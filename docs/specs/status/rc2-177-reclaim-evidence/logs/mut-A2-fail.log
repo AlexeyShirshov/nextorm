@@ -1,0 +1,39 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+failed NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.NativeParams_QueryCommandSurface_ShouldBindChangedValuesSyncAndAsync (7s 849ms)
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+  Expected syncOrderText "[]" to contain ""Id":1".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.NativeParams_QueryCommandSurface_ShouldBindChangedValuesSyncAndAsync() in /home/alex/sources/nextorm/tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:472
+    --- End of stack trace from previous location ---
+/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) failed with 1 error(s) (19s 183ms)
+Exit code: 2
+  Standard output: [testcontainers.org 00:00:00.25] Connected to Docker:
+    Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+    Server Version: 5.8.6
+    Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+    API Version: 1.44
+    Operating System: fedora
+    Total Memory: 11.68 GB
+  [testcontainers.org 00:00:00.25] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+  [testcontainers.org 00:00:00.32] Reusable resource found
+  [testcontainers.org 00:00:00.40] Start Docker container 4ab2d4542432
+  [testcontainers.org 00:00:01.77] Wait for Docker container 4ab2d4542432 to complete readiness checks
+  [testcontainers.org 00:00:01.78] Execute "/bin/sh -c find /opt/mssql-tools*/bin/sqlcmd -type f -print -quit" at Docker container 4ab2d4542432
+  [testcontainers.org 00:00:01.91] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 4ab2d4542432
+  [testcontainers.org 00:00:06.54] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 4ab2d4542432
+  [testcontainers.org 00:00:06.72] Docker container 4ab2d4542432 ready
+  [testcontainers.org 00:00:07.71] Stop Docker container 4ab2d4542432
+
+Test run summary: Failed!
+  total: 1
+  failed: 1
+  succeeded: 0
+  skipped: 0
+  duration: 19s 398ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

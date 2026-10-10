@@ -1,0 +1,11 @@
+--- a/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs
++++ b/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs
+@@ -1313,7 +1313,7 @@
+                     $"Item{pair.Key + 1}",
+                     slotColumns[0].ProjectionItem!.EntityType,
+                     slotMembers,
+-                    JsonShapePresence.AnyColumnNotNull(ordinals),
++                    JsonShapePresence.Always,
+                     pair.Key,
+                     null);
+             }

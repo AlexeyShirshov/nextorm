@@ -1153,29 +1153,48 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// </summary>
     /// <typeparam name="TResult">The projected result type; it is never materialized on this path.</typeparam>
     /// <param name="compiledQuery">The prepared, mapper-less command to execute.</param>
-    /// <param name="rowWriter">The compiled per-row JSON writer.</param>
+    /// <param name="rowWriter">The compiled per-row JSON writer, or <see langword="null"/> on the native document path.</param>
+    /// <param name="plan">The frozen shape plan used to reject an incompatible reader schema before writing.</param>
     /// <param name="output">The caller-owned destination stream; it is never closed.</param>
     /// <param name="options">The validated container options.</param>
     /// <param name="params">The positional parameter values bound to the query.</param>
-    internal void WriteJson<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, JsonRowWriter rowWriter, Stream output, JsonStreamOptions options, ReadOnlySpan<object?> @params)
+    /// <param name="native">Whether the prepared command carries a native <c>FOR JSON</c> document column to copy instead of managed row serialization.</param>
+    internal void WriteJson<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, JsonRowWriter? rowWriter, JsonShapePlan plan, Stream output, JsonStreamOptions options, ReadOnlySpan<object?> @params, bool native)
     {
         ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
         ThrowIfJsonBatch(compiledQuery);
 
-        using var stream = new JsonStreamWriter(output, rowWriter, options);
+        if (native)
+        {
+            WriteJsonNative(compiledQuery, output, @params);
+            return;
+        }
+
         var sqlCommand = GetDbCommand(compiledQuery, @params);
         var reader = RunReader(sqlCommand, compiledQuery.Behavior);
         try
         {
-            while (reader.Read())
+            // Position on the first row so the provider field types are available, then reject an
+            // incompatible reader schema before the destination is touched by anything, framing
+            // included. The validation is metadata-based, so it must run even when the result set is
+            // empty (`hasRow == false`); a compatible empty result still emits `[]` below, and a
+            // one-row look-ahead is not buffering: the row is written immediately below and not lost.
+            var hasRow = reader.Read();
+            JsonRowWriterFactory.ValidateReaderBinding(plan, reader);
+
+            using var stream = new JsonStreamWriter(output, rowWriter!, options);
+            while (hasRow)
+            {
                 stream.WriteRow(reader);
+                hasRow = reader.Read();
+            }
+
+            stream.Complete();
         }
         finally
         {
             reader.Dispose();
         }
-
-        stream.Complete();
     }
 
     /// <summary>
@@ -1185,36 +1204,85 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// </summary>
     /// <typeparam name="TResult">The projected result type; it is never materialized on this path.</typeparam>
     /// <param name="compiledQuery">The prepared, mapper-less command to execute.</param>
-    /// <param name="rowWriter">The compiled per-row JSON writer.</param>
+    /// <param name="rowWriter">The compiled per-row JSON writer, or <see langword="null"/> on the native document path.</param>
+    /// <param name="plan">The frozen shape plan used to reject an incompatible reader schema before writing.</param>
     /// <param name="output">The caller-owned destination stream; it is never closed.</param>
     /// <param name="options">The validated container options.</param>
     /// <param name="params">The positional parameter values bound to the query, or <see langword="null"/>.</param>
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
-    internal async Task WriteJsonAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, JsonRowWriter rowWriter, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
+    /// <param name="native">Whether the prepared command carries a native <c>FOR JSON</c> document column to copy instead of managed row serialization.</param>
+    internal async Task WriteJsonAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, JsonRowWriter? rowWriter, JsonShapePlan plan, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken, bool native)
     {
         ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
         ThrowIfJsonBatch(compiledQuery);
 
-        using var stream = new JsonStreamWriter(output, rowWriter, options);
+        if (native)
+        {
+            await WriteJsonNativeAsync(compiledQuery, output, @params, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
         var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
         try
         {
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            // Metadata-based reader-binding validation runs unconditionally, so an empty result set with
+            // an incompatible schema is rejected before any destination write (not excused by hasRow).
+            var hasRow = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            JsonRowWriterFactory.ValidateReaderBinding(plan, reader);
+
+            using var stream = new JsonStreamWriter(output, rowWriter!, options);
+            while (hasRow)
+            {
                 await stream.WriteRowAsync(reader, cancellationToken).ConfigureAwait(false);
+                hasRow = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await stream.CompleteAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             await reader.DisposeAsync().ConfigureAwait(false);
         }
+    }
 
-        await stream.CompleteAsync(cancellationToken).ConfigureAwait(false);
+    // The native path copies the single FOR JSON document column straight to the caller-owned
+    // destination. SequentialAccess lets the provider stream the document column in chunks instead of
+    // buffering the whole nvarchar(max); the reader is released in finally and the destination is never
+    // flushed or disposed. The transport has its own reader-binding validation (one string column),
+    // rather than the projected-column validation that only fits the managed path.
+    private void WriteJsonNative<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, Stream output, ReadOnlySpan<object?> @params)
+    {
+        var sqlCommand = GetDbCommand(compiledQuery, @params);
+        var reader = RunReader(sqlCommand, compiledQuery.Behavior | CommandBehavior.SequentialAccess);
+        try
+        {
+            JsonNativeStream.WriteDocument(reader, output);
+        }
+        finally
+        {
+            reader.Dispose();
+        }
+    }
+
+    private async Task WriteJsonNativeAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, Stream output, object[]? @params, CancellationToken cancellationToken)
+    {
+        var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior | CommandBehavior.SequentialAccess, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await JsonNativeStream.WriteDocumentAsync(reader, output, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await reader.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     private static void ThrowIfJsonBatch<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
     {
         if (compiledQuery.PendingBatch is not null)
             throw new NotSupportedException(
-                "WriteJson does not support a query backed by a lazy temporary table; materialize the temporary table source first.");
+                "JSON streaming validation [unsupported-execution-form]: WriteJson does not support a query backed by a lazy temporary table; materialize the temporary table source first.");
     }
 }

@@ -1,0 +1,604 @@
+diff --git a/.config/dotnet-tools.json b/.config/dotnet-tools.json
+index 67e4582f..353fd89f 100644
+--- a/.config/dotnet-tools.json
++++ b/.config/dotnet-tools.json
+@@ -22,6 +22,13 @@
+         "docfx"
+       ],
+       "rollForward": false
++    },
++    "dotnet-stryker": {
++      "version": "5.0.0",
++      "commands": [
++        "dotnet-stryker"
++      ],
++      "rollForward": false
+     }
+   }
+ }
+\ No newline at end of file
+diff --git a/stryker-config.json b/stryker-config.json
+new file mode 100644
+index 00000000..90558da0
+--- /dev/null
++++ b/stryker-config.json
+@@ -0,0 +1,25 @@
++{
++  "stryker-config": {
++    "project": "src/nextorm.postgres/nextorm.postgres.csproj",
++    "test-projects": [
++      "tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj"
++    ],
++    "mutate": [
++      "**/PostgresExtremeRowRenderer.cs"
++    ],
++    "coverage-analysis": "perTest",
++    "test-runner": "mtp",
++    "mutation-level": "Standard",
++    "thresholds": {
++      "high": 80,
++      "low": 60,
++      "break": 0
++    },
++    "reporters": [
++      "Progress",
++      "Html",
++      "Json"
++    ],
++    "report-file-name": "mutation-report"
++  }
++}
+diff --git a/tests/nextorm.postgres.tests/ExtremeRowNativeSqlGenerationTests.cs b/tests/nextorm.postgres.tests/ExtremeRowNativeSqlGenerationTests.cs
+index caad128b..f041f2b9 100644
+--- a/tests/nextorm.postgres.tests/ExtremeRowNativeSqlGenerationTests.cs
++++ b/tests/nextorm.postgres.tests/ExtremeRowNativeSqlGenerationTests.cs
+@@ -561,3 +561,160 @@ public class ExtremeAliasEntity
+     [Column("g")]
+     public int? G { get; set; }
+ }
++
++/// <summary>
++/// Direct-renderer guards for PostgreSQL's native extreme-row strategy (#151). These call the public
++/// <see cref="IExtremeRowRenderer"/> obtained from <see cref="PostgresDialect.ExtremeRowRenderer"/>
++/// with hand-built public descriptions/requests, so the eligibility guards and the derived-alias
++/// collision extension are pinned without going through a query shape that cannot express them.
++/// </summary>
++public class ExtremeRowRendererUnitTests
++{
++    private static IExtremeRowRenderer Renderer() => new PostgresDialect().ExtremeRowRenderer!;
++
++    private static ExtremeRowRenderColumn Integral(Type type, bool nullable = false)
++        => new(type, nullable, isDirectMappedColumn: true, usesConverter: false);
++
++    private static ExtremeRowRenderRequest GroupedRequest(
++        string sourceSql,
++        bool isMax,
++        IReadOnlyList<string> payloadAliases,
++        IReadOnlyList<string> keyAliases,
++        IReadOnlyList<string> groupAliases)
++        => new(
++            sourceSql,
++            isMax,
++            payloadAliases,
++            keyAliases,
++            [Integral(typeof(int))],
++            groupAliases,
++            KeywordCase.Lower);
++
++    [Fact]
++    public void CanRender_EmptyKeys_ShouldDeclineEvenWhenGroupsAreIntegral()
++    {
++        var integral = Integral(typeof(int));
++
++        // The guard is `Keys.Count > 0`; an empty-key description must never be accepted even though
++        // the vacuous integral check on the empty key list and the integral groups would both pass.
++        var description = new ExtremeRowDescription(true, keys: [], groups: [integral], payload: [integral]);
++
++        Renderer().CanRender(description).Should().BeFalse();
++    }
++
++    [Theory]
++    [InlineData(typeof(short), false)]
++    [InlineData(typeof(short), true)]
++    [InlineData(typeof(int), false)]
++    [InlineData(typeof(int), true)]
++    [InlineData(typeof(long), false)]
++    [InlineData(typeof(long), true)]
++    public void CanRender_IntegralDirectKeyAndGroup_ShouldAccept(Type type, bool nullable)
++    {
++        var column = Integral(type, nullable);
++
++        Renderer().CanRender(new ExtremeRowDescription(true, [column], [], [column]))
++            .Should().BeTrue();
++    }
++
++    [Fact]
++    public void CanRender_ConverterKey_ShouldDecline()
++    {
++        var converted = new ExtremeRowRenderColumn(typeof(int), false, isDirectMappedColumn: true, usesConverter: true);
++
++        Renderer().CanRender(new ExtremeRowDescription(true, [converted], [], [converted]))
++            .Should().BeFalse("a converter-bound key keeps the portable lowering");
++    }
++
++    [Fact]
++    public void CanRender_ComputedKey_ShouldDecline()
++    {
++        var computed = new ExtremeRowRenderColumn(typeof(int), false, isDirectMappedColumn: false, usesConverter: false);
++
++        Renderer().CanRender(new ExtremeRowDescription(true, [computed], [], [computed]))
++            .Should().BeFalse();
++    }
++
++    [Fact]
++    public void CanRender_NonIntegralGroup_ShouldDecline()
++    {
++        var key = Integral(typeof(int));
++        var group = new ExtremeRowRenderColumn(typeof(double), true, isDirectMappedColumn: true, usesConverter: false);
++
++        Renderer().CanRender(new ExtremeRowDescription(true, [key], [group], [key]))
++            .Should().BeFalse();
++    }
++
++    [Fact]
++    public void Render_Global_ShouldAppendOrderByAndLimit()
++    {
++        var sql = Renderer().Render(new ExtremeRowRenderRequest(
++            "select * from t where k is not null",
++            true,
++            ["id"],
++            ["k"],
++            [Integral(typeof(int))],
++            [],
++            KeywordCase.Lower));
++
++        sql.Should().Be("select * from t where k is not null order by \"k\" desc limit 1");
++    }
++
++    [Fact]
++    public void Render_Grouped_ShouldBoundTheDerivedTableWithFromOpenParenAndAlias()
++    {
++        var sql = Renderer().Render(GroupedRequest(
++            "select * from t where k is not null",
++            isMax: true,
++            payloadAliases: ["id"],
++            keyAliases: ["k"],
++            groupAliases: ["g"]));
++
++        sql.Should().Contain("distinct on (\"g\")");
++        sql.Should().Contain(") * from (select * from t where k is not null) __nextorm_extreme order by \"g\", \"k\" desc");
++    }
++
++    [Fact]
++    public void Render_Grouped_PayloadOnlyAliasCollision_ShouldExtendTheDerivedAlias()
++    {
++        // The derived-table base alias is also a payload column name but not a key/group component.
++        // Collision must still be detected: the short-circuiting `&&` mutant of the `||` predicate
++        // would stop here and reuse the colliding alias verbatim.
++        var sql = Renderer().Render(GroupedRequest(
++            "select * from t where k is not null",
++            isMax: true,
++            payloadAliases: ["__nextorm_extreme"],
++            keyAliases: ["k"],
++            groupAliases: ["g"]));
++
++        sql.Should().Contain(") __nextorm_extreme_ order by");
++        sql.Should().NotContain(") __nextorm_extreme order by");
++    }
++
++    [Fact]
++    public void Render_Grouped_GroupAliasCollision_ShouldExtendTheDerivedAlias()
++    {
++        var sql = Renderer().Render(GroupedRequest(
++            "select * from t where k is not null",
++            isMax: true,
++            payloadAliases: ["id"],
++            keyAliases: ["k"],
++            groupAliases: ["__nextorm_extreme"]));
++
++        sql.Should().Contain(") __nextorm_extreme_ order by");
++    }
++
++    [Fact]
++    public void Render_QuotedAliasWithEmbeddedQuote_ShouldDoubleTheQuote()
++    {
++        var sql = Renderer().Render(GroupedRequest(
++            "select * from t where k is not null",
++            isMax: true,
++            payloadAliases: ["id"],
++            keyAliases: ["we\"ird"],
++            groupAliases: ["g"]));
++
++        sql.Should().Contain("order by \"g\", \"we\"\"ird\" desc");
++        sql.Should().NotContain("\"weird\"");
++    }
++}
+diff --git a/tools/stryker/d151-evidence.py b/tools/stryker/d151-evidence.py
+new file mode 100644
+index 00000000..dacdb906
+--- /dev/null
++++ b/tools/stryker/d151-evidence.py
+@@ -0,0 +1,383 @@
++#!/usr/bin/env python3
++"""D151 Stryker evidence verifier and control probe (issue #151).
++
++Repo-local, dependency-free helper. Sub-commands:
++
++  control-probe  Plant the documented direction mutant in the PostgreSQL
++                 extreme-row renderer, prove the PostgreSQL SQL-generation
++                 tests fail on an assertion (not a compile/discovery error),
++                 then restore the source byte-for-byte and verify its hash.
++  manifest       Hash every artefact under the evidence directory.
++  verify         Schema/scope/control/reproducibility checks over a campaign.
++  self-test      Negative fixtures proving the checks reject broken evidence.
++
++It deliberately keeps only the checks the D151 evidence contract needs; it
++never invents mutant ids and always reads the real Stryker JSON shape.
++"""
++from __future__ import annotations
++
++import argparse
++import datetime
++import hashlib
++import json
++import os
++import re
++import subprocess
++import sys
++import time
++
++REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
++CONTROL_LINE_MARKER = "var direction = isMax ?"
++CONTROL_FROM = '" desc"'
++CONTROL_TO = '""'
++CONTROL_LINE = 81
++RENDERER_NAME = "PostgresExtremeRowRenderer.cs"
++TEST_FILTER = "FullyQualifiedName~ExtremeRow"
++
++
++def sha256_file(path: str) -> str:
++    h = hashlib.sha256()
++    with open(path, "rb") as f:
++        for chunk in iter(lambda: f.read(65536), b""):
++            h.update(chunk)
++    return h.hexdigest()
++
++
++def load_json(path: str):
++    with open(path, encoding="utf-8") as f:
++        return json.load(f)
++
++
++def run(cmd, log_path: str):
++    start = time.time()
++    with open(log_path, "w", encoding="utf-8", errors="replace") as log:
++        proc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=REPO)
++    return proc.returncode, round(time.time() - start, 3)
++
++
++def parse_failed(log_path: str):
++    failed = 0
++    summary_failed = False
++    with open(log_path, encoding="utf-8", errors="replace") as f:
++        for line in f:
++            m = re.search(r"^\s*failed:\s*(\d+)", line)
++            if m:
++                failed = int(m.group(1))
++            if "Test run summary: Failed" in line:
++                summary_failed = True
++    return failed, summary_failed
++
++
++# --------------------------------------------------------------------------- checks
++
++def check_scope(report) -> list:
++    errors = []
++    files = report.get("files", {})
++    if not files:
++        errors.append("report contains no files")
++    # The mutate filter leaves out-of-scope files as Ignored, and Stryker classifies some
++    # out-of-scope mutants as CompileError before the mutate filter is applied. Neither is
++    # executed against tests, so only a test-executed status outside the renderer is a scope
++    # violation.
++    executed = {"Killed", "Survived", "Timeout", "NoCoverage", "RuntimeError"}
++    for f, v in files.items():
++        for m in v.get("mutants", []):
++            if not f.endswith(RENDERER_NAME) and m.get("status") in executed:
++                errors.append(f"out-of-scope active mutant ({m.get('status')}) in: {f}")
++    mutants = [m for v in files.values() for m in v.get("mutants", [])]
++    if not mutants:
++        errors.append("report contains no mutants")
++    return errors
++
++
++def mutants_of(report):
++    return [m for v in report.get("files", {}).values() for m in v.get("mutants", [])]
++
++
++def check_reproducibility(report_a, report_b) -> list:
++    errors = []
++    a = sorted((m["location"]["start"]["line"], m["location"]["start"]["column"], m["status"]) for m in mutants_of(report_a))
++    b = sorted((m["location"]["start"]["line"], m["location"]["start"]["column"], m["status"]) for m in mutants_of(report_b))
++    if a != b:
++        errors.append("mutant status sets differ between run-a and run-b")
++    for status in ("Killed", "Survived"):
++        sa = sorted((m["location"]["start"]["line"], m["location"]["start"]["column"]) for m in mutants_of(report_a) if m["status"] == status)
++        sb = sorted((m["location"]["start"]["line"], m["location"]["start"]["column"]) for m in mutants_of(report_b) if m["status"] == status)
++        if sa != sb:
++            errors.append(f"{status} set differs between run-a and run-b")
++    return errors
++
++
++def find_control_mutant(report):
++    for m in mutants_of(report):
++        loc = m.get("location", {}).get("start", {})
++        if loc.get("line") == CONTROL_LINE and m.get("replacement") == CONTROL_TO:
++            return m
++    return None
++
++
++def check_control(report_a, report_b) -> list:
++    errors = []
++    for name, report in (("run-a", report_a), ("run-b", report_b)):
++        mutant = find_control_mutant(report)
++        if mutant is None:
++            errors.append(f"{name}: direction control mutant at renderer:{CONTROL_LINE} not found")
++        elif mutant.get("status") != "Killed":
++            errors.append(f"{name}: direction control mutant is {mutant.get('status')}, not Killed")
++    return errors
++
++
++def check_disposition(report, disposition, path_label) -> list:
++    errors = []
++    required = {"Survived", "NoCoverage"}
++    covered = set()
++    for entry in disposition.get("mutants", []):
++        covered.add((entry.get("line"), entry.get("column"), entry.get("status")))
++    for m in mutants_of(report):
++        if m["status"] not in required:
++            continue
++        key = (m["location"]["start"]["line"], m["location"]["start"]["column"], m["status"])
++        if key not in covered:
++            errors.append(f"{path_label}: {m['status']} mutant {key} has no disposition entry")
++    return errors
++
++
++def check_control_probe_file(control_path) -> list:
++    errors = []
++    if not os.path.exists(control_path):
++        return [f"missing control-probe evidence {control_path}"]
++    data = load_json(control_path)
++    if not data.get("restored"):
++        errors.append("control-probe did not restore the source byte-for-byte")
++    if data.get("sha256_before") != data.get("sha256_after"):
++        errors.append("control-probe source hash changed after restore")
++    baseline = data.get("baseline", {})
++    active = data.get("active", {})
++    if baseline.get("exit") != 0:
++        errors.append("control-probe baseline tests did not pass")
++    if active.get("exit") == 0:
++        errors.append("control-probe active tests unexpectedly passed")
++    if not active.get("assertion_failure"):
++        errors.append("control-probe active failure was not an assertion failure")
++    return errors
++
++
++# --------------------------------------------------------------------------- commands
++
++def cmd_control_probe(args):
++    os.makedirs(args.evidence, exist_ok=True)
++    src = args.source
++    original = open(src, "rb").read()
++    before = hashlib.sha256(original).hexdigest()
++    text = original.decode("utf-8")
++    idx = text.find(CONTROL_LINE_MARKER)
++    if idx < 0:
++        print(f"FATAL: control anchor {CONTROL_LINE_MARKER!r} not found", file=sys.stderr)
++        return 2
++    line_end = text.find("\n", idx)
++    line = text[idx:line_end]
++    if CONTROL_FROM not in line:
++        print(f"FATAL: {CONTROL_FROM!r} not on the direction line", file=sys.stderr)
++        return 2
++    mutated_line = line.replace(CONTROL_FROM, CONTROL_TO, 1)
++    mutated = (text[:idx] + mutated_line + text[line_end:]).encode("utf-8")
++    active_sha = hashlib.sha256(mutated).hexdigest()
++
++    baseline_log = os.path.join(args.evidence, "control-baseline.log")
++    active_log = os.path.join(args.evidence, "control-active.log")
++    restore_log = os.path.join(args.evidence, "control-restore.log")
++
++    build = ["dotnet", "build", args.project, "-c", "Debug"]
++    test = ["dotnet", "test", args.project, "-c", "Debug", "--no-build", "--filter", TEST_FILTER]
++
++    rc_build, _ = run(build, restore_log)
++    rc_base, secs_base = run(test, baseline_log)
++    base_failed, _ = parse_failed(baseline_log)
++
++    try:
++        with open(src, "wb") as f:
++            f.write(mutated)
++        rc_active_build, _ = run(
++            ["dotnet", "build", args.project, "-c", "Debug"],
++            os.path.join(args.evidence, "control-active-build.log"))
++        rc_active, secs_active = run(test, active_log)
++        active_failed, active_summary_failed = parse_failed(active_log)
++        compiled = rc_active_build == 0
++    finally:
++        with open(src, "wb") as f:
++            f.write(original)
++
++    after = sha256_file(src)
++    restored = after == before
++
++    # A failure is an assertion failure when the active build compiled, the test
++    # run failed, and at least one test is reported failed by the runner.
++    assertion_failure = compiled and rc_active != 0 and active_failed > 0
++
++    result = {
++        "source": os.path.relpath(src, REPO),
++        "mutation": {"marker": CONTROL_LINE_MARKER, "from": CONTROL_FROM, "to": CONTROL_TO, "line": CONTROL_LINE},
++        "sha256_before": before,
++        "sha256_active": active_sha,
++        "sha256_after": after,
++        "baseline": {"exit": rc_base, "failed": base_failed, "seconds": secs_base},
++        "active": {
++            "exit": rc_active,
++            "failed": active_failed,
++            "summary_failed": active_summary_failed,
++            "compiled": compiled,
++            "assertion_failure": assertion_failure,
++            "seconds": secs_active,
++        },
++        "restored": restored,
++        "generated_utc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
++    }
++    with open(os.path.join(args.evidence, "control.json"), "w", encoding="utf-8") as f:
++        json.dump(result, f, indent=2)
++        f.write("\n")
++
++    print(json.dumps(result, indent=2))
++    return 0 if (restored and rc_base == 0 and assertion_failure) else 1
++
++
++def cmd_manifest(args):
++    entries = []
++    for root, _dirs, files in os.walk(args.evidence):
++        for name in files:
++            path = os.path.join(root, name)
++            entries.append({
++                "path": os.path.relpath(path, REPO),
++                "sha256": sha256_file(path),
++                "size": os.path.getsize(path),
++            })
++    entries.sort(key=lambda e: e["path"])
++    out = {
++        "evidence": os.path.relpath(args.evidence, REPO),
++        "git_head": subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True).stdout.strip(),
++        "stryker_version": "5.0.0",
++        "rv": args.rv,
++        "generated_utc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
++        "files": entries,
++    }
++    path = os.path.join(args.evidence, "manifest.json")
++    with open(path, "w", encoding="utf-8") as f:
++        json.dump(out, f, indent=2)
++        f.write("\n")
++    print(f"wrote {path} ({len(entries)} files)")
++    return 0
++
++
++def cmd_verify(args):
++    ev = args.evidence
++    errors = []
++    report_a_path = os.path.join(ev, "run-a", "reports", "mutation-report.json")
++    report_b_path = os.path.join(ev, "run-b", "reports", "mutation-report.json")
++    for path in (report_a_path, report_b_path):
++        if not os.path.exists(path):
++            errors.append(f"missing campaign report {path}")
++    errors += check_control_probe_file(os.path.join(ev, "control.json"))
++    if not errors:
++        report_a = load_json(report_a_path)
++        report_b = load_json(report_b_path)
++        errors += check_scope(report_a)
++        errors += check_scope(report_b)
++        errors += check_reproducibility(report_a, report_b)
++        errors += check_control(report_a, report_b)
++        disposition_path = os.path.join(ev, "disposition.json")
++        if not os.path.exists(disposition_path):
++            errors.append("missing disposition.json")
++        else:
++            disposition = load_json(disposition_path)
++            errors += check_disposition(report_a, disposition, "run-a")
++            errors += check_disposition(report_b, disposition, "run-b")
++
++    result = {
++        "evidence": os.path.relpath(ev, REPO),
++        "rv": args.rv,
++        "passed": not errors,
++        "errors": errors,
++        "generated_utc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
++    }
++    with open(os.path.join(ev, "verifier-result.json"), "w", encoding="utf-8") as f:
++        json.dump(result, f, indent=2)
++        f.write("\n")
++    print(json.dumps(result, indent=2))
++    return 0 if not errors else 1
++
++
++def _fake_report(status_by_key):
++    mutants = []
++    for i, (line, col, status) in enumerate(status_by_key):
++        mutants.append({"id": i, "status": status, "replacement": '""' if line == CONTROL_LINE else "x",
++                        "location": {"start": {"line": line, "column": col}}})
++    return {"files": {"src/nextorm.postgres/PostgresExtremeRowRenderer.cs": {"mutants": mutants}}}
++
++
++def cmd_self_test(_args):
++    failures = []
++
++    # out-of-scope file must be rejected
++    bad_scope = {"files": {"src/nextorm.postgres/Other.cs": {"mutants": [{"status": "Killed", "location": {"start": {"line": 1, "column": 1}}}]}}}
++    if not any("out-of-scope" in e for e in check_scope(bad_scope)):
++        failures.append("scope: out-of-scope file not rejected")
++
++    # empty report must be rejected
++    if not check_scope({"files": {}}):
++        failures.append("scope: empty report not rejected")
++
++    # mismatched sets between runs must be rejected
++    ra = _fake_report([(81, 20, "Killed"), (35, 12, "Killed")])
++    rb = _fake_report([(81, 20, "Killed"), (35, 12, "Survived")])
++    if not check_reproducibility(ra, rb):
++        failures.append("repro: mismatched sets not rejected")
++
++    # a missing control must be rejected
++    no_control = _fake_report([(35, 12, "Killed")])
++    if not check_control(no_control, no_control):
++        failures.append("control: missing direction mutant not rejected")
++
++    # an un-killed control must be rejected
++    survived_control = _fake_report([(81, 20, "Survived")])
++    if not check_control(survived_control, survived_control):
++        failures.append("control: survived direction mutant not rejected")
++
++    # an unresolved survivor must require a disposition entry
++    survivor = _fake_report([(81, 20, "Killed"), (40, 5, "Survived")])
++    if not check_disposition(survivor, {"mutants": []}, "self"):
++        failures.append("disposition: unresolved survivor not rejected")
++
++    result = {"passed": not failures, "failures": failures}
++    print(json.dumps(result, indent=2))
++    return 0 if not failures else 1
++
++
++def main(argv=None):
++    parser = argparse.ArgumentParser(description=__doc__)
++    sub = parser.add_subparsers(dest="command", required=True)
++
++    p = sub.add_parser("control-probe")
++    p.add_argument("--project", required=True)
++    p.add_argument("--source", required=True)
++    p.add_argument("--evidence", required=True)
++    p.set_defaults(func=cmd_control_probe)
++
++    p = sub.add_parser("manifest")
++    p.add_argument("--evidence", required=True)
++    p.add_argument("--rv", type=int, default=1)
++    p.set_defaults(func=cmd_manifest)
++
++    p = sub.add_parser("verify")
++    p.add_argument("--evidence", required=True)
++    p.add_argument("--contract", required=True)
++    p.add_argument("--rv", type=int, default=1)
++    p.set_defaults(func=cmd_verify)
++
++    p = sub.add_parser("self-test")
++    p.set_defaults(func=cmd_self_test)
++
++    args = parser.parse_args(argv)
++    return args.func(args)
++
++
++if __name__ == "__main__":
++    sys.exit(main())

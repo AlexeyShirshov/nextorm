@@ -88,6 +88,7 @@ internal sealed class PostgresTestProvider : ITestProvider
         """
         drop table if exists complex_entity;
         drop table if exists binary_entity;
+        drop table if exists enum_entity;
         drop table if exists pg_oid_entity;
         drop table if exists lob_entity;
         drop table if exists simple_entity;
@@ -139,6 +140,18 @@ internal sealed class PostgresTestProvider : ITestProvider
         insert into binary_entity (id, data) values
             (1, decode('01020304', 'hex')),
             (2, null);
+
+        -- D178 (#178) enum storage: an enum is persisted as its underlying integer.
+        create table enum_entity
+        (
+            id integer primary key,
+            state integer not null,
+            nullable_state integer
+        );
+        insert into enum_entity (id, state, nullable_state) values
+            (1, 7, null),
+            (2, -3, 7),
+            (3, 0, -3);
 
         -- oid/cid are 32-bit unsigned system types (CLR uint in Npgsql); nextorm binds uint as xid,
         -- so these columns are read directly and filtered only through an explicit bigint cast.

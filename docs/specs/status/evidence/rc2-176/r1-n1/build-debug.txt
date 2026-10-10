@@ -1,0 +1,38 @@
+=== C01 dotnet build nextorm.slnx -c Debug (pre-change) ===
+started: 2026-10-08T17:48:19Z
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  nextorm.core.sourcegenerator -> /home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/bin/linux/Debug/netstandard2.0/nextorm.core.sourcegenerator.dll
+  nextorm.examples.clickhouse.analytics -> /home/alex/sources/nextorm/examples/nextorm.examples.clickhouse.analytics/bin/linux/Debug/net10.0/nextorm.examples.clickhouse.analytics.dll
+  nextorm.examples.mssql.adventureworks -> /home/alex/sources/nextorm/examples/nextorm.examples.mssql.adventureworks/bin/linux/Debug/net10.0/nextorm.examples.mssql.adventureworks.dll
+  nextorm.examples.postgres.aviasales -> /home/alex/sources/nextorm/examples/nextorm.examples.postgres.aviasales/bin/linux/Debug/net10.0/nextorm.examples.postgres.aviasales.dll
+  nextorm.core -> /home/alex/sources/nextorm/src/nextorm.core/bin/linux/Debug/net10.0/nextorm.core.dll
+  nextorm.mysql -> /home/alex/sources/nextorm/src/nextorm.mysql/bin/linux/Debug/net10.0/nextorm.mysql.dll
+  nextorm.sqlite -> /home/alex/sources/nextorm/src/nextorm.sqlite/bin/linux/Debug/net10.0/nextorm.sqlite.dll
+  nextorm.postgres -> /home/alex/sources/nextorm/src/nextorm.postgres/bin/linux/Debug/net10.0/nextorm.postgres.dll
+  nextorm.clickhouse -> /home/alex/sources/nextorm/src/nextorm.clickhouse/bin/linux/Debug/net10.0/nextorm.clickhouse.dll
+  nextorm.mariadb -> /home/alex/sources/nextorm/src/nextorm.mariadb/bin/linux/Debug/net10.0/nextorm.mariadb.dll
+  nextorm.sqlserver -> /home/alex/sources/nextorm/src/nextorm.sqlserver/bin/linux/Debug/net10.0/nextorm.sqlserver.dll
+  nextorm.clickhouse.extensions.tests -> /home/alex/sources/nextorm/tests/nextorm.clickhouse.extensions.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.extensions.tests.dll
+  nextorm.alias.tests -> /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll
+  nextorm.core.tests -> /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll
+  nextorm.clickhouse.tests -> /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll
+  nextorm.mariadb.tests -> /home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll
+  nextorm.publicextensibility.tests -> /home/alex/sources/nextorm/tests/nextorm.publicextensibility.tests/bin/linux/Debug/net10.0/nextorm.publicextensibility.tests.dll
+  nextorm.entityframeworkcore -> /home/alex/sources/nextorm/src/nextorm.entityframeworkcore/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.dll
+  nextorm.sqlserver.tests -> /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll
+  nextorm.postgres.tests -> /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll
+  nextorm.mysql.tests -> /home/alex/sources/nextorm/tests/nextorm.mysql.tests/bin/linux/Debug/net10.0/nextorm.mysql.tests.dll
+  nextorm.entityframeworkcore.tests -> /home/alex/sources/nextorm/tests/nextorm.entityframeworkcore.tests/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.tests.dll
+  nextorm.benchmark -> /home/alex/sources/nextorm/benchmarks/nextorm.benchmark/bin/linux/Debug/net10.0/nextorm.benchmark.dll
+  nextorm.sqlite.tests -> /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll
+  nextorm.integration.tests -> /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:41.60
+
+exit_code=0
+finished: 2026-10-08T17:49:01Z

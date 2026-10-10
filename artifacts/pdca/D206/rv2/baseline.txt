@@ -1,0 +1,42 @@
+# T206 recon rv2 baseline provenance
+captured_utc=2026-10-10T09:40:44Z
+head=a60ecb848ac1568a2e15e1afc917db231f182429
+branch=1.0.9-rc2
+
+## git status --porcelain
+ M .opencode/skills/nextorm-pdca/SKILL.md
+ M opencode.json
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAggregates-report-github.md
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAggregates-report.csv
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAggregates-report.html
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCsv-report-github.md
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCsv-report.csv
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCsv-report.html
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkPaging-report-github.md
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkPaging-report.csv
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkPaging-report.html
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkProjection-report-github.md
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkProjection-report.csv
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkProjection-report.html
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkStreaming-report-github.md
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkStreaming-report.csv
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkStreaming-report.html
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWriteJson-report-github.md
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWriteJson-report.csv
+?? BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWriteJson-report.html
+?? benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md
+?? benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv
+?? benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html
+?? benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-github.md
+?? benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.csv
+?? benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.html
+?? benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T208ChangedPathBenchmark-report-github.md
+?? benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T208ChangedPathBenchmark-report.csv
+?? benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T208ChangedPathBenchmark-report.html
+
+## source hashes (sha256)
+34c893510946f41f23ed15f508f4ee2a64d34cb13e1da97e5ab2fe3ebfc87177  src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
+5f0ee7eac896ee60a7985228e44308c50b84db21e42bc74b212c927c7412b017  tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs
+
+## generator at HEAD (unchanged from worktree)
+(empty diff = worktree identical to HEAD for these files)

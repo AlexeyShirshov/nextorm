@@ -1,0 +1,135 @@
+{
+  "task": "T206",
+  "tree": "/home/alex/sources/nextorm",
+  "contract_rv": 2,
+  "status_file": "docs/specs/status/rc2-206-sourcegen-cs0111-alias-join-1.md",
+  "required_rows": [
+    "E206-01",
+    "E206-02",
+    "E206-03",
+    "E206-04",
+    "E206-05",
+    "E206-06",
+    "E206-07",
+    "E206-08"
+  ],
+  "rows": [
+    {
+      "id": "E206-01",
+      "status": "open",
+      "reason": "R01 (reachable supported-syntax last-step CS0111 collision) is unreachable by construction on HEAD a60ecb84; ratified r=2 GAP, retained in #206 milestone 1.0.9-rc2. Proof in GAP.md."
+    },
+    {
+      "id": "E206-02",
+      "status": "open",
+      "reason": "R02 (reject-all/different-body every-location diagnostic) cannot fire because emitted body is a pure function of the signature; ratified r=2 GAP, retained in #206 milestone 1.0.9-rc2. Proof in GAP.md."
+    },
+    {
+      "id": "E206-03",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs",
+          "command": "dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~JoinAliasGeneratorDiagnosticTests",
+          "exit": 0,
+          "value": "selected 21; exactly 1 Join<TJoin>, 0 NORMGEN007, 0 compiler errors; intermediate IsCte passes"
+        }
+      ]
+    },
+    {
+      "id": "E206-04",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs",
+          "command": "dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~JoinAliasGeneratorDiagnosticTests",
+          "exit": 0,
+          "value": "forward==reversed==repeat byte-identical"
+        }
+      ]
+    },
+    {
+      "id": "E206-05",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D206/rv2/recon.log",
+          "command": "dotnet test tests/nextorm.alias.tests -c Debug",
+          "exit": 0,
+          "value": "selected 103; frozen surface/typed-CTE unchanged"
+        }
+      ]
+    },
+    {
+      "id": "E206-06",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "docs/guide/02-joins.md"
+        },
+        {
+          "kind": "doc",
+          "path": "docs/ru/guide/02-joins.md"
+        },
+        {
+          "kind": "build",
+          "path": "artifacts/pdca/D206/rv2/docs-build.log",
+          "command": "dotnet docfx docs/docfx.json",
+          "exit": 0,
+          "value": "EN+RU NORMGEN007 defensive/limitation documented; no unsupported syntax"
+        }
+      ]
+    },
+    {
+      "id": "E206-07",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "build",
+          "path": "artifacts/pdca/D206/rv2/build-release.log",
+          "command": "dotnet build nextorm.slnx -c Release",
+          "exit": 0,
+          "value": "0 warnings 0 errors"
+        },
+        {
+          "kind": "coverage",
+          "path": "artifacts/pdca/D206/rv2/coverage-report/Summary.json",
+          "value": "line 88.4% branch 80.4%; source-generator EXCLUDED from coverage (whitelist)"
+        },
+        {
+          "kind": "integration",
+          "path": "artifacts/pdca/D206/rv2/integration.log",
+          "command": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor",
+          "exit": 0,
+          "value": "3635 total, 0 errors, 0 failed; PG/MySQL/SQLServer/ClickHouse/SQLite/MariaDB all executed (skips are per-capability)"
+        },
+        {
+          "kind": "hygiene",
+          "path": "artifacts/pdca/D206/rv2/hygiene.log",
+          "command": "git diff --check",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "E206-08",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "manifest",
+          "path": "artifacts/pdca/D206/rv2/manifest.json",
+          "command": "python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D206/rv2/manifest.json",
+          "exit": 0
+        },
+        {
+          "kind": "source-inventory",
+          "path": "artifacts/pdca/D206/rv2/baseline.txt"
+        }
+      ]
+    }
+  ]
+}

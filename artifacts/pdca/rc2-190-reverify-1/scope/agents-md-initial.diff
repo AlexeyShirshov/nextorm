@@ -1,0 +1,12 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 6e0d3965..07594aee 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -25,6 +25,7 @@
+ 
+ ## Layout
+ - `src/nextorm.core` is the engine: query builder/plan cache, expression visitors (`Visitors/`), dialects, in-memory context. Providers reference it: `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.clickhouse`; `nextorm.mariadb` builds on `nextorm.mysql`.
++- Core file map (common mis-guesses, `file:line` for a start): SQL/AST expressions are in `Expressions/` (`Expressions/SelectExpression.cs`), not `Query/`; the SQL builder, planner and row mapping live under `DataContext/` (`DataContext/SqlBuilder.cs`, `DataContext/QueryPlanner.cs`, `DataContext/RowMapperFactory.cs`, `DataContext/RowMaterializerBuilder.cs`; note `DataContext/DataContext.cs` is a folder member, not a root `DataContext.cs`); CTE hoisting is `Builders/CteHoister.cs`; JSON shape/streaming is `Query/Json/` (`Query/Json/JsonShapePlan.cs`); CSV options are `Query/CsvStreamOptions.cs`; fluent builders are `Builders/`.
+ - `src/nextorm.core.sourcegenerator` is an empty `IIncrementalGenerator` stub — in the solution but referenced by no project, so it generates nothing today.
+ - `tests/nextorm.<provider>.tests` are dialect/SQL-generation tests using placeholder connection strings; they need no database. Only `tests/nextorm.integration.tests` talks to real databases, through `ProviderTestSuite` + `CommonTestSuite.*.cs` (a test added there runs against every provider; provider-only behavior belongs in `*SpecificTests.cs`).
+ 

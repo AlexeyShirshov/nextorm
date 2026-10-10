@@ -4,7 +4,7 @@ using NextORM.Core;
 namespace NextORM.Core.Tests;
 
 /// <summary>
-/// Coverage for the single-query (<c>AsSingleQuery</c>) interaction with a many-to-many <c>JoinInto</c>
+/// Coverage for the single-query (<c>EagerLoadMode.SingleQuery</c>) interaction with a many-to-many <c>JoinInto</c>
 /// (#135): the many-to-many declaration is rejected before the join/spec pairing runs, a plain
 /// <c>JoinInto</c> combined with a single-query <c>LoadWith</c> exercises the pairing path, and an
 /// explicit junction mapping drops the column names resolved against the auto-published one.
@@ -29,7 +29,7 @@ public class JoinIntoManyToManySingleQueryTests
     }
 
     [Fact]
-    public void ManyToManyJoinInto_WithLoadWithAndAsSingleQuery_ShouldThrow()
+    public void ManyToManyJoinInto_WithLoadWithAndSingleQuery_ShouldThrow()
     {
         using var ctx = CreateManyToManyContext();
 
@@ -37,13 +37,12 @@ public class JoinIntoManyToManySingleQueryTests
         // contributes a link edge plus a child edge, so it is rejected before any index pairing.
         Action act = () => ctx.From<ManyToManyJoinParent>()
             .JoinInto(ctx.From<ManyToManyJoinChild>(), (p, c) => true, p => p.Children)
-            .LoadWith(p => p.Children, c => c.From<ManyToManyJoinChild>(), p => p.Id, c => c.Id)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<ManyToManyJoinChild>(), p => p.Id, c => c.Id, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>()
             .WithMessage("*many-to-many*")
-            .WithMessage("*AsSingleQuery*");
+            .WithMessage("*SingleQuery*");
     }
 
     public sealed class SingleQueryMixedParent
@@ -69,7 +68,7 @@ public class JoinIntoManyToManySingleQueryTests
     }
 
     [Fact]
-    public void PlainJoinInto_WithLoadWithAndAsSingleQuery_ShouldStitchBothCollections()
+    public void PlainJoinInto_WithLoadWithAndSingleQuery_ShouldStitchBothCollections()
     {
         using var ctx = new InMemoryDataContext();
         ctx.From<SingleQueryMixedParent>(b => b
@@ -83,8 +82,7 @@ public class JoinIntoManyToManySingleQueryTests
         // child ignores every filter so the non-empty scope branch of the pairing is exercised.
         var parents = ctx.From<SingleQueryMixedParent>()
             .JoinInto(ctx.From<SingleQueryMixedChild>().IgnoreFilters(), (p, c) => p.Id == c.ParentId, p => p.Children)
-            .LoadWith(p => p.Notes, n => n.From<SingleQueryMixedNote>(), p => p.Id, n => n.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Notes, n => n.From<SingleQueryMixedNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         parents.Should().ContainSingle();

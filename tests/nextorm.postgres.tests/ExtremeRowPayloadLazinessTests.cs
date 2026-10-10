@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
 using System.Reflection;
 using FluentAssertions;
@@ -86,6 +88,25 @@ public class ExtremeRowPayloadLazinessTests
         sql.Should().Contain("row_number()");
     }
 
+    [Fact]
+    public void ReferenceTypePayload_GlobalNative_ShouldRenderIdenticalSqlWithoutForcingThePayload()
+    {
+        // #154 value/reference coverage: an integral (value-type) key with a reference-type payload
+        // column still dispatches natively; PostgreSQL's CanRender reads only Keys/Groups, so the
+        // factory-backed payload must stay unmaterialized through the SQL pass.
+        using var real = PostgresTestContext.Create();
+        var realSql = SqlOf(real, real.From<ExtremeRefPayloadEntity>().SelectWhereMax(x => x.Id).ToCommand());
+
+        using var ctx = new CapturingPostgresDataContext(PlaceholderConnectionString);
+        var sql = SqlOf(ctx, ctx.From<ExtremeRefPayloadEntity>().SelectWhereMax(x => x.Id).ToCommand());
+
+        sql.Should().Be(realSql, "the transparent wrapper must not change the native SQL");
+        sql.Should().Contain("limit 1", "an integral key keeps the native strategy");
+        ctx.CapturingDialect.Renderer.CanRenderCalls.Should().Be(1);
+        IsPayloadMaterialized(ctx.CapturingDialect.Renderer.Description!).Should()
+            .BeFalse("the PostgreSQL renderer never reads Payload, including a reference-type one");
+    }
+
     /// <summary>
     /// A transparent wrapper around the stock PostgreSQL renderer (reached through
     /// <c>base.ExtremeRowRenderer</c>) that captures the production-built description and counts how many
@@ -129,4 +150,19 @@ public class ExtremeRowPayloadLazinessTests
 
         public override ISqlDialect Dialect => CapturingDialect;
     }
+}
+
+/// <summary>
+/// A native-eligible entity (#154 coverage) with an integral value-type key and a reference-type
+/// payload column, used to drive the reference-type payload branch without materializing it.
+/// </summary>
+[SqlTable("extreme_ref_payload_entity")]
+public class ExtremeRefPayloadEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
 }

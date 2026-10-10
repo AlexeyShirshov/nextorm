@@ -1,0 +1,9 @@
+prepare: prepared ok
+selectList.Count = 3
+  [0] ordinal=0 name=id type=Int32 nullable=False defaultOnNull=False converter=null projectionItem=null
+  [1] ordinal=1 name=name type=String nullable=True defaultOnNull=False converter=null projectionItem=null
+  [2] ordinal=2 name=leaf type=Nullable`1 nullable=True defaultOnNull=False converter=null projectionItem=null
+WriteJson json: [{"id":2,"name":null,"leaf":null}]
+WriteJson error: none
+ordinary rows: 1; first = Id:2 Name:<null> Leaf:<null>
+STJ oracle: [{"Id":2,"Name":null,"Leaf":null}]

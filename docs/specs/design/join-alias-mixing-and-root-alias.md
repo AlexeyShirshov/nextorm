@@ -50,9 +50,9 @@
 
 - `nextorm.core.sourcegenerator` — модель цепочки получает вид шага (`Positional` | `Alias(name)`); корневой
   шаг `Alias` из `.WithAlias`; эмит projection/builder/extension для смешанных схем; диагностики.
-- `nextorm.core` — добавляются только: `Projection<T1>` (arity-1, `IExtendableProjection`) и generic
-  `AliasRoot<TNext,TNextEntity>` seam (Фаза 2). Guard `CreateJoined:3137` **сохраняется** как предохранитель
-  базового (не-generated) пути.
+- `nextorm.core` — добавляются только: `Projection<T1>` (arity-1, **plain `IProjection` без `Extend`**) и
+  generic `AliasRoot<TNext,TNextEntity>` seam (Фаза 2). Guard `CreateJoined` **сохраняется** как
+  предохранитель базового (не-generated) пути.
 - Резолв алиасов (`AliasFromProjectionVisitor`, `ProjectionAliasCache`) **не меняется**: он уже slot-based
   (`ItemN` → позиция; `JoinSlotAttribute.Position` → позиция → `t1..t8`).
 - In-memory — fail-closed на обоих seam'ах (root и join).
@@ -69,10 +69,12 @@
 `Item1..ItemN`; алиасные слоты добавляют именованные expression-only свойства с `[JoinSlot(slot)]`.
 Инвариант: `p.ItemK` и алиас слота K — один и тот же слот.
 
-**`Projection<T1>` (новый публичный, arity-1):** `Item1` + `IExtendableProjection.Extend<T>` →
-`Projection<T1,T>`. Корневая alias-проекция: `AliasProjection_A1_Order<T> : Projection<T>`. Это единственное
+**`Projection<T1>` (новый публичный, arity-1):** `Item1`; это **plain `IProjection`, без
+`IExtendableProjection.Extend`** — переход slot 1→2 поставляют сгенерированные позиционные `public new`
+instance-члены, а не сама проекция (отсутствие `Extend` заставляет случайное in-memory-расширение падать
+закрыто). Корневая alias-проекция: `AliasProjection_A1_Order<T> : Projection<T>`. Это единственное
 добавление типов в ядро. Риск: сейчас `Projection` всегда arity ≥ 2 — planner/`DefaultColumnsProvider` могли не
-встречать dim=1; нужен отдельный тест плана single-entity через dim-1 проекцию.
+встречать dim=1; нужен отдельный тест плана single-entity через dim-1 проекцию (закрыт `RootAliasTests`).
 
 **Единый нейминг:** `_` зарезервирован в именах алиасов, поэтому суффикс кодирует каждый шаг:
 `A{slot}_{name}` для алиасного, `P{slot}` для позиционного. Пример:
@@ -92,15 +94,19 @@
 - `AliasProjection_<S><T1..Tn>` : `Projection<T1..Tn>` (+ alias-члены с `[JoinSlot]`; для корня n=1 →
   `Projection<T1>`);
 - `AliasJoin_<S><T1..Tn>` : `EntityBuilder<AliasProjection_<S><T1..Tn>>`;
-- transitions: на каждый следующий шаг и каждый применимый из 7 операторов — extension.
+- transitions: на каждый следующий шаг и каждый применимый из 7 операторов — алиасные extension'ы и/или
+  позиционные instance-члены.
 
 **Два вида transitions:**
 
-- *алиасный шаг* — как сейчас: `Join<TJoin>(this AliasJoin_<S>…, …, Alias.XMarker)` →
+- *алиасный шаг* — как сейчас: extension `Join<TJoin>(this AliasJoin_<S>…, …, Alias.XMarker)` →
   `self.JoinAlias<AliasJoin_<S'>, AliasProjection_<S'>, TJoin>(…)`;
-- *позиционный шаг* — `new`-extension `Join<TJoin>(this AliasJoin_<S>…, EntityBuilder<TJoin>, Expression<…>,
-  JoinOptions?)` → **тот же** `JoinAlias` seam, но `S'` добавляет только `ItemN` (без имени). Затеняет базовый
-  `EntityBuilder.Join`, поэтому guard `3137` не срабатывает.
+- *позиционный шаг* — **сгенерированный instance-член** `public new Join<TJoin>(EntityBuilder<TJoin>,
+  Expression<…>, JoinOptions?)` **на самом** `AliasJoin_<S>` → **тот же** `JoinAlias` seam, но `S'` добавляет
+  только `ItemN` (без имени). Это именно instance-метод (`public new`), а не extension: extension не может
+  затенять применимый instance-метод `EntityBuilder.Join`, поэтому позиционный переход генерируется на
+  билдере и скрывает унаследованный `EntityBuilder.Join`; guard базового (не-generated) пути
+  (`EntityBuilder.CreateJoined`) для generated-приёмников не срабатывает.
 
 **Позиционный префикс:** генератор резолвит core-типы как позиционные шаги — `EntityBuilder<T>` = база;
 `JoinedEntityBuilder<T1..Tn>` = база + `n-1` позиционных шагов (снятие текущего запрета
@@ -126,7 +132,10 @@ Column-alias в `SELECT` для именованного слота — имя �
 **In-memory — fail-closed:** любой алиас → `NotSupportedException` (root и join seam'ы). Чисто позиционные
 цепочки — без изменений.
 
-**Guard `3137`** остаётся для базового (не-generated) `EntityBuilder.Join`; generated-путь затеняет его.
+**Guard базового пути** (`EntityBuilder.CreateJoined`: `query is null && TEntity` — проекция) остаётся для
+не-generated `EntityBuilder.Join`/`Apply`; generated-приёмники скрывают его сгенерированными `public new`
+instance-переходами, поэтому позиционный шаг после алиаса на generated-пути теперь валиден (свободное
+смешивание), а не fail-closed.
 
 **Plan cache:** alias-цепочки покрыты `AliasPlanCacheTests`; для смешанных — обязательный аналог (чередование
 слотов на одном `DataContext`, повторные cached-выполнения), чтобы исключить смешение слотов.

@@ -1,0 +1,16 @@
+# E10 — final no-runtime-change guard (rv=2, r=2, n=1)
+
+Start tip: f7a6d728
+
+| # | command | exit | output artifact | result |
+|---|---|---|---|---|
+| 1 | git diff --no-ext-diff --quiet f7a6d728 -- src | 0 | e10-src-guard.log | no differences |
+| 2 | git diff --no-ext-diff --name-only f7a6d728 -- src | 0 | e10-src-names.txt | empty (0 bytes) |
+| 3 | git ls-files --others --exclude-standard -- src | 0 | e10-untracked-src.txt | empty (0 bytes) |
+
+ACCEPTANCE: quiet diff exits 0, name-only and untracked inventories empty. PASS — D189 introduces no
+runtime/product source change; the D134 implementation is already committed and untouched.
+
+Release-build guard: not re-run — no `src` change since the rv=1 boundary built `nextorm.slnx`
+Debug and Release both 0 warnings / 0 errors (logs /tmp/nextorm-rc2-189-r1/boundary/B-debug.log,
+B-release.log); the rv=2 plan authorizes no new benchmark and no rebuild of an unchanged tree.

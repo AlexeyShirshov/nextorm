@@ -1,0 +1,120 @@
+# ===== R190 re-verify (rv=2) DO->CHECK unit aggregate: per-project dotnet test tests/<proj> -c Debug --no-build x11 =====
+# command form: dotnet test <project> -c Debug --no-build
+# F (tested HEAD) = ee42f183ffa1d769da76a0ccaa024ec53a7885c9
+### nextorm.core.tests rc=0 total=1970 succeeded=1970 skipped=0 failed=0
+Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) passed (8s 928ms)
+
+Test run summary: Passed!
+  total: 1970
+  failed: 0
+  succeeded: 1970
+  skipped: 0
+  duration: 9s 160ms
+### nextorm.sqlite.tests rc=0 total=1311 succeeded=1310 skipped=1 failed=0
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+skipped NextORM.Sqlite.Tests.SqliteRowIdLobProbeTests.Sqlite_RowId_Projection_Streams_Lobs_MemoryBounded
+  Set NEXTORM_LOB_SQLITE_PROBE=1 to run the SQLite rowid LOB capability probe.
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64) passed (15s 509ms)
+
+Test run summary: Passed!
+  total: 1311
+  failed: 0
+  succeeded: 1310
+  skipped: 1
+  duration: 15s 745ms
+### nextorm.sqlserver.tests rc=0 total=756 succeeded=756 skipped=0 failed=0
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) passed (1s 401ms)
+
+Test run summary: Passed!
+  total: 756
+  failed: 0
+  succeeded: 756
+  skipped: 0
+  duration: 1s 634ms
+### nextorm.postgres.tests rc=0 total=844 succeeded=844 skipped=0 failed=0
+Running tests from /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64) passed (1s 760ms)
+
+Test run summary: Passed!
+  total: 844
+  failed: 0
+  succeeded: 844
+  skipped: 0
+  duration: 2s 010ms
+### nextorm.mysql.tests rc=0 total=323 succeeded=323 skipped=0 failed=0
+Running tests from /home/alex/sources/nextorm/tests/nextorm.mysql.tests/bin/linux/Debug/net10.0/nextorm.mysql.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.mysql.tests/bin/linux/Debug/net10.0/nextorm.mysql.tests.dll (net10.0|x64) passed (891ms)
+
+Test run summary: Passed!
+  total: 323
+  failed: 0
+  succeeded: 323
+  skipped: 0
+  duration: 1s 120ms
+### nextorm.mariadb.tests rc=0 total=242 succeeded=242 skipped=0 failed=0
+Running tests from /home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll (net10.0|x64) passed (809ms)
+
+Test run summary: Passed!
+  total: 242
+  failed: 0
+  succeeded: 242
+  skipped: 0
+  duration: 1s 027ms
+### nextorm.clickhouse.tests rc=0 total=607 succeeded=607 skipped=0 failed=0
+Running tests from /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll (net10.0|x64) passed (1s 388ms)
+
+Test run summary: Passed!
+  total: 607
+  failed: 0
+  succeeded: 607
+  skipped: 0
+  duration: 1s 616ms
+### nextorm.clickhouse.extensions.tests rc=0 total=31 succeeded=31 skipped=0 failed=0
+Running tests from /home/alex/sources/nextorm/tests/nextorm.clickhouse.extensions.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.extensions.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.clickhouse.extensions.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.extensions.tests.dll (net10.0|x64) passed (605ms)
+
+Test run summary: Passed!
+  total: 31
+  failed: 0
+  succeeded: 31
+  skipped: 0
+  duration: 846ms
+### nextorm.alias.tests rc=0 total=46 succeeded=46 skipped=0 failed=0
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) passed (3s 099ms)
+
+Test run summary: Passed!
+  total: 46
+  failed: 0
+  succeeded: 46
+  skipped: 0
+  duration: 3s 332ms
+### nextorm.entityframeworkcore.tests rc=0 total=126 succeeded=126 skipped=0 failed=0
+Running tests from /home/alex/sources/nextorm/tests/nextorm.entityframeworkcore.tests/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.entityframeworkcore.tests/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.tests.dll (net10.0|x64) passed (2s 798ms)
+
+Test run summary: Passed!
+  total: 126
+  failed: 0
+  succeeded: 126
+  skipped: 0
+  duration: 3s 026ms
+### nextorm.publicextensibility.tests rc=0 total=10 succeeded=10 skipped=0 failed=0
+Running tests from /home/alex/sources/nextorm/tests/nextorm.publicextensibility.tests/bin/linux/Debug/net10.0/nextorm.publicextensibility.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.publicextensibility.tests/bin/linux/Debug/net10.0/nextorm.publicextensibility.tests.dll (net10.0|x64) passed (550ms)
+
+Test run summary: Passed!
+  total: 10
+  failed: 0
+  succeeded: 10
+  skipped: 0
+  duration: 776ms
+
+# per-project aggregate
+AGGREGATE total=6266 succeeded=6265 skipped=1 failed=0 rc_all=0
+exit_code=0

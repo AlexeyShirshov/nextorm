@@ -393,6 +393,19 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     internal QueryCommand? FromQuery => From?.SubQuery;
     internal bool OneColumn { get; set; }
     /// <summary>
+    /// When <c>true</c>, the JSON preparation path captures a recursive JSON shape description (including
+    /// nested constructions and expanded entity items) and lowers its scalar descendants into the prepared
+    /// select list, instead of collapsing a nested construction into one opaque column. Set only on the
+    /// JSON stream clone; ordinary query preparation never sets it.
+    /// </summary>
+    internal bool JsonShapeMode { get; set; }
+    /// <summary>
+    /// The recursively captured JSON projection shape stored by the JSON-only preparer when
+    /// <see cref="JsonShapeMode"/> is set; <see langword="null"/> for an ordinary (non-JSON) preparation or a
+    /// shape the JSON preparer did not need to take over.
+    /// </summary>
+    internal JsonShapeNode? JsonShape { get; set; }
+    /// <summary>
     /// When <c>true</c>, the planner compiles no row mapper: the command is read as a single scalar
     /// value. Set by the <c>ForJson</c>/<c>ForXml</c> terminals, whose whole result set collapses into
     /// one document column.
@@ -863,6 +876,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _referencedQueries = null;
         _outerRefs = null;
         ReferencedQueriesPlanHash = 0;
+        // The JSON-only preparation state is per-preparation: a re-prepared or derived command must not
+        // retain a stale captured descriptor (or remain in JSON shape mode) from a previous JSON stream.
+        JsonShapeMode = false;
+        JsonShape = null;
         InvalidatePlanKey();
 
         _dataContext?.ResetPreparation(this);

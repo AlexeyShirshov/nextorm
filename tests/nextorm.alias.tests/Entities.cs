@@ -21,3 +21,14 @@ public sealed class Person
 
     public string Name { get; set; } = string.Empty;
 }
+
+/// <summary>Second join target (issue #206): a distinct CLR type that reuses the same alias letter as <see cref="Person"/>.</summary>
+[SqlTable("product")]
+public sealed class Product
+{
+    public int Id { get; set; }
+
+    public int OrderId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+}

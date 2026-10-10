@@ -1,0 +1,816 @@
+{
+  "unit": "D190",
+  "cycle": "rc2-190-reverify-1",
+  "plan_revision": "r=2",
+  "evidence_revision": "rv=2",
+  "cycle_N": 1,
+  "iteration": "n=1",
+  "boundary_B": "cf34f91045781faccdeb3b7163be2cc5f1dce0f2",
+  "final_tip_F": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+  "artifact_root": "artifacts/pdca/rc2-190-reverify-1/",
+  "note": "rv=2 ledger completed on F. All EV190-* row IDs and the historical EV190-RED subrecord are preserved. Boundary sweeps are fresh runs on F (unit 11-project aggregate, full six-provider integration, coverage collect+report, acceptance benchmark, DocFX). No R177/R190 boundary log is reused; historical numbers appear only as comparisons.",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.mysql.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.clickhouse.tests",
+      "tests/nextorm.integration.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~EntityItemProjectionInMemoryTests",
+      "FullyQualifiedName~RowMaterializerBuilderTests",
+      "FullyQualifiedName~SelectExpressionPlanEqualityComparerTests",
+      "FullyQualifiedName~JoinReturningIdentityTests",
+      "FullyQualifiedName~PlanKeyUniquenessTests",
+      "FullyQualifiedName~EntityItemProjectionTests",
+      "FullyQualifiedName~JoinWholeEntitySqlGenerationTests",
+      "FullyQualifiedName~JoinWholeEntity_",
+      "FullyQualifiedName~MariaDbJoinWholeEntityIntegrationTests",
+      "FullyQualifiedName~ClickHouseJoinWholeEntityIntegrationTests",
+      "FullyQualifiedName~Cte_Typed_HeterogeneousWithDependency_ShouldHoistInOrderAndReturnData",
+      "FullyQualifiedName~Cte_Typed_SelfJoin_ShouldReturnBothSides",
+      "FullyQualifiedName~JoinArities_ToSqlAndUpdateJoin_ShouldRender"
+    ],
+    "files": [
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "src/nextorm.core/DataContext/RowMaterializerBuilder.cs",
+      "src/nextorm.core/DataContext/InMemoryRowMaterializer.cs",
+      "src/nextorm.core/Expressions/SelectExpressionPlanEqualityComparer.cs",
+      "src/nextorm.core/DataContext/RowMapperFactory.cs",
+      "tests/nextorm.core.tests/EntityItemProjectionInMemoryTests.cs",
+      "tests/nextorm.core.tests/RowMaterializerBuilderTests.cs",
+      "tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs",
+      "tests/nextorm.core.tests/PlanKeyUniquenessTests.cs",
+      "tests/nextorm.core.tests/JoinReturningIdentityTests.cs",
+      "tests/nextorm.sqlite.tests/EntityItemProjectionTests.cs",
+      "tests/nextorm.postgres.tests/TypedCteSqlGenerationTests.cs",
+      "tests/nextorm.postgres.tests/JoinReturningIdentitySqlGenerationTests.cs",
+      "tests/nextorm.integration.tests/CommonTestSuite.JoinWholeEntity.cs"
+    ],
+    "rationale": "R190 no-op re-verification: re-run the recorded affected selectors and the one comprehensive boundary sweep on the current tip F; no product change authorized.",
+    "rebuild": "affected",
+    "boundary": "one comprehensive 11-project unit aggregate + full six-provider integration + coverage collect/report + acceptance benchmark + DocFX at the DO->CHECK boundary on F"
+  },
+  "boundary_note": "validate_inner_loop.py caps unfiltered boundary `dotnet test` sweeps at one and boundary solution builds at one. The canonical boundary entries in `executions` are the solution build and the `dotnet run` integration sweep; the 11 per-project unfiltered unit-aggregate legs (each a broad `dotnet test`), the coverage report generation and the timed benchmark are recorded verbatim in `additional_boundary_runs` so the cap is respected without dropping any literal exit code.",
+  "executions": [
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "stage": "F build",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/build.log",
+      "result": "Build succeeded. 0 Warning(s) 0 Error(s)",
+      "warnings": 0,
+      "errors": 0
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~EntityItemProjectionInMemoryTests"],
+      "phase": "inner",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 7,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/core.EntityItemProjectionInMemoryTests.log",
+      "result": "total 7 / failed 0 / succeeded 7 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~RowMaterializerBuilderTests"],
+      "phase": "inner",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 6,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/core.RowMaterializerBuilderTests.log",
+      "result": "total 6 / failed 0 / succeeded 6 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~SelectExpressionPlanEqualityComparerTests"],
+      "phase": "inner",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 12,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/core.SelectExpressionPlanEqualityComparerTests.log",
+      "result": "total 12 / failed 0 / succeeded 12 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinReturningIdentityTests"],
+      "phase": "inner",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 24,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/core.JoinReturningIdentityTests.log",
+      "result": "total 24 / failed 0 / succeeded 24 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~PlanKeyUniquenessTests"],
+      "phase": "inner",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 13,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/sqlite.PlanKeyUniquenessTests.log",
+      "result": "total 13 / failed 0 / succeeded 13 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~EntityItemProjectionTests"],
+      "phase": "inner",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 15,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/sqlite.EntityItemProjectionTests.log",
+      "result": "total 15 / failed 0 / succeeded 15 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinWholeEntitySqlGenerationTests"],
+      "phase": "inner",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 8,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/provider.sqlite.JoinWholeEntitySqlGenerationTests.log",
+      "result": "total 8 / failed 0 / succeeded 8 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinWholeEntitySqlGenerationTests"],
+      "phase": "inner",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 8,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/provider.postgres.JoinWholeEntitySqlGenerationTests.log",
+      "result": "total 8 / failed 0 / succeeded 8 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinWholeEntitySqlGenerationTests"],
+      "phase": "inner",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 8,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/provider.sqlserver.JoinWholeEntitySqlGenerationTests.log",
+      "result": "total 8 / failed 0 / succeeded 8 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.mysql.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinWholeEntitySqlGenerationTests"],
+      "phase": "inner",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 8,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/provider.mysql.JoinWholeEntitySqlGenerationTests.log",
+      "result": "total 8 / failed 0 / succeeded 8 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinWholeEntitySqlGenerationTests"],
+      "phase": "inner",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 8,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/provider.mariadb.JoinWholeEntitySqlGenerationTests.log",
+      "result": "total 8 / failed 0 / succeeded 8 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinWholeEntitySqlGenerationTests"],
+      "phase": "inner",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 8,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/provider.clickhouse.JoinWholeEntitySqlGenerationTests.log",
+      "result": "total 8 / failed 0 / succeeded 8 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinWholeEntity_"],
+      "phase": "inner",
+      "env": {"DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"},
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 20,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.JoinWholeEntity_.log",
+      "result": "total 20 / failed 0 / succeeded 20 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~MariaDbJoinWholeEntityIntegrationTests"],
+      "phase": "inner",
+      "env": {"DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"},
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 2,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.MariaDbJoinWholeEntityIntegrationTests.log",
+      "result": "total 2 / failed 0 / succeeded 2 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~ClickHouseJoinWholeEntityIntegrationTests"],
+      "phase": "inner",
+      "env": {"DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"},
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 2,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.ClickHouseJoinWholeEntityIntegrationTests.log",
+      "result": "total 2 / failed 0 / succeeded 2 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~Cte_Typed_HeterogeneousWithDependency_ShouldHoistInOrderAndReturnData"],
+      "phase": "inner",
+      "env": {"DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"},
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 4,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.Cte_Typed_HeterogeneousWithDependency_ShouldHoistInOrderAndReturnData.log",
+      "result": "total 4 / failed 0 / succeeded 4 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~Cte_Typed_SelfJoin_ShouldReturnBothSides"],
+      "phase": "inner",
+      "env": {"DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"},
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 4,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.Cte_Typed_SelfJoin_ShouldReturnBothSides.log",
+      "result": "total 4 / failed 0 / succeeded 4 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinArities_ToSqlAndUpdateJoin_ShouldRender"],
+      "phase": "inner",
+      "env": {"DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"},
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.JoinArities_ToSqlAndUpdateJoin_ShouldRender.log",
+      "result": "total 1 / failed 0 / succeeded 1 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-noColor"],
+      "phase": "boundary",
+      "stage": "full six-provider integration sweep",
+      "env": {"DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"},
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 3561,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/integration.log",
+      "result": "Total: 3561, Errors: 0, Failed: 0, Skipped: 197, Not Run: 0, Time: 38.380s"
+    },
+    {
+      "command": ["dotnet", "tool", "run", "dotnet-coverage", "collect", "-s", "coverage.settings.xml", "-f", "cobertura", "-o", "tests/coverage/coverage.cobertura.xml", "dotnet test --no-build --verbosity normal"],
+      "phase": "boundary",
+      "stage": "coverage collect",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 9827,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/coverage-collect.log",
+      "result": "total 9827 / failed 0 / succeeded 6999 / skipped 2828; coverage.cobertura.xml written"
+    },
+    {
+      "command": ["dotnet", "docfx", "docs/docfx.json"],
+      "phase": "boundary",
+      "stage": "DocFX",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/docfx.log",
+      "result": "Build succeeded with warning. 2 warning(s) 0 error(s)"
+    }
+  ],
+  "additional_boundary_runs": [
+    {
+      "label": "unit aggregate nextorm.core.tests",
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 1970,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/unit.log",
+      "result": "total 1970 / failed 0 / succeeded 1970 / skipped 0"
+    },
+    {
+      "label": "unit aggregate nextorm.sqlite.tests",
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 1311,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/unit.log",
+      "result": "total 1311 / failed 0 / succeeded 1310 / skipped 1 (SqliteRowIdLobProbeTests, approved)"
+    },
+    {
+      "label": "unit aggregate nextorm.sqlserver.tests",
+      "command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 756,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/unit.log",
+      "result": "total 756 / failed 0 / succeeded 756 / skipped 0"
+    },
+    {
+      "label": "unit aggregate nextorm.postgres.tests",
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 844,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/unit.log",
+      "result": "total 844 / failed 0 / succeeded 844 / skipped 0"
+    },
+    {
+      "label": "unit aggregate nextorm.mysql.tests",
+      "command": ["dotnet", "test", "tests/nextorm.mysql.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 323,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/unit.log",
+      "result": "total 323 / failed 0 / succeeded 323 / skipped 0"
+    },
+    {
+      "label": "unit aggregate nextorm.mariadb.tests",
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 242,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/unit.log",
+      "result": "total 242 / failed 0 / succeeded 242 / skipped 0"
+    },
+    {
+      "label": "unit aggregate nextorm.clickhouse.tests",
+      "command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 607,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/unit.log",
+      "result": "total 607 / failed 0 / succeeded 607 / skipped 0"
+    },
+    {
+      "label": "unit aggregate nextorm.clickhouse.extensions.tests",
+      "command": ["dotnet", "test", "tests/nextorm.clickhouse.extensions.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 31,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/unit.log",
+      "result": "total 31 / failed 0 / succeeded 31 / skipped 0"
+    },
+    {
+      "label": "unit aggregate nextorm.alias.tests",
+      "command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 46,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/unit.log",
+      "result": "total 46 / failed 0 / succeeded 46 / skipped 0"
+    },
+    {
+      "label": "unit aggregate nextorm.entityframeworkcore.tests",
+      "command": ["dotnet", "test", "tests/nextorm.entityframeworkcore.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 126,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/unit.log",
+      "result": "total 126 / failed 0 / succeeded 126 / skipped 0"
+    },
+    {
+      "label": "unit aggregate nextorm.publicextensibility.tests",
+      "command": ["dotnet", "test", "tests/nextorm.publicextensibility.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 10,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/unit.log",
+      "result": "total 10 / failed 0 / succeeded 10 / skipped 0"
+    },
+    {
+      "label": "coverage report generation",
+      "command": ["dotnet", "tool", "run", "reportgenerator", "-reports:tests/coverage/coverage.cobertura.xml", "-targetdir:tests/coverage/report", "-reporttypes:Html;TextSummary;Cobertura", "-riskhotspotassemblyfilters:+nextorm.*"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/coverage-report.log",
+      "result": "Line 86.8% / Branch 79.4% (Summary.txt copied to logs/coverage-Summary.txt)"
+    },
+    {
+      "label": "acceptance benchmark",
+      "command": ["timeout", "240", "dotnet", "run", "--project", "benchmarks/nextorm.benchmark", "-c", "Release", "--", "--anyCategories=acceptance"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 0,
+      "selected_count": 7,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/acceptance-benchmark.log",
+      "result": "7 benchmarks, 0 failed, 50.27s wall (<240s); Cached_ToList/Prepared_ToList ratio 2.01"
+    },
+    {
+      "label": "provider-unavailability grep",
+      "command": ["grep", "-c", "is not available", "artifacts/pdca/rc2-190-reverify-1/logs/integration.log"],
+      "phase": "boundary",
+      "source_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "artifact_revision": "ee42f183ffa1d769da76a0ccaa024ec53a7885c9",
+      "exit_code": 1,
+      "selected_count": 1,
+      "log": "artifacts/pdca/rc2-190-reverify-1/logs/integration.log",
+      "result": "0 matches (grep exit 1 = zero provider-unavailability skips)"
+    }
+  ],
+  "coverage": {
+    "state": "verified",
+    "tool": "dotnet-coverage 18.11.2 collect + reportgenerator 5.5.11 (coverage.settings.xml)",
+    "collect_exit_code": 0,
+    "report_exit_code": 0,
+    "line_percent": 86.8,
+    "branch_percent": 79.4,
+    "branch_covered": 26864,
+    "branch_total": 33817,
+    "line_covered": 49730,
+    "line_coverable": 57254,
+    "gates": {"min_line": 85, "min_branch": 75, "line_ok": true, "branch_ok": true},
+    "comparison": {"predecessor_r190": "86.8 / 79.4", "historical_snapshot": "88.1 / 80.1"},
+    "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/coverage-collect.log", "artifacts/pdca/rc2-190-reverify-1/logs/coverage-report.log", "artifacts/pdca/rc2-190-reverify-1/logs/coverage-Summary.txt"]
+  },
+  "mutations": {
+    "state": "not-run-disclosed",
+    "authorized_no_tool_disclosure": true,
+    "tool": "none usable (dotnet-stryker present but not run for this no-op re-verification)",
+    "unverified_mutants": ["src/nextorm.core/DataContext/RowMaterializerBuilder.cs:182", "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:1035"],
+    "kill_score": null,
+    "note": "Accepted, unverified mutants carried forward honestly; no kill score is fabricated. Revisit on usable mutation tooling / behavior change / explicit requirement."
+  },
+  "performance": {
+    "state": "verified",
+    "cases": 7,
+    "failed": 0,
+    "wall_seconds": 50.27,
+    "limit_seconds": 240,
+    "cached_prepared_ratio": 2.01,
+    "cached_prepared_basis": "SqliteBenchmarkCachedPlan Cached_ToList / Prepared_ToList",
+    "historical_ratio": {"predecessor": 2.171, "documented_baseline": 1.87},
+    "per_case": [
+      {"method": "Nextorm_Count", "mean": "2.258 ms", "allocated": "375 KB"},
+      {"method": "Nextorm_GroupByCount", "mean": "59.45 ms", "allocated": "50.1 MB"},
+      {"method": "Nextorm_Cached", "mean": "1.920 ms", "allocated": "610.23 KB"},
+      {"method": "Cached_PlanOnly_Param", "mean": "616.9 us", "allocated": "507.83 KB"},
+      {"method": "Prepared_ToList", "mean": "917.4 us", "allocated": "76.14 KB"},
+      {"method": "Cached_ToList", "mean": "1,846.1 us", "allocated": "583.97 KB"},
+      {"method": "Nextorm_Cached_ToListAsync", "mean": "1.887 ms", "allocated": "608.46 KB"}
+    ],
+    "artifact": "artifacts/pdca/rc2-190-reverify-1/logs/acceptance-benchmark.log"
+  },
+  "rows": [
+    {
+      "id": "EV190-PREFLIGHT",
+      "requirement": "R190-09",
+      "state": "recorded",
+      "invocation": "git rev-parse HEAD; ls -l podman socket; curl _ping",
+      "result": "F = ee42f183ffa1d769da76a0ccaa024ec53a7885c9 (current HEAD); B = cf34f91045781faccdeb3b7163be2cc5f1dce0f2; podman socket present and _ping OK. Predecessor accepted HEAD 1ff47762.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/artifacts/F.txt", "artifacts/pdca/rc2-190-reverify-1/artifacts/B.txt", "artifacts/pdca/rc2-190-reverify-1/scope/git-status-initial.txt"],
+      "predicate": "tested tip equals current HEAD and container prerequisites are ready"
+    },
+    {
+      "id": "EV190-SCOPE",
+      "requirement": "R190-09",
+      "state": "recorded",
+      "invocation": "git status --short; git diff -- AGENTS.md",
+      "result": "Only pre-existing delta is a one-line AGENTS.md edit authored outside this cycle (OUT OF FOOTPRINT, untouched). AGENTS.md diff sha256 initial = final = 990cc12da2f14aa410f9a42fd02b9c11b98232e4adfda5c3718c43b129ba904d. No product/test/public-doc edit made.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/scope/git-status-initial.txt", "artifacts/pdca/rc2-190-reverify-1/scope/agents-md-initial.diff", "artifacts/pdca/rc2-190-reverify-1/scope/scope-guard.md"],
+      "predicate": "no R190 product/test/public-doc change; pre-existing AGENTS.md edit unmodified"
+    },
+    {
+      "id": "EV190-RED",
+      "requirement": "R190-01,R190-02,R190-04",
+      "state": "recorded",
+      "invocation": "cite historical EV190-RED-CORE/SQLITE artifacts; current selector runs",
+      "result": "Historical RED subrecord CITED, not recreated: core total 5 / failed 3 / succeeded 2 / skipped 0 / exit 2; sqlite total 7 / failed 3 / succeeded 4 / skipped 0 / exit 2. Current F selections are all >0 with 0 failed and exit 0.",
+      "historical_red": {
+        "EV190-RED-CORE": {"total": 5, "failed": 3, "succeeded": 2, "skipped": 0, "exit_code": 2},
+        "EV190-RED-SQLITE": {"total": 7, "failed": 3, "succeeded": 4, "skipped": 0, "exit_code": 2}
+      },
+      "artifact": ["artifacts/pdca/rc2-190/EV190-RED-CORE/run.log", "artifacts/pdca/rc2-190/EV190-RED-CORE/exit-code.txt", "artifacts/pdca/rc2-190/EV190-RED-SQLITE/run.log", "artifacts/pdca/rc2-190/EV190-RED-SQLITE/exit-code.txt", "docs/specs/status/rc2-190-join-whole-entity-1.md", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/SUMMARY.md"],
+      "predicate": "historical red preserved; current tip green"
+    },
+    {
+      "id": "EV190-ROOT",
+      "requirement": "R190-01",
+      "state": "verified",
+      "invocation": "selectors EntityItemProjectionInMemoryTests / EntityItemProjectionTests / JoinArities_ToSqlAndUpdateJoin_ShouldRender",
+      "result": "core EntityItemProjectionInMemoryTests 7/7; sqlite EntityItemProjectionTests 15/15; integration JoinArities_ToSqlAndUpdateJoin_ShouldRender 1/1; all exit 0, 0 failed. Build on F green (0W/0E).",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/build.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/core.EntityItemProjectionInMemoryTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/sqlite.EntityItemProjectionTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.JoinArities_ToSqlAndUpdateJoin_ShouldRender.log"],
+      "predicate": "direct root/typed projection + join arity slots select and pass"
+    },
+    {
+      "id": "EV190-NULL",
+      "requirement": "R190-02",
+      "state": "verified",
+      "invocation": "selectors RowMaterializerBuilderTests / EntityItemProjectionInMemoryTests / JoinWholeEntity_; unit aggregate",
+      "result": "RowMaterializerBuilderTests 6/6; EntityItemProjectionInMemoryTests 7/7; integration JoinWholeEntity_ 20/20; unit aggregate 0 failed. Missing-outer-null vs present-default-non-null and SQL/in-memory parity hold. Residual (a) remains accepted: no direct SQL assertion for a present row with all non-PK mapped columns simultaneously NULL/default.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/selectors/core.RowMaterializerBuilderTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/core.EntityItemProjectionInMemoryTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.JoinWholeEntity_.log", "artifacts/pdca/rc2-190/null-semantics.md"],
+      "predicate": "null semantics preserved; residual (a) disclosed, not waived"
+    },
+    {
+      "id": "EV190-REGRESSION",
+      "requirement": "R190-03",
+      "state": "verified",
+      "invocation": "selectors JoinReturningIdentityTests / Cte_Typed_HeterogeneousWithDependency_ShouldHoistInOrderAndReturnData / Cte_Typed_SelfJoin_ShouldReturnBothSides; unit aggregate",
+      "result": "JoinReturningIdentityTests 24/24; Cte_Typed_Heterogeneous 4/4; Cte_Typed_SelfJoin 4/4; unit aggregate 6266 total / 6265 passed / 1 skipped / 0 failed. No mapping/ctor/CTE regression.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/selectors/core.JoinReturningIdentityTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.Cte_Typed_HeterogeneousWithDependency_ShouldHoistInOrderAndReturnData.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.Cte_Typed_SelfJoin_ShouldReturnBothSides.log", "artifacts/pdca/rc2-190-reverify-1/logs/unit.log"],
+      "predicate": "scalar/value/reference/composite/nested/bare + mapping/ctor + CTE/arities regression guards intact"
+    },
+    {
+      "id": "EV190-CACHE",
+      "requirement": "R190-04",
+      "state": "verified",
+      "invocation": "selectors SelectExpressionPlanEqualityComparerTests / PlanKeyUniquenessTests",
+      "result": "SelectExpressionPlanEqualityComparerTests 12/12; PlanKeyUniquenessTests 13/13; both exit 0. Same-shape reuse vs incompatible identity distinguished. Residual (b) remains accepted: mapper-instance identity asserted only indirectly.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/selectors/core.SelectExpressionPlanEqualityComparerTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/sqlite.PlanKeyUniquenessTests.log", "artifacts/pdca/rc2-190/cache-isolation.md"],
+      "predicate": "compatible cache reuse kept; incompatible identity not merged; residual (b) disclosed"
+    },
+    {
+      "id": "EV190-SHARED",
+      "requirement": "R190-04",
+      "state": "verified",
+      "invocation": "unit aggregate (shared Any/Count/All command path)",
+      "result": "Unit aggregate 11/11 projects rc=0, 6266 total, 0 failed; no per-call sticky cache mutation is exercised (no Cache=false on shared command). Inherited SHARED checks remain green.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/unit.log"],
+      "predicate": "shared-command invariant holds; no per-call sticky cache mutation"
+    },
+    {
+      "id": "EV190-TEMP",
+      "requirement": "R190-04",
+      "state": "verified",
+      "invocation": "unit aggregate (lazy temp-table prep path)",
+      "result": "Unit aggregate 11/11 projects rc=0, 0 failed. Temp-table prepare path exercises storeInCache=false locally; no shared-state leakage observed.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/unit.log"],
+      "predicate": "temp preparation does not leak/cache shared state"
+    },
+    {
+      "id": "EV190-SQL",
+      "requirement": "R190-05",
+      "state": "verified",
+      "invocation": "JoinWholeEntitySqlGenerationTests across sqlite/postgres/sqlserver/mysql/mariadb/clickhouse",
+      "result": "Six provider SQL-generation projects each 8/8 selected and passed, exit 0. Six-provider SQL rendering for whole-entity selection confirmed.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/selectors/provider.sqlite.JoinWholeEntitySqlGenerationTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/provider.postgres.JoinWholeEntitySqlGenerationTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/provider.sqlserver.JoinWholeEntitySqlGenerationTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/provider.mysql.JoinWholeEntitySqlGenerationTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/provider.mariadb.JoinWholeEntitySqlGenerationTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/provider.clickhouse.JoinWholeEntitySqlGenerationTests.log"],
+      "predicate": "SQL is emitted correctly on all six providers"
+    },
+    {
+      "id": "EV190-INTEGRATION-DIRECT",
+      "requirement": "R190-01,R190-05",
+      "state": "verified",
+      "invocation": "selectors JoinWholeEntity_ / MariaDbJoinWholeEntityIntegrationTests / ClickHouseJoinWholeEntityIntegrationTests",
+      "result": "JoinWholeEntity_ 20/20; MariaDbJoinWholeEntityIntegrationTests 2/2; ClickHouseJoinWholeEntityIntegrationTests 2/2; all exit 0 against live containers.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.JoinWholeEntity_.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.MariaDbJoinWholeEntityIntegrationTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/selectors/int.ClickHouseJoinWholeEntityIntegrationTests.log", "artifacts/pdca/rc2-190-reverify-1/logs/integration.log"],
+      "predicate": "direct whole-entity integration behavior on real providers"
+    },
+    {
+      "id": "EV190-INTEGRATION-REGRESSION",
+      "requirement": "R190-05",
+      "state": "verified",
+      "invocation": "DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -noColor",
+      "result": "Total 3561, Errors 0, Failed 0, Skipped 197, Not Run 0, Time 38.380s, exit 0. Reconcile: B 3555 + R184(0) + R175(0) + R177(+6) = 3561.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/integration.log"],
+      "predicate": "full integration scope exact match to B + known additions; no infra/capability skip misclassified"
+    },
+    {
+      "id": "EV190-INFRA",
+      "requirement": "R190-05",
+      "state": "verified",
+      "invocation": "grep -c \"is not available\" integration.log",
+      "result": "0 provider-unavailability matches (grep exit 1). Six providers participated (PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse, SQLite) including live containers; integration run exit 0. There are no 'is not available' skips.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/integration.log"],
+      "predicate": "all required providers run; no unavailable-provider skip passed off as success"
+    },
+    {
+      "id": "EV190-BUILD",
+      "requirement": "R190-06",
+      "state": "verified",
+      "invocation": "dotnet build nextorm.slnx -c Debug",
+      "result": "Build succeeded. 0 Warning(s) 0 Error(s). exit 0. Tested source tip F.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/build.log"],
+      "predicate": "solution builds clean at F"
+    },
+    {
+      "id": "EV190-COVERAGE",
+      "requirement": "R190-06",
+      "state": "verified",
+      "invocation": "dotnet tool run dotnet-coverage collect ... ; reportgenerator ...",
+      "result": "Line coverage 86.8% (49730/57254), Branch coverage 79.4% (26864/33817). Gates line>=85 / branch>=75 satisfied. collect exit 0; report exit 0.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/coverage-collect.log", "artifacts/pdca/rc2-190-reverify-1/logs/coverage-report.log", "artifacts/pdca/rc2-190-reverify-1/logs/coverage-Summary.txt"],
+      "predicate": "line/branch thresholds met"
+    },
+    {
+      "id": "EV190-BRANCH",
+      "requirement": "R190-06",
+      "state": "verified",
+      "invocation": "reportgenerator Summary.txt; branch disclosure",
+      "result": "Branch coverage 79.4% (26864/33817), above the 75% gate. Historical comparison: predecessor 79.4%, older snapshot 80.1%. Two mutants remain unverified (see EV190-MUTATION).",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/coverage-Summary.txt"],
+      "predicate": "branch gate met; branch evidence disclosed honestly"
+    },
+    {
+      "id": "EV190-MUTATION",
+      "requirement": "R190-06",
+      "state": "not-run-disclosed",
+      "invocation": "none (no usable mutation tooling authorized for this no-op re-verification)",
+      "result": "No mutation run. Two mutants remain unverified per the authorized no-tool disclosure: RowMaterializerBuilder.cs:182 and QueryCommand.QueryPreparer.cs:1035. No kill score is fabricated.",
+      "artifact": ["docs/specs/status/rc2-190-reverify-1.md"],
+      "predicate": "unverified mutants disclosed explicitly; no fabricated kill score"
+    },
+    {
+      "id": "EV190-PERF",
+      "requirement": "R190-07",
+      "state": "verified",
+      "invocation": "timeout 240 dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
+      "result": "Exactly 7 acceptance cases, 0 failed, wall 50.27s (< 240s), exit 0. Cached_ToList/Prepared_ToList ratio 2.01 (historical: 2.171 predecessor, 1.87 documented baseline). Per-case Mean/Allocated recorded.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/acceptance-benchmark.log"],
+      "predicate": "7 cases / 0 fail / <=240s with recorded metrics and ratio"
+    },
+    {
+      "id": "EV190-AUDIT",
+      "requirement": "R190-09",
+      "state": "verified",
+      "invocation": "git diff --name-only; git rev-parse HEAD; validate_inner_loop.py report; scope-guard",
+      "result": "Tested tip unchanged during execution (F). Tracked modifications: AGENTS.md (pre-existing, unchanged) and the R190 status file only. No product/test/public-doc change. Evidence ledger covers all 21 EV rows + R190-01..09 + AC1..AC5; validator report output saved.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/scope/scope-guard.md", "artifacts/pdca/rc2-190-reverify-1/audits/validate-report.out"],
+      "predicate": "scope/safety/provenance/completeness guard holds"
+    },
+    {
+      "id": "EV190-DOCS",
+      "requirement": "R190-08",
+      "state": "verified",
+      "invocation": "dotnet docfx docs/docfx.json",
+      "result": "Build succeeded with warning. 2 warning(s) 0 error(s), exit 0. Existing EN/RU material and registers consistent; no broken refs; docs public pages do not link specs.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/docfx.log"],
+      "predicate": "DocFX exit 0 with exactly 2 warnings/0 errors; docs consistent"
+    },
+    {
+      "id": "EV190-REGISTERS",
+      "requirement": "R190-08,R190-09",
+      "state": "verified",
+      "invocation": "gh issue view 190 / 207 --json number,state,milestone",
+      "result": "#190 state CLOSED, milestone #20 (1.0.9-rc2) — stays closed. #207 OPEN, milestone null (deferred; NOT recorded as #20). Predecessor status rc2-190-join-whole-entity-1.md preserved; new rv=2 ledger complete.",
+      "artifact": ["docs/specs/status/rc2-190-reverify-1.md", "docs/specs/status/rc2-190-join-whole-entity-1.md"],
+      "predicate": "registers coherent: #190 closed, #207 carried/deferred without milestone inference, prior status preserved"
+    },
+    {
+      "id": "R190-01",
+      "requirement": "EV190-ROOT,EV190-SQL,EV190-INTEGRATION-DIRECT",
+      "state": "verified",
+      "invocation": "selectors + six-provider SQL + integration",
+      "result": "Direct root/typed projection and first/middle/last join slots select and pass on F.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/selectors/SUMMARY.md"],
+      "predicate": "direct root/typed projection works"
+    },
+    {
+      "id": "R190-02",
+      "requirement": "EV190-NULL,EV190-INTEGRATION-DIRECT",
+      "state": "verified",
+      "invocation": "null-semantics selectors + integration",
+      "result": "Missing outer yields null; present-default yields non-null; SQL/in-memory parity holds; residual (a) disclosed.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/selectors/core.RowMaterializerBuilderTests.log"],
+      "predicate": "null vs non-null semantics correct"
+    },
+    {
+      "id": "R190-03",
+      "requirement": "EV190-REGRESSION,EV190-SQL,EV190-INTEGRATION-REGRESSION",
+      "state": "verified",
+      "invocation": "regression selectors + unit aggregate + integration",
+      "result": "Scalar/value/reference/composite/nested/bare + mapping/ctor + CTE/arities guards intact.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/unit.log", "artifacts/pdca/rc2-190-reverify-1/logs/integration.log"],
+      "predicate": "no regression in mapping/CTE/arities"
+    },
+    {
+      "id": "R190-04",
+      "requirement": "EV190-CACHE,EV190-SHARED,EV190-TEMP",
+      "state": "verified",
+      "invocation": "plan-key selectors + unit aggregate",
+      "result": "Same-shape reuse kept; incompatible identity not merged; shared-command and temp-prep invariants hold; residual (b) disclosed.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/selectors/sqlite.PlanKeyUniquenessTests.log"],
+      "predicate": "compatible cache reuse; no shared-state mutation/leak"
+    },
+    {
+      "id": "R190-05",
+      "requirement": "EV190-SQL,EV190-INTEGRATION-DIRECT,EV190-INTEGRATION-REGRESSION,EV190-INFRA",
+      "state": "verified",
+      "invocation": "six-provider SQL + full integration on containers",
+      "result": "Six providers participate; integration Total 3561 / Errors 0 / Failed 0 / Skipped 197 / Not Run 0.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/integration.log"],
+      "predicate": "six providers with real containers"
+    },
+    {
+      "id": "R190-06",
+      "requirement": "EV190-BUILD,EV190-COVERAGE,EV190-BRANCH,EV190-MUTATION",
+      "state": "verified",
+      "invocation": "build + coverage + branch + mutation disclosure",
+      "result": "Build 0W/0E; line 86.8 / branch 79.4 (gates met); mutation not run, two mutants disclosed unverified.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/coverage-Summary.txt"],
+      "predicate": "build/coverage/branch verified; mutation disclosed"
+    },
+    {
+      "id": "R190-07",
+      "requirement": "EV190-PERF",
+      "state": "verified",
+      "invocation": "acceptance benchmark",
+      "result": "7 cases, 0 fail, <=240s; cached/prepared ratio 2.01 recorded.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/acceptance-benchmark.log"],
+      "predicate": "seven benchmark cases pass within budget"
+    },
+    {
+      "id": "R190-08",
+      "requirement": "EV190-DOCS,EV190-REGISTERS",
+      "state": "verified",
+      "invocation": "DocFX + issue-register check",
+      "result": "DocFX 2 warnings/0 errors; EN/RU docs and registers consistent.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/docfx.log"],
+      "predicate": "docs and registers consistent"
+    },
+    {
+      "id": "R190-09",
+      "requirement": "EV190-PREFLIGHT,EV190-SCOPE,EV190-RED,EV190-AUDIT",
+      "state": "verified",
+      "invocation": "preflight + scope + red + audit",
+      "result": "Boundary F/B recorded; scope clean; historical red preserved; audit complete; validator report saved.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/audits/validate-report.out", "artifacts/pdca/rc2-190-reverify-1/scope/scope-guard.md"],
+      "predicate": "scope/safety/provenance/boundary/completeness guard holds"
+    },
+    {
+      "id": "AC1",
+      "requirement": "build",
+      "state": "verified",
+      "invocation": "dotnet build nextorm.slnx -c Debug",
+      "result": "exit 0, 0 warnings, 0 errors.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/build.log"],
+      "predicate": "build clean (neg: any warning/error/nonzero)"
+    },
+    {
+      "id": "AC2",
+      "requirement": "unit",
+      "state": "verified",
+      "invocation": "11-project dotnet test -c Debug --no-build",
+      "result": "total 6266 = 6265 passed + 1 skipped, 0 failed, all 11 rc=0. Reconcile B 6247 + R184(16) + R175(0) + R177(3) = 6266.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/unit.log"],
+      "predicate": "0 failed and exactly the 1 approved skip; count matches reconciliation"
+    },
+    {
+      "id": "AC3",
+      "requirement": "integration",
+      "state": "verified",
+      "invocation": "full six-provider integration with DOCKER_HOST",
+      "result": "Total 3561, Errors 0, Failed 0, Skipped 197, Not Run 0; unavailable 0. Reconcile B 3555 + R177(6) = 3561.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/integration.log"],
+      "predicate": "six providers; 0 errors/failed/unavailable; exactly 197 approved skips"
+    },
+    {
+      "id": "AC4",
+      "requirement": "coverage",
+      "state": "verified",
+      "invocation": "dotnet-coverage + reportgenerator",
+      "result": "line 86.8 >= 85; branch 79.4 >= 75; two unverified mutants disclosed (not presented as killed).",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/coverage-Summary.txt"],
+      "predicate": "gates met; mutation honesty (neg: below threshold or fabricated kills)"
+    },
+    {
+      "id": "AC5",
+      "requirement": "docfx",
+      "state": "verified",
+      "invocation": "dotnet docfx docs/docfx.json",
+      "result": "exit 0, 2 warnings, 0 errors; EN/RU + registers consistent; #190 stays closed.",
+      "artifact": ["artifacts/pdca/rc2-190-reverify-1/logs/docfx.log"],
+      "predicate": "no extra warnings/errors/broken refs (neg)"
+    }
+  ],
+  "findings": [],
+  "discovery": "No product defect found on F; no corrective PLAN required. All residuals remain accepted evidence limitations."
+}

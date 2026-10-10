@@ -46,7 +46,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     private List<Sorting>? _sorting;
     private List<IEagerLoadSpec<TEntity>>? _loadSpecs;
     private List<IJoinIntoSpec<TEntity>>? _joinIntos;
-    private bool _singleQuery;
+    private EagerLoadMode _eagerLoadMode;
     /// <summary>The join clauses collected so far, or <c>null</c> when the query has no joins.</summary>
     protected List<JoinExpression>? _joins;
     private string? _table;
@@ -104,11 +104,17 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// </summary>
     internal IReadOnlyList<IJoinIntoSpec<TEntity>>? JoinIntos => _joinIntos;
     /// <summary>
-    /// Whether <see cref="AsSingleQuery"/> switched the builder to single-query eager loading, so the
-    /// list terminals execute one denormalized command for the <see cref="LoadWith{TChild, TKey}"/>
-    /// collections instead of the default split child queries.
+    /// The eager-load mode chosen on this builder. <see cref="EagerLoadMode.Default"/> means no explicit
+    /// choice was made, so the collections load through the split path; an explicit mode applies to every
+    /// collection declared on the builder, including ones declared earlier.
     /// </summary>
-    internal bool SingleQuery => _singleQuery;
+    internal EagerLoadMode Mode => _eagerLoadMode;
+    /// <summary>
+    /// Whether <see cref="LoadWith{TChild, TKey}"/> switched the builder to single-query eager loading, so
+    /// the list terminals execute one denormalized command for the declared collections instead of the
+    /// default split child queries.
+    /// </summary>
+    internal bool SingleQuery => _eagerLoadMode == EagerLoadMode.SingleQuery;
     /// <summary>
     /// Whether <see cref="IgnoreFilters()"/> (the all-or-nothing form) was applied to this builder. Used
     /// by single-query eager loading to decide the child side's global filters independently of the
@@ -139,6 +145,18 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return copy;
     }
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
+    /// <summary>
+    /// The <c>HAVING</c> predicate applied by <see cref="Having"/>, or <c>null</c> when there is none.
+    /// Read-only neutral seam used by provider extensions that must inspect the composed state (for
+    /// example the SQL Server <c>PIVOT</c>/<c>UNPIVOT</c> source resolution) without mutating it.
+    /// </summary>
+    internal Expression<Func<TEntity, bool>>? HavingCondition => _having;
+    /// <summary>
+    /// The raw grouping expression applied by the <c>GroupBy</c> family, or <c>null</c> when the query
+    /// is not grouped. Read-only neutral seam for provider extensions that must inspect the composed
+    /// state; the projection-typed grouping is otherwise internal state.
+    /// </summary>
+    internal LambdaExpression? GroupByExpression => _group;
     /// <summary>
     /// The ordering keys applied by <c>OrderBy</c>/<c>OrderByDescending</c>, or <c>null</c> when the
     /// query is unordered.
@@ -175,10 +193,22 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     internal double SampleOffset { get; set; }
     /// <summary>The trailing ClickHouse <c>SETTINGS</c> entries, or <c>null</c> when there are none.</summary>
     internal IReadOnlyList<KeyValuePair<string, string>>? SettingsList { get => _settings; set => _settings = value is null ? null : [.. value]; }
+    /// <summary>
+    /// Mutable backing list of <see cref="SettingsList"/>, without the defensive copy the property setter
+    /// performs. After a <c>Clone</c>/join the copy paths hand the builder its own list, so a provider
+    /// extension may append in place (restoring the pre-relocation allocation pattern). The caller must
+    /// own the list it assigns; do not alias it to another builder.
+    /// </summary>
+    internal List<KeyValuePair<string, string>>? SettingsListBacking { get => _settings; set => _settings = value; }
     /// <summary>The <c>PREWHERE</c> predicate (ClickHouse), or <c>null</c> when there is none.</summary>
     internal LambdaExpression? PreWhereCondition { get => _preWhere; set => _preWhere = value; }
     /// <summary>The <c>ARRAY JOIN</c> expressions (ClickHouse), or <c>null</c> when there are none.</summary>
     internal IReadOnlyList<LambdaExpression>? ArrayJoins { get => _arrayJoins; set => _arrayJoins = value is null ? null : [.. value]; }
+    /// <summary>
+    /// Mutable backing list of <see cref="ArrayJoins"/>, without the defensive copy. See
+    /// <see cref="SettingsListBacking"/>.
+    /// </summary>
+    internal List<LambdaExpression>? ArrayJoinsBacking { get => _arrayJoins; set => _arrayJoins = value; }
     /// <summary>The named window definitions declared for this query, or <c>null</c> when there are none.</summary>
     internal IReadOnlyList<WindowDefinition>? Windows { get => _windows; set => _windows = value is null ? null : [.. value]; }
     /// <summary>The <c>ARRAY JOIN</c> kind (plain or <c>LEFT</c>) shared by <see cref="ArrayJoins"/>.</summary>
@@ -501,6 +531,13 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// throws <see cref="InvalidOperationException"/>. Declare distinct members on the same builder to
     /// load several collections.
     /// </para>
+    /// <para>
+    /// <paramref name="mode"/> selects the whole builder's loading strategy. <see cref="EagerLoadMode.Default"/>
+    /// inherits the mode already chosen by an earlier <c>LoadWith</c> (split when none was); an explicit
+    /// <see cref="EagerLoadMode.SplitQuery"/> or <see cref="EagerLoadMode.SingleQuery"/> applies to every
+    /// declared collection, including one declared earlier. Repeating the same explicit mode is allowed,
+    /// but choosing a different explicit mode is rejected with <see cref="NotSupportedException"/>.
+    /// </para>
     /// </summary>
     /// <typeparam name="TChild">The child entity type.</typeparam>
     /// <typeparam name="TKey">
@@ -511,21 +548,33 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <param name="childQuery">Builds the child query from the data context that owns the parent query.</param>
     /// <param name="parentKey">Selects the parent key used to match children.</param>
     /// <param name="childKey">Selects the child key used to match parents.</param>
-    /// <returns>A copy of this builder carrying the eager-load declaration.</returns>
+    /// <param name="mode">
+    /// The whole-builder eager-load mode; <see cref="EagerLoadMode.Default"/> inherits the current choice
+    /// (split when none was made).
+    /// </param>
+    /// <returns>A copy of this builder carrying the eager-load declaration and the resolved mode.</returns>
     /// <exception cref="InvalidOperationException">
     /// The collection member already carries an eager-load declaration on this builder.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    /// <exception cref="NotSupportedException">
+    /// A different explicit mode is already active on this builder.
     /// </exception>
     public EntityBuilder<TEntity> LoadWith<TChild, TKey>(
         Expression<Func<TEntity, ICollection<TChild>>> collection,
         Func<IDataContext, EntityBuilder<TChild>> childQuery,
         Expression<Func<TEntity, TKey>> parentKey,
-        Expression<Func<TChild, TKey>> childKey)
+        Expression<Func<TChild, TKey>> childKey,
+        EagerLoadMode mode = EagerLoadMode.Default)
         where TKey : notnull
     {
         ArgumentNullException.ThrowIfNull(collection);
         ArgumentNullException.ThrowIfNull(childQuery);
         ArgumentNullException.ThrowIfNull(parentKey);
         ArgumentNullException.ThrowIfNull(childKey);
+
+        EnsureValidEagerLoadMode(mode);
+        var resolvedMode = ResolveEagerLoadMode(mode);
 
         var spec = new EagerLoadSpec<TEntity, TChild, TKey>(collection, childQuery, parentKey, childKey);
 
@@ -541,34 +590,50 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         }
 
         var b = Clone();
+        b._eagerLoadMode = resolvedMode;
         b._loadSpecs = _loadSpecs is null ? [spec] : [.. _loadSpecs, spec];
 
         return b;
     }
     /// <summary>
-    /// Switches the collections declared with <see cref="LoadWith{TChild, TKey}"/> to single-query eager
-    /// loading: one denormalized <c>LEFT JOIN</c> command fetches the parents and every declared
-    /// collection, and the rows are stitched in memory. Every terminal that stitches
-    /// (<c>ToList</c>/<c>ToListAsync</c>, <c>ToArray</c>/<c>ToArrayAsync</c>) uses this one command; the
-    /// other terminals see the parent only. The returned builder is a copy; the current builder is
-    /// unchanged.
-    /// <para>
-    /// Unlike split loading, single-query loading never chunks the parent keys: any number of parents is
-    /// fetched by the same one command, so there is no chunked <c>IN</c> list and no silent fallback to
-    /// split. The child query's own <c>Where</c> condition is merged into the join <c>ON</c> predicate, so
-    /// it filters the children without dropping childless parents.
-    /// </para>
-    /// <para>
-    /// Split (two round trips) remains the default; call this only when a single round trip matters more
-    /// than the smaller, chunked child result. A collection member may still be declared only once.
-    /// </para>
+    /// Validates that <paramref name="mode"/> is a defined <see cref="EagerLoadMode"/> value.
     /// </summary>
-    /// <returns>A copy of this builder set to single-query eager loading.</returns>
-    public EntityBuilder<TEntity> AsSingleQuery()
+    /// <param name="mode">The requested eager-load mode.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    private static void EnsureValidEagerLoadMode(EagerLoadMode mode)
     {
-        var b = Clone();
-        b._singleQuery = true;
-        return b;
+        switch (mode)
+        {
+            case EagerLoadMode.Default:
+            case EagerLoadMode.SplitQuery:
+            case EagerLoadMode.SingleQuery:
+                return;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(mode), mode,
+                    $"'{mode}' is not a defined EagerLoadMode value; use Default, SplitQuery or SingleQuery.");
+        }
+    }
+    /// <summary>
+    /// Resolves the requested mode against the mode already active on this builder. <see cref="EagerLoadMode.Default"/>
+    /// inherits the active mode, an explicit mode may be repeated, and two different explicit modes are
+    /// rejected because the mode belongs to the whole builder.
+    /// </summary>
+    /// <param name="mode">The requested mode, already validated.</param>
+    /// <returns>The mode the returned builder carries.</returns>
+    /// <exception cref="NotSupportedException">A different explicit mode is already active on this builder.</exception>
+    private EagerLoadMode ResolveEagerLoadMode(EagerLoadMode mode)
+    {
+        if (mode == EagerLoadMode.Default)
+            return _eagerLoadMode;
+
+        if (_eagerLoadMode == EagerLoadMode.Default || _eagerLoadMode == mode)
+            return mode;
+
+        throw new NotSupportedException(
+            $"EagerLoadMode.{_eagerLoadMode} is already active on this builder and EagerLoadMode.{mode} " +
+            "conflicts with it: the eager-load mode applies to the whole builder, so all LoadWith calls " +
+            "must use the same explicit mode.");
     }
     /// <summary>
     /// Declares a <c>LEFT JOIN</c> to <paramref name="child"/> that fills the <paramref name="collection"/>
@@ -656,10 +721,14 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// list terminal. The returned builder is a copy; the current builder is unchanged.
     /// <para>
     /// The relationship must be declared as one-to-one (<c>HasOneToOne</c>) so the principal/foreign keys
-    /// are known. At most one child is assigned per parent; a <c>LEFT</c> join leaves the reference
-    /// <see langword="null"/> when no child matches, while an <c>INNER</c> join excludes the parent. A
-    /// parent that matches more than one distinct child throws <see cref="InvalidOperationException"/> at
-    /// materialization. Cartesian repeats of the same child caused by a neighbouring join are tolerated.
+    /// are known. The foreign-key uniqueness is a declaration-time trust: the core neither inspects the
+    /// schema or the data nor imposes a uniqueness constraint. At most one child is assigned per parent; a
+    /// <c>LEFT</c> join leaves the reference <see langword="null"/> when no child matches, while an
+    /// <c>INNER</c> join excludes the parent. A parent that matches more than one distinct non-null child
+    /// identity throws <see cref="InvalidOperationException"/> at materialization. Repeated rows of the
+    /// same child identity are tolerated (the first child wins), including cartesian repeats caused by a
+    /// neighbouring join and keyless/null-identity children, for which the core cannot distinguish a
+    /// repeat from a genuinely different child.
     /// </para>
     /// </summary>
     /// <typeparam name="TChild">The child entity type.</typeparam>
@@ -1026,17 +1095,18 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// specifications nor the single-query mode, so the collections would silently stay empty.
     /// </summary>
     /// <param name="method">The composition method being rejected.</param>
-    private void EnsureNoEagerLoadState(string method)
+    internal void EnsureNoEagerLoadState(string method)
     {
         if (_loadSpecs is { Count: > 0 })
             throw new NotSupportedException(
                 $"LoadWith cannot be combined with {method}; materialize the eager-loaded query with " +
                 "ToList/ToListAsync (or ToArray/ToArrayAsync) before applying the modifier.");
 
-        if (_singleQuery)
+        if (_eagerLoadMode != EagerLoadMode.Default)
             throw new NotSupportedException(
-                $"AsSingleQuery cannot be combined with {method}; apply AsSingleQuery only to the final " +
-                "eager-loaded query materialized with ToList/ToListAsync.");
+                $"Single-query eager loading cannot be combined with {method}; choose " +
+                "EagerLoadMode.SingleQuery only on the final eager-loaded query materialized with " +
+                "ToList/ToListAsync.");
     }
     /// <summary>
     /// Names the child-query shapes that single-query eager loading cannot fold into the join predicate.
@@ -1146,7 +1216,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <summary>Builds a parent-only projection command for the aggregate terminals (excludes the <c>JoinInto</c> joins).</summary>
     internal QueryCommand<TResult> SelectParent<TResult>(Expression<Func<TEntity, TResult>> exp) => WithoutJoinIntos().SelectCore(exp);
     /// <summary>
-    /// Materializes the single-query stitching metadata for <see cref="AsSingleQuery"/>: the existing
+    /// Materializes the single-query stitching metadata for <see cref="EagerLoadMode.SingleQuery"/>: the existing
     /// <c>JoinInto</c> declarations (if any) followed by one explicit-key join per
     /// <see cref="LoadWith{TChild, TKey}"/> specification, together with the join clauses that render
     /// them. The child query's own <c>Where</c> condition is folded into each synthesized <c>ON</c>
@@ -1158,7 +1228,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     {
         if (_joinIntos is not { Count: > 0 } && _joins is { } regular && regular.Exists(j => !j.IsJoinInto))
             throw new NotSupportedException(
-                "AsSingleQuery single-query loading cannot be combined with other joins on the same builder; declare LoadWith on a plain entity source only.");
+                "SingleQuery eager loading cannot be combined with other joins on the same builder; declare LoadWith on a plain entity source only.");
 
         // A many-to-many declaration contributes two joins while the single-query mapping assumes one join
         // per declaration; reject it before any join/spec index pairing can overflow.
@@ -1168,7 +1238,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             {
                 if (manyToManyIntos[i].IsManyToMany)
                     throw new NotSupportedException(
-                        "AsSingleQuery single-query loading does not support a many-to-many JoinInto declaration; materialize the many-to-many JoinInto separately, or use split-query loading.");
+                        "SingleQuery eager loading does not support a many-to-many JoinInto declaration; materialize the many-to-many JoinInto separately, or use split-query loading.");
             }
         }
 
@@ -1631,169 +1701,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             ? condition.Parameters[1].Type
             : join.EntityType ?? typeof(object);
     /// <summary>
-    /// Adds the ClickHouse <c>FINAL</c> modifier to the primary <c>FROM</c> table (a forced merge of a
-    /// ReplacingMergeTree/CollapsingMergeTree before the read). Requires a dialect that supports it (see
-    /// <see cref="ISqlDialect.SupportsFinal"/>).
-    /// </summary>
-    internal EntityBuilder<TEntity> Final()
-    {
-        var b = Clone();
-        b.IsFinal = true;
-        return b;
-    }
-    /// <summary>
-    /// Adds a trailing ClickHouse <c>SETTINGS key = value, ...</c> clause. The values are rendered
-    /// verbatim, so only pass trusted literals (for example <c>max_threads = "2"</c>). Requires a dialect
-    /// that supports it (see <see cref="ISqlDialect.SupportsSettings"/>).
-    /// </summary>
-    internal EntityBuilder<TEntity> Settings(params (string Key, string Value)[] settings)
-    {
-        ArgumentNullException.ThrowIfNull(settings);
-
-        var b = Clone();
-        var list = b._settings ??= [];
-
-        foreach (var (key, value) in settings)
-        {
-            if (string.IsNullOrWhiteSpace(key))
-                throw new ArgumentException("A SETTINGS key must not be empty.", nameof(settings));
-
-            list.Add(new KeyValuePair<string, string>(key, value));
-        }
-
-        return b;
-    }
-    /// <summary>
-    /// Adds the ClickHouse <c>PREWHERE</c> predicate, applied before the regular <c>WHERE</c> so the read
-    /// can skip the other columns. A repeated call combines the predicates with <c>and</c>. Requires a
-    /// dialect that supports it (see <see cref="ISqlDialect.SupportsPreWhere"/>).
-    /// </summary>
-    internal EntityBuilder<TEntity> PreWhere(Expression<Func<TEntity, bool>> condition)
-    {
-        ArgumentNullException.ThrowIfNull(condition);
-
-        var b = Clone();
-
-        if (_preWhere is not null)
-        {
-            var replVisitor = new ReplaceParameterExpressionVisitor(_preWhere.Parameters[0]);
-            var newBody = Expression.AndAlso(_preWhere.Body, replVisitor.Visit(condition.Body));
-            b._preWhere = Expression.Lambda<Func<TEntity, bool>>(newBody, _preWhere.Parameters[0]);
-        }
-        else
-            b._preWhere = condition;
-
-        return b;
-    }
-    /// <summary>
-    /// Adds the ClickHouse <c>ARRAY JOIN</c> clause over <paramref name="array"/>, expanding one row per
-    /// array element (a row whose array is empty is dropped). Repeated calls append to the same clause.
-    /// The expanded element is not bound to a CLR member: use
-    /// <see cref="ClickHouseFunctions.array_join{T}(T[])"/> in the projection when the value is needed.
-    /// Requires a dialect that supports it (see <see cref="ISqlDialect.ArrayJoinClause"/>).
-    /// </summary>
-    internal EntityBuilder<TEntity> ArrayJoin<TArray>(Expression<Func<TEntity, TArray>> array)
-        => AddArrayJoin(array, ArrayJoinKind.Inner);
-
-    /// <summary>
-    /// Adds the ClickHouse <c>LEFT ARRAY JOIN</c> clause: like <see cref="ArrayJoin{TArray}"/> but a row
-    /// whose array is empty is kept (with the array column at its default). Requires a dialect that
-    /// supports it (see <see cref="ISqlDialect.ArrayJoinClause"/>).
-    /// </summary>
-    internal EntityBuilder<TEntity> LeftArrayJoin<TArray>(Expression<Func<TEntity, TArray>> array)
-        => AddArrayJoin(array, ArrayJoinKind.Left);
-
-    private EntityBuilder<TEntity> AddArrayJoin<TArray>(Expression<Func<TEntity, TArray>> array, ArrayJoinKind kind)
-    {
-        ArgumentNullException.ThrowIfNull(array);
-
-        if (typeof(TArray) == typeof(string) || !typeof(System.Collections.IEnumerable).IsAssignableFrom(typeof(TArray)))
-            throw new ArgumentException("ARRAY JOIN requires an array or sequence expression.", nameof(array));
-
-        if (_arrayJoins is { Count: > 0 } && _arrayJoinKind != kind)
-            throw new InvalidOperationException("An ARRAY JOIN clause cannot mix ARRAY JOIN and LEFT ARRAY JOIN.");
-
-        var b = Clone();
-
-        var joins = _arrayJoins is null ? new List<LambdaExpression>(1) : new List<LambdaExpression>(_arrayJoins);
-        joins.Add(array);
-        b._arrayJoins = joins;
-        b._arrayJoinKind = kind;
-
-        return b;
-    }
-
-    /// <summary>
-    /// Adds a ClickHouse <c>ARRAY JOIN</c> over <paramref name="array"/> and returns a builder whose
-    /// projection parameter exposes both the original entity (<c>p.Item1</c>) and the expanded element
-    /// (<c>p.Element</c>). A row whose array is empty is dropped. Requires a dialect that supports the
-    /// clause (see <see cref="ISqlDialect.ArrayJoinClause"/>).
-    /// </summary>
-    /// <typeparam name="TElement">The element type of the joined array.</typeparam>
-    /// <exception cref="InvalidOperationException">
-    /// The builder already carries a bound array join, a join, or a Where/Having (which must be applied
-    /// after this call), or the array join kind conflicts with an earlier <c>ArrayJoin</c>.
-    /// </exception>
-    internal EntityBuilder<ArrayJoinProjection<TEntity, TElement>> ArrayJoinElement<TElement>(Expression<Func<TEntity, IEnumerable<TElement>>> array)
-        => ToArrayJoinElement(array, ArrayJoinKind.Inner);
-
-    /// <summary>
-    /// Adds a ClickHouse <c>LEFT ARRAY JOIN</c> over <paramref name="array"/> and returns a builder
-    /// whose projection parameter exposes both the original entity (<c>p.Item1</c>) and the expanded
-    /// element (<c>p.Element</c>). Unlike <see cref="ArrayJoinElement{TElement}"/> a row whose array is
-    /// empty is kept (with the element at its default). Requires a dialect that supports the clause
-    /// (see <see cref="ISqlDialect.ArrayJoinClause"/>).
-    /// </summary>
-    /// <typeparam name="TElement">The element type of the joined array.</typeparam>
-    /// <exception cref="InvalidOperationException">
-    /// The builder already carries a bound array join, a join, or a Where/Having (which must be applied
-    /// after this call), or the array join kind conflicts with an earlier <c>ArrayJoin</c>.
-    /// </exception>
-    internal EntityBuilder<ArrayJoinProjection<TEntity, TElement>> LeftArrayJoinElement<TElement>(Expression<Func<TEntity, IEnumerable<TElement>>> array)
-        => ToArrayJoinElement(array, ArrayJoinKind.Left);
-
-    private EntityBuilder<ArrayJoinProjection<TEntity, TElement>> ToArrayJoinElement<TElement>(Expression<Func<TEntity, IEnumerable<TElement>>> array, ArrayJoinKind kind)
-    {
-        ArgumentNullException.ThrowIfNull(array);
-        EnsureNoEagerLoadState(kind == ArrayJoinKind.Left ? nameof(LeftArrayJoinElement) : nameof(ArrayJoinElement));
-
-        if (_sourceEntityType is not null)
-            throw new InvalidOperationException("Only one ArrayJoinElement/LeftArrayJoinElement is supported per query.");
-
-        if (_condition is not null || _having is not null)
-            throw new InvalidOperationException("Where/Having must be applied after ArrayJoinElement/LeftArrayJoinElement, whose projection parameter differs from the entity.");
-
-        if (_joins is { Count: > 0 })
-            throw new InvalidOperationException("ArrayJoinElement/LeftArrayJoinElement is not supported on a joined query; use ArrayJoin/LeftArrayJoin.");
-
-        if (_arrayJoins is { Count: > 0 } && _arrayJoinKind != kind)
-            throw new InvalidOperationException("An ARRAY JOIN clause cannot mix ARRAY JOIN and LEFT ARRAY JOIN.");
-
-        if (_windows is not null)
-            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be applied before ArrayJoinElement/LeftArrayJoinElement.");
-
-        var b = new EntityBuilder<ArrayJoinProjection<TEntity, TElement>>(_dataProvider)
-        {
-            Logger = Logger,
-            SourceEntityType = typeof(TEntity)
-        };
-
-        // Carry the query shape. The projection parameter type changes, so the Where/Having lambdas
-        // cannot be carried (they are rejected above); everything else is projection independent.
-        CopyProjectionIndependentStateTo(b);
-
-        var joins = _arrayJoins is null ? new List<LambdaExpression>(1) : new List<LambdaExpression>(_arrayJoins);
-        joins.Add(array);
-        b._arrayJoins = joins;
-        b._arrayJoinKind = kind;
-        b.BindArrayJoinElement = true;
-
-        return b;
-    }
-
-    /// <summary>
     /// Adds <c>SELECT DISTINCT</c>, removing duplicate result rows. Cannot be combined with
-    /// <see cref="DistinctOn{TResult}"/>.
+    /// <c>DistinctOn</c>.
     /// </summary>
     /// <returns>A builder with the DISTINCT modifier.</returns>
     public EntityBuilder<TEntity> Distinct()
@@ -1803,26 +1712,6 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         var b = Clone();
         b.IsDistinct = true;
-        return b;
-    }
-    /// <summary>
-    /// Adds a <c>DISTINCT ON (expr, ...)</c> clause (PostgreSQL): keeps the first row of each distinct
-    /// key, where <paramref name="exp"/> is a single column or an anonymous type to key on several
-    /// columns. PostgreSQL requires the leading <c>ORDER BY</c> expressions to match the key. Cannot be
-    /// combined with <see cref="Distinct"/>. Requires a dialect that supports it (see
-    /// <see cref="ISqlDialect.DistinctOn"/>).
-    /// </summary>
-    /// <param name="exp">The key selector: a single column or an anonymous type keying on several columns.</param>
-    public EntityBuilder<TEntity> DistinctOn<TResult>(Expression<Func<TEntity, TResult>> exp)
-    {
-        ArgumentNullException.ThrowIfNull(exp);
-
-        if (IsDistinct)
-            throw new InvalidOperationException("DISTINCT ON cannot be combined with DISTINCT.");
-
-        var b = Clone();
-        b._distinctOn = new DistinctOnClause(exp);
-
         return b;
     }
     /// <summary>
@@ -1992,97 +1881,6 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     }
 
     /// <summary>
-    /// Reshapes this query's source into columns with the native <c>PIVOT</c> operator: for every
-    /// distinct <paramref name="forColumn"/> value in <paramref name="values"/> a result column is
-    /// produced from <paramref name="aggregate"/> of <paramref name="aggregateColumn"/>. The result is
-    /// an untyped source (<see cref="TableAlias"/>): select the grouping columns and the pivoted columns
-    /// by name. Each result column is named by its pivot value, so quote non-identifier values in the
-    /// projection (<c>Q1 = t.GetNullableDecimal("[1]")</c>).
-    /// Requires a dialect that supports it (see <see cref="ISqlDialect.Pivot"/>). The source may
-    /// be a plain table/entity, a table-valued function or a derived query (<c>From(query)</c>); filters
-    /// and other modifiers belong to the reshaped result (or, for a derived source, inside the derived
-    /// query).
-    /// </summary>
-    /// <param name="aggregate">The aggregate applied to each cell (<c>SUM</c>/<c>COUNT</c>/<c>AVG</c>/<c>MIN</c>/<c>MAX</c>).</param>
-    /// <param name="aggregateColumn">The column expression aggregated into each cell.</param>
-    /// <param name="forColumn">The column whose values become the result columns.</param>
-    /// <param name="values">The pivot values; each value names its result column.</param>
-    public EntityBuilder<TableAlias> Pivot(
-        PivotAggregate aggregate,
-        Expression<Func<TEntity, object?>> aggregateColumn,
-        Expression<Func<TEntity, object?>> forColumn,
-        params PivotValue[] values)
-    {
-        ArgumentNullException.ThrowIfNull(aggregateColumn);
-        ArgumentNullException.ThrowIfNull(forColumn);
-        ArgumentNullException.ThrowIfNull(values);
-        if (values.Length == 0)
-            throw new ArgumentException("A PIVOT requires at least one value.", nameof(values));
-        EnsureNoEagerLoadState(nameof(Pivot));
-
-        var spec = PivotExpression.ForPivot(ResolvePivotInner(), typeof(TEntity), aggregate, aggregateColumn, forColumn, values);
-        return new EntityBuilder<TableAlias>(_dataProvider) { Logger = Logger, SourceFrom = new FromExpression(spec) };
-    }
-
-    /// <summary>
-    /// Reshapes this query's source with the native <c>UNPIVOT</c> operator: the listed columns are
-    /// stacked into two result columns (<paramref name="valueColumnName"/> holding the value and
-    /// <paramref name="nameColumnName"/> holding the originating column name). Requires a dialect that
-    /// supports it (see <see cref="ISqlDialect.Pivot"/>). The source may be a plain
-    /// table/entity or a derived query (<c>From(query)</c>).
-    /// </summary>
-    /// <param name="valueColumnName">The name of the output column that receives the values.</param>
-    /// <param name="nameColumnName">The name of the output column that receives the source column name.</param>
-    /// <param name="columns">The source columns to unpivot; each column's name becomes its name-column value.</param>
-    public EntityBuilder<TableAlias> Unpivot(
-        string valueColumnName,
-        string nameColumnName,
-        params UnpivotColumn[] columns)
-    {
-        ArgumentException.ThrowIfNullOrEmpty(valueColumnName);
-        ArgumentException.ThrowIfNullOrEmpty(nameColumnName);
-        ArgumentNullException.ThrowIfNull(columns);
-        if (columns.Length == 0)
-            throw new ArgumentException("An UNPIVOT requires at least one column.", nameof(columns));
-        EnsureNoEagerLoadState(nameof(Unpivot));
-
-        var spec = PivotExpression.ForUnpivot(ResolvePivotInner(), typeof(TEntity), valueColumnName, nameColumnName, columns);
-        return new EntityBuilder<TableAlias>(_dataProvider) { Logger = Logger, SourceFrom = new FromExpression(spec) };
-    }
-
-    /// <summary>
-    /// Resolves the source a <c>PIVOT</c>/<c>UNPIVOT</c> wraps. A plain table/entity mapping, a
-    /// table-valued function and a derived query (<c>From(query)</c>) are allowed; the native operators
-    /// apply to a table expression, so any filter, join, grouping, ordering, paging or table modifier on
-    /// this builder must be applied to the reshaped result (or, for a derived source, moved into the
-    /// derived query).
-    /// </summary>
-    private FromExpression ResolvePivotInner()
-    {
-        if (_joins is { Count: > 0 } || _condition is not null || _having is not null
-            || _group is not null || _sorting is { Count: > 0 } || !Paging.IsEmpty || IsDistinct
-            || _tablesample is not null || _temporal is not null || _rowLock is not null || _preWhere is not null
-            || _arrayJoins is { Count: > 0 } || _settings is { Count: > 0 } || _limitBy is not null
-            || _distinctOn is not null || _extremeRow is not null || _windows is { Count: > 0 } || IsFinal || SampleRatio is not null
-            || TableHints is { Count: > 0 } || IndexHints is not null || Ctes is { Count: > 0 })
-            throw new NotSupportedException(_query is not null
-                ? "PIVOT/UNPIVOT over a derived query accepts no modifiers on the pivot builder; apply filters, joins, grouping, ordering, paging and table modifiers inside the derived query or to the reshaped result."
-                : "PIVOT/UNPIVOT can only be applied to a plain table/entity source, a table-valued function or a derived query; apply filters, joins, grouping, ordering, paging and table modifiers to the reshaped result.");
-
-        if (_query is not null)
-            return new FromExpression(_query);
-
-        if (_from is not null)
-            return _from;
-
-        if (!string.IsNullOrEmpty(_table))
-            return new FromExpression(_table);
-
-        return _dataProvider.GetFrom(typeof(TEntity), null)
-            ?? throw new BuildSqlCommandException($"A PIVOT/UNPIVOT source could not be resolved for type {typeof(TEntity)}.");
-    }
-
-    /// <summary>
     /// Locks the selected rows exclusively until the transaction ends, blocking while a locked row is held
     /// by another transaction. Renders a trailing <c>FOR UPDATE</c> clause on dialects that support it, or a
     /// table hint on the primary source (<c>with (updlock)</c> on SQL Server). Requires a dialect that
@@ -2162,36 +1960,15 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <summary>
     /// Marks the page request as <c>WITH TIES</c>: the result keeps every row tied with the last row of
     /// the page by the <c>ORDER BY</c>. Requires a positive page limit and a dialect that supports it
-    /// (see <see cref="ISqlDialect.SupportsWithTies"/>).
+    /// (see <see cref="ISqlDialect.SupportsWithTies"/>). Cannot be combined with <see cref="Distinct"/>
+    /// or <c>DistinctOn</c>: this combination is rejected during SQL generation with
+    /// <see cref="BuildSqlCommandException"/>; validation is not performed by the <c>WithTies</c>
+    /// fluent call itself.
     /// </summary>
     public EntityBuilder<TEntity> WithTies()
     {
         var b = Clone();
         b.Paging.HasWithTies = true;
-
-        return b;
-    }
-    /// <summary>
-    /// Adds a <c>LIMIT n BY expr</c> clause (ClickHouse): at most <paramref name="limit"/> rows per
-    /// distinct value of <paramref name="exp"/>. <paramref name="exp"/> may be a single column or an
-    /// anonymous type to key on several columns. Requires a dialect that supports it (see
-    /// <see cref="ISqlDialect.LimitBy"/>).
-    /// </summary>
-    internal EntityBuilder<TEntity> LimitBy<TResult>(int limit, Expression<Func<TEntity, TResult>> exp)
-        => LimitBy(limit, 0, exp);
-    /// <summary>
-    /// Adds a <c>LIMIT offset, n BY expr</c> clause (ClickHouse): skips <paramref name="offset"/> rows
-    /// and then returns at most <paramref name="limit"/> rows per distinct key. <paramref name="limit"/>
-    /// must be positive and <paramref name="offset"/> non-negative. Requires a dialect that supports it
-    /// (see <see cref="ISqlDialect.LimitBy"/>).
-    /// </summary>
-    internal EntityBuilder<TEntity> LimitBy<TResult>(int limit, int offset, Expression<Func<TEntity, TResult>> exp)
-    {
-        ArgumentNullException.ThrowIfNull(exp);
-
-        var b = Clone();
-
-        b._limitBy = new LimitByClause(exp, limit, offset);
 
         return b;
     }
@@ -2227,15 +2004,15 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst._loadSpecs = _loadSpecs is null ? null : [.. _loadSpecs];
         dst._joinIntos = _joinIntos is null ? null : [.. _joinIntos];
         dst._joins = _joins is null ? null : [.. _joins];
-        dst._singleQuery = _singleQuery;
+        dst._eagerLoadMode = _eagerLoadMode;
     }
     /// <summary>
     /// Copies every piece of query state whose type does not depend on the projection parameter, so it
     /// can be carried onto a builder with a different <typeparamref name="TOther"/> (used by
-    /// <see cref="ArrayJoinElement{TElement}"/>). The projection-typed state (<c>_condition</c>,
+    /// <c>ArrayJoinElement</c>). The projection-typed state (<c>_condition</c>,
     /// <c>_having</c>) is intentionally excluded.
     /// </summary>
-    private void CopyProjectionIndependentStateTo<TOther>(EntityBuilder<TOther> dst)
+    internal void CopyProjectionIndependentStateTo<TOther>(EntityBuilder<TOther> dst)
     {
         dst._query = _query;
         dst.Paging = Paging;
@@ -2336,7 +2113,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         || _serverOverride is not null
         || _tableExpression is not null
         || IsDistinct
-        || _singleQuery
+        || _eagerLoadMode != EagerLoadMode.Default
         || !_filterScope.IsEmpty
         || _tablesample is not null
         || _temporal is not null
@@ -2552,79 +2329,158 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <returns>A builder over the applied projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> OuterApply<TJoinEntity>(EntityBuilder<TJoinEntity> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
-    /// <summary>
-    /// Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/> and returns this builder
-    /// unchanged in shape: only the left-hand columns survive, and a left-hand row is kept once when at
-    /// least one right-hand row matches. Requires a dialect that supports it (see
-    /// <see cref="ISqlDialect.SupportsSemiAntiJoin"/>).
-    /// </summary>
-    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    // -----------------------------------------------------------------------------------------------
+    // #159 direct Cte<T> overloads. The descriptor is converted with THIS builder's context
+    // (DataProvider.From(cte)) and routed through the existing EntityBuilder-source overload, so CTE
+    // declaration propagation, source resolution, filters, state and caching match ctx.From(cte).
+    // -----------------------------------------------------------------------------------------------
+
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/>; identical to <see cref="Join{TJoinEntity}(EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}}, Action{JoinOptions}?)"/> with this builder's context.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
     /// <param name="joinCondition">The join predicate over the two entities.</param>
-    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
-    /// <returns>A builder over the left-hand columns, carrying the semi join.</returns>
-    internal EntityBuilder<TEntity> SemiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
-        => AddSemiAntiJoin(GetJoinSource(_), joinCondition, JoinType.Semi, options);
-    /// <summary>
-    /// Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>: only the left-hand columns
-    /// survive, and a left-hand row is kept when no right-hand row matches (the complement of
-    /// <see cref="SemiJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}}, Action{JoinOptions})"/>).
-    /// Requires a dialect that supports it (see <see cref="ISqlDialect.SupportsSemiAntiJoin"/>).
-    /// </summary>
-    /// <param name="_">The builder for the joined entity; only its source is used.</param>
-    /// <param name="joinCondition">The join predicate over the two entities.</param>
-    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
-    /// <returns>A builder over the left-hand columns, carrying the anti join.</returns>
-    internal EntityBuilder<TEntity> AntiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
-        => AddSemiAntiJoin(GetJoinSource(_), joinCondition, JoinType.Anti, options);
-    /// <summary>
-    /// Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>: the two sources are paired by row
-    /// position with no <c>ON</c> condition, and the projection exposes both sides (as many rows as the
-    /// shorter side). Requires a dialect that supports it (see <see cref="ISqlDialect.SupportsPasteJoin"/>).
-    /// </summary>
-    /// <param name="_">The builder for the joined entity; only its source is used.</param>
-    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the joined projection.</returns>
-    internal JoinedEntityBuilder<TEntity, TJoinEntity> PasteJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Action<JoinOptions>? options = null)
-        => JoinCore(_, JoinType.Paste, null, options);
-    /// <inheritdoc cref="SemiJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}}, Action{JoinOptions})"/>
-    internal EntityBuilder<TEntity> SemiJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
-        => AddSemiAntiJoin(new FromExpression(query), joinCondition, JoinType.Semi, options);
-    /// <inheritdoc cref="AntiJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}}, Action{JoinOptions})"/>
-    internal EntityBuilder<TEntity> AntiJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
-        => AddSemiAntiJoin(new FromExpression(query), joinCondition, JoinType.Anti, options);
-    /// <inheritdoc cref="PasteJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Action{JoinOptions})"/>
-    internal JoinedEntityBuilder<TEntity, TJoinEntity> PasteJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Action<JoinOptions>? options = null)
-        => JoinCore(query, JoinType.Paste, null, options);
-    private EntityBuilder<TEntity> AddSemiAntiJoin(FromExpression rightSource, LambdaExpression joinCondition, JoinType joinType, Action<JoinOptions>? options = null)
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> Join<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => Join(cte, joinCondition, null);
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> Join<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
     {
-        if (_joinIntos is { Count: > 0 })
-            throw new NotSupportedException(
-                "JoinInto cannot be combined with other joins on the same builder; declare JoinInto on a plain entity source only.");
-
-        if (_windows is not null)
-            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
-
-        var opts = new JoinOptions();
-        options?.Invoke(opts);
-
-        var b = Clone();
-        var joins = b._joins;
-        if (joins is null)
-            b._joins = joins = _joins is null ? [] : [.. _joins];
-
-        joins.Add(new JoinExpression(joinCondition, joinType)
-        {
-            From = rightSource,
-            EntityType = null,
-            Strictness = opts.Strictness ?? JoinStrictness.Default,
-            IsGlobal = opts.IsGlobal,
-            JoinHint = opts.JoinHint,
-            TableHints = opts.TableHints
-        });
-
-        return b;
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return Join(_dataProvider.From(cte), joinCondition, options);
     }
-    private JoinedEntityBuilder<TEntity, TJoinEntity> JoinCore<TJoinEntity>(EntityBuilder<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
+
+    /// <summary>Adds a left outer join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> LeftJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => LeftJoin(cte, joinCondition, null);
+    /// <summary>Adds a left outer join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> LeftJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return LeftJoin(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a right outer join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> RightJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => RightJoin(cte, joinCondition, null);
+    /// <summary>Adds a right outer join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> RightJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return RightJoin(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a full outer join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> FullJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => FullJoin(cte, joinCondition, null);
+    /// <summary>Adds a full outer join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> FullJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return FullJoin(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a cross join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> CrossJoin<TJoinEntity>(Cte<TJoinEntity> cte)
+        => CrossJoin(cte, null);
+    /// <summary>Adds a cross join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> CrossJoin<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        return CrossJoin(_dataProvider.From(cte), options);
+    }
+
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>CROSS APPLY</c>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> CrossApply<TJoinEntity>(Cte<TJoinEntity> cte)
+        => CrossApply(cte, null);
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>CROSS APPLY</c> and per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> CrossApply<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        return CrossApply(_dataProvider.From(cte), options);
+    }
+
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>OUTER APPLY</c>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> OuterApply<TJoinEntity>(Cte<TJoinEntity> cte)
+        => OuterApply(cte, null);
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>OUTER APPLY</c> and per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> OuterApply<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        return OuterApply(_dataProvider.From(cte), options);
+    }
+
+    internal JoinedEntityBuilder<TEntity, TJoinEntity> JoinCore<TJoinEntity>(EntityBuilder<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
         if (_windows is not null)
             throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
@@ -2709,6 +2565,62 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         ArgumentNullException.ThrowIfNull(_);
 
         return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _, null, joinType, options);
+    }
+
+    /// <summary>
+    /// Alias-join seam over a typed CTE for the conditional operators. The descriptor is converted with
+    /// this builder's context and forwarded to
+    /// <see cref="JoinAlias{TNext, TNextEntity, TJoinEntity}(Func{IDataContext, TNext}, EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}}, JoinType, Action{JoinOptions}?)"/>,
+    /// so the CTE declaration set and the join source match the converted form.
+    /// </summary>
+    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
+    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="joinType">The kind of join to add.</param>
+    /// <param name="options">Optional per-join configuration.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/>, <paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The in-memory provider cannot project named aliases.</exception>
+    public TNext JoinAlias<TNext, TNextEntity, TJoinEntity>(
+        Func<IDataContext, TNext> create,
+        Cte<TJoinEntity> cte,
+        Expression<Func<TEntity, TJoinEntity, bool>> joinCondition,
+        JoinType joinType = JoinType.Inner,
+        Action<JoinOptions>? options = null)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+
+        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _dataProvider.From(cte), joinCondition, joinType, options);
+    }
+
+    /// <summary>Alias-join seam over a typed CTE for the conditionless operators; see the conditional counterpart.</summary>
+    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
+    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinType">The conditionless join kind to add.</param>
+    /// <param name="options">Optional per-join configuration.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/> or <paramref name="cte"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The in-memory provider cannot project named aliases.</exception>
+    public TNext JoinAlias<TNext, TNextEntity, TJoinEntity>(
+        Func<IDataContext, TNext> create,
+        Cte<TJoinEntity> cte,
+        JoinType joinType,
+        Action<JoinOptions>? options = null)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        ArgumentNullException.ThrowIfNull(cte);
+
+        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _dataProvider.From(cte), null, joinType, options);
     }
 
     /// <summary>
@@ -2850,6 +2762,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         QueryCommand? query)
         where TNext : EntityBuilder<TNextEntity>
     {
+        // C1-analogue (issue #160): the alias-join re-root drops SourceEntityType/BindArrayJoinElement
+        // through the shared state copy exactly like AliasRoot, so an ArrayJoinElement/LeftArrayJoinElement
+        // receiver must fail closed here too. Positional CreateJoined is deliberately not guarded.
+        EnsureReRootable();
+
         if (_joinIntos is { Count: > 0 })
             throw new NotSupportedException(
                 "JoinInto cannot be combined with other joins on the same builder; declare JoinInto on a plain entity source only.");
@@ -2865,7 +2782,222 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         joined.Ctes = CteMerge.Merge(Ctes, rightCtes);
         ApplyWhereToAliasJoined(joined);
+        ApplyPreAliasStateToAliasJoined(joined);
         return joined;
+    }
+
+    /// <summary>
+    /// Re-bases the query state written before an alias join that is not covered by
+    /// <see cref="ApplyWhereToAliasJoined{TNextEntity}"/> (<c>OrderBy</c>, <c>GroupBy</c>, <c>Having</c>,
+    /// <c>PreWhere</c> and <c>Paging</c>) onto the extended alias projection, so a state applied before
+    /// <c>.WithAlias</c> is not silently dropped when a join follows it. Only a preceding alias
+    /// projection is handled: a plain/derived entity source's modifiers are carried by the join base
+    /// (see <see cref="ResolveJoinBase"/>), exactly as on the positional path, so they are left alone.
+    /// </summary>
+    private void ApplyPreAliasStateToAliasJoined<TNextEntity>(EntityBuilder<TNextEntity> joined)
+    {
+        if (!typeof(TEntity).TryGetProjectionDimension(out _))
+            return;
+
+        // Paging has no lambda and is copied verbatim; it is not part of the join base for a projection
+        // source (ResolveAliasJoinBase returns null there because the projection shape cannot be wrapped).
+        joined.Paging = Paging;
+
+        (ParameterExpression Param, Expression Body) Rebase(LambdaExpression source)
+        {
+            var param = Expression.Parameter(typeof(TNextEntity), source.Parameters[0].Name);
+            var body = new RebaseAliasProjectionVisitor(source.Parameters[0], param, typeof(TNextEntity)).Visit(source.Body);
+            return (param, body);
+        }
+
+        if (_preWhere is not null)
+        {
+            var (param, body) = Rebase(_preWhere);
+            joined._preWhere = Expression.Lambda(body, param);
+        }
+
+        if (_having is not null)
+        {
+            var (param, body) = Rebase(_having);
+            joined._having = Expression.Lambda<Func<TNextEntity, bool>>(body, param);
+        }
+
+        if (_group is not null)
+        {
+            var (param, body) = Rebase(_group);
+            joined._group = Expression.Lambda(body, param);
+        }
+
+        if (_sorting is { Count: > 0 })
+        {
+            var sorting = new List<Sorting>(_sorting.Count);
+            foreach (var key in _sorting)
+            {
+                if (key.SortExpression is LambdaExpression { Parameters.Count: 1 } sort)
+                {
+                    var (param, body) = Rebase(sort);
+                    sorting.Add(new Sorting(Expression.Lambda(body, param)) { Direction = key.Direction });
+                }
+                else
+                {
+                    sorting.Add(key);
+                }
+            }
+
+            joined._sorting = sorting;
+        }
+    }
+
+    /// <summary>
+    /// Guards every alias re-root path (root alias via <see cref="AliasRoot{TNext,TNextEntity}"/> and
+    /// alias join via <see cref="CreateAliasJoined{TNext,TNextEntity}"/>) against a
+    /// <c>ArrayJoinElement</c>/<c>LeftArrayJoinElement</c> receiver (issue #160, C1). Such a source is a
+    /// projection whose <c>Element</c> member is bound through <c>_bindArrayJoinElement</c>/
+    /// <c>_sourceEntityType</c>: the shared join-state copy (<see cref="ApplyJoinStateTo{TOther}"/>)
+    /// deliberately omits those flags, so re-rooting it would silently drop the element binding and fail
+    /// later with an unrelated error. Fail closed at construction instead. Applied only to the alias
+    /// re-root paths; the positional <see cref="CreateJoined{TJoinEntity}"/> path must observe the
+    /// baseline behavior (R160-02′).
+    /// </summary>
+    private void EnsureReRootable()
+    {
+        if (_bindArrayJoinElement || _sourceEntityType is not null)
+            throw new NotSupportedException(
+                "An ArrayJoinElement/LeftArrayJoinElement source cannot be re-rooted as a named root/slot (WithAlias or an alias Join): a bound ARRAY JOIN element is carried by source flags the alias re-root cannot preserve. Apply the alias to a plain root source and reference the array join element without a named slot.");
+    }
+
+    /// <summary>
+    /// Root-alias seam (issue #160, Phase 2): re-roots a plain source builder into a caller-created
+    /// builder whose projection shape names the root slot 1 lexically (for example
+    /// <c>AliasProjection_A1_Order&lt;Order&gt;</c>), preserving the source's query state (physical table
+    /// or derived source, CTE declarations, overrides, source options and hints). The generated
+    /// <c>.WithAlias(Alias.X)</c> extension supplies <paramref name="create"/>. It is root-only: a
+    /// builder that already carries a join, <c>JoinInto</c> or a projection shape is rejected, and the
+    /// in-memory provider fails closed because it cannot project named aliases.
+    /// </summary>
+    /// <typeparam name="TNext">The generated builder type that receives the root alias.</typeparam>
+    /// <typeparam name="TNextEntity">The root-alias projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's source state and no joins.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The in-memory provider cannot project named aliases, or the receiver is not the root source.</exception>
+    public TNext AliasRoot<TNext, TNextEntity>(Func<IDataContext, TNext> create)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+
+        if (_dataProvider is InMemoryDataContext)
+            throw new NotSupportedException(
+                "Named alias projections are not supported by the in-memory provider; run the query against a SQL provider.");
+
+        if (_joins is { Count: > 0 } || _joinIntos is { Count: > 0 })
+            throw new NotSupportedException(
+                "WithAlias names the root source (slot 1) and must be applied before any Join/JoinInto.");
+
+        if (typeof(TEntity).TryGetProjectionDimension(out _))
+            throw new NotSupportedException(
+                "WithAlias must be applied to a plain root source, not to a join or alias projection.");
+
+        // C1 (issue #160): a bound ArrayJoinElement/LeftArrayJoinElement source is a projection whose
+        // Element member is bound through _bindArrayJoinElement/_sourceEntityType. The shared join-state
+        // copy deliberately omits those flags, so re-rooting such a source would silently drop the element
+        // binding; fail closed at construction instead. Shared with the alias-join re-root path.
+        EnsureReRootable();
+
+        if (_windows is not null)
+            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
+
+        EnsureNoEagerLoadState("WithAlias");
+
+        var rooted = create(_dataProvider);
+        ApplyJoinStateTo(rooted, Query);
+
+        // A mapped-entity root carries no explicit FROM source (it is resolved from entity metadata by
+        // the planner from the query's source type). After re-rooting, that source type is the projection,
+        // which is not a registered entity, so the projection's slot 1 could not be resolved. Materialize
+        // the mapped root's physical source once, without touching the planner: every other root kind
+        // already carries an explicit source (table name, FromExpression or derived Query).
+        if (rooted.SourceFrom is null && rooted.Query is null && string.IsNullOrEmpty(rooted.Table))
+        {
+            rooted.SourceFrom = _dataProvider.GetFrom(_sourceEntityType ?? typeof(TEntity), null);
+        }
+        // A derived root source (From(builder) / From(QueryCommand<T>)) is carried as _query. After
+        // re-rooting, the projection type would make ResolveJoinBase treat it as a joined projection that
+        // cannot be joined again, even though the physical source is a derived query. Materialize it once
+        // as an explicit derived-table FromExpression and clear _query, so the derived root is preserved
+        // and aliased 't1', exactly like FromSql. The projection guard in ResolveJoinBase is not touched.
+        else if (rooted.Query is not null)
+        {
+            rooted.SourceFrom = new FromExpression(rooted.Query);
+            rooted.Query = null;
+        }
+
+        // Query state written before '.WithAlias' is typed over the plain root entity. Move every
+        // entity-typed lambda (Where, OrderBy, GroupBy, Having, PreWhere) onto the projection's Item1 so
+        // it keeps pointing at the same table after re-rooting; Paging carries no lambda and is copied
+        // verbatim. A projection exposing Item1 is required for any of these, so fail closed instead of
+        // silently dropping the state when it is missing.
+        if (_condition is not null || _sorting is { Count: > 0 } || _group is not null
+            || _having is not null || _preWhere is not null)
+        {
+            var item1 = ProjectionAliasCache.GetItem1Property(typeof(TNextEntity))
+                ?? throw new NotSupportedException(
+                    $"WithAlias requires the root projection '{typeof(TNextEntity)}' to derive from a Projection type exposing Item1.");
+
+            (ParameterExpression Param, Expression Body) Rebind(LambdaExpression source)
+            {
+                var param = Expression.Parameter(typeof(TNextEntity), source.Parameters[0].Name);
+                var body = new ReplaceTargetParameterVisitor(source.Parameters[0], Expression.Property(param, item1)).Visit(source.Body);
+                return (param, body);
+            }
+
+            if (_condition is not null)
+            {
+                var (param, body) = Rebind(_condition);
+                rooted.Condition = Expression.Lambda<Func<TNextEntity, bool>>(body, param);
+            }
+
+            if (_having is not null)
+            {
+                var (param, body) = Rebind(_having);
+                rooted._having = Expression.Lambda<Func<TNextEntity, bool>>(body, param);
+            }
+
+            if (_group is not null)
+            {
+                var (param, body) = Rebind(_group);
+                rooted._group = Expression.Lambda(body, param);
+            }
+
+            if (_preWhere is not null)
+            {
+                var (param, body) = Rebind(_preWhere);
+                rooted._preWhere = Expression.Lambda(body, param);
+            }
+
+            if (_sorting is { Count: > 0 })
+            {
+                var sorting = new List<Sorting>(_sorting.Count);
+                foreach (var key in _sorting)
+                {
+                    if (key.SortExpression is LambdaExpression { Parameters.Count: 1 } sort)
+                    {
+                        var (param, body) = Rebind(sort);
+                        sorting.Add(new Sorting(Expression.Lambda(body, param)) { Direction = key.Direction });
+                    }
+                    else
+                    {
+                        sorting.Add(key);
+                    }
+                }
+
+                rooted._sorting = sorting;
+            }
+        }
+
+        rooted.Paging = Paging;
+
+        return rooted;
     }
 
     /// <summary>
@@ -2946,7 +3078,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         if (_query is null)
             return;
 
-        var item1 = typeof(TNextEntity).GetProperty(nameof(Projection<TEntity, object>.Item1), BindingFlags.Public | BindingFlags.Instance)
+        var item1 = ProjectionAliasCache.GetItem1Property(typeof(TNextEntity))
             ?? throw new NotSupportedException(
                 $"An alias join over a derived source requires the alias projection '{typeof(TNextEntity)}' to derive from a Projection type exposing Item1.");
 
@@ -2990,7 +3122,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <see cref="FromExpression"/>, so it must be turned back into a table source here; otherwise the
     /// join would fall back to entity metadata that does not exist for <see cref="TableAlias"/>.
     /// </summary>
-    private FromExpression GetJoinSource<TJoinEntity>(EntityBuilder<TJoinEntity> builder)
+    internal FromExpression GetJoinSource<TJoinEntity>(EntityBuilder<TJoinEntity> builder)
         => JoinSourceResolver.Resolve(_dataProvider, builder);
 
     /// <summary>
@@ -3144,7 +3276,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         ApplyJoinStateTo(cb, query);
         return cb;
     }
-    private JoinedEntityBuilder<TEntity, TJoinEntity> JoinCore<TJoinEntity>(QueryCommand<TJoinEntity> query, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
+    internal JoinedEntityBuilder<TEntity, TJoinEntity> JoinCore<TJoinEntity>(QueryCommand<TJoinEntity> query, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
         if (_windows is not null)
             throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
@@ -3286,20 +3418,6 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         b._group = exp;
         b.GroupingType = GroupingType.Cube;
-
-        return b;
-    }
-    /// <summary>
-    /// Adds the <c>WITH TOTALS</c> modifier to the grouping (ClickHouse): an extra row with the totals
-    /// over all groups. Requires a dialect that supports it (see
-    /// <see cref="ISqlDialect.SupportsGroupByWithTotals"/>); it cannot be combined with
-    /// <see cref="GroupByGroupingSets"/>. It is a no-op when the query has no grouping.
-    /// </summary>
-    internal EntityBuilder<TEntity> WithTotals()
-    {
-        var b = Clone();
-
-        b.GroupByWithTotals = true;
 
         return b;
     }
@@ -3663,12 +3781,21 @@ public class EntityBuilder : ICloneable
     private readonly IDataContext _dataProvider;
     private readonly string? _table;
     internal ILogger? Logger { get; set; }
+    /// <summary>The data context this named-table builder resolves sources and creates commands from.</summary>
+    internal IDataContext DataProvider => _dataProvider;
     private Expression<Func<TableAlias, bool>>? _condition;
     private List<Sorting>? _sorting;
     /// <summary>The join clauses collected so far, or <c>null</c> when the query has no joins.</summary>
     protected List<JoinExpression>? _joins;
     /// <summary>CTE declarations that must be attached to commands this builder creates.</summary>
     internal IReadOnlyList<CteDefinition>? Ctes { get; set; }
+    /// <summary>
+    /// The join clauses collected so far on this named-table builder, or <c>null</c> when there are none.
+    /// Neutral seam used by provider extensions that append a join through the same copy path.
+    /// </summary>
+    internal List<JoinExpression>? Joins { get => _joins; set => _joins = value; }
+    /// <summary>The raw physical table name this named-table builder selects from, or <c>null</c>.</summary>
+    internal string? Table => _table;
     /// <summary>
     /// Per-query override of identifier quoting (<c>null</c> inherits the context default). Set through
     /// <see cref="WithQuotedIdentifiers"/>.
@@ -3944,63 +4071,7 @@ public class EntityBuilder : ICloneable
     /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TableAlias> OuterApply(EntityBuilder from)
         => JoinCore(from, JoinType.OuterApply, null);
-    /// <summary>
-    /// Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="from"/> and keeps this builder's
-    /// shape: only the left-hand columns survive (see
-    /// <see cref="EntityBuilder{TEntity}.SemiJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}}, Action{JoinOptions})"/>).
-    /// </summary>
-    /// <param name="from">The named-table builder whose source is joined.</param>
-    /// <param name="joinCondition">The join predicate over the two table aliases.</param>
-    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
-    /// <returns>A builder over the left-hand columns, carrying the semi join.</returns>
-    internal EntityBuilder SemiJoin(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
-    {
-        var opts = new JoinOptions();
-        options?.Invoke(opts);
-        return AddSemiAntiJoin(new JoinExpression(joinCondition, JoinType.Semi)
-        {
-            From = new FromExpression(from._table!),
-            Strictness = opts.Strictness ?? JoinStrictness.Default,
-            IsGlobal = opts.IsGlobal,
-            JoinHint = opts.JoinHint,
-            TableHints = opts.TableHints
-        });
-    }
-    /// <inheritdoc cref="SemiJoin(EntityBuilder, Expression{Func{TableAlias, TableAlias, bool}}, Action{JoinOptions})"/>
-    internal EntityBuilder AntiJoin(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
-    {
-        var opts = new JoinOptions();
-        options?.Invoke(opts);
-        return AddSemiAntiJoin(new JoinExpression(joinCondition, JoinType.Anti)
-        {
-            From = new FromExpression(from._table!),
-            Strictness = opts.Strictness ?? JoinStrictness.Default,
-            IsGlobal = opts.IsGlobal,
-            JoinHint = opts.JoinHint,
-            TableHints = opts.TableHints
-        });
-    }
-    /// <summary>
-    /// Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="from"/> (see
-    /// <see cref="EntityBuilder{TEntity}.PasteJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Action{JoinOptions})"/>).
-    /// </summary>
-    /// <param name="from">The named-table builder whose source is joined.</param>
-    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
-    /// <returns>A builder over the joined projection.</returns>
-    internal JoinedEntityBuilder<TableAlias, TableAlias> PasteJoin(EntityBuilder from, Action<JoinOptions>? options = null)
-        => JoinCore(from, JoinType.Paste, null, options);
-    private EntityBuilder AddSemiAntiJoin(JoinExpression join)
-    {
-        var b = Clone();
-        var joins = b._joins;
-        if (joins is null)
-            b._joins = joins = _joins is null ? [] : [.. _joins];
-
-        joins.Add(join);
-
-        return b;
-    }
-    private JoinedEntityBuilder<TableAlias, TableAlias> JoinCore(EntityBuilder from, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
+    internal JoinedEntityBuilder<TableAlias, TableAlias> JoinCore(EntityBuilder from, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
         options?.Invoke(opts);
@@ -4080,44 +4151,161 @@ public class EntityBuilder : ICloneable
     /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TJoinEntity> OuterApply<TJoinEntity>(EntityBuilder<TJoinEntity> _)
         => JoinCore(_, JoinType.OuterApply, null);
-    /// <inheritdoc cref="SemiJoin(EntityBuilder, Expression{Func{TableAlias, TableAlias, bool}}, Action{JoinOptions})"/>
-    internal EntityBuilder SemiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
+    // #159 direct Cte<T> overloads for the named-table (TableAlias) receiver. The descriptor is
+    // converted with this builder's context and routed through the generic EntityBuilder-source
+    // overloads, so the source resolution and CTE propagation match ctx.From(cte).
+
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> Join<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => Join(cte, joinCondition, null);
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> Join<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
     {
-        var opts = new JoinOptions();
-        options?.Invoke(opts);
-        return AddSemiAntiJoin(new JoinExpression(joinCondition, JoinType.Semi)
-        {
-            From = _dataProvider.GetFrom(typeof(TJoinEntity), null)!,
-            Strictness = opts.Strictness ?? JoinStrictness.Default,
-            IsGlobal = opts.IsGlobal,
-            JoinHint = opts.JoinHint,
-            TableHints = opts.TableHints
-        });
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return Join(_dataProvider.From(cte), joinCondition, options);
     }
-    /// <inheritdoc cref="SemiJoin(EntityBuilder, Expression{Func{TableAlias, TableAlias, bool}}, Action{JoinOptions})"/>
-    internal EntityBuilder AntiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
+
+    /// <summary>Adds a left outer join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> LeftJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => LeftJoin(cte, joinCondition, null);
+    /// <summary>Adds a left outer join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> LeftJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
     {
-        var opts = new JoinOptions();
-        options?.Invoke(opts);
-        return AddSemiAntiJoin(new JoinExpression(joinCondition, JoinType.Anti)
-        {
-            From = _dataProvider.GetFrom(typeof(TJoinEntity), null)!,
-            Strictness = opts.Strictness ?? JoinStrictness.Default,
-            IsGlobal = opts.IsGlobal,
-            JoinHint = opts.JoinHint,
-            TableHints = opts.TableHints
-        });
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return LeftJoin(_dataProvider.From(cte), joinCondition, options);
     }
-    /// <inheritdoc cref="PasteJoin(EntityBuilder, Action{JoinOptions})"/>
-    internal JoinedEntityBuilder<TableAlias, TJoinEntity> PasteJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Action<JoinOptions>? options = null)
-        => JoinCore(_, JoinType.Paste, null, options);
-    private JoinedEntityBuilder<TableAlias, TJoinEntity> JoinCore<TJoinEntity>(EntityBuilder<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
+
+    /// <summary>Adds a right outer join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> RightJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => RightJoin(cte, joinCondition, null);
+    /// <summary>Adds a right outer join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> RightJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return RightJoin(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a full outer join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> FullJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => FullJoin(cte, joinCondition, null);
+    /// <summary>Adds a full outer join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> FullJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return FullJoin(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a cross join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> CrossJoin<TJoinEntity>(Cte<TJoinEntity> cte)
+        => CrossJoin(cte, null);
+    /// <summary>Adds a cross join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> CrossJoin<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        return JoinCore(_dataProvider.From(cte), JoinType.Cross, null, options);
+    }
+
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>CROSS APPLY</c>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> CrossApply<TJoinEntity>(Cte<TJoinEntity> cte)
+        => CrossApply(cte, null);
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>CROSS APPLY</c> and per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> CrossApply<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        return JoinCore(_dataProvider.From(cte), JoinType.CrossApply, null, options);
+    }
+
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>OUTER APPLY</c>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> OuterApply<TJoinEntity>(Cte<TJoinEntity> cte)
+        => OuterApply(cte, null);
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>OUTER APPLY</c> and per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> OuterApply<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        return JoinCore(_dataProvider.From(cte), JoinType.OuterApply, null, options);
+    }
+    internal JoinedEntityBuilder<TableAlias, TJoinEntity> JoinCore<TJoinEntity>(EntityBuilder<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
         options?.Invoke(opts);
         var cb = new JoinedEntityBuilder<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType)
         {
-            From = _dataProvider.GetFrom(typeof(TJoinEntity), null)!,
+            From = JoinSourceResolver.Resolve(_dataProvider, _),
             EntityType = joinCondition is null ? typeof(TJoinEntity) : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,

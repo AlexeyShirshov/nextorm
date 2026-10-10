@@ -1,0 +1,24 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+failed NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests.PreExistingForJsonClause_ShouldNotAttachSecondNativeRewrite (189ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+  Expected native to be False because an already-attached ForJsonClause must prevent the native rewrite, but found True.
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.BooleanAssertions`1.BeFalse(String because, Object[] becauseArgs)
+    at NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests.PreExistingForJsonClause_ShouldNotAttachSecondNativeRewrite() in /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs:128
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) failed with 1 error(s) (694ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 1
+  failed: 1
+  succeeded: 0
+  skipped: 0
+  duration: 916ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

@@ -1,0 +1,87 @@
+{
+  "exit_code": 1,
+  "verdict": "PROVEN REGRESSION",
+  "threshold": 1.05,
+  "z": 4.786,
+  "pairs": 8,
+  "replacement_pairs_used": 0,
+  "any_U_gt_1.05": true,
+  "any_L_gt_1.05": true,
+  "cases": [
+    {
+      "case": "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count",
+      "R": 1.010860594949047,
+      "L": 0.9634277477966684,
+      "U": 1.0606287235941232,
+      "dbar": 0.010802042250997143,
+      "s_d": 0.02840236399196986,
+      "SE": 0.010041752090225254,
+      "alloc_growth_flag": true
+    },
+    {
+      "case": "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount",
+      "R": 0.9947515583241615,
+      "L": 0.9457305130869955,
+      "U": 1.0463135630026172,
+      "dbar": -0.0052622631277846965,
+      "s_d": 0.029865352124590856,
+      "SE": 0.010558996504911128,
+      "alloc_growth_flag": false
+    },
+    {
+      "case": "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached",
+      "R": 1.0821124079499223,
+      "L": 1.0518983856016402,
+      "U": 1.113194277572198,
+      "dbar": 0.07891506407618362,
+      "s_d": 0.01673567568066599,
+      "SE": 0.005916954880768856,
+      "alloc_growth_flag": true
+    },
+    {
+      "case": "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList",
+      "R": 1.0059995000520243,
+      "L": 0.9850397878126744,
+      "U": 1.0274051938066302,
+      "dbar": 0.005981574711245294,
+      "s_d": 0.012442963417471378,
+      "SE": 0.004399251905275074,
+      "alloc_growth_flag": false
+    },
+    {
+      "case": "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList",
+      "R": 1.076522462143284,
+      "L": 1.0412598858965376,
+      "U": 1.1129792160400098,
+      "dbar": 0.07373590350638747,
+      "s_d": 0.019682268376886396,
+      "SE": 0.006958732719214956,
+      "alloc_growth_flag": true
+    },
+    {
+      "case": "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param",
+      "R": 1.072788036080451,
+      "L": 1.0064480594460885,
+      "U": 1.143500809163216,
+      "dbar": 0.07026090087285895,
+      "s_d": 0.037724304111176284,
+      "SE": 0.01333755562627815,
+      "alloc_growth_flag": true
+    },
+    {
+      "case": "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync",
+      "R": 1.0776489143979437,
+      "L": 1.0397941408909859,
+      "U": 1.1168818298090626,
+      "dbar": 0.07478173706410678,
+      "s_d": 0.021132821353851614,
+      "SE": 0.007471580642456175,
+      "alloc_growth_flag": true
+    }
+  ],
+  "global_total_sec": {
+    "A": 922.65,
+    "B": 884.2,
+    "informational": true
+  }
+}

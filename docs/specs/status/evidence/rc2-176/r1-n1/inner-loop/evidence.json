@@ -1,0 +1,45 @@
+{
+  "unit": "D176.1",
+  "scope": {
+    "projects": ["tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj"],
+    "selectors": ["FullyQualifiedName~D176Probe"],
+    "files": ["tests/nextorm.sqlite.tests/D176ProbeTests.cs"],
+    "rationale": "D176.1 reconnaissance: one temporary throwaway xunit class exercises the existing JSON-stream terminals against SQLite for nested anonymous/named projections and a left-join entity slot. No product code changes; the probe file is deleted after the run. The selector scopes the inner loop to that throwaway class only.",
+    "rebuild": "affected",
+    "boundary": "Solution build C01 (dotnet build nextorm.slnx -c Debug) and core suite C02 (tests/nextorm.core.tests) are recorded separately as D176.1 baseline/boundary evidence; the throwaway probe gets no separate boundary sweep."
+  },
+  "executions": [
+    {
+      "command": ["dotnet", "build", "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj", "-c", "Debug"],
+      "phase": "inner",
+      "source_revision": "d176.1-probe-r1",
+      "artifact_revision": "d176.1-probe-r1",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~D176Probe"],
+      "phase": "inner",
+      "source_revision": "d176.1-probe-r1",
+      "artifact_revision": "d176.1-probe-r1",
+      "exit_code": 0,
+      "selected_count": 4
+    },
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "d176.1-baseline-c388ff14",
+      "artifact_revision": "d176.1-baseline-c388ff14",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "d176.1-baseline-c388ff14",
+      "artifact_revision": "d176.1-baseline-c388ff14",
+      "exit_code": 0,
+      "selected_count": 1789
+    }
+  ]
+}

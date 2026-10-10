@@ -268,3 +268,123 @@ public class RawSourceBindingSqlGenerationTests
         sql.Should().NotContain("tenant_id =");
     }
 }
+
+/// <summary>
+/// #185 D185: binding a raw source is self-sufficient — it registers the entity mapping through the
+/// same path as <c>From&lt;T&gt;()</c>, so a typed member projection works on a genuinely cold
+/// <see cref="DataContextCache.Metadata"/> (no prior <c>From&lt;T&gt;</c>). The negative half pins the
+/// configured-mapping precedence and that a repeated bind is a registration no-op.
+/// <para>
+/// Joins the serialized "DataContextCache clear" collection because it clears the process-wide cache.
+/// </para>
+/// </summary>
+[Collection("DataContextCache clear")]
+public class RawSourceBindingColdRegistrationTests
+{
+    [SqlTable("rsb_cold_configured")]
+    public sealed class ColdConfiguredEntity
+    {
+        [System.ComponentModel.DataAnnotations.Schema.Column("attr_name")]
+        public string? Name { get; set; }
+    }
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
+    {
+        var prepared = (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
+        return prepared.DbCommand.CommandText.Replace("\r\n", "\n");
+    }
+
+    // R01/R02: cold interface + typed projection via the raw-SQL entry point.
+    [Fact]
+    public void ColdInterfaceTypedProjection_FromSql_ShouldRegisterAndRender()
+    {
+        DataContextCache.Clear();
+        using var ctx = MariaDbTestContext.Create();
+
+        DataContextCache.Metadata.ContainsKey(typeof(IComplexEntity)).Should().BeFalse("genuinely cold metadata");
+
+        var sql = SqlOf(ctx, ctx.FromSql("select id, somestring from complex_entity")
+            .BindEntity<IComplexEntity>(["id", "somestring"])
+            .Select(t => t.Id));
+
+        sql.Should().Contain("select id from (select id, somestring from complex_entity)");
+        DataContextCache.Metadata.ContainsKey(typeof(IComplexEntity)).Should().BeTrue(
+            "binding registers the mapping without a prior From<T>()");
+    }
+
+    // R01/R02: the same cold binding through the named-source entry point.
+    [Fact]
+    public void ColdInterfaceTypedProjection_FromNamedSource_ShouldRegisterAndRender()
+    {
+        DataContextCache.Clear();
+        using var ctx = MariaDbTestContext.Create();
+
+        DataContextCache.Metadata.ContainsKey(typeof(IComplexEntity)).Should().BeFalse("genuinely cold metadata");
+
+        var sql = SqlOf(ctx, ctx.From("complex_entity")
+            .BindEntity<IComplexEntity>(["id", "somestring"])
+            .Select(t => t.Id));
+
+        sql.Should().Contain("from complex_entity");
+        sql.Should().Contain("id");
+        DataContextCache.Metadata.ContainsKey(typeof(IComplexEntity)).Should().BeTrue();
+    }
+
+    // R04: a configured From<T>(cfg) registered before binding keeps its configured column name.
+    [Fact]
+    public void ColdConfiguredMapping_ShouldWinOverAttributeMapping()
+    {
+        DataContextCache.Clear();
+        using var ctx = MariaDbTestContext.Create();
+        ctx.From<ColdConfiguredEntity>(cfg => cfg.Property(x => x.Name!).HasColumnName("configured_name"));
+
+        DataContextCache.Metadata[typeof(ColdConfiguredEntity)].Properties
+            .Should().ContainSingle(p => p.ColumnName == "configured_name");
+
+        var sql = SqlOf(ctx, ctx.FromSql("select configured_name from rsb_cold_configured")
+            .BindEntity<ColdConfiguredEntity>(["configured_name"])
+            .Select(x => x.Name));
+
+        sql.Should().Contain("configured_name");
+        sql.Should().NotContain("attr_name", "the configured mapping wins over the attribute mapping");
+    }
+
+    // R02: a repeated bind does not change the mapping or the generated SQL.
+    [Fact]
+    public void RepeatedBind_ShouldNotChangeSqlOrMapping()
+    {
+        DataContextCache.Clear();
+        using var ctx = MariaDbTestContext.Create();
+        var source = ctx.FromSql("select id, somestring from complex_entity");
+
+        var first = source.BindEntity<IComplexEntity>(["id", "somestring"]).Select(t => t.Id);
+        var firstMetadata = DataContextCache.Metadata[typeof(IComplexEntity)];
+        var second = source.BindEntity<IComplexEntity>(["id", "somestring"]).Select(t => t.Id);
+
+        SqlOf(ctx, first).Should().Be(SqlOf(ctx, second));
+        DataContextCache.Metadata[typeof(IComplexEntity)].Should().BeSameAs(firstMetadata,
+            "the second bind is a registration no-op");
+    }
+
+    // R07: the exact TableAlias guard is unchanged and registers no mapping.
+    [Fact]
+    public void TableAlias_BindEntity_ShouldStillThrowNotSupported()
+    {
+        DataContextCache.Clear();
+        using var ctx = MariaDbTestContext.Create();
+        var source = ctx.FromSql("select 1 as Id");
+
+        var act = () => source.BindEntity<TableAlias>(["Id"]);
+
+        act.Should().Throw<NotSupportedException>();
+        DataContextCache.Metadata.ContainsKey(typeof(TableAlias)).Should().BeFalse(
+            "TableAlias is rejected and has no mapping to register");
+    }
+}
+
+/// <summary>
+/// Serializes the tests that clear the process-wide <see cref="DataContextCache"/> with the rest of
+/// the suite.
+/// </summary>
+[CollectionDefinition("DataContextCache clear", DisableParallelization = true)]
+public sealed class RawSourceBindingCacheClearCollection;

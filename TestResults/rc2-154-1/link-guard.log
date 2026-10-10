@@ -1,0 +1,3 @@
+# link guard: public article pages must not link to docs/specs/** (no match == pass)
+# command: rg -n "docs/specs" docs/advanced/api-reference.md docs/advanced/select-where-extrema-native.md docs/ru/advanced/api-reference.md docs/ru/advanced/select-where-extrema-native.md
+exit=1

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.SqliteBenchmarkPaging-20261010-194401</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
+IterationCount=3  LaunchCount=1  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                </th><th>Categories </th><th>Mean</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>A_Nextorm_Prepared_PageAsync</td><td>A_Paging</td><td>88.62 &mu;s</td><td>1.7090</td><td>-</td><td>13.99 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Page</td><td>A_Paging</td><td>112.54 &mu;s</td><td>2.0752</td><td>-</td><td>17.61 KB</td>
+</tr><tr><td>A_EFCore_Compiled_PageAsync</td><td>A_Paging</td><td>134.25 &mu;s</td><td>5.3711</td><td>0.9766</td><td>44.81 KB</td>
+</tr><tr><td>A_Dapper_PageAsync</td><td>A_Paging,B_Paging</td><td>103.67 &mu;s</td><td>2.1973</td><td>-</td><td>18.15 KB</td>
+</tr><tr><td>B_Nextorm_Cached_PageAsync</td><td>B_Paging</td><td>101.31 &mu;s</td><td>2.6855</td><td>-</td><td>22.62 KB</td>
+</tr><tr><td>B_Linq2Db_PageAsync</td><td>B_Paging</td><td>140.91 &mu;s</td><td>2.6855</td><td>-</td><td>22.65 KB</td>
+</tr><tr><td>B_EFCore_PageAsync</td><td>B_Paging</td><td>185.84 &mu;s</td><td>6.8359</td><td>1.2207</td><td>56.9 KB</td>
+</tr></tbody></table>
+</body>
+</html>

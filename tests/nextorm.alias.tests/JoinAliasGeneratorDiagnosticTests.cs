@@ -81,6 +81,59 @@ public class JoinAliasGeneratorDiagnosticTests
     }
 
     [Fact]
+    public void Root_alias_emits_a_dim1_projection_and_a_withalias_extension()
+    {
+        var harness = RunDiagnosticCase("var q = orders.WithAlias(Alias.Root);");
+
+        harness.Run.Diagnostics.Should().BeEmpty();
+        harness.Run.GeneratedTrees.Should().HaveCount(1);
+        var generated = harness.Run.GeneratedTrees[0].ToString();
+        generated.Should().Contain("class AliasProjection_A1_Root<T1> : global::NextORM.Core.Projection<T1>");
+        generated.Should().Contain("AliasJoin_A1_Root<T1>");
+        generated.Should().Contain("WithAlias<T>");
+        generated.Should().Contain("AliasRoot<");
+        // The root alias names slot 1; Item1 is inherited from Projection<T1> and the generated alias
+        // member is expression-only (slot 1), so the generated text carries the slot attribute + member.
+        generated.Should().Contain("[global::NextORM.Core.JoinSlot(1)]");
+        generated.Should().Contain("public T1 Root => throw new global::System.NotSupportedException();");
+    }
+
+    [Fact]
+    public void WithAlias_after_a_join_reports_NORMGEN008()
+    {
+        var harness = RunDiagnosticCase(
+            "var q = orders.Join<Person>(people, (a, b) => true, Alias.Buyer).WithAlias(Alias.Root);");
+
+        AssertSingleDiagnostic(harness, "NORMGEN008", "Alias.Root");
+    }
+
+    [Fact]
+    public void Repeated_WithAlias_reports_NORMGEN008_on_the_second_root_alias()
+    {
+        var harness = RunDiagnosticCase(
+            "var q = orders.WithAlias(Alias.First).WithAlias(Alias.Second);");
+
+        AssertSingleDiagnostic(harness, "NORMGEN008", "Alias.Second");
+    }
+
+    [Fact]
+    public void Root_alias_colliding_with_a_retained_ItemN_reports_NORMGEN002()
+    {
+        var harness = RunDiagnosticCase("var q = orders.WithAlias(Alias.Item1);");
+
+        AssertSingleDiagnostic(harness, "NORMGEN002", "Alias.Item1");
+    }
+
+    [Fact]
+    public void Root_alias_duplicating_a_join_alias_reports_NORMGEN001()
+    {
+        var harness = RunDiagnosticCase(
+            "var q = orders.WithAlias(Alias.X).Join<Person>(people, (a, b) => true, Alias.X);");
+
+        AssertSingleDiagnostic(harness, "NORMGEN001", "Alias.X");
+    }
+
+    [Fact]
     public void Non_normalizable_assembly_name_reports_NORMGEN006()
     {
         const string body = "var q = orders.Join<Person>(people, (a, b) => true, Alias.Buyer);";
@@ -100,6 +153,85 @@ public class JoinAliasGeneratorDiagnosticTests
     }
 
     [Fact]
+    public void Unrelated_user_type_named_Cte_is_not_recognized_as_a_Nextorm_CTE()
+    {
+        // R159-10 negative: a user type that merely shares the simple name 'Cte' must not be treated as a
+        // NextORM CTE descriptor. With symbol-identity recognition no alias surface is generated for it
+        // (the pre-fix simple-name match emitted an overload taking NextORM.Core.Cte<TJoin>).
+        const string source =
+            "using NextORM.Core;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public sealed class Cte<T> { }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(EntityBuilder<Order> orders, Cte<Person> cte)\n" +
+            "    {\n" +
+            "        _ = orders.Join(cte, (a, b) => true, Alias.Buyer);\n" +
+            "    }\n" +
+            "}\n";
+
+        var compilation = CSharpCompilation.Create(
+            "AliasHarness",
+            [CSharpSyntaxTree.ParseText(source, path: "Harness.cs", cancellationToken: TestContext.Current.CancellationToken)],
+            References,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        GeneratorDriver driver = CSharpGeneratorDriver.Create([CreateGenerator()]);
+        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out _, out _, TestContext.Current.CancellationToken);
+
+        driver.GetRunResult().GeneratedTrees.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Explicit_generic_joined_type_is_independent_of_the_source_CTE_kind()
+    {
+        // C6 (D159 r1/n2 probe, promoted to a permanent test): an explicit generic <Person> whose source
+        // actually carries Other (EntityBuilder<Other> or Cte<Other>) still selects the emitted step-1
+        // overload by the SOURCE expression's CTE kind, not by the explicit type argument. The explicit
+        // joined type is not part of a single-step emitted signature (the method is generic over TJoin),
+        // so the mismatch stays a call-site CS1503 and never becomes a generator crash or a
+        // silently-merged method. Closes C6 with its observed outcome.
+        const string source =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public sealed class Other { public int Id { get; set; } }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(EntityBuilder<Order> orders, EntityBuilder<Other> others, Cte<Other> otherCte)\n" +
+            "    {\n" +
+            "        _ = orders.Join<Person>(others, (a, b) => true, Alias.X);\n" +
+            "        _ = orders.Join<Person>(otherCte, (a, b) => true, Alias.Y);\n" +
+            "    }\n" +
+            "}\n";
+
+        var compilation = CSharpCompilation.Create(
+            "AliasHarness",
+            [CSharpSyntaxTree.ParseText(source, path: "Harness.cs", cancellationToken: TestContext.Current.CancellationToken)],
+            References,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        GeneratorDriver driver = CSharpGeneratorDriver.Create([CreateGenerator()]);
+        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out _, TestContext.Current.CancellationToken);
+        var run = driver.GetRunResult();
+
+        // The generator itself is clean: no NORMGEN diagnostic, one source, both step-1 overload forms.
+        run.Diagnostics.Should().BeEmpty();
+        run.GeneratedTrees.Should().HaveCount(1);
+        var generated = run.GeneratedTrees[0].ToString();
+        generated.Should().Contain("AliasJoin_P1_A2_X").And.Contain("AliasJoin_P1_A2_Y");
+        generated.Should().Contain("global::NextORM.Core.EntityBuilder<TJoin> _,");
+        generated.Should().Contain("global::NextORM.Core.Cte<TJoin> cte,");
+
+        // The explicit <Person> vs actual <Other> mismatch remains a normal compile error at the call site.
+        output.GetDiagnostics(TestContext.Current.CancellationToken).Should().Contain(diagnostic => diagnostic.Id == "CS1503");
+    }
+
+    [Fact]
     public void Valid_snippet_emits_one_source_without_diagnostics()
     {
         var harness = RunDiagnosticCase(
@@ -107,7 +239,7 @@ public class JoinAliasGeneratorDiagnosticTests
 
         harness.Run.Diagnostics.Should().BeEmpty();
         harness.Run.GeneratedTrees.Should().HaveCount(1);
-        harness.Run.GeneratedTrees[0].ToString().Should().Contain("class AliasProjection_Buyer");
+        harness.Run.GeneratedTrees[0].ToString().Should().Contain("class AliasProjection_P1_A2_Buyer");
     }
 
     [Fact]
@@ -149,13 +281,270 @@ public class JoinAliasGeneratorDiagnosticTests
         outputs.Should().OnlyContain(output => output.Reason == IncrementalStepRunReason.Cached);
     }
 
+    [Fact]
+    public void Digit_ending_alias_at_a_later_slot_keeps_its_positional_slot()
+    {
+        // R160-01 / D:160-03 harness negative for the F1 gap (E160-13 M4): 'Buyer2' is a name whose
+        // trailing digit is 2, but here it occupies slot 3 (a positional join takes slot 2), so the
+        // digit and the slot differ. The emitted slot attribute and the property's generic index must
+        // be the positional slot 3; a generator that derived the slot from the trailing digit would
+        // emit JoinSlot(2) on a T2 property instead.
+        var harness = RunDiagnosticCase(
+            "var q = orders" +
+            ".Join<Person>(people, (a, b) => true)" +
+            ".Join<Person>(people, (a, b) => true, Alias.Buyer2);");
+
+        harness.Run.Diagnostics.Should().BeEmpty();
+        harness.Run.GeneratedTrees.Should().HaveCount(1);
+        var generated = harness.Run.GeneratedTrees[0].ToString();
+
+        generated.Should().Contain("class AliasProjection_P1_P2_A3_Buyer2");
+        generated.Should().MatchRegex(@"\[global::NextORM\.Core\.JoinSlot\(3\)\]\s+public T3 Buyer2 =>");
+        generated.Should().NotMatchRegex(@"\[global::NextORM\.Core\.JoinSlot\(2\)\]\s+public T2 Buyer2 =>");
+    }
+
+    [Fact]
+    public void Distinct_root_aliases_emit_one_WithAlias_each_and_duplicates_are_deduped()
+    {
+        // `JoinAliasGenerator.cs:666-671` collects the distinct root-alias names, so the loop at
+        // `:1053` emits exactly one generic `WithAlias<T>` per name. The `continue` guard at `:1057`
+        // is unreachable for valid input: each name yields a distinct signature (its own marker type),
+        // so no root alias is ever skipped as an already-seen signature.
+        var distinct = RunDiagnosticCase(
+            "var q1 = orders.WithAlias(Alias.First);" +
+            "var q2 = people.WithAlias(Alias.Second);");
+
+        distinct.Run.Diagnostics.Should().BeEmpty();
+        distinct.Run.GeneratedTrees.Should().HaveCount(1);
+        var generated = distinct.Run.GeneratedTrees[0].ToString();
+        CountOccurrences(generated, "WithAlias<T>(").Should().Be(2);
+        generated.Should().Contain("AliasJoin_A1_First<T>");
+        generated.Should().Contain("AliasJoin_A1_Second<T>");
+
+        // The same root-alias name in two independent chains is deduped to a single method by the
+        // `Distinct` at `:669`, not emitted twice (which would be the collision `:1057` guards on).
+        var duplicate = RunDiagnosticCase(
+            "var q1 = orders.WithAlias(Alias.Root);" +
+            "var q2 = people.WithAlias(Alias.Root);");
+
+        duplicate.Run.Diagnostics.Should().BeEmpty();
+        duplicate.Run.GeneratedTrees.Should().HaveCount(1);
+        var generatedDuplicate = duplicate.Run.GeneratedTrees[0].ToString();
+        CountOccurrences(generatedDuplicate, "WithAlias<T>(").Should().Be(1);
+        generatedDuplicate.Should().Contain("AliasJoin_A1_Root<T>");
+    }
+
+    [Fact]
+    public void R03_byte_identical_distinct_chains_collapse_to_one_method()
+    {
+        // R03 (issue #206): two individually-valid alias chains over the same base `Order`, same
+        // `Alias.X`, differing only in the LAST step's joined type (Person vs Other). The last-step
+        // joined type is deliberately excluded from the emitted extension identity (it becomes the
+        // method type parameter `TJoin`), so both candidates render the SAME signature with a
+        // BYTE-IDENTICAL body. The generator must collapse them to one method, with no CS0111 and no
+        // NORMGEN007: the same-signature/different-body guard is not spuriously triggered.
+        const string source =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public sealed class Other { public int Id { get; set; } }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(EntityBuilder<Order> orders, EntityBuilder<Person> people, EntityBuilder<Other> others)\n" +
+            "    {\n" +
+            "        _ = orders.Join<Person>(people, (a, b) => true, Alias.X);\n" +
+            "        _ = orders.Join<Other>(others, (a, b) => true, Alias.X);\n" +
+            "    }\n" +
+            "}\n";
+
+        var harness = RunSource(source);
+        harness.Run.Diagnostics.Should().BeEmpty();
+        harness.Run.GeneratedTrees.Should().HaveCount(1);
+
+        var generated = harness.Run.GeneratedTrees[0].ToString();
+
+        TestContext.Current.AddAttachment("R03-generated.cs", generated);
+        TestContext.Current.AddAttachment("R03-diagnostics.txt", string.Join("\n", harness.Run.Diagnostics.Select(d => d.ToString())));
+        TestContext.Current.AddAttachment("R03-compiler.txt", string.Join("\n", harness.Output.GetDiagnostics(TestContext.Current.CancellationToken).Select(d => d.ToString())));
+
+        // Two distinct chains (different ChainKey: last JoinedType) collapse to exactly one method.
+        CountOccurrences(generated, "Join<TJoin>(").Should().Be(1);
+        generated.Should().Contain("AliasJoin_P1_A2_X<global::Harness.Order, TJoin>");
+
+        // No CS0111 (duplicate member) and no other compiler error from the emitted source.
+        harness.Output.GetDiagnostics(TestContext.Current.CancellationToken)
+            .Should().NotContain(d => d.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void R03_control_distinct_aliases_process_both_call_sites()
+    {
+        // R03 non-vacuity control (issue #206): the SAME two alias-join call sites as
+        // `R03_byte_identical_distinct_chains_collapse_to_one_method`, but with DISTINCT aliases
+        // (Alias.X / Alias.Y) so the two candidates carry distinct emitted signatures. The shared-alias
+        // test's `CountOccurrences(..., "Join<TJoin>(") == 1` would also hold vacuously for a generator
+        // that processed only one of the two call sites (one method, 0 diagnostics, 0 compiler errors);
+        // this control demands exactly TWO generated overloads, so a one-site generator fails here.
+        const string source =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public sealed class Other { public int Id { get; set; } }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(EntityBuilder<Order> orders, EntityBuilder<Person> people, EntityBuilder<Other> others)\n" +
+            "    {\n" +
+            "        _ = orders.Join<Person>(people, (a, b) => true, Alias.X);\n" +
+            "        _ = orders.Join<Other>(others, (a, b) => true, Alias.Y);\n" +
+            "    }\n" +
+            "}\n";
+
+        var control = RunSource(source);
+        control.Run.Diagnostics.Should().BeEmpty();
+        control.Run.GeneratedTrees.Should().HaveCount(1);
+
+        var generated = control.Run.GeneratedTrees[0].ToString();
+        TestContext.Current.AddAttachment("R03-control-generated.cs", generated);
+        TestContext.Current.AddAttachment("R03-control-compiler.txt", string.Join("\n", control.Output.GetDiagnostics(TestContext.Current.CancellationToken).Select(d => d.ToString())));
+
+        // Two distinct call sites must yield two distinct overloads and two distinct typed builders.
+        CountOccurrences(generated, "Join<TJoin>(").Should().Be(2);
+        generated.Should().Contain("AliasJoin_P1_A2_X<global::Harness.Order, TJoin>");
+        generated.Should().Contain("AliasJoin_P1_A2_Y<global::Harness.Order, TJoin>");
+        generated.Should().Contain("public class AliasJoin_P1_A2_X<T1, T2>");
+        generated.Should().Contain("public class AliasJoin_P1_A2_Y<T1, T2>");
+        generated.Should().Contain("public class AliasProjection_P1_A2_X<T1, T2>");
+        generated.Should().Contain("public class AliasProjection_P1_A2_Y<T1, T2>");
+        control.Output.GetDiagnostics(TestContext.Current.CancellationToken)
+            .Should().NotContain(d => d.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void R07_generation_is_order_independent_and_repeatable()
+    {
+        // R07 (issue #206): byte-identical generated source across (a) reversed declaration order of
+        // two supported alias chains and (b) repeated runs on the same source. The pipeline sorts every
+        // emitted collection by an ordinal key, so neither file order nor run-to-run state may leak
+        // into the generated text.
+        const string header =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(EntityBuilder<Order> orders, EntityBuilder<Person> people)\n" +
+            "    {\n";
+        const string chainA = "        _ = orders.Join<Person>(people, (a, b) => true, Alias.Buyer);\n";
+        const string chainB = "        _ = people.Join<Order>(orders, (a, b) => true, Alias.Seller);\n";
+        const string footer = "    }\n}\n";
+
+        var forward1 = RunSource(header + chainA + chainB + footer);
+        var forward2 = RunSource(header + chainA + chainB + footer);
+        var reversed1 = RunSource(header + chainB + chainA + footer);
+        var reversed2 = RunSource(header + chainB + chainA + footer);
+
+        forward1.Run.Diagnostics.Should().BeEmpty();
+        reversed1.Run.Diagnostics.Should().BeEmpty();
+
+        var forwardText = forward1.Run.GeneratedTrees.Single().ToString();
+        var reversedText = reversed1.Run.GeneratedTrees.Single().ToString();
+
+        TestContext.Current.AddAttachment("R07-forward-generated.cs", forwardText);
+        TestContext.Current.AddAttachment("R07-reversed-generated.cs", reversedText);
+
+        // Non-vacuity guard: a byte compare of two empty (or declaration-less) payloads would pass even
+        // if generation silently dropped both overloads. Before comparing, require the fixture's actual
+        // generated builders and generic extension signatures — a regression that stops emitting them
+        // must fail here, not slip through as `empty == empty`.
+        forwardText.Should().NotBeNullOrWhiteSpace();
+        reversedText.Should().NotBeNullOrWhiteSpace();
+        forwardText.Should().Contain("public class AliasJoin_P1_A2_Buyer<T1, T2>");
+        forwardText.Should().Contain("public class AliasJoin_P1_A2_Seller<T1, T2>");
+        forwardText.Should().Contain("public class AliasProjection_P1_A2_Buyer<T1, T2>");
+        forwardText.Should().Contain("public class AliasProjection_P1_A2_Seller<T1, T2>");
+        forwardText.Should().Contain("AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin>");
+        forwardText.Should().Contain("AliasJoin_P1_A2_Seller<global::Harness.Person, TJoin>");
+        forwardText.Should().Contain("Alias.BuyerMarker");
+        forwardText.Should().Contain("Alias.SellerMarker");
+        CountOccurrences(forwardText, "Join<TJoin>(").Should().Be(2);
+
+        // Repeated runs of the same source are byte-identical.
+        forward2.Run.GeneratedTrees.Single().ToString().Should().Be(forwardText);
+        reversed2.Run.GeneratedTrees.Single().ToString().Should().Be(reversedText);
+
+        // Declaration-order independence: reversing the two chains changes not a single byte.
+        reversedText.Should().Be(forwardText);
+    }
+
+    [Fact]
+    public void R03_intermediate_cte_alias_join_is_supported_without_false_NORMGEN007()
+    {
+        // R03 (issue #206, intermediate `IsCte`): a chain whose intermediate step is an alias join
+        // from a CLOSED typed CTE descriptor (`Cte<Person>`), followed by another alias join. The
+        // intermediate step's source kind belongs only to that step's own extension identity; it is
+        // NOT part of the later step's emitted signature. The continuation must still be emitted and
+        // the chain must not trigger a false NORMGEN007.
+        const string source =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(EntityBuilder<Order> orders, EntityBuilder<Person> people, Cte<Person> cte)\n" +
+            "    {\n" +
+            "        _ = orders.Join(cte, (a, b) => true, Alias.Buyer).Join<Person>(people, (a, b) => true, Alias.Seller);\n" +
+            "    }\n" +
+            "}\n";
+
+        var harness = RunSource(source);
+        harness.Run.Diagnostics.Should().BeEmpty();
+        harness.Run.GeneratedTrees.Should().HaveCount(1);
+
+        var generated = harness.Run.GeneratedTrees[0].ToString();
+
+        TestContext.Current.AddAttachment("R03-cte-generated.cs", generated);
+        TestContext.Current.AddAttachment("R03-cte-diagnostics.txt", string.Join("\n", harness.Run.Diagnostics.Select(d => d.ToString())));
+
+        // The closed-CTE intermediate step emits its own Cte<TJoin>-source overload...
+        generated.Should().Contain("global::NextORM.Core.Cte<TJoin> cte,");
+        // ...and the continuation over the already-aliased receiver is still emitted.
+        generated.Should().Contain("AliasJoin_P1_A2_Buyer<global::Harness.Order, global::Harness.Person>");
+        generated.Should().Contain("AliasJoin_P1_A2_Buyer_A3_Seller<global::Harness.Order, global::Harness.Person, TJoin>");
+
+        harness.Output.GetDiagnostics(TestContext.Current.CancellationToken)
+            .Should().NotContain(d => d.Severity == DiagnosticSeverity.Error);
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Harness plumbing.
     // ---------------------------------------------------------------------------------------------
 
-    private static Harness RunDiagnosticCase(string body)
+    private static int CountOccurrences(string text, string value)
     {
-        var source = Source(body);
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+
+        return count;
+    }
+
+    private static Harness RunDiagnosticCase(string body)
+        => RunSource(Source(body));
+
+    private static Harness RunSource(string source)
+    {
         var compilation = CreateCompilation(source);
 
         GeneratorDriver driver = CSharpGeneratorDriver.Create([CreateGenerator()]);

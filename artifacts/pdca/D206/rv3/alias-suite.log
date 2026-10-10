@@ -1,0 +1,20 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) passed (4s 612ms)
+
+  In process file artifacts produced:
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_byte_identical_distinct_chains_collapse_to_one_method': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/eefb18f047e2d03f09d08a810eec16342e2920635374f0b9ca4a220e4932e97e/R03-compiler.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_byte_identical_distinct_chains_collapse_to_one_method': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/eefb18f047e2d03f09d08a810eec16342e2920635374f0b9ca4a220e4932e97e/R03-diagnostics.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_byte_identical_distinct_chains_collapse_to_one_method': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/eefb18f047e2d03f09d08a810eec16342e2920635374f0b9ca4a220e4932e97e/R03-generated.cs.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R07_generation_is_order_independent_and_repeatable': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/cc9c1bbe2190f9788ed578c18b6763029116b360740b9ccd81e58aa041ae3552/R07-reversed-generated.cs.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R07_generation_is_order_independent_and_repeatable': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/cc9c1bbe2190f9788ed578c18b6763029116b360740b9ccd81e58aa041ae3552/R07-forward-generated.cs.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_control_distinct_aliases_process_both_call_sites': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/17cebb4a35a82ef7bb87368f250c131e801b8a10575a03a8c6778b7f5f52b674/R03-control-compiler.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_control_distinct_aliases_process_both_call_sites': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/17cebb4a35a82ef7bb87368f250c131e801b8a10575a03a8c6778b7f5f52b674/R03-control-generated.cs.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_intermediate_cte_alias_join_is_supported_without_false_NORMGEN007': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/bc9459c921aef494a254553e32b000f6360e37577f64af553c4ae5002eb23fef/R03-cte-diagnostics.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_intermediate_cte_alias_join_is_supported_without_false_NORMGEN007': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/bc9459c921aef494a254553e32b000f6360e37577f64af553c4ae5002eb23fef/R03-cte-generated.cs.txt
+
+Test run summary: Passed!
+  total: 104
+  failed: 0
+  succeeded: 104
+  skipped: 0
+  duration: 4s 824ms

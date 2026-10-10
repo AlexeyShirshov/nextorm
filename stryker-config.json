@@ -1,0 +1,25 @@
+{
+  "stryker-config": {
+    "project": "src/nextorm.postgres/nextorm.postgres.csproj",
+    "test-projects": [
+      "tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj"
+    ],
+    "mutate": [
+      "**/PostgresExtremeRowRenderer.cs"
+    ],
+    "coverage-analysis": "perTest",
+    "test-runner": "mtp",
+    "mutation-level": "Standard",
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    },
+    "reporters": [
+      "Progress",
+      "Html",
+      "Json"
+    ],
+    "report-file-name": "mutation-report"
+  }
+}

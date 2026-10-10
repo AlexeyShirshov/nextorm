@@ -1,0 +1,23 @@
+{
+ "unit": "D175",
+ "scope": {
+  "projects": ["tests/nextorm.core.tests","tests/nextorm.sqlite.tests","tests/nextorm.integration.tests"],
+  "selectors": [
+    "FullyQualifiedName~SelectExpressionPlanEqualityComparerTests|FullyQualifiedName~ImplicitNavigationR3CountBoundaryTests|FullyQualifiedName~RawSourceBindingFilterTests|FullyQualifiedName~PlanKeyStructureTests|FullyQualifiedName~InMemoryTests|FullyQualifiedName~JoinIntoPlanKeyTests",
+    "FullyQualifiedName~JoinIntoSqlGenerationTests|FullyQualifiedName~JoinIntoExecutionTests",
+    "FullyQualifiedName~JoinInto",
+    "FullyQualifiedName~SelectExpressionPlanEqualityComparerTests",
+    "FullyQualifiedName~ImplicitNavigationR3CountBoundaryTests",
+    "FullyQualifiedName~RawSourceBindingFilterTests",
+    "FullyQualifiedName~PlanKeyStructureTests",
+    "FullyQualifiedName~InMemoryTests",
+    "FullyQualifiedName~JoinIntoPlanKeyTests",
+    "FullyQualifiedName~JoinIntoSqlGenerationTests",
+    "FullyQualifiedName~JoinIntoExecutionTests"
+  ],
+  "files": ["tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs","tests/nextorm.core.tests/ImplicitNavigationR3CountBoundaryTests.cs","tests/nextorm.core.tests/RawSourceBindingFilterTests.cs","tests/nextorm.core.tests/PlanKeyStructureTests.cs","tests/nextorm.core.tests/InMemoryTests.cs","tests/nextorm.sqlite.tests/JoinIntoSqlGenerationTests.cs","tests/nextorm.sqlite.tests/JoinIntoExecutionTests.cs","tests/nextorm.integration.tests/CommonTestSuite.JoinInto.cs"],
+  "rebuild": "affected",
+  "boundary": "CORE-FULL + SQLITE-FULL + BUILD at DO->CHECK; INTEGRATION only if an integration-suite file changed",
+  "rationale": "test-only assertion strengthening; the focused fixtures exercise every changed plan-inequality/hash assertion in JoinInto and navigation plan-key tests. Individual selectors are the validator-conforming split of the mandated OR filters (same affected subset, no widening): the helper rejects xunit's '|' as a shell compound token."
+ }
+}

@@ -151,8 +151,9 @@ public interface ITestProvider
 
     /// <summary>
     /// True when the provider implements the multi-column <c>ToDataReader</c>/<c>ToDataReaderAsync</c>
-    /// terminal. PostgreSQL and SQL Server do; SQLite appends its <c>rowid</c> locator to the streaming
-    /// projection and fails closed, while MySQL/MariaDB and ClickHouse have no sequential-access support.
+    /// terminal. PostgreSQL and SQL Server do through sequential access; SQLite does through the
+    /// locator-free buffered result path (no <c>rowid</c> is appended to the projection). MySQL/MariaDB,
+    /// ClickHouse and the in-memory provider have no sequential-access support and fail closed.
     /// </summary>
     bool SupportsLobDataReader => false;
 

@@ -1,0 +1,2 @@
+# command: python3 scripts/validate_inner_loop.py brief docs/specs/status/rc2-175-joininto-quality-reclaim-1-evidence/do-scope.json
+exit_code=0

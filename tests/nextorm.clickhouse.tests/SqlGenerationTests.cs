@@ -1,6 +1,8 @@
 using System.Data.Common;
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Postgres;
+using NextORM.SqlServer;
 
 namespace NextORM.ClickHouse.Tests;
 

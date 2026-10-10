@@ -1,0 +1,2 @@
+FAIL: more than one comprehensive boundary test sweep: 2
+REPORT_EXIT=2

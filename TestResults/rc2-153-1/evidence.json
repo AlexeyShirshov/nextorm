@@ -1,0 +1,178 @@
+{
+  "unit": "D153 public-extensibility",
+  "scope": {
+    "projects": [
+      "tests/nextorm.publicextensibility.tests/nextorm.publicextensibility.tests.csproj",
+      "tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj",
+      "tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~ExternalDialectExtensibility",
+      "FullyQualifiedName~ExtremeRow"
+    ],
+    "files": [
+      "tests/nextorm.publicextensibility.tests/nextorm.publicextensibility.tests.csproj",
+      "tests/nextorm.publicextensibility.tests/ExternalDialectExtensibilityTests.cs",
+      "docs/specs/design/API-NAMING-REVIEW.md",
+      "docs/specs/status/rc2-153-public-extensibility-1.md",
+      "docs/advanced/select-where-extrema-native.md",
+      "docs/ru/advanced/select-where-extrema-native.md",
+      "docs/advanced/api-reference.md",
+      "docs/ru/advanced/api-reference.md",
+      "src/nextorm.postgres/PostgresDialect.cs",
+      "src/nextorm.clickhouse/ClickHouseDialect.cs",
+      "nextorm.slnx"
+    ],
+    "rebuild": "affected",
+    "boundary": "run the new consumer project full suite + filtered ExtremeRow tests in postgres/clickhouse test projects, then the PG/CH extreme-row container integration tests",
+    "rationale": "the change is docs/XML-comment plus one new non-friend consumer assembly; the affected behavior is dialect subclassing + renderer selection, covered by the new consumer tests and the existing ExtremeRow native/portable regression suites"
+  },
+  "amendments": [
+    {
+      "reason": "the integration runner executes the provider-specific extreme-row classes; the filter was narrowed to FullyQualifiedName~ExtremeRowNativeSpecificTests so the run starts only the PostgreSQL and ClickHouse containers instead of pulling in the cross-provider SelectWhereExtrema_* CommonTestSuite cases",
+      "added_selectors": [
+        "FullyQualifiedName~ExtremeRowNativeSpecificTests"
+      ],
+      "validated_before_run": true
+    },
+    {
+      "reason": "docs-only loop-back re-verification after the CHECK r=1/n=1 documentation defect: the two provider-native extreme-row integration classes are run separately so each provider's execution is provable (executed > 0, skipped 0); both classes are narrower than the already-authorized FullyQualifiedName~ExtremeRowNativeSpecificTests superset, no compiled input changed, so --no-build reuses the existing build artifact",
+      "added_selectors": [
+        "FullyQualifiedName~PostgresExtremeRowNativeSpecificTests",
+        "FullyQualifiedName~ClickHouseExtremeRowNativeSpecificTests"
+      ],
+      "validated_before_run": true
+    }
+  ],
+  "executions": [
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.publicextensibility.tests/nextorm.publicextensibility.tests.csproj",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "18659e41-d153-working-tree",
+      "artifact_revision": "18659e41-d153-working-tree",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.publicextensibility.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~ExternalDialectExtensibility"
+      ],
+      "phase": "inner",
+      "source_revision": "18659e41-d153-working-tree",
+      "artifact_revision": "18659e41-d153-working-tree",
+      "exit_code": 0,
+      "selected_count": 10
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.postgres.tests",
+        "-c",
+        "Debug",
+        "--filter",
+        "FullyQualifiedName~ExtremeRow"
+      ],
+      "phase": "boundary",
+      "source_revision": "18659e41-d153-working-tree",
+      "artifact_revision": "18659e41-d153-working-tree",
+      "exit_code": 0,
+      "selected_count": 37
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.clickhouse.tests",
+        "-c",
+        "Debug",
+        "--filter",
+        "FullyQualifiedName~ExtremeRow"
+      ],
+      "phase": "boundary",
+      "source_revision": "18659e41-d153-working-tree",
+      "artifact_revision": "18659e41-d153-working-tree",
+      "exit_code": 0,
+      "selected_count": 59
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.publicextensibility.tests",
+        "-c",
+        "Debug",
+        "--no-build"
+      ],
+      "phase": "boundary",
+      "source_revision": "18659e41-d153-working-tree",
+      "artifact_revision": "18659e41-d153-working-tree",
+      "exit_code": 0,
+      "selected_count": 10
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~ExtremeRowNativeSpecificTests"
+      ],
+      "phase": "boundary",
+      "source_revision": "18659e41-d153-working-tree",
+      "artifact_revision": "18659e41-d153-working-tree",
+      "exit_code": 0,
+      "selected_count": 51
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~PostgresExtremeRowNativeSpecificTests"
+      ],
+      "phase": "boundary",
+      "source_revision": "18659e41-d153-working-tree",
+      "artifact_revision": "18659e41-d153-working-tree",
+      "exit_code": 0,
+      "selected_count": 16
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~ClickHouseExtremeRowNativeSpecificTests"
+      ],
+      "phase": "boundary",
+      "source_revision": "18659e41-d153-working-tree",
+      "artifact_revision": "18659e41-d153-working-tree",
+      "exit_code": 0,
+      "selected_count": 35
+    }
+  ]
+}

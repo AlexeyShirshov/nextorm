@@ -202,13 +202,26 @@ public interface IDistinctOnRenderer
 /// <remarks>
 /// This is a read-only input constructed by the core and handed to an external
 /// <see cref="IExtremeRowRenderer"/>. Implementing a renderer means receiving instances through
-/// <see cref="IExtremeRowRenderer.CanRender"/>; the constructor is intentionally not part of the public
-/// contract, so no external code needs to (or can) construct one.
+/// <see cref="IExtremeRowRenderer.CanRender"/>. The eager constructor is part of the public contract:
+/// an external assembly without <c>InternalsVisibleTo</c> can construct one directly. Validation
+/// happens at construction - a null <c>clrType</c> throws <see cref="ArgumentNullException"/>. There
+/// is no SQL, provider, security or cardinality validation, and nothing calls
+/// <see cref="IExtremeRowRenderer.CanRender"/> or <see cref="IExtremeRowRenderer.Render"/>.
 /// </remarks>
 public sealed record ExtremeRowRenderColumn
 {
-    internal ExtremeRowRenderColumn(Type clrType, bool isNullable, bool isDirectMappedColumn, bool usesConverter)
+    /// <summary>
+    /// Creates a shape fact for one prepared extreme-row column. Exposed so an external
+    /// <see cref="IExtremeRowRenderer"/> can be exercised without a host that has internals access.
+    /// </summary>
+    /// <param name="clrType">The CLR type of the value produced by the column. Must not be <see langword="null"/>.</param>
+    /// <param name="isNullable">Whether <paramref name="clrType"/> can hold <c>null</c>.</param>
+    /// <param name="isDirectMappedColumn">Whether the column is a direct access to a mapped entity property.</param>
+    /// <param name="usesConverter">Whether a value converter is attached to the mapped property.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="clrType"/> is <see langword="null"/>.</exception>
+    public ExtremeRowRenderColumn(Type clrType, bool isNullable, bool isDirectMappedColumn, bool usesConverter)
     {
+        ArgumentNullException.ThrowIfNull(clrType);
         ClrType = clrType;
         IsNullable = isNullable;
         IsDirectMappedColumn = isDirectMappedColumn;
@@ -240,8 +253,13 @@ public sealed record ExtremeRowRenderColumn
 /// <remarks>
 /// This is a read-only input constructed by the core and handed to an external
 /// <see cref="IExtremeRowRenderer"/>. Implementing a renderer means receiving instances through
-/// <see cref="IExtremeRowRenderer.CanRender"/>; the constructor is intentionally not part of the public
-/// contract, so no external code needs to (or can) construct one.
+/// <see cref="IExtremeRowRenderer.CanRender"/>. The eager constructor is part of the public contract:
+/// an external assembly without <c>InternalsVisibleTo</c> can construct one directly. Validation
+/// happens at construction - a null collection reference throws <see cref="ArgumentNullException"/>
+/// and a null element throws <see cref="ArgumentException"/>; <see cref="Payload"/> is never read to
+/// validate it. There is no SQL, provider, security or cardinality validation, and nothing calls
+/// <see cref="IExtremeRowRenderer.CanRender"/> or <see cref="IExtremeRowRenderer.Render"/>. The
+/// internal lazy factory constructor remains non-public and is the path core preparation uses.
 /// </remarks>
 public sealed record ExtremeRowDescription
 {
@@ -251,13 +269,27 @@ public sealed record ExtremeRowDescription
     // from the record's value semantics (see Equals/GetHashCode below).
     private Lazy<IReadOnlyList<ExtremeRowRenderColumn>>? _payload;
 
-    internal ExtremeRowDescription(
+    /// <summary>
+    /// Creates an eager description from already-materialized payload columns. Exposed so an external
+    /// <see cref="IExtremeRowRenderer"/> can be exercised without a host that has internals access.
+    /// The collections are borrowed, not copied.
+    /// </summary>
+    /// <param name="isMax"><see langword="true"/> for a maximum, <see langword="false"/> for a minimum.</param>
+    /// <param name="keys">The extreme-key components in selector order. Must not be <see langword="null"/>.</param>
+    /// <param name="groups">The group-by components in selector order; empty for the global form. Must not be <see langword="null"/>.</param>
+    /// <param name="payload">The source payload columns. Must not be <see langword="null"/> and is not read during construction.</param>
+    /// <exception cref="ArgumentNullException">A collection reference is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">A collection contains a <see langword="null"/> element.</exception>
+    public ExtremeRowDescription(
         bool isMax,
         IReadOnlyList<ExtremeRowRenderColumn> keys,
         IReadOnlyList<ExtremeRowRenderColumn> groups,
         IReadOnlyList<ExtremeRowRenderColumn> payload)
         : this(isMax, keys, groups, () => payload)
     {
+        ExtremeRowValidation.RequireColumns(keys, nameof(keys));
+        ExtremeRowValidation.RequireColumns(groups, nameof(groups));
+        ExtremeRowValidation.RequireColumns(payload, nameof(payload));
     }
 
     internal ExtremeRowDescription(
@@ -317,12 +349,68 @@ public sealed record ExtremeRowDescription
 /// <remarks>
 /// This is a read-only input constructed by the core and handed to an external
 /// <see cref="IExtremeRowRenderer"/>. Implementing a renderer means receiving instances through
-/// <see cref="IExtremeRowRenderer.Render"/>; the constructor is intentionally not part of the public
-/// contract, so no external code needs to (or can) construct one.
+/// <see cref="IExtremeRowRenderer.Render"/>. The eager constructor is part of the public contract:
+/// an external assembly without <c>InternalsVisibleTo</c> can construct one directly. Validation
+/// happens at construction - a null reference throws <see cref="ArgumentNullException"/>, while an
+/// empty or whitespace-only <c>sourceSql</c>, a null or empty collection element, or an undeclared
+/// <see cref="KeywordCase"/> throws <see cref="ArgumentException"/> (a whitespace-only alias is
+/// accepted). There is no SQL, provider, security or cardinality validation, and nothing calls
+/// <see cref="IExtremeRowRenderer.CanRender"/> or <see cref="IExtremeRowRenderer.Render"/>.
 /// </remarks>
 public sealed record ExtremeRowRenderRequest
 {
+    /// <summary>
+    /// Creates the prepared inputs of one native extreme-row render. Exposed so an external
+    /// <see cref="IExtremeRowRenderer"/> can be exercised without a host that has internals access.
+    /// Every collection is borrowed, not copied; the renderer must not mutate a collection while the
+    /// request is in use, including from a concurrent caller.
+    /// </summary>
+    /// <param name="sourceSql">The prepared filtered source SQL. Must not be <see langword="null"/>, empty or whitespace-only.</param>
+    /// <param name="isMax"><see langword="true"/> for a maximum, <see langword="false"/> for a minimum.</param>
+    /// <param name="payloadAliases">The canonical payload aliases, in order. Must not be <see langword="null"/>; elements must not be <see langword="null"/> or empty (whitespace-only is accepted).</param>
+    /// <param name="keyAliases">The aliases of the extreme-key components, in selector order. Must not be <see langword="null"/>; elements must not be <see langword="null"/> or empty (whitespace-only is accepted).</param>
+    /// <param name="keyColumns">The shape facts aligned with <paramref name="keyAliases"/>. Must not be <see langword="null"/>; elements must not be <see langword="null"/>.</param>
+    /// <param name="groupAliases">The aliases of the group-by components; empty for the global form. Must not be <see langword="null"/>; elements must not be <see langword="null"/> or empty (whitespace-only is accepted).</param>
+    /// <param name="keywordCase">The keyword casing; must be a declared <see cref="KeywordCase"/> value.</param>
+    /// <exception cref="ArgumentNullException">A required reference is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="sourceSql"/> is empty or whitespace-only, a collection contains a <see langword="null"/> or empty element, or <paramref name="keywordCase"/> is not a declared value.</exception>
+    public ExtremeRowRenderRequest(
+        string sourceSql,
+        bool isMax,
+        IReadOnlyList<string> payloadAliases,
+        IReadOnlyList<string> keyAliases,
+        IReadOnlyList<ExtremeRowRenderColumn> keyColumns,
+        IReadOnlyList<string> groupAliases,
+        KeywordCase keywordCase)
+    {
+        ArgumentNullException.ThrowIfNull(sourceSql);
+        if (string.IsNullOrWhiteSpace(sourceSql))
+            throw new ArgumentException("The prepared source SQL must not be empty or whitespace-only.", nameof(sourceSql));
+
+        ExtremeRowValidation.RequireAliases(payloadAliases, nameof(payloadAliases));
+        ExtremeRowValidation.RequireAliases(keyAliases, nameof(keyAliases));
+        ExtremeRowValidation.RequireColumns(keyColumns, nameof(keyColumns));
+        ExtremeRowValidation.RequireAliases(groupAliases, nameof(groupAliases));
+
+        if (!Enum.IsDefined(keywordCase))
+            throw new ArgumentException($"'{keywordCase}' is not a declared {nameof(KeywordCase)} value.", nameof(keywordCase));
+
+        SourceSql = sourceSql;
+        IsMax = isMax;
+        PayloadAliases = payloadAliases;
+        KeyAliases = keyAliases;
+        KeyColumns = keyColumns;
+        GroupAliases = groupAliases;
+        KeywordCase = keywordCase;
+    }
+
+    /// <summary>
+    /// The core's trusted construction path: the inputs are already structurally valid, so the public
+    /// collection scans are skipped. Distinguished from the public constructor by an internal marker so
+    /// no external caller can opt out of validation.
+    /// </summary>
     internal ExtremeRowRenderRequest(
+        ExtremeRowTrustedConstruction _,
         string sourceSql,
         bool isMax,
         IReadOnlyList<string> payloadAliases,
@@ -673,4 +761,47 @@ public interface ISqliteFunctions
     /// <c>json_get</c>).
     /// </summary>
     string Render(string name, IReadOnlyList<string> args);
+}
+
+/// <summary>
+/// Internal marker that distinguishes the core's trusted, already-validated
+/// <see cref="ExtremeRowRenderRequest"/> construction from the validated public constructor. It is
+/// deliberately not public, so no external caller can bypass validation.
+/// </summary>
+internal readonly struct ExtremeRowTrustedConstruction
+{
+}
+
+/// <summary>Construction-time validation shared by the public eager extreme-row constructors.</summary>
+internal static class ExtremeRowValidation
+{
+    /// <summary>
+    /// Requires a non-null column collection whose elements are all non-null. The collection is
+    /// borrowed as-is, not copied, and is never read as a payload.
+    /// </summary>
+    internal static void RequireColumns(IReadOnlyList<ExtremeRowRenderColumn>? columns, string paramName)
+    {
+        ArgumentNullException.ThrowIfNull(columns, paramName);
+        for (var i = 0; i < columns.Count; i++)
+        {
+            if (columns[i] is null)
+                throw new ArgumentException($"The '{paramName}' collection contains a null element at index {i}.", paramName);
+        }
+    }
+
+    /// <summary>
+    /// Requires a non-null alias collection whose elements are all non-null and non-empty. A
+    /// whitespace-only element is accepted; the rule is non-empty, not non-whitespace.
+    /// </summary>
+    internal static void RequireAliases(IReadOnlyList<string>? aliases, string paramName)
+    {
+        ArgumentNullException.ThrowIfNull(aliases, paramName);
+        for (var i = 0; i < aliases.Count; i++)
+        {
+            if (aliases[i] is null)
+                throw new ArgumentException($"The '{paramName}' collection contains a null element at index {i}.", paramName);
+            if (aliases[i].Length == 0)
+                throw new ArgumentException($"The '{paramName}' collection contains an empty element at index {i}.", paramName);
+        }
+    }
 }

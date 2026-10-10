@@ -11,7 +11,7 @@ namespace NextORM.Benchmark;
 
 /// <summary>
 /// Eager loading (<c>LoadWith</c>): the split-query default (chunked <c>IN</c> child statement, #95)
-/// against single-query stitching (<c>AsSingleQuery</c>, #107).
+/// against single-query stitching (<c>EagerLoadMode.SingleQuery</c>, #107).
 /// The dataset is seeded once per benchmark case: <see cref="ParentCount"/> parents with
 /// <see cref="ChildrenPerParent"/> children each, so the measured work is the query, not the setup.
 /// The command count is captured per case in an instance field and asserted inside the benchmark, so a
@@ -114,8 +114,7 @@ public class SqliteBenchmarkEagerLoading
     {
         _counter.Reset();
         var parents = _db.From<EagerBenchParent>()
-            .LoadWith(p => p.Children, c => c.From<EagerBenchChild>(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<EagerBenchChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .OrderBy(p => p.Id)
             .ToList();
         _commandCount = _counter.Executing;

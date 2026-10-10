@@ -909,6 +909,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TypeName_ShouldExecuteStructuredParameter()
     {
         var ctx = _sut.DataProvider;
@@ -936,6 +937,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_StructuredOutputDirection_ThrowsArgumentException()
     {
         var ctx = _sut.DataProvider;
@@ -1022,6 +1024,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_Scalar_ShouldStreamRows()
     {
         var ctx = _sut.DataProvider;
@@ -1051,6 +1054,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_Entity_ShouldStreamMappedColumns()
     {
         var ctx = _sut.DataProvider;
@@ -1084,6 +1088,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteProcedure_WithTableParameter_ShouldPassRows()
     {
         var ctx = _sut.DataProvider;
@@ -1106,6 +1111,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_EmptySet_ShouldReturnZero()
     {
         var ctx = _sut.DataProvider;
@@ -1127,6 +1133,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameterWithoutTypeName_ShouldThrowArgumentException()
     {
         var ctx = _sut.DataProvider;
@@ -1145,6 +1152,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_EnumScalar_ShouldStreamUnderlyingNumber()
     {
         var ctx = _sut.DataProvider;
@@ -1166,6 +1174,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_ReEnumerated_ShouldExecuteTwice()
     {
         var ctx = _sut.DataProvider;
@@ -1191,6 +1200,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_LazyNonEmptySet_ShouldStreamPeekedRow()
     {
         var ctx = _sut.DataProvider;
@@ -1216,6 +1226,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_LazyEmptySet_ShouldReturnZero()
     {
         var ctx = _sut.DataProvider;
@@ -1241,6 +1252,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_EntityNullColumn_ShouldCountNulls()
     {
         var ctx = _sut.DataProvider;
@@ -1269,6 +1281,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_DecimalPrecision_ShouldRoundtripAgainstRealUddt()
     {
         var ctx = _sut.DataProvider;
@@ -1302,6 +1315,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_DecimalPrecisionOverflow_ShouldNotSilentlyCorrupt()
     {
         var ctx = _sut.DataProvider;
@@ -1334,6 +1348,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_DecimalScaleExcess_ShouldRoundToDeclaredScale()
     {
         var ctx = _sut.DataProvider;
@@ -1362,6 +1377,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_InsertSelect_ShouldInsertRows()
     {
         var ctx = _sut.DataProvider;
@@ -1406,6 +1422,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public async Task ExecuteRawAsync_TableParameter_InsertSelect_ShouldInsertRows()
     {
         var ctx = _sut.DataProvider;
@@ -1440,6 +1457,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public async Task ExecuteProcedureAsync_WithTableParameter_ShouldPassRows()
     {
         var ctx = _sut.DataProvider;

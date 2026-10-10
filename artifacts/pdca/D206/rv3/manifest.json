@@ -1,0 +1,154 @@
+{
+  "task": "T206",
+  "tree": "/home/alex/sources/nextorm",
+  "contract_rv": 3,
+  "status_file": "docs/specs/status/rc2-206-sourcegen-cs0111-alias-join-1.md",
+  "required_rows": [
+    "E206-03",
+    "E206-04",
+    "E206-05",
+    "E206-06D",
+    "E206-07",
+    "E206-08"
+  ],
+  "rows": [
+    {
+      "id": "E206-03",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs",
+          "command": "dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~JoinAliasGeneratorDiagnosticTests",
+          "exit": 0,
+          "value": "selected 22; two-candidate control + collapse to exactly one Join<TJoin>; 0 NORMGEN007; 0 compiler errors; intermediate IsCte passes"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D206/rv3/alias-suite.log",
+          "command": "dotnet test tests/nextorm.alias.tests -c Debug",
+          "exit": 0,
+          "value": "104 total, 0 failed, 0 skipped; superset of the 22 filtered R03/R07 tests"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D206/rv2/fix.log",
+          "exit": 0,
+          "value": "filtered inner loop: total 22 failed 0 succeeded 22 (R03 collapse + two-candidate control + intermediate IsCte)"
+        }
+      ]
+    },
+    {
+      "id": "E206-04",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs",
+          "command": "dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~JoinAliasGeneratorDiagnosticTests",
+          "exit": 0,
+          "value": "expected declarations asserted before byte compare; forward==reversed==repeat; declaration-removal negative demonstrated exit 2 then restored"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D206/rv2/fix.log",
+          "exit": 0,
+          "value": "declaration-removal negative: R07 exit 2 (NEG_TEST_EXIT=2) then restored green (RESTORE_TEST_EXIT=0)"
+        }
+      ]
+    },
+    {
+      "id": "E206-05",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D206/rv3/alias-suite.log",
+          "command": "dotnet test tests/nextorm.alias.tests -c Debug",
+          "exit": 0,
+          "value": "selected 104; frozen surface/typed-CTE unchanged; 0 failed, 0 skipped"
+        }
+      ]
+    },
+    {
+      "id": "E206-06D",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "docs/guide/02-joins.md"
+        },
+        {
+          "kind": "doc",
+          "path": "docs/ru/guide/02-joins.md"
+        },
+        {
+          "kind": "build",
+          "path": "artifacts/pdca/D206/rv3/docs-build.log",
+          "command": "dotnet docfx docs/docfx.json",
+          "exit": 0,
+          "value": "defensive NORMGEN007; share one generic overload; no demonstrated workaround"
+        }
+      ]
+    },
+    {
+      "id": "E206-07",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "build",
+          "path": "artifacts/pdca/D206/rv3/build-debug.log",
+          "command": "dotnet build nextorm.slnx -c Debug",
+          "exit": 0,
+          "value": "0 warnings 0 errors"
+        },
+        {
+          "kind": "build",
+          "path": "artifacts/pdca/D206/rv3/build-release.log",
+          "command": "dotnet build nextorm.slnx -c Release",
+          "exit": 0,
+          "value": "0 warnings 0 errors"
+        },
+        {
+          "kind": "coverage",
+          "path": "artifacts/pdca/D206/rv2/coverage-report/Summary.json",
+          "value": "line 88.4% branch 80.4%; source generator EXCLUDED (coverage whitelist)"
+        },
+        {
+          "kind": "integration",
+          "path": "artifacts/pdca/D206/rv2/integration.log",
+          "command": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor",
+          "exit": 0,
+          "value": "3635 total, 0 failed, 197 capability/opt-in skips; PostgreSQL/MySQL/SQLServer/ClickHouse/SQLite executed"
+        },
+        {
+          "kind": "hygiene",
+          "path": "artifacts/pdca/D206/rv3/hygiene.log",
+          "command": "git diff --check",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "E206-08",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "manifest",
+          "path": "artifacts/pdca/D206/rv3/manifest.json",
+          "command": "python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D206/rv3/manifest.json",
+          "exit": 0
+        },
+        {
+          "kind": "source-inventory",
+          "path": "artifacts/pdca/D206/rv2/baseline.txt"
+        },
+        {
+          "kind": "status",
+          "path": "docs/specs/status/rc2-206-sourcegen-cs0111-alias-join-1.md",
+          "value": "reconciled: rv2 contradiction at ~:189-191 replaced by a note; rv3 tables/manifest authoritative"
+        }
+      ]
+    }
+  ]
+}

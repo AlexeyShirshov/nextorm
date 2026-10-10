@@ -10,6 +10,7 @@ namespace NextORM.Integration.Tests;
 /// insert + read-back path is exercised end to end.
 /// </summary>
 [Collection("Sqlite")]
+[Trait("D162", "Conformance")]
 public sealed class SqliteTableValuedParameterTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

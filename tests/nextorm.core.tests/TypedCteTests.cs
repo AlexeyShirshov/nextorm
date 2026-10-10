@@ -5,7 +5,10 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.Postgres;
+using NextORM.SqlServer;
 
 namespace NextORM.Core.Tests;
 
@@ -762,6 +765,465 @@ public class TypedCteTests
         // Different declarations under one name are rejected by the existing Ordinal semantics, before
         // any DB round-trip.
         act.Should().Throw<InvalidOperationException>().WithMessage("*'dup'*");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // #159 direct Cte<T> join overloads: a descriptor passed straight to the seven operators must
+    // behave exactly like converting it with the receiving context first (ctx.From(cte)).
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void TypedCte_DirectJoin_ShouldMatchConvertedForm()
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().Where(x => x.Id > 1).Select(x => new { x.Id }).AsCte("l");
+        var right = ctx.From<TypedCteEntity>().Where(x => x.Id < 9).Select(x => new { x.Id }).AsCte("r");
+
+        var direct = SqlOf(ctx, ctx.From(left)
+            .Join(right, (a, b) => a.Id == b.Id)
+            .Select(p => new { L = p.Item1.Id, R = p.Item2.Id }));
+        var converted = SqlOf(ctx, ctx.From(left)
+            .Join(ctx.From(right), (a, b) => a.Id == b.Id)
+            .Select(p => new { L = p.Item1.Id, R = p.Item2.Id }));
+
+        direct.Should().Be(converted);
+        direct.Should().Contain("with l as (");
+        direct.Should().Contain(", r as (");
+        direct.Should().Contain("join r as");
+    }
+
+    [Theory]
+    [InlineData("Join")]
+    [InlineData("LeftJoin")]
+    [InlineData("RightJoin")]
+    [InlineData("FullJoin")]
+    public void TypedCte_DirectConditionalOperators_ShouldMatchConvertedForm(string operation)
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("l");
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        QueryCommand<long> Direct() => operation switch
+        {
+            "Join" => ctx.From(left).Join(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            "LeftJoin" => ctx.From(left).LeftJoin(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            "RightJoin" => ctx.From(left).RightJoin(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            "FullJoin" => ctx.From(left).FullJoin(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            _ => throw new NotSupportedException(),
+        };
+        QueryCommand<long> Converted() => operation switch
+        {
+            "Join" => ctx.From(left).Join(ctx.From(right), (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            "LeftJoin" => ctx.From(left).LeftJoin(ctx.From(right), (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            "RightJoin" => ctx.From(left).RightJoin(ctx.From(right), (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            "FullJoin" => ctx.From(left).FullJoin(ctx.From(right), (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            _ => throw new NotSupportedException(),
+        };
+
+        SqlOf(ctx, Direct()).Should().Be(SqlOf(ctx, Converted()));
+    }
+
+    [Fact]
+    public void TypedCte_DirectCrossJoin_ShouldMatchConvertedForm()
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("l");
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        QueryCommand<long> Direct = ctx.From(left).CrossJoin(right).Select(p => p.Item1.Id);
+        QueryCommand<long> Converted = ctx.From(left).CrossJoin(ctx.From(right)).Select(p => p.Item1.Id);
+
+        SqlOf(ctx, Direct).Should().Be(SqlOf(ctx, Converted));
+    }
+
+    [Theory]
+    [InlineData("CrossApply")]
+    [InlineData("OuterApply")]
+    public void TypedCte_DirectApply_UnsupportedDialect_ShouldMatchConvertedRejection(string operation)
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("l");
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        QueryCommand<long> Direct = operation switch
+        {
+            "CrossApply" => ctx.From(left).CrossApply(right).Select(p => p.Item1.Id),
+            _ => ctx.From(left).OuterApply(right).Select(p => p.Item1.Id),
+        };
+        QueryCommand<long> Converted = operation switch
+        {
+            "CrossApply" => ctx.From(left).CrossApply(ctx.From(right)).Select(p => p.Item1.Id),
+            _ => ctx.From(left).OuterApply(ctx.From(right)).Select(p => p.Item1.Id),
+        };
+
+        // Unsupported APPLY must keep the exact full-form capability rejection.
+        var directEx = Record.Exception(() => SqlOf(ctx, Direct));
+        var convertedEx = Record.Exception(() => SqlOf(ctx, Converted));
+        directEx.Should().BeOfType<NotSupportedException>();
+        convertedEx.Should().BeOfType<NotSupportedException>();
+        directEx!.Message.Should().Be(convertedEx!.Message);
+    }
+
+    [Fact]
+    public void TypedCte_DirectJoin_WithExplicitOptions_ShouldMatchConvertedForm()
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("l");
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        var direct = SqlOf(ctx, ctx.From(left)
+            .Join(right, (a, b) => a.Id == b.Id, o => o.SuppressCartesianWarning())
+            .Select(p => p.Item1.Id));
+        var converted = SqlOf(ctx, ctx.From(left)
+            .Join(ctx.From(right), (a, b) => a.Id == b.Id, o => o.SuppressCartesianWarning())
+            .Select(p => p.Item1.Id));
+
+        direct.Should().Be(converted);
+    }
+
+    [Fact]
+    public void TypedCte_DirectJoin_NullCte_ShouldFailBeforeSourceWork()
+    {
+        using var ctx = new TestContext();
+
+        var other = ctx.From<TypedCteEntity>().ToCommand().AsCte("b");
+        Cte<TypedCteEntity>? missing = null;
+
+        var act = () => ctx.From(other).Join(missing!, (a, b) => a.Id == b.Id);
+
+        act.Should().Throw<ArgumentNullException>().Where(e => e.ParamName == "cte");
+    }
+
+    [Fact]
+    public void TypedCte_DirectJoin_NullPredicate_ShouldFailBeforeSourceWork()
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().ToCommand().AsCte("a");
+        var right = ctx.From<TypedCteEntity>().ToCommand().AsCte("b");
+        System.Linq.Expressions.Expression<Func<TypedCteEntity, TypedCteEntity, bool>>? predicate = null;
+
+        var act = () => ctx.From(left).Join(right, predicate!);
+
+        act.Should().Throw<ArgumentNullException>().Where(e => e.ParamName == "joinCondition");
+    }
+
+    [Fact]
+    public void TypedCte_DirectJoin_ShouldPreserveDependencyOrder()
+    {
+        using var ctx = new TestContext();
+
+        var dependency = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("dep");
+        var consumer = ctx.From(dependency).Select(x => new { x.Id }).AsCte("consumer");
+        var root = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("root");
+
+        var sql = SqlOf(ctx, ctx.From(root)
+            .Join(consumer, (a, b) => a.Id == b.Id)
+            .Select(p => p.Item1.Id));
+
+        sql.Should().Contain("with root as (");
+        sql.Should().Contain("dep as (");
+        sql.Should().Contain("consumer as (");
+        // Dependency-before-consumer: the transitive dependency is declared before its consumer.
+        sql.IndexOf("dep as (", StringComparison.Ordinal).Should().BeLessThan(sql.IndexOf("consumer as (", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TypedCte_DirectSelfJoin_ShouldEmitDefinitionOnce()
+    {
+        using var ctx = new TestContext();
+
+        var cte = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("s");
+
+        var sql = SqlOf(ctx, ctx.From(cte)
+            .Join(cte, (a, b) => a.Id == b.Id)
+            .Select(p => p.Item1.Id));
+
+        Occurrences(sql, "s as (").Should().Be(1);
+        sql.Should().Contain("join s as 't2'");
+    }
+
+    [Fact]
+    public void TypedCte_DirectJoin_ShouldNotMutateSharedCommandCacheFlag()
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().ToCommand().AsCte("a");
+        var right = ctx.From<TypedCteEntity>().ToCommand().AsCte("b");
+        var command = ctx.From(left).Join(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id);
+
+        command.Cache.Should().BeTrue();
+        SqlOf(ctx, command);
+        command.Cache.Should().BeTrue();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // #159 TableAlias (named-table) receiver: the non-generic EntityBuilder Cte<T> overloads must
+    // behave exactly like converting the descriptor with the receiving context first, including the
+    // JoinSourceResolver path they route through.
+    // ---------------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("Join")]
+    [InlineData("LeftJoin")]
+    [InlineData("RightJoin")]
+    [InlineData("FullJoin")]
+    public void TypedCte_TableAliasReceiver_DirectConditionalOperators_ShouldMatchConvertedForm(string operation)
+    {
+        using var ctx = new TestContext();
+
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        QueryCommand<long> Direct() => operation switch
+        {
+            "Join" => ctx.From("typed_cte_entity").Join(right, (t, b) => t.GetInt64("Id") == b.Id).Select(p => p.Item2.Id),
+            "LeftJoin" => ctx.From("typed_cte_entity").LeftJoin(right, (t, b) => t.GetInt64("Id") == b.Id).Select(p => p.Item2.Id),
+            "RightJoin" => ctx.From("typed_cte_entity").RightJoin(right, (t, b) => t.GetInt64("Id") == b.Id).Select(p => p.Item2.Id),
+            "FullJoin" => ctx.From("typed_cte_entity").FullJoin(right, (t, b) => t.GetInt64("Id") == b.Id).Select(p => p.Item2.Id),
+            _ => throw new NotSupportedException(),
+        };
+        QueryCommand<long> Converted() => operation switch
+        {
+            "Join" => ctx.From("typed_cte_entity").Join(ctx.From(right), (t, b) => t.GetInt64("Id") == b.Id).Select(p => p.Item2.Id),
+            "LeftJoin" => ctx.From("typed_cte_entity").LeftJoin(ctx.From(right), (t, b) => t.GetInt64("Id") == b.Id).Select(p => p.Item2.Id),
+            "RightJoin" => ctx.From("typed_cte_entity").RightJoin(ctx.From(right), (t, b) => t.GetInt64("Id") == b.Id).Select(p => p.Item2.Id),
+            "FullJoin" => ctx.From("typed_cte_entity").FullJoin(ctx.From(right), (t, b) => t.GetInt64("Id") == b.Id).Select(p => p.Item2.Id),
+            _ => throw new NotSupportedException(),
+        };
+
+        var direct = SqlOf(ctx, Direct());
+        direct.Should().Be(SqlOf(ctx, Converted()));
+        direct.Should().Contain("r as (");
+    }
+
+    [Fact]
+    public void TypedCte_TableAliasReceiver_DirectCrossJoin_ShouldMatchConvertedForm()
+    {
+        using var ctx = new TestContext();
+
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        var direct = SqlOf(ctx, ctx.From("typed_cte_entity").CrossJoin(right).Select(p => p.Item2.Id));
+        var converted = SqlOf(ctx, ctx.From("typed_cte_entity").CrossJoin(ctx.From(right)).Select(p => p.Item2.Id));
+
+        direct.Should().Be(converted);
+    }
+
+    [Theory]
+    [InlineData("CrossApply")]
+    [InlineData("OuterApply")]
+    public void TypedCte_TableAliasReceiver_DirectApply_UnsupportedDialect_ShouldMatchConvertedRejection(string operation)
+    {
+        using var ctx = new TestContext();
+
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        QueryCommand<long> Direct() => operation switch
+        {
+            "CrossApply" => ctx.From("typed_cte_entity").CrossApply(right).Select(p => p.Item2.Id),
+            _ => ctx.From("typed_cte_entity").OuterApply(right).Select(p => p.Item2.Id),
+        };
+        QueryCommand<long> Converted() => operation switch
+        {
+            "CrossApply" => ctx.From("typed_cte_entity").CrossApply(ctx.From(right)).Select(p => p.Item2.Id),
+            _ => ctx.From("typed_cte_entity").OuterApply(ctx.From(right)).Select(p => p.Item2.Id),
+        };
+
+        var directEx = Record.Exception(() => SqlOf(ctx, Direct()));
+        var convertedEx = Record.Exception(() => SqlOf(ctx, Converted()));
+        directEx.Should().BeOfType<NotSupportedException>();
+        convertedEx.Should().BeOfType<NotSupportedException>();
+        directEx!.Message.Should().Be(convertedEx!.Message);
+    }
+
+    [Fact]
+    public void TypedCte_TableAliasReceiver_NamedArguments_ShouldMatchPositional()
+    {
+        using var ctx = new TestContext();
+
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        var positional = SqlOf(ctx, ctx.From("typed_cte_entity")
+            .Join(right, (t, b) => t.GetInt64("Id") == b.Id)
+            .Select(p => p.Item2.Id));
+        var named = SqlOf(ctx, ctx.From("typed_cte_entity")
+            .Join(cte: right, joinCondition: (t, b) => t.GetInt64("Id") == b.Id, options: null)
+            .Select(p => p.Item2.Id));
+
+        named.Should().Be(positional);
+    }
+
+    [Fact]
+    public void TypedCte_TableAliasReceiver_NullCte_ShouldFailBeforeSourceWork()
+    {
+        using var ctx = new TestContext();
+
+        Cte<TypedCteEntity>? missing = null;
+
+        var act = () => ctx.From("typed_cte_entity").Join(missing!, (t, b) => t.GetInt64("Id") == b.Id);
+
+        act.Should().Throw<ArgumentNullException>().Where(e => e.ParamName == "cte");
+    }
+
+    [Fact]
+    public void TypedCte_TableAliasReceiver_AllFourteenOverloads_CompileAndBuild()
+    {
+        // R159-06 compile coverage: the non-generic EntityBuilder (TableAlias) receiver must expose all
+        // 14 Cte<T> overloads - four conditional operators and CrossJoin/CrossApply/OuterApply, each in
+        // the concise and explicit-options forms. Building (never rendering) each one pins the surface.
+        using var ctx = new TestContext();
+
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        ctx.From("typed_cte_entity").Join(right, (t, b) => t.GetInt64("Id") == b.Id).Should().NotBeNull();
+        ctx.From("typed_cte_entity").Join(right, (t, b) => t.GetInt64("Id") == b.Id, options: null).Should().NotBeNull();
+        ctx.From("typed_cte_entity").LeftJoin(right, (t, b) => t.GetInt64("Id") == b.Id).Should().NotBeNull();
+        ctx.From("typed_cte_entity").LeftJoin(right, (t, b) => t.GetInt64("Id") == b.Id, options: null).Should().NotBeNull();
+        ctx.From("typed_cte_entity").RightJoin(right, (t, b) => t.GetInt64("Id") == b.Id).Should().NotBeNull();
+        ctx.From("typed_cte_entity").RightJoin(right, (t, b) => t.GetInt64("Id") == b.Id, options: null).Should().NotBeNull();
+        ctx.From("typed_cte_entity").FullJoin(right, (t, b) => t.GetInt64("Id") == b.Id).Should().NotBeNull();
+        ctx.From("typed_cte_entity").FullJoin(right, (t, b) => t.GetInt64("Id") == b.Id, options: null).Should().NotBeNull();
+        ctx.From("typed_cte_entity").CrossJoin(right).Should().NotBeNull();
+        ctx.From("typed_cte_entity").CrossJoin(right, options: null).Should().NotBeNull();
+        ctx.From("typed_cte_entity").CrossApply(right).Should().NotBeNull();
+        ctx.From("typed_cte_entity").CrossApply(right, options: null).Should().NotBeNull();
+        ctx.From("typed_cte_entity").OuterApply(right).Should().NotBeNull();
+        ctx.From("typed_cte_entity").OuterApply(right, options: null).Should().NotBeNull();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // C3 regression pin: the TableAlias generic JoinCore resolves the joined builder's explicit
+    // source through JoinSourceResolver. Plain mapped joins must keep falling back to entity
+    // metadata; explicit sources (raw statement / derived query / configured table) must resolve
+    // to that source instead of silently ignoring it.
+    // ---------------------------------------------------------------------------------------------
+
+    [SqlTable("typed_cte_ta_entity")]
+    private sealed class TypedCteTableAliasEntity
+    {
+        public long Id { get; set; }
+    }
+
+    [SqlTableFunction("typed_cte_tvf")]
+    private static IQueryable<TypedCteEntity> TypedCteRows() => throw new NotSupportedException();
+
+    [Fact]
+    public void TypedCte_TableAliasReceiver_PlainTypedJoin_ShouldUseEntityMetadata()
+    {
+        using var ctx = new TestContext();
+
+        var sql = SqlOf(ctx, ctx.From("typed_cte_entity")
+            .Join(ctx.From<TypedCteEntity>(), (t, b) => t.GetInt64("Id") == b.Id)
+            .Select(p => p.Item2.Id));
+
+        sql.Should().Contain("typed_cte_entity");
+    }
+
+    [Fact]
+    public void TypedCte_TableAliasReceiver_ExplicitRawStatementSource_ShouldUseJoinedSource()
+    {
+        using var ctx = new TestContext();
+
+        var bound = ctx.FromSql("select Id from typed_cte_raww").BindEntity<TypedCteEntity>(["Id"]);
+
+        var cmd = ctx.From("typed_cte_entity")
+            .Join(bound, (t, b) => t.GetInt64("Id") == b.Id)
+            .Select(p => p.Item2.Id);
+
+        // The in-memory test dialect cannot render a raw FROM source, so assert the resolved join source
+        // structurally: the raw FromSql source must reach the join instead of falling back to metadata.
+        cmd.PrepareCommand(false, CancellationToken.None);
+        var join = cmd.Joins.Should().ContainSingle().Subject;
+        join.From.Should().NotBeNull();
+        join.From!.RawSqlSource.Should().NotBeNull();
+        join.From!.RawSqlSource!.Sql.Should().Be("select Id from typed_cte_raww");
+    }
+
+    [Fact]
+    public void TypedCte_TableAliasReceiver_DerivedQuerySource_ShouldUseJoinedSource()
+    {
+        using var ctx = new TestContext();
+
+        var derived = ctx.From<TypedCteEntity>().Where(x => x.Id > 0).ToCommand();
+        var bound = ctx.From(derived);
+
+        var sql = SqlOf(ctx, ctx.From("typed_cte_entity")
+            .Join(bound, (t, b) => t.GetInt64("Id") == b.Id)
+            .Select(p => p.Item2.Id));
+
+        // The derived query is honored as a subquery source rather than replaced by entity metadata.
+        sql.Should().Contain("join (select");
+    }
+
+    [Fact]
+    public void TypedCte_TableAliasReceiver_ConfiguredTableSource_ShouldUseEntityMetadata()
+    {
+        using var ctx = new TestContext();
+
+        var bound = ctx.From<TypedCteTableAliasEntity>(b => b.Table("typed_cte_ta_override"));
+
+        var sql = SqlOf(ctx, ctx.From("typed_cte_entity")
+            .Join(bound, (t, b) => t.GetInt64("Id") == b.Id)
+            .Select(p => p.Item2.Id));
+
+        sql.Should().Contain("typed_cte_ta_override");
+    }
+
+    // E159-R2-TVF: the TableAlias receiver's generic JoinCore resolves the joined builder's explicit
+    // `_from` through JoinSourceResolver, so a table-valued function source reaches the join instead of
+    // being replaced by entity metadata (JoinSourceResolver.cs:11-14, EntityBuilder.cs:4478).
+    [Fact]
+    public void TypedCte_TableAliasReceiver_TableValuedFunctionSource_ShouldUseJoinedSource()
+    {
+        using var ctx = new TestContext();
+
+        var tvf = ctx.FromTableFunction(() => TypedCteRows());
+
+        var cmd = ctx.From("typed_cte_entity")
+            .Join(tvf, (t, b) => t.GetInt64("Id") == b.Id)
+            .Select(p => p.Item2.Id);
+
+        cmd.PrepareCommand(false, CancellationToken.None);
+        var join = cmd.Joins.Should().ContainSingle().Subject;
+        join.From.Should().NotBeNull();
+        join.From!.TableFunction.Should().NotBeNull();
+        join.From!.TableFunction!.Name.Should().Be("typed_cte_tvf");
+    }
+
+    // E159-R2-SA: Semi/Anti on the TableAlias receiver stay on the metadata fallback
+    // (`GetFrom(typeof(TJoinEntity))` - EntityBuilder.cs:4448,4462) and do not route the joined
+    // builder's explicit source through JoinSourceResolver. A derived-query source used as the joined
+    // builder is therefore ignored by Semi/Anti: the join reads the mapped table, not the subquery.
+    [Fact]
+    public void TypedCte_TableAliasReceiver_SemiAntiJoin_ShouldKeepEntityMetadataFallback()
+    {
+        using var ctx = new TestContext();
+
+        var derived = ctx.From<TypedCteEntity>().Where(x => x.Id > 0).ToCommand();
+        var bound = ctx.From(derived);
+
+        var semi = ctx.From("typed_cte_entity")
+            .SemiJoin(bound, (t, b) => t.GetInt64("Id") == b.Id)
+            .Select(t => t.GetInt64("Id"));
+        var anti = ctx.From("typed_cte_entity")
+            .AntiJoin(bound, (t, b) => t.GetInt64("Id") == b.Id)
+            .Select(t => t.GetInt64("Id"));
+
+        semi.PrepareCommand(false, CancellationToken.None);
+        anti.PrepareCommand(false, CancellationToken.None);
+
+        foreach (var join in new[] { semi.Joins.Should().ContainSingle().Subject, anti.Joins.Should().ContainSingle().Subject })
+        {
+            join.From.Should().NotBeNull();
+            join.From!.SubQuery.Should().BeNull();
+            join.From!.TableFunction.Should().BeNull();
+            join.From!.Table.Should().Be("typed_cte_entity");
+        }
     }
 
     // ---------------------------------------------------------------------------------------------

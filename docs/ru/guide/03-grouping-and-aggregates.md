@@ -215,7 +215,7 @@ Grouping sets доступны в SQL Server, PostgreSQL, SQLite и ClickHouse
 
 PostgreSQL-конструкция `DISTINCT ON` — «выбирающая строку» пара к группировке: вместо свёртки каждого
 ключа в агрегаты она ключует строки так же, как `GROUP BY`, но оставляет по одной представительной
-строке на ключ, выбранной через `ORDER BY`. Используйте [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) вместо [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), когда нужна сама строка, а не агрегат по ней:
+строке на ключ, выбранной через `ORDER BY`. Используйте [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) вместо [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), когда нужна сама строка, а не агрегат по ней:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -230,7 +230,7 @@ select distinct on (somestring) id, somestring from complex_entity order by some
 ```
 
 Ключом может быть анонимный тип — тогда ключ составляется из нескольких колонок; ведущие выражения
-`ORDER BY` должны ему соответствовать. [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) нельзя комбинировать с [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), и реализует его
+`ORDER BY` должны ему соответствовать. [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) нельзя комбинировать с [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), и реализует его
 только PostgreSQL — остальные провайдеры отклоняют его на этапе построения SQL. Полная поверхность —
 в разделе [SELECT DISTINCT](07-distinct.md#distinct-on-postgresql).
 

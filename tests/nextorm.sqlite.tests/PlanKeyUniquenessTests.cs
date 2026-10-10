@@ -1,7 +1,10 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.Postgres;
+using NextORM.SqlServer;
 
 namespace NextORM.Sqlite.Tests;
 
@@ -61,6 +64,12 @@ public class PlanKeyUniquenessTests
 
     private static QueryCommand Row(EntityBuilder<IComplexEntity> e)
         => e.Select(x => new PKRow { Id = x.Id, Int = x.Int });
+
+    private static JoinedEntityBuilder<EagerParent, EagerChild> DirectParentJoin(IDataContext ctx)
+        => ctx.From<EagerParent>().LeftJoin(ctx.From<EagerChild>(), (p, c) => p.Id == c.ParentId);
+
+    private static JoinedEntityBuilder<EagerChild, EagerChild> DirectSelfJoin(IDataContext ctx)
+        => ctx.From<EagerChild>().Join(ctx.From<EagerChild>(), (a, b) => a.Id == b.Id);
 
     /// <summary>
     /// All query variants that must have a unique plan key. Each builds a fresh command so the matrix
@@ -123,6 +132,13 @@ public class PlanKeyUniquenessTests
             .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
         yield return ("join-condition", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id != b.Id)
             .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
+
+        // Direct whole-entity projection of a joined item (D190): the selected slot and its source
+        // binding are part of the plan identity, including a same-type self join.
+        yield return ("direct-parent", ctx => DirectParentJoin(ctx).Select(p => p.Item1));
+        yield return ("direct-child", ctx => DirectParentJoin(ctx).Select(p => p.Item2));
+        yield return ("direct-self-item1", ctx => DirectSelfJoin(ctx).Select(p => p.Item1));
+        yield return ("direct-self-item2", ctx => DirectSelfJoin(ctx).Select(p => p.Item2));
 
         // Set operations
         yield return ("union", ctx => E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }).Union(E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int })));
@@ -533,6 +549,144 @@ public class PlanKeyUniquenessTests
 
             prepared.DbCommand.CommandText.Should().Be(
                 ownSql[name], $"the cached plan for '{name}' must keep its own SQL");
+        }
+    }
+
+    /// <summary>
+    /// #173: the projection-item member is part of the plan key. Two commands with equal SQL, context
+    /// type and every other shape input, differing only in <see cref="ProjectionEntityItem.Member"/>,
+    /// must not alias each other in the real <see cref="QueryPlanStore"/>; an equal-member control must
+    /// still reuse the stored plan. The member is injected at the test seam because the production
+    /// producers only emit the tuple <c>ItemN</c> members.
+    /// </summary>
+    [Fact]
+    public void PlanCache_ShouldSeparateProjectionItemMembers()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var memberId = typeof(PKRow).GetProperty(nameof(PKRow.Id))!;
+        var memberInt = typeof(PKRow).GetProperty(nameof(PKRow.Int))!;
+
+        QueryCommand Build()
+        {
+            var cmd = Row(E(ctx));
+            cmd.PrepareCommand(false, CancellationToken.None);
+            return cmd;
+        }
+
+        var first = Build();
+        var second = Build();
+        var control = Build();
+
+        first.SelectList![0].ProjectionItem = new ProjectionEntityItem(0, typeof(PKRow), memberId);
+        second.SelectList![0].ProjectionItem = new ProjectionEntityItem(0, typeof(PKRow), memberInt);
+        control.SelectList![0].ProjectionItem = new ProjectionEntityItem(0, typeof(PKRow), memberId);
+
+        QueryPlanStore.Clear();
+        var contextType = typeof(PlanKeyUniquenessTests);
+        var holderFirst = new StubCommandHolder();
+        var holderSecond = new StubCommandHolder();
+
+        var planFirst = new QueryPlan(first, null);
+        var planSecond = new QueryPlan(second, null);
+        var planControl = new QueryPlan(control, null);
+
+        planFirst.Equals(planSecond).Should().BeFalse("a projection-item member is part of the plan key");
+        planFirst.Equals(planControl).Should().BeTrue("an equal member identity must reuse the plan key");
+
+        QueryPlanStore.Set(contextType, planFirst, holderFirst);
+        QueryPlanStore.TryGet(contextType, planSecond, out var missedHolder, out var missedPlan).Should()
+            .BeFalse("the member-only variation must not alias the stored plan");
+        missedHolder.Should().BeNull();
+        missedPlan.Should().BeNull();
+
+        QueryPlanStore.Set(contextType, planSecond, holderSecond);
+        QueryPlanStore.TryGet(contextType, planFirst, out var foundFirst, out var storedFirst).Should().BeTrue();
+        foundFirst.Should().BeSameAs(holderFirst);
+        storedFirst.Should().BeSameAs(planFirst);
+
+        QueryPlanStore.TryGet(contextType, planSecond, out var foundSecond, out var storedSecond).Should().BeTrue();
+        foundSecond.Should().BeSameAs(holderSecond);
+        storedSecond.Should().BeSameAs(planSecond);
+
+        QueryPlanStore.TryGet(contextType, planControl, out var foundControl, out _).Should()
+            .BeTrue("an equal-shape control must reuse the stored plan");
+        foundControl.Should().BeSameAs(holderFirst);
+    }
+
+    /// <summary>
+    /// D190: the direct whole-entity projections of a joined item must never receive another variant's
+    /// cached SQL. The same entity type selected through different slots of a self-join has the same
+    /// entity type and result type, so the source/slot-binding must separate the real
+    /// <see cref="QueryPlanStore"/> entries.
+    /// </summary>
+    [Fact]
+    public void PlanCache_ShouldSeparateDirectEntityItemSlots()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.PurgeQueryCache();
+
+        static string Own<T>((IDataContext Ctx, QueryCommand<T> Cmd) variant)
+            => ((DbPreparedQueryCommand<T>)variant.Ctx.GetPreparedQueryCommand(variant.Cmd, false, false, CancellationToken.None)).DbCommand.CommandText;
+
+        static string Cached<T>((IDataContext Ctx, QueryCommand<T> Cmd) variant)
+            => ((DbPreparedQueryCommand<T>)variant.Ctx.GetPreparedQueryCommand(variant.Cmd, false, true, CancellationToken.None)).DbCommand.CommandText;
+
+        var parent = (ctx, DirectParentJoin(ctx).Select(p => p.Item1));
+        var child = (ctx, DirectParentJoin(ctx).Select(p => p.Item2));
+        var selfItem1 = (ctx, DirectSelfJoin(ctx).Select(p => p.Item1));
+        var selfItem2 = (ctx, DirectSelfJoin(ctx).Select(p => p.Item2));
+
+        var ownSql = new[] { Own(parent), Own(child), Own(selfItem1), Own(selfItem2) };
+        ownSql.Should().OnlyHaveUniqueItems("each direct whole-entity projection has its own SQL shape");
+
+        Cached(parent).Should().Be(ownSql[0], "the parent slot keeps its own cached SQL");
+        Cached(child).Should().Be(ownSql[1], "the child slot keeps its own cached SQL");
+        Cached(selfItem1).Should().Be(ownSql[2], "the first self-join slot keeps its own cached SQL");
+        Cached(selfItem2).Should().Be(ownSql[3], "the second self-join slot keeps its own cached SQL");
+    }
+
+    /// <summary>
+    /// D190: two independently built but equivalent direct whole-entity projections must share one
+    /// plan key and actually hit the stored <see cref="QueryPlanStore"/> entry, so the mapper/SQL is
+    /// reused rather than rebuilt per call site.
+    /// </summary>
+    [Fact]
+    public void QueryPlan_ShouldReuseEquivalentDirectEntityProjection()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        QueryCommand<EagerChild> Build()
+        {
+            var cmd = DirectParentJoin(ctx).Select(p => p.Item2);
+            cmd.PrepareCommand(false, CancellationToken.None);
+            return cmd;
+        }
+
+        var first = Build();
+        var second = Build();
+
+        var planFirst = new QueryPlan(first, null);
+        var planSecond = new QueryPlan(second, null);
+
+        planFirst.Equals(planSecond).Should().BeTrue("an equivalent direct projection must share the plan key");
+        planFirst.GetHashCode().Should().Be(planSecond.GetHashCode(), "equal plans must hash alike");
+
+        QueryPlanStore.Clear();
+        var contextType = typeof(PlanKeyUniquenessTests);
+        var holder = new StubCommandHolder();
+        QueryPlanStore.Set(contextType, planFirst, holder);
+
+        QueryPlanStore.TryGet(contextType, planSecond, out var found, out var stored).Should()
+            .BeTrue("the equivalent direct projection must hit the cached plan");
+        found.Should().BeSameAs(holder);
+        stored.Should().BeSameAs(planFirst);
+    }
+
+    private sealed class StubCommandHolder : IDbCommandHolder
+    {
+        public void ResetConnection(DbConnection conn, IDataContext dbContext)
+        {
         }
     }
 }

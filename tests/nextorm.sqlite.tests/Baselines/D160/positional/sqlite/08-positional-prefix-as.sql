@@ -1,0 +1,1 @@
+select id from (select t1.id, t2.somestring as 'String' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3'

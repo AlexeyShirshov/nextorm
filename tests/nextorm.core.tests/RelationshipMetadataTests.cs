@@ -182,6 +182,38 @@ public class RelationshipMetadataTests
         public int OwnerId { get; set; }
     }
 
+    public sealed class SharedFkParent
+    {
+        public int Id { get; set; }
+        public ICollection<SharedFkChild> Children { get; set; } = new List<SharedFkChild>();
+        public SharedFkChild? Primary { get; set; }
+    }
+
+    public sealed class SharedFkChild
+    {
+        public int Id { get; set; }
+        public int ParentId { get; set; }
+    }
+
+    public sealed class DualRefParent
+    {
+        public int Id { get; set; }
+        public SharedFkChild? Primary { get; set; }
+        public SharedFkChild? Secondary { get; set; }
+    }
+
+    public sealed class NonUniqueFkParent
+    {
+        public int Id { get; set; }
+        public NonUniqueFkChild? Primary { get; set; }
+    }
+
+    public sealed class NonUniqueFkChild
+    {
+        public int Id { get; set; }
+        public int ParentId { get; set; }
+    }
+
     public sealed class M2MParent
     {
         public int Id { get; set; }
@@ -276,6 +308,108 @@ public class RelationshipMetadataTests
         relationship.PrincipalKey[0].IsKey.Should().BeTrue();
 
         metadata.Properties.Should().NotContain(p => p.PropertyInfo.Name == nameof(ProfileOwnerA.Profile));
+    }
+
+    [Fact]
+    public void HasOneToOne_WithSharedForeignKeyAndOneToMany_ShouldPreserveBothDeclarationsIndependently()
+    {
+        // R170-02 / SH1: the same mapped FK backs both a OneToMany collection navigation and a OneToOne
+        // reference navigation. Declaring the one-to-one must not merge the declarations, subsume the
+        // collection, or force uniqueness onto the shared FK.
+        var metadata = new EntityMetadataBuilder<SharedFkParent>()
+            .HasMany(p => p.Children, c => c.ParentId)
+            .HasOneToOne(p => p.Primary, p => p.Id, c => c.ParentId)
+            .Build();
+
+        metadata.Relationships.Should().HaveCount(2);
+
+        var oneToMany = metadata.Relationships.Single(r => r.Kind == RelationshipKind.OneToMany);
+        var oneToOne = metadata.Relationships.Single(r => r.Kind == RelationshipKind.OneToOne);
+        oneToMany.Should().NotBeSameAs(oneToOne, "the two declarations are independent, not merged");
+
+        // Both declarations survive with their declared cardinality and participants.
+        oneToMany.Navigation!.Name.Should().Be(nameof(SharedFkParent.Children));
+        oneToMany.IsCollection.Should().BeTrue("the non-one-to-one side keeps its collection multiplicity");
+        oneToOne.Navigation!.Name.Should().Be(nameof(SharedFkParent.Primary));
+        oneToOne.IsCollection.Should().BeFalse();
+
+        oneToMany.DeclaringType.Should().Be(typeof(SharedFkParent));
+        oneToMany.RelatedType.Should().Be(typeof(SharedFkChild));
+        oneToOne.DeclaringType.Should().Be(typeof(SharedFkParent));
+        oneToOne.RelatedType.Should().Be(typeof(SharedFkChild));
+
+        // Both resolve to the one shared foreign-key property, each with its own principal key.
+        oneToMany.ForeignKey[0].PropertyInfo.Should().BeSameAs(oneToOne.ForeignKey[0].PropertyInfo,
+            "both declarations share the one foreign-key property without merging");
+        oneToMany.ForeignKey[0].PropertyInfo.Name.Should().Be(nameof(SharedFkChild.ParentId));
+        oneToOne.ForeignKey[0].PropertyInfo.Name.Should().Be(nameof(SharedFkChild.ParentId));
+        oneToMany.PrincipalKey[0].PropertyInfo.Name.Should().Be(nameof(SharedFkParent.Id));
+        oneToOne.PrincipalKey[0].PropertyInfo.Name.Should().Be(nameof(SharedFkParent.Id));
+
+        // Negative control: a OneToOne declaration must not force a uniqueness flag/constraint onto the
+        // shared FK. The core model exposes no uniqueness member, so the observable contract is that the
+        // FK stays a plain non-key dependent column; an implementation that forced uniqueness fails here.
+        oneToOne.ForeignKey[0].IsKey.Should().BeFalse(
+            "a OneToOne declaration does not force uniqueness onto the shared foreign key");
+        oneToMany.ForeignKey[0].IsKey.Should().BeFalse(
+            "the OneToMany declaration does not mark the shared foreign key unique");
+    }
+
+    [Fact]
+    public void TwoHasOneToOne_NavigationsSharingOneForeignKey_ShouldBothRegisterWithoutRejection()
+    {
+        // R170-02 / SH2: two independently declared OneToOne navigations over the same mapped FK are not a
+        // conflict; both register, neither forces a uniqueness constraint, and neither is mapped as a column.
+        var metadata = new EntityMetadataBuilder<DualRefParent>()
+            .HasOneToOne(p => p.Primary, p => p.Id, c => c.ParentId)
+            .HasOneToOne(p => p.Secondary, p => p.Id, c => c.ParentId)
+            .Build();
+
+        metadata.Relationships.Should().HaveCount(2);
+        metadata.Relationships.Should().OnlyContain(r => r.Kind == RelationshipKind.OneToOne);
+        metadata.Relationships.Select(r => r.Navigation!.Name).Should()
+            .BeEquivalentTo(new[] { nameof(DualRefParent.Primary), nameof(DualRefParent.Secondary) });
+        metadata.Relationships.Should().OnlyContain(r => !r.ForeignKey[0].IsKey,
+            "a OneToOne declaration adds no uniqueness flag to the shared foreign key");
+
+        metadata.Properties.Should().NotContain(p => p.PropertyInfo.Name == nameof(DualRefParent.Primary));
+        metadata.Properties.Should().NotContain(p => p.PropertyInfo.Name == nameof(DualRefParent.Secondary));
+    }
+
+    [Fact]
+    public void HasOneToOne_OnUniqueForeignKey_ShouldAcceptDeclarationAndResolveKeys()
+    {
+        // case UQ / R170-01: a OneToOne declared over a genuinely unique FK is accepted at metadata build
+        // time; the declaration resolves its keys and excludes the navigation from mapped columns. This
+        // asserts declaration acceptance only — metadata does not inspect schema/index uniqueness.
+        var metadata = new EntityMetadataBuilder<ProfileOwnerA>()
+            .HasOneToOne(o => o.Profile, o => o.Id, p => p.OwnerId)
+            .Build();
+
+        metadata.Relationships.Should().ContainSingle();
+        var relationship = metadata.Relationships[0];
+        relationship.Kind.Should().Be(RelationshipKind.OneToOne);
+        relationship.ForeignKey[0].PropertyInfo.Name.Should().Be(nameof(ProfileA.OwnerId));
+        relationship.PrincipalKey[0].PropertyInfo.Name.Should().Be(nameof(ProfileOwnerA.Id));
+        relationship.ForeignKey[0].IsKey.Should().BeFalse("declaring OneToOne does not mark the FK unique");
+        metadata.Properties.Should().NotContain(p => p.PropertyInfo.Name == nameof(ProfileOwnerA.Profile));
+    }
+
+    [Fact]
+    public void HasOneToOne_OnNonUniqueForeignKey_ShouldBuildWithoutMetadataRejection()
+    {
+        // case NQ / R170-01: a OneToOne declared over an FK that is not unique in the data is still
+        // accepted at metadata build time; no uniqueness validation runs and no metadata exception is
+        // raised. The non-uniqueness only surfaces at runtime (REQ170-RUNTIME). Declaration acceptance only.
+        var metadata = new EntityMetadataBuilder<NonUniqueFkParent>()
+            .HasOneToOne(p => p.Primary, p => p.Id, c => c.ParentId)
+            .Build();
+
+        var relationship = metadata.Relationships.Should().ContainSingle().Subject;
+        relationship.Kind.Should().Be(RelationshipKind.OneToOne);
+        relationship.ForeignKey[0].PropertyInfo.Name.Should().Be(nameof(NonUniqueFkChild.ParentId));
+        relationship.ForeignKey[0].IsKey.Should().BeFalse(
+            "the OneToOne declaration must not force a uniqueness flag onto a non-unique FK");
     }
 
     [Fact]

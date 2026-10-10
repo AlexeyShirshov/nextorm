@@ -83,8 +83,8 @@ public class AliasJoinWhereTests
                 .Join<Person>(people, (a, b) => a.BuyerId == b.Id, Alias.Buyer);
             var filtered = firstJoin.Where(p => p.Buyer.Id == 20);
 
-            var chained = filtered.JoinAlias<AliasJoin_Buyer_Approver<Order, Person, Person>, AliasProjection_Buyer_Approver<Order, Person, Person>, Person>(
-                static dc => new AliasJoin_Buyer_Approver<Order, Person, Person>(dc),
+            var chained = filtered.JoinAlias<AliasJoin_P1_A2_Buyer_A3_Approver<Order, Person, Person>, AliasProjection_P1_A2_Buyer_A3_Approver<Order, Person, Person>, Person>(
+                static dc => new AliasJoin_P1_A2_Buyer_A3_Approver<Order, Person, Person>(dc),
                 people,
                 (a, b) => a.Item1.ApproverId == b.Id);
 

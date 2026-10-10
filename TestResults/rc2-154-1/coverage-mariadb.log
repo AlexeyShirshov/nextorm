@@ -1,0 +1,14 @@
+dotnet-coverage v18.11.2.0 [linux-x64 - .NET 10.0.12]
+
+SessionId: 218dfbd1-b9c8-41c0-b82c-4b58d4746085
+Running tests from /home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll (net10.0|x64) passed (2s 060ms)
+
+Test run summary: Passed!
+  total: 218
+  failed: 0
+  succeeded: 218
+  skipped: 0
+  duration: 1s 697ms
+Code coverage results: TestResults/rc2-154-1/coverage-mariadb.xml.
+exit=0

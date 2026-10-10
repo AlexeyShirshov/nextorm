@@ -1,0 +1,33 @@
+{
+  "task": "T206",
+  "issue": 206,
+  "milestone": "1.0.9-rc2",
+  "contract_rv": 3,
+  "note": "Durable, non-PASS-blocking obligations of #206 on the current generator. These rows stay open (never na/met) and are excluded from the rv3 scoped PASS-blocking manifest.",
+  "items": [
+    {
+      "id": "E206-01",
+      "requirement": "R01",
+      "status": "open",
+      "summary": "Reachable supported-syntax last-step same-signature/different-body collision that would emit CS0111 in reconstructed unguarded output.",
+      "reason": "Unreachable by construction on HEAD a60ecb84: the emitted method body is a pure function of the emitted signature; the last-step JoinedType is rendered as the TJoin type parameter and never enters the body, so two supported chains with equal signatures always have byte-identical bodies.",
+      "reopen_trigger": "A committed supported-syntax reproducer that yields two distinct bodies under the same emitted signature, OR an approved design that makes the last-step JoinedType participate in the emitted identity (invalidating the purity proof)."
+    },
+    {
+      "id": "E206-02",
+      "requirement": "R02",
+      "status": "open",
+      "summary": "Same-signature/different-body groups must emit no arbitrarily selected overload and NORMGEN007 must identify every distinct affected invocation location with remediation.",
+      "reason": "The NORMGEN007 reject-all branch is structurally unreachable because equal emitted signature implies byte-identical body (same purity proof as E206-01), so the diagnostic has no constructible witness.",
+      "reopen_trigger": "Same as E206-01: a reachable differing-body collision, at which point the diagnostic location/remediation obligations become testable."
+    },
+    {
+      "id": "E206-06",
+      "requirement": "R05",
+      "status": "open",
+      "summary": "Original R05 demonstrated-workaround sub-obligation: a verified remediation for NORMGEN007 documented in the EN/RU joins guides.",
+      "reason": "No verified NORMGEN007 workaround can be demonstrated while the diagnostic is unreachable; documenting one would violate the R05 negative (promising an unverified workaround). Only the defensive-limitation part (rv3 row E206-06D) is met.",
+      "reopen_trigger": "A reachable collision with an observable, verified remediation that can be documented in both joins guides."
+    }
+  ]
+}

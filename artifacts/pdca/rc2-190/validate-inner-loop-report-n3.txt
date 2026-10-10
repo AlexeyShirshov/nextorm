@@ -1,0 +1,3 @@
+validate_inner_loop.py brief  artifacts/pdca/rc2-190/test-scope.json -> rc=0
+validate_inner_loop.py report artifacts/pdca/rc2-190/evidence.json -> rc=0
+(rc 0 = valid; the validator prints nothing on success)

@@ -243,6 +243,35 @@ the source aliases yourself (`HashJoin(t1 t2)`): nextorm's aliases are assigned 
 exposed. All four hints are part of the plan key. On SQLite, ClickHouse and the in-memory provider they
 are rejected with `NotSupportedException`.
 
+### Tables-in-scope hints on joined DELETE/UPDATE
+
+`WithTablesInScopeHint` is honoured by the multi-table `DELETE` and `UPDATE` builders, not only by
+`SELECT`: the hints reach the target and every joined physical source.
+
+```csharp
+dataContext.From<IComplexEntity>()
+    .WithTablesInScopeHint("SeqScan(t1)")        // SQL Server: .WithTablesInScopeHint("nolock")
+    .Join(dataContext.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+    .CreateUpdateJoinBuilder()
+    .Set(p => p.Item1.String, "x")
+    .ToSql();
+```
+
+```sql
+-- SQL Server: a WITH (...) clause on each physical table
+update [t1] set t1.somestring = @p0 from complex_entity with (nolock) as [t1] join simple_entity with (nolock) as [t2] on t1.id = t2.id
+-- PostgreSQL: one statement-level comment immediately after UPDATE (the same for DELETE)
+update /*+ SeqScan(t1) */ complex_entity as "t1" set somestring = @p0 from simple_entity as "t2" where t1.id = t2.id
+```
+
+On PostgreSQL/MySQL/MariaDB the scope hint — together with any join or subquery hints collected for the
+statement — is emitted once as a `/*+ ... */` comment immediately after the `DELETE`/`UPDATE` keyword.
+For a CTE-backed DML statement the hoisted `WITH` prefix is placed before the statement while the
+comment stays after the DML verb, matching how the `SELECT` path places it after `SELECT` in a
+`WITH … SELECT`. SQLite and ClickHouse reject a nonempty scope hint with `NotSupportedException`,
+consistently with `SELECT`; a joined `DELETE`/`UPDATE` is itself unsupported on those providers, so their
+existing capability error is unchanged. Hint-free DML stays byte-identical.
+
 ## ClickHouse query modifiers
 
 ClickHouse exposes four query-level modifiers that are not hints: `Final()`, `PreWhere(predicate)` and

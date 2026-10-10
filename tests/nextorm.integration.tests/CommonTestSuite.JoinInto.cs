@@ -89,6 +89,67 @@ public abstract partial class CommonTestSuite
         return (many, one, none);
     }
 
+    /// <summary>
+    /// Seeds two parents with exactly one distinct child each. This is the positive per-parent control
+    /// for the one-to-one backstop: a global identity comparison would wrongly merge the two children,
+    /// so each parent must keep its own child.
+    /// </summary>
+    private (int First, int Second) SeedJoinIntoTwoParentsOneChild()
+    {
+        var ctx = _sut.DataProvider;
+
+        JoinIntoChildren();
+        JoinIntoNotes();
+        JoinIntoParents();
+
+        var first = NextJoinIntoId();
+        var second = first + 1;
+
+        ctx.CreateInsertBuilder<JoinIntoParent>().Values([
+            new JoinIntoParent { Id = first, Name = "solo-a" },
+            new JoinIntoParent { Id = second, Name = "solo-b" },
+        ]).Insert();
+
+        ctx.CreateInsertBuilder<JoinIntoChild>().Values([
+            new JoinIntoChild { Id = first + 100, ParentId = first, Name = "solo-a-child" },
+            new JoinIntoChild { Id = second + 100, ParentId = second, Name = "solo-b-child" },
+        ]).Insert();
+
+        return (first, second);
+    }
+
+    /// <summary>
+    /// Seeds a single parent with exactly one physical child and two notes. Joining the notes collection
+    /// alongside the one-to-one reference repeats that one child row in the denormalized result while its
+    /// identity stays the same — the repeated-identity case for the shared providers, whose tables carry
+    /// a primary key so a duplicated physical row cannot be inserted.
+    /// </summary>
+    private int SeedJoinIntoRepeatedIdentity()
+    {
+        var ctx = _sut.DataProvider;
+
+        JoinIntoChildren();
+        JoinIntoNotes();
+        JoinIntoParents();
+
+        var parent = NextJoinIntoId();
+
+        ctx.CreateInsertBuilder<JoinIntoParent>().Values([
+            new JoinIntoParent { Id = parent, Name = "repeat" },
+        ]).Insert();
+
+        ctx.CreateInsertBuilder<JoinIntoChild>().Values([
+            new JoinIntoChild { Id = parent + 100, ParentId = parent, Name = "repeat-child" },
+        ]).Insert();
+
+        ctx.CreateInsertBuilder<JoinIntoNote>().Values([
+            new JoinIntoNote { Id = parent + 200, ParentId = parent, Text = "repeat-n1" },
+            new JoinIntoNote { Id = parent + 201, ParentId = parent, Text = "repeat-n2" },
+        ]).Insert();
+
+        return parent;
+    }
+
     [Fact]
     public void JoinInto_Left_ShouldKeepChildlessParentAndGroupChildren()
     {
@@ -269,6 +330,110 @@ public abstract partial class CommonTestSuite
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*more than one distinct*");
+    }
+
+    [Fact]
+    public async Task JoinInto_OneToOne_ShouldThrowWhenAParentMatchesMoreThanOneChildToListAsync()
+    {
+        // R170-04 / DA: the shared-provider one-to-one backstop must reject two distinct child
+        // identities on the async terminal with the same diagnostic as the sync path.
+        var (many, _, _) = SeedJoinInto();
+
+        Func<Task> act = () => JoinIntoParents()
+            .Where(p => p.Id == many)
+            .JoinInto(JoinIntoChildren(), (p, c) => p.Id == c.ParentId, p => p.PrimaryChild)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*more than one distinct*");
+    }
+
+    [Fact]
+    public void JoinInto_OneToOne_TwoParentsWithDistinctChildren_ShouldAssignEachItsOwnChild()
+    {
+        // R170-04 / PS: positive per-parent control — two parents, each with its own single child,
+        // must load without a throw and each keep its own child identity and payload. This rules out a
+        // global identity comparison that would see the two children as a duplicate.
+        var (first, second) = SeedJoinIntoTwoParentsOneChild();
+
+        var parents = JoinIntoParents()
+            .Where(p => p.Id == first || p.Id == second)
+            .JoinInto(JoinIntoChildren(), (p, c) => p.Id == c.ParentId, p => p.PrimaryChild)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(first, second);
+        parents[0].PrimaryChild!.Id.Should().Be(first + 100);
+        parents[0].PrimaryChild!.ParentId.Should().Be(first);
+        parents[0].PrimaryChild!.Name.Should().Be("solo-a-child");
+        parents[1].PrimaryChild!.Id.Should().Be(second + 100);
+        parents[1].PrimaryChild!.ParentId.Should().Be(second);
+        parents[1].PrimaryChild!.Name.Should().Be("solo-b-child");
+    }
+
+    [Fact]
+    public async Task JoinInto_OneToOne_TwoParentsWithDistinctChildren_ToListAsync_ShouldAssignEachItsOwnChild()
+    {
+        // R170-04 / PA: async parity of the positive per-parent control.
+        var (first, second) = SeedJoinIntoTwoParentsOneChild();
+
+        var parents = await JoinIntoParents()
+            .Where(p => p.Id == first || p.Id == second)
+            .JoinInto(JoinIntoChildren(), (p, c) => p.Id == c.ParentId, p => p.PrimaryChild)
+            .OrderBy(p => p.Id)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        parents.Select(p => p.Id).Should().Equal(first, second);
+        parents[0].PrimaryChild!.Id.Should().Be(first + 100);
+        parents[0].PrimaryChild!.ParentId.Should().Be(first);
+        parents[0].PrimaryChild!.Name.Should().Be("solo-a-child");
+        parents[1].PrimaryChild!.Id.Should().Be(second + 100);
+        parents[1].PrimaryChild!.ParentId.Should().Be(second);
+        parents[1].PrimaryChild!.Name.Should().Be("solo-b-child");
+    }
+
+    // case PV(repeated)
+    [Fact]
+    public void JoinInto_OneToOne_RepeatedSameIdentity_ShouldNotThrowAndKeepOneChild()
+    {
+        // case PV(repeated): one physical child joined twice through a neighbouring one-to-many collection
+        // repeats its rows with an unchanged identity; the one-to-one backstop must tolerate the repeat and
+        // assign the single child once.
+        var parent = SeedJoinIntoRepeatedIdentity();
+
+        var parents = JoinIntoParents()
+            .Where(p => p.Id == parent)
+            .JoinInto(JoinIntoNotes(), (p, n) => p.Id == n.ParentId, p => p.Notes)
+            .JoinInto(JoinIntoChildren(), (p, c) => p.Id == c.ParentId, p => p.PrimaryChild)
+            .ToList();
+
+        parents.Should().ContainSingle("the repeated one-to-one rows must collapse to one parent");
+        parents[0].Notes.Should().HaveCount(2);
+        parents[0].PrimaryChild.Should().NotBeNull("a repeated same-identity child is tolerated");
+        parents[0].PrimaryChild!.Id.Should().Be(parent + 100);
+        parents[0].PrimaryChild!.ParentId.Should().Be(parent);
+        parents[0].PrimaryChild!.Name.Should().Be("repeat-child");
+    }
+
+    // case PV(repeated)
+    [Fact]
+    public async Task JoinInto_OneToOne_RepeatedSameIdentity_ToListAsync_ShouldNotThrowAndKeepOneChild()
+    {
+        // case PV(repeated): async parity of the repeated-identity tolerance.
+        var parent = SeedJoinIntoRepeatedIdentity();
+
+        var parents = await JoinIntoParents()
+            .Where(p => p.Id == parent)
+            .JoinInto(JoinIntoNotes(), (p, n) => p.Id == n.ParentId, p => p.Notes)
+            .JoinInto(JoinIntoChildren(), (p, c) => p.Id == c.ParentId, p => p.PrimaryChild)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        parents.Should().ContainSingle("the repeated one-to-one rows must collapse to one parent");
+        parents[0].Notes.Should().HaveCount(2);
+        parents[0].PrimaryChild.Should().NotBeNull("a repeated same-identity child is tolerated");
+        parents[0].PrimaryChild!.Id.Should().Be(parent + 100);
+        parents[0].PrimaryChild!.ParentId.Should().Be(parent);
+        parents[0].PrimaryChild!.Name.Should().Be("repeat-child");
     }
 
     [Fact]

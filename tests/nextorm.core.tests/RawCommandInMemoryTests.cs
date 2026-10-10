@@ -7,6 +7,7 @@ namespace NextORM.Core.Tests;
 /// The in-memory context executes LINQ only; raw SQL execution is rejected through the
 /// <see cref="IRawCommandExecutor"/> default interface implementation.
 /// </summary>
+[Trait("D162", "Conformance")]
 public class RawCommandInMemoryTests
 {
     [Fact]

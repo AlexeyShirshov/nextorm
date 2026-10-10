@@ -1,0 +1,11 @@
+{
+  "unit": "R177-D177-R3",
+  "scope": {
+    "projects": ["tests/nextorm.integration.tests"],
+    "selectors": ["-class NextORM.Integration.Tests.SqlServerNativeJsonStreamTests"],
+    "files": ["tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs"],
+    "rebuild": "affected",
+    "boundary": "this class run with DOCKER_HOST at DO->CHECK boundary",
+    "rationale": "close A1/A9/R16/A2-E177-14 live native-path rows"
+  }
+}

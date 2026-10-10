@@ -241,7 +241,7 @@ select t1.id, (select top(1) t2.id from attachments as [t2]
 
 The main source of a join is the first table, so a filter declared for `T1` applies to `Item1` exactly as in a plain query.
 
-The disable scope is carried by the query that starts it, so a type listed in a selective `IgnoreFilters` is disabled wherever it appears in that query, and `IgnoreFilters()` disables every filter everywhere in the query — including eagerly-loaded children declared with [`LoadWith`](eager-loading.md). This holds identically in split and single-query (`AsSingleQuery`) mode: the child side's effective scope is the **union** of its own `IgnoreFilters` scope and the parent's, `IgnoreFilters()` (`All`) absorbs that union, and a child's selective scope disables only filters on that child. See [Eager loading](eager-loading.md#single-query-mode-assinglequery).
+The disable scope is carried by the query that starts it, so a type listed in a selective `IgnoreFilters` is disabled wherever it appears in that query, and `IgnoreFilters()` disables every filter everywhere in the query — including eagerly-loaded children declared with [`LoadWith`](eager-loading.md). This holds identically in split and single-query (`EagerLoadMode.SingleQuery`) mode: the child side's effective scope is the **union** of its own `IgnoreFilters` scope and the parent's, `IgnoreFilters()` (`All`) absorbs that union, and a child's selective scope disables only filters on that child. See [Eager loading](eager-loading.md#single-query-mode-eagerloadmodesinglequery).
 
 ## UPDATE and DELETE (DML)
 

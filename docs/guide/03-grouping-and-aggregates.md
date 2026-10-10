@@ -213,7 +213,7 @@ Grouping sets are available on SQL Server, PostgreSQL, SQLite and ClickHouse
 
 PostgreSQL's `DISTINCT ON` is the row-picking counterpart of grouping: instead of collapsing each key
 into aggregates, it keys the rows the way `GROUP BY` does but keeps one representative row per key,
-chosen by `ORDER BY`. Use [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) instead of [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) when you need the row itself rather than an aggregate over it:
+chosen by `ORDER BY`. Use [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) instead of [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) when you need the row itself rather than an aggregate over it:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -228,7 +228,7 @@ select distinct on (somestring) id, somestring from complex_entity order by some
 ```
 
 The key may be an anonymous type to key on several columns; the leading `ORDER BY` expressions must
-match it. [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) cannot be combined with [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), and only PostgreSQL implements it — every
+match it. [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) cannot be combined with [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), and only PostgreSQL implements it — every
 other provider rejects it at SQL build time. See [SELECT DISTINCT](07-distinct.md#distinct-on-postgresql)
 for the full surface.
 

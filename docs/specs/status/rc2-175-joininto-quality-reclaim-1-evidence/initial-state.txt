@@ -1,0 +1,17 @@
+task: R175 DO reclaim rv=2
+branch: 1.0.9-rc2
+plan_baseline: cf34f910
+HEAD: 3ebaa4ee55c1d5295ad4e6e83be5922a82fbd81c
+3ebaa4ee #184 LoadWith(...EagerLoadMode) parameter fold replaces AsSingleQuery; CHECK PASS r=1 rv=2
+ancestor cf34f910..HEAD exit check:
+cf34f910 IS ancestor of HEAD
+
+tracked modifications (should be none for the 5 files):
+(end)
+
+file endings:
+tests/nextorm.core.tests/ImplicitNavigationR3CountBoundaryTests.cs:    Unicode text, UTF-8 text, with CRLF line terminators
+tests/nextorm.core.tests/InMemoryTests.cs:                             ASCII text, with CRLF line terminators
+tests/nextorm.core.tests/PlanKeyStructureTests.cs:                     ASCII text, with CRLF line terminators
+tests/nextorm.core.tests/RawSourceBindingFilterTests.cs:               Unicode text, UTF-8 text, with CRLF line terminators
+tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs: Unicode text, UTF-8 text, with CRLF line terminators

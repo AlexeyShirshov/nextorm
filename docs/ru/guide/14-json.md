@@ -40,7 +40,16 @@
 * **Каждый SQL-провайдер** использует один общий JSON-*терминал*: [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
   [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) записывают проекцию запроса в принадлежащий вызывающему `Stream` как JSON-массив или
   NDJSON, сериализуя на клиенте через `System.Text.Json` (см. [Потоковое сохранение данных](28-streaming-data.md#json)).
-  Это терминал сериализации, а не SQL-функция JSON: он не меняет провайдерные JSON-поверхности ниже.
+  В SQL Server подходящую плоскую проекцию вместо этого обслуживает сама СУБД через завершающее
+  `FOR JSON PATH`, а единственная колонка-документ копируется в поток ограниченными чанками — это
+  внутренняя оптимизация с тем же контрактом вывода, не меняющая скалярный `ForJson` ниже (см.
+  [Нативный быстрый путь SQL Server](28-streaming-data.md#нативный-быстрый-путь-sql-server)).
+  Предварительная валидация использует единый контракт исключений — `NotSupportedException` с
+  соглашением о сообщении `JSON streaming validation [<token>]: <context>.` и фиксированными токенами
+  `mode-options`, `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory` и
+  `unsupported-execution-form` — а несовместимая схема reader'а отклоняется до любого вывода, включая
+  обрамление. Это терминал сериализации, а не SQL-функция JSON: он не меняет провайдерные
+  JSON-поверхности ниже.
 
 Поскольку механизмы разные, один и тот же концептуальный результат записывается по-разному. Читайте
 раздел своего провайдера; в [матрице провайдеров](#матрица-провайдеров) и разделе
@@ -93,7 +102,10 @@ select id, somestring from complex_entity for json auto
 
 Необязательный `root` оборачивает документ в `ROOT('name')`, а `includeNullValues` добавляет
 `INCLUDE_NULL_VALUES`. `ForJson` возвращает `null`, если запрос не вернул строк (SQL Server отдаёт SQL
-NULL для пустого результата `FOR JSON`). Предложение размещается после `ORDER BY` и перед завершающим
+NULL для пустого результата `FOR JSON`). Тот же серверный рендеринг `FOR JSON PATH` лежит и в основе
+нативного быстрого пути `WriteJson` для подходящей плоской проекции; этот путь — внутренняя
+оптимизация и не меняет сам `ForJson` (см.
+[Нативный быстрый путь SQL Server](28-streaming-data.md#нативный-быстрый-путь-sql-server)). Предложение размещается после `ORDER BY` и перед завершающим
 `OPTION (...)`, поэтому сочетается с [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) (сначала хинт, затем
 терминал): запрос `for json path option (recompile)` корректен. Используйте
 [`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)), чтобы только присоединить предложение и сохранить
@@ -394,6 +406,14 @@ from complex_entity
 * Переносимой абстракции JSON нет. Код, написанный для JSON-поверхности одного провайдера, бросает
   `NotSupportedException` на другом; если нужно ветвление, используйте флаги возможностей
   `ISqlDialect`.
+* Терминал потоковой JSON-записи валидирует свои опции и проекцию заранее и падает с
+  `NotSupportedException` по стабильному соглашению `JSON streaming validation [<token>]: <context>.`
+  (токены `mode-options`, `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory`,
+  `unsupported-execution-form`); несовместимая схема reader'а отклоняется до любого вывода, включая
+  обрамление массива/`Root`. Ошибки жизненного цикла остаются
+  `InvalidOperationException`/`ObjectDisposedException`, а ошибки приёмника/провайдера и отмена
+  сохраняют свою категорию. См.
+  [Исключения валидации и ошибки времени выполнения](28-streaming-data.md#исключения-валидации-и-ошибки-времени-выполнения).
 * `ForJson`/`ForXml` есть только в SQL Server ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson) /
   [`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)), и они взаимоисключающи в одной команде.
 * Поверхность `json`/`jsonb` PostgreSQL (`SqlFunctions.Postgres`) требует

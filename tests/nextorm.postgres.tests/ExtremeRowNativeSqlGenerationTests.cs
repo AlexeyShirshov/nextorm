@@ -561,3 +561,160 @@ public class ExtremeAliasEntity
     [Column("g")]
     public int? G { get; set; }
 }
+
+/// <summary>
+/// Direct-renderer guards for PostgreSQL's native extreme-row strategy (#151). These call the public
+/// <see cref="IExtremeRowRenderer"/> obtained from <see cref="PostgresDialect.ExtremeRowRenderer"/>
+/// with hand-built public descriptions/requests, so the eligibility guards and the derived-alias
+/// collision extension are pinned without going through a query shape that cannot express them.
+/// </summary>
+public class ExtremeRowRendererUnitTests
+{
+    private static IExtremeRowRenderer Renderer() => new PostgresDialect().ExtremeRowRenderer!;
+
+    private static ExtremeRowRenderColumn Integral(Type type, bool nullable = false)
+        => new(type, nullable, isDirectMappedColumn: true, usesConverter: false);
+
+    private static ExtremeRowRenderRequest GroupedRequest(
+        string sourceSql,
+        bool isMax,
+        IReadOnlyList<string> payloadAliases,
+        IReadOnlyList<string> keyAliases,
+        IReadOnlyList<string> groupAliases)
+        => new(
+            sourceSql,
+            isMax,
+            payloadAliases,
+            keyAliases,
+            [Integral(typeof(int))],
+            groupAliases,
+            KeywordCase.Lower);
+
+    [Fact]
+    public void CanRender_EmptyKeys_ShouldDeclineEvenWhenGroupsAreIntegral()
+    {
+        var integral = Integral(typeof(int));
+
+        // The guard is `Keys.Count > 0`; an empty-key description must never be accepted even though
+        // the vacuous integral check on the empty key list and the integral groups would both pass.
+        var description = new ExtremeRowDescription(true, keys: [], groups: [integral], payload: [integral]);
+
+        Renderer().CanRender(description).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(typeof(short), false)]
+    [InlineData(typeof(short), true)]
+    [InlineData(typeof(int), false)]
+    [InlineData(typeof(int), true)]
+    [InlineData(typeof(long), false)]
+    [InlineData(typeof(long), true)]
+    public void CanRender_IntegralDirectKeyAndGroup_ShouldAccept(Type type, bool nullable)
+    {
+        var column = Integral(type, nullable);
+
+        Renderer().CanRender(new ExtremeRowDescription(true, [column], [], [column]))
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void CanRender_ConverterKey_ShouldDecline()
+    {
+        var converted = new ExtremeRowRenderColumn(typeof(int), false, isDirectMappedColumn: true, usesConverter: true);
+
+        Renderer().CanRender(new ExtremeRowDescription(true, [converted], [], [converted]))
+            .Should().BeFalse("a converter-bound key keeps the portable lowering");
+    }
+
+    [Fact]
+    public void CanRender_ComputedKey_ShouldDecline()
+    {
+        var computed = new ExtremeRowRenderColumn(typeof(int), false, isDirectMappedColumn: false, usesConverter: false);
+
+        Renderer().CanRender(new ExtremeRowDescription(true, [computed], [], [computed]))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void CanRender_NonIntegralGroup_ShouldDecline()
+    {
+        var key = Integral(typeof(int));
+        var group = new ExtremeRowRenderColumn(typeof(double), true, isDirectMappedColumn: true, usesConverter: false);
+
+        Renderer().CanRender(new ExtremeRowDescription(true, [key], [group], [key]))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void Render_Global_ShouldAppendOrderByAndLimit()
+    {
+        var sql = Renderer().Render(new ExtremeRowRenderRequest(
+            "select * from t where k is not null",
+            true,
+            ["id"],
+            ["k"],
+            [Integral(typeof(int))],
+            [],
+            KeywordCase.Lower));
+
+        sql.Should().Be("select * from t where k is not null order by \"k\" desc limit 1");
+    }
+
+    [Fact]
+    public void Render_Grouped_ShouldBoundTheDerivedTableWithFromOpenParenAndAlias()
+    {
+        var sql = Renderer().Render(GroupedRequest(
+            "select * from t where k is not null",
+            isMax: true,
+            payloadAliases: ["id"],
+            keyAliases: ["k"],
+            groupAliases: ["g"]));
+
+        sql.Should().Contain("distinct on (\"g\")");
+        sql.Should().Contain(") * from (select * from t where k is not null) __nextorm_extreme order by \"g\", \"k\" desc");
+    }
+
+    [Fact]
+    public void Render_Grouped_PayloadOnlyAliasCollision_ShouldExtendTheDerivedAlias()
+    {
+        // The derived-table base alias is also a payload column name but not a key/group component.
+        // Collision must still be detected: the short-circuiting `&&` mutant of the `||` predicate
+        // would stop here and reuse the colliding alias verbatim.
+        var sql = Renderer().Render(GroupedRequest(
+            "select * from t where k is not null",
+            isMax: true,
+            payloadAliases: ["__nextorm_extreme"],
+            keyAliases: ["k"],
+            groupAliases: ["g"]));
+
+        sql.Should().Contain(") __nextorm_extreme_ order by");
+        sql.Should().NotContain(") __nextorm_extreme order by");
+    }
+
+    [Fact]
+    public void Render_Grouped_GroupAliasCollision_ShouldExtendTheDerivedAlias()
+    {
+        var sql = Renderer().Render(GroupedRequest(
+            "select * from t where k is not null",
+            isMax: true,
+            payloadAliases: ["id"],
+            keyAliases: ["k"],
+            groupAliases: ["__nextorm_extreme"]));
+
+        sql.Should().Contain(") __nextorm_extreme_ order by");
+    }
+
+    [Fact]
+    public void Render_QuotedAliasWithEmbeddedQuote_ShouldDoubleTheQuote()
+    {
+        var sql = Renderer().Render(GroupedRequest(
+            "select * from t where k is not null",
+            isMax: true,
+            payloadAliases: ["id"],
+            keyAliases: ["we\"ird"],
+            groupAliases: ["g"]));
+
+        sql.Should().Contain("order by \"g\", \"we\"\"ird\" desc");
+        sql.Should().NotContain("\"weird\"");
+    }
+}

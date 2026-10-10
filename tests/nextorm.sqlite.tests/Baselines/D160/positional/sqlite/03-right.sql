@@ -1,0 +1,1 @@
+select t2.id from simple_entity as 't1' right join complex_entity as 't2' on cast(t1.id as bigint) = t2.id

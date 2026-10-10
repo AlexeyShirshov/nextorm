@@ -1,10 +1,13 @@
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.Postgres;
+using NextORM.SqlServer;
 
 namespace NextORM.Core.Tests;
 
 /// <summary>
-/// Regression coverage for the single-query (<c>AsSingleQuery</c>) eager-load P1s: unsupported child
+/// Regression coverage for the single-query (<c>EagerLoadMode.SingleQuery</c>) eager-load P1s: unsupported child
 /// query shapes are rejected instead of silently dropped, parent/child <c>IgnoreFilters</c> decisions
 /// are independent (split semantics), compositions that cannot carry the loader are rejected, a keyless
 /// parent is rejected with guidance (split still works) and a key type without an equality operator is
@@ -163,39 +166,36 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_ChildOrderBy_IsRejected()
+    public void SingleQuery_ChildOrderBy_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().OrderBy(x => x.Id), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().OrderBy(x => x.Id), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*OrderBy*").WithMessage("*split-query*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildLimit_IsRejected()
+    public void SingleQuery_ChildLimit_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().Limit(1), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().Limit(1), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildDistinct_IsRejected()
+    public void SingleQuery_ChildDistinct_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().Distinct(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().Distinct(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Distinct*");
@@ -221,8 +221,7 @@ public class EagerLoadingSingleQueryP1Tests
         using var context = CreateContext();
 
         var builder = context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery();
+            .LoadWith(p => p.Children, c => c.From<P1Child>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery);
 
         builder.SingleQuery.Should().BeTrue();
         builder.LoadSpecs.Should().HaveCount(1);
@@ -265,34 +264,34 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_ThenAs_IsRejected()
+    public void SingleQuery_ThenAs_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .As(p => new { p.Id })
             .ToList();
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*AsSingleQuery*As*");
+        act.Should().Throw<NotSupportedException>().WithMessage("*LoadWith*As*");
     }
 
     [Fact]
-    public void AsSingleQuery_ThenJoin_IsRejected()
+    public void SingleQuery_ThenJoin_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .Join(context.From<P1Note>(), (p, n) => p.Id == n.ParentId)
             .Select(p => p.Item1.Id)
             .ToList();
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*AsSingleQuery*Join*");
+        act.Should().Throw<NotSupportedException>().WithMessage("*LoadWith*Join*");
     }
 
     [Fact]
-    public void AsSingleQuery_KeylessParent_IsRejectedWithGuidance()
+    public void SingleQuery_KeylessParent_IsRejectedWithGuidance()
     {
         using var context = new InMemoryDataContext();
         context.From<KeylessChild>().WithData(new[]
@@ -303,8 +302,7 @@ public class EagerLoadingSingleQueryP1Tests
         context.From<KeylessParent>().WithData(new[] { new KeylessParent { Name = "a" } });
 
         var act = () => context.From<KeylessParent>()
-            .LoadWith(p => p.Children, c => c.From<KeylessChild>(), p => p.Name, c => c.Name)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<KeylessChild>(), p => p.Name, c => c.Name, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>()
@@ -333,7 +331,7 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_KeyWithoutEqualityOperator_IsRejected()
+    public void SingleQuery_KeyWithoutEqualityOperator_IsRejected()
     {
         using var context = new InMemoryDataContext();
         context.From<NoEqChild>().WithData(new[]
@@ -343,8 +341,7 @@ public class EagerLoadingSingleQueryP1Tests
         context.From<NoEqParent>().WithData(new[] { new NoEqParent { Key = new NoEqKey { Value = 1 } } });
 
         var act = () => context.From<NoEqParent>()
-            .LoadWith(p => p.Children, c => c.From<NoEqChild>(), p => p.Key, c => c.Key)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<NoEqChild>(), p => p.Key, c => c.Key, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>()
@@ -372,7 +369,7 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_ParentIgnoreFilters_ShouldAlsoDisableChildGlobalFilters()
+    public void SingleQuery_ParentIgnoreFilters_ShouldAlsoDisableChildGlobalFilters()
     {
         using var context = new InMemoryDataContext();
         context.From<FilteredP1Child>(b => b.HasQueryFilter(c => !c.IsDeleted)).WithData(new[]
@@ -388,8 +385,7 @@ public class EagerLoadingSingleQueryP1Tests
         });
 
         var parents = context.From<FilteredP1Parent>()
-            .LoadWith(p => p.Children, c => c.From<FilteredP1Child>(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1Child>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .IgnoreFilters()
             .OrderBy(p => p.Id)
             .ToList();
@@ -402,7 +398,7 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_ChildIgnoreFilters_KeepsParentGlobalFilters()
+    public void SingleQuery_ChildIgnoreFilters_KeepsParentGlobalFilters()
     {
         using var context = new InMemoryDataContext();
         context.From<FilteredP1Child>(b => b.HasQueryFilter(c => !c.IsDeleted)).WithData(new[]
@@ -418,8 +414,7 @@ public class EagerLoadingSingleQueryP1Tests
         });
 
         var parents = context.From<FilteredP1Parent>()
-            .LoadWith(p => p.Children, c => c.From<FilteredP1Child>().IgnoreFilters(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1Child>().IgnoreFilters(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .OrderBy(p => p.Id)
             .ToList();
 
@@ -429,7 +424,7 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_ParentSelectiveIgnore_ShouldPreserveScopeOnChildJoinFlagFalse()
+    public void SingleQuery_ParentSelectiveIgnore_ShouldPreserveScopeOnChildJoinFlagFalse()
     {
         using var context = new InMemoryDataContext();
         context.From<FilteredP1ScopedChild>(b => b
@@ -450,8 +445,7 @@ public class EagerLoadingSingleQueryP1Tests
             ]);
 
         var parents = context.From<FilteredP1ScopedParent>()
-            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .IgnoreFilters(["soft"])
             .OrderBy(p => p.Id)
             .ToList();
@@ -466,7 +460,7 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_ChildAllIgnore_ShouldDominateSelectiveParentScope()
+    public void SingleQuery_ChildAllIgnore_ShouldDominateSelectiveParentScope()
     {
         using var context = new InMemoryDataContext();
         context.From<FilteredP1ScopedChild>(b => b
@@ -487,8 +481,7 @@ public class EagerLoadingSingleQueryP1Tests
             ]);
 
         var parents = context.From<FilteredP1ScopedParent>()
-            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>().IgnoreFilters(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>().IgnoreFilters(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .IgnoreFilters(["soft"])
             .OrderBy(p => p.Id)
             .ToList();
@@ -500,7 +493,7 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_ChildSelectiveIgnoreByKey_ShouldApplyToChild()
+    public void SingleQuery_ChildSelectiveIgnoreByKey_ShouldApplyToChild()
     {
         using var context = new InMemoryDataContext();
         context.From<FilteredP1ScopedChild>(b => b
@@ -521,8 +514,7 @@ public class EagerLoadingSingleQueryP1Tests
             ]);
 
         var parents = context.From<FilteredP1ScopedParent>()
-            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>().IgnoreFilters(["soft"]), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>().IgnoreFilters(["soft"]), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .OrderBy(p => p.Id)
             .ToList();
 
@@ -534,7 +526,7 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_ChildSelectiveIgnoreByType_ShouldApplyToChild()
+    public void SingleQuery_ChildSelectiveIgnoreByType_ShouldApplyToChild()
     {
         using var context = new InMemoryDataContext();
         context.From<FilteredP1ScopedChild>(b => b
@@ -555,8 +547,7 @@ public class EagerLoadingSingleQueryP1Tests
             ]);
 
         var parents = context.From<FilteredP1ScopedParent>()
-            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>().IgnoreFilters(typeof(FilteredP1ScopedChild)), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>().IgnoreFilters(typeof(FilteredP1ScopedChild)), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .OrderBy(p => p.Id)
             .ToList();
 
@@ -690,13 +681,14 @@ public class EagerLoadingSingleQueryP1Tests
                     p => p.Children,
                     c => childSoft ? c.From<FilteredP1ScopedChild>().IgnoreFilters(["soft"]) : c.From<FilteredP1ScopedChild>(),
                     p => p.Id,
-                    c => c.ParentId);
+                    c => c.ParentId,
+                    single ? EagerLoadMode.SingleQuery : EagerLoadMode.SplitQuery);
             if (parentAll)
                 builder = builder.IgnoreFilters();
             else if (parentSoft)
                 builder = builder.IgnoreFilters(["soft"]);
 
-            var parents = (single ? builder.AsSingleQuery() : builder).OrderBy(p => p.Id).ToList();
+            var parents = builder.OrderBy(p => p.Id).ToList();
             return string.Join(
                 ";",
                 parents.Select(p => p.Id + ":" + string.Join("|", p.Children.Select(c => c.Id))));
@@ -709,7 +701,7 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_DuplicateParentKeys_GroupChildrenPerMaterializedParent()
+    public void SingleQuery_DuplicateParentKeys_GroupChildrenPerMaterializedParent()
     {
         using var context = new InMemoryDataContext();
         context.From<P1Child>().WithData(new[]
@@ -724,8 +716,7 @@ public class EagerLoadingSingleQueryP1Tests
         });
 
         var parents = context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         // Deduplication is by the mapped parent key, so two rows with the same key collapse to one parent
@@ -783,8 +774,7 @@ public class EagerLoadingSingleQueryP1Tests
                     return c.From<P1Child>();
                 },
                 p => p.Id,
-                c => c.ParentId)
-            .AsSingleQuery();
+                c => c.ParentId, EagerLoadMode.SingleQuery);
 
         var act = () => builder.ToListAsync(cts.Token);
 
@@ -806,8 +796,7 @@ public class EagerLoadingSingleQueryP1Tests
                     return c.From<P1Child>();
                 },
                 p => p.Id,
-                c => c.ParentId)
-            .AsSingleQuery();
+                c => c.ParentId, EagerLoadMode.SingleQuery);
 
         builder.ToEnumerable().ToList().Should().ContainSingle().Which.Children.Should().BeEmpty();
         builder.ToDictionary(p => p.Id).Should().ContainKey(1);
@@ -824,7 +813,7 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_RepeatedChildRows_AreDeduplicated()
+    public void SingleQuery_RepeatedChildRows_AreDeduplicated()
     {
         using var context = new InMemoryDataContext();
         context.From<P1Child>().WithData(new[]
@@ -835,8 +824,7 @@ public class EagerLoadingSingleQueryP1Tests
         context.From<P1Parent>().WithData(new[] { new P1Parent { Id = 1 } });
 
         var parents = context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         parents.Should().ContainSingle();
@@ -863,15 +851,14 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_KeylessParent_EmptyResult_IsRejected()
+    public void SingleQuery_KeylessParent_EmptyResult_IsRejected()
     {
         using var context = new InMemoryDataContext();
         context.From<KeylessChild>().WithData(Array.Empty<KeylessChild>());
         context.From<KeylessParent>().WithData(Array.Empty<KeylessParent>());
 
         var act = () => context.From<KeylessParent>()
-            .LoadWith(p => p.Children, c => c.From<KeylessChild>(), p => p.Name, c => c.Name)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<KeylessChild>(), p => p.Name, c => c.Name, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>()
@@ -880,15 +867,14 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_ReferenceKeyWithoutEqualityOperator_IsRejected()
+    public void SingleQuery_ReferenceKeyWithoutEqualityOperator_IsRejected()
     {
         using var context = new InMemoryDataContext();
         context.From<NoEqRefChild>().WithData(new[] { new NoEqRefChild { Key = new NoEqRefKey { Value = 1 } } });
         context.From<NoEqRefParent>().WithData(new[] { new NoEqRefParent { Key = new NoEqRefKey { Value = 1 } } });
 
         var act = () => context.From<NoEqRefParent>()
-            .LoadWith(p => p.Children, c => c.From<NoEqRefChild>(), p => p.Key, c => c.Key)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<NoEqRefChild>(), p => p.Key, c => c.Key, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>()
@@ -902,7 +888,7 @@ public class EagerLoadingSingleQueryP1Tests
     [InlineData(false, true, false)]
     [InlineData(false, false, true)]
     [InlineData(true, true, true)]
-    public void AsSingleQuery_TwoSpecs_PerSideIgnoreFilters(bool parentIgnore, bool childIgnore, bool noteIgnore)
+    public void SingleQuery_TwoSpecs_PerSideIgnoreFilters(bool parentIgnore, bool childIgnore, bool noteIgnore)
     {
         using var context = new InMemoryDataContext();
         context.From<FilteredP1Child>(b => b.HasQueryFilter(c => !c.IsDeleted)).WithData(new[]
@@ -933,8 +919,7 @@ public class EagerLoadingSingleQueryP1Tests
                 p => p.Notes,
                 c => noteIgnore ? c.From<FilteredP1Note>().IgnoreFilters() : c.From<FilteredP1Note>(),
                 p => p.Id,
-                n => n.ParentId)
-            .AsSingleQuery();
+                n => n.ParentId, EagerLoadMode.SingleQuery);
 
         if (parentIgnore)
             builder = builder.IgnoreFilters();
@@ -949,156 +934,144 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_ChildJoin_IsRejected()
+    public void SingleQuery_ChildJoin_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().SemiJoin(c.From<P1Note>(), (x, n) => x.Id == n.ParentId), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().SemiJoin(c.From<P1Note>(), (x, n) => x.Id == n.ParentId), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's Join*").WithMessage("*split-query*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildPreWhere_IsRejected()
+    public void SingleQuery_ChildPreWhere_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().PreWhere(x => x.Id > 0), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().PreWhere(x => x.Id > 0), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's PreWhere*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildArrayJoin_IsRejected()
+    public void SingleQuery_ChildArrayJoin_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().ArrayJoin(x => new[] { x.Id }), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().ArrayJoin(x => new[] { x.Id }), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's ArrayJoin*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildFinal_IsRejected()
+    public void SingleQuery_ChildFinal_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().Final(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().Final(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's Final*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildWindow_IsRejected()
+    public void SingleQuery_ChildWindow_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().Window("w"), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().Window("w"), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's Window*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildSettings_IsRejected()
+    public void SingleQuery_ChildSettings_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().Settings(("max_threads", "2")), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().Settings(("max_threads", "2")), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's Settings*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildRowLock_IsRejected()
+    public void SingleQuery_ChildRowLock_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().ForUpdate(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().ForUpdate(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's ForUpdate/ForShare*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildTableHint_IsRejected()
+    public void SingleQuery_ChildTableHint_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>(o => o.WithTableHint("nolock")), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>(o => o.WithTableHint("nolock")), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's TableHint*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildTableSample_IsRejected()
+    public void SingleQuery_ChildTableSample_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>(o => o.TableSample(10)), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>(o => o.TableSample(10)), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's TableSample*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildSample_IsRejected()
+    public void SingleQuery_ChildSample_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>(o => o.Sample(0.5)), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>(o => o.Sample(0.5)), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's Sample*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildForSystemTime_IsRejected()
+    public void SingleQuery_ChildForSystemTime_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().ForSystemTime(TemporalClause.All()), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().ForSystemTime(TemporalClause.All()), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's ForSystemTime*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildDerivedSource_IsRejected()
+    public void SingleQuery_ChildDerivedSource_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From(c.From<P1Child>().Where(x => x.Active).ToCommand()), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From(c.From<P1Child>().Where(x => x.Active).ToCommand()), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's derived (As) source*");
@@ -1177,78 +1150,72 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_ChildGroupBy_IsRejected()
+    public void SingleQuery_ChildGroupBy_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().GroupBy(x => x.ParentId), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().GroupBy(x => x.ParentId), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's GroupBy*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildHaving_IsRejected()
+    public void SingleQuery_ChildHaving_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().Having(x => x.ParentId > 0), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().Having(x => x.ParentId > 0), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's Having*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildDistinctOn_IsRejected()
+    public void SingleQuery_ChildDistinctOn_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().DistinctOn(x => x.ParentId), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().DistinctOn(x => x.ParentId), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's DistinctOn*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildLimitBy_IsRejected()
+    public void SingleQuery_ChildLimitBy_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().LimitBy(2, x => x.ParentId), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().LimitBy(2, x => x.ParentId), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's LimitBy*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildIndexHint_IsRejected()
+    public void SingleQuery_ChildIndexHint_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>(o => o.WithIndex("ix_child")), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>(o => o.WithIndex("ix_child")), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's IndexHint*");
     }
 
     [Fact]
-    public void AsSingleQuery_ChildTablesInScopeHint_IsRejected()
+    public void SingleQuery_ChildTablesInScopeHint_IsRejected()
     {
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().WithTablesInScopeHint("x"), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<P1Child>().WithTablesInScopeHint("x"), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's TablesInScopeHint*");

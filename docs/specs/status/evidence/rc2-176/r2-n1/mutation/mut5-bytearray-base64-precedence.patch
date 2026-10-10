@@ -1,0 +1,13 @@
+--- a/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs
++++ b/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs
+@@ -389,8 +389,8 @@
+     {
+         Expression writeItem;
+ 
+-        // byte[] Base64 takes precedence over general array handling, including as a jagged element.
+-        if (elementValueType != typeof(byte[]) && elementValueType.IsArray)
++        // Mutation: drop the Base64 precedence so a byte[] element is treated as a general array.
++        if (elementValueType.IsArray)
+         {
+             var nested = BuildArrayWriter(elementValueType, name, depth + 1);
+             writeItem = Expression.Invoke(Expression.Constant(nested), item, writer);

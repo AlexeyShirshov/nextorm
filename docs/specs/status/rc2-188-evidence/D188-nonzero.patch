@@ -1,0 +1,2215 @@
+diff --git a/benchmarks/nextorm.benchmark/BenchmarkComparisonValidation.cs b/benchmarks/nextorm.benchmark/BenchmarkComparisonValidation.cs
+new file mode 100644
+index 00000000..1f60ecd5
+--- /dev/null
++++ b/benchmarks/nextorm.benchmark/BenchmarkComparisonValidation.cs
+@@ -0,0 +1,50 @@
++namespace NextORM.Benchmark;
++
++/// <summary>
++/// Setup-time semantic probes shared by the tier-1 comparison classes. Every arm's workload is
++/// executed once in <c>[GlobalSetup]</c> and its row count/checksum compared here, outside the timed
++/// region, so a benchmark body that silently reads different rows cannot be reported as equivalent.
++/// </summary>
++internal static class BenchmarkComparisonValidation
++{
++    /// <summary>Throws <see cref="InvalidOperationException"/> when <paramref name="condition"/> is false.</summary>
++    public static void Ensure(bool condition, string message)
++    {
++        if (!condition)
++            throw new InvalidOperationException(message);
++    }
++
++    /// <summary>Throws when the observed count differs from the expected count.</summary>
++    public static void EnsureCount(long expected, long actual, string context)
++        => Ensure(expected == actual, $"{context}: expected {expected} rows, observed {actual}.");
++
++    /// <summary>Throws when the two checksums differ.</summary>
++    public static void EnsureChecksum(long expected, long actual, string context)
++        => Ensure(expected == actual, $"{context}: expected checksum {expected}, observed {actual}.");
++
++    /// <summary>Computes the order-sensitive checksum the shared <see cref="BenchmarkRowSink"/> uses.</summary>
++    public static long Checksum<T>(IEnumerable<T> rows, Func<T, long> selector)
++    {
++        var checksum = 0L;
++        foreach (var row in rows)
++            checksum = unchecked((checksum * 31) + selector(row));
++        return checksum;
++    }
++
++    /// <summary>Counts the rows through the same selector used by the checksum (materializes once).</summary>
++    public static (int Count, long Checksum) Measure<T>(IEnumerable<T> rows, Func<T, long> selector)
++    {
++        var count = 0;
++        var checksum = 0L;
++        foreach (var row in rows)
++        {
++            count++;
++            checksum = unchecked((checksum * 31) + selector(row));
++        }
++        return (count, checksum);
++    }
++
++    /// <summary>Writes a one-line observation to the benchmark log (BDN captures Console output).</summary>
++    public static void Report(string context, long count, long checksum, string? extra = null)
++        => Console.WriteLine($"[D188] {context}: rows={count}, checksum={checksum}{(extra is null ? string.Empty : ", " + extra)}");
++}
+diff --git a/benchmarks/nextorm.benchmark/BenchmarkRowSink.cs b/benchmarks/nextorm.benchmark/BenchmarkRowSink.cs
+new file mode 100644
+index 00000000..a89ab937
+--- /dev/null
++++ b/benchmarks/nextorm.benchmark/BenchmarkRowSink.cs
+@@ -0,0 +1,47 @@
++namespace NextORM.Benchmark;
++
++/// <summary>
++/// Observable, allocation-free row consumer shared by the tier-1 comparison classes. Every measured
++/// arm folds its rows into the same sink shape (a row count, an order-independent checksum and an
++/// optional byte count) so BenchmarkDotNet cannot dead-code-eliminate the query and so the arms can
++/// be compared on identical work. The sink is reset outside the measured region and read once after
++/// each invocation; it never retains references to the rows.
++/// </summary>
++internal sealed class BenchmarkRowSink
++{
++    /// <summary>Rows observed since the last <see cref="Reset"/>.</summary>
++    public long Rows { get; private set; }
++
++    /// <summary>Order-sensitive checksum of the folded column values, to prove the same rows were read.</summary>
++    public long Checksum { get; private set; }
++
++    /// <summary>Bytes written to an optional output arm (JSON/CSV), otherwise zero.</summary>
++    public long Bytes { get; private set; }
++
++    /// <summary>Clears the counters so the next measured body starts from a known state.</summary>
++    public void Reset()
++    {
++        Rows = 0;
++        Checksum = 0;
++        Bytes = 0;
++    }
++
++    /// <summary>Folds one scalar column value into the checksum and advances the row count.</summary>
++    public void Add(long value)
++    {
++        Rows++;
++        Checksum = unchecked((Checksum * 31) + value);
++    }
++
++    /// <summary>Records a nullable scalar column, folding a stable sentinel for <see langword="null"/>.</summary>
++    public void Add(long? value) => Add(value ?? long.MinValue);
++
++    /// <summary>Records a string column by its length, so wide values do not allocate.</summary>
++    public void Add(string? value) => Add(value?.Length ?? -1);
++
++    /// <summary>Adds a byte count produced by an output arm without retaining the payload.</summary>
++    public void AddBytes(long bytes) => Bytes += bytes;
++
++    /// <summary>A deterministic token describing how many rows were consumed, for setup assertions.</summary>
++    public override string ToString() => $"rows={Rows}, checksum={Checksum}, bytes={Bytes}";
++}
+diff --git a/benchmarks/nextorm.benchmark/BenchmarkSerializationSink.cs b/benchmarks/nextorm.benchmark/BenchmarkSerializationSink.cs
+new file mode 100644
+index 00000000..0135da16
+--- /dev/null
++++ b/benchmarks/nextorm.benchmark/BenchmarkSerializationSink.cs
+@@ -0,0 +1,46 @@
++namespace NextORM.Benchmark;
++
++/// <summary>
++/// A write-only <see cref="Stream"/> that counts the bytes a materialize→serialize arm produces but
++/// discards them, so the measured competitor pipeline does not retain the serialized output in a
++/// growing buffer. Reset outside the measured body; the byte count is the consumed result.
++/// </summary>
++internal sealed class BenchmarkSerializationSink : Stream
++{
++    /// <summary>Bytes written since the last <see cref="Reset"/>.</summary>
++    public long Bytes { get; private set; }
++
++    /// <summary>Clears the byte count without touching any backing storage (there is none).</summary>
++    public void Reset() => Bytes = 0;
++
++    public override bool CanRead => false;
++    public override bool CanSeek => false;
++    public override bool CanWrite => true;
++    public override long Length => Bytes;
++
++    public override long Position
++    {
++        get => Bytes;
++        set => throw new NotSupportedException();
++    }
++
++    public override void Flush()
++    {
++    }
++
++    public override void Write(byte[] buffer, int offset, int count) => Bytes += count;
++
++    public override void Write(ReadOnlySpan<byte> buffer) => Bytes += buffer.Length;
++
++    public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
++    {
++        Bytes += buffer.Length;
++        return default;
++    }
++
++    public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
++
++    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
++
++    public override void SetLength(long value) => throw new NotSupportedException();
++}
+diff --git a/benchmarks/nextorm.benchmark/SqliteBenchmarkAggregates.cs b/benchmarks/nextorm.benchmark/SqliteBenchmarkAggregates.cs
+new file mode 100644
+index 00000000..463469b5
+--- /dev/null
++++ b/benchmarks/nextorm.benchmark/SqliteBenchmarkAggregates.cs
+@@ -0,0 +1,309 @@
++using BenchmarkDotNet.Attributes;
++using BenchmarkDotNet.Columns;
++using Dapper;
++using LinqToDB;
++using Microsoft.Data.Sqlite;
++using Microsoft.EntityFrameworkCore;
++using NextORM.Core;
++using NextORM.Sqlite;
++using IDataContext = NextORM.Core.IDataContext;
++
++namespace NextORM.Benchmark;
++
++/// <summary>
++/// SQL-side aggregate comparison on SQLite <c>large_table</c> (~10 000 rows): <c>COUNT(*)</c>,
++/// <c>SUM(id)</c> and <c>GROUP BY id % 100</c> with a per-group count. The grouping key is fixed at
++/// 100 buckets so all four libraries translate it to SQL; no client-side aggregation is measured.
++/// <para>
++/// Category <c>A</c> uses nextorm <c>Prepare()</c>, EF <c>CompileAsyncQuery</c>, linq2db
++/// <c>CompiledQuery.Compile</c> and raw Dapper SQL; Category <c>B</c> uses the ordinary paths
++/// (nextorm plan cache, regular EF/linq2db and the same raw Dapper call).
++/// </para>
++/// </summary>
++[GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
++[HideColumns(Column.Job, Column.Runtime, Column.Error, Column.StdDev, Column.RatioSD)]
++[MemoryDiagnoser]
++[Config(typeof(NextormConfig))]
++public class SqliteBenchmarkAggregates
++{
++    /// <summary>The grouping divisor; <c>large_table</c> keys 1..10000 split into exactly 100 buckets.</summary>
++    private const int GroupModulus = 100;
++
++    /// <summary>The <see cref="SqliteBenchmarkAggregates"/> arms all aggregate the same rows; the observed count is validated to this value.</summary>
++    public const int ExpectedRows = 10_000;
++
++    private readonly IDataContext _db;
++    private readonly TestDataRepository _ctx;
++    private readonly EFDataContext _efCtx;
++    private readonly SqliteConnection _conn;
++    private readonly Linq2DbDataRepository _linq2Db;
++
++    private readonly IPreparedQueryCommand<int> _nextormCount;
++    private readonly IPreparedQueryCommand<long> _nextormSum;
++    private readonly IPreparedQueryCommand<GroupCountRow> _nextormGroupBy;
++
++    private long _sink;
++
++    public SqliteBenchmarkAggregates()
++    {
++        var builder = new DataContextBuilder();
++        builder.UseSqlite(BenchDb.FilePath);
++        _db = builder.CreateDataContext();
++        _ctx = new TestDataRepository(_db);
++        ((IConnectionManager)_db).EnsureConnectionOpen();
++
++        var countCmd = _ctx.LargeEntity.Select(e => SqlFunctions.Sql.count());
++        countCmd.SingleRow = true;
++        _nextormCount = countCmd.Prepare();
++
++        var sumCmd = _ctx.LargeEntity.Select(e => SqlFunctions.Sql.sum(e.Id));
++        sumCmd.SingleRow = true;
++        _nextormSum = sumCmd.Prepare();
++
++        _nextormGroupBy = _ctx.LargeEntity
++            .GroupBy(e => new { Bucket = e.Id % GroupModulus })
++            .Select(e => new GroupCountRow { Key = e.Id % GroupModulus, Count = SqlFunctions.Sql.count() })
++            .Prepare();
++
++        var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
++        efBuilder.UseSqlite($"Filename={BenchDb.FilePath}");
++        efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
++        _efCtx = new EFDataContext(efBuilder.Options);
++
++        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
++        _conn.Open();
++
++        _linq2Db = new Linq2DbDataRepository();
++    }
++
++    private static readonly Func<EFDataContext, Task<int>> _efCompiledCount =
++        EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities.Count());
++
++    private static readonly Func<EFDataContext, Task<long>> _efCompiledSum =
++        EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities.Sum(e => e.Id));
++
++    private static readonly Func<EFDataContext, IAsyncEnumerable<GroupCountRow>> _efCompiledGroupBy =
++        EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities
++            .GroupBy(e => e.Id % GroupModulus)
++            .Select(g => new GroupCountRow { Key = g.Key, Count = g.Count() }));
++
++    private static readonly Func<LinqToDB.IDataContext, int> _l2dbCompiledCount =
++        LinqToDB.CompiledQuery.Compile((LinqToDB.IDataContext db) => db.GetTable<Linq2DbLargeEntity>().Count());
++
++    private static readonly Func<LinqToDB.IDataContext, long> _l2dbCompiledSum =
++        LinqToDB.CompiledQuery.Compile((LinqToDB.IDataContext db) => db.GetTable<Linq2DbLargeEntity>().Sum(it => it.Id));
++
++    private static readonly Func<LinqToDB.IDataContext, List<GroupCountRow>> _l2dbCompiledGroupBy =
++        LinqToDB.CompiledQuery.Compile((LinqToDB.IDataContext db) => db.GetTable<Linq2DbLargeEntity>()
++            .GroupBy(it => it.Id % GroupModulus)
++            .Select(g => new GroupCountRow { Key = g.Key, Count = g.Count() })
++            .ToList());
++
++    [GlobalSetup]
++    public void Verify()
++    {
++        var rows = _ctx.LargeEntity.Count();
++        BenchmarkComparisonValidation.EnsureCount(ExpectedRows, rows, "Aggregates/large_table");
++        var expectedSum = SumOfFirstN(rows);
++
++        var count = _db.ExecuteScalar(_nextormCount, ReadOnlySpan<object?>.Empty, true);
++        var sum = _db.ExecuteScalar(_nextormSum, ReadOnlySpan<object?>.Empty, false);
++        BenchmarkComparisonValidation.EnsureCount(rows, count, "Aggregates/nextorm-count");
++        BenchmarkComparisonValidation.EnsureCount(expectedSum, sum, "Aggregates/nextorm-sum");
++
++        var l2dbCount = _linq2Db.Db.GetTable<Linq2DbLargeEntity>().Count();
++        var l2dbSum = _linq2Db.Db.GetTable<Linq2DbLargeEntity>().Sum(it => it.Id);
++        BenchmarkComparisonValidation.EnsureCount(rows, l2dbCount, "Aggregates/linq2db-count");
++        BenchmarkComparisonValidation.EnsureCount(expectedSum, l2dbSum, "Aggregates/linq2db-sum");
++
++        var dapperCount = _conn.ExecuteScalar<long>("select count(*) from large_table");
++        var dapperSum = _conn.ExecuteScalar<long?>("select sum(id) from large_table");
++        BenchmarkComparisonValidation.EnsureCount(rows, dapperCount, "Aggregates/dapper-count");
++        BenchmarkComparisonValidation.EnsureCount(expectedSum, dapperSum ?? -1, "Aggregates/dapper-sum");
++
++        var efCount = _efCtx.LargeEntities.Count();
++        var efSum = _efCtx.LargeEntities.Sum(e => e.Id);
++        BenchmarkComparisonValidation.EnsureCount(rows, efCount, "Aggregates/EFCore-count");
++        BenchmarkComparisonValidation.EnsureCount(expectedSum, efSum, "Aggregates/EFCore-sum");
++
++        var groups = _db.ToList(_nextormGroupBy);
++        BenchmarkComparisonValidation.EnsureCount(GroupModulus, groups.Count, "Aggregates/nextorm-groupby-groups");
++        BenchmarkComparisonValidation.Report("Aggregates/nextorm", rows, expectedSum, $"sum={sum}, groups={groups.Count}");
++    }
++
++    private static long SumOfFirstN(long n) => n * (n + 1) / 2;
++
++    [Benchmark]
++    [BenchmarkCategory("A_Aggregates")]
++    public long A_Nextorm_Prepared_Count()
++    {
++        var value = _db.ExecuteScalar(_nextormCount, ReadOnlySpan<object?>.Empty, true);
++        _sink += value;
++        return value;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Aggregates")]
++    public long A_Nextorm_Prepared_Sum()
++    {
++        var value = _db.ExecuteScalar(_nextormSum, ReadOnlySpan<object?>.Empty, false);
++        _sink += value;
++        return value;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Aggregates")]
++    public async Task A_Nextorm_Prepared_GroupByCount()
++    {
++        foreach (var row in await _db.ToListAsync(_nextormGroupBy))
++            _sink += row.Count;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Aggregates")]
++    public async Task<long> A_EFCore_Compiled_Count() => _sink += await _efCompiledCount(_efCtx);
++
++    [Benchmark]
++    [BenchmarkCategory("A_Aggregates")]
++    public async Task<long> A_EFCore_Compiled_Sum()
++    {
++        var value = await _efCompiledSum(_efCtx);
++        _sink += value;
++        return value;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Aggregates")]
++    public async Task A_EFCore_Compiled_GroupByCount()
++    {
++        await foreach (var row in _efCompiledGroupBy(_efCtx))
++            _sink += row.Count;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Aggregates")]
++    public long A_Linq2Db_Compiled_Count() => _sink += _l2dbCompiledCount(_linq2Db.Db);
++
++    [Benchmark]
++    [BenchmarkCategory("A_Aggregates")]
++    public long A_Linq2Db_Compiled_Sum()
++    {
++        var value = _l2dbCompiledSum(_linq2Db.Db);
++        _sink += value;
++        return value;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Aggregates")]
++    public int A_Linq2Db_Compiled_GroupByCount()
++    {
++        var groups = _l2dbCompiledGroupBy(_linq2Db.Db);
++        foreach (var row in groups)
++            _sink += row.Count;
++        return groups.Count;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Aggregates", "B_Aggregates")]
++    public async Task<long> Dapper_Count() => _sink += await _conn.ExecuteScalarAsync<long>("select count(*) from large_table");
++
++    [Benchmark]
++    [BenchmarkCategory("A_Aggregates", "B_Aggregates")]
++    public async Task<long?> Dapper_Sum() => _sink += await _conn.ExecuteScalarAsync<long?>("select sum(id) from large_table") ?? 0;
++
++    [Benchmark]
++    [BenchmarkCategory("A_Aggregates", "B_Aggregates")]
++    public async Task<int> Dapper_GroupByCount()
++    {
++        var groups = (await _conn.QueryAsync<GroupCountRow>(
++            "select id % 100 as \"Key\", count(*) as \"Count\" from large_table group by id % 100")).ToList();
++        foreach (var row in groups)
++            _sink += row.Count;
++        return groups.Count;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_Aggregates")]
++    public long B_Nextorm_Cached_Count() => _sink += _ctx.LargeEntity.Count();
++
++    [Benchmark]
++    [BenchmarkCategory("B_Aggregates")]
++    public long B_Nextorm_Cached_Sum()
++    {
++        var value = _ctx.LargeEntity.Sum(e => e.Id);
++        _sink += value;
++        return value;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_Aggregates")]
++    public async Task<int> B_Nextorm_Cached_GroupByCount()
++    {
++        var groups = await _ctx.LargeEntity
++            .GroupBy(e => new { Bucket = e.Id % GroupModulus })
++            .Select(e => new GroupCountRow { Key = e.Id % GroupModulus, Count = SqlFunctions.Sql.count() })
++            .ToListAsync();
++        foreach (var row in groups)
++            _sink += row.Count;
++        return groups.Count;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_Aggregates")]
++    public async Task<long> B_EFCore_Count() => _sink += await _efCtx.LargeEntities.CountAsync();
++
++    [Benchmark]
++    [BenchmarkCategory("B_Aggregates")]
++    public async Task<long> B_EFCore_Sum()
++    {
++        var value = await _efCtx.LargeEntities.SumAsync(e => e.Id);
++        _sink += value;
++        return value;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_Aggregates")]
++    public async Task<int> B_EFCore_GroupByCount()
++    {
++        var groups = await _efCtx.LargeEntities
++            .GroupBy(e => e.Id % GroupModulus)
++            .Select(g => new GroupCountRow { Key = g.Key, Count = g.Count() })
++            .ToListAsync();
++        foreach (var row in groups)
++            _sink += row.Count;
++        return groups.Count;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_Aggregates")]
++    public async Task<long> B_Linq2Db_Count() => _sink += await LinqToDB.Async.AsyncExtensions.CountAsync(_linq2Db.Db.GetTable<Linq2DbLargeEntity>());
++
++    [Benchmark]
++    [BenchmarkCategory("B_Aggregates")]
++    public async Task<long> B_Linq2Db_Sum()
++    {
++        var value = await LinqToDB.Async.AsyncExtensions.SumAsync(_linq2Db.Db.GetTable<Linq2DbLargeEntity>(), it => it.Id);
++        _sink += value;
++        return value;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_Aggregates")]
++    public async Task<int> B_Linq2Db_GroupByCount()
++    {
++        var groups = await LinqToDB.Async.AsyncExtensions.ToListAsync(_linq2Db.Db.GetTable<Linq2DbLargeEntity>()
++            .GroupBy(it => it.Id % GroupModulus)
++            .Select(g => new GroupCountRow { Key = g.Key, Count = g.Count() }));
++        foreach (var row in groups)
++            _sink += row.Count;
++        return groups.Count;
++    }
++}
++
++/// <summary>One <c>GROUP BY</c> bucket: the key value and the number of rows it contains.</summary>
++public sealed class GroupCountRow
++{
++    public long Key { get; set; }
++
++    public int Count { get; set; }
++}
+diff --git a/benchmarks/nextorm.benchmark/SqliteBenchmarkCsv.cs b/benchmarks/nextorm.benchmark/SqliteBenchmarkCsv.cs
+index 56de8afb..c3e7acbd 100644
+--- a/benchmarks/nextorm.benchmark/SqliteBenchmarkCsv.cs
++++ b/benchmarks/nextorm.benchmark/SqliteBenchmarkCsv.cs
+@@ -1,8 +1,13 @@
+ using System.Text;
+ using BenchmarkDotNet.Attributes;
+ using BenchmarkDotNet.Columns;
++using Dapper;
++using LinqToDB;
++using Microsoft.Data.Sqlite;
++using Microsoft.EntityFrameworkCore;
+ using NextORM.Core;
+ using NextORM.Sqlite;
++using IDataContext = NextORM.Core.IDataContext;
+ 
+ namespace NextORM.Benchmark;
+ 
+@@ -37,6 +42,9 @@ public class SqliteBenchmarkCsv
+ 
+     private readonly IDataContext _db;
+     private readonly TestDataRepository _ctx;
++    private readonly EFDataContext _efCtx;
++    private readonly SqliteConnection _conn;
++    private readonly Linq2DbDataRepository _linq2Db;
+     private readonly MemoryStream _destination = new(1 << 18);
+     private readonly StreamWriter _manualWriter;
+     private long _sink;
+@@ -51,9 +59,57 @@ public class SqliteBenchmarkCsv
+ 
+         _manualWriter = new StreamWriter(_destination, new UTF8Encoding(false), 1 << 16, leaveOpen: true);
+ 
++        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
++        _conn.Open();
++
++        var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
++        efBuilder.UseSqlite($"Filename={BenchDb.FilePath}");
++        efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
++        _efCtx = new EFDataContext(efBuilder.Options);
++
++        _linq2Db = new Linq2DbDataRepository();
++
+         // Warm the plan cache for the ToList baselines; WriteCsv rebuilds its plan on every call.
+         _ctx.LargeEntity.Limit(Rows).ToList();
+         _ctx.LargeEntity.Limit(Rows).Select(it => it.Str).ToList();
++
++        ValidateCompetitorCsv();
++    }
++
++    /// <summary>
++    /// Setup-time proof that the three materialize→manual-CSV arms emit the same bytes as the native
++    /// <c>Nextorm_ToList_ManualCsv</c> baseline. Runs outside the timed region.
++    /// </summary>
++    private void ValidateCompetitorCsv()
++    {
++        var nextorm = WriteManualCsv(_ctx.LargeEntity.Limit(Rows).ToList(), static row => $"{row.Id},{row.Str},{row.Dt:O}\r\n");
++        var dapper = WriteManualCsv(_conn.Query<LargeEntity>("select id, someString as str, dt from large_table").ToList(), static row => $"{row.Id},{row.Str},{row.Dt:O}\r\n");
++        var linq2Db = WriteManualCsv(
++            _linq2Db.Db.GetTable<Linq2DbLargeEntity>().Select(it => new Linq2DbLargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt }).ToList(),
++            static row => $"{row.Id},{row.Str},{row.Dt:O}\r\n");
++        var ef = WriteManualCsv(
++            _efCtx.LargeEntities.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).ToList(),
++            static row => $"{row.Id},{row.Str},{row.Dt:O}\r\n");
++
++        foreach (var (name, candidate) in new[] { ("dapper", dapper), ("linq2db", linq2Db), ("EFCore", ef) })
++            BenchmarkComparisonValidation.Ensure(
++                nextorm.AsSpan().SequenceEqual(candidate),
++                $"CSV/{name}: manual output differs from the Nextorm baseline ({nextorm.Length} vs {candidate.Length} bytes).");
++
++        BenchmarkComparisonValidation.Report("CSV/nextorm", Rows, nextorm.Length, $"bytes={nextorm.Length}");
++    }
++
++    private static byte[] WriteManualCsv<T>(IEnumerable<T> rows, Func<T, string> format)
++    {
++        using var stream = new MemoryStream(1 << 18);
++        using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 1 << 16, leaveOpen: true))
++        {
++            writer.Write(Header);
++            foreach (var row in rows)
++                writer.Write(format(row));
++            writer.Flush();
++        }
++        return stream.ToArray();
+     }
+ 
+     [Benchmark(Baseline = true)]
+@@ -100,4 +156,54 @@ public class SqliteBenchmarkCsv
+         _ctx.LargeEntity.Limit(Rows).Select(it => it.Str).WriteCsv(_destination, null, CancellationToken.None);
+         _sink = _destination.Length;
+     }
++
++    /// <summary>Closest equivalent for Dapper: materialize the rows, then write the same CSV by hand.</summary>
++    /// <remarks>This is a materialize→serialize arm, not a streaming arm; the label says so.</remarks>
++    [Benchmark]
++    public void Dapper_ToList_ManualCsv()
++    {
++        var rows = _conn.Query<LargeEntity>("select id, someString as str, dt from large_table").ToList();
++        ResetDestination();
++        _manualWriter.Write(Header);
++        foreach (var row in rows)
++            _manualWriter.Write($"{row.Id},{row.Str},{row.Dt:O}\r\n");
++        _manualWriter.Flush();
++        _sink = rows.Count;
++    }
++
++    /// <summary>Closest equivalent for linq2db: materialize the rows, then write the same CSV by hand.</summary>
++    [Benchmark]
++    public void Linq2Db_ToList_ManualCsv()
++    {
++        var rows = _linq2Db.Db.GetTable<Linq2DbLargeEntity>()
++            .Select(it => new Linq2DbLargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt })
++            .ToList();
++        ResetDestination();
++        _manualWriter.Write(Header);
++        foreach (var row in rows)
++            _manualWriter.Write($"{row.Id},{row.Str},{row.Dt:O}\r\n");
++        _manualWriter.Flush();
++        _sink = rows.Count;
++    }
++
++    /// <summary>Closest equivalent for EF Core: materialize the rows, then write the same CSV by hand.</summary>
++    [Benchmark]
++    public void EFCore_ToList_ManualCsv()
++    {
++        var rows = _efCtx.LargeEntities
++            .Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt })
++            .ToList();
++        ResetDestination();
++        _manualWriter.Write(Header);
++        foreach (var row in rows)
++            _manualWriter.Write($"{row.Id},{row.Str},{row.Dt:O}\r\n");
++        _manualWriter.Flush();
++        _sink = rows.Count;
++    }
++
++    private void ResetDestination()
++    {
++        _destination.SetLength(0);
++        _destination.Position = 0;
++    }
+ }
+diff --git a/benchmarks/nextorm.benchmark/SqliteBenchmarkPaging.cs b/benchmarks/nextorm.benchmark/SqliteBenchmarkPaging.cs
+new file mode 100644
+index 00000000..0d23d5d7
+--- /dev/null
++++ b/benchmarks/nextorm.benchmark/SqliteBenchmarkPaging.cs
+@@ -0,0 +1,187 @@
++using BenchmarkDotNet.Attributes;
++using BenchmarkDotNet.Columns;
++using Dapper;
++using LinqToDB;
++using Microsoft.Data.Sqlite;
++using Microsoft.EntityFrameworkCore;
++using NextORM.Core;
++using NextORM.Sqlite;
++using IDataContext = NextORM.Core.IDataContext;
++
++namespace NextORM.Benchmark;
++
++/// <summary>
++/// Cross-library ordered paging comparison on SQLite <c>large_table</c> (~10 000 rows):
++/// <c>ORDER BY id OFFSET 5000 LIMIT 100</c>. The ordering key is the unique primary key, so the
++/// page is deterministic and no tie-breaker is needed. The interior page (rows 5001..5100) is
++/// validated to be non-empty in setup, outside the timed region.
++/// <para>
++/// Category <c>A</c>: nextorm <c>Prepare()</c>, EF <c>CompileAsyncQuery</c>, linq2db
++/// <c>CompiledQuery.Compile</c> and raw Dapper SQL. Category <c>B</c>: the ordinary paths.
++/// </para>
++/// </summary>
++[GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
++[HideColumns(Column.Job, Column.Runtime, Column.Error, Column.StdDev, Column.RatioSD)]
++[MemoryDiagnoser]
++[Config(typeof(NextormConfig))]
++public class SqliteBenchmarkPaging
++{
++    /// <summary>The number of rows skipped before the measured page (interior page).</summary>
++    public const int OffsetRows = 5_000;
++
++    /// <summary>The measured page size.</summary>
++    public const int PageSize = 100;
++
++    private readonly IDataContext _db;
++    private readonly TestDataRepository _ctx;
++    private readonly EFDataContext _efCtx;
++    private readonly SqliteConnection _conn;
++    private readonly Linq2DbDataRepository _linq2Db;
++    private readonly IPreparedQueryCommand<ProjectionDto> _nextormPrepared;
++
++    private long _sink;
++
++    public SqliteBenchmarkPaging()
++    {
++        var builder = new DataContextBuilder();
++        builder.UseSqlite(BenchDb.FilePath);
++        _db = builder.CreateDataContext();
++        _ctx = new TestDataRepository(_db);
++        ((IConnectionManager)_db).EnsureConnectionOpen();
++
++        _nextormPrepared = _ctx.LargeEntity
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
++            .OrderBy(e => e.Id)
++            .Offset(OffsetRows)
++            .Limit(PageSize)
++            .Prepare();
++
++        var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
++        efBuilder.UseSqlite($"Filename={BenchDb.FilePath}");
++        efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
++        _efCtx = new EFDataContext(efBuilder.Options);
++
++        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
++        _conn.Open();
++
++        _linq2Db = new Linq2DbDataRepository();
++    }
++
++    private const string PageSql =
++        "select id, someString as Str from large_table order by id limit 100 offset 5000";
++
++    private static readonly Func<LinqToDB.IDataContext, List<ProjectionDto>> _l2dbCompiled =
++        LinqToDB.CompiledQuery.Compile((LinqToDB.IDataContext db) => db
++            .GetTable<Linq2DbLargeEntity>()
++            .OrderBy(it => it.Id)
++            .Skip(OffsetRows)
++            .Take(PageSize)
++            .Select(it => new ProjectionDto { Id = it.Id, Str = it.Str })
++            .ToList());
++
++    private static readonly Func<EFDataContext, IAsyncEnumerable<ProjectionDto>> _efCompiled =
++        EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities
++            .OrderBy(e => e.Id)
++            .Skip(OffsetRows)
++            .Take(PageSize)
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str }));
++
++    [GlobalSetup]
++    public void Verify()
++    {
++        var rows = _ctx.LargeEntity.Count();
++        BenchmarkComparisonValidation.EnsureCount(SqliteBenchmarkAggregates.ExpectedRows, rows, "Paging/large_table");
++
++        var page = _db.ToList(_nextormPrepared);
++        BenchmarkComparisonValidation.EnsureCount(PageSize, page.Count, "Paging/nextorm-page");
++        BenchmarkComparisonValidation.Ensure(page.Count > 0, "Paging/nextorm measured interior page is empty.");
++        BenchmarkComparisonValidation.EnsureCount(OffsetRows + 1, page[0].Id, "Paging/nextorm first-id");
++
++        var firstChecksum = BenchmarkComparisonValidation.Checksum(page, r => r.Id);
++        var l2db = _l2dbCompiled(_linq2Db.Db);
++        var dapper = _conn.Query<ProjectionDto>(PageSql).ToList();
++        var ef = _efCtx.LargeEntities.OrderBy(e => e.Id).Skip(OffsetRows).Take(PageSize)
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str }).ToList();
++
++        BenchmarkComparisonValidation.EnsureCount(firstChecksum, BenchmarkComparisonValidation.Checksum(l2db, r => r.Id), "Paging/linq2db-checksum");
++        BenchmarkComparisonValidation.EnsureCount(firstChecksum, BenchmarkComparisonValidation.Checksum(dapper, r => r.Id), "Paging/dapper-checksum");
++        BenchmarkComparisonValidation.EnsureCount(firstChecksum, BenchmarkComparisonValidation.Checksum(ef, r => r.Id), "Paging/EFCore-checksum");
++        BenchmarkComparisonValidation.Report("Paging/nextorm", page.Count, firstChecksum, $"offset={OffsetRows}, limit={PageSize}, large_table={rows}");
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Paging")]
++    public async Task A_Nextorm_Prepared_PageAsync()
++    {
++        foreach (var row in await _db.ToListAsync(_nextormPrepared))
++            _sink += row.Id;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Paging")]
++    public async Task A_EFCore_Compiled_PageAsync()
++    {
++        await foreach (var row in _efCompiled(_efCtx))
++            _sink += row.Id;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Paging")]
++    public long A_Linq2Db_Compiled_Page()
++    {
++        long n = 0;
++        foreach (var row in _l2dbCompiled(_linq2Db.Db))
++            n += row.Id;
++        _sink += n;
++        return n;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Paging", "B_Paging")]
++    public async Task A_Dapper_PageAsync()
++    {
++        foreach (var row in await _conn.QueryAsync<ProjectionDto>(PageSql))
++            _sink += row.Id;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_Paging")]
++    public async Task B_Nextorm_Cached_PageAsync()
++    {
++        var rows = await _ctx.LargeEntity
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
++            .OrderBy(e => e.Id)
++            .Offset(OffsetRows)
++            .Limit(PageSize)
++            .ToListAsync();
++        foreach (var row in rows)
++            _sink += row.Id;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_Paging")]
++    public async Task B_EFCore_PageAsync()
++    {
++        var rows = await _efCtx.LargeEntities
++            .OrderBy(e => e.Id)
++            .Skip(OffsetRows)
++            .Take(PageSize)
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
++            .ToListAsync();
++        foreach (var row in rows)
++            _sink += row.Id;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_Paging")]
++    public async Task B_Linq2Db_PageAsync()
++    {
++        var rows = await LinqToDB.Async.AsyncExtensions.ToListAsync(_linq2Db.Db.GetTable<Linq2DbLargeEntity>()
++            .OrderBy(it => it.Id)
++            .Skip(OffsetRows)
++            .Take(PageSize)
++            .Select(it => new ProjectionDto { Id = it.Id, Str = it.Str }));
++        foreach (var row in rows)
++            _sink += row.Id;
++    }
++}
+diff --git a/benchmarks/nextorm.benchmark/SqliteBenchmarkProjection.cs b/benchmarks/nextorm.benchmark/SqliteBenchmarkProjection.cs
+new file mode 100644
+index 00000000..41e6b2b6
+--- /dev/null
++++ b/benchmarks/nextorm.benchmark/SqliteBenchmarkProjection.cs
+@@ -0,0 +1,178 @@
++using System.ComponentModel.DataAnnotations.Schema;
++using BenchmarkDotNet.Attributes;
++using BenchmarkDotNet.Columns;
++using Dapper;
++using LinqToDB;
++using Microsoft.Data.Sqlite;
++using Microsoft.EntityFrameworkCore;
++using NextORM.Core;
++using NextORM.Sqlite;
++using IDataContext = NextORM.Core.IDataContext;
++
++namespace NextORM.Benchmark;
++
++/// <summary>
++/// Cross-library DTO-projection comparison on SQLite <c>large_table</c> (~10 000 rows). All arms
++/// materialise the same shared <see cref="ProjectionDto"/> from the same columns and are validated
++/// against each other outside the timed region.
++/// <para>
++/// Category <c>A</c> pairs the compiled/prepared forms: nextorm <c>Prepare()</c>, EF
++/// <c>CompileAsyncQuery</c>, linq2db <c>CompiledQuery.Compile</c> and raw Dapper SQL (whose
++/// command text is cached). Category <c>B</c> is the ordinary path: nextorm's implicit plan cache,
++/// regular EF/linq2db queries and the same raw Dapper call.
++/// </para>
++/// </summary>
++[GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
++[HideColumns(Column.Job, Column.Runtime, Column.Error, Column.StdDev, Column.RatioSD)]
++[MemoryDiagnoser]
++[Config(typeof(NextormConfig))]
++public class SqliteBenchmarkProjection
++{
++    private readonly IDataContext _db;
++    private readonly TestDataRepository _ctx;
++    private readonly EFDataContext _efCtx;
++    private readonly SqliteConnection _conn;
++    private readonly Linq2DbDataRepository _linq2Db;
++    private readonly IPreparedQueryCommand<ProjectionDto> _nextormPrepared;
++
++    private long _sink;
++
++    public SqliteBenchmarkProjection()
++    {
++        var builder = new DataContextBuilder();
++        builder.UseSqlite(BenchDb.FilePath);
++        _db = builder.CreateDataContext();
++        _ctx = new TestDataRepository(_db);
++        ((IConnectionManager)_db).EnsureConnectionOpen();
++
++        _nextormPrepared = _ctx.LargeEntity
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
++            .Prepare();
++
++        var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
++        efBuilder.UseSqlite($"Filename={BenchDb.FilePath}");
++        efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
++        _efCtx = new EFDataContext(efBuilder.Options);
++
++        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
++        _conn.Open();
++
++        _linq2Db = new Linq2DbDataRepository();
++    }
++
++    private static readonly Func<LinqToDB.IDataContext, List<ProjectionDto>> _l2dbCompiled =
++        LinqToDB.CompiledQuery.Compile((LinqToDB.IDataContext db) => db
++            .GetTable<Linq2DbLargeEntity>()
++            .Select(it => new ProjectionDto { Id = it.Id, Str = it.Str })
++            .ToList());
++
++    private static readonly Func<EFDataContext, IAsyncEnumerable<ProjectionDto>> _efCompiled =
++        EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str }));
++
++    [GlobalSetup]
++    public void Verify()
++    {
++        var expected = CountLargeRows();
++
++        var nextorm = ToList(_nextormPrepared);
++        var linq2Db = _linq2Db.Db.GetTable<Linq2DbLargeEntity>()
++            .Select(it => new ProjectionDto { Id = it.Id, Str = it.Str }).ToList();
++        var ef = _efCtx.LargeEntities
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str }).AsNoTracking().ToList();
++        var dapper = _conn.Query<ProjectionDto>("select id, someString as Str from large_table").ToList();
++
++        var baseline = BenchmarkComparisonValidation.Measure(nextorm, r => r.Id);
++        BenchmarkComparisonValidation.EnsureCount(expected, baseline.Count, "Projection/nextorm");
++        Compare("Projection/linq2db", baseline, BenchmarkComparisonValidation.Measure(linq2Db, r => r.Id));
++        Compare("Projection/EFCore", baseline, BenchmarkComparisonValidation.Measure(ef, r => r.Id));
++        Compare("Projection/Dapper", baseline, BenchmarkComparisonValidation.Measure(dapper, r => r.Id));
++        BenchmarkComparisonValidation.Report("Projection/nextorm", baseline.Count, baseline.Checksum, $"large_table={expected}");
++    }
++
++    private static void Compare(string context, (int Count, long Checksum) expected, (int Count, long Checksum) actual)
++    {
++        BenchmarkComparisonValidation.EnsureCount(expected.Count, actual.Count, context);
++        BenchmarkComparisonValidation.EnsureChecksum(expected.Checksum, actual.Checksum, context);
++    }
++
++    private List<ProjectionDto> ToList(IPreparedQueryCommand<ProjectionDto> command) => _db.ToList(command);
++
++    private long CountLargeRows() => _ctx.LargeEntity.Count();
++
++    [Benchmark]
++    [BenchmarkCategory("A_Projection")]
++    public async Task A_Nextorm_Prepared_ToListAsync()
++    {
++        foreach (var row in await _db.ToListAsync(_nextormPrepared))
++            _sink += row.Id;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Projection")]
++    public async Task A_EFCore_Compiled_ToListAsync()
++    {
++        await foreach (var row in _efCompiled(_efCtx))
++            _sink += row.Id;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Projection")]
++    public long A_Linq2Db_Compiled_ToList()
++    {
++        long n = 0;
++        foreach (var row in _l2dbCompiled(_linq2Db.Db))
++            n += row.Id;
++        _sink += n;
++        return n;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_Projection", "B_Projection")]
++    public async Task A_Dapper_ToListAsync()
++    {
++        foreach (var row in await _conn.QueryAsync<ProjectionDto>("select id, someString as Str from large_table"))
++            _sink += row.Id;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_Projection")]
++    public async Task B_Nextorm_Cached_ToListAsync()
++    {
++        var rows = await _ctx.LargeEntity
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
++            .ToListAsync();
++        foreach (var row in rows)
++            _sink += row.Id;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_Projection")]
++    public async Task B_EFCore_ToListAsync()
++    {
++        var rows = await _efCtx.LargeEntities
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
++            .ToListAsync();
++        foreach (var row in rows)
++            _sink += row.Id;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_Projection")]
++    public async Task B_Linq2Db_ToListAsync()
++    {
++        var rows = await LinqToDB.Async.AsyncExtensions.ToListAsync(_linq2Db.Db.GetTable<Linq2DbLargeEntity>()
++            .Select(it => new ProjectionDto { Id = it.Id, Str = it.Str }));
++        foreach (var row in rows)
++            _sink += row.Id;
++    }
++}
++
++/// <summary>The shared non-LOB projection DTO: the entity key and one variable-width string column.</summary>
++public sealed class ProjectionDto
++{
++    public long Id { get; set; }
++
++    [Column("someString")]
++    public string? Str { get; set; }
++}
+diff --git a/benchmarks/nextorm.benchmark/SqliteBenchmarkStreaming.cs b/benchmarks/nextorm.benchmark/SqliteBenchmarkStreaming.cs
+new file mode 100644
+index 00000000..7fb30e35
+--- /dev/null
++++ b/benchmarks/nextorm.benchmark/SqliteBenchmarkStreaming.cs
+@@ -0,0 +1,222 @@
++using BenchmarkDotNet.Attributes;
++using BenchmarkDotNet.Columns;
++using Dapper;
++using LinqToDB;
++using Microsoft.Data.Sqlite;
++using Microsoft.EntityFrameworkCore;
++using NextORM.Core;
++using NextORM.Sqlite;
++using IDataContext = NextORM.Core.IDataContext;
++
++namespace NextORM.Benchmark;
++
++/// <summary>
++/// DTO streaming comparison on SQLite <c>large_table</c> (~10 000 rows): buffered DTO
++/// materialization (<c>ToList</c>/<c>Query</c>) versus unbuffered DTO enumeration
++/// (<c>ToAsyncEnumerable</c>/<c>QueryUnbuffered</c>/<c>AsAsyncEnumerable</c>). Every arm reads the
++/// same projected columns into the shared <see cref="BenchmarkRowSink"/>; the workloads are
++/// validated against each other in setup.
++/// <para>
++/// <b>Blocked subgroup (#189).</b> The zero-materialization subgroup (raw-reader consumption with
++/// no entity/DTO construction) is deliberately absent: it depends on a CHECK-passed D189 SQLite
++/// <c>ToDataReader</c>/<c>ToDataReaderAsync</c> that does not exist, so per the D188 escalation this
++/// unit is blocked and active and no reader arm is implemented. No materialized arm is relabeled as
++/// zero, and no fallback is substituted in its place.
++/// </para>
++/// </summary>
++[GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
++[HideColumns(Column.Job, Column.Runtime, Column.Error, Column.StdDev, Column.RatioSD)]
++[MemoryDiagnoser]
++[Config(typeof(NextormConfig))]
++public class SqliteBenchmarkStreaming
++{
++    private readonly IDataContext _db;
++    private readonly TestDataRepository _ctx;
++    private readonly EFDataContext _efCtx;
++    private readonly SqliteConnection _conn;
++    private readonly Linq2DbDataRepository _linq2Db;
++
++    private readonly IPreparedQueryCommand<ProjectionDto> _nextormBuffered;
++    private readonly IPreparedQueryCommand<ProjectionDto> _nextormUnbuffered;
++
++    private readonly BenchmarkRowSink _sink = new();
++
++    public SqliteBenchmarkStreaming()
++    {
++        var builder = new DataContextBuilder();
++        builder.UseSqlite(BenchDb.FilePath);
++        _db = builder.CreateDataContext();
++        _ctx = new TestDataRepository(_db);
++        ((IConnectionManager)_db).EnsureConnectionOpen();
++
++        _nextormBuffered = _ctx.LargeEntity
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
++            .Prepare();
++
++        _nextormUnbuffered = _ctx.LargeEntity
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
++            .Prepare(false);
++
++        var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
++        efBuilder.UseSqlite($"Filename={BenchDb.FilePath}");
++        efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
++        _efCtx = new EFDataContext(efBuilder.Options);
++
++        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
++        _conn.Open();
++
++        _linq2Db = new Linq2DbDataRepository();
++    }
++
++    private static readonly Func<EFDataContext, IAsyncEnumerable<ProjectionDto>> _efCompiled =
++        EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities
++            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str }));
++
++    [GlobalSetup]
++    public async Task Verify()
++    {
++        var rows = _ctx.LargeEntity.Count();
++        BenchmarkComparisonValidation.EnsureCount(SqliteBenchmarkAggregates.ExpectedRows, rows, "Streaming/large_table");
++
++        var buffered = await _db.ToListAsync(_nextormBuffered);
++        var baseline = BenchmarkComparisonValidation.Measure(buffered, r => r.Id);
++        BenchmarkComparisonValidation.EnsureCount(SqliteBenchmarkAggregates.ExpectedRows, baseline.Count, "Streaming/nextorm-buffered");
++        BenchmarkComparisonValidation.Report("Streaming/nextorm-buffered", baseline.Count, baseline.Checksum);
++
++        var dapperUnbuffered = new List<ProjectionDto>();
++        await foreach (var row in _conn.QueryUnbufferedAsync<ProjectionDto>("select id, someString as Str from large_table"))
++            dapperUnbuffered.Add(row);
++        var efUnbuffered = new List<ProjectionDto>();
++        await foreach (var row in _efCompiled(_efCtx))
++            efUnbuffered.Add(row);
++
++        Compare("Streaming/dapper-unbuffered", baseline, BenchmarkComparisonValidation.Measure(dapperUnbuffered, r => r.Id));
++        Compare("Streaming/EFCore-unbuffered", baseline, BenchmarkComparisonValidation.Measure(efUnbuffered, r => r.Id));
++    }
++
++    private static void Compare(string context, (int Count, long Checksum) expected, (int Count, long Checksum) actual)
++    {
++        BenchmarkComparisonValidation.EnsureCount(expected.Count, actual.Count, context);
++        BenchmarkComparisonValidation.EnsureChecksum(expected.Checksum, actual.Checksum, context);
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_BufferedDto")]
++    public async Task A_Nextorm_Prepared_ToList_Dto()
++    {
++        foreach (var row in await _db.ToListAsync(_nextormBuffered))
++            _sink.Add(row.Id);
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_UnbufferedDto")]
++    public async Task A_Nextorm_Prepared_AsyncStream_Dto()
++    {
++        await foreach (var row in _nextormUnbuffered.ToAsyncEnumerable(_db))
++            _sink.Add(row.Id);
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_BufferedDto")]
++    public async Task A_EFCore_Compiled_ToList_Dto()
++    {
++        await foreach (var row in _efCompiled(_efCtx))
++            _sink.Add(row.Id);
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_UnbufferedDto")]
++    public async Task A_EFCore_Compiled_AsyncStream_Dto()
++    {
++        await foreach (var row in _efCompiled(_efCtx))
++            _sink.Add(row.Id);
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_BufferedDto", "B_BufferedDto")]
++    public async Task Dapper_ToList_Dto()
++    {
++        foreach (var row in await _conn.QueryAsync<ProjectionDto>("select id, someString as Str from large_table"))
++            _sink.Add(row.Id);
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_UnbufferedDto", "B_UnbufferedDto")]
++    public async Task Dapper_AsyncStream_Dto()
++    {
++        await foreach (var row in _conn.QueryUnbufferedAsync<ProjectionDto>("select id, someString as Str from large_table"))
++            _sink.Add(row.Id);
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("A_BufferedDto")]
++    public long Linq2Db_Compiled_ToList_Dto()
++    {
++        long n = 0;
++        foreach (var row in Linq2DbCompiled(_linq2Db.Db))
++            n += row.Id;
++        _sink.Add(n);
++        return n;
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_BufferedDto")]
++    public async Task B_Nextorm_Cached_ToList_Dto()
++    {
++        var rows = await _ctx.LargeEntity.Select(e => new ProjectionDto { Id = e.Id, Str = e.Str }).ToListAsync();
++        foreach (var row in rows)
++            _sink.Add(row.Id);
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_UnbufferedDto")]
++    public async Task B_Nextorm_Cached_AsyncStream_Dto()
++    {
++        await foreach (var row in _ctx.LargeEntity.Select(e => new ProjectionDto { Id = e.Id, Str = e.Str }).ToAsyncEnumerable())
++            _sink.Add(row.Id);
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_BufferedDto")]
++    public async Task B_EFCore_ToList_Dto()
++    {
++        var rows = await _efCtx.LargeEntities.Select(e => new ProjectionDto { Id = e.Id, Str = e.Str }).ToListAsync();
++        foreach (var row in rows)
++            _sink.Add(row.Id);
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_UnbufferedDto")]
++    public async Task B_EFCore_AsyncStream_Dto()
++    {
++        await foreach (var row in _efCtx.LargeEntities.Select(e => new ProjectionDto { Id = e.Id, Str = e.Str }).AsAsyncEnumerable())
++            _sink.Add(row.Id);
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_BufferedDto")]
++    public async Task B_Linq2Db_ToList_Dto()
++    {
++        var rows = await LinqToDB.Async.AsyncExtensions.ToListAsync(_linq2Db.Db.GetTable<Linq2DbLargeEntity>()
++            .Select(it => new ProjectionDto { Id = it.Id, Str = it.Str }));
++        foreach (var row in rows)
++            _sink.Add(row.Id);
++    }
++
++    [Benchmark]
++    [BenchmarkCategory("B_UnbufferedDto")]
++    public async Task B_Linq2Db_AsyncStream_Dto()
++    {
++        await foreach (var row in LinqToDB.Async.AsyncExtensions.AsAsyncEnumerable(_linq2Db.Db.GetTable<Linq2DbLargeEntity>()
++            .Select(it => new ProjectionDto { Id = it.Id, Str = it.Str })))
++            _sink.Add(row.Id);
++    }
++
++    private static readonly Func<LinqToDB.IDataContext, List<ProjectionDto>> _l2dbCompiled =
++        LinqToDB.CompiledQuery.Compile((LinqToDB.IDataContext db) => db
++            .GetTable<Linq2DbLargeEntity>()
++            .Select(it => new ProjectionDto { Id = it.Id, Str = it.Str })
++            .ToList());
++
++    private static List<ProjectionDto> Linq2DbCompiled(LinqToDB.IDataContext db) => _l2dbCompiled(db);
++}
+diff --git a/benchmarks/nextorm.benchmark/SqliteBenchmarkWriteJson.cs b/benchmarks/nextorm.benchmark/SqliteBenchmarkWriteJson.cs
+index a188e860..d81b1609 100644
+--- a/benchmarks/nextorm.benchmark/SqliteBenchmarkWriteJson.cs
++++ b/benchmarks/nextorm.benchmark/SqliteBenchmarkWriteJson.cs
+@@ -1,10 +1,20 @@
+ using System.ComponentModel.DataAnnotations;
+ using System.ComponentModel.DataAnnotations.Schema;
++using System.Text.Json;
+ using BenchmarkDotNet.Attributes;
+ using BenchmarkDotNet.Columns;
++using Dapper;
++using LinqToDB;
++using LinqToDB.Data;
++using LinqToDB.DataProvider.SQLite;
+ using Microsoft.Data.Sqlite;
++using Microsoft.EntityFrameworkCore;
+ using NextORM.Core;
+ using NextORM.Sqlite;
++using IDataContext = NextORM.Core.IDataContext;
++using L2dbColumn = LinqToDB.Mapping.ColumnAttribute;
++using L2dbPrimaryKey = LinqToDB.Mapping.PrimaryKeyAttribute;
++using L2dbTable = LinqToDB.Mapping.TableAttribute;
+ 
+ namespace NextORM.Benchmark;
+ 
+@@ -37,10 +47,14 @@ public class SqliteBenchmarkWriteJson
+     private const int PayloadBaseWidth = 512;
+ 
+     private readonly MemoryStream _sink = new();
++    private readonly BenchmarkSerializationSink _competitorSink = new();
+ 
+     private IDataContext _db = null!;
+     private EntityBuilder<JsonBenchEntity> _entities = null!;
+     private string _path = null!;
++    private SqliteConnection _dapperConn = null!;
++    private DataConnection _linq2Db = null!;
++    private JsonBenchDbContext _efCtx = null!;
+ 
+     /// <summary>The number of seeded rows; the triple 1k/10k/100k shows whether allocation scales with row count.</summary>
+     [Params(1_000, 10_000, 100_000)]
+@@ -78,9 +92,63 @@ public class SqliteBenchmarkWriteJson
+         _ = WriteJsonAsync_Array_Scalar().GetAwaiter().GetResult();
+         _ = WriteJsonAsync_Array_ScalarPayload().GetAwaiter().GetResult();
+         _ = ToList_Dto();
++
++        _dapperConn = new SqliteConnection($"Data Source={_path}");
++        _dapperConn.Open();
++        _linq2Db = new DataConnection(new DataOptions().UseSQLite($"Data Source={_path}", SQLiteProvider.Microsoft));
++        var efBuilder = new DbContextOptionsBuilder<JsonBenchDbContext>();
++        efBuilder.UseSqlite($"Filename={_path}");
++        efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
++        _efCtx = new JsonBenchDbContext(efBuilder.Options);
++
++        ValidateCompetitorJson();
+         _sink.SetLength(0);
+     }
+ 
++    /// <summary>
++    /// Setup-time proof that the three materialize→serialize arms emit the same logical rows as the
++    /// native Nextorm JSON arm. Runs outside the timed region and fails the benchmark if they differ.
++    /// </summary>
++    private void ValidateCompetitorJson()
++    {
++        _ = WriteJson_Array_Dto();
++        _sink.Position = 0;
++        var baseline = MeasureJson(_sink);
++
++        var dapper = _dapperConn.Query<JsonBenchDto>("select id, name from json_bench").ToList();
++        var linq2Db = _linq2Db.GetTable<JsonBenchLinqRow>()
++            .Select(x => new JsonBenchDto { Id = x.Id, Name = x.Name }).ToList();
++        var ef = _efCtx.Rows.Select(x => new JsonBenchDto { Id = x.Id, Name = x.Name }).ToList();
++
++        CompareJson("WriteJson/dapper", baseline, MeasureJson(SerializeToScratch(dapper)));
++        CompareJson("WriteJson/linq2db", baseline, MeasureJson(SerializeToScratch(linq2Db)));
++        CompareJson("WriteJson/EFCore", baseline, MeasureJson(SerializeToScratch(ef)));
++        BenchmarkComparisonValidation.Report("WriteJson/nextorm", baseline.Count, baseline.Checksum, $"rowCount={RowCount}");
++    }
++
++    private static MemoryStream SerializeToScratch(List<JsonBenchDto> rows)
++    {
++        var scratch = new MemoryStream();
++        JsonSerializer.Serialize(scratch, rows);
++        scratch.Position = 0;
++        return scratch;
++    }
++
++    private static (int Count, long Checksum) MeasureJson(Stream stream)
++    {
++        var rows = JsonSerializer.Deserialize<List<JsonBenchDto>>(stream, new JsonSerializerOptions
++        {
++            PropertyNameCaseInsensitive = true,
++        }) ?? [];
++        return BenchmarkComparisonValidation.Measure(rows, r => r.Id);
++    }
++
++    private static void CompareJson(string context, (int Count, long Checksum) expected, (int Count, long Checksum) actual)
++    {
++        BenchmarkComparisonValidation.EnsureCount(expected.Count, actual.Count, context);
++        BenchmarkComparisonValidation.EnsureChecksum(expected.Checksum, actual.Checksum, context);
++    }
++
+     private void Seed(int count)
+     {
+         var rows = new JsonBenchEntity[count];
+@@ -173,9 +241,46 @@ public class SqliteBenchmarkWriteJson
+             sum += row.Id;
+         return sum;
+     }
++
++    /// <summary>Closest equivalent for Dapper: materialize the DTO rows, then serialize the list.</summary>
++    /// <remarks>This is not a zero-materialization arm; the label deliberately says materialize→serialize.</remarks>
++    /// <returns>The number of JSON bytes written to the non-retaining sink.</returns>
++    [Benchmark]
++    public long Dapper_ToList_Json()
++    {
++        _competitorSink.Reset();
++        var rows = _dapperConn.Query<JsonBenchDto>("select id, name from json_bench").ToList();
++        JsonSerializer.Serialize(_competitorSink, rows);
++        return _competitorSink.Bytes;
++    }
++
++    /// <summary>Closest equivalent for linq2db: materialize the DTO rows, then serialize the list.</summary>
++    /// <returns>The number of JSON bytes written to the non-retaining sink.</returns>
++    [Benchmark]
++    public long Linq2Db_ToList_Json()
++    {
++        _competitorSink.Reset();
++        var rows = _linq2Db.GetTable<JsonBenchLinqRow>()
++            .Select(x => new JsonBenchDto { Id = x.Id, Name = x.Name })
++            .ToList();
++        JsonSerializer.Serialize(_competitorSink, rows);
++        return _competitorSink.Bytes;
++    }
++
++    /// <summary>Closest equivalent for EF Core: materialize the DTO rows, then serialize the list.</summary>
++    /// <returns>The number of JSON bytes written to the non-retaining sink.</returns>
++    [Benchmark]
++    public long EFCore_ToList_Json()
++    {
++        _competitorSink.Reset();
++        var rows = _efCtx.Rows.Select(x => new JsonBenchDto { Id = x.Id, Name = x.Name }).ToList();
++        JsonSerializer.Serialize(_competitorSink, rows);
++        return _competitorSink.Bytes;
++    }
+ }
+ 
+ [SqlTable("json_bench")]
++[Table("json_bench")]
+ public sealed class JsonBenchEntity
+ {
+     [Key]
+@@ -204,3 +309,25 @@ public sealed class JsonBenchWideDto
+ 
+     public string? Payload { get; set; }
+ }
++
++/// <summary>linq2db mapping for the temporary <c>json_bench</c> table used by the serializer competitor arm.</summary>
++[L2dbTable("json_bench")]
++public sealed class JsonBenchLinqRow
++{
++    [L2dbPrimaryKey]
++    [L2dbColumn("id")]
++    public int Id { get; set; }
++
++    [L2dbColumn("name")]
++    public string? Name { get; set; }
++}
++
++/// <summary>EF Core context over the temporary <c>json_bench</c> table used by the serializer competitor arm.</summary>
++public sealed class JsonBenchDbContext : DbContext
++{
++    public JsonBenchDbContext(DbContextOptions<JsonBenchDbContext> options) : base(options)
++    {
++    }
++
++    public DbSet<JsonBenchEntity> Rows { get; set; } = null!;
++}
+diff --git a/docs/specs/performance/comparison-benchmark-scenarios.md b/docs/specs/performance/comparison-benchmark-scenarios.md
+index c6638751..edfb1981 100644
+--- a/docs/specs/performance/comparison-benchmark-scenarios.md
++++ b/docs/specs/performance/comparison-benchmark-scenarios.md
+@@ -1,127 +1,148 @@
+ # Comparison benchmarks tier 1 — query-shape scenarios
+ 
+-Статус: дизайн согласован (user review пройден 2026-10-04). Реализация не начата — отложена до отдельного решения.
++Статус: дизайн согласован (user review пройден 2026-10-04). Non-zero части реализованы в D188 DO (2026-10-09): SQLite projection/aggregates/paging/streaming (buffered+unbuffered DTO) и JSON/CSV cross-library. Zero/raw-reader подгруппа — `blocked + active`, ждёт CHECK-прохождения #189.
+ Tracking: [GitHub issue #188](https://github.com/AlexeyShirshov/nextorm/issues/188), milestone `1.0.9-rc2`.
+-Branch: `1.0.9-b`.
+-Зависимость: item 10 (zero-materialization) разблокируется после [#189](https://github.com/AlexeyShirshov/nextorm/issues/189).
++Branch: `1.0.9-rc2`.
++Зависимость: zero/raw-reader подгруппа item 10 (#188) заблокирована незавершённым [#189](https://github.com/AlexeyShirshov/nextorm/issues/189). Цикл #189 остановлен на собственном perf-предикате приёмки; zero-арм остаётся активным (blocked), не снят, не подменён материализацией, не подменён другим провайдером и не «вылечен» падением на materialize→serialize. Текущий статус #189 не приписывается реализации `ToDataReader` (D134) как причине пост-D134 регрессии.
+ 
+ ## 1. Контекст и пробел
+ 
+-Кросс-библиотечное сравнение (Nextorm / Dapper / linq2db / EF Core) на SQLite покрывает:
++Кросс-библиотечное сравнение (Nextorm / Dapper / linq2db / EF Core) на SQLite покрывало:
+ 
+ - end-to-end классы `SqliteBenchmarkAny`, `...First`, `...Single`, `...Join`, `...Where`, `...Iteration`, `...LargeIteration`, `...Cache` — полный режим, `benchmark-report.md:14`;
+ - 12 SQL-конструкций в `SqliteBenchmarkFeaturesFair` / `...Cached` — `docs/comparisons/benchmarks.md:52-87`.
+ 
+-Не покрыты query-shapes/терминалы: проекция в DTO как отдельный сценарий, агрегаты/`GroupBy`, сортировка+пагинация, потоковый вывод без материализации; JSON/CSV сравниваются только внутри nextorm (`SqliteBenchmarkWriteJson`, `SqliteBenchmarkCsv` — nextorm-only). Нет ни одного zero-materialization арма.
++Не были покрыты query-shapes/терминалы: проекция в DTO как отдельный сценарий, агрегаты/`GroupBy`, сортировка+пагинация, потоковый вывод; JSON/CSV сравнивались только внутри nextorm (`SqliteBenchmarkWriteJson`, `SqliteBenchmarkCsv` — nextorm-only). Не было ни одного zero-materialization арма.
++
++Все перечисленные non-zero пробелы закрыты D188: добавлены `SqliteBenchmarkProjection`, `SqliteBenchmarkAggregates`, `SqliteBenchmarkPaging`, `SqliteBenchmarkStreaming` (buffered/unbuffered DTO) и расширены `SqliteBenchmarkWriteJson` / `SqliteBenchmarkCsv` (competitor materialize→serialize). Единственный незакрытый пробел — zero-materialization (raw reader) подгруппа streaming, она остаётся `blocked + active`.
+ 
+ ## 2. Согласованный scope (tier 1)
+ 
+ 1. `SqliteBenchmarkProjection` — `Select(x => new Dto{...})` cross-library.
+ 2. `SqliteBenchmarkAggregates` — `Count`/`Sum`/`GroupBy→Count` на SQLite, SQL-side.
+ 3. `SqliteBenchmarkPaging` — `OrderBy + offset/limit`.
+-4. `SqliteBenchmarkStreaming` — микро-материализация vs нулевая (blocked by #189).
++4. `SqliteBenchmarkStreaming` — buffered DTO vs unbuffered DTO enumeration; zero-materialization (raw reader) — blocked by #189.
+ 5. JSON/CSV cross-library — расширить `SqliteBenchmarkWriteJson` / `SqliteBenchmarkCsv` армами Dapper / linq2db / EF Core через materialize→serialize.
+ 
+-Вне scope: LOB-стриминг `ToStream`/`ToTextReader` (не бенчмаркаем); DML и navigation/eager loading cross-library (tier 2).
++Вне scope: LOB-стриминг `ToStream`/`ToTextReader` (не бенчмаркаем); DML и navigation/eager loading cross-library (tier 2); synchronous-кампания; дополнительные провайдеры.
+ 
+ ## 3. Общий стенд и переиспользование
+ 
+ - Данные: `BenchDb.FilePath` (env `NEXTORM_BENCH_DB` → `/tmp/nextorm-bench/test.db` → `data/test.db`), `TestDataRepository` (`SimpleEntity`/`LargeEntity`/`ComplexEntity`), `EFDataContext`, `Linq2DbDataRepository`.
++- Наблюдённые counts (D01/D188 DO, read-only): `simple_entity`=10, `complex_entity`=3, `large_table`=10000. `large_table` используется для projection/aggregates/paging/streaming; JSON-класс сеет собственную временную `json_bench`-таблицу, CSV-класс — срез `large_table` (10 000 строк).
+ - Проводник: `Microsoft.Data.Sqlite` у всех участников; БД на tmpfs.
+ - Конструктор-паттерн: `builder.UseSqlite(BenchDb.FilePath) → CreateDataContext → EnsureConnectionOpen`; Dapper через `((SqliteDataContext)_ctx.DataContext).ConnectionString`; EF `UseSqlite + NoTracking`; linq2db `Linq2DbDataRepository`.
+-- Атрибуты класса: `[MemoryDiagnoser]`, `[Config(typeof(NextormConfig))]`, `[GroupBenchmarksBy(ByJob, ByCategory)]`, `[HideColumns(...)]`, class-level `[BenchmarkCategory]`.
+-- Job: `NextormConfig` (`ShortRun` + `InProcessEmitToolchain`, `NEXTORM_BENCH_FULL=1` → `Job.Default`); отчёты в `benchmarks/BenchmarkDotNet.Artifacts`.
++- Атрибуты класса: `[MemoryDiagnoser]`, `[Config(typeof(NextormConfig))]`, `[GroupBenchmarksBy(ByJob, ByCategory)]`, `[HideColumns(...)]`, class-level `[BenchmarkCategory]` где применимо.
++- Job: `NextormConfig` (`ShortRun` + `InProcessEmitToolchain`, `NEXTORM_BENCH_FULL=1` → `Job.Default`); отчёты в `benchmarks/BenchmarkDotNet.Artifacts`. `NEXTORM_BENCH_FULL=0` для D188-свипов.
++- Sinks/валидация (benchmark-only, `benchmarks/nextorm.benchmark/`): `BenchmarkRowSink` (count+checksum+bytes, без удержания строк), `BenchmarkSerializationSink` (write-only non-retaining `Stream`), `BenchmarkComparisonValidation` (`Measure`/`Checksum`/`Ensure*`/`Report`).
++
++### 3.1 Граница тайминга
+ 
+-## 4. Новые классы
++- Семантическая сверка армов, подготовка prepared/compiled-команд, проверка counts/checksums/pages/сериализованного вывода выполняются в конструкторе/`[GlobalSetup]` вне измеряемой области.
++- `Prepare()` / `CompiledQuery.Compile` / `CompileAsyncQuery` создаются вне timed-body; Category A измеряет только повторное исполнение reusable-команды.
++- Sink сбрасывается вне timed-body; `BenchmarkSerializationSink` не удерживает сериализованный payload.
++- Никакие production-пути/API, фикстуры или пакеты не меняются.
++
++## 4. Классы, армы и эквивалентность
+ 
+ ### 4.1 `SqliteBenchmarkProjection`
+ 
+-- Данные: `large_table` (~10 000 строк).
+-- Проекция: `Select(x => new ProjectionDto { Id = x.Id, Str = x.Str })` (добавить `ProjectionDto`).
+-- Армы:
+-  - `Nextorm_Prepared_ToList` (`.Prepare()`), `Nextorm_Cached_ToList` (fresh fluent + план-кэш);
+-  - `Dapper_Query_Dto` (raw SQL `select id, someString`);
+-  - `Linq2Db_Compiled_ToList` (`CompiledQuery.Compile`), `Linq2Db_ToList`;
+-  - `EFCore_Compiled_ToList` (`EF.CompileAsyncQuery`), `EFCore_ToList`.
+-- Показывает стоимость построения `TResult` относительно implicit entity-маппинга.
++- Данные: `large_table` (10 000 строк).
++- Общий DTO: `ProjectionDto { Id, Str }` из `id, someString` (non-LOB).
++- Category A (prepared/compiled): `A_Nextorm_Prepared_ToListAsync`, `A_EFCore_Compiled_ToListAsync` (`EF.CompileAsyncQuery`), `A_Linq2Db_Compiled_ToList` (`CompiledQuery.Compile`), `A_Dapper_ToListAsync` (raw SQL; тот же арм несёт и Category B).
++- Category B (обычный путь): `B_Nextorm_Cached_ToListAsync` (неявный план-кэш), `B_EFCore_ToListAsync`, `B_Linq2Db_ToListAsync`.
++- Setup-валидация: count и order-sensitive checksum совпадают у nextorm/linq2db/EF Core/Dapper.
+ 
+ ### 4.2 `SqliteBenchmarkAggregates`
+ 
+-- Данные: `large_table` (~10 000 строк).
+-- Операции: `Count()`, `Sum(x => x.Id)` (long), `GroupBy(x => x.Id % 100).Select(g => new { g.Key, C = g.Count() })` (~100 групп).
+-- Армы: `Nextorm` (prepared/cached), `Dapper` (raw SQL), `linq2db`, `EF Core`.
+-- Результат обязательно «потребляется» в `_sink`, чтобы JIT не выбросил запрос.
+-- Точная форма group-key (`id % K` vs иная low-cardinality колонка) фиксируется при реализации; критерий — портируемость трансляции во всех четырёх библиотеках.
++- Данные: `large_table` (10 000 строк); grouping key `id % 100` (`GroupModulus=100`, ровно 100 бакетов, SQL-side).
++- Операции: `Count()`, `Sum(x => x.Id)` (long, ожидаемо 50 005 000), `GroupBy(x => x.Id % 100) → GroupCountRow { Key, Count }`.
++- Category A: `A_Nextorm_Prepared_{Count,Sum,GroupByCount}`, `A_EFCore_Compiled_{...}`, `A_Linq2Db_Compiled_{...}`, `Dapper_{Count,Sum,GroupByCount}` (последние несут и B).
++- Category B: `B_Nextorm_Cached_{...}`, `B_EFCore_{...}`, `B_Linq2Db_{...}`.
++- Setup-валидация: rows=10000, sum=ExpectedRows*(ExpectedRows+1)/2, group count=100; агрегация строго на стороне SQLite (нет client-side).
+ 
+ ### 4.3 `SqliteBenchmarkPaging`
+ 
+-- Данные: `large_table` (~10 000 строк).
+-- Запрос: `OrderBy(x => x.Id).Offset(5_000).Limit(100)` (nextorm; API — `Offset`/`Limit`, `EntityBuilder.cs:2130,2141`) против `OrderBy(...).Skip(5_000).Take(100)` (Dapper raw SQL `ORDER BY id LIMIT 100 OFFSET 5000`, linq2db, EF Core).
+-- Армы: `Nextorm` (prepared/cached), `Dapper`, `linq2db`, `EF Core`.
++- Данные: `large_table` (10 000 строк).
++- Запрос: `ORDER BY id OFFSET 5000 LIMIT 100` (nextorm `OrderBy/Offset/Limit`; конкуренты `ORDER BY ... LIMIT 100 OFFSET 5000`). Ключ сортировки — уникальный primary key, tie-breaker не требуется.
++- Category A: `A_Nextorm_Prepared_PageAsync`, `A_EFCore_Compiled_PageAsync`, `A_Linq2Db_Compiled_Page`, `A_Dapper_PageAsync` (Dapper raw-арм несёт и Category B).
++- Category B: `B_Nextorm_Cached_PageAsync`, `B_EFCore_PageAsync`, `B_Linq2Db_PageAsync`.
++- Setup-валидация: page count=100 (непустая interior-страница), первый `Id`=5001, checksums совпадают у всех библиотек.
+ 
+-### 4.4 `SqliteBenchmarkStreaming` (blocked by #189)
++### 4.4 `SqliteBenchmarkStreaming`
+ 
+-- Данные: `large_table` (~10 000 строк).
+-- Микро-материализация: `Nextorm_ToList_Dto`, `Nextorm_AsyncEnumerable_Dto`, `Dapper_Query_Dto`, `Linq2Db_ToList_Dto`, `EFCore_ToList_Dto`.
+-- Нулевая: `Nextorm_ToDataReader`, `Dapper_ExecuteReader`, `Linq2Db_ExecuteReader` — EF Core исключён (нет LINQ-raw-reader).
+-- Все армы сводят колонки в **идентичный** sink (`long`-аккумулятор, `Consumer`), иначе dead-code elimination.
+-- Headline-метрики: `Allocated` / `Gen0` / `Gen2` (суть — исчезновение per-row heap-объекта), время вторично.
+-- На SQLite `ToDataReader` доступен после #189 (D134, реализован 2026-10-06). Приёмка выбрана как
+-  acceptance-набор `--anyCategories=acceptance` (7 зафиксированных кейсов, не трогаются); baseline
+-  прогнан **до** правок кода: exit 0, 7/7 кейсов, global 48.08 s
+-  (`/tmp/D134-evidence/baseline-acceptance.log`). Сравнительный zero-arm прогон `Nextorm_ToDataReader`
+-  против `Dapper_ExecuteReader`/`Linq2Db_ExecuteReader` на `large_table` **не выполнялся** в этой
+-  правке (остаётся item 10, #188) — чисел по нему не приводим, пока он не исполнен.
++- Данные: `large_table` (10 000 строк); не-LOB колонки `id, someString`.
++- Buffered DTO: `A_Nextorm_Prepared_ToList_Dto`, `A_EFCore_Compiled_ToList_Dto`, `Dapper_ToList_Dto` (A+B), `Linq2Db_Compiled_ToList_Dto`, `B_Nextorm_Cached_ToList_Dto`, `B_EFCore_ToList_Dto`, `B_Linq2Db_ToList_Dto`.
++- Unbuffered DTO enumeration: `A_Nextorm_Prepared_AsyncStream_Dto`, `A_EFCore_Compiled_AsyncStream_Dto`, `Dapper_AsyncStream_Dto` (A+B), `B_Nextorm_Cached_AsyncStream_Dto`, `B_EFCore_AsyncStream_Dto`, `B_Linq2Db_AsyncStream_Dto`.
++- Все армы сводят колонки в один `BenchmarkRowSink`; setup-валидация сверяет count+checksum buffered/unbuffered DTO.
++- **Zero/raw-reader подгруппа — `blocked + active` (ждёт #189).** Не реализована: нет per-row entity/DTO construction и collection accumulation. EF Core исключён из zero-подгруппы (нет LINQ raw-reader). Нет `ToList`-fallback, нет relabel материализованного арма как zero, нет «SQLite unavailable» как pass. После CHECK-прохождения #189 добавляются `Nextorm_ToDataReader`/`ToDataReaderAsync`, `Dapper_ExecuteReader`, `Linq2Db_ExecuteReader` с идентичным sink; только тогда zero-утверждения попадают в отчёт.
++- Headline-метрики zero-подгруппы (когда разблокируется): `Allocated` / `Gen0` / `Gen2`; время вторично.
+ 
+ ### 4.5 JSON/CSV cross-library
+ 
+-- Расширить `SqliteBenchmarkWriteJson`: добавить `Dapper_ToList_Json` (`Query<Dto>` + `JsonSerializer.Serialize`), `Linq2Db_ToList_Json`, `EFCore_ToList_Json`; сравнение с `Nextorm_WriteJson`.
+-- Расширить `SqliteBenchmarkCsv`: добавить `Dapper_ToList_ManualCsv`, `Linq2Db_...`, `EFCore_...` через тот же ручной CSV-writer, что и существующий `Nextorm_ToList_ManualCsv`; сравнение с `Nextorm_WriteCsv`.
+-- Это **closest equivalent**, не тот же API: у конкурентов нет non-materialising терминала, поэтому их арм = materialize + serializer. Фиксируется в отчёте.
++Расширены **closest equivalent** армами: у конкурентов нет non-materialising терминала, поэтому их арм = materialize + serializer. Это фиксируется в отчёте.
++
++- `SqliteBenchmarkWriteJson` (временная `json_bench`, `[Params(1_000, 10_000, 100_000)]`):
++  - native (сохранены и исполняются): `WriteJson_Array_Scalar`, `WriteJson_Array_ScalarPayload`, `WriteJson_Array_Dto`, `WriteJson_Array_WideDto`, `WriteJsonAsync_Array_Scalar`, `WriteJsonAsync_Array_ScalarPayload`, `ToList_Dto` (baseline).
++  - competitor materialize→serialize: `Dapper_ToList_Json`, `Linq2Db_ToList_Json`, `EFCore_ToList_Json` (`Query`/linq2db/EF `ToList` + `JsonSerializer.Serialize` в non-retaining `BenchmarkSerializationSink`).
++  - Setup-валидация: сериализованный вывод десериализуется и сверяется по count+checksum с native baseline (логическая, не байтовая эквивалентность, т.к. native streaming и `JsonSerializer` форматируют по-разному).
++- `SqliteBenchmarkCsv` (срез `large_table` 10 000 строк; колонки `id, someString, dt`):
++  - native (сохранены): `Nextorm_ToList` (baseline), `Nextorm_ToList_ManualCsv`, `Nextorm_WriteCsv`, `Nextorm_StringProjection_ToList`, `Nextorm_StringProjection_WriteCsv`.
++  - competitor: `Dapper_ToList_ManualCsv`, `Linq2Db_ToList_ManualCsv`, `EFCore_ToList_ManualCsv` — тот же ручной writer.
++  - CSV-dialect: header `Id,Str,Dt\r\n`, строка `{Id},{Str},{Dt:O}\r\n`, UTF-8 без BOM, `\r\n`. Setup-валидация: побайтовое совпадение с native baseline.
++  - `[BenchmarkCategory("csv")]`; замороженные 7 `acceptance`-кейсов не затронуты.
+ 
+ ## 5. Симметрия reuse
+ 
+ - Category A: nextorm `.Prepare()` против `EF.CompileAsyncQuery` / `LinqToDB.CompiledQuery.Compile` и raw Dapper.
+ - Category B: nextorm implicit план-кэш (fresh fluent с константами) против regular (non-compiled) EF Core / linq2db и raw Dapper.
+-- Сохранять ту же методологию, что в `SqliteBenchmarkFeaturesFair` / `...Cached`.
++- Dapper raw-армы присутствуют в A и B (у него нет compiled-режима); это явно отражено в `[BenchmarkCategory]`.
++- Сохраняется та же методология, что в `SqliteBenchmarkFeaturesFair` / `...Cached`.
++- Category A не заявляется, если не представлены все применимые reusable-курьеры (nextorm/EF/linq2db); Dapper — общий raw-арм.
+ 
+ ## 6. Fairness constraints
+ 
+ - Один ADO-провайдер (`Microsoft.Data.Sqlite`) у всех; БД на tmpfs.
+ - Одинаковая семантика SQL на арм; параметризация согласована.
+-- Обязательный sink/`Consumer` для агрегатов и zero-армов.
+-- `large_table` (10k) для throughput-сценариев; не использовать `simple_entity`/`complex_entity` (малые + расхождение «доки ~10k / инварианты 10 и 3», зафиксировано в issue #188).
++- Обязательный sink/`Consumer` для всех сравнимых армов (`BenchmarkRowSink`, `BenchmarkSerializationSink`).
++- `large_table` (10 000) для throughput-сценариев; не использовать `simple_entity`/`complex_entity` (10 и 3 строки). Расхождение «доки ~10k / инварианты 10 и 3» из issue #188 фиксируется как наблюдённое: `large_table`=10000.
+ - Не трогать замороженные 7 `acceptance`-кейсов; новые классы — свои `[BenchmarkCategory]`.
++- Setup-проверки вне timed-области; результаты не подменяются клиентской агрегацией/материализацией.
++- Zero-materialization означает отсутствие entity/DTO-материализации, **не** нулевые аллокации.
+ 
+ ## 7. Критерии приёмки
+ 
+ - Новые классы компилируются, помечены `[MemoryDiagnoser]`, запускаются через `--filter`; BDN рапортует 0 failures; каждый класс — исполненный прогон (ShortRun) с сохранённым отчётом.
+ - `dotnet build nextorm.slnx -c Debug` и `-c Release` — 0 warning / 0 error.
+ - `--anyCategories=acceptance` по-прежнему даёт ровно 7 кейсов.
+-- JSON/CSV: добавленные cross-library армы дают корректный вывод (те же байты/строки, что у существующих baselines), подтверждено сверкой.
+-- Zero-армы (после #189) демонстрируют измеримо меньший `Allocated` против микро-армов в сохранённом отчёте.
++- JSON/CSV: добавленные cross-library армы дают корректный вывод (логически эквивалентный native JSON; побайтово совпадающий manual CSV), подтверждено setup-сверкой.
++- Zero-армы (после CHECK-прохождения #189) демонстрируют корректное чтение и, в сохранённом отчёте, измеримо меньший `Allocated` против микро-армов. До этого zero-подгруппа остаётся `blocked + active` и в отчёт не попадает.
+ 
+ ## 8. Доки
+ 
+ - `docs/comparisons/benchmarks.md` + `docs/ru/comparisons/benchmarks.md`: новые строки/таблицы (projection, aggregates, paging, streaming, JSON/CSV cross-library).
+ - `docs/specs/comparison/linq2db-comparison.md` + `docs/specs/ru/comparison/linq2db-comparison.md`: обновить утверждение о бенчмаркнутых сценариях (`:197-199`).
+ - `docs/comparisons/capabilities.md` / `capability-matrix.md` — только если формулировка о потоковых терминалах меняется после #189.
++- Публичные страницы не ссылаются на внутренние `docs/specs/**`; отчёты — на retained BDN artifacts / публичные страницы.
+ 
+ ## 9. Зависимости
+ 
+-- Item 10 (zero-arm на SQLite) заблокирован #189.
+-- Items 7–9 и JSON/CSV cross-library — без зависимостей, могут идти параллельно.
++- Item 10 (zero-arm на SQLite) заблокирован #189; остаётся `blocked + active`, исходный объём и критерии не изменены.
++- Items 7–9 и JSON/CSV cross-library — без зависимостей, реализованы non-zero частью D188.
++- #189 не CHECK-прошёл; D188 не заменяет и не снимает zero-arm.
+ 
+ ## 10. Риски
+ 
+-- `GroupBy`-трансляция `id % K` может отличаться по поддержке/плану между библиотеками — при реализации выбрать портируемую форму.
++- `GroupBy`-трансляция `id % K` может отличаться по поддержке/плану между библиотеками — форма зафиксирована `id % 100`.
+ - Zero-arm без идентичного sink даёт недостоверный результат (dead-code elimination) — sink обязателен.
+ - Смешение reuse-стратегий искажает сравнение — строго держать Category A/B.
+-- `ToDataReader` на SQLite после #189 (буферизованное, non-sequential чтение BLOB) может дать неожиданный allocation-профиль — не использовать LOB в streaming-сценарии (только не-LOB проекции).
++- Native JSON streaming и `JsonSerializer` форматируют по-разному — сравнение логическое (count/checksum), не байтовое; CSV сравнивается побайтово.
++- ShortRun/InProcess дают runnable coverage и индикативные измерения, а не статистические рейтинги.
+ 
+ ## 11. Ссылки
+ 
+-- `benchmarks/nextorm.benchmark/SqliteBenchmarkLargeIteration.cs`, `...Where.cs`, `...FeaturesFair.cs`, `...FeaturesFairCached.cs`, `...WriteJson.cs`, `...Csv.cs`
++- `benchmarks/nextorm.benchmark/SqliteBenchmarkProjection.cs`, `...Aggregates.cs`, `...Paging.cs`, `...Streaming.cs`, `...WriteJson.cs`, `...Csv.cs`
++- `benchmarks/nextorm.benchmark/BenchmarkRowSink.cs`, `BenchmarkSerializationSink.cs`, `BenchmarkComparisonValidation.cs`
+ - `benchmarks/nextorm.benchmark/Linq2DbDataContext.cs`, `EFDataContext.cs`, `TestDataContext.cs`, `BenchDb.cs`, `NextormConfig.cs`
+ - `docs/comparisons/benchmarks.md`, `docs/specs/performance/benchmark-report.md`, `docs/specs/performance/acceptance-benchmarks.md`
+ - `docs/specs/comparison/linq2db-comparison.md:197-199`
+diff --git a/docs/specs/status/collection-1.0.9-rc2.md b/docs/specs/status/collection-1.0.9-rc2.md
+index 9a5742cf..fac32101 100644
+--- a/docs/specs/status/collection-1.0.9-rc2.md
++++ b/docs/specs/status/collection-1.0.9-rc2.md
+@@ -62,7 +62,7 @@ Intra-group order is a serialization dependency (footprint overlap) plus one fun
+ | D180 | #180 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=2 | docs/specs/status/rc2-180-json-stream-provider-conversion-1.md | closed #180 (93714a8e); CHECK PASS r=2/n=2/rv=2 |
+ | D184 | #184 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=2 | docs/specs/status/rc2-184-loadwith-eagerloadmode-1.md | blocked: evidence-contract gap — CHECK could not certify despite all product gates green (build Debug/Release 0/0, core 1772/0/0, sqlite 1161/1skip, eager integration 52/0/0 four providers, full container 3337/0 failed, coverage 85.9/76.5, code audit 0 Critical/0 product Warnings); escalation decided real r=2 evidence-tracing replan; CHECK invoked STOP on recurrence; patch `artifacts/pdca/rc2-184/D184-blocked.patch`; artifacts `artifacts/pdca/rc2-184/{r1,r2}/` |
+ | D185 | #185 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=2 | docs/specs/status/rc2-185-bindentity-registration-1.md | closed #185 (0d0b7fab) |
+-| D188 | #188 | G1 | 1.0.9-rc2 | blocked | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md | Comparison benchmarks tier 1 — **blocked on D189's successful CHECK** (D189 now incomplete: r4 A/B proven regression; predecessor not CHECK-passed; #188 stays OPEN) |
++| D188 | #188 | G1 | 1.0.9-rc2 | in-progress | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md | Comparison benchmarks tier 1 — **in-progress** (DO non-zero units; D05 zero-arm BLOCKED+active pending D189's CHECK; D189 incomplete r4 A/B proven regression; #188 stays OPEN) |
+ | D189 | #189 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=4 (terminal? no — incomplete) | docs/specs/status/rc2-189-sqlite-datareader-1.md | r=4 paired A/B proven regression case3 L=1.0519>1.05; #189 OPEN; patch `docs/specs/status/rc2-189-evidence/D189-STOP.patch` preserved; lane continues |
+ | D190 | #190 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-190-join-whole-entity-1.md | done — CHECK PASS r1/rv1 evidence-completion; mutation closed by authorized disclosure; commit 1ff47762; #190 closed |
+ | D191 | #191 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-191-provider-extensions-1.md | done — provider-specific fluent API relocated out of core into provider packages; CHECK PASS snapshot-n2 `7e9fad9`/diff `f652c19e`; commit `e25f558e`; issue #191 closed (evidence artifacts/pdca/rc2-191/r1/) |
+@@ -92,7 +92,7 @@ CHECK re-gather budget: ≤2 targeted evidence requests per collection CHECK inv
+ - Verification state: `unverified` (P done; DO not started).
+ - Defect id and history: none.
+ - D179 completed (CHECK PASS r2/n2/3, tests+docs only, production delta 0; issue #179 closed).
+-- Next allowed step: **D189 incomplete (r4 A/B proven regression); next: D188 dependency adjudication by planner (D188 predecessor D189 not CHECK-passed), then D151**. (D169 done, CHECK PASS r1/rv1/n=2, commit `bbc3b47e79e2659f52ccfbbcd489ae70b3df6c9a`, #169 closed; D167 done, CHECK PASS r1/N=1/rv=1, commit `0b4241b9`, #167 closed; D185 done, CHECK PASS r=2/n=2, commit `0d0b7fab`; D180 done, CHECK PASS r=2/n=2/rv=2, commit `93714a8e`; D178 done, CHECK PASS r=1 n=2 rv=1, commit `31c9e9d9d0157706167a49a42546499affcaea07`, #178 closed; D176 done, CHECK PASS r=2/rv=2, commit `f760e5521f7630e56a2841e6b1e097aaae92273d`, #176 closed; D173 done, CHECK PASS r1/rv1/n2, commit `29e794fd`; D175 terminal incomplete — escalation decision (c) STOP, patch preserved; D174 done, CHECK PASS r1/n2, commit `6bc4ae41`; D162 done, CHECK PASS rv=2; D191 done; D190 done, CHECK PASS r1/rv1 evidence-completion, commit `1ff47762`, mutation closed by authorized no-tool disclosure, #190 closed). D160 set-aside, D170, D184 and D175 incomplete remain preserved and are not resumed here.
++- Next allowed step: **D188 CHECK then incomplete (zero-arm blocked); then D151**. (D189 incomplete (r4 A/B proven regression); D188 in-progress under the escalate decision that the zero-arm is blocked+active pending D189 CHECK. D169 done, CHECK PASS r1/rv1/n=2, commit `bbc3b47e79e2659f52ccfbbcd489ae70b3df6c9a`, #169 closed; D167 done, CHECK PASS r1/N=1/rv=1, commit `0b4241b9`, #167 closed; D185 done, CHECK PASS r=2/n=2, commit `0d0b7fab`; D180 done, CHECK PASS r=2/n=2/rv=2, commit `93714a8e`; D178 done, CHECK PASS r=1 n=2 rv=1, commit `31c9e9d9d0157706167a49a42546499affcaea07`, #178 closed; D176 done, CHECK PASS r=2/rv=2, commit `f760e5521f7630e56a2841e6b1e097aaae92273d`, #176 closed; D173 done, CHECK PASS r1/rv1/n2, commit `29e794fd`; D175 terminal incomplete — escalation decision (c) STOP, patch preserved; D174 done, CHECK PASS r1/n2, commit `6bc4ae41`; D162 done, CHECK PASS rv=2; D191 done; D190 done, CHECK PASS r1/rv1 evidence-completion, commit `1ff47762`, mutation closed by authorized no-tool disclosure, #190 closed). D160 set-aside, D170, D184 and D175 incomplete remain preserved and are not resumed here.
+ - **D170 (continued per the user-authorized continuation policy):** marked **incomplete** — terminal STOP (CHECK r=3 fail, same defect family as r=1/r=2; unmet R170-02/R170-03 variant/oracle closure; ClickHouse row satisfied but matrix not closed). Full change preserved as patch `docs/specs/status/rc2-170-evidence/D170-STOP-incomplete.patch` with artifacts `artifacts/pdca/rc2-170/{r1,r2,r3}/`; the task's product/test/doc paths were restored to the last verified-green tip `5b7fb9e7`; the lane continues with the next pending task. #170 stays **OPEN**.
+ - **D177 (continued per the user-authorized continuation policy):** marked **incomplete** — CHECK n=3 failed only the completeness/variant gate (no P1 product defect established); the required native-path tests (A1/A9/R7/R15/R16/A2-E177-14) do not exist; the rv=2 re-gather budget is exhausted; escalation decision (c) STOP, no r=3 and no 4th CHECK of r=2. The full green change is preserved uncommitted plus patch `docs/specs/status/rc2-177-evidence/D177-INCOMPLETE.patch` (sha256 `d37ba97b5193deee1e3d81fa2dcdbabfb94277f90f2198e3c521ed93cc5ca791`, 117872 bytes, 14 files); artifacts `artifacts/D177/rv2/`. The task's product/test/doc paths are left in the working tree (green, unchanged); the lane continues with the next pending task **D179**. #177 stays **OPEN**.
+ - **D189 (incomplete per CHECK r=4):** marked **incomplete** — not done; r=4 paired A/B measurement (user-authorized option a) returned **PROVEN REGRESSION** (evaluator exit 1). D189 is functionally confirmed (D134 `65477266` SQLite locator-free `ToDataReader` verified on rc2, stale `ITestProvider.cs` XML comment fixed, test-only assertions added) but the E09 numeric closure predicate is unresolved: baseline `48.08 s` vs measured `G_current = 55.05 s`, ratio `1.1450`, 7/7 cases executed, measurement exit 0 → **FAIL**. Governing number: case3 `SqliteBenchmarkAny.Nextorm_Cached` `L=1.05190 > 1.05` (R=1.08211, U=1.11319); cases 5/6/7 indeterminate (`L≈1.04`); 8/8 valid pairs, 0 replacement pairs. Confound recorded (not fixed): A=`65477266` is an **ancestor** of B=`b25cd227`, both contain D134 "Enable SQLite ToDataReader…", so B−A isolates only changes AFTER D134. The r=3 STOP history is preserved. Temp worktree `/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266` removed (worktrees-before == worktrees-after). The two edited test files (`tests/nextorm.integration.tests/Providers/ITestProvider.cs`, `tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs`) remain **uncommitted** (green); the green test-only patch is preserved at `docs/specs/status/rc2-189-evidence/D189-STOP.patch`; r4 evidence under `docs/specs/status/rc2-189-evidence/r4-ab/`. #189 stays **OPEN**; lane continues.
+diff --git a/docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md b/docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md
+new file mode 100644
+index 00000000..207a3890
+--- /dev/null
++++ b/docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md
+@@ -0,0 +1,584 @@
++# D188 — Tier-1 cross-library comparison benchmarks
++
++```yaml
++task_id: D188
++issue: "#188 — Comparison benchmarks tier 1: projection, aggregates, paging, streaming + cross-library JSON/CSV"
++milestone: 1.0.9-rc2
++selected_variant: "SQLite; matched query workloads; explicit reuse categories; shared observable sinks"
++base: "branch 1.0.9-rc2 @ 18659e41 (collection-assigned; do not treat as final DO identity)"
++cycle: D188
++plan_revision: r1
++plan_state: ready
++phase: DO
++artifact_root: benchmarks/BenchmarkDotNet.Artifacts/D188/r1
++provenance:
++  - "Issue #188 and supplied scout evidence"
++  - "Existing docs/specs/performance/comparison-benchmark-scenarios.md"
++  - "D189 is a predecessor for SQLite zero-materialization"
++status_file: docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md
++```
++
++`ready` means **ready for the collection ALL-barrier and scheduling**, not permission to start implementation during collection phase P. Coder persists this plan verbatim. No implementation, benchmark execution, commit, or push occurs in P.
++
++## Goal (in essence)
++
++Make the public comparison substantiate how the four libraries behave on representative SQLite query and output workloads currently missing from the comparison.
++
++The result must distinguish:
++
++- SQL workload from client-side processing.
++- Reused/compiled queries from ordinary cached queries.
++- DTO materialization from reading rows without entity/DTO materialization.
++- Native Nextorm output from other libraries' **closest equivalent: materialize → serialize**.
++
++This is benchmark instrumentation and reporting, not a change to ORM behavior or a requirement to make Nextorm win.
++
++## Scope
++
++**Fix now:**
++
++- Four new classes:
++  - `SqliteBenchmarkProjection`
++  - `SqliteBenchmarkAggregates`
++  - `SqliteBenchmarkPaging`
++  - `SqliteBenchmarkStreaming`
++- Extend existing `SqliteBenchmarkWriteJson` and `SqliteBenchmarkCsv`.
++- Shared row sink/BDN `Consumer`, semantic validation, bounded executed runs, retained reports.
++- Update the existing performance spec and both language versions of the public comparison and linq2db scenario claim.
++
++**Deferred, with triggers:**
++
++| Exclusion | Trigger for a separate planned extension |
++|---|---|
++| LOB `ToStream` / `ToTextReader` | Agreed LOB benchmark issue and representative LOB fixture |
++| DML and navigation/eager loading comparisons | Tier-2 comparison issue |
++| Additional providers | Agreed cross-provider benchmark scope and fixtures |
++| Full-duration statistical/ranking campaign | Request to publish statistically supported rankings |
++| Extra synchronous query counterparts outside reader streaming | Request for a synchronous comparison campaign |
++| Compiled/prepared cross-library serialization category | Request to compare reusable serialization pipelines; add all applicable Category A counterparts together |
++
++D189's zero-materialization dependency is **not deferred scope**. It remains an active, predecessor-blocked part of D188. #190 is not required.
++
++## Acceptance criteria (each with a negative case)
++
++| ID | Acceptance criterion | Explicit negative case |
++|---|---|---|
++| AC01 | The benchmark project builds in Release with project warning/error policy; all six affected classes are discoverable through their class filters and carry `[MemoryDiagnoser]`. | A missing class, warning-as-error, missing diagnoser, or filter selecting no benchmarks fails. |
++| AC02 | Projection, aggregates and paging execute equivalent workloads across the four libraries. Applicable Category A arms pair Nextorm preparation with EF and linq2db compiled-query reuse; Category B uses ordinary/cached forms. | Client-side aggregation, different filters/order/limits, mislabeled compilation, or unmatched reuse claims fail. |
++| AC03 | Aggregates and paging use `large_table`; observed fixture counts and effective paging parameters are recorded. Results are validated outside timed operations. | Inferring 10,000 rows from prose, substituting `simple_entity`, empty paging caused by unsuitable parameters, or result disagreement fails. |
++| AC04 | Streaming compares buffered DTOs, unbuffered DTO enumeration, and non-LOB raw-reader consumption using the same logical row workload and observable sink. Zero arms have no per-row entity/DTO construction or collection accumulation. | An empty loop, unconsumed reader, different selected columns, DTO construction in a zero arm, or undisposed resources fails. |
++| AC05 | SQLite Nextorm zero-materialization consumes verified D189 behavior. Dapper and linq2db raw-reader counterparts run; EF is explicitly excluded from that subgroup. | Omitting the Nextorm zero arm, substituting another provider, silently falling back to materialization, or presenting EF LINQ as a raw-reader arm fails. |
++| AC06 | JSON and CSV contain Dapper, linq2db and EF materialize→serialize counterparts, preserve applicable existing Nextorm arms, and validate equivalent logical output. | Different rows/options, unconsumed output, incorrectly claiming zero-materialization parity, or dropping existing coverage without justification fails. |
++| AC07 | Each of the four new and two modified classes has an executed filtered ShortRun, zero benchmark failures, allocation/GC diagnostics, a saved report and log. | Build-only evidence, a timeout, zero executed cases, missing report/diagnostics, or BDN failure fails. |
++| AC08 | Public EN/RU comparison pages, internal EN/RU linq2db scenario claims, and the existing performance spec accurately describe executed coverage, dataset counts, reuse and limitations. | Missing mirror, unsupported result claim, duplicate spec, broken report link, or public link into `docs/specs/**` fails. |
++| AC09 | Scope stays within benchmark instrumentation/docs/artifacts; existing acceptance regression is checked where applicable. | Production query-path changes hidden inside this task, acceptance failures, sticky cache mutation, or unrelated fixture/package edits fail. |
++| AC10 | Evidence is complete against the contract, including predecessor, applicability decisions, test scope and run identity. | A missing report is treated as incomplete evidence—not success, an automatic replan, or permission to omit an arm. |
++
++## Minimal solution / alternatives
++
++**What is essential?** Equivalent SQL/result workloads, explicit reuse categories, observable consumption and executed evidence.
++
++**What cannot change?** Agreed tier-1 scope, SQLite zero-arm requirement, existing production semantics, EN/RU obligations and honest closest-equivalent reporting.
++
++**What is optimal within those constraints?** Extend the current stand with four classes and small benchmark-only helpers; validate semantics in setup and measure only the intended operations.
++
++| Approach | Advantages | Disadvantages / cost / risk |
++|---|---|---|
++| **Extend the existing stand — selected** | Small footprint; preserves configuration, fixtures and documentation conventions | Requires explicit validation because fixture size and some terminal capabilities are unverified |
++| General benchmark abstraction framework | Could reduce repeated setup | Larger design and abstraction overhead; risks measuring adapters instead of libraries |
++| Implement materialized comparisons now and omit zero arms | Earlier partial results | Does not satisfy #188; rejected as a completion strategy |
++
++Implementation decisions:
++
++- Use the existing constructor/repository patterns.
++- Use a named, non-LOB DTO projection shared logically across libraries.
++- Use deterministic ordering with a unique tie-breaker for paging and ordered output.
++- Perform correctness checks in setup, outside measured bodies.
++- Use async database execution for the principal comparison campaign. Reader streaming also includes matched synchronous reader arms.
++- Do not introduce a Category A claim unless all applicable reusable-query counterparts are represented.
++- Preserve existing native Nextorm JSON/CSV arms; separate them visibly from materialize→serialize competitors.
++- "Zero-materialization" means **no entity/DTO materialization**, not zero allocation.
++
++## Ordered tasks (fix now)
++
++All tasks are active. Only the zero-arm portion of D05 is blocked on D189.
++
++| Task | Action and evidence anchor |
++|---|---|
++| **D01 — Resolve prerequisites and pin capabilities** | Read the existing spec and applicable `pdca-dotnet` / `nextorm-pdca` contracts; inspect the inner-loop validator's documented invocation/schema; use Roslyn for the required C# APIs, overloads and compiled-query capabilities. Verify issue URL/milestone and the collection base. Observe fixture counts and runtime location without reseeding. Anchors: `BenchDb.cs:5–19`, csproj `:26–28`, `SqliteBenchmarkFeaturesFair.cs:239–268`, `Linq2DbDataContext.cs:46–216`. Record exact runner argv before its execution. |
++| **D02 — Extend and review the existing written spec** | Update `docs/specs/performance/comparison-benchmark-scenarios.md`, not a duplicate. Specify arms, query/result equivalence, timing boundaries, parameters, serialization semantics, category applicability and D189 dependency. Existing discrepancy anchor: spec `:93`. Obtain in-cycle design review before implementation; autonomous mode does not require user `go`. |
++| **D03 — Shared benchmark-only instrumentation** | Add `BenchmarkRowSink.cs`, `BenchmarkComparisonValidation.cs`, and `BenchmarkSerializationSink.cs`. Define observable consumption, semantic comparisons, output sink and deterministic resource cleanup. No production helper/API changes. |
++| **D04 — Projection, aggregates and paging** | Add the three new classes. Aggregates include SQL-side Count, Sum and GroupBy→Count. Paging uses the large fixture and stable ordering. Reuse patterns: `SqliteBenchmarkWhere.cs:68–244`; category patterns: `SqliteBenchmarkFeaturesFair.cs`. |
++| **D05 — Streaming, including predecessor-blocked zero arms** | Add `SqliteBenchmarkStreaming.cs`. Implement buffered DTO and async DTO enumeration arms. Consume D189's verified SQLite reader behavior before implementing/accepting Nextorm zero arms. Add matched Dapper/linq2db reader arms and shared consumption; no EF zero arm. Current empty-loop instrumentation is not copied. |
++| **D06 — Cross-library JSON/CSV** | Modify `SqliteBenchmarkWriteJson.cs:108–168` and `SqliteBenchmarkCsv.cs:59–95`; add three competitor materialize→serialize paths with matched output semantics and a non-retaining output sink. Preserve existing Nextorm coverage. |
++| **D07 — Execute, retain and document** | Build, execute six filtered runs, validate the evidence set, run applicable acceptance regression, retain reports/logs, update EN/RU docs and claims. Report actual fixture counts and ShortRun limitations. |
++| **D08 — CHECK handoff** | Audit footprint, category/variant decisions, CRLF, artifacts and contract completeness. Leave every unfinished task active. No success claim before CHECK. |
++
++D01 is an **additive prerequisite**, not replacement of D188. Discovery of a genuine production requirement returns to PLAN; it does not authorize an unplanned engine edit.
++
++## Variant matrix (derived from the execution path)
++
++Execution path:
++
++**fixture → library/reuse mode → SQL terminal → optional DTO materialization → row/output sink → consumer → cleanup**
++
++Legend:
++
++- **T — test:** executed BDN case with setup validation and report evidence.
++- **G — guard:** explicit, observable non-applicability; no benchmark claim.
++- **D — deferred:** trigger stated below.
++- "Compiled" means the library's real public compiled-query mechanism, not a cached delegate around ordinary execution.
++
++### Async database execution
++
++| Shape | Nextorm prepared | Nextorm cached | Dapper | linq2db regular | linq2db compiled | EF regular | EF compiled |
++|---|---:|---:|---:|---:|---:|---:|---:|
++| DTO projection | T | T | T | T | T | T | T |
++| SQL Count | T | T | T | T | T | T | T |
++| SQL Sum | T | T | T | T | T | T | T |
++| SQL GroupBy→Count | T | T | T | T | T | T | T |
++| Ordered paging | T | T | T | T | T | T | T |
++| Buffered DTO list | T | T | T | T | T | T | T |
++| Unbuffered DTO enumeration | T | T | T | T | T | T | T |
++| Raw-reader, no DTOs | G1 | T¹ | T | T | G2 | G3 | G3 |
++| JSON output | D1² | T² | T | T | D1 | T | D1 |
++| CSV output | D1² | T² | T | T | D1 | T | D1 |
++
++¹ Blocked on D189; cached means the normal applicable query path, without mutating the shared command cache flag.
++
++² Preserve and execute existing native Nextorm arms regardless of their current reuse form. The deferred designation concerns **adding a cross-library Category A serialization comparison**, not removing an existing prepared arm.
++
++- **G1:** A separate prepared-reader arm is not assumed from D189's terminal support. D01 determines public applicability. If applicable, activate an additional test row with a stable ID before implementation; otherwise record the API-based guard. The mandatory native Nextorm reader arm remains.
++- **G2:** Raw-reader SQL execution is not a LINQ compiled-query comparison.
++- **G3:** EF LINQ provides no agreed raw-reader counterpart; EF is excluded from zero-materialization.
++- **D1 trigger:** an agreed reusable serialization comparison; introduce Nextorm prepared, EF compiled and linq2db compiled counterparts together.
++- If a required **T** capability is unsupported, obtain PLAN review. Do not silently convert it to a guard or ordinary query.
++
++### Synchronous database execution
++
++| Shape / arms | Closure |
++|---|---|
++| Projection, aggregates, paging; all library/reuse arms | **D:** trigger = agreed synchronous comparison campaign |
++| Buffered/unbuffered DTO streaming; all applicable arms | **D:** same trigger; do not compare them against async-only zero arms |
++| Raw reader: Nextorm native, Dapper, linq2db regular | **T:** separate matched synchronous subgroup; Nextorm depends on D189 |
++| Raw reader: separate Nextorm prepared form | **G1**, with the same capability predicate |
++| Raw reader: linq2db compiled, EF regular/compiled | **G2/G3** |
++| JSON/CSV synchronous database counterparts | **D:** synchronous campaign; synchronous serialization inside the selected async pipeline is still measured |
++
++### Inputs, results and flags
++
++| Variant | Closure and negative case |
++|---|---|
++| Nonempty fixture, selected scalar value/reference fields | **T:** validate equivalent values and counts; differing projections fail |
++| Empty aggregate/group/page result | **T:** setup probes validate Count=0, agreed Sum empty semantics, empty grouping/page; provider mismatch fails |
++| Nullable values/default scalar values | **T:** helper/sink/serializer probes; database nullable-field probes where the chosen mapped field exists. **G:** a database-null branch only if schema inspection proves no such selected field |
++| JSON/CSV escaping, Unicode, null/default values | **T:** deterministic in-memory validation probes; malformed or semantically different output fails |
++| Paging first/interior/beyond-end and ties | **T:** setup probes; measured interior page must be nonempty. Missing unique tie-breaker fails |
++| Prepared/compiled vs ordinary reuse | **T:** lifecycle and category audit; compilation/preparation inside the measured body fails the declared reuse category |
++| Dapper buffered/unbuffered flag | **T:** explicit terminal selection; an unbuffered label on buffered execution fails |
++| EF tracking | **T:** use an explicit consistent no-tracking workload where applicable; record DTO tracking non-applicability |
++| Connection lifetime, sink reset, reader/enumerator disposal | **T:** setup/cleanup audit and executed runs; leaked or cumulative work fails |
++| Other providers, LOB and cancellation-specific scenarios | **D:** corresponding provider/LOB/cancellation benchmark issue |
++
++## Footprint (expected + uncertainty)
++
++Paths below are under `benchmarks/nextorm.benchmark/` unless stated otherwise.
++
++**New files:**
++
++- `SqliteBenchmarkProjection.cs`
++- `SqliteBenchmarkAggregates.cs`
++- `SqliteBenchmarkPaging.cs`
++- `SqliteBenchmarkStreaming.cs`
++- `BenchmarkRowSink.cs`
++- `BenchmarkComparisonValidation.cs`
++- `BenchmarkSerializationSink.cs`
++
++**Modified files:**
++
++- `SqliteBenchmarkWriteJson.cs`
++- `SqliteBenchmarkCsv.cs`
++- `docs/specs/performance/comparison-benchmark-scenarios.md`
++- `docs/comparisons/benchmarks.md`
++- `docs/ru/comparisons/benchmarks.md`
++- `docs/specs/comparison/linq2db-comparison.md`
++- `docs/specs/ru/comparison/linq2db-comparison.md`
++
++**Status/evidence:**
++
++- `docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md`
++- `benchmarks/BenchmarkDotNet.Artifacts/D188/r1/**`
++- BDN-generated `benchmarks/BenchmarkDotNet.Artifacts/results/*SqliteBenchmark{Projection,Aggregates,Paging,Streaming,WriteJson,Csv}*`
++- Corresponding generated logs retained and indexed in the task artifact directory.
++
++**Uncertainty bounded by D01:**
++
++- A benchmark-only DTO or mapped large-table field may require a small addition to an existing benchmark model/repository file. Record the exact path before editing.
++- Existing constructor/setup details may require local adjustments in the two modified classes.
++- No `Program.cs`, shared config, acceptance harness or package edit is expected.
++
++The csproj includes new `*.cs` through SDK globs: **no csproj edit is needed**. No `src/**`, `tests/**`, fixture database, SQL seed or package-version edit is planned.
++
++## Predecessor-result requirements
++
++**D189 supplies:**
++
++1. Its result/status artifact identifying the implemented revision and successful CHECK.
++2. SQLite support for Nextorm non-LOB projections through `ToDataReader` and `ToDataReaderAsync`.
++3. Executed evidence that the reader returns the selected scalar columns/rows correctly and can be consumed and disposed in sync and async forms.
++
++D188 consumes the API implementation and behavior—not D189 benchmark timing.
++
++At integration, D01/D05 verify the predecessor is actually present in the assigned working base and run D188's own sink-based validation.
++
++**Incomplete predecessor handling:**
++
++- Missing sync/async support, unsupported selected non-LOB columns, incorrect results or missing validation leaves the zero-arm unit **blocked and active**.
++- Other D188 work may proceed if the collection schedule permits.
++- No fallback to `ToList`, omitted arm, "SQLite unavailable" pass or materialization mislabeled as zero.
++- Return to PLAN with a new `P:` task describing the observed prerequisite defect. The original D05 criteria and remainder stay unchanged.
++- An external blocker requires orchestrator escalation; an unproven blocker first receives targeted scout investigation.
++
++#190 contributes no required artifact or behavior.
++
++## Assumptions / prerequisites
++
++| What the statement did not establish | Closure |
++|---|---|
++| Actual `large_table` size and active fixture path | **Prerequisite:** observe both at runtime. `BenchDb.cs:5–19` selects environment/tmp/cwd paths; do not assume the tracked file is the opened file. |
++| Meaning of "~10k" vs small-table invariants | **Evidence:** tracked `data/test.db`; simple=10/complex=3 setup invariants; large-table fill is commented at `SqliteBenchmarkLargeIteration.cs:74–80`. Record distinct table populations and the existing discrepancy; do not reseed silently. |
++| Exact selected fields, grouping key and paging parameters | **Prerequisite:** D01 schema/mapping inspection; D02 fixes the common workload. Use non-LOB fields, deterministic grouping and a unique ordering tie-breaker. |
++| Async/compiled terminal API applicability | **Prerequisite:** Roslyn-backed capability inventory for pinned versions; no inferred symbols or overloads. |
++| Serializer, CSV dialect and output comparison | **Design choice:** agree matching names/order/null/escaping/delimiter/newline rules in D02. Use semantic validation where native formatting differs; document differences rather than falsifying byte equivalence. |
++| Exact validator CLI/schema | **Prerequisite:** inspect script documentation/help and pin real argv. Do not invent options. |
++| Full local skill obligations | **Prerequisite:** D01 verifies both contracts and records applicable gates. Additional unconditional obligations are added before implementation; none are waived. |
++| Verified GitHub URL and immutable collection base | **Prerequisite:** record repository-backed issue URL and assigned base; no fabricated URL/SHA. |
++| Machine/runtime comparability | **Assumption/risk:** execute the comparison on one identified host/runtime/configuration and report it. ShortRun supports runnable coverage and indicative measurements, not definitive rankings. |
++| Fixture mutation | **Constraint:** read-only workload; no database rewrite or uncontrolled seed operation. |
++
++Pinned environment: .NET 10; BDN 0.15.8; Dapper 2.1.86; linq2db/SQLite 6.5.0; Microsoft.Data.Sqlite and EF Core 10.0.12; System.Linq.Async 7.0.1. CPM stays unchanged.
++
++BDN artifacts are git-tracked and publicly linked. Retain relevant new reports; do not clear unrelated artifact history.
++
++## Test strategy
++
++Here, **test** means:
++
++1. Release build.
++2. Setup-time semantic validation of each benchmark's workload.
++3. Actual filtered BDN ShortRun for every affected class.
++4. Zero failed cases and saved allocation/GC reports.
++5. Scope/applicability and documentation evidence.
++
++No new library unit/integration tests are expected because no library behavior is changed. Benchmark helper edge cases run as deterministic setup validation, not timed work.
++
++### Planned test-scope JSON
++
++The semantic scope is fixed below. D01 maps it to the validator's real schema without reducing the boundary:
++
++```json
++{
++  "projects": [
++    "benchmarks/nextorm.benchmark/nextorm.benchmark.csproj"
++  ],
++  "selectors": [
++    "--filter *SqliteBenchmarkProjection*",
++    "--filter *SqliteBenchmarkAggregates*",
++    "--filter *SqliteBenchmarkPaging*",
++    "--filter *SqliteBenchmarkStreaming*",
++    "--filter *SqliteBenchmarkWriteJson*",
++    "--filter *SqliteBenchmarkCsv*"
++  ],
++  "rebuild": "affected",
++  "boundary": "full filtered run of all four new classes and both modified classes",
++  "rationale": "Benchmark-instrumentation change; exercise every affected class and all declared arms without changing production query paths."
++}
++```
++
++The validator's invocation is not presumed to be `dotnet test`: this project is a BDN application. If the validator cannot represent BDN selectors, record its explicit limitation and obtain PLAN review; direct BDN evidence remains mandatory.
++
++### Commands
++
++All commands are **planned**, not executed in P. Run from repository root; save stdout/stderr, exit status and elapsed time.
++
++```bash
++dotnet build benchmarks/nextorm.benchmark/nextorm.benchmark.csproj -c Release
++
++timeout --signal=TERM 720s env NEXTORM_BENCH_FULL=0 \
++  dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- \
++  --filter '*SqliteBenchmarkProjection*'
++
++timeout --signal=TERM 720s env NEXTORM_BENCH_FULL=0 \
++  dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- \
++  --filter '*SqliteBenchmarkAggregates*'
++
++timeout --signal=TERM 720s env NEXTORM_BENCH_FULL=0 \
++  dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- \
++  --filter '*SqliteBenchmarkPaging*'
++
++timeout --signal=TERM 720s env NEXTORM_BENCH_FULL=0 \
++  dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- \
++  --filter '*SqliteBenchmarkStreaming*'
++
++timeout --signal=TERM 720s env NEXTORM_BENCH_FULL=0 \
++  dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- \
++  --filter '*SqliteBenchmarkWriteJson*'
++
++timeout --signal=TERM 720s env NEXTORM_BENCH_FULL=0 \
++  dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- \
++  --filter '*SqliteBenchmarkCsv*'
++
++timeout --signal=TERM 240s env NEXTORM_BENCH_FULL=0 \
++  dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- \
++  --anyCategories=acceptance
++```
++
++Exit 0 alone is insufficient: CHECK must also find executed cases, no BDN failures, validated setup and the corresponding saved reports. Exit 124/137 is failure/incomplete execution, not a passing benchmark.
++
++**Regression boundary:** run the existing seven-case acceptance set as a benchmark regression safeguard; do not add the new heavy classes to its `acceptance` category. It is additionally mandatory if query setup/translation paths are touched. A required production edit triggers replan before execution of that edit, including the relevant unit/provider/integration scope.
++
++**Coverage:** project thresholds remain line ≥85% and branch ≥75% for the configured production coverage set. This benchmark-only footprint does not alter that set or justify claiming new production coverage. Any expanded production footprint activates its coverage obligation. Required container tests may not be presented as green when providers are skipped.
++
++## Docs plan
++
++- Extend the existing performance spec with class/arm inventory, variant applicability, timing boundaries, sinks, predecessor requirements and report links.
++- Update:
++  - `docs/comparisons/benchmarks.md`
++  - `docs/ru/comparisons/benchmarks.md`
++  - `docs/specs/comparison/linq2db-comparison.md`
++  - `docs/specs/ru/comparison/linq2db-comparison.md`
++- State actual dataset counts, Category A/B definitions, raw-reader EF exclusion, closest-equivalent serialization, ShortRun configuration and limitations.
++- Public links point to public pages or retained BDN artifacts, **never internal specs**.
++- No XML-doc/public API work is expected.
++- No generated DocFX content or unrelated numbered-guide changes.
++
++## Performance measurement decision
++
++**Required.** Measurement is the deliverable, not an incidental optimization.
++
++- Baseline: matched Dapper/linq2db/EF arms on the same workload; retain existing Nextorm JSON/CSV arms. No numerical historical baseline is invented.
++- Instrument: BDN `[MemoryDiagnoser]`; report `Allocated`, Gen0 and Gen2 where emitted, plus timing and job/environment.
++- Use default ShortRun via `NEXTORM_BENCH_FULL=0`; do not silently activate `Job.Default`.
++- Build separately, then execute one complete filtered class at a time.
++- Budget: **12 minutes per affected class**, maximum **72 minutes** for the six class runs; acceptance set separately capped at **4 minutes**.
++- No speedup threshold is imposed. Correctness, complete execution and diagnostic availability are gates.
++- If a class exceeds its bound, return to PLAN to change the run partition or workload while preserving every required arm. Do not drop cases or treat a partial report as passing.
++- Report ShortRun/InProcess limitations; full statistically supported comparisons remain deferred.
++
++The overlay's ≤4-minute acceptance-set rule applies to the existing acceptance set—not to the six-class comparison campaign.
++
++## Reconnaissance decision
++
++**No prototype run before DO is required to choose the design.** The stand, scope and existing written spec support the selected approach.
++
++**Targeted reconnaissance is required in D01** for:
++
++- Actual fixture path/counts and schema.
++- Public terminal/compiled-query applicability.
++- Existing serialization semantics.
++- Validator CLI/schema and local contract gates.
++- D189 integration evidence.
++
++Observable completion: a recorded capability/workload table, observed counts, exact commands and no unexplained required-arm gap.
++
++The first executed class runs are DO validation, not disposable experiments replacing acceptance. A capability conflict receives targeted scout evidence first; persistent low confidence goes to escalation trigger 5.
++
++## Unit execution mode
++
++**Sequential units in one working tree.**
++
++The new files are mostly independent, but shared sink/validation helpers, the spec and docs are common contracts. Establish those first, then implement classes, then measure and document.
++
++No additional worktree is justified by D188 alone. The collection scheduler may isolate a group if its combined footprint requires it.
++
++Collection coordination:
++
++- D189 precedes the zero-arm unit.
++- Shared comparison pages, specs and BDN artifact locations must be serialized or assigned a common owner across tasks.
++- Do not assume task-level independence merely because C# filenames differ.
++- Authorized collection commits are left to collection policy; never push or introduce a merge outside that policy.
++
++## Design checklist
++
++- [ ] Public C# API discovery/references use Roslyn, not text search.
++- [ ] Projection DTO and selected non-LOB columns are equivalent.
++- [ ] Aggregation/grouping happens in SQLite.
++- [ ] Paging order includes a unique tie-breaker.
++- [ ] Category A compiles/prepares outside timing; Category B accurately names reuse.
++- [ ] No sticky mutation such as shared `queryCommand.Cache = false`.
++- [ ] Every row/output is observably consumed; no empty loops.
++- [ ] Sink reset, checksums and resource cleanup are deterministic.
++- [ ] Zero arms create no entity/DTO collection; allocations are still reported honestly.
++- [ ] JSON/CSV timing includes the declared materialize→serialize work.
++- [ ] Required setup validation is outside timed operations.
++- [ ] No production API/fixture/package edits are hidden in instrumentation.
++- [ ] CRLF preserved; warning-as-error policy satisfied.
++- [ ] Relevant reports retained; unrelated tracked artifacts untouched.
++- [ ] EN/RU claims match executed evidence.
++
++**Priority matrix:** AC01–AC10 and their execution-path invariant rows are **P1 by construction**. CHECK cannot lower them. Informative timing interpretations/rankings are P2. Explicitly deferred extensions are P3 until their trigger activates.
++
++## Evidence contract
++
++**Current contract: rv1.** Stable requirement IDs are AC01–AC10; stable evidence-row IDs follow below.
++
++All sources/artifacts below are **planned**, except the supplied scout anchors. No future implementation `file:line` or test symbols are claimed.
++
++### Shared mandatory bindings
++
++These bindings are part of every row:
++
++- **Revision:** `rv1`.
++- **Owner:** named below; coder produces implementation/run evidence, scout supplies facts, CHECK evaluates.
++- **Source identity:** assigned base + final working-tree identity, runtime/environment, timestamp and exact argv/invocation.
++- **Artifact root A:** `benchmarks/BenchmarkDotNet.Artifacts/D188/r1`.
++- **Artifacts per row:** `A/<row-ID>.md` evidence index, referenced logs/reports or structured inspection findings, observed result/exit status and applicability result.
++- **Applicability:** evaluated from observable footprint/capability/run facts, never from whether a report happens to exist.
++- **Negative cases:** retained explicitly below.
++- Command references `BUILD`, `RUN-Projection`, `RUN-Aggregates`, `RUN-Paging`, `RUN-Streaming`, `RUN-WriteJson`, `RUN-Csv`, and `ACCEPTANCE` expand exactly to the commands in Test strategy.
++
++| Row / requirement / priority | Required check and negative case | Expected kinds and sources | Exact command / invocation and expected result | Owner / applicability |
++|---|---|---|---|---|
++| **EC01 / AC10 / P1** | Resolve local gates, issue/base and validator interface. Negative: invented CLI or unresolved unconditional gate. | Scout facts from skills, script/help, issue metadata and collection assignment; prerequisite ledger | `Task(scout, "D188 EC01: read pdca-dotnet and nextorm-pdca contracts, existing performance spec, scripts/validate_inner_loop.py documentation/schema; return applicable gates and exact supported invocation, verified #188 URL/milestone, and collection base requirements; no code edits or recommendations.")`; `python3 scripts/validate_inner_loop.py --help`; `gh issue view 188 --json number,url,title,milestone`. Help/metadata calls exit 0; findings must resolve the prerequisites. | Scout; **always** |
++| **EC02 / AC03 / P1** | Observe actual opened DB, table counts and selected schema. Negative: treating prose as row-count evidence. | Runtime setup observations, mapping/schema facts, fixture identity | `RUN-Aggregates` and `RUN-Paging`; setup must log DB path, simple/complex/large counts and effective parameters, then pass validation. | Coder; **always** |
++| **EC03 / AC05 / P1** | Verify D189 integration and both reader forms. Negative: incomplete predecessor/fallback. | D189 result/status and executed predecessor evidence; D188 reader setup results | `Task(scout, "D188 EC03: inspect D189 result and integrated base using Roslyn; identify SQLite non-LOB ToDataReader/ToDataReaderAsync support and its executed evidence, including selected columns, row correctness and disposal; return findings only.")`; then `RUN-Streaming`. Both required forms must be validated. | Scout + coder; **zero-arm implementation**, mandatory for completion |
++| **EC04 / AC02,AC04,AC06 / P1** | Written workload/arm contract agrees with scope. Negative: unfair categories or duplicate spec. | Updated existing spec and structured design review | `Task(planner, "Review D188 D02 spec summary against AC01–AC10 and rv1: arm/category parity, timing boundaries, sink semantics, variants, D189 and bounded runs. Return approve or concrete defects; no execution.")`. Explicit approval required before D03–D06 implementation. | Planner; **always** |
++| **EC05 / AC01 / P1** | Release build, class attributes and discoverability. Negative: warnings, absent class/diagnoser. | Build log and Roslyn class/attribute inventory | `BUILD`, exit 0 with no warnings-as-errors; `Task(scout, "D188 EC05: use Roslyn to enumerate the six affected benchmark classes, benchmark methods/categories and MemoryDiagnoser attributes; return semantic findings.")`. | Coder + scout; **always** |
++| **EC06 / AC02,AC07 / P1** | Complete projection run; matched DTO values and reuse categories. Negative: missing arm or result mismatch. | Setup validations, BDN log, saved timing/allocation report | `RUN-Projection`; exit 0, nonzero executed cases, zero failures, complete expected-arm inventory. | Coder; **always** |
++| **EC07 / AC02,AC03,AC07 / P1** | Count/Sum/GroupBy execute SQL-side on large table. Negative: client grouping or differing empty semantics. | Translation/capability findings, setup probes, BDN report/log | `RUN-Aggregates`; exit 0, all required shapes/arms validated and reported. | Coder; **always** |
++| **EC08 / AC02,AC03,AC07 / P1** | Stable sort/paging and equivalent pages. Negative: nondeterministic ties or empty measured page. | Parameter/count log, setup page probes, report/log | `RUN-Paging`; exit 0, complete matched arms and validated first/interior/beyond-end probes. | Coder; **always** |
++| **EC09 / AC04,AC05,AC07 / P1** | Full vs zero streaming with observable sink. Negative: elided loop, materialized zero arm or missing reader form. | Sink/code-path inspection, setup checksums/counts, report with allocation/GC diagnostics | `RUN-Streaming`; exit 0, every required subgroup executes, semantic parity passes, zero-arm audit passes. | Coder; **always for completion** |
++| **EC10 / AC06,AC07 / P1** | JSON cross-library output equivalence and honest pipeline label. Negative: different output workload or false zero claim. | Serializer/sink probes, setup comparison, report/log | `RUN-WriteJson`; exit 0, retained native arms plus three competitors execute and validate. | Coder; **always** |
++| **EC11 / AC06,AC07 / P1** | CSV equivalence including escaping/null/default rules. Negative: incompatible dialect or unconsumed output. | CSV/sink probes, setup comparison, report/log | `RUN-Csv`; exit 0, retained native arms plus three competitors execute and validate. | Coder; **always** |
++| **EC12 / AC09 / P1** | Existing acceptance regression remains bounded and green. Negative: timeout, skipped selected cases or changed category set. | Existing seven-case acceptance report/log | `ACCEPTANCE`; exit 0 within 240 seconds, all seven expected cases execute successfully. | Coder; **this planned benchmark regression**, also mandatory on relevant query-path touch |
++| **EC13 / AC10 / P1** | Validator records the fixed test boundary. Negative: `dotnet test` substitute or reduced selectors. | Test-scope JSON, pinned validator argv, output/log | `Task(coder, "D188 EC13: execute scripts/validate_inner_loop.py using the real CLI/schema established by EC01 and the Test strategy JSON; persist exact argv, normalized scope, exit status and log. Do not reduce projects/selectors/rebuild/boundary or substitute build-only evidence.")`. Supported validation must succeed; inability to represent the scope returns to PLAN. | Coder; **always** |
++| **EC14 / AC08 / P1** | EN/RU claims and report links reflect actual coverage. Negative: absent mirror, public internal-spec link or missing report. | Five edited documents, report index and link findings | `Task(scout, "D188 EC14: inspect the two public comparison pages, EN/RU linq2db scenario claims and existing performance spec; validate scenario/closest-equivalent/count/job claims against EC06–EC11 and verify links. Check public docs contain no links to docs/specs. Return file:line findings only.")`. No unresolved P1 finding. | Scout; **always** |
++| **EC15 / AC02,AC04,AC09,AC10 / P1** | Variant/guard and footprint audit. Negative: silent downgrade, production edit, cache mutation or omitted active unit. | Roslyn impact/capability findings, diff inventory, variant ledger | `git diff --name-only`; `git diff --check`; `Task(scout, "D188 EC15: audit declared arms, capabilities, guards, compiled-query lifecycle, sink consumption, cleanup and production impact using Roslyn; verify active D189-dependent remainder and report footprint deviations.")`. Diff check exit 0; inventory within authorized footprint; every variant closed. | Coder + scout; **always** |
++| **EC16 / AC09,AC10 / P1** | Expanded production testing/coverage if the footprint changes. Negative: silent omission or provider-skipped green claim. | Revised scope/contract and project-required test/coverage evidence | `Task(planner, "D188 EC16: production footprint or new unconditional local gate observed; define the additive/revised testing obligation and exact commands before related edits. Preserve AC01–AC10 and evidence IDs.")`. This is a replan gate, not acceptance evidence. | Planner; **observable production-footprint change or newly established unconditional obligation** |
++
++**Contract revision rules:**
++
++- rv1 has no predecessor and supersedes nothing.
++- EC01's verified validator argv and any genuinely new applicability fact are pinned before implementation/execution. If they require a contract revision, use **rv2 explicitly superseding rv1**, preserving all IDs and obligations and adding IDs for newly applicable variants.
++- Pure clarification does not increase plan revision `r1` or reset attempts.
++- Missing evidence alone justifies neither contract revision nor another DO iteration.
++- Every completed run is tied to the implementation identity being checked; stale reports are not substitutes.
++
++## CHECK re-gather budget and completeness
++
++Owner: **CHECK**, with orchestrator dispatching scout/coder requests.
++
++Finite budget: **two targeted re-gather rounds**, at most **three requests per round**. Each request names missing row IDs and exact evidence sought.
++
++Re-gather may retrieve existing reports/logs, inspect applicability or obtain focused factual clarification. It may not silently rerun the six-class campaign, change scope, waive a requirement or treat absence of a report as a code defect.
++
++After the budget:
++
++- Actual implementation defect → failed CHECK with a concrete new PLAN/DO correction.
++- Evidence still absent → incomplete/non-passing verdict.
++- Persistent low-confidence diagnosis → orchestrator calls `escalate`, trigger 5.
++
++CHECK uses P1 priorities unchanged. Completion requires all unconditional rows, all applicable conditional rows, and justified guards/deferred triggers.
++
++## Risks / confidence
++
++**High confidence:** existing stand reuse, file inclusion, required classes/docs, report retention and the need for an observable sink.
++
++**Medium confidence:** practical run duration, dataset suitability and matching native serialization semantics.
++
++**Low-confidence decisions requiring D01 evidence:**
++
++- Exact reusable-query terminal support, particularly asynchronous streaming and aggregates.
++- Separate prepared-reader applicability.
++- Validator schema/BDN support.
++- D189's integrated completeness.
++
++These are not assumed successful. A failed capability probe first receives focused scout investigation; persistent uncertainty triggers escalation 5 even without proving an external blocker.
++
++Other risks:
++
++- Environment-selected fixture differs from tracked `data/test.db`.
++- Global BDN outputs overlap another collection task.
++- Native serialization formatting differs despite equivalent values.
++- ShortRun measurements are overinterpreted.
++- D189 lands partially.
++
++**DO → PLAN classification policy:** additive prerequisite → new active dependency with original criteria retained; acceptable assumption → explicit risk without weakened acceptance; true out-of-authority/resource blocker → recommend orchestrator `escalate`; insufficient evidence → scout first. A blocker report or "implementation finished" claim never completes D188.
++
++## Plan self-check
++
++- [x] Goal reconstructed as evidence-producing comparison, not presumed API work.
++- [x] Every acceptance criterion includes a negative case.
++- [x] Minimal solution, alternatives and constraints stated.
++- [x] Execution-path matrix covers libraries/reuse, shapes, sync/async, null/default, input/output and flags.
++- [x] Every gap has evidence, an explicit assumption, prerequisite or blocker.
++- [x] Exact footprint, sink helpers and SDK-glob implication recorded.
++- [x] D189 consumption and fail-closed incomplete-result handling specified; #190 excluded.
++- [x] Six complete executed class runs, report obligations and bounded budgets specified.
++- [x] Test scope, validator prerequisite and production-expansion gates recorded.
++- [x] Existing spec extended; required EN/RU docs included.
++- [x] Evidence rv1 has stable IDs, checks, negatives, sources, invocations, expected results, artifacts, owners and applicability.
++- [x] CHECK re-gather budget, priorities and revision rules fixed.
++- [x] Collection phase P stops at `plan_state=ready`; no implementation or execution performed.
++
++## DO execution record (2026-10-09)
++
++- **escalate decision (2026-10-09):** D188 proceeds; the D05 zero-materialization arm is **BLOCKED and active** — predecessor D189 did not CHECK-pass (EC03 unmet). Only the zero-arm portion of D05 is blocked; its input is "raw reader / zero materialization". Constraints: fail-closed; no `ToList` fallback; no silently omitted arm; no "SQLite unavailable" pass; no materialize→serialize mislabeled as zero; EF excluded from the zero arm (AC05). A non-zero unit inseparable from the zero-arm returns BLOCKED, not decided or forced.
++- **phase:** `P` → `DO`; **DO started** (2026-10-09).
++- **D01 closed:** fixture observed read-only — `BenchDb.FilePath` → `/tmp/nextorm-bench/test.db` (same schema/counts as tracked `data/test.db`): `simple_entity`=10, `complex_entity`=3, `large_table`=10000. In-repo validator present at `scripts/validate_inner_loop.py`.
++- **D03 closed:** added `BenchmarkRowSink.cs`, `BenchmarkComparisonValidation.cs`, `BenchmarkSerializationSink.cs`.
++- **D04 closed:** added `SqliteBenchmarkProjection.cs`, `SqliteBenchmarkAggregates.cs`, `SqliteBenchmarkPaging.cs` (`large_table`, A/B categories, setup-time validation).
++- **D05 partially closed (non-zero):** added `SqliteBenchmarkStreaming.cs` with buffered + unbuffered DTO arms. The zero/raw-reader subgroup is **not implemented (blocked+active)**; no fallback, no relabel, no EF zero arm.
++- **D06 closed:** extended `SqliteBenchmarkWriteJson.cs` and `SqliteBenchmarkCsv.cs` with Dapper/linq2db/EF materialize→serialize arms plus setup-time output-equivalence validation.
++- **Build gate:** `dotnet build nextorm.slnx -c Debug` → 0 Warning(s) 0 Error(s); `dotnet build nextorm.slnx -c Release` → 0 Warning(s) 0 Error(s).
++- **Not yet closed:** D02 spec extension (deferred), D07 executed six-class sweeps/artifacts (deferred to the next task), D08 CHECK handoff.
++- **Journal:** `2026-10-09 | DO | r1 | n=1/3 | compile gate green, non-zero units closed, zero-arm blocked | docs/specs/status/rc2-188-evidence/D188-nonzero.patch`
++
++## DO execution record addendum (2026-10-09, D02 + six-class sweeps)
++
++```yaml
++current_cycle: 1
++plan_revision: r1
++attempt: 1/3
++```
++
++- **D02 closed:** extended the existing single spec `docs/specs/performance/comparison-benchmark-scenarios.md` (no duplicate) with the implemented non-zero arm inventory (projection / aggregates / paging / streaming buffered+unbuffered DTO), the JSON/CSV competitor `materialize → serialize` semantics, timing boundaries (setup/correctness outside the timed region), Category A/B applicability, shared sinks, observed fixture counts (`large_table`=10000, `simple_entity`=10, `complex_entity`=3), and ShortRun/InProcess limitations.
++  - The zero/raw-reader subgroup is documented as **blocked + active** pending a CHECK-passing #189; no `ToList` fallback, no relabel of a materialized arm, EF excluded from the zero subgroup. #189's unresolved perf predicate is **not** attributed to the D134 `ToDataReader` implementation as a post-D134 regression.
++- **D07 (non-zero sweep campaign) executed.** Release build `dotnet build benchmarks/nextorm.benchmark/nextorm.benchmark.csproj -c Release` → exit 0, 0 Warning(s) / 0 Error(s), log `TestResults/D188/r1/build-release.log`. All six sweeps run from repo root, wrapped in `timeout --signal=TERM 720s env NEXTORM_BENCH_FULL=0` (ShortRun + `InProcessEmitToolchain`), argv per class = `dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --filter '<class>'`:
++
++| Class filter | exit | executed cases | retained log |
++|---|---|---|---|
++| `*SqliteBenchmarkProjection*` | 0 | 7 | `TestResults/D188/r1/projection.run.log` |
++| `*SqliteBenchmarkAggregates*` | 0 | 21 | `TestResults/D188/r1/aggregates.run.log` |
++| `*SqliteBenchmarkPaging*` | 0 | 7 | `TestResults/D188/r1/paging.run.log` |
++| `*SqliteBenchmarkStreaming*` | 0 | 13 | `TestResults/D188/r1/streaming.run.log` |
++| `*SqliteBenchmarkWriteJson*` | 0 | 30 | `TestResults/D188/r1/writejson.run.log` |
++| `*SqliteBenchmarkCsv*` | 0 | 8 | `TestResults/D188/r1/csv.run.log` |
++
++- Zero BDN failures and zero `NA` allocation rows across all six logs; 86/86 cases executed. Total wall ≈ 678 s (< 72 min budget; slowest class `WriteJson` 290 s < 12 min).
++- **Artifacts retained** under `TestResults/D188/r1/artifacts/` (per class: BDN `-report-github.md` / `-report.csv` / `-report.html` plus the run log). BDN's native output landed in the tracked root `BenchmarkDotNet.Artifacts/` because `BenchmarkArtifacts.Resolve()` searches for `nextorm.sln` (now `nextorm.slnx`) and falls back to the working directory — a pre-existing path mismatch, not introduced here.
++- **Validator:** `python3 scripts/validate_inner_loop.py brief TestResults/D188/r1/test-scope-brief.json` → exit 0; `python3 scripts/validate_inner_loop.py report TestResults/D188/r1/evidence.json` → exit 0 (six `boundary` executions, filter values map 1:1 to the six scope selectors, `selected_count` 7/21/7/13/30/8, all `exit_code` 0).
++- **Capability notes (rival arms):** no rival arm was unmeasurable in the non-zero campaign — Dapper / linq2db / EF Core `materialize → serialize` (JSON, CSV) and the Dapper / linq2db DTO forms all executed. The only non-measurable arm is the SQLite zero-materialization / raw-reader subgroup, which is a predecessor capability gap (#189), not a rival-library gap; it is recorded blocked+active, never counted as a skipped/zero-match pass and never substituted.
++- **Still open:** D05 zero/raw-reader streaming subgroup **blocked + active** pending #189; D07 public EN/RU docs updates and D08 CHECK handoff remain. `#188` OPEN. No commit, no push.
++- **Defect history:** no new defect key in this addendum (build and all six sweeps green). Prior blocker key `D189-zero-materialization` — observed r1 n1, 0 fixes applied, evidence `docs/specs/status/rc2-189-evidence/D189-STOP.patch`, escalation verdict: blocked+active, no fallback.
++- **Journal:** `2026-10-09T08:25Z | DO | r1 | n=1/3 | D02 closed; six-class non-zero sweeps 86/86 cases, 0 failures; zero-arm remains blocked+active | TestResults/D188/r1/ (build-release.log, {projection,aggregates,paging,streaming,writejson,csv}.run.log, test-scope-brief.json, evidence.json, artifacts/)
++
++## Terminal-preparation record (2026-10-09, CHECK handoff)
++
++```yaml
++current_cycle: 1
++plan_revision: r1
++attempt: 1/3
++evidence_revision: rv1
++```
++
++- **Non-zero units closed:** D01 (prerequisites/capability pin), D02 (existing single spec extended, no duplicate), D03 (shared sink/validation helpers), D04 (projection/aggregates/paging), non-zero D05 (buffered + unbuffered DTO streaming), D06 (cross-library JSON/CSV materialize→serialize).
++- **D07 (non-zero sweep campaign) closed:** six filtered ShortRun classes executed, **86/86 cases, 0 BDN failures, 0 `NA` allocation rows**; logs/artifacts retained under `TestResults/D188/r1/` and `TestResults/D188/r1/artifacts/`; validator `brief`/`report` exit 0. The D07 **sweep/evidence portion is done**; only its public-docs portion is blocked.
++- **Blocked + active (incomplete scope, same milestone `1.0.9-rc2`):**
++  - **D05 zero/raw-reader streaming subgroup** — predecessor D189 has not CHECK-passed (EC03 unmet). Not implemented; no `ToList` fallback, no relabel of a materialized arm, EF excluded from the zero subgroup (AC05). Criteria and remainder unchanged; unit stays active, not `superseded`.
++  - **D07 public-docs portion** — the EN/RU public comparison pages and the internal EN/RU linq2db scenario claims are **deferred/blocked, same milestone**. No partial public comparison docs are published while the zero-arm set is incomplete; publishing now would misrepresent the incomplete coverage. Public-docs work resumes only after the unblock trigger.
++- **D08 CHECK handoff: pending** — no success claim before CHECK; every unfinished unit stays active.
++- **Unblock trigger:** D189 successful CHECK, **or** explicit user authorization to change the predecessor prerequisite. The D189→D188 prerequisite is not changed autonomously; a failed dependency is a blocker, not a substitute arm.
++- **Issue state:** #188 OPEN. No commit, no push. Plan revision stays `r1`; evidence revision stays `rv1`.
++- **Defect history:** key `D189-zero-materialization` — observed r1 n1, 0 fixes applied, evidence `docs/specs/status/rc2-189-evidence/D189-STOP.patch`, escalation verdict: blocked+active, no fallback. No new defect key in this record.
++- **Journal:** `2026-10-09T13:30Z | DO | r1 | n=1/3 | terminal-preparation: non-zero units closed (D01–D04, non-zero D05, D06, D07 86/86 cases 0 failures, D02 spec); zero-arm + D07 public docs blocked; D08 CHECK pending | docs/specs/status/rc2-188-evidence/D188-nonzero.patch``

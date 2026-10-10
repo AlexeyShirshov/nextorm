@@ -1,0 +1,13 @@
+# ===== R190 re-verify (rv=2) coverage report (CI command) =====
+# F (tested HEAD) = ee42f183ffa1d769da76a0ccaa024ec53a7885c9
+# command: dotnet tool run reportgenerator -reports:tests/coverage/coverage.cobertura.xml -targetdir:tests/coverage/report -reporttypes:"Html;TextSummary;Cobertura" -riskhotspotassemblyfilters:"+nextorm.*"
+2026-10-09T19:58:08: Arguments
+2026-10-09T19:58:08:  -reports:tests/coverage/coverage.cobertura.xml
+2026-10-09T19:58:08:  -targetdir:tests/coverage/report
+2026-10-09T19:58:08:  -reporttypes:Html;TextSummary;Cobertura
+2026-10-09T19:58:08:  -riskhotspotassemblyfilters:+nextorm.*
+2026-10-09T19:58:12: Writing report file 'tests/coverage/report/Cobertura.xml'
+2026-10-09T19:58:12: Writing report file 'tests/coverage/report/index.html'
+2026-10-09T19:58:12: Writing report file 'tests/coverage/report/Summary.txt'
+2026-10-09T19:58:12: Report generation took 4.4 seconds
+exit_code=0

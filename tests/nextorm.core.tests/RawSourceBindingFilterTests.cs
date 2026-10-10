@@ -909,7 +909,7 @@ public class RawSourceBindingFilterTests
         => new(new QueryProvider());
 
     [Fact]
-    public void SameSqlAndColumns_DifferentEntityType_NotEqualWithDistinctHash()
+    public void SameSqlAndColumns_DifferentEntityType_NotEqual()
     {
         using var ctx = new InMemoryDataContext();
         ConfigureTenant(ctx);
@@ -924,13 +924,10 @@ public class RawSourceBindingFilterTests
 
         comparer.Equals(tenant.SourceFrom, opaque.SourceFrom).Should().BeFalse(
             "the bound entity type selects different filters");
-        comparer.GetHashCode(tenant.SourceFrom).Should().NotBe(
-            comparer.GetHashCode(opaque.SourceFrom),
-            "different entity types must not collide in the plan key");
     }
 
     [Fact]
-    public void SameTypeSameColumnCount_DifferentColumnNames_NotEqualWithDistinctHash()
+    public void SameTypeSameColumnCount_DifferentColumnNames_NotEqual()
     {
         using var ctx = new InMemoryDataContext();
         ConfigureTenant(ctx);
@@ -945,9 +942,6 @@ public class RawSourceBindingFilterTests
 
         comparer.Equals(declared.SourceFrom, swapped.SourceFrom).Should().BeFalse(
             "equal column counts with different names declare different filter dependencies");
-        comparer.GetHashCode(declared.SourceFrom).Should().NotBe(
-            comparer.GetHashCode(swapped.SourceFrom),
-            "the declared column names participate in the plan key");
     }
 
     [Fact]

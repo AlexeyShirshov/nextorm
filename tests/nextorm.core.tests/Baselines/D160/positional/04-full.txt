@@ -1,0 +1,5 @@
+case=04-full
+projection=p => p.Item2.Id
+condition=<none>
+join_count=1
+join[0]=Full;cond=(a, b) => (a.Id == b.Id)

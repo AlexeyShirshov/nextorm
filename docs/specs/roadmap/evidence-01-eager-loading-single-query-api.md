@@ -41,6 +41,15 @@ All commands run in `/home/alex/sources/nextorm` on 2026-10-04 (env date), git w
 
 ## Facts
 
+> **Superseded (D184 / #184, `1.0.9-rc2`).** The decision recorded below — `AsSingleQuery` as a
+> standalone builder method — is superseded. D184 removed `AsSingleQuery()` and folded the choice
+> into an optional `EagerLoadMode mode = EagerLoadMode.Default` parameter of `LoadWith`, with
+> whole-builder semantics: an explicit mode applies to every declaration, `Default` inherits the
+> current choice (split when none), repeating the same explicit mode is allowed, a different explicit
+> mode throws `NotSupportedException`, and an undefined value throws `ArgumentOutOfRangeException`
+> (`ParamName == "mode"`). The material below is kept as historical evidence and no longer describes
+> the current API.
+
 ### 1. Agreed API shape — `AsSingleQuery` is a separate builder method, not a `LoadWith` parameter/option
 
 - `git show 29853ad:docs/specs/roadmap/todo_eager_loading.md:13-19` (status block, issue #107) —

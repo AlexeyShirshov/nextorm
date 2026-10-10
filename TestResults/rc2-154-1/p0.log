@@ -1,0 +1,34 @@
+b01ee878
+---status---
+?? StrykerOutput/
+?? docs/specs/status/rc2-151-stryker-mutation-1.md
+?? docs/specs/status/rc2-154-dto-public-ctors-1.md
+?? docs/specs/status/rc2-157-register-finding-25-1.md
+?? docs/specs/status/rc2-159-cte-direct-joins-1.md
+?? docs/specs/status/rc2-160-join-alias-mixing-1.md
+?? docs/specs/status/rc2-162-navigation-temp-tvp-fail-closed-1.md
+?? docs/specs/status/rc2-167-csv-chunked-read-1.md
+?? docs/specs/status/rc2-169-dml-scope-hints-1.md
+?? docs/specs/status/rc2-170-onetoone-fk-uniqueness-1.md
+?? docs/specs/status/rc2-171-joininto-as-derived-1.md
+?? docs/specs/status/rc2-172-child-collection-projection-1.md
+?? docs/specs/status/rc2-173-projection-folding-member-1.md
+?? docs/specs/status/rc2-174-identity-selector-cache-1.md
+?? docs/specs/status/rc2-175-joininto-test-quality-1.md
+?? docs/specs/status/rc2-176-json-nested-1.md
+?? docs/specs/status/rc2-177-native-json-1.md
+?? docs/specs/status/rc2-178-json-enum-1.md
+?? docs/specs/status/rc2-179-json-error-policy-1.md
+?? docs/specs/status/rc2-180-json-stream-provider-conversion-1.md
+?? docs/specs/status/rc2-184-loadwith-eagerloadmode-1.md
+?? docs/specs/status/rc2-185-bindentity-registration-1.md
+?? docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md
+?? docs/specs/status/rc2-189-sqlite-datareader-1.md
+?? docs/specs/status/rc2-190-join-whole-entity-1.md
+?? docs/specs/status/rc2-191-provider-extensions-1.md
+---ancestry---
+b01ee878 #153 checkpoint collection status (D153 done)
+8401ca51 #153 public dialect extensibility contract: non-friend consumer assembly, EN/RU + XML docs, API decision register
+---merge-base---
+18659e41 IS ancestor
+exit=0

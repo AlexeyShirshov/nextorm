@@ -1,0 +1,81 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+[37m  Discovering: nextorm.integration.tests
+[0m[37m  Discovered:  nextorm.integration.tests
+[0m[37m  Starting:    nextorm.integration.tests
+[0m[testcontainers.org 00:00:00.29] Connected to Docker:
+  Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+  Server Version: 5.8.6
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.44
+  Operating System: fedora
+  Total Memory: 11.68 GB
+[testcontainers.org 00:00:00.30] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.36] Reusable resource found
+[testcontainers.org 00:00:00.45] Start Docker container 4ab2d4542432
+[testcontainers.org 00:00:01.81] Wait for Docker container 4ab2d4542432 to complete readiness checks
+[testcontainers.org 00:00:01.83] Execute "/bin/sh -c find /opt/mssql-tools*/bin/sqlcmd -type f -print -quit" at Docker container 4ab2d4542432
+[testcontainers.org 00:00:02.18] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 4ab2d4542432
+[testcontainers.org 00:00:11.31] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 4ab2d4542432
+[testcontainers.org 00:00:11.47] Docker container 4ab2d4542432 ready
+[91m    NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.NativeParams_QueryCommandSurface_ShouldBindChangedValuesSyncAndAsync [FAIL]
+[0m[37m      Microsoft.Data.SqlClient.SqlException : Column expressions and data sources without names or aliases cannot be formatted as JSON text using FOR JSON clause. Add alias to the unnamed column or table.
+[0m[90m      Stack Trace:
+[0m[37m           at Microsoft.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+[0m[37m           at Microsoft.Data.SqlClient.SqlInternalConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+[0m[37m           at Microsoft.Data.SqlClient.TdsParser.ThrowExceptionAndWarning(TdsParserStateObject stateObj, SqlCommand command, Boolean callerHasConnectionLock, Boolean asyncClose)
+[0m[37m           at Microsoft.Data.SqlClient.TdsParser.TryRun(RunBehavior runBehavior, SqlCommand cmdHandler, SqlDataReader dataStream, BulkCopySimpleResultSet bulkCopyHandler, TdsParserStateObject stateObj, Boolean& dataReady)
+[0m[37m           at Microsoft.Data.SqlClient.SqlDataReader.TryConsumeMetaData()
+[0m[37m           at Microsoft.Data.SqlClient.SqlDataReader.get_MetaData()
+[0m[37m           at Microsoft.Data.SqlClient.SqlCommand.FinishExecuteReader(SqlDataReader ds, RunBehavior runBehavior, String resetOptionsString, Boolean isInternal, Boolean forDescribeParameterEncryption, Boolean shouldCacheForAlwaysEncrypted)
+[0m[37m           at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReaderTds(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, Boolean isAsync, Int32 timeout, Task& task, Boolean asyncWrite, Boolean inRetry, SqlDataReader ds, Boolean describeParameterEncryptionRequest)
+[0m[37m           at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReader(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, TaskCompletionSource`1 completion, Int32 timeout, Task& task, Boolean& usedCache, Boolean asyncWrite, Boolean inRetry, String method)
+[0m[37m           at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReader(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, String method)
+[0m[37m           at Microsoft.Data.SqlClient.SqlCommand.ExecuteReader(CommandBehavior behavior)
+[0m[37m           at Microsoft.Data.SqlClient.SqlCommand.ExecuteDbDataReader(CommandBehavior behavior)
+[0m[37m        src/nextorm.core/DataContext/QueryExecutor.cs(181,0): at NextORM.Core.QueryExecutor.RunReader(DbCommand command, CommandBehavior behavior)
+[0m[37m        src/nextorm.core/DataContext/QueryExecutor.cs(1257,0): at NextORM.Core.QueryExecutor.WriteJsonNative[TResult](DbPreparedQueryCommand`1 compiledQuery, Stream output, ReadOnlySpan`1 params)
+[0m[37m        src/nextorm.core/DataContext/QueryExecutor.cs(1169,0): at NextORM.Core.QueryExecutor.WriteJson[TResult](DbPreparedQueryCommand`1 compiledQuery, JsonRowWriter rowWriter, JsonShapePlan plan, Stream output, JsonStreamOptions options, ReadOnlySpan`1 params, Boolean native)
+[0m[37m        src/nextorm.core/DataContext/DataContext.cs(347,0): at NextORM.Core.DataContext.WriteJson[TResult](QueryCommand`1 queryCommand, Stream output, JsonStreamOptions options, Object[] params, CancellationToken cancellationToken)
+[0m[37m        src/nextorm.core/Query/QueryCommand.TResult.cs(217,0): at NextORM.Core.QueryCommand`1.WriteJson(Stream stream, JsonStreamOptions options, CancellationToken cancellationToken, ReadOnlySpan`1 params)
+[0m[37m        tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs(466,0): at NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.NativeParams_QueryCommandSurface_ShouldBindChangedValuesSyncAndAsync()
+[0m[37m        --- End of stack trace from previous location ---
+[0m[91m    NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.NativeParams_EntityBuilderSurface_ShouldBindChangedValuesSyncAndAsync [FAIL]
+[0m[37m      Expected twoText "[{"Id":2,"Name":"é中😀<b>\/slash","Flag":false,"Num":20}]" to contain "é中😀<b>/slash".
+[0m[90m      Stack Trace:
+[0m[37m           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+[0m[37m           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+[0m[37m           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+[0m[37m           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+[0m[37m           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+[0m[37m           at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+[0m[37m           at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+[0m[37m        tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs(516,0): at NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.NativeParams_EntityBuilderSurface_ShouldBindChangedValuesSyncAndAsync()
+[0m[37m        --- End of stack trace from previous location ---
+[0m[91m    NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.Native_RepeatedCalls_ChangedParams_ShouldIsolateStateAndNotLeakCachePolicy [FAIL]
+[0m[37m      Microsoft.Data.SqlClient.SqlException : Column expressions and data sources without names or aliases cannot be formatted as JSON text using FOR JSON clause. Add alias to the unnamed column or table.
+[0m[90m      Stack Trace:
+[0m[37m           at Microsoft.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+[0m[37m           at Microsoft.Data.SqlClient.SqlInternalConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+[0m[37m           at Microsoft.Data.SqlClient.TdsParser.ThrowExceptionAndWarning(TdsParserStateObject stateObj, SqlCommand command, Boolean callerHasConnectionLock, Boolean asyncClose)
+[0m[37m           at Microsoft.Data.SqlClient.TdsParser.TryRun(RunBehavior runBehavior, SqlCommand cmdHandler, SqlDataReader dataStream, BulkCopySimpleResultSet bulkCopyHandler, TdsParserStateObject stateObj, Boolean& dataReady)
+[0m[37m           at Microsoft.Data.SqlClient.SqlDataReader.TryConsumeMetaData()
+[0m[37m           at Microsoft.Data.SqlClient.SqlDataReader.get_MetaData()
+[0m[37m           at Microsoft.Data.SqlClient.SqlCommand.FinishExecuteReader(SqlDataReader ds, RunBehavior runBehavior, String resetOptionsString, Boolean isInternal, Boolean forDescribeParameterEncryption, Boolean shouldCacheForAlwaysEncrypted)
+[0m[37m           at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReaderTds(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, Boolean isAsync, Int32 timeout, Task& task, Boolean asyncWrite, Boolean inRetry, SqlDataReader ds, Boolean describeParameterEncryptionRequest)
+[0m[37m           at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReader(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, TaskCompletionSource`1 completion, Int32 timeout, Task& task, Boolean& usedCache, Boolean asyncWrite, Boolean inRetry, String method)
+[0m[37m           at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReader(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, String method)
+[0m[37m           at Microsoft.Data.SqlClient.SqlCommand.ExecuteReader(CommandBehavior behavior)
+[0m[37m           at Microsoft.Data.SqlClient.SqlCommand.ExecuteDbDataReader(CommandBehavior behavior)
+[0m[37m        src/nextorm.core/DataContext/QueryExecutor.cs(181,0): at NextORM.Core.QueryExecutor.RunReader(DbCommand command, CommandBehavior behavior)
+[0m[37m        src/nextorm.core/DataContext/QueryExecutor.cs(1257,0): at NextORM.Core.QueryExecutor.WriteJsonNative[TResult](DbPreparedQueryCommand`1 compiledQuery, Stream output, ReadOnlySpan`1 params)
+[0m[37m        src/nextorm.core/DataContext/QueryExecutor.cs(1169,0): at NextORM.Core.QueryExecutor.WriteJson[TResult](DbPreparedQueryCommand`1 compiledQuery, JsonRowWriter rowWriter, JsonShapePlan plan, Stream output, JsonStreamOptions options, ReadOnlySpan`1 params, Boolean native)
+[0m[37m        src/nextorm.core/DataContext/DataContext.cs(347,0): at NextORM.Core.DataContext.WriteJson[TResult](QueryCommand`1 queryCommand, Stream output, JsonStreamOptions options, Object[] params, CancellationToken cancellationToken)
+[0m[37m        src/nextorm.core/Query/QueryCommand.TResult.cs(217,0): at NextORM.Core.QueryCommand`1.WriteJson(Stream stream, JsonStreamOptions options, CancellationToken cancellationToken, ReadOnlySpan`1 params)
+[0m[37m        tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs(381,0): at NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.Native_RepeatedCalls_ChangedParams_ShouldIsolateStateAndNotLeakCachePolicy()
+[0m[37m           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+[0m[37m           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[0m[testcontainers.org 00:00:13.00] Stop Docker container 4ab2d4542432
+[37m  Finished:    nextorm.integration.tests (ID = 'b4ece81caced377475cbe4ebc5ceca7103a9595a1230fab7f41a6fb60ce4340a')
+[0m[37m=== TEST EXECUTION SUMMARY ===
+[0m[37m   nextorm.integration.tests  Total: 16, Errors: 0, Failed: 3, Skipped: 0, Not Run: 0, Time: 13.293s
+[0m[0mexit_code=1

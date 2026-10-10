@@ -63,9 +63,18 @@ description: "Проектный оверлей nextorm к глобальном�
 10. **Поиск — ignore-aware; символы — `roslyn`.** Для C#-символов (типы/члены/`refs`/`callers`/overloads/
     implementations/renames) — только инструмент `roslyn`, не текстовый поиск. Для текста (доки,
     комментарии, строковые литералы, имена SQL) — `rg`/`git grep` с ограничением по исходникам
-    (`rg -n --glob '*.cs' "<lit>" src tests`). **Никогда `grep -r`/`grep -rn`/`find`** по дереву: они
-    игнорируют `.gitignore` и читают `bin/`/`obj/`/`TestResults/` (≈1.3 GB артефактов под `src`/`tests`),
-    т.е. ~1 GB диска на один вызов. См. `AGENTS.md` → «Searching text».
+     (`rg -n --glob '*.cs' "<lit>" src tests`). **Никогда `grep -r`/`grep -rn`/`find`** по дереву: они
+     игнорируют `.gitignore` и читают `bin/`/`obj/`/`TestResults/` (≈1.3 GB артефактов под `src`/`tests`),
+     т.е. ~1 GB диска на один вызов. См. `AGENTS.md` → «Searching text».
+11. **Недоказуемый критерий — GAP, а не `ready`.** Критерий, чьё решающее evidence невоспроизводимо из
+    закоммиченных/декларируемых источников (напр. «красное» плечо red↔green есть только в
+    отклонённом/незакоммиченном артефакте, или probe не исполняется против baseline), — это gap:
+    `planner` **переопределяет оракул** (или задача остаётся gap'ом), а не тащит его в DO как
+    «in-cycle prerequisite». Получаемость решающего probe **демонстрируется до фиксации плана**.
+12. **Повторный заход после терминального `incomplete`/STOP** не перезапускает провалившийся критерий
+    без изменений: прежняя терминальная причина — обязательный вход PLAN; `planner` либо показывает,
+    что доказательство теперь получаемо (новое evidence/починенный харнесс), либо переформулирует
+    критерий (переопределяет оракул).
 
 Выход Plan: severity (🔴/🟡/ℹ️), `file:line`, one-line fix, применимый инвариант
 (1–10); split **fix now** vs **deferred с триггером** (deferred остаётся в текущем
@@ -208,6 +217,23 @@ Critical/Warning/Suggestion + роутинг специалистам:
 **PLAN обязан закрепить контракт до DO:** применяются разделы «Versioned evidence contract»
 и «CHECK completeness gate — mandatory evidence contract» глобального скилла `pdca-dotnet`.
 Этот оверлей не вводит отдельную схему контракта.
+
+**Frozen evidence manifest (nextorm).** Путь — базовый дефолт `pdca-dotnet` §«Versioned evidence
+contract» (`artifacts/pdca/<task>/rv<k>/manifest.json`, `<task>` — `D<issue>`/kebab-slug,
+`<k>` — ревизия контракта `rv`); nextorm его **не переопределяет** и не дублирует. Схема — там же
+(оверлей схему не дублирует); валидируется in-repo
+`python3 scripts/validate_inner_loop.py manifest <путь>` (покрытие `required_rows` + форма строк и
+evidence). Пишет его DO на границе DO→CHECK; CHECK открывает его первым и по каждой строке читает
+`path`.
+
+**Проектные evidence-корни (nextorm).** Портативный агент `check` даёт scoped `read` только на
+generic-корни (`docs/specs/status/**`, `artifacts/**`, `TestResults/**`); nextorm-специфику
+объявляют **на стороне проекта**, а не в общем агенте/ассете:
+- статус/контракт — `docs/specs/status/**`;
+- evidence-артефакты — `artifacts/**` (в т.ч. `artifacts/pdca/**`);
+- тест-артефакты — `TestResults/**`;
+- scratch вне worktree — `/tmp/nextorm*/**` (через `external_directory`, см. проектный `opencode.json`).
+
 
 Строки проектной таблицы приоритетов классов — строки контракта с обязательными слотами
 и сохранёнными приоритетами. Безусловные проектные проверки нельзя снимать через N/A.

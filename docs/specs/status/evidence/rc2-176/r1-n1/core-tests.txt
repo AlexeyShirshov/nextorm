@@ -1,0 +1,14 @@
+=== C02 dotnet test tests/nextorm.core.tests -c Debug (pre-change) ===
+started: 2026-10-08T17:49:04Z
+Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) passed (14s 876ms)
+
+Test run summary: Passed!
+  total: 1789
+  failed: 0
+  succeeded: 1789
+  skipped: 0
+  duration: 14s 324ms
+
+exit_code=0
+finished: 2026-10-08T17:49:19Z

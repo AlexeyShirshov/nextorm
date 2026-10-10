@@ -473,6 +473,9 @@ internal static class RowMapperFactory
                     signature = signature * 31 + (column.ProviderType?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.Converter is null ? 0 : RuntimeHelpers.GetHashCode(column.Converter));
                     signature = signature * 31 + (column.ProjectionItem is { } item ? item.EntityType.GetHashCode() * 31 + item.Slot : 0);
+                    // #173: the target member is part of the materialized shape, so the compiled-mapper
+                    // key must include it. A null member (a constructor position) contributes zero.
+                    signature = signature * 31 + (column.ProjectionItem?.Member?.GetHashCode() ?? 0);
                 }
             }
         }

@@ -420,6 +420,18 @@ public partial class QueryCommand
                         ? resolvedSource
                         : null;
 
+                    // JSON-only preparation: an explicit construction that contains nested objects, arrays
+                    // or expanded entity items is captured as a recursive JSON shape and its scalar
+                    // descendants are lowered into this select list. The captured shape is stored on the
+                    // command for the JSON layer; ordinary preparation is untouched when the projection is
+                    // flat or the command was not prepared by the JSON terminal.
+                    if (cmd.JsonShapeMode
+                        && TryPrepareJsonShapeColumns(cmd, noHash, srcMetadata, cancellationToken, out var jsonRoot, out var jsonColumns, out var jsonColumnsPlanHash))
+                    {
+                        cmd.JsonShape = jsonRoot;
+                        return (jsonColumns, jsonColumnsPlanHash);
+                    }
+
                     // §6: a System.Tuple is not a supported whole-row shape for a column-shape source
                     // (a typed CTE, or a data-modifying CTE read). The tuple is projected as one opaque
                     // column, which the typed member reader cannot address: an identity read renders an
@@ -479,6 +491,61 @@ public partial class QueryCommand
                         if (!cmd._dontCache && !noHash) unchecked
                         {
                             columnsPlanHash = columnsPlanHash * 13 + scalarShape[0].PlanHashCode;
+                        }
+                    }
+                    else if (TryGetDirectEntityItem(cmd, out var directItemType, out var directSlot, out var directMemberName, out var directItemExpression))
+                    {
+                        // A direct whole-entity projection of a recognized joined projection item
+                        // (Select(p => p.ItemN)): expand the item into its mapped scalar columns so the
+                        // SQL path reads exactly the selected entity's columns (the agreed equivalent of
+                        // tN.*), tagged so the materializer rebuilds the entity and yields null on the
+                        // missing outer-join side. Recognized before the scalar-member branches and only
+                        // for a confirmed Projection<T...>.ItemN.
+                        if (cmd._dataContext!.NeedMapping)
+                        {
+                            var directColumns = new List<SelectExpression>();
+                            if (!TryExpandEntityItem(directItemType, directItemExpression, directSlot, null, null, directColumns, cancellationToken))
+                            {
+                                // The recognizer already proved a mapped entity, so a refused expansion
+                                // means the build was cancelled. Never leave the select list empty.
+                                cancellationToken.ThrowIfCancellationRequested();
+                                throw new QueryPreparationException(
+                                    $"Cannot expand the projected entity item '{directItemType.Name}'; it is not a supported mapped entity.");
+                            }
+
+                            selectList = directColumns.ToArray();
+                            for (var i = 0; i < selectList.Length; i++)
+                            {
+                                selectList[i].Index = i;
+                                if (!cmd._dontCache && !noHash)
+                                {
+                                    selectList[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selectList[i]);
+                                    columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // The in-memory source row already carries the entity item (or the outer-join
+                            // null), so read the item object itself instead of re-materializing it from
+                            // flattened columns; a scalar-default presence heuristic would turn a present
+                            // all-default entity into a missing one.
+                            cmd.OneColumn = true;
+                            var directVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger) { ProjectionMode = true };
+                            var directSelect = directVisitor.Visit(cmd._exp);
+                            var directColumn = new SelectExpression(directItemType)
+                            {
+                                Index = 0,
+                                PropertyName = directMemberName,
+                                Expression = directSelect,
+                            };
+                            if (!cmd._dontCache && !noHash)
+                            {
+                                directColumn.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(directColumn);
+                                columnsPlanHash = columnsPlanHash * 13 + directColumn.PlanHashCode;
+                            }
+
+                            selectList = [directColumn];
                         }
                     }
                     else if (cmd._exp.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
@@ -655,6 +722,23 @@ public partial class QueryCommand
                         throw new NotSupportedException(
                             $"The bare top-level scalar projection '{domMember.Type}' at Select position 0 is not supported; project it inside a named shape (for example Select(x => new {{ x.Doc }}) or a DTO) instead.");
                     }
+                    // Final invariant: a structural direct-projection read (Select(p => p.ItemN)) that no
+                    // earlier branch handled and whose item is not a mapped entity must fail closed. The
+                    // scalar/tuple/DOM branches above run first, so this guard never masks a supported
+                    // scalar; it only prevents an empty select list for a non-mapped reference-type item.
+                    else if (TryGetProjectionItemMember(cmd, out var unmappedItemType, out _, out _, out _)
+                        && RequiresMappingButUnmapped(cmd, unmappedItemType))
+                    {
+                        throw new NotSupportedException(
+                            $"The projection item '{unmappedItemType}' at Select position 0 is not a mapped entity and cannot be projected as a whole; project its columns explicitly or use a mapped entity type.");
+                    }
+                    // A cast of the item to an unrelated result type is not a supported whole-entity
+                    // projection either; fail closed rather than emit an empty select list.
+                    else if (IsUnrelatedCastOfProjectionItem(cmd, out var castItemType))
+                    {
+                        throw new NotSupportedException(
+                            $"The projection item '{castItemType}' at Select position 0 is cast to an unrelated result type and cannot be projected as a whole; project its columns explicitly or use a mapped entity type.");
+                    }
                 }
                 else
                 {
@@ -752,6 +836,511 @@ public partial class QueryCommand
         }
 
         /// <summary>
+        /// Captures a JSON-specific recursive shape from an explicit construction projection and lowers
+        /// every scalar descendant into the prepared select list, binding each leaf to its assigned reader
+        /// ordinal. Returns <see langword="false"/> when the projection does not need JSON-specific
+        /// flattening (a flat shape or a non-construction body), leaving ordinary preparation in charge.
+        /// </summary>
+        private static bool TryPrepareJsonShapeColumns(
+            QueryCommand cmd,
+            bool noHash,
+            IEntityMetadata? srcMetadata,
+            CancellationToken cancellationToken,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out JsonShapeNode? root,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SelectExpression[]? columns,
+            out int columnsPlanHash)
+        {
+            root = null;
+            columns = null;
+            columnsPlanHash = 7;
+
+            var expression = cmd._exp;
+            if (expression is null || expression.Parameters.Count == 0)
+                return false;
+
+            var body = TypeFacts.UnwrapConvert(expression.Body);
+
+            // ValueTuple has its own fail-closed rejection in the ordinary path; do not capture it here.
+            // A conditional construction (a translatable predicate choosing a New/MemberInit arm against a
+            // null arm) is captured so its branch presence can be lowered into a hidden sentinel column.
+            if (body is not (NewExpression or MemberInitExpression or ConditionalExpression) || TypeFacts.IsValueTupleType(body.Type))
+                return false;
+
+            if (!JsonShapeNeedsCapture(cmd, body, isRoot: true))
+                return false;
+
+            var lowered = new List<SelectExpression>();
+            var visitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger) { ProjectionMode = true };
+            using var outerScope = visitor.PushOuter(expression.Parameters[0]);
+
+            var captured = BuildJsonShapeNode(cmd, visitor, srcMetadata, body, body.Type, name: null, slot: null, member: null, lowered, cancellationToken);
+
+            for (var i = 0; i < lowered.Count; i++)
+                lowered[i].Index = i;
+
+            DisambiguateJsonLeafAliases(lowered);
+
+            columns = lowered.ToArray();
+            root = captured;
+            cmd.OneColumn = false;
+
+            if (!cmd._dontCache && !noHash)
+            {
+                for (var i = 0; i < columns.Length; i++)
+                    unchecked
+                    {
+                        columns[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(columns[i]);
+                        columnsPlanHash = columnsPlanHash * 13 + columns[i].PlanHashCode;
+                    }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Whether an explicit construction contains a phase-2 JSON construct that the ordinary preparer
+        /// would otherwise collapse into one opaque column: a nested construction, a supported array member
+        /// or an expanded entity item. A fully flat construction stays on the ordinary path.
+        /// </summary>
+        private static bool JsonShapeNeedsCapture(QueryCommand cmd, Expression body, bool isRoot)
+        {
+            var unwrapped = TypeFacts.UnwrapConvert(body);
+
+            if (unwrapped is NewExpression ctor)
+            {
+                if (!isRoot)
+                    return true;
+
+                var arguments = ctor.Arguments;
+                for (var i = 0; i < arguments.Count; i++)
+                {
+                    if (JsonShapeNeedsCapture(cmd, arguments[i], isRoot: false))
+                        return true;
+                }
+
+                return false;
+            }
+
+            if (unwrapped is MemberInitExpression init)
+            {
+                if (!isRoot)
+                    return true;
+
+                var bindings = init.Bindings;
+                for (var i = 0; i < bindings.Count; i++)
+                {
+                    if (bindings[i] is MemberAssignment assignment && JsonShapeNeedsCapture(cmd, assignment.Expression, isRoot: false))
+                        return true;
+                }
+
+                return false;
+            }
+
+            if (unwrapped is ConditionalExpression conditional)
+            {
+                // A supported conditional construction (a translatable predicate choosing a New/MemberInit
+                // arm against a null arm) is a capture trigger. A scalar conditional (no construction arm)
+                // stays a normal leaf; an unsupported construction pairing throws here (fail-closed)
+                // instead of flattening the object type into an opaque column.
+                return TryGetConditionalConstruction(conditional, out _, out _);
+            }
+
+            var valueType = Nullable.GetUnderlyingType(unwrapped.Type) ?? unwrapped.Type;
+            if (valueType == typeof(byte[]))
+                return false;
+
+            if (valueType.IsArray)
+                return true;
+
+            return IsJsonMappedEntity(cmd, valueType);
+        }
+
+        private static bool IsJsonMappedEntity(QueryCommand cmd, Type type)
+            => cmd._dataContext!.NeedMapping
+                && DataContextCache.Metadata.TryGetValue(type, out var metadata)
+                && metadata.Properties.Count > 0;
+
+        private static JsonShapeNode BuildJsonShapeNode(
+            QueryCommand cmd,
+            CorrelatedQueryExpressionVisitor visitor,
+            IEntityMetadata? srcMetadata,
+            Expression expression,
+            Type declaredType,
+            string? name,
+            int? slot,
+            MemberInfo? member,
+            List<SelectExpression> lowered,
+            CancellationToken cancellationToken)
+        {
+            var raw = expression;
+            var unwrapped = TypeFacts.UnwrapConvert(expression);
+
+            if (unwrapped is NewExpression ctor)
+                return BuildJsonObjectNode(cmd, visitor, srcMetadata, ctor, name, slot, member, lowered, cancellationToken);
+
+            if (unwrapped is MemberInitExpression init)
+                return BuildJsonObjectNode(cmd, visitor, srcMetadata, init, name, slot, member, lowered, cancellationToken);
+
+            if (unwrapped is ConditionalExpression conditional
+                && TryGetConditionalConstruction(conditional, out var constructionArm, out var constructionIsTrue))
+                return BuildJsonConditionalNode(cmd, visitor, srcMetadata, conditional, constructionArm, constructionIsTrue, name, slot, member, lowered, cancellationToken);
+
+            var valueType = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
+
+            // An entity-typed member is expanded into its mapped scalar columns (reusing the ordinary
+            // materializer expansion) and grouped as one JSON object carrying a slot-level presence rule.
+            if (IsJsonMappedEntity(cmd, valueType))
+            {
+                var start = lowered.Count;
+                if (TryExpandEntityItem(valueType, raw, slot ?? 0, member as PropertyInfo, visitor, lowered, cancellationToken))
+                {
+                    var count = lowered.Count - start;
+                    var members = new JsonShapeNode[count];
+                    var ordinals = new int[count];
+                    for (var i = 0; i < count; i++)
+                    {
+                        var column = lowered[start + i];
+                        var ordinal = start + i;
+                        ordinals[i] = ordinal;
+                        members[i] = JsonShapeNode.Scalar(
+                            column.PropertyName,
+                            column.PropertyType,
+                            new JsonShapeBinding(ordinal, column.Nullable, column.DefaultOnNull));
+                    }
+
+                    return JsonShapeNode.Object(name, declaredType, members, JsonShapePresence.AnyColumnNotNull(ordinals), slot, member);
+                }
+            }
+
+            var loweredColumn = AppendJsonLeafColumn(cmd, visitor, srcMetadata, raw, declaredType, name, lowered);
+            var binding = new JsonShapeBinding(loweredColumn.Index, loweredColumn.Nullable, loweredColumn.DefaultOnNull);
+
+            if (valueType != typeof(byte[]) && valueType.IsArray)
+            {
+                // byte[] is Base64 and must be tested before general array handling (phase-1 rule).
+                return JsonShapeNode.Array(name, declaredType, BuildJsonArrayElement(valueType), binding);
+            }
+
+            return JsonShapeNode.Scalar(name, declaredType, binding);
+        }
+
+        private static JsonShapeNode BuildJsonObjectNode(
+            QueryCommand cmd,
+            CorrelatedQueryExpressionVisitor visitor,
+            IEntityMetadata? srcMetadata,
+            NewExpression ctor,
+            string? name,
+            int? slot,
+            MemberInfo? member,
+            List<SelectExpression> lowered,
+            CancellationToken cancellationToken)
+        {
+            var arguments = ctor.Arguments;
+            var members = new JsonShapeNode[arguments.Count];
+
+            for (var i = 0; i < arguments.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var parameter = ctor.Constructor!.GetParameters()[i];
+                var memberName = ResolveJsonResultMemberName(ctor.Type, parameter.Name!);
+                members[i] = BuildJsonShapeNode(cmd, visitor, srcMetadata, arguments[i], parameter.ParameterType, memberName, i, null, lowered, cancellationToken);
+            }
+
+            return JsonShapeNode.Object(name, ctor.Type, members, JsonShapePresence.Always, slot, member);
+        }
+
+        private static JsonShapeNode BuildJsonObjectNode(
+            QueryCommand cmd,
+            CorrelatedQueryExpressionVisitor visitor,
+            IEntityMetadata? srcMetadata,
+            MemberInitExpression init,
+            string? name,
+            int? slot,
+            MemberInfo? member,
+            List<SelectExpression> lowered,
+            CancellationToken cancellationToken)
+        {
+            var bindings = init.Bindings;
+            var members = new JsonShapeNode[bindings.Count];
+
+            for (var i = 0; i < bindings.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (bindings[i] is not MemberAssignment assignment)
+                    throw new NotSupportedException(
+                        $"The JSON projection member '{bindings[i].Member.Name}' uses a member binding other than assignment and cannot be captured.");
+
+                var declaredType = assignment.Member switch
+                {
+                    PropertyInfo property => property.PropertyType,
+                    FieldInfo field => field.FieldType,
+                    _ => assignment.Expression.Type,
+                };
+
+                members[i] = BuildJsonShapeNode(cmd, visitor, srcMetadata, assignment.Expression, declaredType, assignment.Member.Name, i, assignment.Member, lowered, cancellationToken);
+            }
+
+            return JsonShapeNode.Object(name, init.Type, members, JsonShapePresence.Always, slot, member);
+        }
+
+        /// <summary>
+        /// Recognizes a JSON conditional construction: exactly one arm is a <see cref="NewExpression"/> or
+        /// <see cref="MemberInitExpression"/> and the other arm is a null value (<c>null</c> or
+        /// <c>default</c>). A construction on both arms, or a construction against a non-null arm, is
+        /// rejected fail-closed. A conditional with no construction arm returns <see langword="false"/> and
+        /// stays on the ordinary scalar/CASE leaf path.
+        /// </summary>
+        private static bool TryGetConditionalConstruction(
+            ConditionalExpression conditional,
+            out Expression construction,
+            out bool constructionIsTrue)
+        {
+            var trueIsConstruction = IsJsonConstructionArm(conditional.IfTrue);
+            var falseIsConstruction = IsJsonConstructionArm(conditional.IfFalse);
+
+            if (trueIsConstruction && falseIsConstruction)
+                throw new NotSupportedException(
+                    "A JSON conditional projection cannot construct an object on both arms; use a single construction arm and a null arm.");
+
+            if (trueIsConstruction || falseIsConstruction)
+            {
+                var constructionArm = trueIsConstruction ? conditional.IfTrue : conditional.IfFalse;
+                var nullArm = trueIsConstruction ? conditional.IfFalse : conditional.IfTrue;
+                if (!IsJsonNullArm(nullArm))
+                    throw new NotSupportedException(
+                        "A JSON conditional construction requires its non-construction arm to be null; a non-null arm is not supported.");
+
+                construction = constructionArm;
+                constructionIsTrue = trueIsConstruction;
+                return true;
+            }
+
+            construction = conditional;
+            constructionIsTrue = false;
+            return false;
+        }
+
+        private static bool IsJsonConstructionArm(Expression expression)
+        {
+            var unwrapped = TypeFacts.UnwrapConvert(expression);
+            return unwrapped is NewExpression or MemberInitExpression && !TypeFacts.IsValueTupleType(unwrapped.Type);
+        }
+
+        private static bool IsJsonNullArm(Expression expression)
+        {
+            var unwrapped = TypeFacts.UnwrapConvert(expression);
+            return unwrapped is ConstantExpression { Value: null } or DefaultExpression;
+        }
+
+        /// <summary>
+        /// Lowers a supported conditional construction into a JSON object node carrying the construction
+        /// arm's members plus a hidden nullable sentinel scalar. The sentinel is non-null exactly on the
+        /// construction arm and SQL NULL on the null arm, so the existing
+        /// <see cref="JsonShapePresence.AnyColumnNotNull"/> rule (fed the sentinel ordinal) decides object
+        /// presence without inferring it from the visible property values; the hidden column is never a JSON
+        /// member. The predicate is rendered by the existing CASE lowering, so an untranslatable predicate
+        /// throws before output.
+        /// </summary>
+        private static JsonShapeNode BuildJsonConditionalNode(
+            QueryCommand cmd,
+            CorrelatedQueryExpressionVisitor visitor,
+            IEntityMetadata? srcMetadata,
+            ConditionalExpression conditional,
+            Expression construction,
+            bool constructionIsTrue,
+            string? name,
+            int? slot,
+            MemberInfo? member,
+            List<SelectExpression> lowered,
+            CancellationToken cancellationToken)
+        {
+            var objectNode = BuildJsonShapeNode(cmd, visitor, srcMetadata, construction, construction.Type, name, slot, member, lowered, cancellationToken);
+
+            if (objectNode.Kind != JsonShapeNodeKind.Object)
+                throw new NotSupportedException(
+                    "A JSON conditional construction arm must be an object construction (new or member-init).");
+
+            var sentinelOrdinal = AppendJsonConditionalSentinel(cmd, visitor, srcMetadata, conditional.Test, constructionIsTrue, lowered);
+            return JsonShapeNode.Object(
+                objectNode.Name,
+                objectNode.DeclaredType,
+                objectNode.Members,
+                JsonShapePresence.AnyColumnNotNull([sentinelOrdinal]),
+                objectNode.Slot,
+                objectNode.Member);
+        }
+
+        private static int AppendJsonConditionalSentinel(
+            QueryCommand cmd,
+            CorrelatedQueryExpressionVisitor visitor,
+            IEntityMetadata? srcMetadata,
+            Expression predicate,
+            bool constructionIsTrue,
+            List<SelectExpression> lowered)
+        {
+            // A non-null string on the construction arm and a SQL NULL on the null arm, rendered through the
+            // existing conditional CASE lowering. String arms avoid a nullable value-type constant (which the
+            // constant renderer would not inline) and keep the sentinel column type-neutral.
+            var nonNull = Expression.Constant("json", typeof(string));
+            var nullValue = Expression.Constant(null, typeof(string));
+            var sentinel = Expression.Condition(
+                predicate,
+                constructionIsTrue ? nonNull : nullValue,
+                constructionIsTrue ? nullValue : nonNull);
+
+            var column = AppendJsonLeafColumn(cmd, visitor, srcMetadata, sentinel, typeof(string), propertyName: null, lowered);
+            return column.Index;
+        }
+
+        private static SelectExpression AppendJsonLeafColumn(
+            QueryCommand cmd,
+            CorrelatedQueryExpressionVisitor visitor,
+            IEntityMetadata? srcMetadata,
+            Expression expression,
+            Type declaredType,
+            string? propertyName,
+            List<SelectExpression> lowered)
+        {
+            var (durationUnit, durationPrecision) = ResolveDuration(srcMetadata, expression);
+            var converter = ResolveConverter(srcMetadata, expression) ?? ResolveShapeConverter(cmd, expression);
+
+            var column = new SelectExpression(declaredType)
+            {
+                Index = lowered.Count,
+                PropertyName = propertyName,
+                Expression = visitor.Visit(expression),
+                DurationUnit = durationUnit,
+                DurationPrecision = durationPrecision,
+                ProviderType = converter?.ProviderType,
+                Converter = converter,
+                IsLobStreaming = TableAliasAccessors.IsStreaming(expression),
+            };
+            column.DefaultOnNull = !column.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(expression);
+            TagWideCountNarrowing(column, cmd);
+            lowered.Add(column);
+            return column;
+        }
+
+        /// <summary>
+        /// The lowered JSON leaf columns are bound by reader ordinal, but their SQL aliases still carry
+        /// the member name. Two same-named leaves in different object scopes are a legal JSON shape
+        /// (scoping lives in the captured descriptor), yet they would emit two identical output names;
+        /// SQL Server then rejects a trailing <c>ORDER BY</c> on that name as ambiguous. Give every
+        /// duplicate occurrence after the first a distinct output alias. The alias is cosmetic to JSON
+        /// (the writer reads by ordinal and the descriptor owns the scoped property names), so this does
+        /// not change the emitted JSON.
+        /// </summary>
+        private static void DisambiguateJsonLeafAliases(List<SelectExpression> lowered)
+        {
+            Dictionary<string, int>? seen = null;
+            for (var i = 0; i < lowered.Count; i++)
+            {
+                var column = lowered[i];
+                var name = column.PropertyName;
+                if (string.IsNullOrEmpty(name))
+                    continue;
+
+                seen ??= new Dictionary<string, int>(StringComparer.Ordinal);
+                if (seen.TryGetValue(name!, out var count))
+                {
+                    seen[name!] = count + 1;
+                    column.PropertyName = $"__json_{i}";
+                }
+                else
+                {
+                    seen[name!] = 1;
+                }
+            }
+        }
+
+        private static JsonShapeNode BuildJsonArrayElement(Type arrayType)
+        {
+            var elementType = arrayType.GetElementType()!;
+            var valueType = Nullable.GetUnderlyingType(elementType) ?? elementType;
+
+            if (valueType.IsArray)
+                return JsonShapeNode.Array(name: null, elementType, BuildJsonArrayElement(valueType), binding: null);
+
+            return JsonShapeNode.Scalar(name: null, elementType, binding: null);
+        }
+
+        /// <summary>
+        /// Builds the JSON shape of an actual <see cref="IProjection"/> result (a bare join command or a
+        /// derived identity read): the expanded select list already carries per-slot
+        /// <see cref="ProjectionEntityItem"/> groups, so each slot becomes a top-level <c>ItemN</c> object
+        /// with an any-column-not-null presence rule, exactly like the materializer's joined-entity
+        /// rebuild. A partial/mixed projection (some columns not tagged with a slot) is rejected
+        /// fail-closed rather than silently falling back to the flat phase-1 plan, which would emit mapped
+        /// column names instead of <c>Item1</c>/<c>Item2</c>.
+        /// </summary>
+        private static JsonShapeNode? BuildJsonProjectionShape(SelectExpression[] columns, Type projectionType)
+        {
+            if (columns.Length == 0 || !projectionType.IsAssignableTo(typeof(IProjection)))
+                return null;
+
+            var slots = new SortedDictionary<int, List<SelectExpression>>();
+            for (var i = 0; i < columns.Length; i++)
+            {
+                if (columns[i].ProjectionItem is not { } item)
+                    throw new NotSupportedException(
+                        $"The JSON projection '{projectionType.Name}' mixes slot-tagged and untagged columns at ordinal {i}; only a whole-entity Projection slot shape can be streamed as JSON.");
+
+                if (!slots.TryGetValue(item.Slot, out var slotColumns))
+                    slots[item.Slot] = slotColumns = [];
+
+                slotColumns.Add(columns[i]);
+            }
+
+            var members = new JsonShapeNode[slots.Count];
+            var memberIndex = 0;
+            foreach (var pair in slots)
+            {
+                var slotColumns = pair.Value;
+                var slotMembers = new JsonShapeNode[slotColumns.Count];
+                var ordinals = new int[slotColumns.Count];
+                for (var i = 0; i < slotColumns.Count; i++)
+                {
+                    var column = slotColumns[i];
+                    ordinals[i] = column.Index;
+                    slotMembers[i] = JsonShapeNode.Scalar(
+                        column.PropertyName,
+                        column.PropertyType,
+                        new JsonShapeBinding(column.Index, column.Nullable, column.DefaultOnNull));
+                }
+
+                members[memberIndex++] = JsonShapeNode.Object(
+                    $"Item{pair.Key + 1}",
+                    slotColumns[0].ProjectionItem!.EntityType,
+                    slotMembers,
+                    JsonShapePresence.AnyColumnNotNull(ordinals),
+                    pair.Key,
+                    null);
+            }
+
+            return JsonShapeNode.Object(name: null, projectionType, members, JsonShapePresence.Always, slot: null, member: null);
+        }
+
+        private static string ResolveJsonResultMemberName(Type resultType, string parameterName)
+        {
+            var properties = resultType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+            for (var i = 0; i < properties.Length; i++)
+            {
+                if (string.Equals(properties[i].Name, parameterName, StringComparison.Ordinal))
+                    return properties[i].Name;
+            }
+
+            for (var i = 0; i < properties.Length; i++)
+            {
+                if (string.Equals(properties[i].Name, parameterName, StringComparison.OrdinalIgnoreCase))
+                    return properties[i].Name;
+            }
+
+            return parameterName;
+        }
+
+        /// <summary>
         /// Returns the column a consumer reads from a single-column projection source. A named member
         /// column is reused directly (its defining expression re-resolves to the output alias). An
         /// unaliased computed scalar carries no member name, so the consumer reads the source's stable
@@ -807,6 +1396,8 @@ public partial class QueryCommand
                     }
 
                     selectList = derived;
+                    if (cmd.JsonShapeMode)
+                        cmd.JsonShape = BuildJsonProjectionShape(derived, (cmd.ProjectionType ?? srcType));
                     return true;
                 }
 
@@ -871,6 +1462,131 @@ public partial class QueryCommand
             }
 
             selectList = columns;
+            if (cmd.JsonShapeMode)
+                cmd.JsonShape = BuildJsonProjectionShape(columns, (cmd.ProjectionType ?? srcType));
+            return true;
+        }
+
+        /// <summary>
+        /// Structural predicate for a direct whole-entity projection item
+        /// (<c>Select(p =&gt; p.ItemN)</c>): a bare property read of the joined projection parameter
+        /// itself, where the property is a declared <c>ItemN</c> of that <see cref="IProjection"/> type
+        /// and the result type is the item's own type. An ordinary entity-valued member (for example a
+        /// mapped navigation), a nested item read or an explicit cast to an unrelated result type is not
+        /// recognized. Does not consult entity metadata; the mapping gate lives in
+        /// <see cref="TryGetDirectEntityItem"/> and in the final unmapped-item guard.
+        /// </summary>
+        private static bool TryGetProjectionItemMember(
+            QueryCommand cmd,
+            out Type itemType,
+            out int slot,
+            out string memberName,
+            out Expression itemExpression)
+        {
+            itemType = typeof(object);
+            slot = 0;
+            memberName = string.Empty;
+            itemExpression = cmd._exp!.Body;
+
+            // Only a joined projection is addressed by ItemN; a plain entity projection has no items.
+            if (cmd._joins is not { Length: > 0 })
+                return false;
+
+            var body = TypeFacts.UnwrapConvert(cmd._exp.Body);
+            if (body is not MemberExpression { Member: PropertyInfo property } member
+                || member.Expression is not ParameterExpression parameter)
+                return false;
+
+            var projectionType = parameter.Type;
+            if (!projectionType.IsAssignableTo(typeof(IProjection)))
+                return false;
+
+            // The read must name a property declared by the projection type itself, not a member of a
+            // nested entity reached through an ItemN (for example p.Item2.SomeNavigation).
+            var name = property.Name;
+            if (name.Length <= 4 || !name.StartsWith("Item", StringComparison.Ordinal))
+                return false;
+
+            if (!int.TryParse(name.AsSpan(4), out var n) || n < 1)
+                return false;
+
+            // Read the item type from the projection's generic arguments and take the member directly
+            // from the expression, instead of re-resolving by name: a re-resolution could throw
+            // AmbiguousMatchException on a hidden member and is not needed to prove the binding.
+            var itemTypes = projectionType.GetGenericArguments();
+            if (n > itemTypes.Length || property.DeclaringType != projectionType)
+                return false;
+
+            var resolvedItemType = itemTypes[n - 1];
+            if (property.PropertyType != resolvedItemType)
+                return false;
+
+            // The result type must be the item's own type; a cast to an unrelated result type is deferred.
+            if (cmd._exp.Body.Type != resolvedItemType)
+                return false;
+
+            slot = n - 1;
+            memberName = name;
+            itemType = resolvedItemType;
+            itemExpression = body;
+            return true;
+        }
+
+        /// <summary>
+        /// Recognizes the direct whole-entity projection of a joined projection item and confirms the
+        /// SQL provider can materialize it: the structural <see cref="TryGetProjectionItemMember"/> match
+        /// must hold and, on a mapping provider, the item must be a mapped entity. A scalar or otherwise
+        /// non-entity item is left to the prior scalar projection behavior (and, if no earlier branch
+        /// handles it, to the final unmapped-item guard).
+        /// </summary>
+        private static bool TryGetDirectEntityItem(
+            QueryCommand cmd,
+            out Type itemType,
+            out int slot,
+            out string memberName,
+            out Expression itemExpression)
+            => TryGetProjectionItemMember(cmd, out itemType, out slot, out memberName, out itemExpression)
+                && !RequiresMappingButUnmapped(cmd, itemType);
+
+        /// <summary>
+        /// True when the command runs on a mapping provider and <paramref name="itemType"/> has no mapped
+        /// entity metadata, so it cannot be expanded into columns.
+        /// </summary>
+        private static bool RequiresMappingButUnmapped(QueryCommand cmd, Type itemType)
+            => cmd._dataContext!.NeedMapping
+                && (!DataContextCache.Metadata.TryGetValue(itemType, out var itemMetadata) || itemMetadata.Properties.Count == 0);
+
+        /// <summary>
+        /// True when the projection is a cast of a bare joined projection item (<c>Select(p =&gt;
+        /// (object)p.ItemN)</c>) to an unrelated result type: a deferred form that must fail closed
+        /// instead of rendering an empty select list.
+        /// </summary>
+        private static bool IsUnrelatedCastOfProjectionItem(QueryCommand cmd, out Type itemType)
+        {
+            itemType = typeof(object);
+            if (cmd._exp!.Body is not UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } convert)
+                return false;
+
+            if (TypeFacts.UnwrapConvert(convert.Operand) is not MemberExpression { Member: PropertyInfo property } member
+                || member.Expression is not ParameterExpression parameter)
+                return false;
+
+            var projectionType = parameter.Type;
+            if (!projectionType.IsAssignableTo(typeof(IProjection)))
+                return false;
+
+            var name = property.Name;
+            if (name.Length <= 4 || !name.StartsWith("Item", StringComparison.Ordinal))
+                return false;
+
+            if (!int.TryParse(name.AsSpan(4), out var n) || n < 1)
+                return false;
+
+            var itemTypes = projectionType.GetGenericArguments();
+            if (n > itemTypes.Length || property.DeclaringType != projectionType || property.PropertyType != itemTypes[n - 1])
+                return false;
+
+            itemType = itemTypes[n - 1];
             return true;
         }
 

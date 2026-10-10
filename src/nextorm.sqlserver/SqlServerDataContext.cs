@@ -107,7 +107,7 @@ public class SqlServerDataContext : DataContext
     /// <param name="parameter">The parameter descriptor.</param>
     /// <returns>A new SQL Server parameter configured from <paramref name="parameter"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="parameter"/> is a table-valued parameter without a type name, or a structured parameter whose <see cref="ParameterDirection"/> is not <see cref="ParameterDirection.Input"/>.</exception>
-    protected override DbParameter CreateProcedureParameter(ProcedureParameter parameter)
+    protected internal override DbParameter CreateProcedureParameter(ProcedureParameter parameter)
     {
         if (parameter.Value is TableParameterValue tableValue)
             return CreateTableValuedParameter(parameter, tableValue);

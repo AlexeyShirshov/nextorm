@@ -1,0 +1,39 @@
+{
+  "unit": "D154 public eager extreme-row DTO constructors",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+      "tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj",
+      "tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj",
+      "tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj",
+      "tests/nextorm.integration.tests/nextorm.integration.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~ExtremeRowDescriptionLazinessTests",
+      "FullyQualifiedName~ExtremeRowDialectGuardTests",
+      "FullyQualifiedName~InMemoryExtremeRowTests",
+      "FullyQualifiedName~ExtremeRowNativeSqlGenerationTests",
+      "FullyQualifiedName~ExtremeRowPayloadLazinessTests",
+      "FullyQualifiedName~ExtremeRowNativeCacheStabilityTests",
+      "FullyQualifiedName~PostgresExtremeRowNativeSpecificTests",
+      "FullyQualifiedName~ClickHouseExtremeRowNativeSpecificTests"
+    ],
+    "files": [
+      "src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs",
+      "src/nextorm.core/DataContext/SqlBuilder.cs",
+      "tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs",
+      "tests/nextorm.core.tests/ExtremeRowDescriptionLazinessTests.cs",
+      "tests/nextorm.postgres.tests/ExtremeRowPayloadLazinessTests.cs",
+      "tests/nextorm.clickhouse.tests/ExtremeRowPayloadLazinessTests.cs",
+      "docs/advanced/api-reference.md",
+      "docs/advanced/select-where-extrema-native.md",
+      "docs/ru/advanced/api-reference.md",
+      "docs/ru/advanced/select-where-extrema-native.md",
+      "docs/specs/design/API-NAMING-REVIEW.md",
+      "docs/specs/status/rc2-154-dto-public-ctors-1.md"
+    ],
+    "rebuild": "affected",
+    "boundary": "run the new external non-friend consumer suite (nextorm.mariadb.tests full project), the affected extreme-row core/provider regression classes, the PostgreSQL+ClickHouse container integration extreme-row classes (DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock, providers must not be skipped), and the core+mariadb coverage sweep",
+    "rationale": "the change publishes three existing eager DTO constructors, adds construction-time validation and an internal trusted construction marker in nextorm.core, and adds an external (no InternalsVisibleTo) contract suite; the affected behavior is construction/validation/laziness and the existing native extreme-row SQL generation, covered by the new external suite plus the affected core/postgres/clickhouse regression classes and the PG/CH container integration classes"
+  }
+}

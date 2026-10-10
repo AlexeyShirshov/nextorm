@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
+using System.Text;
 using FluentAssertions;
 using NextORM.Core;
 using Npgsql;
@@ -2161,6 +2162,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_Scalar_ShouldUseUnnest()
     {
         var ctx = _sut.DataProvider;
@@ -2181,6 +2183,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_EmptyScalar_ShouldReadNoRows()
     {
         var ctx = _sut.DataProvider;
@@ -2193,6 +2196,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_Entity_ShouldUseJsonbToRecordset()
     {
         var ctx = _sut.DataProvider;
@@ -2217,6 +2221,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameterWithTypeName_ShouldThrowArgumentException()
     {
         var ctx = _sut.DataProvider;
@@ -2229,6 +2234,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_DateTime_ShouldRoundTripUnnest()
     {
         var ctx = _sut.DataProvider;
@@ -2254,6 +2260,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_NullableIntArray_ShouldKeepNulls()
     {
         var ctx = _sut.DataProvider;
@@ -2459,6 +2466,52 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         act.Should().Throw<PostgresException>()
             .Which.SqlState.Should().Be("42883");
+    }
+
+    // D176.5 provider-native array source: array_agg over a string column is a real PostgreSQL text[],
+    // exercised through the recursive JSON writer inside an object member.
+    [Fact]
+    public void WriteJson_NativeStringArrayAgg_ShouldMatchSerializer()
+    {
+        var command = _sut.ComplexEntity
+            .Select(x => new { Strings = SqlFunctions.Postgres.array_agg(x.RequiredString) });
+
+        using var stream = new MemoryStream();
+        command.WriteJson(stream);
+
+        Encoding.UTF8.GetString(stream.ToArray())
+            .Should().Be(JsonSerializer.Serialize(command.ToList()));
+    }
+
+    // D176 loop-back T5: a provider-native array that is SQL NULL must emit JSON null, and an empty
+    // native array must emit []; both beyond the shared non-empty array_agg string source.
+    [Fact]
+    public void WriteJson_NativeArray_NullAndEmpty_ShouldMatchSerializer()
+    {
+        // Aggregate over no rows: PostgreSQL returns SQL NULL for array_agg.
+        var nullCommand = _sut.ComplexEntity.Where(x => x.Id < 0)
+            .Select(x => new { Strings = SqlFunctions.Postgres.array_agg(x.RequiredString) });
+        using (var stream = new MemoryStream())
+        {
+            nullCommand.WriteJson(stream);
+            var actual = Encoding.UTF8.GetString(stream.ToArray());
+            actual.Should().Be(JsonSerializer.Serialize(nullCommand.ToList()));
+            actual.Should().Contain("\"Strings\":null", "a SQL NULL array is JSON null, never []");
+        }
+
+        // string_to_array('', ',') is a real empty text[] (no aggregate, no array literal translation).
+        var emptyCommand = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Empty = SqlFunctions.Postgres.string_to_array("", ","),
+            });
+        using (var stream = new MemoryStream())
+        {
+            emptyCommand.WriteJson(stream);
+            var actual = Encoding.UTF8.GetString(stream.ToArray());
+            actual.Should().Be(JsonSerializer.Serialize(emptyCommand.ToList()));
+            actual.Should().Contain("\"Empty\":[]", "an empty native array is []");
+        }
     }
 
     private static int RawProcedureKey() => Random.Shared.Next(2_000_000, int.MaxValue);

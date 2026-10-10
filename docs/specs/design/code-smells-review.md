@@ -1767,10 +1767,7 @@ Build Release — **0 warnings / 0 errors**; unit: core **161/161**, clickhouse 
 
 ### ℹ️ Наблюдения (фикс не требуется)
 
-- **`p.Item1` без колонки.** `Select(p => p.Item1)`/`Where(p => p.Item1 == …)` не поддержаны: член `Item1` не
-  проходит спец-обработку (`MemberTranslator.cs:94-109` ловит только `Element`) и упирается в терминальный
-  `throw BuildSqlCommandException("Cannot resolve column for member Item1")` (`:410`). Документированный пример
-  (`p.Item1.Id`) и тесты работают. Зазор UX/тестов, не дефект.
+- **`p.Item1` без колонки — `Select` закрыт.** `Select(p => p.ItemN)` теперь поддержан ([#190](https://github.com/AlexeyShirshov/nextorm/issues/190)): распознаётся в `QueryCommand.QueryPreparer.TryGetDirectEntityItem` до скалярной трансляции, раскрывается существующим `TryExpandEntityItem` в mapped-колонки и материализуется на корень через `RowMaterializerBuilder.TryBuildRootEntityItem` (all-NULL → `null` на отсутствующей стороне outer join). Сравнение целой сущности в предикате (`Where(p => p.Item1 == …)`) по-прежнему не поддержано и отклоняется терминальным `throw BuildSqlCommandException("Cannot resolve column for member Item1")` (`MemberTranslator.cs:573`) — это согласованный scope, не дефект. Документированный пример (`p.Item1.Id`) продолжает работать.
 - **`ArrayJoinNames.ElementMember` — `const string "Element"`,** а не `nameof(ArrayJoinProjection<object, object>.Element)`
   (`ArrayJoinProjection.cs:41`): переименование свойства не обновит константу автоматически. Риск низкий.
 - **SQL-алиас `__nextorm_aj_element`** рендерится без кавычек (`SqlBuilder.cs:119-121`); идентификатор безопасен для
@@ -1848,19 +1845,38 @@ capability-проверки, а не вернёт «нет».
 - **Проверка:** build 0/0; SQL-gen-тесты SQL Server `Tablesample_Bernoulli_ShouldThrow…` не меняются
   (`SupportsTablesample`-ветка бросает раньше method-ветки).
 
-### 🟡 Находка 25 — `WITH TIES` не гейтится с `DISTINCT`/`DISTINCT ON` (ОТКРЫТА)
+### ✅ Находка 25 (актуализация 07.10.2026) — `WITH TIES` гейтится с `DISTINCT`/`DISTINCT ON` при генерации SQL
 
-`EntityBuilder` гейтит пару `DISTINCT`↔`DISTINCT ON` (`:477-504`), но `WithTies()` (`:570-576`) не
-проверяет ни `IsDistinct`, ни `_distinctOn`; `SqlBuilder` для `WITH TIES` проверяет только диалект и
-положительный лимит (`SqlBuilder.cs:66-70`). PostgreSQL и SQL Server не сочетают `WITH TIES` с
-`DISTINCT` (PostgreSQL — и с `DISTINCT ON`), поэтому `.Distinct().Limit(n).WithTies()` доходит до
-сервера как недопустимый SQL. Рантайм-эффект на живом сервере в этом проходе не перепроверялся
-(аналог Находки 19).
+Устаревшее утверждение «`WITH TIES` не гейтится, недопустимый SQL доходит до сервера» — **CLOSED**:
+guard существует и срабатывает на этапе генерации SQL. `SqlBuilder.cs:81-82` —
+`if (cmd.Paging.HasWithTies && (cmd.IsDistinct || cmd.DistinctOn is not null)) throw new
+BuildSqlCommandException("WITH TIES cannot be combined with DISTINCT or DISTINCT ON.");` — покрывает
+оба модификатора; исключение объявлено в `BuildSqlCommandException.cs:12` (`public : DataContextException`).
+Вызов падает до построения SQL, поэтому рантайм-эффект «недопустимый SQL доходит до сервера» не
+воспроизводится. Принятое поведение — оценка при генерации, отсутствие раннего fluent-guard'а в
+`WithTies()` **не является отдельным долгом**.
 
-- **Стало:** зеркальный guard в `WithTies()` (как `Distinct()`/`DistinctOn()`) либо явная оговорка в
-  XML-доке, что `WITH TIES` несовместим с `DISTINCT`/`DISTINCT ON`.
-- **Проверка:** unit-тест `.Distinct().Limit(2).WithTies()` → `InvalidOperationException` (или
-  закреплённая документированная комбинация); живой сервер — по возможности.
+- **Историческое (оставлено как история):** прежнее утверждение, что `WithTies()` (`:570-576`) не
+  проверяет `IsDistinct`/`_distinctOn`, и предложение «зеркальный guard в `WithTies()`» с ожиданием
+  `InvalidOperationException` (старые, ныне неактуальные диапазоны `EntityBuilder.cs:477-504,570-576`,
+  `SqlBuilder.cs:66-70`) относились к варианту раннего fluent-guard'а; он не выбран.
+- **Проверка:** новые теории обоих порядков вызова: PostgreSQL
+  `WithTies_WithDistinct_InBothCallOrders_ShouldRejectCombination` (`tests/nextorm.postgres.tests/SqlGenerationTests.cs:3845`)
+  и `WithTies_WithDistinctOn_InBothCallOrders_ShouldRejectCombination` (`:3863`); SQL Server
+  `WithTies_WithDistinct_InBothCallOrders_ShouldRejectCombination`
+  (`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:2675`). Запрос строится вне `Assert.Throws`,
+  внутри — только генерация SQL; проверены тип `BuildSqlCommandException` и точное сообщение (раннее
+  fluent-исключение неприемлемо). Существующие позитивные/offset/без-лимита тесты `WITH TIES`
+  остались зелёными (AC4).
+- **Доказательства:** C1 `dotnet build -c Debug` exit 0 (0 warnings / 0 errors);
+  C2 `dotnet test tests/nextorm.postgres.tests -c Debug --filter FullyQualifiedName~NextORM.Postgres.Tests.SqlGenerationTests.WithTies`
+  exit 0 (7 passed / 0 skipped; 6 rejection-кейсов: 2 DISTINCT + 2 DISTINCT ON + 2 SQL Server);
+  C3 `dotnet test tests/nextorm.sqlserver.tests -c Debug --filter FullyQualifiedName~NextORM.SqlServer.Tests.SqlGenerationTests.WithTies`
+  exit 0 (5 passed / 0 skipped); C4/C5 полные прогоны обоих проектов exit 0 (791 и 712 passed / 0 skipped).
+  Логи: `/tmp/nextorm-D157-r1/build.log`, `postgres-withties.log`, `sqlserver-withties.log`,
+  `postgres-project.log`, `sqlserver-project.log`.
+- **Провенанс:** долг 6 задачи #144 (`native-extreme-row-144-1.md:303`; исходный issue цитировал
+  `:302`), маппинг долга на `:314` → **#157**.
 
 ### 🟡 Находка 26 — мусорный артефакт `SqlGenerationTests.cs.dump` (ОТКРЫТА)
 
@@ -8291,3 +8307,25 @@ P0/P1 нет**; обе находки ниже — 🟡 P2, **deferred с три
 **ℹ️ Наблюдение A. God-class `RawMapperFactory` (Observation C предрелизного аудита v1.0.9-rc1) не переоткрывается.** Проход не расширяет класс, а сужает его: удалены две эвристики вместе с их doc-комментариями (`git diff --numstat` — `RawMapperFactory.cs` +43/−68, net −25), а обе точки классификации сведены к одному вызову провайдерного предиката. Пре-существующая крупность `RawMapperFactory`/`QueryCommand`/`DataContext` констатируется как есть и **не переоткрывается**.
 
 **ℹ️ Наблюдение B. Доказательство — у кодового потока.** Debug build `dotnet build nextorm.slnx -c Debug` exit 0, 0 Warning(s)/0 Error(s) (`/tmp/nextorm-203/r1-n1/d1-build.log`); `dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~RawRowMaterializer` total 52 / succeeded 52 / failed 0 / skipped 0 (`/tmp/nextorm-203/r1-n1/d2-innerloop.log`). Полная приёмка (six-provider suite, coverage, 7-case perf, docfx) и ревизии/попытки — в статусе `203-authoritative-rawrow-classification-1.md`; этот поток docs/registers-only, код не прогонялся.
+
+---
+
+## Аудит 08.10.2026 — issue #191: реализация provider-specific extensions перенесена в провайдерные сборки (кодовая сторона; ветка `1.0.9-rc2`; новых P0/P1 — нет; ℹ️ — N191-C1)
+
+**Область.** Реализация ClickHouse-модификаторов (`Final`/`Settings`/`PreWhere`/`ArrayJoin`/…, `SemiJoin`/`AntiJoin`/`PasteJoin`) перенесена из core-instance в `ClickHouseEntityBuilderExtensions`/`ClickHouseJoinedEntityBuilderExtensions`; публичные option-расширения `Sample`/`Global`/`WithStrictness` делегируют **существующим** `internal`-мутаторам core (`FromOptions.Sample`×2, `JoinOptions.Global`/`WithStrictness`), которые остаются в core; PostgreSQL `DistinctOn` и SQL Server `Pivot`/`Unpivot` — в новые провайдерные extension-классы. Типизированное состояние и copy/clone-механизмы остаются в core. Фактически расширены только реально используемые `internal`-швы: read-only `HavingCondition`/`GroupByExpression`/`SourceFrom`/`PreWhereCondition`, `EnsureNoEagerLoadState`, новый typed `JoinedEntityBuilder.JoinCore`, non-copying `SettingsListBacking`/`ArrayJoinsBacking` (возвращают builder'у его собственную копию после clone/join) и IVT для `nextorm.postgres`/`nextorm.sqlserver`; `protected internal override CreateProcedureParameter` в PG/SS — вынужденное следствие этого IVT (компилятор требует `protected internal`, иначе CS0507), публичный контракт не расширен; private-сеттеры `FromOptions`/`JoinOptions` после ревизии **не расширялись**, публичный widening отсутствует.
+
+**ℹ️ N191-C1. Рекурсия `JoinedEntityBuilder`-расширений — дефект найден и исправлен в рамках D191.3.** Первая реализация `ClickHouseJoinedEntityBuilderExtensions.SemiJoin`/`AntiJoin` вызывала `builder.SemiJoin(...)`/`AntiJoin(...)`, что для более специфичного ресивера `JoinedEntityBuilder<T1,T2>` перебиндивалось на сам extension → `StackOverflow` (exit 134) в `ClickHouseExtensionSurfaceTests` и `SqlGenerationTests`. Причина — extension-lookup выбирает наиболее специфичный применимый extension; `this`-тип совпадает с ресивером. Исправление: receiver приводится к базовому `EntityBuilder<Projection<...>>` перед вызовом (как в уже-корректных `ArrayJoin`/`LeftArrayJoin`); Roslyn `refs` подтверждают привязку 12 call-sites к базовому extension. Для PG/SS теневой рекурсии нет: удалённые instance-члены отсутствуют в core, поэтому extension — единственная привязка.
+
+**ℹ️ Наблюдения.** (1) Нового слопа нет; guard/exception-сообщения сохранены. CHECK r1 нашёл allocation-регрессию (+~70 B/op) в трёх CH construct-кейсах: relocation провёл `Settings`/`ArrayJoin` через защитно-копирующие сеттеры и добавил лишнюю копию в `Settings`; DO n=2 восстановил pre-relocation поведение через non-copying `internal`-швы `SettingsListBacking`/`ArrayJoinsBacking` (клон/join отдаёт builder'у его собственную копию — алиасинга/leak между builders нет) и убрал избыточную перекопировку. (2) `InternalsVisibleTo` для `nextorm.postgres`/`nextorm.sqlserver` — минимальный грант, аналогичный уже принятому для ClickHouse (см. API-NAMING-REVIEW N191-1). (3) Доказательства/приёмка — статус `rc2-191-provider-extensions-1.md`; CHECK сертифицирует.
+
+---
+
+## Предрелизный аудит v1.0.9-rc2 (2026-10-10, diff `v1.0.9-rc1..HEAD` @ `a2dd5aca`, 101 коммит; 🔴 — 0, 🟡 — 0 новых (P0/P1 — нет), ℹ️ — 2)
+
+**Область.** Кодовая дельта rc2: `src/**` 42 файла (+5163 / −919; новые — `EagerLoadMode.cs`, `CsvBinaryFieldWriter.cs`, `JsonNativeStream.cs`, `JsonShapeNode.cs`, `PostgresEntityBuilderExtensions.cs`, `SqlServerEntityBuilderExtensions.cs`; крупнейший прирост — `JoinedEntityBuilder.cs` +840, `QueryCommand.QueryPreparer.cs` +716, `EntityBuilder.cs` +695 / −507). Проверены заявленные оси: подавления, `IDisposable`, LINQ на горячем пути, god-классы, хэш-ключи кэша, `T? x = null`. API-сторона новых публичных имён — `API-NAMING-REVIEW.md` §«Предрелизный аудит v1.0.9-rc2» (N184-1/NJSON1/NJSON2).
+
+**Точные числа.** `dotnet build nextorm.slnx -c Release` — **0 warnings / 0 errors**. Подавления в `src/` — **5** (CS8619 ×3 `Builders/EntityBuilderExtensions.cs:356,373,389`; CS8714 `DataContext/InMemoryLinqSource.cs:82`; IDE0066 `Query/ExpressionPlanEqualityComparer.cs:594`), все с парным `restore` и комментарием-обоснованием ⇒ соотношение **5/5**; в дельте — **0 добавлено / 0 удалено** (`#pragma warning disable`, `[SuppressMessage]`, `NoWarn`, `Skip=`, `Task.Delay` — **0**). `CS1591`-pragma в дельте встречается только в `artifacts/**/*.log` (лог-артефакты) и в генераторе `JoinAliasGenerator.cs:754` (эмитится в сгенерированный код, pre-existing). Сигнатурных публичных `T? x = null` в дельте — **0** (все новые `= null` — `internal`/`private`; `LoadWith` использует enum-дефолт `EagerLoadMode.Default`, не `null`).
+
+**Проверка по осям.** (1) **IDisposable — ✅.** Новый `CsvBinaryChunkReader : IDisposable` (`Query/Csv/CsvBinaryFieldWriter.cs:162`) возвращает оба `ArrayPool`-буфера; ctor при отказе второго `Rent` возвращает первый и `throw;` (без leak); `Dispose` (`:271`) возвращает оба; call-sites — `using var` (`:72,:109`). Пустых `catch` — 0; единственный новый `catch` (`:183`) перебрасывает. (2) **LINQ на горячем пути — ✅.** Добавленные `.ToArray()` (`JsonShapePlan`, lowered columns) — холодная подготовка плана; LINQ-операторов, `Task.Delay`, `Task.Run`, `.Result`, `.Wait()`, `async void`, `lock` в дельте нет. (3) **Хэш-ключи кэша — ✅.** `Expressions/SelectExpressionPlanEqualityComparer.cs` (#173) добавляет `ProjectionItem.Member` **и** в `Equals` (`:76`), **и** в `GetHashCode` (`:122`) — контракт `Equals ⇒ одинаковый hash` сохранён; `DataContext/ProjectionAliasCache.cs` добавляет memoized `ConditionalWeakTable<Type, StrongBox<PropertyInfo?>>` и **чистит** её в `Clear()`; `DataContextCache.Clear()` вызывает новый `JoinIntoSpecHelpers.ClearIdentitySelectorCache()` (ключ — стабильный `ConcurrentDictionary<Type, Delegate>`). (4) **Optional-`null` — ✅** нового публичного нет (см. числа). (5) **God-класс — pre-existing, не блокер.** `EntityBuilder.cs` 4129 → 4317 строк (тело `EntityBuilder<TEntity>` ≈3.0k после вычета вложенных visitor'ов) — давняя кумулятивная регрессия Находки 4 (зафиксирована отдельно, не переоткрывается); дельта добавляет форму `#160`, а не новую ответственность. Новых god-классов/длинных списков параметров нет.
+
+ℹ️ **Наблюдения.** (1) **`InternalsVisibleTo nextorm.benchmark` — новый грант** (`src/nextorm.core/nextorm.core.csproj:87`; комментарий: бенч C08 гоняет нативный array-путь `JsonShapeNode`/`JsonRowWriterFactory`). Раскрывает бенчмарк-сборке всю internal-поверхность core; прецедент — IVT провайдерам/тестам (N191-2 / Наблюдение F «Аудит 27.09.2026 — LOB фаза 2»). Не блокер; при заморозке — тот же вопрос сужения гранта, что и для провайдерных IVT. (2) `nextorm.core.csproj` также получил IVT для `nextorm.postgres`/`nextorm.sqlserver` — уже записано в N191-1/N191-C1, не переоткрывается. (3) `slopwatch` локально не установлен (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx); скан подавлений/слопа выполнен вручную по added-строкам диффа.

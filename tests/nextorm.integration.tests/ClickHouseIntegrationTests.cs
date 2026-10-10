@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
 
 namespace NextORM.Integration.Tests;
@@ -1376,6 +1377,351 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void WriteJson_TypedColumns_ShouldMatchJsonSerializer()
         => CommonTestSuite.WriteJsonTypedColumns(_sut);
 
+    // D178 (#178) enum storage mirrors: ClickHouse does not derive CommonTestSuite.
+    [Fact]
+    public void EnumStorage_NumericMember_ShouldMatchJsonSerializer()
+        => CommonTestSuite.EnumStorageNumericMember(_sut);
+
+    [Fact]
+    public void EnumStorage_StringMember_ShouldMatchJsonSerializer()
+        => CommonTestSuite.EnumStorageStringMember(_sut);
+
+    [Fact]
+    public void EnumStorage_GenericStringMember_ShouldMatchJsonSerializer()
+        => CommonTestSuite.EnumStorageGenericStringMember(_sut);
+
+    [Fact]
+    public void EnumStorage_FlatObject_ShouldMatchJsonSerializer()
+        => CommonTestSuite.EnumStorageFlatObject(_sut);
+
+    [Fact]
+    public void EnumStorage_FieldType_ShouldBeNumeric()
+        => CommonTestSuite.RecordEnumStorageFieldType(_sut, Provider.Name);
+
+    // D176.5 phase-2 mirrors: ClickHouse does not derive CommonTestSuite, so the shared nested/object/
+    // conditional bodies are re-pinned here explicitly. ClickHouse has no binary_entity, so the slot
+    // scenario uses a ClickHouse-local fixture and the native-array scenarios use the Array columns.
+
+    [Fact]
+    public void WriteJson_NestedAnonymous_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonNestedAnonymous(_sut);
+
+    [Fact]
+    public void WriteJson_NestedMultipleLevels_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonNestedMultipleLevels(_sut);
+
+    [Fact]
+    public void WriteJson_NestedNamed_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonNestedNamed(_sut);
+
+    [Fact]
+    public void WriteJson_NestedAllNullChild_ShouldStayObject()
+        => CommonTestSuite.WriteJsonNestedAllNullChild(_sut);
+
+    [Fact]
+    public void WriteJson_NestedSameNameDifferentScopes_ShouldBeAccepted()
+        => CommonTestSuite.WriteJsonNestedSameNameDifferentScopes(_sut);
+
+    [Fact]
+    public void WriteJson_ConditionalNullArmTrue_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonConditionalNullArmTrue(_sut);
+
+    [Fact]
+    public void WriteJson_ConditionalNullArmFalse_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonConditionalNullArmFalse(_sut);
+
+    [Fact]
+    public void WriteJson_ConditionalAllNullObject_ShouldStayObject()
+        => CommonTestSuite.WriteJsonConditionalAllNullObject(_sut);
+
+    [Fact]
+    public void WriteJson_ConditionalMemberInit_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonConditionalMemberInit(_sut);
+
+    [Fact]
+    public void WriteJson_ConditionalBothArmsConstruction_ShouldThrowBeforeOutput()
+        => CommonTestSuite.WriteJsonConditionalBothArmsConstruction(_sut);
+
+    [Fact]
+    public async Task WriteJson_NestedAsync_ShouldMatchSync()
+        => await CommonTestSuite.WriteJsonNestedAsyncMatchesSync(_sut);
+
+    [Fact]
+    public async Task WriteJson_ConditionalAsync_ShouldMatchSync()
+        => await CommonTestSuite.WriteJsonConditionalAsyncMatchesSync(_sut);
+
+    [Fact]
+    public void WriteJson_Slot_LeftJoin_ShouldMatchItem1Item2()
+    {
+        EnsureJsonSlotSeed();
+        var command = _sut.DataProvider.From<JsonSlotParent>()
+            .Settings(("join_use_nulls", "1"))
+            .OrderBy(p => p.ParentId)
+            .LeftJoin(_sut.DataProvider.From<JsonSlotChild>(), (p, c) => p.ParentId == c.ParentRef);
+
+        var expected = JsonSerializer.Serialize(command.ToList());
+        var actual = JsonText(command);
+
+        actual.Should().Be(expected);
+        actual.Should().Contain("\"Item1\"").And.Contain("\"Item2\"");
+        actual.Should().Contain("\"Item2\":null", "the unmatched outer-join slot for parent 3 is JSON null");
+    }
+
+    [Fact]
+    public void WriteJson_Slot_Item1Item2_ShouldExposeDistinctSlotProperties()
+    {
+        // ClickHouse rejects duplicate output aliases in a whole-entity projection, so this fixture
+        // uses distinct member names per side. The per-object name scoping itself (same leaf name in
+        // two slots) is exercised by the shared suite and MariaDB, whose SELECT output allows it.
+        EnsureJsonSlotSeed();
+        var command = _sut.DataProvider.From<JsonSlotParent>()
+            .Settings(("join_use_nulls", "1"))
+            .OrderBy(p => p.ParentId)
+            .LeftJoin(_sut.DataProvider.From<JsonSlotChild>(), (p, c) => p.ParentId == c.ParentRef);
+
+        using var document = JsonDocument.Parse(JsonText(command));
+        var first = document.RootElement[0];
+
+        first.GetProperty("Item1").GetProperty("ParentId").GetInt32().Should().Be(1);
+        first.GetProperty("Item1").GetProperty("ParentName").GetString().Should().Be("p1");
+        first.GetProperty("Item2").GetProperty("ChildId").GetInt32().Should().Be(10);
+        first.GetProperty("Item2").GetProperty("ChildName").GetString().Should().Be("c1");
+    }
+
+    [Fact]
+    public async Task WriteJson_SlotAsync_ShouldMatchSync()
+    {
+        EnsureJsonSlotSeed();
+        var command = _sut.DataProvider.From<JsonSlotParent>()
+            .Settings(("join_use_nulls", "1"))
+            .OrderBy(p => p.ParentId)
+            .LeftJoin(_sut.DataProvider.From<JsonSlotChild>(), (p, c) => p.ParentId == c.ParentRef);
+
+        (await JsonTextAsync(command)).Should().Be(JsonText(command));
+    }
+
+    [Fact]
+    public void WriteJson_NativeArrays_ShouldMatchSerializer()
+    {
+        // Native Array(String)/Array(Int32) members inside an object, including the empty-array row.
+        var command = _sut.ArrayEntity.OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Tags, x.Nums });
+
+        JsonText(command).Should().Be(JsonSerializer.Serialize(command.ToList()));
+    }
+
+    [Fact]
+    public void WriteJson_NativeArrays_EmptyRow_ShouldEmitEmptyArrays()
+    {
+        var command = _sut.ArrayEntity.Where(x => x.Id == 3)
+            .Select(x => new { x.Id, x.Tags, x.Nums });
+
+        var text = JsonText(command);
+        text.Should().Contain("\"Tags\":[]").And.Contain("\"Nums\":[]");
+    }
+
+    [Fact]
+    public void WriteJson_NestedJaggedArray_ShouldMatchSerializer()
+    {
+        // Concrete ClickHouse nested-array source: groupArray of an Array(String) column is
+        // Array(Array(String)), so byte[]-free jagged recursion is exercised against real data.
+        var command = _sut.ArrayEntity
+            .Select(x => new { Grouped = SqlFunctions.ClickHouse.group_array(x.Tags) });
+
+        JsonText(command).Should().Be(JsonSerializer.Serialize(command.ToList()));
+    }
+
+    // T3: duplicate effective name within one nested object (shared body over complex_entity).
+    [Fact]
+    public void WriteJson_DuplicateNameWithinOneObject_ShouldThrowBeforeOutput()
+        => CommonTestSuite.WriteJsonDuplicateNameWithinOneObject(_sut);
+
+    // T4: whole-entity async and conditional-root async terminals (shared bodies).
+    [Fact]
+    public async Task WriteJson_WholeEntityAsync_ShouldMatchSync()
+        => await CommonTestSuite.WriteJsonWholeEntityAsyncMatchesSync(_sut);
+
+    [Fact]
+    public async Task WriteJson_ConditionalRootAsync_ShouldMatchSync()
+        => await CommonTestSuite.WriteJsonConditionalRootAsyncMatchesSync(_sut);
+
+    // T6: ClickHouse-local byte[]->String fixture (there is no shared binary_entity on ClickHouse).
+    [Fact]
+    public void WriteJson_ByteArrayNested_ShouldBeBase64()
+    {
+        EnsureJsonBinarySeed();
+        var command = _sut.DataProvider.From<JsonBinaryEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Data } });
+
+        var expected = JsonSerializer.Serialize(new object[]
+        {
+            new { Id = 1, Child = new { Data = new byte[] { 1, 2, 3, 4 } } },
+            new { Id = 2, Child = new { Data = Array.Empty<byte>() } },
+        });
+
+        JsonText(command).Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task WriteJson_ByteArrayAsync_ShouldMatchSync()
+    {
+        EnsureJsonBinarySeed();
+        var command = _sut.DataProvider.From<JsonBinaryEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Data } });
+
+        (await JsonTextAsync(command)).Should().Be(JsonText(command));
+    }
+
+    // T4/T6: slot async terminals over the ClickHouse-local slot fixture.
+    [Fact]
+    public async Task WriteJson_EntityAndScalarSlotAsync_ShouldMatchSync()
+    {
+        EnsureJsonSlotSeed();
+        var command = _sut.DataProvider.From<JsonSlotParent>()
+            .Settings(("join_use_nulls", "1"))
+            .OrderBy(p => p.ParentId)
+            .LeftJoin(_sut.DataProvider.From<JsonSlotChild>(), (p, c) => p.ParentId == c.ParentRef)
+            .Select(p => new { p.Item1, ChildId = p.Item2.ChildId });
+
+        (await JsonTextAsync(command)).Should().Be(JsonText(command));
+    }
+
+    [Fact]
+    public async Task WriteJson_ScalarScalarSlotsAsync_ShouldMatchSync()
+    {
+        EnsureJsonSlotSeed();
+        var command = _sut.DataProvider.From<JsonSlotParent>()
+            .Settings(("join_use_nulls", "1"))
+            .OrderBy(p => p.ParentId)
+            .LeftJoin(_sut.DataProvider.From<JsonSlotChild>(), (p, c) => p.ParentId == c.ParentRef)
+            .Select(p => new { ParentId = p.Item1.ParentId, ChildId = p.Item2.ChildId });
+
+        (await JsonTextAsync(command)).Should().Be(JsonText(command));
+    }
+
+    // T6: duplicate leaf names across slots exercising the JSON leaf-alias disambiguation.
+    [Fact]
+    public void WriteJson_DuplicateLeafNamesAcrossSlots_ShouldBeAccepted()
+    {
+        EnsureJsonSlotDupSeed();
+        var command = _sut.DataProvider.From<JsonSlotDupParent>()
+            .Settings(("join_use_nulls", "1"))
+            .OrderBy(p => p.Id)
+            .LeftJoin(_sut.DataProvider.From<JsonSlotDupChild>(), (p, c) => p.Id == c.ParentRef);
+
+        using var document = JsonDocument.Parse(JsonText(command));
+        var first = document.RootElement[0];
+
+        first.GetProperty("Item1").GetProperty("Id").GetInt32().Should().Be(1);
+        first.GetProperty("Item1").GetProperty("Name").GetString().Should().Be("p1");
+        first.GetProperty("Item2").GetProperty("Id").GetInt32().Should().Be(10);
+        first.GetProperty("Item2").GetProperty("Name").GetString().Should().Be("c1");
+    }
+
+    private static string JsonText<TResult>(QueryCommand<TResult> command)
+    {
+        using var stream = new MemoryStream();
+        command.WriteJson(stream);
+        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    // A bare join command is an EntityBuilder<Projection<...>>; the user-defined conversion is not
+    // considered for generic inference, so the slot helpers need this overload.
+    private static string JsonText<TEntity>(EntityBuilder<TEntity> builder)
+    {
+        using var stream = new MemoryStream();
+        builder.WriteJson(stream);
+        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static async Task<string> JsonTextAsync<TResult>(QueryCommand<TResult> command)
+    {
+        using var stream = new MemoryStream();
+        await command.WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static async Task<string> JsonTextAsync<TEntity>(EntityBuilder<TEntity> builder)
+    {
+        using var stream = new MemoryStream();
+        await builder.WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    // ClickHouse-local join fixture for the JSON slot scenario. The unmatched Item2 side must be SQL NULL,
+    // so the query requests join_use_nulls=1 (the dialect only injects it for implicit navigations).
+    private static readonly object JsonSlotSeedGate = new();
+    private static bool _jsonSlotSeeded;
+
+    private void EnsureJsonSlotSeed()
+    {
+        lock (JsonSlotSeedGate)
+        {
+            if (_jsonSlotSeeded)
+                return;
+
+            var ctx = _sut.DataProvider;
+            ExecuteRaw(ctx, "drop table if exists json_slot_child");
+            ExecuteRaw(ctx, "drop table if exists json_slot_parent");
+            ExecuteRaw(ctx, "create table json_slot_parent (id Int32, parent_name Nullable(String)) engine = Memory");
+            ExecuteRaw(ctx, "create table json_slot_child (id Int32, parent_id Int32, child_name Nullable(String)) engine = Memory");
+            ExecuteRaw(ctx, "insert into json_slot_parent (id, parent_name) values (1, 'p1'), (2, 'p2'), (3, 'p3')");
+            ExecuteRaw(ctx, "insert into json_slot_child (id, parent_id, child_name) values (10, 1, 'c1'), (11, 1, 'c2'), (12, 2, 'c3')");
+            _jsonSlotSeeded = true;
+        }
+    }
+
+    // T6: ClickHouse-local byte[] fixture. An `Array(UInt8)` column (ClickHouse's binary-friendly
+    // vector) is bound to a CLR byte[] property; the recursive writer must Base64-encode it inside a
+    // nested object (and leave the SQL NULL row null).
+    private static readonly object JsonBinarySeedGate = new();
+    private static bool _jsonBinarySeeded;
+
+    private void EnsureJsonBinarySeed()
+    {
+        lock (JsonBinarySeedGate)
+        {
+            if (_jsonBinarySeeded)
+                return;
+
+            var ctx = _sut.DataProvider;
+            ExecuteRaw(ctx, "drop table if exists json_binary");
+            ExecuteRaw(ctx, "create table json_binary (id Int32, data Array(UInt8)) engine = Memory");
+            ExecuteRaw(ctx, "insert into json_binary (id, data) values (1, [1, 2, 3, 4]), (2, [])");
+            _jsonBinarySeeded = true;
+        }
+    }
+
+    // T6: a ClickHouse-local join fixture whose two sides expose duplicate member names (Id/Name),
+    // exercising the JSON leaf-alias disambiguation that keeps the whole-entity projection valid.
+    private static readonly object JsonSlotDupSeedGate = new();
+    private static bool _jsonSlotDupSeeded;
+
+    private void EnsureJsonSlotDupSeed()
+    {
+        lock (JsonSlotDupSeedGate)
+        {
+            if (_jsonSlotDupSeeded)
+                return;
+
+            var ctx = _sut.DataProvider;
+            ExecuteRaw(ctx, "drop table if exists json_slot_dup_child");
+            ExecuteRaw(ctx, "drop table if exists json_slot_dup_parent");
+            ExecuteRaw(ctx, "create table json_slot_dup_parent (id Int32, name Nullable(String)) engine = Memory");
+            ExecuteRaw(ctx, "create table json_slot_dup_child (id Int32, parent_ref Int32, name Nullable(String)) engine = Memory");
+            ExecuteRaw(ctx, "insert into json_slot_dup_parent (id, name) values (1, 'p1'), (2, 'p2'), (3, 'p3')");
+            ExecuteRaw(ctx, "insert into json_slot_dup_child (id, parent_ref, name) values (10, 1, 'c1'), (11, 1, 'c2'), (12, 2, 'c3')");
+            _jsonSlotDupSeeded = true;
+        }
+    }
+
+    private static void ExecuteRaw(IDataContext ctx, string sql)
+    {
+        using (ctx.ExecuteRaw(sql))
+        {
+        }
+    }
+
     [Fact]
     public void ArrayColumns_ShouldProjectDirectly()
     {
@@ -1938,4 +2284,71 @@ public interface IDynamicValuesRow
     byte A { get; set; }
     [Column("b")]
     string? B { get; set; }
+}
+
+// D176.5 ClickHouse-local JSON slot fixture (ClickHouse has no binary_entity to join). The member
+// names are distinct per side because ClickHouse rejects duplicate output aliases in a whole-entity
+// projection (the shared/MariaDB slot fixtures keep the same-named Id/Name on both slots).
+[SqlTable("json_slot_parent")]
+public sealed class JsonSlotParent
+{
+    [Key]
+    [Column("id")]
+    public int ParentId { get; set; }
+
+    [Column("parent_name")]
+    public string? ParentName { get; set; }
+}
+
+[SqlTable("json_slot_child")]
+public sealed class JsonSlotChild
+{
+    [Key]
+    [Column("id")]
+    public int ChildId { get; set; }
+
+    [Column("parent_id")]
+    public int ParentRef { get; set; }
+
+    [Column("child_name")]
+    public string? ChildName { get; set; }
+}
+
+// D176 loop-back T6: ClickHouse-local byte[]->String fixture for nested Base64 (no shared
+// binary_entity on ClickHouse).
+[SqlTable("json_binary")]
+public sealed class JsonBinaryEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("data")]
+    public byte[]? Data { get; set; }
+}
+
+// D176 loop-back T6: duplicate-leaf-names-across-slots fixture (both sides expose Id/Name).
+[SqlTable("json_slot_dup_parent")]
+public sealed class JsonSlotDupParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+}
+
+[SqlTable("json_slot_dup_child")]
+public sealed class JsonSlotDupChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_ref")]
+    public int ParentRef { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
 }

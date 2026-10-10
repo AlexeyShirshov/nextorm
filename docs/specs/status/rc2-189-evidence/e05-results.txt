@@ -1,0 +1,18 @@
+# E05 — pinned start identity + D189 source immutability (rv=2, r=2, n=1)
+
+Pinned start tip ref: f7a6d728^{commit}
+Pinned predecessor ref: 65477266^{commit}
+
+| # | command | exit | output artifact | result |
+|---|---|---|---|---|
+| 1 | git rev-parse --verify 'f7a6d728^{commit}' | 0 | e05-start-tip.txt | f7a6d728efe925fc4e7a0a7c1b509e36a207216a |
+| 2 | git rev-parse --verify '65477266^{commit}' | 0 | e05-d134-tip.txt | 65477266558f2ad959a38d3c045360690769815f |
+| 3 | git merge-base --is-ancestor 65477266 f7a6d728 | 0 | e05-ancestry.log | D134 is an ancestor of the D189 start tip |
+| 4 | git diff --no-ext-diff --exit-code f7a6d728 -- src | 0 | e05-src-diff.patch | empty (0 bytes) — no tracked src change vs start tip |
+| 5 | git ls-files --others --exclude-standard -- src | 0 | e05-untracked-src.txt | empty (0 bytes) — no untracked src |
+
+ACCEPTANCE: all five commands exit 0; both inventories empty; both commit IDs recorded. PASS.
+
+Note: the start tip f7a6d728 is the D189 start (planner-pinned). D189's own edits are confined to the
+two tracked test files (tests/nextorm.integration.tests/Providers/ITestProvider.cs,
+tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs) plus the untracked status doc; `src` is untouched.

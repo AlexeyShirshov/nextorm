@@ -93,6 +93,7 @@ internal sealed class ClickHouseTestProvider : ITestProvider
         "drop table if exists simple_entity",
         "drop table if exists complex_entity",
         "drop table if exists wide_entity",
+        "drop table if exists enum_entity",
 
         """
         create table simple_entity (id Int32) engine = Memory
@@ -175,6 +176,22 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             (1, 18446744073709551615, 18446744073709551615),
             (2, 0, NULL),
             (3, 42, 7)
+        """,
+
+        // D178 (#178) enum storage: an enum is persisted as its underlying Int32.
+        """
+        create table enum_entity
+        (
+            id Int32,
+            state Int32,
+            nullable_state Nullable(Int32)
+        ) engine = Memory
+        """,
+        """
+        insert into enum_entity (id, state, nullable_state) values
+            (1, 7, NULL),
+            (2, -3, 7),
+            (3, 0, -3)
         """,
 
         "drop table if exists json_entity",

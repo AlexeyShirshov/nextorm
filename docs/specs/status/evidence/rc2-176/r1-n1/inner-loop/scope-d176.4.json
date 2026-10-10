@@ -1,0 +1,34 @@
+{
+  "unit": "D176.4",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+      "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj",
+      "tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj",
+      "tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj",
+      "tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj",
+      "tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~JsonShapeWriterTests",
+      "FullyQualifiedName~JsonStreamingTests",
+      "FullyQualifiedName~JsonStreamingSqlLoweringTests",
+      "FullyQualifiedName~NextORM.Sqlite.Tests",
+      "FullyQualifiedName~NextORM.Postgres.Tests",
+      "FullyQualifiedName~NextORM.SqlServer.Tests",
+      "FullyQualifiedName~NextORM.MySql.Tests",
+      "FullyQualifiedName~NextORM.ClickHouse.Tests"
+    ],
+    "files": [
+      "tests/nextorm.core.tests/JsonShapeWriterTests.cs",
+      "tests/nextorm.sqlite.tests/JsonStreamingTests.cs",
+      "tests/nextorm.postgres.tests/JsonStreamingSqlLoweringTests.cs",
+      "tests/nextorm.sqlserver.tests/JsonStreamingSqlLoweringTests.cs",
+      "tests/nextorm.mysql.tests/JsonStreamingSqlLoweringTests.cs",
+      "tests/nextorm.clickhouse.tests/JsonStreamingSqlLoweringTests.cs"
+    ],
+    "rationale": "D176.4 adds the comprehensive JSON-shape test surface: direct recursive-writer boundaries in core (tests/nextorm.core.tests/JsonShapeWriterTests.cs), end-to-end nested/join/slot/terminal/cache regression coverage over SQLite (tests/nextorm.sqlite.tests/JsonStreamingTests.cs), and per-dialect SQL-lowering regression tests that assert the JSON nested-shape lowering emits the same explicit scalar columns as the ordinary flat projection for PostgreSQL, SQL Server, MySQL and ClickHouse. No product source is changed unless a defect is exposed.",
+    "rebuild": "affected",
+    "boundary": "Full affected project sweeps: C02 core, full SQLite project and each touched dialect project, after the last edit; the filtered JSON classes are re-run after every coherent edit."
+  }
+}

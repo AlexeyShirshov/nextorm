@@ -16,7 +16,7 @@ public class AliasExpressionOnlyContractTests
     [Fact]
     public void Reading_an_alias_member_outside_an_expression_tree_throws()
     {
-        var projection = new AliasProjection_Buyer_Approver<Order, Person, Person>();
+        var projection = new AliasProjection_P1_A2_Buyer_A3_Approver<Order, Person, Person>();
 
         // ItemN still behaves like a normal projection member.
         projection.Item1.Should().BeNull();
@@ -35,7 +35,7 @@ public class AliasExpressionOnlyContractTests
     [Fact]
     public void Reading_a_single_alias_member_outside_an_expression_tree_throws()
     {
-        var projection = new AliasProjection_Buyer<Order, Person>();
+        var projection = new AliasProjection_P1_A2_Buyer<Order, Person>();
 
         Action readBuyer = () => _ = projection.Buyer;
 

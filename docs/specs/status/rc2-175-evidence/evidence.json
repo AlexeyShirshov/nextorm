@@ -1,0 +1,38 @@
+{
+ "unit": "D175",
+ "scope": {
+  "projects": ["tests/nextorm.core.tests","tests/nextorm.sqlite.tests","tests/nextorm.integration.tests"],
+  "selectors": [
+    "FullyQualifiedName~SelectExpressionPlanEqualityComparerTests|FullyQualifiedName~ImplicitNavigationR3CountBoundaryTests|FullyQualifiedName~RawSourceBindingFilterTests|FullyQualifiedName~PlanKeyStructureTests|FullyQualifiedName~InMemoryTests|FullyQualifiedName~JoinIntoPlanKeyTests",
+    "FullyQualifiedName~JoinIntoSqlGenerationTests|FullyQualifiedName~JoinIntoExecutionTests",
+    "FullyQualifiedName~JoinInto",
+    "FullyQualifiedName~SelectExpressionPlanEqualityComparerTests",
+    "FullyQualifiedName~ImplicitNavigationR3CountBoundaryTests",
+    "FullyQualifiedName~RawSourceBindingFilterTests",
+    "FullyQualifiedName~PlanKeyStructureTests",
+    "FullyQualifiedName~InMemoryTests",
+    "FullyQualifiedName~JoinIntoPlanKeyTests",
+    "FullyQualifiedName~JoinIntoSqlGenerationTests",
+    "FullyQualifiedName~JoinIntoExecutionTests"
+  ],
+  "files": ["tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs","tests/nextorm.core.tests/ImplicitNavigationR3CountBoundaryTests.cs","tests/nextorm.core.tests/RawSourceBindingFilterTests.cs","tests/nextorm.core.tests/PlanKeyStructureTests.cs","tests/nextorm.core.tests/InMemoryTests.cs","tests/nextorm.sqlite.tests/JoinIntoSqlGenerationTests.cs","tests/nextorm.sqlite.tests/JoinIntoExecutionTests.cs","tests/nextorm.integration.tests/CommonTestSuite.JoinInto.cs"],
+  "rebuild": "affected",
+  "boundary": "CORE-FULL + SQLITE-FULL + BUILD at DO->CHECK; INTEGRATION only if an integration-suite file changed",
+  "rationale": "test-only assertion strengthening; the focused fixtures exercise every changed plan-inequality/hash assertion in JoinInto and navigation plan-key tests. Individual selectors are the validator-conforming split of the mandated OR filters (same affected subset, no widening): the helper rejects xunit's '|' as a shell compound token."
+ },
+ "executions": [
+  {"command":["dotnet","build","tests/nextorm.core.tests","-c","Debug"],"phase":"inner","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":1},
+  {"command":["dotnet","build","tests/nextorm.sqlite.tests","-c","Debug"],"phase":"inner","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":1},
+  {"command":["dotnet","test","tests/nextorm.core.tests","-c","Debug","--no-build","--filter","FullyQualifiedName~SelectExpressionPlanEqualityComparerTests"],"phase":"inner","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":4},
+  {"command":["dotnet","test","tests/nextorm.core.tests","-c","Debug","--no-build","--filter","FullyQualifiedName~ImplicitNavigationR3CountBoundaryTests"],"phase":"inner","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":7},
+  {"command":["dotnet","test","tests/nextorm.core.tests","-c","Debug","--no-build","--filter","FullyQualifiedName~RawSourceBindingFilterTests"],"phase":"inner","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":60},
+  {"command":["dotnet","test","tests/nextorm.core.tests","-c","Debug","--no-build","--filter","FullyQualifiedName~PlanKeyStructureTests"],"phase":"inner","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":19},
+  {"command":["dotnet","test","tests/nextorm.core.tests","-c","Debug","--no-build","--filter","FullyQualifiedName~InMemoryTests"],"phase":"inner","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":154},
+  {"command":["dotnet","test","tests/nextorm.core.tests","-c","Debug","--no-build","--filter","FullyQualifiedName~JoinIntoPlanKeyTests"],"phase":"inner","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":8},
+  {"command":["dotnet","test","tests/nextorm.sqlite.tests","-c","Debug","--no-build","--filter","FullyQualifiedName~JoinIntoSqlGenerationTests"],"phase":"inner","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":9},
+  {"command":["dotnet","test","tests/nextorm.sqlite.tests","-c","Debug","--no-build","--filter","FullyQualifiedName~JoinIntoExecutionTests"],"phase":"inner","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":7},
+  {"command":["dotnet","test","tests/nextorm.core.tests","-c","Debug"],"phase":"boundary","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":1767},
+  {"command":["dotnet","test","tests/nextorm.sqlite.tests","-c","Debug"],"phase":"boundary","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":1161},
+  {"command":["dotnet","build","nextorm.slnx","-c","Debug"],"phase":"boundary","source_revision":"d175r1-04836505-8312cdf1","artifact_revision":"d175r1-04836505-8312cdf1","exit_code":0,"selected_count":1}
+ ]
+}

@@ -1,0 +1,577 @@
+diff --git a/docs/advanced/api-reference.md b/docs/advanced/api-reference.md
+index fed15d9b..d5c6766d 100644
+--- a/docs/advanced/api-reference.md
++++ b/docs/advanced/api-reference.md
+@@ -106,7 +106,7 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
+ | [`PivotAggregate`](xref:NextORM.Core.PivotAggregate), [`PivotValue`](xref:NextORM.Core.PivotValue), [`UnpivotColumn`](xref:NextORM.Core.UnpivotColumn), [`PivotExpression`](xref:NextORM.Core.PivotExpression) | The native SQL Server `PIVOT`/`UNPIVOT` source construct: `EntityBuilder.Pivot`/`Unpivot` reshape a plain table or a derived query into named columns ([`Pivot`](xref:NextORM.Core.ISqlDialect.Pivot)). |
+ | [`IIifRenderer`](xref:NextORM.Core.IIifRenderer), [`ISessionInfoFunctions`](xref:NextORM.Core.ISessionInfoFunctions), [`IUuidGenerators`](xref:NextORM.Core.IUuidGenerators), [`ILimitByRenderer`](xref:NextORM.Core.ILimitByRenderer) | Dialect capability objects exposed by [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`Iif`, `SessionInfoFunctions`, `UuidGenerators`, `LimitBy`). The object's presence is the capability, so support and rendering come from a single fact and can never diverge; the legacy `Supports*`/`Make*` members were removed in favour of the objects. |
+ | [`IScalarFunctions`](xref:NextORM.Core.IScalarFunctions), [`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions), [`IXmlFunctions`](xref:NextORM.Core.IXmlFunctions), [`ISequenceAggregateRenderer`](xref:NextORM.Core.ISequenceAggregateRenderer), [`IUniqAggregateRenderer`](xref:NextORM.Core.IUniqAggregateRenderer), [`IQuantileAggregateRenderer`](xref:NextORM.Core.IQuantileAggregateRenderer), [`ITopKAggregateRenderer`](xref:NextORM.Core.ITopKAggregateRenderer), [`IMultiIfRenderer`](xref:NextORM.Core.IMultiIfRenderer), [`IDistinctOnRenderer`](xref:NextORM.Core.IDistinctOnRenderer), [`ITableSampleMethods`](xref:NextORM.Core.ITableSampleMethods), [`IPivotRenderer`](xref:NextORM.Core.IPivotRenderer), [`IArrayJoinRenderer`](xref:NextORM.Core.IArrayJoinRenderer), [`IDateConversionRenderer`](xref:NextORM.Core.IDateConversionRenderer), [`IStringSplitRenderer`](xref:NextORM.Core.IStringSplitRenderer), [`ILockRenderer`](xref:NextORM.Core.ILockRenderer) | The remaining dialect capability objects exposed by [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`ScalarFunctions`, `SqlServerFunctions`, `XmlFunctions`, `SequenceAggregates`, `UniqAggregates`, `QuantileAggregates`, `TopKAggregates`, `MultiIf`, `DistinctOn`, `TableSample`, `Pivot`, `ArrayJoinClause`, `DateConversion`, `StringSplit`, `Lock`). Each nullable object is the single source of the capability and its renderer, so the XML/sequence/uniq/quantile/topK/multiIf/distinct-on/tablesample/PIVOT/unpivot/array-join/date-conversion/split/lock capabilities can never be "declared but unimplemented". |
+-| [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) | Optional native renderer for the `SelectWhereMax`/`SelectWhereMin` row selection with [`ExtremeRowTies.One`](xref:NextORM.Core.ExtremeRowTies.One), exposed by [`ISqlDialect.ExtremeRowRenderer`](xref:NextORM.Core.ISqlDialect.ExtremeRowRenderer) and [`SqlDialectBase.ExtremeRowRenderer`](xref:NextORM.Core.SqlDialectBase.ExtremeRowRenderer) (both default to `null`, which keeps the portable window-function lowering). `CanRender(ExtremeRowDescription)` is a side-effect-free decision taken before any SQL, alias or parameter is built; only a positive answer dispatches to `Render(ExtremeRowRenderRequest)`, and `Render` has no late fallback. PostgreSQL and ClickHouse implement it and their dialects are non-sealed for test/custom extensibility. See [Native extreme-row strategies](select-where-extrema-native.md). |
++| [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) | Optional native renderer for the `SelectWhereMax`/`SelectWhereMin` row selection with [`ExtremeRowTies.One`](xref:NextORM.Core.ExtremeRowTies.One), exposed by [`ISqlDialect.ExtremeRowRenderer`](xref:NextORM.Core.ISqlDialect.ExtremeRowRenderer) and [`SqlDialectBase.ExtremeRowRenderer`](xref:NextORM.Core.SqlDialectBase.ExtremeRowRenderer) (both default to `null`, which keeps the portable window-function lowering). `CanRender(ExtremeRowDescription)` is a side-effect-free decision taken before any SQL, alias or parameter is built; only a positive answer dispatches to `Render(ExtremeRowRenderRequest)`, and `Render` has no late fallback. PostgreSQL and ClickHouse implement it; both dialects are deliberately non-`sealed` and keep their public constructors, `Instance` and the virtual `ExtremeRowRenderer` hook, so an external assembly can subclass them and install its own public `IExtremeRowRenderer` (returning `null` from the `ExtremeRowRenderer` override — or returning `false` from `CanRender` — keeps the portable lowering). The built-in renderers are `internal`. See [Native extreme-row strategies](select-where-extrema-native.md). |
+ | [`ExtremeRowRenderColumn`](xref:NextORM.Core.ExtremeRowRenderColumn), [`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription), [`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest) | Shape-only inputs of the native extreme-row contract: `ExtremeRowRenderColumn` (`ClrType`, `IsNullable`, `IsDirectMappedColumn`, `UsesConverter`), `ExtremeRowDescription` (`IsMax`, `Keys`, `Groups`, `Payload`; an empty `Groups` means the global form) handed to `CanRender`, and `ExtremeRowRenderRequest` (`SourceSql`, `IsMax`, `PayloadAliases`, `KeyAliases`, `KeyColumns` (the key shape facts positionally aligned with `KeyAliases`), `GroupAliases`, `KeywordCase`) handed to `Render`. See [Native extreme-row strategies](select-where-extrema-native.md). |
+ | [`DataContextExtensions`](xref:NextORM.Core.DataContextExtensions) | Provider-independent helpers: [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)), [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)), [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})), [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)), CTE entry points ([`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) / [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32}))) and prepared-command terminals. |
+ 
+diff --git a/docs/advanced/select-where-extrema-native.md b/docs/advanced/select-where-extrema-native.md
+index 2f0fbfa1..d9ea6820 100644
+--- a/docs/advanced/select-where-extrema-native.md
++++ b/docs/advanced/select-where-extrema-native.md
+@@ -111,7 +111,39 @@ The native strategy is a public dialect capability, not a hard-coded provider br
+ - [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) exposes `CanRender(`[`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription)`)`, a side-effect-free decision taken before any SQL is assembled, and `Render(`[`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest)`)`, which returns the winning-row source. Only a positive `CanRender` leads to `Render`, and `Render` has no late fallback to the portable path.
+ - [`ExtremeRowRenderColumn`](xref:NextORM.Core.ExtremeRowRenderColumn), [`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription) and [`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest) carry only shape facts (CLR type, nullability, direct-mapped/converter flags, and the prepared source/aliases), never the expression or build context. See the [API quick reference](api-reference.md).
+ 
+-`PostgresDialect` and `ClickHouseDialect` are not `sealed`, so a custom dialect can derive from them and override the renderer (for example to change eligibility) without touching the core builder.
++`PostgresDialect` and `ClickHouseDialect` are deliberately **not `sealed`**: keeping them inheritable, together with their public constructors (`PostgresDialect()`, `PostgresDialect(Version?)`, `ClickHouseDialect()`), the shared `Instance` singleton and the virtual `ExtremeRowRenderer` hook, is the supported external extension boundary — a public compatibility commitment, not a test detail. A custom dialect can derive from either provider dialect, override the hook and install its own public [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) implementation; the built-in renderers (`PostgresExtremeRowRenderer`, `ClickHouseExtremeRowRenderer`) are `internal` and are not part of that contract. Returning `null` from the override — or installing a renderer whose `CanRender` answers `false` — keeps the portable window-function lowering, and the provider defaults and constructors are unchanged.
++
++```csharp
++// A non-friend assembly subclasses the provider dialect and installs a custom renderer.
++public sealed class MyPostgresDialect : PostgresDialect
++{
++    public override IExtremeRowRenderer? ExtremeRowRenderer => MyRenderer.Instance;
++}
++
++// Only the global (ungrouped) single-key form is handled natively; every other shape
++// falls back to the portable lowering because CanRender answers false.
++public sealed class MyRenderer : IExtremeRowRenderer
++{
++    public static readonly MyRenderer Instance = new();
++
++    public bool CanRender(ExtremeRowDescription description)
++        => description.Groups.Count == 0 && description.Keys.Count == 1;
++
++    public string Render(ExtremeRowRenderRequest request)
++    {
++        var direction = request.IsMax ? "desc" : "asc";
++        return request.SourceSql
++            + " order by \"" + request.KeyAliases[0] + "\" " + direction + " limit 1";
++    }
++}
++
++// The second example: returning null from the override forces the portable window-function
++// lowering for every request, without installing a renderer.
++public sealed class PortablePostgresDialect : PostgresDialect
++{
++    public override IExtremeRowRenderer? ExtremeRowRenderer => null;
++}
++```
+ 
+ ## See also
+ 
+diff --git a/docs/ru/advanced/api-reference.md b/docs/ru/advanced/api-reference.md
+index df907373..aeefb3a8 100644
+--- a/docs/ru/advanced/api-reference.md
++++ b/docs/ru/advanced/api-reference.md
+@@ -106,7 +106,7 @@
+ | [`PivotAggregate`](xref:NextORM.Core.PivotAggregate), [`PivotValue`](xref:NextORM.Core.PivotValue), [`UnpivotColumn`](xref:NextORM.Core.UnpivotColumn), [`PivotExpression`](xref:NextORM.Core.PivotExpression) | Нативная конструкция источника SQL Server `PIVOT`/`UNPIVOT`: `EntityBuilder.Pivot`/`Unpivot` разворачивают простую таблицу или производный запрос в именованные колонки ([`Pivot`](xref:NextORM.Core.ISqlDialect.Pivot)). |
+ | [`IIifRenderer`](xref:NextORM.Core.IIifRenderer), [`ISessionInfoFunctions`](xref:NextORM.Core.ISessionInfoFunctions), [`IUuidGenerators`](xref:NextORM.Core.IUuidGenerators), [`ILimitByRenderer`](xref:NextORM.Core.ILimitByRenderer) | Capability-объекты диалекта, доступные через [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`Iif`, `SessionInfoFunctions`, `UuidGenerators`, `LimitBy`). Наличие объекта и есть поддержка, поэтому поддержка и рендеринг исходят из одного факта и не могут разойтись; устаревшие пары `Supports*`/`Make*` удалены в пользу объектов. |
+ | [`IScalarFunctions`](xref:NextORM.Core.IScalarFunctions), [`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions), [`IXmlFunctions`](xref:NextORM.Core.IXmlFunctions), [`ISequenceAggregateRenderer`](xref:NextORM.Core.ISequenceAggregateRenderer), [`IUniqAggregateRenderer`](xref:NextORM.Core.IUniqAggregateRenderer), [`IQuantileAggregateRenderer`](xref:NextORM.Core.IQuantileAggregateRenderer), [`ITopKAggregateRenderer`](xref:NextORM.Core.ITopKAggregateRenderer), [`IMultiIfRenderer`](xref:NextORM.Core.IMultiIfRenderer), [`IDistinctOnRenderer`](xref:NextORM.Core.IDistinctOnRenderer), [`ITableSampleMethods`](xref:NextORM.Core.ITableSampleMethods), [`IPivotRenderer`](xref:NextORM.Core.IPivotRenderer), [`IArrayJoinRenderer`](xref:NextORM.Core.IArrayJoinRenderer), [`IDateConversionRenderer`](xref:NextORM.Core.IDateConversionRenderer), [`IStringSplitRenderer`](xref:NextORM.Core.IStringSplitRenderer), [`ILockRenderer`](xref:NextORM.Core.ILockRenderer) | Остальные capability-объекты диалекта, доступные через [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`ScalarFunctions`, `SqlServerFunctions`, `XmlFunctions`, `SequenceAggregates`, `UniqAggregates`, `QuantileAggregates`, `TopKAggregates`, `MultiIf`, `DistinctOn`, `TableSample`, `Pivot`, `ArrayJoinClause`, `DateConversion`, `StringSplit`, `Lock`). Каждый nullable-объект — единый источник поддержки и рендерера, поэтому возможности XML/sequence/uniq/quantile/topK/multiIf/distinct-on/tablesample/PIVOT/unpivot/array-join/date-conversion/split/lock не могут быть «объявлены, но не реализованы». |
+-| [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) | Необязательный нативный рендерер выбора строк `SelectWhereMax`/`SelectWhereMin` с [`ExtremeRowTies.One`](xref:NextORM.Core.ExtremeRowTies.One), доступный через [`ISqlDialect.ExtremeRowRenderer`](xref:NextORM.Core.ISqlDialect.ExtremeRowRenderer) и [`SqlDialectBase.ExtremeRowRenderer`](xref:NextORM.Core.SqlDialectBase.ExtremeRowRenderer) (оба по умолчанию `null`, что сохраняет переносимое понижение до оконной функции). `CanRender(ExtremeRowDescription)` — решение без побочных эффектов, принимаемое до построения любого SQL, алиаса или параметра; только положительный ответ ведёт к `Render(ExtremeRowRenderRequest)`, и у `Render` нет позднего отката. Его реализуют PostgreSQL и ClickHouse, а их диалекты не `sealed` для тестовой/пользовательской расширяемости. См. [Нативные стратегии выбора экстремальной строки](select-where-extrema-native.md). |
++| [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) | Необязательный нативный рендерер выбора строк `SelectWhereMax`/`SelectWhereMin` с [`ExtremeRowTies.One`](xref:NextORM.Core.ExtremeRowTies.One), доступный через [`ISqlDialect.ExtremeRowRenderer`](xref:NextORM.Core.ISqlDialect.ExtremeRowRenderer) и [`SqlDialectBase.ExtremeRowRenderer`](xref:NextORM.Core.SqlDialectBase.ExtremeRowRenderer) (оба по умолчанию `null`, что сохраняет переносимое понижение до оконной функции). `CanRender(ExtremeRowDescription)` — решение без побочных эффектов, принимаемое до построения любого SQL, алиаса или параметра; только положительный ответ ведёт к `Render(ExtremeRowRenderRequest)`, и у `Render` нет позднего отката. Его реализуют PostgreSQL и ClickHouse; оба диалекта намеренно не `sealed` и сохраняют публичные конструкторы, `Instance` и виртуальный хост `ExtremeRowRenderer`, поэтому внешняя сборка может наследоваться от них и поставить собственную публичную реализацию `IExtremeRowRenderer` (возврат `null` из переопределения `ExtremeRowRenderer` — или возврат `false` из `CanRender` — сохраняет переносимый путь). Встроенные рендереры `internal`. См. [Нативные стратегии выбора экстремальной строки](select-where-extrema-native.md). |
+ | [`ExtremeRowRenderColumn`](xref:NextORM.Core.ExtremeRowRenderColumn), [`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription), [`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest) | Входные данные нативного контракта, несущие только факты формы: `ExtremeRowRenderColumn` (`ClrType`, `IsNullable`, `IsDirectMappedColumn`, `UsesConverter`), `ExtremeRowDescription` (`IsMax`, `Keys`, `Groups`, `Payload`; пустой `Groups` означает глобальную форму), передаваемый в `CanRender`, и `ExtremeRowRenderRequest` (`SourceSql`, `IsMax`, `PayloadAliases`, `KeyAliases`, `KeyColumns` (факты формы ключа, позиционно выровненные с `KeyAliases`), `GroupAliases`, `KeywordCase`), передаваемый в `Render`. См. [Нативные стратегии выбора экстремальной строки](select-where-extrema-native.md). |
+ | [`DataContextExtensions`](xref:NextORM.Core.DataContextExtensions) | Независимые от провайдера помощники: [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)), [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)), [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})), [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)), точки входа CTE ([`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) / [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32}))) и терминалы подготовленных команд. |
+ 
+diff --git a/docs/ru/advanced/select-where-extrema-native.md b/docs/ru/advanced/select-where-extrema-native.md
+index 5d54e258..69f93285 100644
+--- a/docs/ru/advanced/select-where-extrema-native.md
++++ b/docs/ru/advanced/select-where-extrema-native.md
+@@ -111,7 +111,39 @@ from (
+ - [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) предоставляет `CanRender(`[`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription)`)` — решение без побочных эффектов, принимаемое до сборки любого SQL, — и `Render(`[`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest)`)`, возвращающий источник строки-победителя. Только положительный `CanRender` ведёт к `Render`, и у `Render` нет позднего отката к переносимому пути.
+ - [`ExtremeRowRenderColumn`](xref:NextORM.Core.ExtremeRowRenderColumn), [`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription) и [`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest) несут только факты формы (CLR-тип, nullable, признаки прямой отображённости и конвертера, а также подготовленный источник и алиасы), но никогда — выражение или контекст построения. См. [Краткий справочник API](api-reference.md).
+ 
+-`PostgresDialect` и `ClickHouseDialect` не `sealed`, поэтому пользовательский диалект может наследоваться от них и переопределять рендерер (например, чтобы изменить условия пригодности), не трогая общий построитель.
++`PostgresDialect` и `ClickHouseDialect` намеренно **не `sealed`**: их наследуемость вместе с публичными конструкторами (`PostgresDialect()`, `PostgresDialect(Version?)`, `ClickHouseDialect()`), общим синглтоном `Instance` и виртуальным хостом `ExtremeRowRenderer` — это и есть поддерживаемая внешняя граница расширяемости, публичное обещание совместимости, а не тестовая деталь. Пользовательский диалект может наследоваться от любого из них, переопределить хост и вернуть собственную публичную реализацию [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer); встроенные рендереры (`PostgresExtremeRowRenderer`, `ClickHouseExtremeRowRenderer`) `internal` и в этот контракт не входят. Возврат `null` из переопределения — или рендерер, чей `CanRender` отвечает `false`, — сохраняет переносимое понижение до оконной функции; значения по умолчанию провайдера и конструкторы не меняются.
++
++```csharp
++// Сборка-потребитель без friend-доступа наследует диалект провайдера и ставит свой рендерер.
++public sealed class MyPostgresDialect : PostgresDialect
++{
++    public override IExtremeRowRenderer? ExtremeRowRenderer => MyRenderer.Instance;
++}
++
++// Нативно обрабатывается только глобальная (несгруппированная) форма с одним ключом; любая
++// другая форма уходит на переносимый путь, потому что CanRender отвечает false.
++public sealed class MyRenderer : IExtremeRowRenderer
++{
++    public static readonly MyRenderer Instance = new();
++
++    public bool CanRender(ExtremeRowDescription description)
++        => description.Groups.Count == 0 && description.Keys.Count == 1;
++
++    public string Render(ExtremeRowRenderRequest request)
++    {
++        var direction = request.IsMax ? "desc" : "asc";
++        return request.SourceSql
++            + " order by \"" + request.KeyAliases[0] + "\" " + direction + " limit 1";
++    }
++}
++
++// Второй пример: возврат null из переопределения принудительно включает переносимое
++// понижение до оконной функции для каждого запроса, без установки рендерера.
++public sealed class PortablePostgresDialect : PostgresDialect
++{
++    public override IExtremeRowRenderer? ExtremeRowRenderer => null;
++}
++```
+ 
+ ## См. также
+ 
+diff --git a/docs/specs/design/API-NAMING-REVIEW.md b/docs/specs/design/API-NAMING-REVIEW.md
+index 3165e163..4a38bbfc 100644
+--- a/docs/specs/design/API-NAMING-REVIEW.md
++++ b/docs/specs/design/API-NAMING-REVIEW.md
+@@ -5586,3 +5586,16 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
+ | N203-1 | ℹ️ (protected seam) | `DataContext/DataContext.cs:694,698`; потребители `RawMapperFactory.cs:260,333,355`; override `PostgresDataContext.cs:245` | Имя следует существующему шву `SupportsRawRowColumns` (capability-свойство + `internal`-проекция для `RawMapperFactory`, живущего вне иерархии `DataContext`); `IsGenuineCompositeColumn` — предикат *идентификации*, а не capability, и с BCL не конфликтует. Единственный источник вердикта о composite; `PostgresDataContext` — единственный override **в `src/`** (тестовый фейк `RawRowMaterializerTests.cs:864` также переопределяет шов). `find -name 'PublicAPI*.txt'` — **0** (Шаг 5; issue #53 **OPEN**, проверено `gh issue view 53 --json number,state,url`: https://github.com/AlexeyShirshov/nextorm/issues/53) | Добавление `protected`-члена отразить в дельте релиза как аддитивное, non-breaking (конвенция `:5569` учитывает `protected DataContext.*`); в `PublicAPI.*.txt` не вносить (файлов нет, Шаг 5 открыт); release notes не требуются |
+ 
+ ℹ️ **Наблюдения.** (1) Публичная дельта аддитивная и неломающая: **+1 `protected`** член `DataContext.IsGenuineCompositeColumn` (расширяем наследниками; учитывается конвенцией `:5569`) + `internal`-шов; новых публичных типов нет. (2) Шов зеркалит `SupportsRawRowColumns`/`RawRowColumnsSupported`: capability-свойство + `internal`-проекция, потому что `RawMapperFactory` живёт вне иерархии `DataContext`. (3) Публичные доки EN+RU (`guide/12-raw-sql.md`, `guide/provider-specific/postgresql.md`, `advanced/limitations.md` + RU) синхронны, ссылок на `docs/specs/**` нет; этот поток — docs/registers-only + docfx. (4) Кодовая сторона/приёмка — `code-smells-review.md` и статус `203-authoritative-rawrow-classification-1.md`.
++
++---
++
++## Аудит 07.10.2026 — issue #153: публичный контракт расширяемости диалектов (Postgres/ClickHouse)
++
++**Область.** #153 делает поддерживаемую внешнюю границу расширяемости `PostgresDialect`/`ClickHouseDialect` явной: оба диалекта **намеренно не `sealed`** — это публичное обещание совместимости, а не тестовая деталь. Публичные хосты: виртуальное свойство `ExtremeRowRenderer` (DIM `ISqlDialect.ExtremeRowRenderer => null`; `SqlDialectBase.ExtremeRowRenderer => null`) и публичный интерфейс `IExtremeRowRenderer` (`CanRender(ExtremeRowDescription)`/`Render(ExtremeRowRenderRequest)`). Публичные конструкторы (`PostgresDialect()`, `PostgresDialect(Version?)`, `ClickHouseDialect()`), синглтоны `Instance` и значения по умолчанию сохраняются. Встроенные рендереры (`PostgresExtremeRowRenderer`, `ClickHouseExtremeRowRenderer`) остаются `internal` и **не** являются обещанием стабильности. Публичная дельта кода — **0 новых публичных типов/членов**; изменение — XML-doc, публичные доки EN+RU и новая сборка-потребитель без `InternalsVisibleTo`. Проверенный URL: https://github.com/AlexeyShirshov/nextorm/issues/153.
++
++| # | Ур. | Место | Оценка | Рекомендация |
++|---|-----|-------|--------|--------------|
++| N153-1 | **P2 (BC / Шаг 5)** | `src/nextorm.postgres/PostgresDialect.cs:18,27,39,52,418`; `src/nextorm.clickhouse/ClickHouseDialect.cs:20,26,37,297`; `src/nextorm.core/DataContext/Dialect/SqlDialectBase.cs:240`; `ISqlDialect.cs:1284` | Сознательный отказ от `sealed` = публичное обещание: удаление наследуемости, перевод `ExtremeRowRenderer` в не-виртуальный/`internal`, смена сигнатур публичных конструкторов или удаление `Instance` — source/binary break для внешних потребителей (в т. ч. прекомпилированных подклассов и `new PostgresDialect(Version?)`). Встроенные рендереры `internal` — намеренно вне контракта. `find -name 'PublicAPI*.txt'` — **0** (Шаг 5, issue #53, открыт) | При заморозке зафиксировать наследуемость и публичные хосты как совместимый контракт; в release notes отметить, что снятие наследуемости — breaking; встроенные рендереры в публичную поверхность не вносить |
++| N153-2 | ℹ️ (naming/контракт) | `DialectCapabilities.cs:372-399`; `SqlDialectBase.cs:240`; `ISqlDialect.cs:1284` | Контракт опирается на уже публичный интерфейс и default-члены `ExtremeRowRenderer => null` (DIM, чтобы существующие внешние реализации `ISqlDialect` продолжали компилироваться) и виртуальный хост `SqlDialectBase`, чей `null` возвращает переносимый путь. Новой публичной поверхности нет; имя `ExtremeRowRenderer` согласовано с `SupportsSelectWhereMinMax` | Без изменений; контракт считать зафиксированным |
++
++ℹ️ **Наблюдения.** (1) **P0 — нет; новых P1 по именам нет.** (2) Наследуемость, установка собственного публичного `IExtremeRowRenderer` через подкласс и форсирование переносимого пути возвратом `null` покрыты новой сборкой-потребителем `tests/nextorm.publicextensibility.tests` **без `InternalsVisibleTo`** (guard по метаданным трёх production-сборок + runtime-проверки PG/CH accept/decline/null). (3) Встроенные рендереры (`PostgresExtremeRowRenderer`, `ClickHouseExtremeRowRenderer`) остаются `internal` и в публичный контракт не входят; их внутренняя реализация — не обещание стабильности. (4) Публичные доки EN+RU (`advanced/select-where-extrema-native.md`, `advanced/api-reference.md` + RU) синхронны, ссылок на `docs/specs/**` нет. (5) XML-doc двух диалектов дополнен (класс, `Instance`, конструкторы, хост `ExtremeRowRenderer`): наследование, переопределение, `null → переносимый путь`, неизменные значения по умолчанию. (6) Пересчёт baseline недокументированных типов и правка Приложения A **не выполнялись** (границы #153). (7) Кодовая сторона/приёмка — статус `rc2-153-public-extensibility-1.md`; production-diff — XML-comment/docs only.
+diff --git a/nextorm.slnx b/nextorm.slnx
+index e61c87f5..26f52eb9 100644
+--- a/nextorm.slnx
++++ b/nextorm.slnx
+@@ -33,5 +33,6 @@
+   <Project Path="tests/nextorm.entityframeworkcore.tests/nextorm.entityframeworkcore.tests.csproj" />
+   <Project Path="tests/nextorm.integration.tests/nextorm.integration.tests.csproj" />
+   <Project Path="tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj" />
++  <Project Path="tests/nextorm.publicextensibility.tests/nextorm.publicextensibility.tests.csproj" />
+   <Project Path="tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj" />
+ </Solution>
+diff --git a/src/nextorm.clickhouse/ClickHouseDialect.cs b/src/nextorm.clickhouse/ClickHouseDialect.cs
+index ec950bf1..7bd035da 100644
+--- a/src/nextorm.clickhouse/ClickHouseDialect.cs
++++ b/src/nextorm.clickhouse/ClickHouseDialect.cs
+@@ -9,9 +9,20 @@ namespace NextORM.ClickHouse;
+ /// standard-deviation/variance aggregate names. ClickHouse has no recursive CTE support, so the
+ /// <c>recursive</c> modifier is omitted.
+ /// </summary>
++/// <remarks>
++/// The type is deliberately not <see langword="sealed"/>. Subclassing it and overriding
++/// <see cref="ExtremeRowRenderer"/> is the supported external extension boundary (a public
++/// compatibility commitment), so an assembly without <c>InternalsVisibleTo</c> can install its own
++/// public <see cref="IExtremeRowRenderer"/>. The built-in renderer is <c>internal</c> and is not part
++/// of that contract. The public constructor and the shared <see cref="Instance"/> are preserved;
++/// returning <see langword="null"/> from an override keeps the portable window-function lowering.
++/// </remarks>
+ public class ClickHouseDialect : SqlDialectBase
+ {
+-    /// <summary>The shared ClickHouse dialect instance.</summary>
++    /// <summary>
++    /// The shared ClickHouse dialect instance. Subclassing the dialect does not change this instance;
++    /// a derived dialect is created through the public constructor instead.
++    /// </summary>
+     public static readonly ClickHouseDialect Instance = new();
+ 
+     private readonly IMultiIfRenderer _multiIf;
+@@ -19,7 +30,10 @@ public class ClickHouseDialect : SqlDialectBase
+     private readonly IQuantileAggregateRenderer _quantileAggregates;
+     private readonly ITopKAggregateRenderer _topKAggregates;
+ 
+-    /// <summary>Creates the dialect and its capability renderers.</summary>
++    /// <summary>
++    /// Creates the dialect and its capability renderers. The constructor is public so an external
++    /// assembly can derive a custom dialect from <see cref="ClickHouseDialect"/>.
++    /// </summary>
+     public ClickHouseDialect()
+     {
+         _multiIf = new ClickHouseMultiIfRenderer(this);
+@@ -274,7 +288,12 @@ public class ClickHouseDialect : SqlDialectBase
+     /// <summary>ClickHouse 21+ renders <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with a window function.</summary>
+     public override bool SupportsSelectWhereMinMax => true;
+ 
+-    /// <summary>ClickHouse renders eligible <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with <c>argMin</c>/<c>argMax</c> over a payload tuple; the rest falls back to the portable window function.</summary>
++    /// <summary>
++    /// ClickHouse renders eligible <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with <c>argMin</c>/<c>argMax</c> over a payload tuple; the rest falls back to the portable window function.
++    /// The property is <see langword="virtual"/> so a derived dialect can override it with a custom
++    /// <see cref="IExtremeRowRenderer"/>; returning <see langword="null"/> keeps the portable
++    /// window-function lowering. The built-in renderer is <c>internal</c> and is not a public contract.
++    /// </summary>
+     public override IExtremeRowRenderer? ExtremeRowRenderer => ClickHouseExtremeRowRenderer.Instance;
+ 
+     /// <summary>ClickHouse supports the <c>GROUPS</c> window frame unit.</summary>
+diff --git a/src/nextorm.postgres/PostgresDialect.cs b/src/nextorm.postgres/PostgresDialect.cs
+index a32a1f1e..e973bd77 100644
+--- a/src/nextorm.postgres/PostgresDialect.cs
++++ b/src/nextorm.postgres/PostgresDialect.cs
+@@ -7,12 +7,23 @@ namespace NextORM.Postgres;
+ /// PostgreSQL dialect: <c>||</c> concatenation, <c>@name</c> parameters, double-quoted identifiers,
+ /// <c>limit/offset</c> paging and the aggregate name mapping (<c>stdev</c> -> <c>stddev</c>, ...).
+ /// </summary>
++/// <remarks>
++/// The type is deliberately not <see langword="sealed"/>. Subclassing it and overriding
++/// <see cref="ExtremeRowRenderer"/> is the supported external extension boundary (a public
++/// compatibility commitment), so an assembly without <c>InternalsVisibleTo</c> can install its own
++/// public <see cref="IExtremeRowRenderer"/>. The built-in renderer is <c>internal</c> and is not part
++/// of that contract. The public constructors and the shared <see cref="Instance"/> are preserved;
++/// returning <see langword="null"/> from an override keeps the portable window-function lowering.
++/// </remarks>
+ public class PostgresDialect : SqlDialectBase
+ {
+     // The first PostgreSQL release with the ANSI aggregate FILTER clause (SQL:2003 T612, 9.4).
+     private static readonly Version AggregatesFilterMinVersion = new(9, 4);
+ 
+-    /// <summary>Gets the shared PostgreSQL dialect instance.</summary>
++    /// <summary>
++    /// Gets the shared PostgreSQL dialect instance. Subclassing the dialect does not change this
++    /// instance; a derived dialect is created through the public constructors instead.
++    /// </summary>
+     public static readonly PostgresDialect Instance = new();
+ 
+     private readonly Version? _version;
+@@ -21,6 +32,10 @@ public class PostgresDialect : SqlDialectBase
+     /// Creates an unversioned PostgreSQL dialect: every supported form (including the ANSI aggregate
+     /// <c>FILTER</c> clause) is emitted. Equivalent to the shared <see cref="Instance"/>.
+     /// </summary>
++    /// <remarks>
++    /// The constructor is public so an external assembly can derive a custom dialect from
++    /// <see cref="PostgresDialect"/>.
++    /// </remarks>
+     public PostgresDialect()
+     {
+     }
+@@ -30,6 +45,10 @@ public class PostgresDialect : SqlDialectBase
+     /// the ANSI aggregate <c>FILTER</c> clause; <see langword="null"/> is the unversioned form.
+     /// </summary>
+     /// <param name="serverVersion">The PostgreSQL server version, or <see langword="null"/> for unset.</param>
++    /// <remarks>
++    /// The constructor is public so an external assembly can derive a custom dialect from
++    /// <see cref="PostgresDialect"/>; passing <see langword="null"/> equals the parameterless form.
++    /// </remarks>
+     public PostgresDialect(Version? serverVersion) => _version = serverVersion;
+ 
+     /// <inheritdoc/>
+@@ -390,7 +409,12 @@ public class PostgresDialect : SqlDialectBase
+     /// <summary>PostgreSQL supports the <c>SELECT DISTINCT ON (expr, ...)</c> modifier.</summary>
+     public override IDistinctOnRenderer DistinctOn => PostgresDistinctOnRenderer.Instance;
+ 
+-    /// <summary>PostgreSQL renders eligible <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with <c>DISTINCT ON</c>/<c>ORDER BY ... LIMIT 1</c>; the rest falls back to the portable window function.</summary>
++    /// <summary>
++    /// PostgreSQL renders eligible <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with <c>DISTINCT ON</c>/<c>ORDER BY ... LIMIT 1</c>; the rest falls back to the portable window function.
++    /// The property is <see langword="virtual"/> so a derived dialect can override it with a custom
++    /// <see cref="IExtremeRowRenderer"/>; returning <see langword="null"/> keeps the portable
++    /// window-function lowering. The built-in renderer is <c>internal</c> and is not a public contract.
++    /// </summary>
+     public override IExtremeRowRenderer? ExtremeRowRenderer => PostgresExtremeRowRenderer.Instance;
+ 
+     /// <summary>PostgreSQL supports the <c>SelectWhereMax</c>/<c>SelectWhereMin</c> feature (native or portable).</summary>
+diff --git a/tests/nextorm.publicextensibility.tests/ExternalDialectExtensibilityTests.cs b/tests/nextorm.publicextensibility.tests/ExternalDialectExtensibilityTests.cs
+new file mode 100644
+index 00000000..710490d4
+--- /dev/null
++++ b/tests/nextorm.publicextensibility.tests/ExternalDialectExtensibilityTests.cs
+@@ -0,0 +1,274 @@
++using System.ComponentModel.DataAnnotations;
++using System.ComponentModel.DataAnnotations.Schema;
++using System.Data.Common;
++using System.Reflection;
++using System.Runtime.CompilerServices;
++using FluentAssertions;
++using NextORM.ClickHouse;
++using NextORM.Core;
++using NextORM.Postgres;
++using Xunit;
++
++namespace NextORM.PublicExtensibility.Tests;
++
++/// <summary>
++/// External-consumer proof for the supported extension boundary of <see cref="PostgresDialect"/> and
++/// <see cref="ClickHouseDialect"/>. This assembly has no <c>InternalsVisibleTo</c> grant from
++/// <c>nextorm.core</c>, <c>nextorm.postgres</c> or <c>nextorm.clickhouse</c>: it subclasses both
++/// dialects through their public constructors, implements the public <see cref="IExtremeRowRenderer"/>,
++/// installs it through the subclass and forces the portable strategy with <see langword="null"/>.
++/// </summary>
++public class ExternalDialectExtensibilityTests
++{
++    private const string PostgresConnectionString =
++        "Host=localhost;Port=5432;Database=nextorm;Username=nextorm;Password=nextorm";
++
++    private const string ClickHouseConnectionString =
++        "Host=localhost;Port=8123;Username=default;Password=nextorm;Database=nextorm";
++
++    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
++
++    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
++        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
++
++    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
++        => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
++
++    // ---- no friend access: metadata guard --------------------------------------------------
++
++    [Fact]
++    public void ReferencedProductionAssemblies_ShouldNotGrantInternalsVisibleToThisConsumer()
++    {
++        var consumerName = typeof(ExternalDialectExtensibilityTests).Assembly.GetName().Name;
++        consumerName.Should().Be("nextorm.publicextensibility.tests");
++
++        var assemblies = new[]
++        {
++            typeof(IDataContext).Assembly,
++            typeof(PostgresDataContext).Assembly,
++            typeof(ClickHouseDataContext).Assembly,
++        };
++
++        foreach (var assembly in assemblies)
++        {
++            var granted = assembly
++                .GetCustomAttributes<InternalsVisibleToAttribute>()
++                .Select(a => a.AssemblyName)
++                .ToArray();
++
++            granted.Should().NotContain(name =>
++                name == consumerName
++                || name.StartsWith(consumerName + ",", StringComparison.Ordinal));
++        }
++    }
++
++    // ---- public constructors and unchanged defaults ----------------------------------------
++
++    [Fact]
++    public void PostgresDialectSubclass_ShouldUseThePublicParameterlessConstructor()
++    {
++        new CustomPostgresDialect().ExtremeRowRenderer.Should().BeNull();
++
++        // The shipped default is unchanged: the built-in dialect still opts into the native renderer.
++        new PostgresDialect().ExtremeRowRenderer.Should().NotBeNull();
++    }
++
++    [Fact]
++    public void PostgresDialectSubclass_ShouldUseThePublicVersionConstructorIncludingNull()
++    {
++        new CustomPostgresDialect(serverVersion: null, renderer: null).ExtremeRowRenderer.Should().BeNull();
++        new CustomPostgresDialect(new Version(15, 0), renderer: null).ExtremeRowRenderer.Should().BeNull();
++
++        new PostgresDialect(null).ExtremeRowRenderer.Should().NotBeNull();
++        new PostgresDialect(new Version(15, 0)).ExtremeRowRenderer.Should().NotBeNull();
++    }
++
++    [Fact]
++    public void ClickHouseDialectSubclass_ShouldUseThePublicParameterlessConstructor()
++    {
++        new CustomClickHouseDialect().ExtremeRowRenderer.Should().BeNull();
++        new ClickHouseDialect().ExtremeRowRenderer.Should().NotBeNull();
++    }
++
++    // ---- custom renderer installed through the subclass: accept path -----------------------
++
++    [Fact]
++    public void PostgresCustomRenderer_AcceptPath_ShouldBeInvoked()
++    {
++        var renderer = new RecordingExtremeRowRenderer(canRender: true);
++        using var ctx = new CustomPostgresDataContext(PostgresConnectionString, new DataContextBuilder(), renderer);
++        var e = ctx.From<PublicExtensionEntity>();
++
++        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score).ToCommand());
++
++        renderer.CanRenderCalls.Should().BeGreaterThan(0);
++        renderer.RenderCalls.Should().Be(1);
++        sql.Should().Contain("custom-extreme-renderer");
++        sql.Should().NotContain("row_number()");
++    }
++
++    [Fact]
++    public void ClickHouseCustomRenderer_AcceptPath_ShouldBeInvoked()
++    {
++        var renderer = new RecordingExtremeRowRenderer(canRender: true);
++        using var ctx = new CustomClickHouseDataContext(ClickHouseConnectionString, new DataContextBuilder(), renderer);
++        var e = ctx.From<PublicExtensionEntity>();
++
++        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score).ToCommand());
++
++        renderer.CanRenderCalls.Should().BeGreaterThan(0);
++        renderer.RenderCalls.Should().Be(1);
++        sql.Should().Contain("custom-extreme-renderer");
++        sql.Should().NotContain("row_number()");
++    }
++
++    // ---- custom renderer: decline path (CanRender => false) ---------------------------------
++
++    [Fact]
++    public void PostgresCustomRenderer_DeclinePath_ShouldProducePortableSqlWithoutRender()
++    {
++        var renderer = new RecordingExtremeRowRenderer(canRender: false);
++        using var ctx = new CustomPostgresDataContext(PostgresConnectionString, new DataContextBuilder(), renderer);
++        var e = ctx.From<PublicExtensionEntity>();
++
++        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score).ToCommand());
++
++        renderer.CanRenderCalls.Should().BeGreaterThan(0);
++        renderer.RenderCalls.Should().Be(0);
++        sql.Should().Contain("row_number()");
++        sql.Should().NotContain("custom-extreme-renderer");
++    }
++
++    [Fact]
++    public void ClickHouseCustomRenderer_DeclinePath_ShouldProducePortableSqlWithoutRender()
++    {
++        var renderer = new RecordingExtremeRowRenderer(canRender: false);
++        using var ctx = new CustomClickHouseDataContext(ClickHouseConnectionString, new DataContextBuilder(), renderer);
++        var e = ctx.From<PublicExtensionEntity>();
++
++        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score).ToCommand());
++
++        renderer.CanRenderCalls.Should().BeGreaterThan(0);
++        renderer.RenderCalls.Should().Be(0);
++        sql.Should().Contain("row_number()");
++        sql.Should().NotContain("custom-extreme-renderer");
++    }
++
++    // ---- override returning null: portable strategy, via real SQL generation ----------------
++
++    [Fact]
++    public void PostgresNullOverride_ShouldProducePortableSql()
++    {
++        using var ctx = new CustomPostgresDataContext(PostgresConnectionString, new DataContextBuilder(), renderer: null);
++        var e = ctx.From<PublicExtensionEntity>();
++
++        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score).ToCommand());
++
++        sql.Should().Contain("row_number()");
++        sql.Should().NotContain("distinct on");
++        sql.Should().NotContain("limit 1");
++    }
++
++    [Fact]
++    public void ClickHouseNullOverride_ShouldProducePortableSql()
++    {
++        using var ctx = new CustomClickHouseDataContext(ClickHouseConnectionString, new DataContextBuilder(), renderer: null);
++        var e = ctx.From<PublicExtensionEntity>();
++
++        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.Score).ToCommand());
++
++        sql.Should().Contain("row_number()");
++        sql.Should().NotContain("argMax");
++        sql.Should().NotContain("argMin");
++    }
++}
++
++/// <summary>A mapped entity for the public query path, materializable from the placeholder SQL.</summary>
++[SqlTable("public_extension_entity")]
++public class PublicExtensionEntity
++{
++    [Key]
++    [Column("id")]
++    public long Id { get; set; }
++
++    [Column("score")]
++    public int? Score { get; set; }
++
++    [Column("name")]
++    public string? Name { get; set; }
++}
++
++/// <summary>A public <see cref="IExtremeRowRenderer"/> implementation that records its callbacks.</summary>
++internal sealed class RecordingExtremeRowRenderer : IExtremeRowRenderer
++{
++    private readonly bool _canRender;
++
++    public RecordingExtremeRowRenderer(bool canRender) => _canRender = canRender;
++
++    public int CanRenderCalls { get; private set; }
++
++    public int RenderCalls { get; private set; }
++
++    public bool CanRender(ExtremeRowDescription description)
++    {
++        CanRenderCalls++;
++        return _canRender;
++    }
++
++    public string Render(ExtremeRowRenderRequest request)
++    {
++        RenderCalls++;
++        return request.SourceSql + " /* custom-extreme-renderer */";
++    }
++}
++
++/// <summary>A PostgreSQL dialect subclass created through the public constructors.</summary>
++internal sealed class CustomPostgresDialect : PostgresDialect
++{
++    private readonly IExtremeRowRenderer? _renderer;
++
++    public CustomPostgresDialect()
++    {
++    }
++
++    public CustomPostgresDialect(Version? serverVersion, IExtremeRowRenderer? renderer)
++        : base(serverVersion) => _renderer = renderer;
++
++    public override IExtremeRowRenderer? ExtremeRowRenderer => _renderer;
++}
++
++/// <summary>A ClickHouse dialect subclass created through the public constructor.</summary>
++internal sealed class CustomClickHouseDialect : ClickHouseDialect
++{
++    private readonly IExtremeRowRenderer? _renderer;
++
++    public CustomClickHouseDialect()
++    {
++    }
++
++    public CustomClickHouseDialect(IExtremeRowRenderer? renderer) => _renderer = renderer;
++
++    public override IExtremeRowRenderer? ExtremeRowRenderer => _renderer;
++}
++
++/// <summary>Installs a custom PostgreSQL dialect through the overridable <c>Dialect</c> hook.</summary>
++internal sealed class CustomPostgresDataContext : PostgresDataContext
++{
++    private readonly ISqlDialect _dialect;
++
++    public CustomPostgresDataContext(string connectionString, DataContextBuilder optionsBuilder, IExtremeRowRenderer? renderer)
++        : base(connectionString, optionsBuilder) => _dialect = new CustomPostgresDialect(null, renderer);
++
++    public override ISqlDialect Dialect => _dialect;
++}
++
++/// <summary>Installs a custom ClickHouse dialect through the overridable <c>Dialect</c> hook.</summary>
++internal sealed class CustomClickHouseDataContext : ClickHouseDataContext
++{
++    private readonly ISqlDialect _dialect;
++
++    public CustomClickHouseDataContext(string connectionString, DataContextBuilder optionsBuilder, IExtremeRowRenderer? renderer)
++        : base(connectionString, optionsBuilder) => _dialect = new CustomClickHouseDialect(renderer);
++
++    public override ISqlDialect Dialect => _dialect;
++}
+diff --git a/tests/nextorm.publicextensibility.tests/nextorm.publicextensibility.tests.csproj b/tests/nextorm.publicextensibility.tests/nextorm.publicextensibility.tests.csproj
+new file mode 100644
+index 00000000..53ca5461
+--- /dev/null
++++ b/tests/nextorm.publicextensibility.tests/nextorm.publicextensibility.tests.csproj
+@@ -0,0 +1,26 @@
++<Project Sdk="Microsoft.NET.Sdk">
++
++  <ItemGroup>
++    <!-- Pinned to the last open-source (Apache-2.0) release; 8.x switched to the commercial Xceed license. -->
++    <PackageReference Include="FluentAssertions" />
++    <PackageReference Include="Microsoft.NET.Test.Sdk" />
++    <PackageReference Include="xunit.v3" />
++    <PackageReference Include="xunit.runner.visualstudio">
++      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
++      <PrivateAssets>all</PrivateAssets>
++    </PackageReference>
++    <PackageReference Include="coverlet.collector">
++      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
++      <PrivateAssets>all</PrivateAssets>
++    </PackageReference>
++  </ItemGroup>
++
++  <ItemGroup>
++    <!-- A non-friend consumer assembly: it references the production packages but receives no
++         InternalsVisibleTo grant, so every extension point it exercises is public surface. -->
++    <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
++    <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
++    <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
++  </ItemGroup>
++
++</Project>

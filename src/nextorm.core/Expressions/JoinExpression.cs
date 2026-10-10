@@ -171,7 +171,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// scope and the command's, and <see cref="QueryFilterScope.AllFilters"/> absorbs that union, so a
     /// parent <c>IgnoreFilters()</c> still disables every child filter and a child
     /// <c>IgnoreFilters(keys)</c> adds to the parent's selective scope. Set for the single-query
-    /// (<c>AsSingleQuery</c>) child joins and for a <c>JoinInto</c> child that disabled filters; a plain
+    /// (<c>EagerLoadMode.SingleQuery</c>) child joins and for a <c>JoinInto</c> child that disabled filters; a plain
     /// join leaves it <see langword="null"/>.
     /// </summary>
     internal QueryFilterScope? FilterScope { get; set; }

@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
 using System.Reflection;
 using FluentAssertions;
@@ -94,6 +96,26 @@ public class ExtremeRowPayloadLazinessTests
         sql.Should().Contain("row_number()");
     }
 
+    [Fact]
+    public void ValueTypePayload_GlobalNative_ShouldMaterializeExactlyOnceAndMemoize()
+    {
+        // #154 value/reference coverage: a value-type-only payload must still be materialized exactly
+        // once by the ClickHouse eligibility decision (which reads Payload) and memoized for later reads.
+        using var real = ClickHouseTestContext.Create();
+        var realSql = SqlOf(real, real.From<ExtremeValuePayloadEntity>().SelectWhereMax(x => x.K1).ToCommand());
+
+        using var ctx = new CapturingClickHouseDataContext(PlaceholderConnectionString);
+        var sql = SqlOf(ctx, ctx.From<ExtremeValuePayloadEntity>().SelectWhereMax(x => x.K1).ToCommand());
+
+        sql.Should().Be(realSql, "the transparent wrapper must not change the native SQL");
+        ctx.CapturingDialect.Renderer.CanRenderCalls.Should().Be(1);
+        var description = ctx.CapturingDialect.Renderer.Description!;
+        IsPayloadMaterialized(description).Should()
+            .BeTrue("the ClickHouse renderer reads the payload to decide tuple eligibility");
+        ReferenceEquals(description.Payload, description.Payload).Should()
+            .BeTrue("repeated reads must keep returning the single memoized payload");
+    }
+
     /// <summary>Transparent wrapper around the stock ClickHouse renderer that captures the description.</summary>
     internal sealed class CapturingExtremeRowRenderer(IExtremeRowRenderer inner) : IExtremeRowRenderer
     {
@@ -133,4 +155,22 @@ public class ExtremeRowPayloadLazinessTests
 
         public override ISqlDialect Dialect => CapturingDialect;
     }
+}
+
+/// <summary>
+/// A native-eligible entity (#154 coverage) whose key and payload are both value types, used to drive
+/// the value-type payload branch through the ClickHouse eligibility decision.
+/// </summary>
+[SqlTable("extreme_value_payload_entity")]
+public class ExtremeValuePayloadEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("k1")]
+    public int? K1 { get; set; }
+
+    [Column("payload")]
+    public int? Payload { get; set; }
 }

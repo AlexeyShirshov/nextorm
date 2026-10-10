@@ -1,0 +1,24 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+failed NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests.SupportedMethodCallProjection_ShouldBeNativeAndRenderForJson (202ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+  Expected plan.Columns[0].IsDirectPassThrough to be True because a method call whose declaring type is not TableAlias/TableColumn is a direct pass-through, but found False.
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.BooleanAssertions`1.BeTrue(String because, Object[] becauseArgs)
+    at NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests.SupportedMethodCallProjection_ShouldBeNativeAndRenderForJson() in /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs:104
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) failed with 1 error(s) (704ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 1
+  failed: 1
+  succeeded: 0
+  skipped: 0
+  duration: 923ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

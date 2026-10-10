@@ -1,0 +1,65 @@
+{
+  "unit": "D176.3",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+      "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~JsonShapeWriterTests",
+      "FullyQualifiedName~JsonStreamingTests",
+      "FullyQualifiedName~NextORM.Sqlite.Tests"
+    ],
+    "files": [
+      "src/nextorm.core/Query/Json/JsonShapePlan.cs",
+      "src/nextorm.core/Query/Json/JsonRowWriterFactory.cs",
+      "tests/nextorm.core.tests/JsonShapeWriterTests.cs",
+      "tests/nextorm.sqlite.tests/JsonStreamingTests.cs"
+    ],
+    "rationale": "D176.3 implements the recursive JSON shape writer and per-object scoped name validation in Query/Json plus the minimal focused writer tests. JsonShapeWriterTests exercises the writer directly with a fake IDataRecord (recursion, scope validation, presence, Base64, array guards); JsonStreamingTests is the SQLite end-to-end terminal that proves nested object/locally-scoped names, the whole-entity root object and the flat phase-1 regression surface through the two changed source files. No other compiled inputs are touched.",
+    "rebuild": "affected",
+    "boundary": "Full affected project sweep C02 (dotnet test tests/nextorm.core.tests -c Debug, no filter) after the last edit; the SQLite/JSON inner classes are re-run after every coherent edit, and a filtered full SQLite namespace boundary run confirms no ordinary-materialization regression."
+  },
+  "executions": [
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "d176.3-final2",
+      "artifact_revision": "d176.3-final2",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonShapeWriterTests"],
+      "phase": "inner",
+      "source_revision": "d176.3-final2",
+      "artifact_revision": "d176.3-final2",
+      "exit_code": 0,
+      "selected_count": 17
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonStreamingTests"],
+      "phase": "inner",
+      "source_revision": "d176.3-final2",
+      "artifact_revision": "d176.3-final2",
+      "exit_code": 0,
+      "selected_count": 28
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "d176.3-final2",
+      "artifact_revision": "d176.3-final2",
+      "exit_code": 0,
+      "selected_count": 1806
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--filter", "FullyQualifiedName~NextORM.Sqlite.Tests"],
+      "phase": "boundary",
+      "source_revision": "d176.3-final2",
+      "artifact_revision": "d176.3-final2",
+      "exit_code": 0,
+      "selected_count": 1187
+    }
+  ]
+}

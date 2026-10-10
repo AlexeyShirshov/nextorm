@@ -138,11 +138,12 @@ MariaDB supports the same clause on system-versioned tables, except `CONTAINED I
 
 ## `PIVOT` / `UNPIVOT`
 
-[`EntityBuilder<TEntity>.Pivot`](xref:NextORM.Core.EntityBuilder`1) reshapes a source into columns with
+[`EntityBuilder.Pivot`](xref:NextORM.SqlServer.SqlServerEntityBuilderExtensions.Pivot``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PivotAggregate,System.Linq.Expressions.Expression{System.Func{``0,System.Object}},System.Linq.Expressions.Expression{System.Func{``0,System.Object}},NextORM.Core.PivotValue[])) reshapes a source into columns with
 the native T-SQL `PIVOT` operator and
-[`Unpivot`](xref:NextORM.Core.EntityBuilder`1.Unpivot(System.String,System.String,NextORM.Core.UnpivotColumn[])) stacks columns into rows with `UNPIVOT`
+[`Unpivot`](xref:NextORM.SqlServer.SqlServerEntityBuilderExtensions.Unpivot``1(NextORM.Core.EntityBuilder{``0},System.String,System.String,NextORM.Core.UnpivotColumn[])) stacks columns into rows with `UNPIVOT`
 ([`Pivot`](xref:NextORM.Core.ISqlDialect.Pivot) /
-[`Pivot`](xref:NextORM.Core.ISqlDialect.Pivot)). The result is an untyped source:
+[`Pivot`](xref:NextORM.Core.ISqlDialect.Pivot)). They are extension methods in the `NextORM.SqlServer`
+namespace; add `using NextORM.SqlServer;` to use them. The result is an untyped source:
 select the grouping columns and the pivoted columns by name through `TableAlias`. The operators apply to
 a table expression, so the source may be a plain table/entity, a table-valued function or a derived
 query (`ctx.From(derivedQuery)`); filters and other modifiers belong to the reshaped result (or, for a

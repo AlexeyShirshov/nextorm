@@ -90,6 +90,7 @@ internal sealed class SqlServerTestProvider : ITestProvider
         """
         drop table if exists complex_entity;
         drop table if exists binary_entity;
+        drop table if exists enum_entity;
         drop table if exists lob_entity;
         drop table if exists xml_entity;
         drop table if exists simple_entity;
@@ -146,6 +147,16 @@ internal sealed class SqlServerTestProvider : ITestProvider
         );
 
         insert into binary_entity (id, data) values (1, 0x01020304), (2, null);
+
+        -- D178 (#178) enum storage: an enum is persisted as its underlying integer.
+        create table enum_entity
+        (
+            id int not null primary key,
+            state int not null,
+            nullable_state int null
+        );
+
+        insert into enum_entity (id, state, nullable_state) values (1, 7, null), (2, -3, 7), (3, 0, -3);
 
         -- 8 MiB of 0xAB and 8 MiB of N'x'. REPLICATE converts a binary argument to varchar(max),
         -- so the blob is assembled by doubling an 8-byte seed (20 doublings -> 8,388,608 bytes).

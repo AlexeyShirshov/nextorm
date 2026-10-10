@@ -328,16 +328,27 @@ select id, Calc from (select id, (somestring + somestring) as [Calc] from comple
 
 ## Named join aliases
 
-A joined query can name its slots instead of addressing them positionally:
+A joined query can name its slots instead of addressing them positionally. A join carries an optional
+trailing `Alias.<Name>` argument that names the new slot, and the root source can be named with
+`.WithAlias(Alias.X)`:
 
 ```csharp
 var rows = await dataContext.From<Order>(b => b.Table("orders"))
-    .Join<Person>(people, (o, buyer) => o.BuyerId == buyer.Id, Alias.Buyer)
-    .Select(p => new { Buyer = p.Buyer.Id })
+    .WithAlias(Alias.Root)
+    .Join<Person>(people, (o, buyer) => o.Root.BuyerId == buyer.Id, Alias.Buyer)
+    .Select(p => new { OrderId = p.Root.Id, Buyer = p.Buyer.Id })
     .ToListAsync();
 ```
 
-`p.Buyer` is an ordinary projection member generated for the `Alias.Buyer` slot, so `p.Buyer.Id` can
-be used anywhere a positional `p.Item2.Id` would be — in `Select`, `Where` and later joins. See
+The named members are **expression-only**: they exist so a `Select`/`Where` expression tree can name
+the joined table of the slot, and the translator rewrites them to that table. Reading one outside an
+expression tree — for example materialising `p.Buyer` directly — throws `NotSupportedException` by
+design instead of returning a defaulted value; project the column you need (`Select(p => p.Buyer.Id)`)
+instead. A named member can be used anywhere a positional `p.Item2.Id` would be — in `Select`, `Where`
+and later joins. A purely positional chain uses the accumulator types
+`Projection<T1>`..`Projection<T1..T8>`, whose `ItemN` members are ordinary properties; a root alias
+uses `Projection<T1>` — the only dimension-1 projection, a plain `IProjection` that is not directly
+extendable, its slot-1 transition being supplied by the generated positional members — and a named
+slot is an expression-only property added on top of the same accumulator. See
 [Joins](../guide/02-joins.md#named-join-aliases).
 

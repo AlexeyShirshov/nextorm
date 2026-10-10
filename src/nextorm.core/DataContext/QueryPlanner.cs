@@ -70,7 +70,7 @@ internal sealed class QueryPlanner : IQueryPlanner
     private List<Parameter> ExtractParams(QueryCommand queryCommand)
     {
         var @params = new List<Parameter>();
-        MakeSelect(queryCommand, true, @params, queryCommand, null, false);
+        MakeSelect(queryCommand, true, @params, queryCommand, null, false, false);
         return @params;
     }
 
@@ -515,7 +515,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         return (sql, renderedParams);
     }
 
-    private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider, bool sequentialAccess)
+    private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider, bool sequentialAccess, bool suppressLobLocator)
     {
         // The single render funnel for cold, warm-miss and prepared-miss renders (including the cached-hit
         // parameter refresh through ExtractParams). A previously prepared command skips re-preparation, so
@@ -537,6 +537,12 @@ internal sealed class QueryPlanner : IQueryPlanner
             NamingConvention = queryCommand.ResolvedNamingConvention,
             KeywordCase = queryCommand.ResolvedKeywordCase,
             SequentialAccess = sequentialAccess,
+            SuppressLobLocator = suppressLobLocator,
+            // The native FOR JSON streaming clone aliases every projected column to its JSON property
+            // name, so a mapped column that differs from the property only by case (id vs Id) still gets
+            // the exact alias FOR JSON PATH emits as the property name. Set only on that clone: a plain
+            // JSON-shape preparation (ForJsonClause null) and the scalar ForJson terminal are untouched.
+            ExactProjectionAliases = queryCommand.JsonShapeMode && queryCommand.ForJsonClause is not null,
             RenderMutationBody = _renderMutationBody,
         };
         var sqlBuilder = new SqlBuilder(in ctx);
@@ -550,6 +556,9 @@ internal sealed class QueryPlanner : IQueryPlanner
         => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, sequentialAccess, false, cancellationToken);
 
     internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool sequentialAccess, bool streamingRowsRequested, CancellationToken cancellationToken)
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, sequentialAccess, streamingRowsRequested, suppressLobLocator: false, cancellationToken);
+
+    internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool sequentialAccess, bool streamingRowsRequested, bool suppressLobLocator, CancellationToken cancellationToken)
     {
         // A data-modifying CTE makes the whole statement side-effecting, so its plan must never be
         // shared: the mutation's shape (row count, target columns) is not captured by the CTE query.
@@ -767,7 +776,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         {
             var @params = new List<Parameter>();
             var aliasProvider = new DefaultAliasProvider();
-            return (MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider, sequentialAccess), @params);
+            return (MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider, sequentialAccess, suppressLobLocator), @params);
         }
     }
 

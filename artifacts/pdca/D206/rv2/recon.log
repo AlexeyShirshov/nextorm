@@ -1,0 +1,470 @@
+===== STEP 3a: dotnet build nextorm.slnx -c Debug (2026-10-10T09:41:19Z) =====
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  nextorm.core.sourcegenerator -> /home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/bin/linux/Debug/netstandard2.0/nextorm.core.sourcegenerator.dll
+  nextorm.examples.mssql.adventureworks -> /home/alex/sources/nextorm/examples/nextorm.examples.mssql.adventureworks/bin/linux/Debug/net10.0/nextorm.examples.mssql.adventureworks.dll
+  nextorm.examples.clickhouse.analytics -> /home/alex/sources/nextorm/examples/nextorm.examples.clickhouse.analytics/bin/linux/Debug/net10.0/nextorm.examples.clickhouse.analytics.dll
+  nextorm.examples.postgres.aviasales -> /home/alex/sources/nextorm/examples/nextorm.examples.postgres.aviasales/bin/linux/Debug/net10.0/nextorm.examples.postgres.aviasales.dll
+  nextorm.core -> /home/alex/sources/nextorm/src/nextorm.core/bin/linux/Debug/net10.0/nextorm.core.dll
+  nextorm.mysql -> /home/alex/sources/nextorm/src/nextorm.mysql/bin/linux/Debug/net10.0/nextorm.mysql.dll
+  nextorm.postgres -> /home/alex/sources/nextorm/src/nextorm.postgres/bin/linux/Debug/net10.0/nextorm.postgres.dll
+  nextorm.sqlite -> /home/alex/sources/nextorm/src/nextorm.sqlite/bin/linux/Debug/net10.0/nextorm.sqlite.dll
+  nextorm.clickhouse -> /home/alex/sources/nextorm/src/nextorm.clickhouse/bin/linux/Debug/net10.0/nextorm.clickhouse.dll
+  nextorm.mariadb -> /home/alex/sources/nextorm/src/nextorm.mariadb/bin/linux/Debug/net10.0/nextorm.mariadb.dll
+  nextorm.sqlserver -> /home/alex/sources/nextorm/src/nextorm.sqlserver/bin/linux/Debug/net10.0/nextorm.sqlserver.dll
+  nextorm.publicextensibility.tests -> /home/alex/sources/nextorm/tests/nextorm.publicextensibility.tests/bin/linux/Debug/net10.0/nextorm.publicextensibility.tests.dll
+  nextorm.clickhouse.extensions.tests -> /home/alex/sources/nextorm/tests/nextorm.clickhouse.extensions.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.extensions.tests.dll
+  nextorm.alias.tests -> /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll
+  nextorm.core.tests -> /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll
+  nextorm.entityframeworkcore -> /home/alex/sources/nextorm/src/nextorm.entityframeworkcore/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.dll
+  nextorm.entityframeworkcore.tests -> /home/alex/sources/nextorm/tests/nextorm.entityframeworkcore.tests/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.tests.dll
+  nextorm.sqlserver.tests -> /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll
+  nextorm.postgres.tests -> /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll
+  nextorm.benchmark -> /home/alex/sources/nextorm/benchmarks/nextorm.benchmark/bin/linux/Debug/net10.0/nextorm.benchmark.dll
+  nextorm.clickhouse.tests -> /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll
+  nextorm.integration.tests -> /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll
+  nextorm.mariadb.tests -> /home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll
+  nextorm.mysql.tests -> /home/alex/sources/nextorm/tests/nextorm.mysql.tests/bin/linux/Debug/net10.0/nextorm.mysql.tests.dll
+  nextorm.sqlite.tests -> /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:44.53
+BUILD_EXIT=0
+
+===== STEP 3b: dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~JoinAliasGeneratorDiagnosticTests (2026-10-10T09:42:07Z) =====
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+failed NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_byte_identical_distinct_chains_collapse_to_one_method (251ms)
+  from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+  Expected harness.Output.GetDiagnostics(TestContext.Current.CancellationToken) {Harness.cs(10,57): error CS0103: The name 'Alias' does not exist in the current context, Harness.cs(11,56): error CS0103: The name 'Alias' does not exist in the current context} to not have any items matching (Convert(d.Severity, Int32) == 3), but found {Harness.cs(10,57): error CS0103: The name 'Alias' does not exist in the current context, Harness.cs(11,56): error CS0103: The name 'Alias' does not exist in the current context}.
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Collections.GenericCollectionAssertions`3.NotContain(Expression`1 predicate, String because, Object[] becauseArgs)
+    at NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_byte_identical_distinct_chains_collapse_to_one_method() in /home/alex/sources/nextorm/tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs:372
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_intermediate_cte_alias_join_is_supported_without_false_NORMGEN007 (30ms)
+  from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+  Expected harness.Output.GetDiagnostics(TestContext.Current.CancellationToken) {Harness.cs(9,46): error CS0103: The name 'Alias' does not exist in the current context, Harness.cs(9,96): error CS0103: The name 'Alias' does not exist in the current context} to not have any items matching (Convert(d.Severity, Int32) == 3), but found {Harness.cs(9,46): error CS0103: The name 'Alias' does not exist in the current context, Harness.cs(9,96): error CS0103: The name 'Alias' does not exist in the current context}.
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Collections.GenericCollectionAssertions`3.NotContain(Expression`1 predicate, String because, Object[] becauseArgs)
+    at NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_intermediate_cte_alias_join_is_supported_without_false_NORMGEN007() in /home/alex/sources/nextorm/tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs:448
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) failed with 2 error(s) (2s 533ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 21
+  failed: 2
+  succeeded: 19
+  skipped: 0
+  duration: 2s 772ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)
+FILTERED_EXIT=2
+
+===== STEP 3a(2): dotnet build tests/nextorm.alias.tests -c Debug (affected, inner) (2026-10-10T09:42:39Z) =====
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  nextorm.core.sourcegenerator -> /home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/bin/linux/Debug/netstandard2.0/nextorm.core.sourcegenerator.dll
+  nextorm.core -> /home/alex/sources/nextorm/src/nextorm.core/bin/linux/Debug/net10.0/nextorm.core.dll
+  nextorm.sqlite -> /home/alex/sources/nextorm/src/nextorm.sqlite/bin/linux/Debug/net10.0/nextorm.sqlite.dll
+  nextorm.alias.tests -> /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:02.56
+AFFECTED_BUILD_EXIT=0
+
+===== STEP 3b(2): dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~JoinAliasGeneratorDiagnosticTests (2026-10-10T09:42:42Z) =====
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) passed (2s 126ms)
+
+Test run summary: Passed!
+  total: 21
+  failed: 0
+  succeeded: 21
+  skipped: 0
+  duration: 2s 349ms
+FILTERED_EXIT=0
+
+===== STEP 3c(boundary): dotnet test tests/nextorm.alias.tests -c Debug (wider alias suite, unfiltered) (2026-10-10T09:42:53Z) =====
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) passed (4s 392ms)
+
+Test run summary: Passed!
+  total: 103
+  failed: 0
+  succeeded: 103
+  skipped: 0
+  duration: 4s 611ms
+WIDER_EXIT=0
+
+===== STEP 3d(boundary): dotnet build nextorm.slnx -c Debug (2026-10-10T09:42:59Z) =====
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  nextorm.core.sourcegenerator -> /home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/bin/linux/Debug/netstandard2.0/nextorm.core.sourcegenerator.dll
+  nextorm.examples.clickhouse.analytics -> /home/alex/sources/nextorm/examples/nextorm.examples.clickhouse.analytics/bin/linux/Debug/net10.0/nextorm.examples.clickhouse.analytics.dll
+  nextorm.examples.mssql.adventureworks -> /home/alex/sources/nextorm/examples/nextorm.examples.mssql.adventureworks/bin/linux/Debug/net10.0/nextorm.examples.mssql.adventureworks.dll
+  nextorm.examples.postgres.aviasales -> /home/alex/sources/nextorm/examples/nextorm.examples.postgres.aviasales/bin/linux/Debug/net10.0/nextorm.examples.postgres.aviasales.dll
+  nextorm.core -> /home/alex/sources/nextorm/src/nextorm.core/bin/linux/Debug/net10.0/nextorm.core.dll
+  nextorm.mysql -> /home/alex/sources/nextorm/src/nextorm.mysql/bin/linux/Debug/net10.0/nextorm.mysql.dll
+  nextorm.sqlite -> /home/alex/sources/nextorm/src/nextorm.sqlite/bin/linux/Debug/net10.0/nextorm.sqlite.dll
+  nextorm.postgres -> /home/alex/sources/nextorm/src/nextorm.postgres/bin/linux/Debug/net10.0/nextorm.postgres.dll
+  nextorm.clickhouse -> /home/alex/sources/nextorm/src/nextorm.clickhouse/bin/linux/Debug/net10.0/nextorm.clickhouse.dll
+  nextorm.sqlserver -> /home/alex/sources/nextorm/src/nextorm.sqlserver/bin/linux/Debug/net10.0/nextorm.sqlserver.dll
+  nextorm.mariadb -> /home/alex/sources/nextorm/src/nextorm.mariadb/bin/linux/Debug/net10.0/nextorm.mariadb.dll
+  nextorm.clickhouse.extensions.tests -> /home/alex/sources/nextorm/tests/nextorm.clickhouse.extensions.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.extensions.tests.dll
+  nextorm.alias.tests -> /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll
+  nextorm.core.tests -> /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll
+  nextorm.mysql.tests -> /home/alex/sources/nextorm/tests/nextorm.mysql.tests/bin/linux/Debug/net10.0/nextorm.mysql.tests.dll
+  nextorm.sqlserver.tests -> /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll
+  nextorm.entityframeworkcore -> /home/alex/sources/nextorm/src/nextorm.entityframeworkcore/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.dll
+  nextorm.publicextensibility.tests -> /home/alex/sources/nextorm/tests/nextorm.publicextensibility.tests/bin/linux/Debug/net10.0/nextorm.publicextensibility.tests.dll
+  nextorm.postgres.tests -> /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll
+  nextorm.mariadb.tests -> /home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll
+  nextorm.sqlite.tests -> /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll
+  nextorm.clickhouse.tests -> /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll
+  nextorm.integration.tests -> /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll
+  nextorm.entityframeworkcore.tests -> /home/alex/sources/nextorm/tests/nextorm.entityframeworkcore.tests/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.tests.dll
+  nextorm.benchmark -> /home/alex/sources/nextorm/benchmarks/nextorm.benchmark/bin/linux/Debug/net10.0/nextorm.benchmark.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:02.75
+SOLUTION_BUILD_EXIT=0
+
+===== STEP 3a(3): dotnet build tests/nextorm.alias.tests -c Debug (affected, inner) (2026-10-10T09:43:57Z) =====
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  nextorm.core.sourcegenerator -> /home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/bin/linux/Debug/netstandard2.0/nextorm.core.sourcegenerator.dll
+  nextorm.core -> /home/alex/sources/nextorm/src/nextorm.core/bin/linux/Debug/net10.0/nextorm.core.dll
+  nextorm.sqlite -> /home/alex/sources/nextorm/src/nextorm.sqlite/bin/linux/Debug/net10.0/nextorm.sqlite.dll
+  nextorm.alias.tests -> /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:02.08
+AFFECTED_BUILD3_EXIT=0
+
+===== STEP 3b(3): dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~JoinAliasGeneratorDiagnosticTests (2026-10-10T09:44:00Z) =====
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) passed (2s 026ms)
+
+  In process file artifacts produced:
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_byte_identical_distinct_chains_collapse_to_one_method': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/eefb18f047e2d03f09d08a810eec16342e2920635374f0b9ca4a220e4932e97e/R03-compiler.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_byte_identical_distinct_chains_collapse_to_one_method': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/eefb18f047e2d03f09d08a810eec16342e2920635374f0b9ca4a220e4932e97e/R03-diagnostics.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_byte_identical_distinct_chains_collapse_to_one_method': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/eefb18f047e2d03f09d08a810eec16342e2920635374f0b9ca4a220e4932e97e/R03-generated.cs.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R07_generation_is_order_independent_and_repeatable': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/cc9c1bbe2190f9788ed578c18b6763029116b360740b9ccd81e58aa041ae3552/R07-reversed-generated.cs.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R07_generation_is_order_independent_and_repeatable': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/cc9c1bbe2190f9788ed578c18b6763029116b360740b9ccd81e58aa041ae3552/R07-forward-generated.cs.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_intermediate_cte_alias_join_is_supported_without_false_NORMGEN007': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/bc9459c921aef494a254553e32b000f6360e37577f64af553c4ae5002eb23fef/R03-cte-diagnostics.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_intermediate_cte_alias_join_is_supported_without_false_NORMGEN007': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/bc9459c921aef494a254553e32b000f6360e37577f64af553c4ae5002eb23fef/R03-cte-generated.cs.txt
+
+Test run summary: Passed!
+  total: 21
+  failed: 0
+  succeeded: 21
+  skipped: 0
+  duration: 2s 248ms
+FILTERED3_EXIT=0
+
+===== generated source / diagnostics dumps (from xunit attachments) (2026-10-10T09:44:10Z) =====
+----- ATTACHMENT: tests/TestResults/nextorm.alias.tests/bc9459c921aef494a254553e32b000f6360e37577f64af553c4ae5002eb23fef/R03-cte-diagnostics.txt -----
+
+----- ATTACHMENT: tests/TestResults/nextorm.alias.tests/bc9459c921aef494a254553e32b000f6360e37577f64af553c4ae5002eb23fef/R03-cte-generated.cs.txt -----
+// <auto-generated />
+#nullable disable
+#pragma warning disable CS1591
+namespace NextORM.Generated.AliasHarness
+{
+    public static class Alias
+    {
+        public sealed class BuyerMarker { }
+        public sealed class SellerMarker { }
+        public static BuyerMarker Buyer { get; } = new BuyerMarker();
+        public static SellerMarker Seller { get; } = new SellerMarker();
+    }
+    public class AliasProjection_P1_A2_Buyer<T1, T2> : global::NextORM.Core.Projection<T1, T2>
+    {
+        [global::NextORM.Core.JoinSlot(2)]
+        public T2 Buyer => throw new global::System.NotSupportedException();
+    }
+
+    public class AliasJoin_P1_A2_Buyer<T1, T2> : global::NextORM.Core.EntityBuilder<NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Buyer<T1, T2>>
+    {
+        public AliasJoin_P1_A2_Buyer(global::NextORM.Core.IDataContext dataProvider) : base(dataProvider) { }
+    }
+
+    public class AliasProjection_P1_A2_Buyer_A3_Seller<T1, T2, T3> : global::NextORM.Core.Projection<T1, T2, T3>
+    {
+        [global::NextORM.Core.JoinSlot(2)]
+        public T2 Buyer => throw new global::System.NotSupportedException();
+        [global::NextORM.Core.JoinSlot(3)]
+        public T3 Seller => throw new global::System.NotSupportedException();
+    }
+
+    public class AliasJoin_P1_A2_Buyer_A3_Seller<T1, T2, T3> : global::NextORM.Core.EntityBuilder<NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Buyer_A3_Seller<T1, T2, T3>>
+    {
+        public AliasJoin_P1_A2_Buyer_A3_Seller(global::NextORM.Core.IDataContext dataProvider) : base(dataProvider) { }
+    }
+
+    public static class JoinAliasExtensions
+    {
+        public static NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin> Join<TJoin>(
+            this global::NextORM.Core.EntityBuilder<global::Harness.Order> self,
+            global::NextORM.Core.Cte<TJoin> cte,
+            global::System.Linq.Expressions.Expression<global::System.Func<global::Harness.Order, TJoin, bool>> condition,
+            NextORM.Generated.AliasHarness.Alias.BuyerMarker marker)
+            => self.JoinAlias<NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin>, NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Buyer<global::Harness.Order, TJoin>, TJoin>(
+                static dc => new NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin>(dc),
+                cte,
+                condition,
+                global::NextORM.Core.JoinType.Inner);
+        public static NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer_A3_Seller<global::Harness.Order, global::Harness.Person, TJoin> Join<TJoin>(
+            this NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, global::Harness.Person> self,
+            global::NextORM.Core.EntityBuilder<TJoin> _,
+            global::System.Linq.Expressions.Expression<global::System.Func<NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Buyer<global::Harness.Order, global::Harness.Person>, TJoin, bool>> condition,
+            NextORM.Generated.AliasHarness.Alias.SellerMarker marker)
+            => self.JoinAlias<NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer_A3_Seller<global::Harness.Order, global::Harness.Person, TJoin>, NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Buyer_A3_Seller<global::Harness.Order, global::Harness.Person, TJoin>, TJoin>(
+                static dc => new NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer_A3_Seller<global::Harness.Order, global::Harness.Person, TJoin>(dc),
+                _,
+                condition,
+                global::NextORM.Core.JoinType.Inner);
+    }
+}
+
+----- ATTACHMENT: tests/TestResults/nextorm.alias.tests/cc9c1bbe2190f9788ed578c18b6763029116b360740b9ccd81e58aa041ae3552/R07-forward-generated.cs.txt -----
+// <auto-generated />
+#nullable disable
+#pragma warning disable CS1591
+namespace NextORM.Generated.AliasHarness
+{
+    public static class Alias
+    {
+        public sealed class BuyerMarker { }
+        public sealed class SellerMarker { }
+        public static BuyerMarker Buyer { get; } = new BuyerMarker();
+        public static SellerMarker Seller { get; } = new SellerMarker();
+    }
+    public class AliasProjection_P1_A2_Buyer<T1, T2> : global::NextORM.Core.Projection<T1, T2>
+    {
+        [global::NextORM.Core.JoinSlot(2)]
+        public T2 Buyer => throw new global::System.NotSupportedException();
+    }
+
+    public class AliasJoin_P1_A2_Buyer<T1, T2> : global::NextORM.Core.EntityBuilder<NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Buyer<T1, T2>>
+    {
+        public AliasJoin_P1_A2_Buyer(global::NextORM.Core.IDataContext dataProvider) : base(dataProvider) { }
+    }
+
+    public class AliasProjection_P1_A2_Seller<T1, T2> : global::NextORM.Core.Projection<T1, T2>
+    {
+        [global::NextORM.Core.JoinSlot(2)]
+        public T2 Seller => throw new global::System.NotSupportedException();
+    }
+
+    public class AliasJoin_P1_A2_Seller<T1, T2> : global::NextORM.Core.EntityBuilder<NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Seller<T1, T2>>
+    {
+        public AliasJoin_P1_A2_Seller(global::NextORM.Core.IDataContext dataProvider) : base(dataProvider) { }
+    }
+
+    public static class JoinAliasExtensions
+    {
+        public static NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin> Join<TJoin>(
+            this global::NextORM.Core.EntityBuilder<global::Harness.Order> self,
+            global::NextORM.Core.EntityBuilder<TJoin> _,
+            global::System.Linq.Expressions.Expression<global::System.Func<global::Harness.Order, TJoin, bool>> condition,
+            NextORM.Generated.AliasHarness.Alias.BuyerMarker marker)
+            => self.JoinAlias<NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin>, NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Buyer<global::Harness.Order, TJoin>, TJoin>(
+                static dc => new NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin>(dc),
+                _,
+                condition,
+                global::NextORM.Core.JoinType.Inner);
+        public static NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Seller<global::Harness.Person, TJoin> Join<TJoin>(
+            this global::NextORM.Core.EntityBuilder<global::Harness.Person> self,
+            global::NextORM.Core.EntityBuilder<TJoin> _,
+            global::System.Linq.Expressions.Expression<global::System.Func<global::Harness.Person, TJoin, bool>> condition,
+            NextORM.Generated.AliasHarness.Alias.SellerMarker marker)
+            => self.JoinAlias<NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Seller<global::Harness.Person, TJoin>, NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Seller<global::Harness.Person, TJoin>, TJoin>(
+                static dc => new NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Seller<global::Harness.Person, TJoin>(dc),
+                _,
+                condition,
+                global::NextORM.Core.JoinType.Inner);
+    }
+}
+
+----- ATTACHMENT: tests/TestResults/nextorm.alias.tests/cc9c1bbe2190f9788ed578c18b6763029116b360740b9ccd81e58aa041ae3552/R07-reversed-generated.cs.txt -----
+// <auto-generated />
+#nullable disable
+#pragma warning disable CS1591
+namespace NextORM.Generated.AliasHarness
+{
+    public static class Alias
+    {
+        public sealed class BuyerMarker { }
+        public sealed class SellerMarker { }
+        public static BuyerMarker Buyer { get; } = new BuyerMarker();
+        public static SellerMarker Seller { get; } = new SellerMarker();
+    }
+    public class AliasProjection_P1_A2_Buyer<T1, T2> : global::NextORM.Core.Projection<T1, T2>
+    {
+        [global::NextORM.Core.JoinSlot(2)]
+        public T2 Buyer => throw new global::System.NotSupportedException();
+    }
+
+    public class AliasJoin_P1_A2_Buyer<T1, T2> : global::NextORM.Core.EntityBuilder<NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Buyer<T1, T2>>
+    {
+        public AliasJoin_P1_A2_Buyer(global::NextORM.Core.IDataContext dataProvider) : base(dataProvider) { }
+    }
+
+    public class AliasProjection_P1_A2_Seller<T1, T2> : global::NextORM.Core.Projection<T1, T2>
+    {
+        [global::NextORM.Core.JoinSlot(2)]
+        public T2 Seller => throw new global::System.NotSupportedException();
+    }
+
+    public class AliasJoin_P1_A2_Seller<T1, T2> : global::NextORM.Core.EntityBuilder<NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Seller<T1, T2>>
+    {
+        public AliasJoin_P1_A2_Seller(global::NextORM.Core.IDataContext dataProvider) : base(dataProvider) { }
+    }
+
+    public static class JoinAliasExtensions
+    {
+        public static NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin> Join<TJoin>(
+            this global::NextORM.Core.EntityBuilder<global::Harness.Order> self,
+            global::NextORM.Core.EntityBuilder<TJoin> _,
+            global::System.Linq.Expressions.Expression<global::System.Func<global::Harness.Order, TJoin, bool>> condition,
+            NextORM.Generated.AliasHarness.Alias.BuyerMarker marker)
+            => self.JoinAlias<NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin>, NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Buyer<global::Harness.Order, TJoin>, TJoin>(
+                static dc => new NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin>(dc),
+                _,
+                condition,
+                global::NextORM.Core.JoinType.Inner);
+        public static NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Seller<global::Harness.Person, TJoin> Join<TJoin>(
+            this global::NextORM.Core.EntityBuilder<global::Harness.Person> self,
+            global::NextORM.Core.EntityBuilder<TJoin> _,
+            global::System.Linq.Expressions.Expression<global::System.Func<global::Harness.Person, TJoin, bool>> condition,
+            NextORM.Generated.AliasHarness.Alias.SellerMarker marker)
+            => self.JoinAlias<NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Seller<global::Harness.Person, TJoin>, NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Seller<global::Harness.Person, TJoin>, TJoin>(
+                static dc => new NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Seller<global::Harness.Person, TJoin>(dc),
+                _,
+                condition,
+                global::NextORM.Core.JoinType.Inner);
+    }
+}
+
+----- ATTACHMENT: tests/TestResults/nextorm.alias.tests/eefb18f047e2d03f09d08a810eec16342e2920635374f0b9ca4a220e4932e97e/R03-compiler.txt -----
+
+----- ATTACHMENT: tests/TestResults/nextorm.alias.tests/eefb18f047e2d03f09d08a810eec16342e2920635374f0b9ca4a220e4932e97e/R03-diagnostics.txt -----
+
+----- ATTACHMENT: tests/TestResults/nextorm.alias.tests/eefb18f047e2d03f09d08a810eec16342e2920635374f0b9ca4a220e4932e97e/R03-generated.cs.txt -----
+// <auto-generated />
+#nullable disable
+#pragma warning disable CS1591
+namespace NextORM.Generated.AliasHarness
+{
+    public static class Alias
+    {
+        public sealed class XMarker { }
+        public static XMarker X { get; } = new XMarker();
+    }
+    public class AliasProjection_P1_A2_X<T1, T2> : global::NextORM.Core.Projection<T1, T2>
+    {
+        [global::NextORM.Core.JoinSlot(2)]
+        public T2 X => throw new global::System.NotSupportedException();
+    }
+
+    public class AliasJoin_P1_A2_X<T1, T2> : global::NextORM.Core.EntityBuilder<NextORM.Generated.AliasHarness.AliasProjection_P1_A2_X<T1, T2>>
+    {
+        public AliasJoin_P1_A2_X(global::NextORM.Core.IDataContext dataProvider) : base(dataProvider) { }
+    }
+
+    public static class JoinAliasExtensions
+    {
+        public static NextORM.Generated.AliasHarness.AliasJoin_P1_A2_X<global::Harness.Order, TJoin> Join<TJoin>(
+            this global::NextORM.Core.EntityBuilder<global::Harness.Order> self,
+            global::NextORM.Core.EntityBuilder<TJoin> _,
+            global::System.Linq.Expressions.Expression<global::System.Func<global::Harness.Order, TJoin, bool>> condition,
+            NextORM.Generated.AliasHarness.Alias.XMarker marker)
+            => self.JoinAlias<NextORM.Generated.AliasHarness.AliasJoin_P1_A2_X<global::Harness.Order, TJoin>, NextORM.Generated.AliasHarness.AliasProjection_P1_A2_X<global::Harness.Order, TJoin>, TJoin>(
+                static dc => new NextORM.Generated.AliasHarness.AliasJoin_P1_A2_X<global::Harness.Order, TJoin>(dc),
+                _,
+                condition,
+                global::NextORM.Core.JoinType.Inner);
+    }
+}
+
+
+===== STEP 3c(2, boundary): dotnet test tests/nextorm.alias.tests -c Debug (wider alias suite) (2026-10-10T09:44:16Z) =====
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) passed (4s 087ms)
+
+  In process file artifacts produced:
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_byte_identical_distinct_chains_collapse_to_one_method': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/eefb18f047e2d03f09d08a810eec16342e2920635374f0b9ca4a220e4932e97e/R03-compiler.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_byte_identical_distinct_chains_collapse_to_one_method': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/eefb18f047e2d03f09d08a810eec16342e2920635374f0b9ca4a220e4932e97e/R03-diagnostics.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_byte_identical_distinct_chains_collapse_to_one_method': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/eefb18f047e2d03f09d08a810eec16342e2920635374f0b9ca4a220e4932e97e/R03-generated.cs.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R07_generation_is_order_independent_and_repeatable': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/cc9c1bbe2190f9788ed578c18b6763029116b360740b9ccd81e58aa041ae3552/R07-reversed-generated.cs.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R07_generation_is_order_independent_and_repeatable': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/cc9c1bbe2190f9788ed578c18b6763029116b360740b9ccd81e58aa041ae3552/R07-forward-generated.cs.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_intermediate_cte_alias_join_is_supported_without_false_NORMGEN007': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/bc9459c921aef494a254553e32b000f6360e37577f64af553c4ae5002eb23fef/R03-cte-diagnostics.txt
+    - For test 'NextORM.AliasTests.JoinAliasGeneratorDiagnosticTests.R03_intermediate_cte_alias_join_is_supported_without_false_NORMGEN007': /home/alex/sources/nextorm/tests/TestResults/nextorm.alias.tests/bc9459c921aef494a254553e32b000f6360e37577f64af553c4ae5002eb23fef/R03-cte-generated.cs.txt
+
+Test run summary: Passed!
+  total: 103
+  failed: 0
+  succeeded: 103
+  skipped: 0
+  duration: 4s 299ms
+WIDER2_EXIT=0
+
+===== STEP 3d(2, boundary): dotnet build nextorm.slnx -c Debug (2026-10-10T09:44:22Z) =====
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  nextorm.core.sourcegenerator -> /home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/bin/linux/Debug/netstandard2.0/nextorm.core.sourcegenerator.dll
+  nextorm.examples.mssql.adventureworks -> /home/alex/sources/nextorm/examples/nextorm.examples.mssql.adventureworks/bin/linux/Debug/net10.0/nextorm.examples.mssql.adventureworks.dll
+  nextorm.examples.clickhouse.analytics -> /home/alex/sources/nextorm/examples/nextorm.examples.clickhouse.analytics/bin/linux/Debug/net10.0/nextorm.examples.clickhouse.analytics.dll
+  nextorm.examples.postgres.aviasales -> /home/alex/sources/nextorm/examples/nextorm.examples.postgres.aviasales/bin/linux/Debug/net10.0/nextorm.examples.postgres.aviasales.dll
+  nextorm.core -> /home/alex/sources/nextorm/src/nextorm.core/bin/linux/Debug/net10.0/nextorm.core.dll
+  nextorm.clickhouse -> /home/alex/sources/nextorm/src/nextorm.clickhouse/bin/linux/Debug/net10.0/nextorm.clickhouse.dll
+  nextorm.sqlserver -> /home/alex/sources/nextorm/src/nextorm.sqlserver/bin/linux/Debug/net10.0/nextorm.sqlserver.dll
+  nextorm.postgres -> /home/alex/sources/nextorm/src/nextorm.postgres/bin/linux/Debug/net10.0/nextorm.postgres.dll
+  nextorm.mysql -> /home/alex/sources/nextorm/src/nextorm.mysql/bin/linux/Debug/net10.0/nextorm.mysql.dll
+  nextorm.sqlite -> /home/alex/sources/nextorm/src/nextorm.sqlite/bin/linux/Debug/net10.0/nextorm.sqlite.dll
+  nextorm.entityframeworkcore -> /home/alex/sources/nextorm/src/nextorm.entityframeworkcore/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.dll
+  nextorm.publicextensibility.tests -> /home/alex/sources/nextorm/tests/nextorm.publicextensibility.tests/bin/linux/Debug/net10.0/nextorm.publicextensibility.tests.dll
+  nextorm.mariadb -> /home/alex/sources/nextorm/src/nextorm.mariadb/bin/linux/Debug/net10.0/nextorm.mariadb.dll
+  nextorm.sqlserver.tests -> /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll
+  nextorm.clickhouse.tests -> /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll
+  nextorm.clickhouse.extensions.tests -> /home/alex/sources/nextorm/tests/nextorm.clickhouse.extensions.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.extensions.tests.dll
+  nextorm.core.tests -> /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll
+  nextorm.postgres.tests -> /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll
+  nextorm.mysql.tests -> /home/alex/sources/nextorm/tests/nextorm.mysql.tests/bin/linux/Debug/net10.0/nextorm.mysql.tests.dll
+  nextorm.benchmark -> /home/alex/sources/nextorm/benchmarks/nextorm.benchmark/bin/linux/Debug/net10.0/nextorm.benchmark.dll
+  nextorm.entityframeworkcore.tests -> /home/alex/sources/nextorm/tests/nextorm.entityframeworkcore.tests/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.tests.dll
+  nextorm.mariadb.tests -> /home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll
+  nextorm.sqlite.tests -> /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll
+  nextorm.integration.tests -> /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll
+  nextorm.alias.tests -> /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:02.40
+SOLUTION_BUILD2_EXIT=0

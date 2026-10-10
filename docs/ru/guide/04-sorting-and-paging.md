@@ -244,7 +244,8 @@ select top(3) with ties id, nullableint from complex_entity order by nullableint
 ```
 
 `WITH TIES` поддерживают только PostgreSQL и SQL Server; остальные SQL-провайдеры и in-memory
-контекст бросают `NotSupportedException`. Сочетание с `DISTINCT`/`DISTINCT ON` отклоняется.
+контекст бросают `NotSupportedException`. Сочетание с `DISTINCT`/`DISTINCT ON` отклоняется при
+генерации SQL с `BuildSqlCommandException`; сам fluent-вызов `WithTies()` сочетание не проверяет.
 
 ## First, FirstOrDefault, Single, SingleOrDefault
 

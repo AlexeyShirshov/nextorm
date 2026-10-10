@@ -1,0 +1,4 @@
+# D175 r1 validator `brief` capture
+# command: python3 /home/alex/.config/opencode/skills/pdca-dotnet/scripts/validate_inner_loop.py brief /tmp/nextorm-D175/r1/scope.json
+# stdout+stderr captured below (helper prints nothing on a valid scope):
+EXIT=0

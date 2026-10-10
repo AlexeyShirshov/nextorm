@@ -1,0 +1,25 @@
+=== D176.1 inner probe test run ===
+started: 2026-10-08T17:51:58Z
+cmd: dotnet test tests/nextorm.sqlite.tests -c Debug --no-build --filter FullyQualifiedName~D176Probe
+env: D176_PROBE_DIR=/home/alex/sources/nextorm/docs/specs/status/evidence/rc2-176/r1-n1/probe
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64) passed (1s 432ms)
+
+Test run summary: Passed!
+  total: 4
+  failed: 0
+  succeeded: 4
+  skipped: 0
+  duration: 1s 921ms
+
+exit_code=0
+finished: 2026-10-08T17:52:00Z
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64) passed (1s 380ms)
+
+Test run summary: Passed!
+  total: 4
+  failed: 0
+  succeeded: 4
+  skipped: 0
+  duration: 1s 702ms

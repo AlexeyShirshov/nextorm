@@ -1,0 +1,27 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.integration.tests
+  Discovered:  nextorm.integration.tests
+  Starting:    nextorm.integration.tests
+[testcontainers.org 00:00:00.28] Connected to Docker:
+  Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+  Server Version: 5.8.6
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.44
+  Operating System: fedora
+  Total Memory: 11.68 GB
+[testcontainers.org 00:00:00.28] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.35] Reusable resource found
+[testcontainers.org 00:00:00.43] Start Docker container 4ab2d4542432
+[testcontainers.org 00:00:01.80] Wait for Docker container 4ab2d4542432 to complete readiness checks
+[testcontainers.org 00:00:01.81] Execute "/bin/sh -c find /opt/mssql-tools*/bin/sqlcmd -type f -print -quit" at Docker container 4ab2d4542432
+[testcontainers.org 00:00:01.94] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 4ab2d4542432
+[testcontainers.org 00:00:07.66] Docker container 4ab2d4542432 ready
+[native-measurement] rows=0 native[ms=1.32 alloc=10824 bytes=2 route=True serializer_count=1] managed[ms=4.44 alloc=57224 bytes=2 route=False serializer_count=0]
+[native-measurement] rows=1 native[ms=1.22 alloc=10792 bytes=24 route=True serializer_count=1] managed[ms=3.53 alloc=57312 bytes=43 route=False serializer_count=0]
+[native-measurement] rows=100 native[ms=1.01 alloc=16672 bytes=2389 route=True serializer_count=1] managed[ms=4.58 alloc=75424 bytes=4190 route=False serializer_count=0]
+[native-measurement] rows=10000 native[ms=14.14 alloc=1060936 bytes=271493 route=True serializer_count=1] managed[ms=22.38 alloc=1371712 bytes=451494 route=False serializer_count=0]
+[testcontainers.org 00:00:10.40] Stop Docker container 4ab2d4542432
+  Finished:    nextorm.integration.tests (ID = 'b4ece81caced377475cbe4ebc5ceca7103a9595a1230fab7f41a6fb60ce4340a')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.integration.tests  Total: 16, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 10.685s
+exit_code=0

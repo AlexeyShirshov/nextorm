@@ -9,9 +9,20 @@ namespace NextORM.ClickHouse;
 /// standard-deviation/variance aggregate names. ClickHouse has no recursive CTE support, so the
 /// <c>recursive</c> modifier is omitted.
 /// </summary>
+/// <remarks>
+/// The type is deliberately not <see langword="sealed"/>. Subclassing it and overriding
+/// <see cref="ExtremeRowRenderer"/> is the supported external extension boundary (a public
+/// compatibility commitment), so an assembly without <c>InternalsVisibleTo</c> can install its own
+/// public <see cref="IExtremeRowRenderer"/>. The built-in renderer is <c>internal</c> and is not part
+/// of that contract. The public constructor and the shared <see cref="Instance"/> are preserved;
+/// returning <see langword="null"/> from an override keeps the portable window-function lowering.
+/// </remarks>
 public class ClickHouseDialect : SqlDialectBase
 {
-    /// <summary>The shared ClickHouse dialect instance.</summary>
+    /// <summary>
+    /// The shared ClickHouse dialect instance. Subclassing the dialect does not change this instance;
+    /// a derived dialect is created through the public constructor instead.
+    /// </summary>
     public static readonly ClickHouseDialect Instance = new();
 
     private readonly IMultiIfRenderer _multiIf;
@@ -19,7 +30,10 @@ public class ClickHouseDialect : SqlDialectBase
     private readonly IQuantileAggregateRenderer _quantileAggregates;
     private readonly ITopKAggregateRenderer _topKAggregates;
 
-    /// <summary>Creates the dialect and its capability renderers.</summary>
+    /// <summary>
+    /// Creates the dialect and its capability renderers. The constructor is public so an external
+    /// assembly can derive a custom dialect from <see cref="ClickHouseDialect"/>.
+    /// </summary>
     public ClickHouseDialect()
     {
         _multiIf = new ClickHouseMultiIfRenderer(this);
@@ -274,7 +288,12 @@ public class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse 21+ renders <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with a window function.</summary>
     public override bool SupportsSelectWhereMinMax => true;
 
-    /// <summary>ClickHouse renders eligible <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with <c>argMin</c>/<c>argMax</c> over a payload tuple; the rest falls back to the portable window function.</summary>
+    /// <summary>
+    /// ClickHouse renders eligible <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with <c>argMin</c>/<c>argMax</c> over a payload tuple; the rest falls back to the portable window function.
+    /// The property is <see langword="virtual"/> so a derived dialect can override it with a custom
+    /// <see cref="IExtremeRowRenderer"/>; returning <see langword="null"/> keeps the portable
+    /// window-function lowering. The built-in renderer is <c>internal</c> and is not a public contract.
+    /// </summary>
     public override IExtremeRowRenderer? ExtremeRowRenderer => ClickHouseExtremeRowRenderer.Instance;
 
     /// <summary>ClickHouse supports the <c>GROUPS</c> window frame unit.</summary>

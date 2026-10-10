@@ -290,6 +290,107 @@ public class UpdateJoinSqlGenerationTests
             .Should().Be("update merge_entity as \"t1\" set name = @p0 from merge_entity as \"t2\" where t1.id = t2.id returning t1.id");
     }
 
+    [Fact]
+    public void UpdateJoin_DmlScopeHint_ShouldFoldIntoInlineComment()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("SeqScan(t1)")
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.String, "x")
+            .ToSql();
+
+        sql.Should().Be("update /*+ SeqScan(t1) */ complex_entity as \"t1\" set somestring = @p0 from simple_entity as \"t2\" where t1.id = cast(t2.id as bigint)");
+    }
+
+    [Fact]
+    public void UpdateJoin_DmlScopeHint_Multiple_ShouldComposeInOneComment()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("SeqScan(t1)", "SeqScan(t2)")
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.String, "x")
+            .ToSql();
+
+        sql.Should().StartWith("update /*+ SeqScan(t1) SeqScan(t2) */ complex_entity as \"t1\"");
+        sql.Should().NotContain("/*+ SeqScan(t1) *//*+");
+    }
+
+    [Fact]
+    public void UpdateJoin_DmlScopeHint_EmptyArguments_ShouldThrowArgumentException()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // V06: WithTablesInScopeHint() with no non-empty hint is rejected at construction
+        // (EntityBuilder.cs:3185-3192); there is no "empty list" render branch. The genuine hint-free
+        // render is guarded by the other UpdateJoin tests.
+        var act = () => ctx.From<IMergeEntity>().WithTablesInScopeHint();
+
+        act.Should().Throw<ArgumentException>().WithMessage("*non-empty*");
+    }
+
+    [Fact]
+    public void UpdateJoin_DmlScopeHint_ShouldComposeWithJoinHintInOneComment()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // V08: a scope hint and a per-join hint both fold into the single statement-level comment,
+        // once, in collection order (scope first, then the join hint). The join hint must not be
+        // rendered structurally on an inline dialect.
+        var sql = ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("SeqScan(t1)")
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id, j => j.WithJoinHint("HashJoin(t1 t2)"))
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.String, "x")
+            .ToSql();
+
+        sql.Should().Be("update /*+ SeqScan(t1) HashJoin(t1 t2) */ complex_entity as \"t1\" set somestring = @p0 from simple_entity as \"t2\" where t1.id = cast(t2.id as bigint)");
+        (sql.Split("/*+").Length - 1).Should().Be(1);
+    }
+
+    [Fact]
+    public void UpdateJoin_DmlScopeHint_FromCte_ShouldPlaceCommentAfterUpdateVerb()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // Finding 6: with a hoisted WITH prefix the inline comment still follows the UPDATE verb
+        // ("with ... update /*+ ... */"), mirroring the SELECT convention.
+        var scope = ctx.With("c", ctx.From<ISimpleEntity>().Where(x => x.Id > 0).Select(x => new { x.Id }));
+
+        var sql = ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("SeqScan(t1)")
+            .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.String, "x")
+            .ToSql();
+
+        sql.Should().StartWith("with c as (select id from simple_entity");
+        sql.Should().Contain("update /*+ SeqScan(t1) */ complex_entity as \"t1\"");
+        (sql.IndexOf("/*+")).Should().BeGreaterThan(sql.IndexOf("update"));
+    }
+
+    [Fact]
+    public void UpdateJoin_DmlScopeHint_UnsupportedJoinTableHint_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // An unsupported join-table hint on a DML path rejects consistently with SELECT (PostgreSQL has
+        // no table hints); the scope hint does not mask the capability rejection.
+        var act = () => ctx.From<IMergeEntity>()
+            .WithTablesInScopeHint("SeqScan(t1)")
+            .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinTableHint("rowlock"))
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.Name, "x")
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Table hints*");
+    }
+
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)

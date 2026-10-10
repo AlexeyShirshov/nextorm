@@ -623,8 +623,13 @@ public class EntityMetadataBuilder<T>
     /// <summary>
     /// Declares a one-to-one relationship: a reference navigation on this (principal) entity, the
     /// principal key on this entity and the unique foreign key on the related (dependent) type. The
-    /// uniqueness of the foreign key is trusted; it is not validated by the core. This is the principal
-    /// counterpart of the <c>HasOne</c> overload, whose foreign key lives on the declaring type.
+    /// uniqueness of the foreign key is a declaration-time trust: the core neither inspects the schema
+    /// or the data nor imposes a uniqueness constraint, so a non-unique foreign key is accepted when
+    /// the metadata is built. The only runtime guard is per parent through <c>JoinInto</c>: two distinct
+    /// non-null child identities for one parent throw <see cref="InvalidOperationException"/>, while
+    /// repeated identical rows and keyless/null-identity repeats are tolerated (the first child wins).
+    /// This is the principal counterpart of the <c>HasOne</c> overload, whose foreign key lives on the
+    /// declaring type.
     /// </summary>
     /// <typeparam name="TChild">The related (dependent) entity type.</typeparam>
     /// <typeparam name="TKey">The property type shared by the principal key and the foreign key.</typeparam>

@@ -112,8 +112,8 @@ public static class DataContextCache
     /// <summary>
     /// Clears every process-wide cache in the engine: the metadata, table-valued-parameter metadata,
     /// select-list, expression and in-values caches owned by this class, the compiled row-mapper cache,
-    /// the projection-alias and FROM caches, and the thread-local plan cache. The next query rebuilds
-    /// whatever it needs.
+    /// the projection-alias and FROM caches, the compiled <c>JoinInto</c> identity-selector cache, and
+    /// the thread-local plan cache. The next query rebuilds whatever it needs.
     /// </summary>
     /// <remarks>
     /// The plan cache is <c>[ThreadStatic]</c>, so a plan created on another thread is dropped lazily
@@ -137,6 +137,7 @@ public static class DataContextCache
         QueryPlanner.ClearFromCache();
         QueryPlanStore.Clear();
         MemberInfoExtensions.ClearColumnNames();
+        JoinIntoSpecHelpers.ClearIdentitySelectorCache();
     }
 
     /// <summary>

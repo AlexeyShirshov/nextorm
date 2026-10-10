@@ -1,10 +1,20 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
+using Dapper;
+using LinqToDB;
+using LinqToDB.Data;
+using LinqToDB.DataProvider.SQLite;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using NextORM.Core;
 using NextORM.Sqlite;
+using IDataContext = NextORM.Core.IDataContext;
+using L2dbColumn = LinqToDB.Mapping.ColumnAttribute;
+using L2dbPrimaryKey = LinqToDB.Mapping.PrimaryKeyAttribute;
+using L2dbTable = LinqToDB.Mapping.TableAttribute;
 
 namespace NextORM.Benchmark;
 
@@ -37,10 +47,14 @@ public class SqliteBenchmarkWriteJson
     private const int PayloadBaseWidth = 512;
 
     private readonly MemoryStream _sink = new();
+    private readonly BenchmarkSerializationSink _competitorSink = new();
 
     private IDataContext _db = null!;
     private EntityBuilder<JsonBenchEntity> _entities = null!;
     private string _path = null!;
+    private SqliteConnection _dapperConn = null!;
+    private DataConnection _linq2Db = null!;
+    private JsonBenchDbContext _efCtx = null!;
 
     /// <summary>The number of seeded rows; the triple 1k/10k/100k shows whether allocation scales with row count.</summary>
     [Params(1_000, 10_000, 100_000)]
@@ -78,7 +92,61 @@ public class SqliteBenchmarkWriteJson
         _ = WriteJsonAsync_Array_Scalar().GetAwaiter().GetResult();
         _ = WriteJsonAsync_Array_ScalarPayload().GetAwaiter().GetResult();
         _ = ToList_Dto();
+
+        _dapperConn = new SqliteConnection($"Data Source={_path}");
+        _dapperConn.Open();
+        _linq2Db = new DataConnection(new DataOptions().UseSQLite($"Data Source={_path}", SQLiteProvider.Microsoft));
+        var efBuilder = new DbContextOptionsBuilder<JsonBenchDbContext>();
+        efBuilder.UseSqlite($"Filename={_path}");
+        efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+        _efCtx = new JsonBenchDbContext(efBuilder.Options);
+
+        ValidateCompetitorJson();
         _sink.SetLength(0);
+    }
+
+    /// <summary>
+    /// Setup-time proof that the three materialize→serialize arms emit the same logical rows as the
+    /// native Nextorm JSON arm. Runs outside the timed region and fails the benchmark if they differ.
+    /// </summary>
+    private void ValidateCompetitorJson()
+    {
+        _ = WriteJson_Array_Dto();
+        _sink.Position = 0;
+        var baseline = MeasureJson(_sink);
+
+        var dapper = _dapperConn.Query<JsonBenchDto>("select id, name from json_bench").ToList();
+        var linq2Db = _linq2Db.GetTable<JsonBenchLinqRow>()
+            .Select(x => new JsonBenchDto { Id = x.Id, Name = x.Name }).ToList();
+        var ef = _efCtx.Rows.Select(x => new JsonBenchDto { Id = x.Id, Name = x.Name }).ToList();
+
+        CompareJson("WriteJson/dapper", baseline, MeasureJson(SerializeToScratch(dapper)));
+        CompareJson("WriteJson/linq2db", baseline, MeasureJson(SerializeToScratch(linq2Db)));
+        CompareJson("WriteJson/EFCore", baseline, MeasureJson(SerializeToScratch(ef)));
+        BenchmarkComparisonValidation.Report("WriteJson/nextorm", baseline.Count, baseline.Checksum, $"rowCount={RowCount}");
+    }
+
+    private static MemoryStream SerializeToScratch(List<JsonBenchDto> rows)
+    {
+        var scratch = new MemoryStream();
+        JsonSerializer.Serialize(scratch, rows);
+        scratch.Position = 0;
+        return scratch;
+    }
+
+    private static (int Count, long Checksum) MeasureJson(Stream stream)
+    {
+        var rows = JsonSerializer.Deserialize<List<JsonBenchDto>>(stream, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+        }) ?? [];
+        return BenchmarkComparisonValidation.Measure(rows, r => r.Id);
+    }
+
+    private static void CompareJson(string context, (int Count, long Checksum) expected, (int Count, long Checksum) actual)
+    {
+        BenchmarkComparisonValidation.EnsureCount(expected.Count, actual.Count, context);
+        BenchmarkComparisonValidation.EnsureChecksum(expected.Checksum, actual.Checksum, context);
     }
 
     private void Seed(int count)
@@ -173,9 +241,46 @@ public class SqliteBenchmarkWriteJson
             sum += row.Id;
         return sum;
     }
+
+    /// <summary>Closest equivalent for Dapper: materialize the DTO rows, then serialize the list.</summary>
+    /// <remarks>This is not a zero-materialization arm; the label deliberately says materialize→serialize.</remarks>
+    /// <returns>The number of JSON bytes written to the non-retaining sink.</returns>
+    [Benchmark]
+    public long Dapper_ToList_Json()
+    {
+        _competitorSink.Reset();
+        var rows = _dapperConn.Query<JsonBenchDto>("select id, name from json_bench").ToList();
+        JsonSerializer.Serialize(_competitorSink, rows);
+        return _competitorSink.Bytes;
+    }
+
+    /// <summary>Closest equivalent for linq2db: materialize the DTO rows, then serialize the list.</summary>
+    /// <returns>The number of JSON bytes written to the non-retaining sink.</returns>
+    [Benchmark]
+    public long Linq2Db_ToList_Json()
+    {
+        _competitorSink.Reset();
+        var rows = _linq2Db.GetTable<JsonBenchLinqRow>()
+            .Select(x => new JsonBenchDto { Id = x.Id, Name = x.Name })
+            .ToList();
+        JsonSerializer.Serialize(_competitorSink, rows);
+        return _competitorSink.Bytes;
+    }
+
+    /// <summary>Closest equivalent for EF Core: materialize the DTO rows, then serialize the list.</summary>
+    /// <returns>The number of JSON bytes written to the non-retaining sink.</returns>
+    [Benchmark]
+    public long EFCore_ToList_Json()
+    {
+        _competitorSink.Reset();
+        var rows = _efCtx.Rows.Select(x => new JsonBenchDto { Id = x.Id, Name = x.Name }).ToList();
+        JsonSerializer.Serialize(_competitorSink, rows);
+        return _competitorSink.Bytes;
+    }
 }
 
 [SqlTable("json_bench")]
+[Table("json_bench")]
 public sealed class JsonBenchEntity
 {
     [Key]
@@ -203,4 +308,26 @@ public sealed class JsonBenchWideDto
     public int Id { get; set; }
 
     public string? Payload { get; set; }
+}
+
+/// <summary>linq2db mapping for the temporary <c>json_bench</c> table used by the serializer competitor arm.</summary>
+[L2dbTable("json_bench")]
+public sealed class JsonBenchLinqRow
+{
+    [L2dbPrimaryKey]
+    [L2dbColumn("id")]
+    public int Id { get; set; }
+
+    [L2dbColumn("name")]
+    public string? Name { get; set; }
+}
+
+/// <summary>EF Core context over the temporary <c>json_bench</c> table used by the serializer competitor arm.</summary>
+public sealed class JsonBenchDbContext : DbContext
+{
+    public JsonBenchDbContext(DbContextOptions<JsonBenchDbContext> options) : base(options)
+    {
+    }
+
+    public DbSet<JsonBenchEntity> Rows { get; set; } = null!;
 }

@@ -343,8 +343,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     internal void WriteJson<TResult>(QueryCommand<TResult> queryCommand, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
     {
-        var (prepared, rowWriter) = PrepareJsonStream(queryCommand, options, cancellationToken);
-        _executor.WriteJson(prepared, rowWriter, output, options, @params is null ? ReadOnlySpan<object?>.Empty : @params);
+        var (prepared, rowWriter, plan, native) = PrepareJsonStream(queryCommand, options, cancellationToken);
+        _executor.WriteJson(prepared, rowWriter, plan, output, options, @params is null ? ReadOnlySpan<object?>.Empty : @params, native);
     }
 
     /// <summary>Asynchronously streams a query's projected rows as JSON to a caller-owned stream; see <see cref="WriteJson{TResult}"/>.</summary>
@@ -357,38 +357,81 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <returns>A task that completes when the whole document has been written.</returns>
     internal Task WriteJsonAsync<TResult>(QueryCommand<TResult> queryCommand, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
     {
-        var (prepared, rowWriter) = PrepareJsonStream(queryCommand, options, cancellationToken);
-        return _executor.WriteJsonAsync(prepared, rowWriter, output, options, @params, cancellationToken);
+        var (prepared, rowWriter, plan, native) = PrepareJsonStream(queryCommand, options, cancellationToken);
+        return _executor.WriteJsonAsync(prepared, rowWriter, plan, output, options, @params, cancellationToken, native);
     }
 
     // A JSON stream needs the SQL rendered and the command attached, but no Func<IDataRecord,TResult>:
     // DocumentMode is the planner's existing no-mapper flag. It is set on a live clone so the caller's
     // command is never mutated (DocumentMode is part of the plan key and the sticky-state hazard is the
     // same as Cache). The clone's populated SelectList/OneColumn feed the shape plan.
-    private (DbPreparedQueryCommand<TResult> Prepared, JsonRowWriter RowWriter) PrepareJsonStream<TResult>(QueryCommand<TResult> queryCommand, JsonStreamOptions options, CancellationToken cancellationToken)
+    //
+    // When the dialect can serve the document natively (SQL Server FOR JSON) and the request is
+    // eligible, the returned command carries the trailing FOR JSON clause and RowWriter is null; the
+    // executor then copies the single native document column. The native clone is prepared first so the
+    // eligible fast path pays one preparation; an ineligible request falls back to the managed
+    // row-streaming clone before execution and is never retried through the managed path later.
+    private (DbPreparedQueryCommand<TResult> Prepared, JsonRowWriter? RowWriter, JsonShapePlan Plan, bool Native) PrepareJsonStream<TResult>(QueryCommand<TResult> queryCommand, JsonStreamOptions options, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
         ArgumentNullException.ThrowIfNull(options);
+
+        // Fail fast on an already-cancelled token (mirroring OpenLobReader/OpenLobReaderAsync). During
+        // preparation PrepareColumns bails out of a construction projection on cancellation without
+        // throwing, yielding an empty select list that would otherwise surface as an unrelated
+        // "no selected columns" NotSupportedException instead of the cancellation.
+        cancellationToken.ThrowIfCancellationRequested();
 
         // ResetPreparation clears the prepared pieces, including the source. A temporary-table source
         // cannot be reconstructed from the entity metadata (there is none for TableAlias), so preserve
         // it explicitly; otherwise the temp marker is lost and the batch guard never fires.
         var tempSource = queryCommand.From?.TempTable is not null ? queryCommand.From : null;
 
+        // A native document is only attempted for a dialect that renders FOR JSON and when the caller did
+        // not already attach a document clause (which the managed stream does not consume). Eligibility is
+        // decided from the validated shape plan below, before any execution.
+        var tryNative = Dialect.SupportsForJson
+            && queryCommand.ForJsonClause is null
+            && queryCommand.ForXmlClause is null;
+
+        if (tryNative)
+        {
+            var nativeCmd = CloneForJsonStream(queryCommand, tempSource);
+            // include_null_values is the inverse of IgnoreNull: FOR JSON omits null members by default,
+            // matching the managed IgnoreNull=true; INCLUDE_NULL_VALUES matches IgnoreNull=false.
+            nativeCmd.ForJsonClause = new ForJsonClause(ForJsonMode.Path, null, IncludeNullValues: !options.IgnoreNull);
+
+            var nativePrepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
+                nativeCmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
+
+            var nativePlan = JsonShapePlan.Build(nativeCmd.SelectList, nativeCmd.OneColumn, options, nativeCmd.JsonShape);
+            if (JsonNativeStream.IsEligible(nativePlan, options))
+                return (nativePrepared, null, nativePlan, true);
+        }
+
+        var cmd = CloneForJsonStream(queryCommand, tempSource);
+        var prepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
+            cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
+
+        var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options, cmd.JsonShape);
+        return (prepared, JsonRowWriterFactory.Build(plan), plan, false);
+    }
+
+    // Clones the caller's command into a JSON-stream preparation. DocumentMode is the planner's existing
+    // no-mapper flag; JsonShapeMode captures the recursive projection shape while preparing the clone
+    // only, so the caller's command and its shared select list/result shape are never mutated. A
+    // temporary-table source is preserved so the executor's batch guard still fires.
+    private static QueryCommand<TResult> CloneForJsonStream<TResult>(QueryCommand<TResult> queryCommand, FromExpression? tempSource)
+    {
         var cmd = (QueryCommand<TResult>)queryCommand.Clone();
         cmd.DocumentMode = true;
         cmd.ResetPreparation();
         if (tempSource is not null)
             cmd.From = tempSource;
 
-        // Route through the context's preparation wrapper (not the planner directly) so a lazy
-        // temporary-table source is still detected; the executor then rejects that shape, since a
-        // batch read cannot be streamed through a single reader.
-        var prepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
-            cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
-
-        var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options);
-        return (prepared, JsonRowWriterFactory.Build(plan));
+        cmd.JsonShapeMode = true;
+        cmd.JsonShape = null;
+        return cmd;
     }
 
     // A query that reads a lazy temporary table is not a single statement: the table must be created on
@@ -465,7 +508,48 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     private const string CsvTerminalName = "WriteCsv/WriteCsvAsync";
 
-    private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken, string terminalName)
+    // The CSV-local result reader seam. Unlike the general OpenResultReader it asks the planner for
+    // sequential access when the provider supports it (so a direct binary column can be read with
+    // IDataRecord.GetBytes in bounded chunks instead of materialising the whole array) and always
+    // suppresses the dialect's LOB locator column (SQLite's rowid), which only the single-column LOB
+    // terminals need and which would otherwise change the CSV SELECT. Both flags are local to this
+    // preparation: the plan is still storeInCache: false and the shared QueryCommand is never mutated.
+    // The actually applied mode travels back with the owner and is never re-derived by the writer.
+    internal CsvResultReader OpenCsvReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = PrepareResultCommand(
+            queryCommand,
+            cancellationToken,
+            CsvTerminalName,
+            sequentialAccess: Dialect.SupportsSequentialAccess,
+            suppressLobLocator: true);
+        var owner = _executor.OpenResultReader(prepared, @params);
+        return new CsvResultReader(owner, IsSequential(prepared));
+    }
+
+    internal async Task<CsvResultReader> OpenCsvReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = PrepareResultCommand(
+            queryCommand,
+            cancellationToken,
+            CsvTerminalName,
+            sequentialAccess: Dialect.SupportsSequentialAccess,
+            suppressLobLocator: true);
+        var owner = await _executor.OpenResultReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
+        return new CsvResultReader(owner, IsSequential(prepared));
+    }
+
+    private static bool IsSequential<TResult>(DbPreparedQueryCommand<TResult> command)
+        => (command.Behavior & CommandBehavior.SequentialAccess) != 0;
+
+    private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(
+        QueryCommand<TResult> queryCommand,
+        CancellationToken cancellationToken,
+        string terminalName,
+        bool sequentialAccess = false,
+        bool suppressLobLocator = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
 
@@ -482,8 +566,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             queryCommand,
             createEnumerator: false,
             storeInCache: false,
-            sequentialAccess: false,
+            sequentialAccess: sequentialAccess,
             streamingRowsRequested: false,
+            suppressLobLocator: suppressLobLocator,
             cancellationToken);
     }
 
@@ -1653,4 +1738,25 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     /// <summary>Clears all cached query plans held by this context.</summary>
     public void PurgeQueryCache() => _queryCache.PurgeQueryCache();
+}
+
+/// <summary>
+/// The CSV terminal's open result reader together with the sequential-access mode the planner actually
+/// applied to it. Returning the real mode (rather than re-deriving it from the reader type or from
+/// <c>GetBytes</c> support) is what lets the CSV writer admit its bounded binary path only on a
+/// confirmed sequential reader.
+/// </summary>
+internal readonly struct CsvResultReader
+{
+    internal CsvResultReader(CommandReaderOwner owner, bool sequentialAccess)
+    {
+        Owner = owner;
+        SequentialAccess = sequentialAccess;
+    }
+
+    /// <summary>The open reader and its per-call command; the caller owns and disposes it.</summary>
+    internal CommandReaderOwner Owner { get; }
+
+    /// <summary>Whether the reader was opened with <see cref="CommandBehavior.SequentialAccess"/>.</summary>
+    internal bool SequentialAccess { get; }
 }

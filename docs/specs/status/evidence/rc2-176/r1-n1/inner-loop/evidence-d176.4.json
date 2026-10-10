@@ -1,0 +1,141 @@
+{
+  "unit": "D176.4",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+      "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj",
+      "tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj",
+      "tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj",
+      "tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj",
+      "tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~JsonShapeWriterTests",
+      "FullyQualifiedName~JsonStreamingTests",
+      "FullyQualifiedName~JsonStreamingSqlLoweringTests",
+      "FullyQualifiedName~NextORM.Sqlite.Tests",
+      "FullyQualifiedName~NextORM.Postgres.Tests",
+      "FullyQualifiedName~NextORM.SqlServer.Tests",
+      "FullyQualifiedName~NextORM.MySql.Tests",
+      "FullyQualifiedName~NextORM.ClickHouse.Tests"
+    ],
+    "files": [
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "tests/nextorm.core.tests/JsonShapeWriterTests.cs",
+      "tests/nextorm.sqlite.tests/JsonStreamingTests.cs",
+      "tests/nextorm.postgres.tests/JsonStreamingSqlLoweringTests.cs",
+      "tests/nextorm.sqlserver.tests/JsonStreamingSqlLoweringTests.cs",
+      "tests/nextorm.mysql.tests/JsonStreamingSqlLoweringTests.cs",
+      "tests/nextorm.clickhouse.tests/JsonStreamingSqlLoweringTests.cs"
+    ],
+    "rationale": "D176.4 adds the comprehensive JSON-shape test surface: direct recursive-writer boundaries in core, end-to-end nested/join/slot/terminal/cache regressions over SQLite, and per-dialect SQL-lowering regression tests for PostgreSQL, SQL Server, MySQL and ClickHouse. A test exposed a real defect in the actual Projection<T1,T2> terminal (bare join emitted a flat duplicate-named object instead of Item1/Item2); QueryCommand.QueryPreparer.cs gained the minimal slot-grouping fix (BuildJsonProjectionShape) before the final runs.",
+    "rebuild": "affected",
+    "boundary": "Full affected project sweeps after the last edit: the one comprehensive unfiltered core sweep plus namespace-filtered complete SQLite and dialect project sweeps, all exit 0."
+  },
+  "executions": [
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonShapeWriterTests"],
+      "phase": "inner",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 32
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonStreamingTests"],
+      "phase": "inner",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 43
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonStreamingSqlLoweringTests"],
+      "phase": "inner",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 2
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonStreamingSqlLoweringTests"],
+      "phase": "inner",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 2
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.mysql.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonStreamingSqlLoweringTests"],
+      "phase": "inner",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 2
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonStreamingSqlLoweringTests"],
+      "phase": "inner",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 2
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 1821
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~NextORM.Sqlite.Tests"],
+      "phase": "boundary",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 1202
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~NextORM.Postgres.Tests"],
+      "phase": "boundary",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 813
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~NextORM.SqlServer.Tests"],
+      "phase": "boundary",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 737
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.mysql.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~NextORM.MySql.Tests"],
+      "phase": "boundary",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 313
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~NextORM.ClickHouse.Tests"],
+      "phase": "boundary",
+      "source_revision": "d176.4-final",
+      "artifact_revision": "d176.4-final",
+      "exit_code": 0,
+      "selected_count": 601
+    }
+  ]
+}

@@ -70,9 +70,20 @@
          LimitBy/WithTotals/ArrayJoin*/Semi|Anti|PasteJoin, FromOptions.Sample, JoinOptions.Global)
          as public extension methods over the now-internal instance members. -->
     <InternalsVisibleTo Include="nextorm.clickhouse" />
+    <!-- The PostgreSQL provider re-exposes DistinctOn<TResult> as a public extension method over the
+         internal construction seam (DistinctOnClause/IsDistinct/Clone). -->
+    <InternalsVisibleTo Include="nextorm.postgres" />
+    <!-- The SQL Server provider re-exposes Pivot/Unpivot as public extension methods over the internal
+         construction seams (PivotExpression/EnsureNoEagerLoadState/typed builder state). -->
+    <InternalsVisibleTo Include="nextorm.sqlserver" />
     <!-- The EF Core bridge stages its whole import and publishes it under the shared metadata
          registration gate, so a concurrent auto/configured registration or junction publication
          cannot clobber a bridged entry (and vice versa). -->
     <InternalsVisibleTo Include="nextorm.entityframeworkcore" />
+    <!-- The C08 focused JSON-stream-phase2 benchmark drives the recursive writer's native-array path
+         (JsonShapeNode/JsonRowWriterFactory) over a fake IDataRecord, so it can measure the array
+         recursion without a provider-native array source/container. Same benchmark-only mechanism the
+         test projects use; no product behaviour depends on it. -->
+    <InternalsVisibleTo Include="nextorm.benchmark" />
   </ItemGroup>
 </Project>

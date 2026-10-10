@@ -1,8 +1,13 @@
 using System.Text;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
+using Dapper;
+using LinqToDB;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using NextORM.Core;
 using NextORM.Sqlite;
+using IDataContext = NextORM.Core.IDataContext;
 
 namespace NextORM.Benchmark;
 
@@ -37,6 +42,9 @@ public class SqliteBenchmarkCsv
 
     private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
+    private readonly EFDataContext _efCtx;
+    private readonly SqliteConnection _conn;
+    private readonly Linq2DbDataRepository _linq2Db;
     private readonly MemoryStream _destination = new(1 << 18);
     private readonly StreamWriter _manualWriter;
     private long _sink;
@@ -51,9 +59,57 @@ public class SqliteBenchmarkCsv
 
         _manualWriter = new StreamWriter(_destination, new UTF8Encoding(false), 1 << 16, leaveOpen: true);
 
+        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
+        _conn.Open();
+
+        var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
+        efBuilder.UseSqlite($"Filename={BenchDb.FilePath}");
+        efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+        _efCtx = new EFDataContext(efBuilder.Options);
+
+        _linq2Db = new Linq2DbDataRepository();
+
         // Warm the plan cache for the ToList baselines; WriteCsv rebuilds its plan on every call.
         _ctx.LargeEntity.Limit(Rows).ToList();
         _ctx.LargeEntity.Limit(Rows).Select(it => it.Str).ToList();
+
+        ValidateCompetitorCsv();
+    }
+
+    /// <summary>
+    /// Setup-time proof that the three materialize→manual-CSV arms emit the same bytes as the native
+    /// <c>Nextorm_ToList_ManualCsv</c> baseline. Runs outside the timed region.
+    /// </summary>
+    private void ValidateCompetitorCsv()
+    {
+        var nextorm = WriteManualCsv(_ctx.LargeEntity.Limit(Rows).ToList(), static row => $"{row.Id},{row.Str},{row.Dt:O}\r\n");
+        var dapper = WriteManualCsv(_conn.Query<LargeEntity>("select id, someString as str, dt from large_table").ToList(), static row => $"{row.Id},{row.Str},{row.Dt:O}\r\n");
+        var linq2Db = WriteManualCsv(
+            _linq2Db.Db.GetTable<Linq2DbLargeEntity>().Select(it => new Linq2DbLargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt }).ToList(),
+            static row => $"{row.Id},{row.Str},{row.Dt:O}\r\n");
+        var ef = WriteManualCsv(
+            _efCtx.LargeEntities.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).ToList(),
+            static row => $"{row.Id},{row.Str},{row.Dt:O}\r\n");
+
+        foreach (var (name, candidate) in new[] { ("dapper", dapper), ("linq2db", linq2Db), ("EFCore", ef) })
+            BenchmarkComparisonValidation.Ensure(
+                nextorm.AsSpan().SequenceEqual(candidate),
+                $"CSV/{name}: manual output differs from the Nextorm baseline ({nextorm.Length} vs {candidate.Length} bytes).");
+
+        BenchmarkComparisonValidation.Report("CSV/nextorm", Rows, nextorm.Length, $"bytes={nextorm.Length}");
+    }
+
+    private static byte[] WriteManualCsv<T>(IEnumerable<T> rows, Func<T, string> format)
+    {
+        using var stream = new MemoryStream(1 << 18);
+        using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 1 << 16, leaveOpen: true))
+        {
+            writer.Write(Header);
+            foreach (var row in rows)
+                writer.Write(format(row));
+            writer.Flush();
+        }
+        return stream.ToArray();
     }
 
     [Benchmark(Baseline = true)]
@@ -99,5 +155,55 @@ public class SqliteBenchmarkCsv
         _destination.Position = 0;
         _ctx.LargeEntity.Limit(Rows).Select(it => it.Str).WriteCsv(_destination, null, CancellationToken.None);
         _sink = _destination.Length;
+    }
+
+    /// <summary>Closest equivalent for Dapper: materialize the rows, then write the same CSV by hand.</summary>
+    /// <remarks>This is a materialize→serialize arm, not a streaming arm; the label says so.</remarks>
+    [Benchmark]
+    public void Dapper_ToList_ManualCsv()
+    {
+        var rows = _conn.Query<LargeEntity>("select id, someString as str, dt from large_table").ToList();
+        ResetDestination();
+        _manualWriter.Write(Header);
+        foreach (var row in rows)
+            _manualWriter.Write($"{row.Id},{row.Str},{row.Dt:O}\r\n");
+        _manualWriter.Flush();
+        _sink = rows.Count;
+    }
+
+    /// <summary>Closest equivalent for linq2db: materialize the rows, then write the same CSV by hand.</summary>
+    [Benchmark]
+    public void Linq2Db_ToList_ManualCsv()
+    {
+        var rows = _linq2Db.Db.GetTable<Linq2DbLargeEntity>()
+            .Select(it => new Linq2DbLargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt })
+            .ToList();
+        ResetDestination();
+        _manualWriter.Write(Header);
+        foreach (var row in rows)
+            _manualWriter.Write($"{row.Id},{row.Str},{row.Dt:O}\r\n");
+        _manualWriter.Flush();
+        _sink = rows.Count;
+    }
+
+    /// <summary>Closest equivalent for EF Core: materialize the rows, then write the same CSV by hand.</summary>
+    [Benchmark]
+    public void EFCore_ToList_ManualCsv()
+    {
+        var rows = _efCtx.LargeEntities
+            .Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt })
+            .ToList();
+        ResetDestination();
+        _manualWriter.Write(Header);
+        foreach (var row in rows)
+            _manualWriter.Write($"{row.Id},{row.Str},{row.Dt:O}\r\n");
+        _manualWriter.Flush();
+        _sink = rows.Count;
+    }
+
+    private void ResetDestination()
+    {
+        _destination.SetLength(0);
+        _destination.Position = 0;
     }
 }

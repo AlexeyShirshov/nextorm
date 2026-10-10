@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Postgres;
 
 namespace NextORM.SqlServer.Tests;
 
@@ -2669,6 +2670,24 @@ public class SqlGenerationTests
         act.Should().Throw<BuildSqlCommandException>();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WithTies_WithDistinct_InBothCallOrders_ShouldRejectCombination(bool withTiesFirst)
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var query = withTiesFirst
+            ? e.Limit(2).WithTies().Distinct().OrderBy(x => x.Id).Select(x => x.Id)
+            : e.Limit(2).Distinct().WithTies().OrderBy(x => x.Id).Select(x => x.Id);
+
+        var act = () => SqlOf(ctx, query);
+
+        act.Should().Throw<BuildSqlCommandException>()
+            .WithMessage("WITH TIES cannot be combined with DISTINCT or DISTINCT ON.");
+    }
+
     [Fact]
     public void DistinctOn_ShouldThrowBecauseSqlServerHasNoDistinctOn()
     {
@@ -3169,6 +3188,19 @@ public class SqlGenerationTests
         var act = () => e.Unpivot("val", "qtr");
 
         act.Should().Throw<ArgumentException>().WithMessage("*at least one column*");
+    }
+
+    [Fact]
+    public void Unpivot_WithUnresolvableAliasSource_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        // A raw TableAlias builder has no query, source, table name or resolvable metadata mapping, so
+        // ResolvePivotInner reaches its fallback and reports the unresolvable source.
+        var e = new EntityBuilder<TableAlias>(ctx);
+
+        var act = () => e.Unpivot("val", "qtr", UnpivotColumn.Create("q1"));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*could not be resolved*");
     }
 
     private static Expression<Func<IComplexEntity, string>> SwitchOfId(string @default, params (long Test, string Result)[] cases)

@@ -131,6 +131,35 @@ public abstract partial class CommonTestSuite
             "the skipped tenant filter must be observable through the context's query-filter logger");
     }
 
+    // R03 (smoke): a bound class entity materializes from a raw source and its values round-trip. This
+    // process-wide smoke test cannot assert a cold cache: RawBindMaterializedEntity is registered by the
+    // first provider to run, so the guard then skips registration for every later provider. The
+    // authoritative cold-state proof is the isolated sqlite test
+    // RawSourceBindingColdRegistrationTests.ColdClassEntity_RawSql_ShouldMaterializeNullAndNonNullValues.
+    [Fact]
+    public void RawSourceBinding_BoundClassEntity_ShouldMaterialize()
+    {
+        var ctx = RawBindContext(1);
+        var b = NextRawBindBase();
+        SeedRawBindRows(RawBindActive(b), RawBindDeleted(b - 1), RawBindForeign(b - 2));
+
+        // The whole entity is materialized by the builder terminal (no identity Select: a single-source
+        // `Select(x => x)` is not a supported whole-entity projection). This is the runtime smoke check:
+        // the bind's registration makes typed materialization work regardless of prior From<T>() state.
+        var rows = ctx.FromSql(AllRawBindColumnsSql)
+            .BindEntity<RawBindMaterializedEntity>(["id", "tenant_id", "is_deleted", "name"])
+            .Where(x => x.Id >= b - 2 && x.Id <= b)
+            .ToList();
+
+        rows.Should().ContainSingle(r => r.Id == b);
+        var row = rows.Single(r => r.Id == b);
+        row.TenantId.Should().Be(1);
+        row.IsDeleted.Should().BeFalse();
+        row.Name.Should().Be("raw-bind-active");
+        DataContextCache.Metadata.ContainsKey(typeof(RawBindMaterializedEntity)).Should().BeTrue(
+            "a bound class entity has a registered mapping (coldness is proven by the isolated sqlite test)");
+    }
+
     private sealed class RawBindLogSink : ILoggerProvider
     {
         private readonly List<string> _messages = [];
@@ -170,6 +199,28 @@ public abstract partial class CommonTestSuite
 /// </summary>
 [SqlTable("query_filter_entity")]
 public sealed class RawBindJoinMainEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("tenant_id")]
+    public int TenantId { get; set; }
+
+    [Column("is_deleted")]
+    public bool IsDeleted { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+}
+
+/// <summary>
+/// A class entity unique to <c>RawSourceBinding_BoundClassEntity_ShouldMaterialize</c>. Its mapping is
+/// registered by the first provider that binds it; later providers reuse it (a registration no-op), so
+/// this smoke test does not assert a cold <c>Metadata</c> (#185 D185, R03).
+/// </summary>
+[SqlTable("query_filter_entity")]
+public sealed class RawBindMaterializedEntity
 {
     [Key]
     [Column("id")]

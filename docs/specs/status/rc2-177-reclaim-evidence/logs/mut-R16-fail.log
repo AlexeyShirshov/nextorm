@@ -1,0 +1,41 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+failed NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.NativeThenManagedThenNative_OnOneContext_ShouldRouteEachCallIndependently (13s 041ms)
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: System.NotSupportedException : JSON streaming validation [reader-binding]: the numeric column 'Id' at ordinal 0 (declared Int32) has provider field type 'System.String' which is not supported; supported numeric field types are sbyte, byte, short, ushort, int, uint, long, ulong, float, double, decimal or ClickHouseDecimal.
+    at NextORM.Core.JsonRowWriterFactory.EnsureNumericFieldType(IDataRecord reader, Int32 ordinal, String name, Type target) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:217
+    at NextORM.Core.JsonRowWriterFactory.ValidateColumnReaderBinding(JsonShapeColumn& column, IDataRecord reader) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:207
+    at NextORM.Core.JsonRowWriterFactory.ValidateReaderBinding(JsonShapePlan plan, IDataRecord reader) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:173
+    at NextORM.Core.QueryExecutor.WriteJson[TResult](DbPreparedQueryCommand`1 compiledQuery, JsonRowWriter rowWriter, JsonShapePlan plan, Stream output, JsonStreamOptions options, ReadOnlySpan`1 params, Boolean native) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryExecutor.cs:1183
+    at NextORM.Core.DataContext.WriteJson[TResult](QueryCommand`1 queryCommand, Stream output, JsonStreamOptions options, Object[] params, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:347
+    at NextORM.Core.QueryCommand`1.WriteJson(Stream destination, JsonStreamOptions options) in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.TResult.cs:160
+    at NextORM.Core.QueryCommand`1.WriteJson(Stream destination) in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.TResult.cs:145
+    at NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.<NativeThenManagedThenNative_OnOneContext_ShouldRouteEachCallIndependently>g__Native|21_0() in /home/alex/sources/nextorm/tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:412
+    at NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.NativeThenManagedThenNative_OnOneContext_ShouldRouteEachCallIndependently() in /home/alex/sources/nextorm/tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:438
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) failed with 1 error(s) (24s 455ms)
+Exit code: 2
+  Standard output: [testcontainers.org 00:00:00.37] Connected to Docker:
+    Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+    Server Version: 5.8.6
+    Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+    API Version: 1.44
+    Operating System: fedora
+    Total Memory: 11.68 GB
+  [testcontainers.org 00:00:00.37] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+  [testcontainers.org 00:00:00.44] Reusable resource found
+  [testcontainers.org 00:00:00.53] Start Docker container 4ab2d4542432
+  [testcontainers.org 00:00:01.90] Wait for Docker container 4ab2d4542432 to complete readiness checks
+  [testcontainers.org 00:00:01.91] Execute "/bin/sh -c find /opt/mssql-tools*/bin/sqlcmd -type f -print -quit" at Docker container 4ab2d4542432
+  [testcontainers.org 00:00:02.11] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 4ab2d4542432
+  [testcontainers.org 00:00:11.25] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 4ab2d4542432
+  [testcontainers.org 00:00:11.50] Docker container 4ab2d4542432 ready
+  [testcontainers.org 00:00:12.91] Stop Docker container 4ab2d4542432
+
+Test run summary: Failed!
+  total: 1
+  failed: 1
+  succeeded: 0
+  skipped: 0
+  duration: 24s 198ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

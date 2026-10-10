@@ -162,7 +162,7 @@ select nullableint from complex_entity
 
 PostgreSQL also supports `DISTINCT ON (expr, ...)`, which keeps the first row of each distinct key
 according to the `ORDER BY` (the leading sort expressions must match the key). Use
-[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) instead of `Distinct`; combining the two
+[`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) instead of `Distinct`; combining the two
 throws, because PostgreSQL treats them as mutually exclusive.
 
 ```csharp
@@ -263,7 +263,7 @@ request is instead rendered natively, automatically, from the provider and the q
 the portable lowering above.
 
 The request is rejected at SQL build time when combined with another row-shaping modifier the
-derived-table lowering cannot express: [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), a join, `Having`, named windows,
+derived-table lowering cannot express: [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), a join, `Having`, named windows,
 `LimitBy`, `ArrayJoin`, `PreWhere`, paging, a set operation or a non-physical source.
 
 ## Provider differences

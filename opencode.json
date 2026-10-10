@@ -13,7 +13,8 @@
     "external_directory": {
       "/home/alex/sources/nextorm*/**": "allow",
       "/home/alex/sources/linq2db-*-nextorm/**": "allow",
-      "/home/alex/.config/opencode/**": "allow"
+      "/home/alex/.config/opencode/**": "allow",
+      "/tmp/nextorm*/**": "allow"
     }
   }
 }

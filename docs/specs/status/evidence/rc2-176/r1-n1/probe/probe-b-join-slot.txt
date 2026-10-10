@@ -1,0 +1,16 @@
+prepare: prepared ok
+selectList.Count = 6
+  [0] ordinal=0 name=Id type=Int32 nullable=False defaultOnNull=False converter=null projectionItem=Slot=0,Entity=ProbeParent,Member=null
+  [1] ordinal=1 name=Name type=String nullable=True defaultOnNull=False converter=null projectionItem=Slot=0,Entity=ProbeParent,Member=null
+  [2] ordinal=2 name=LeafA type=Nullable`1 nullable=True defaultOnNull=False converter=null projectionItem=Slot=0,Entity=ProbeParent,Member=null
+  [3] ordinal=3 name=Id type=Int32 nullable=False defaultOnNull=False converter=null projectionItem=Slot=1,Entity=ProbeChild,Member=null
+  [4] ordinal=4 name=ParentId type=Int32 nullable=False defaultOnNull=False converter=null projectionItem=Slot=1,Entity=ProbeChild,Member=null
+  [5] ordinal=5 name=Name type=String nullable=True defaultOnNull=False converter=null projectionItem=Slot=1,Entity=ProbeChild,Member=null
+sql: select t1.id, t1.name, t1.leaf_a as 'LeafA', t2.id, t2.parent_id as 'ParentId', t2.name from probe_parent as 't1' left join probe_child as 't2' on t1.id = t2.parent_id
+raw reader rows (IsDBNull per ordinal):
+  row0: [0]id=False:Int64 [1]name=False:String [2]LeafA=False:Int64 [3]id=False:Int64 [4]ParentId=False:Int64 [5]name=False:String
+  row1: [0]id=False:Int64 [1]name=True:String [2]LeafA=True:Int64 [3]id=True:Int64 [4]ParentId=True:Int64 [5]name=True:String
+WriteJson json: <null>
+WriteJson error: System.NotSupportedException: Duplicate JSON property name 'Id' after naming-policy conversion; JSON object members must be unique.
+ordinary rows: 2; null Right = 1
+STJ oracle: [{"Left":{"Id":1,"Name":"p1","LeafA":11},"Right":{"Id":10,"ParentId":1,"Name":"c1"}},{"Left":{"Id":2,"Name":null,"LeafA":null},"Right":null}]

@@ -570,6 +570,7 @@ public sealed class MySqlSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_Scalar_ShouldUseJsonTable()
     {
         var ctx = _sut.DataProvider;
@@ -590,6 +591,7 @@ public sealed class MySqlSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_Entity_ShouldUseJsonTable()
     {
         var ctx = _sut.DataProvider;
@@ -614,6 +616,7 @@ public sealed class MySqlSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_EmptyScalar_ShouldReturnNoRows()
     {
         var ctx = _sut.DataProvider;
@@ -626,6 +629,7 @@ public sealed class MySqlSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_EmptyEntity_ShouldReturnNoRows()
     {
         var ctx = _sut.DataProvider;
@@ -638,6 +642,7 @@ public sealed class MySqlSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public async Task ExecuteRawAsync_TableParameter_Scalar_ShouldUseJsonTable()
     {
         var ctx = _sut.DataProvider;
@@ -655,6 +660,7 @@ public sealed class MySqlSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameterWithTypeName_ShouldThrowArgumentException()
     {
         var ctx = _sut.DataProvider;

@@ -1,0 +1,50 @@
+{
+  "schema": "nextorm-pdca-test-scope/1",
+  "unit": "D190",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.mysql.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.clickhouse.tests",
+      "tests/nextorm.integration.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~EntityItemProjectionInMemoryTests",
+      "FullyQualifiedName~RowMaterializerBuilderTests",
+      "FullyQualifiedName~SelectExpressionPlanEqualityComparerTests",
+      "FullyQualifiedName~JoinReturningIdentityTests",
+      "FullyQualifiedName~PlanKeyUniquenessTests",
+      "FullyQualifiedName~EntityItemProjectionTests",
+      "FullyQualifiedName~JoinWholeEntitySqlGenerationTests",
+      "FullyQualifiedName~JoinWholeEntity_",
+      "FullyQualifiedName~MariaDbJoinWholeEntityIntegrationTests",
+      "FullyQualifiedName~ClickHouseJoinWholeEntityIntegrationTests",
+      "FullyQualifiedName~Cte_Typed_HeterogeneousWithDependency_ShouldHoistInOrderAndReturnData",
+      "FullyQualifiedName~Cte_Typed_SelfJoin_ShouldReturnBothSides",
+      "FullyQualifiedName~JoinArities_ToSqlAndUpdateJoin_ShouldRender"
+    ],
+    "files": [
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "src/nextorm.core/DataContext/RowMaterializerBuilder.cs",
+      "src/nextorm.core/DataContext/InMemoryRowMaterializer.cs",
+      "src/nextorm.core/Expressions/SelectExpressionPlanEqualityComparer.cs",
+      "src/nextorm.core/DataContext/RowMapperFactory.cs",
+      "tests/nextorm.core.tests/EntityItemProjectionInMemoryTests.cs",
+      "tests/nextorm.core.tests/RowMaterializerBuilderTests.cs",
+      "tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs",
+      "tests/nextorm.core.tests/PlanKeyUniquenessTests.cs",
+      "tests/nextorm.core.tests/JoinReturningIdentityTests.cs",
+      "tests/nextorm.sqlite.tests/EntityItemProjectionTests.cs",
+      "tests/nextorm.postgres.tests/TypedCteSqlGenerationTests.cs",
+      "tests/nextorm.postgres.tests/JoinReturningIdentitySqlGenerationTests.cs",
+      "tests/nextorm.integration.tests/CommonTestSuite.JoinWholeEntity.cs"
+    ],
+    "rationale": "D190 n=3 evidence-only pass: individual single-class selectors only (no combined '|' selectors); one full-solution boundary sweep BOUNDARY-01.",
+    "rebuild": "affected",
+    "boundary": "BOUNDARY-01"
+  }
+}

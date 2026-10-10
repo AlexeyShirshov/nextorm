@@ -1,0 +1,9 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) passed (1s 014ms)
+
+Test run summary: Passed!
+  total: 7
+  failed: 0
+  succeeded: 7
+  skipped: 0
+  duration: 1s 260ms

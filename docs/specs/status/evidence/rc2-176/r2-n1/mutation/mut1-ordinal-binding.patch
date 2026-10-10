@@ -1,0 +1,13 @@
+--- a/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs
++++ b/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs
+@@ -264,8 +264,8 @@
+             throw new NotSupportedException($"The JSON scalar member '{node.Name}' has no prepared ordinal binding.");
+ 
+         var (valueType, kind) = JsonShapePlan.Classify(node.DeclaredType, node.Name);
+-        var column = new JsonShapeColumn(binding.Ordinal, name, valueType, kind, binding.Nullable, binding.DefaultOnNull);
+-        var isNull = Expression.Call(record, IsDBNullMI, Expression.Constant(binding.Ordinal));
++        var column = new JsonShapeColumn(0, name, valueType, kind, binding.Nullable, binding.DefaultOnNull);
++        var isNull = Expression.Call(record, IsDBNullMI, Expression.Constant(0));
+         var present = Expression.Block(
+             Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+             WriteValue(writer, column, ReadValue(record, column)));

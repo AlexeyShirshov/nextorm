@@ -1,0 +1,28 @@
+{
+  "unit": "D176.7",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+      "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~JsonShapeWriterTests",
+      "FullyQualifiedName~JsonStreamingTests"
+    ],
+    "files": [
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "tests/nextorm.core.tests/JsonShapeWriterTests.cs",
+      "tests/nextorm.sqlite.tests/JsonStreamingTests.cs"
+    ],
+    "rationale": "D176.7 adds conditional-construction capture in the JSON-only preparer (QueryCommand.QueryPreparer.cs): a ConditionalExpression with a translatable predicate and a New/MemberInit arm lowers the construction as a scoped object plus a hidden nullable sentinel column, using the existing AnyColumnNotNull presence rule. The affected tests are the direct recursive-writer tests (core JsonShapeWriterTests, which prove the sentinel-only presence decision at the writer level) and the end-to-end SQLite JsonStreamingTests (which exercise the real preparer and SQL CASE lowering). No other product source is changed.",
+    "rebuild": "affected",
+    "boundary": "Full affected project sweeps after the last edit: the one comprehensive unfiltered core sweep (tests/nextorm.core.tests) plus the namespace-filtered complete SQLite project sweep (FullyQualifiedName~NextORM.Sqlite.Tests), both exit 0."
+  },
+  "amendments": [
+    {
+      "reason": "The pre-declared boundary sweeps the complete SQLite project through its namespace filter (FullyQualifiedName~NextORM.Sqlite.Tests); only the two JSON classes are asserted, but the whole project runs for regression safety.",
+      "added_selectors": ["FullyQualifiedName~NextORM.Sqlite.Tests"],
+      "validated_before_run": true
+    }
+  ]
+}

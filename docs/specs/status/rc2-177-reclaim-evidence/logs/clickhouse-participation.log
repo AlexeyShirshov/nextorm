@@ -1,0 +1,21 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.integration.tests
+  Discovered:  nextorm.integration.tests
+  Starting:    nextorm.integration.tests
+[testcontainers.org 00:00:00.38] Connected to Docker:
+  Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+  Server Version: 5.8.6
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.44
+  Operating System: fedora
+  Total Memory: 11.68 GB
+[testcontainers.org 00:00:00.39] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.46] Reusable resource found
+[testcontainers.org 00:00:00.55] Start Docker container 525af9d6a314
+[testcontainers.org 00:00:02.26] Wait for Docker container 525af9d6a314 to complete readiness checks
+[testcontainers.org 00:00:05.94] Docker container 525af9d6a314 ready
+[testcontainers.org 00:00:09.82] Stop Docker container 525af9d6a314
+  Finished:    nextorm.integration.tests (ID = 'b4ece81caced377475cbe4ebc5ceca7103a9595a1230fab7f41a6fb60ce4340a')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.integration.tests  Total: 148, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 10.175s
+exit_code=0

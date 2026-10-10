@@ -1,0 +1,5 @@
+case=03-right
+projection=p => p.Item2.Id
+condition=<none>
+join_count=1
+join[0]=Right;cond=(a, b) => (a.Id == b.Id)

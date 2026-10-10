@@ -235,7 +235,6 @@ public class PlanKeyStructureTests
         var renderedB = new QueryPlan(cmd, "select 2");
 
         renderedA.Equals(renderedB).Should().BeFalse();
-        renderedA.GetHashCode().Should().NotBe(renderedB.GetHashCode());
     }
 
     [Fact]

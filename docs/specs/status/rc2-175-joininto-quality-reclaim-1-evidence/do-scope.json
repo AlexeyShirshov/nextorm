@@ -1,0 +1,19 @@
+{
+  "unit": "D175",
+  "scope": {
+    "projects": ["tests/nextorm.core.tests", "tests/nextorm.sqlite.tests"],
+    "selectors": [
+      "FullyQualifiedName~NextORM.Core.Tests.SelectExpressionPlanEqualityComparerTests",
+      "FullyQualifiedName~NextORM.Core.Tests.RawSourceBindingFilterTests",
+      "FullyQualifiedName~NextORM.Core.Tests.ImplicitNavigationR3CountBoundaryTests",
+      "FullyQualifiedName~NextORM.Core.Tests.PlanKeyStructureTests",
+      "FullyQualifiedName~NextORM.Core.Tests.InMemoryTests",
+      "FullyQualifiedName~NextORM.Sqlite.Tests.JoinIntoExecutionTests",
+      "FullyQualifiedName~NextORM.Sqlite.Tests.JoinIntoSqlGenerationTests"
+    ],
+    "files": ["tests/nextorm.core.tests/ImplicitNavigationR3CountBoundaryTests.cs","tests/nextorm.core.tests/InMemoryTests.cs","tests/nextorm.core.tests/PlanKeyStructureTests.cs","tests/nextorm.core.tests/RawSourceBindingFilterTests.cs","tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs"],
+    "rebuild": "affected",
+    "boundary": "BEFORE DO->CHECK: full core + sqlite unit, then full container integration with DOCKER_HOST, coverage, docfx.",
+    "rationale": "The five edited test files and the JoinInto execution/SQL assertions are exactly the changed behavior; these selectors cover every H/C/X site with minimal cost."
+  }
+}

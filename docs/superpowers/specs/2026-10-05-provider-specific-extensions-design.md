@@ -3,10 +3,10 @@
 - **Дата:** 2026-10-05
 - **Статус (явно):**
   - **conversational design — APPROVED**: обсуждавшийся в чате архитектурный дизайн одобрен пользователем 2026-10-05.
-  - **written spec — AWAITING USER REVIEW**: эта письменная спецификация ещё не утверждена пользователем.
-  - **implementation plan — NOT WRITTEN / NOT APPROVED**: детальный план реализации не создан и не одобрен.
-  - **implementation — NOT AUTHORIZED**: product-код, тесты, конфиги не редактируются; сборки, установка зависимостей, коммиты, push и merge не авторизованы.
-  - Одобрение дизайна в чате **не** является одобрением спецификации; спецификация **не** является разрешением на реализацию.
+  - **written spec — REVIEWED / APPROVED (2026-10-08)**: письменная спецификация рассмотрена и явно одобрена пользователем 2026-10-08 (указание «D191 spec user-approved (proceed)»). Reviewed content: git blob `77825df33c6d4e54fafdf16e1f6fc79f092236a6`, SHA-256 `8bf020f693f0dde347d99c17fad10f73a92c45a1b24ed4839a997b2f62c139ad`. Одобрение даёт implementation authorization для задачи D191 (объём — reviewed-спецификация + сохранённый план).
+  - **implementation plan — WRITTEN / PLAN-ready**: детальный план реализации сохранён в `docs/specs/status/rc2-191-provider-extensions-1.md` (plan_revision 1, plan_state ready); закреплена архитектура direct relocation.
+  - **implementation — AUTHORIZED for task D191**: пользовательское указание 2026-10-08 разрешает реализацию в объёме reviewed-спецификации и сохранённого плана для D191. Коммиты, push и merge по-прежнему не авторизованы; функциональный объём не расширяется.
+  - Ранее действовавшее уточнение («одобрение дизайна в чате **не** является одобрением спецификации; спецификация **не** является разрешением на реализацию») утратило силу 2026-10-08: спецификация одобрена письменно и служит основанием implementation authorization для D191.
 - **Тип документа:** дизайн-спека (записанные решения), не детальный план реализации.
 - **Трекинг:** GitHub issue [#191](https://github.com/AlexeyShirshov/nextorm/issues/191) — «Вынести провайдер-специфичные методы и их реализацию из EntityBuilder в extensions», статус OPEN; milestone **1.0.9-rc2** ([milestone/20](https://github.com/AlexeyShirshov/nextorm/milestone/20)). Issue и milestone проверены (VERIFIED) через `gh issue view` / `gh api`. Связанный (не переоткрывается и не изменяется) issue [#122](https://github.com/AlexeyShirshov/nextorm/issues/122) — CLOSED.
 - **Локальный путь этой спеки:** `docs/superpowers/specs/2026-10-05-provider-specific-extensions-design.md` (файл в этом репозитории, ещё не закоммичен; в рамках этой задачи создаётся только он).

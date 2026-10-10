@@ -26,7 +26,7 @@ public class TvpMetadataCacheTests
     /// A single mapped property keeps the fluent registration shallow: <c>From&lt;T&gt;(cfg)</c> with a
     /// declared property maps exactly that property, so the expected column set is unambiguous.
     /// </summary>
-    private sealed class TvpCacheRow
+    internal sealed class TvpCacheRow
     {
         public string? Name { get; set; }
     }
@@ -50,7 +50,7 @@ public class TvpMetadataCacheTests
         }
     }
 
-    private sealed class TestContext : DataContext
+    internal sealed class TestContext : DataContext
     {
         public TestContext() : base(new DataContextBuilder())
         {
@@ -63,7 +63,7 @@ public class TvpMetadataCacheTests
         protected override DbConnection CreateDbConnection(string? connectionString) => throw new NotSupportedException();
     }
 
-    private static TableParameterValue Carrier<T>(IEnumerable<T> rows)
+    internal static TableParameterValue Carrier<T>(IEnumerable<T> rows)
     {
         var parameter = ProcedureParameter.Table("p", rows);
         return (TableParameterValue)parameter.Value!;
@@ -128,5 +128,60 @@ public class TvpMetadataCacheTests
         var columns = Carrier(new[] { new AttributedTvpCacheRow { Name = "a" } }).GetColumns(ctx);
 
         columns.Select(c => c.Name).Should().Equal("attributed_name");
+    }
+}
+
+/// <summary>
+/// #185 D185 / R05: the table-valued-parameter auto-resolution path keeps its own cache and never
+/// registers into the configured <see cref="DataContextCache.Metadata"/>, so a TVP-only entry does not
+/// count as a registration. Binding a raw source is self-sufficient and registers the mapping; a
+/// configured mapping survives TVP resolution and a later bind.
+/// <para>
+/// The class name carries "RawSourceBinding" so the D185 inner-loop selector covers it; it reuses the
+/// TVP test fixtures above (which are <see langword="internal"/> for this reason).
+/// </para>
+/// </summary>
+[Collection("Query cache controls")]
+public class RawSourceBindingTvpRegistrationTests
+{
+    [Fact]
+    public void TvpOnly_Resolution_Does_Not_Register_But_BindEntity_Does()
+    {
+        DataContextCache.Clear();
+        using var ctx = new TvpMetadataCacheTests.TestContext();
+
+        // TVP-only auto-resolution populates the private TVP cache, never the configured one.
+        _ = TvpMetadataCacheTests.Carrier(new[] { new TvpMetadataCacheTests.TvpCacheRow { Name = "a" } }).GetColumns(ctx);
+        DataContextCache.TvpMetadata.ContainsKey(typeof(TvpMetadataCacheTests.TvpCacheRow)).Should().BeTrue(
+            "the auto path keeps its own cache");
+        DataContextCache.Metadata.ContainsKey(typeof(TvpMetadataCacheTests.TvpCacheRow)).Should().BeFalse(
+            "a TVP-only entry does not count as a configured registration");
+
+        // A bind is self-sufficient: it registers the mapping through the From<T>() path.
+        _ = ((IDataContext)ctx).From("tvp_cache_table").BindEntity<TvpMetadataCacheTests.TvpCacheRow>(["Name"]);
+
+        DataContextCache.Metadata.ContainsKey(typeof(TvpMetadataCacheTests.TvpCacheRow)).Should().BeTrue(
+            "binding registers the entity mapping");
+    }
+
+    [Fact]
+    public void Configured_Then_Tvp_Then_Bind_Keeps_The_Configured_Mapping()
+    {
+        DataContextCache.Clear();
+        using var ctx = new TvpMetadataCacheTests.TestContext();
+        var rowType = typeof(TvpMetadataCacheTests.TvpCacheRow);
+
+        ctx.From<TvpMetadataCacheTests.TvpCacheRow>(cfg => cfg.Property(x => x.Name!).HasColumnName("FullName"));
+        var configured = DataContextCache.Metadata[rowType];
+
+        // The TVP auto path defers to the configured mapping...
+        TvpMetadataCacheTests.Carrier(new[] { new TvpMetadataCacheTests.TvpCacheRow { Name = "a" } }).GetColumns(ctx)
+            .Select(c => c.Name).Should().Equal("FullName");
+
+        // ...and binding preserves it rather than overwriting it with an auto mapping.
+        _ = ((IDataContext)ctx).From("tvp_cache_table").BindEntity<TvpMetadataCacheTests.TvpCacheRow>(["FullName"]);
+
+        DataContextCache.Metadata[rowType].Should().BeSameAs(configured,
+            "the configured mapping is never replaced by binding");
     }
 }

@@ -127,7 +127,7 @@ internal static class JoinIntoStitcher
             throw new NotSupportedException(
                 $"Single-query eager loading requires the parent type '{typeof(TEntity).Name}' to declare a " +
                 "mapped key so the denormalized rows can be deduplicated. Configure a key (for example with " +
-                "HasKey), or use split-query loading (LoadWith without AsSingleQuery), which does not require one.");
+                "HasKey), or use split-query loading (LoadWith without EagerLoadMode.SingleQuery), which does not require one.");
 
         // Each declaration contributes one or more projection items (a many-to-many declaration
         // contributes a link item followed by the child). The child assigned per declaration is the

@@ -73,6 +73,10 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
         {
             if (xItem.EntityType != yItem.EntityType) return false;
             if (xItem.Slot != yItem.Slot) return false;
+            // #173: the target member (the property the rebuilt entity is assigned to) is part of the
+            // materialized shape, so it must participate in the plan identity. A null member is a
+            // constructor position and compares equal only to another null member.
+            if (!object.Equals(xItem.Member, yItem.Member)) return false;
         }
 
         if (!ReferenceEquals(x.Converter, y.Converter)) return false;
@@ -114,6 +118,10 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
             hash.Add(obj.ProviderType);
 
             hash.Add(obj.ProjectionItem is { } item ? item.EntityType.GetHashCode() * 31 + item.Slot : 0);
+
+            // #173: mirror the equality contribution. A null member (a constructor position)
+            // contributes zero, so null/null hashes alike and null/non-null hashes apart.
+            hash.Add(obj.ProjectionItem?.Member);
 
             if (obj.Converter is not null)
                 hash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.Converter));

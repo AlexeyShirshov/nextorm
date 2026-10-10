@@ -73,4 +73,31 @@ public class UpdateJoinSqlGenerationTests
             .ToSql()
             .Should().Be("update simple_entity as 't1' set id = t2.id from simple_entity as 't2' where t1.id = t2.id and t1.id = 1");
     }
+
+    [Fact]
+    public void UpdateJoin_DmlScopeHint_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => ctx.From<IMergeEntity>()
+            .WithTablesInScopeHint("nolock")
+            .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.Name, "x")
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Tables-in-scope hints*");
+    }
+
+    [Fact]
+    public void UpdateJoin_DmlScopeHint_EmptyArguments_ShouldThrowArgumentException()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        // V06: WithTablesInScopeHint() with no non-empty hint is rejected at construction, before any
+        // provider capability check; the hint-free render is guarded by UpdateJoin_SetConstant_.
+        var act = () => ctx.From<IMergeEntity>().WithTablesInScopeHint();
+
+        act.Should().Throw<ArgumentException>().WithMessage("*non-empty*");
+    }
 }

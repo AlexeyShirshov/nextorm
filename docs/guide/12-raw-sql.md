@@ -271,6 +271,32 @@ select id, tenant_id as 'TenantId' from (select id, tenant_id from complex_entit
 - The binding does not apply to `WithSql`/`PrepareFromSql`/`ExecuteRaw`, and the in-memory provider still
   rejects `FromSql` with `NotSupportedException`.
 
+#### Self-sufficient binding and mapping precedence
+
+Binding is **self-sufficient**: `BindEntity<TEntity>` registers `TEntity`'s mapping on the context
+through the same path as `From<TEntity>()`, so a typed member projection and entity materialization
+work even when the type was never queried through LINQ before. No prior `From<TEntity>()` is needed:
+
+```csharp
+// No prior From<ComplexEntity>(): the bind registers the mapping.
+var ids = dataContext
+    .FromSql("select id, somestring from complex_entity")
+    .BindEntity<ComplexEntity>(["id", "somestring"])
+    .Select(t => t.Id)
+    .ToList();
+```
+
+- The registration is **process-wide**, exactly like `From<TEntity>()`; a repeated bind is a no-op.
+- A mapping already configured with `From<TEntity>(cfg)` is **preserved** — the configured mapping
+  wins over the auto mapping. A configured column name, converter or filter set before the bind is
+  never overwritten, so register a custom mapping **before** binding when one is needed.
+- Registering the entity mapping does **not** touch the table-valued-parameter auto-resolution cache:
+  the TVP path keeps its own cache, defers to a configured mapping, and never seeds an entity mapping
+  into `Metadata`. A TVP-only mapping does not count as a registered entity mapping; `DataContextCache.Clear()`
+  drops both caches, and a later bind re-registers the type.
+- A genuinely broken mapping fails at **bind time** rather than producing a query whose filters were
+  silently dropped.
+
 Binding is per source: a joined raw source uses its own `BindEntity<TEntity>` binding and declared columns
 (never the main source's or another occurrence's), and its compatible filters are merged into that join's
 `ON` condition. The main source's filters are always evaluated against its own binding; in a joined command

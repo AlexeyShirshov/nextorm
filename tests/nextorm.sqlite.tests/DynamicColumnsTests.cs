@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
+using NextORM.ClickHouse;
 using NextORM.Core;
 using NextORM.Sqlite;
 namespace NextORM.Sqlite.Tests;

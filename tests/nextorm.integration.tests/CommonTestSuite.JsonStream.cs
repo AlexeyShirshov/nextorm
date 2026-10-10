@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Data;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -201,5 +204,213 @@ public abstract partial class CommonTestSuite
 
         actual.Should().Equal(Utf8(JsonSerializer.Serialize(new List<int>())));
         Encoding.UTF8.GetString(actual).Should().Be("[]");
+    }
+
+    // -------------------------------------------------------------------------------------------------
+    // D178 (#178) enum storage matrix: the same numeric-backed enum column is persisted by every
+    // provider and streamed as a JSON number (plain enum) or as a JSON string (a stock
+    // [JsonConverter(typeof(JsonStringEnumConverter))] type attribute). The shared bodies run once per
+    // CommonTestSuite-derived provider; ClickHouse/MariaDB re-pin them because they do not derive the
+    // suite. The field-type recorder captures each provider's actual IDataRecord.GetFieldType so the
+    // provider-matrix evidence is observable facts, not an assumption.
+
+    // NOTE (D178): the bare scalar endpoint Select(x => x.State) is not exercised here. nextorm's
+    // query preparer does not classify an enum member as a single-column projection
+    // (TypeFacts.IsSingleColumnProjection excludes enums), so that query renders no columns before the
+    // JSON layer is reached — a pre-existing preparer limitation outside the JSON streaming footprint.
+    // The plan's scalar one-column shape is proven by the direct-writer tests
+    // (JsonStreamingTests.WriteEnumDirect with oneColumn:true). Here a one-member object keeps the
+    // member-provenance path over a real provider column.
+
+    /// <summary>Plain enum member: JSON output equals the default <see cref="JsonSerializer"/> numeric form.</summary>
+    [Fact]
+    public void EnumStorage_NumericMember_ShouldMatchJsonSerializer() => EnumStorageNumericMember(_sut);
+
+    /// <summary>
+    /// A plain enum over a numeric provider column must stream as the underlying number. The expected
+    /// document is built by STJ from the known seed values, so no nextorm read path is involved.
+    /// </summary>
+    internal static void EnumStorageNumericMember(TestDataRepository sut)
+    {
+        var expected = JsonSerializer.Serialize(new[]
+        {
+            new { State = StreamEnumState.Active },
+            new { State = StreamEnumState.Disabled },
+            new { State = StreamEnumState.Unknown },
+        });
+
+        var actual = WriteJsonBytes(
+            sut.DataProvider.From<IStreamEnumEntity>().OrderBy(x => x.Id).Select(x => new { x.State }));
+
+        actual.Should().Equal(Utf8(expected));
+    }
+
+    /// <summary>A stock STJ string-enum type attribute yields the STJ string names on every provider.</summary>
+    [Fact]
+    public void EnumStorage_StringMember_ShouldMatchJsonSerializer() => EnumStorageStringMember(_sut);
+
+    /// <summary>
+    /// The generic stock STJ form (<c>JsonStringEnumConverter&lt;TEnum&gt;</c>) declared on the enum type
+    /// must resolve to the same STJ names on every provider (the converter is resolved in the shape plan,
+    /// not by the provider, so the byte-for-byte contract is provider-independent).
+    /// </summary>
+    [Fact]
+    public void EnumStorage_GenericStringMember_ShouldMatchJsonSerializer() => EnumStorageGenericStringMember(_sut);
+
+    /// <summary>
+    /// A supported generic string-enum converter attribute on the enum type must produce exactly the STJ
+    /// output (names) even though the column is stored as the integer value. Mirrors the non-generic body
+    /// for providers that do not derive <see cref="CommonTestSuite"/>.
+    /// </summary>
+    internal static void EnumStorageGenericStringMember(TestDataRepository sut)
+    {
+        var expected = JsonSerializer.Serialize(new[]
+        {
+            new { State = GenericStreamEnumState.Active },
+            new { State = GenericStreamEnumState.Disabled },
+            new { State = GenericStreamEnumState.Unknown },
+        });
+
+        var actual = WriteJsonBytes(
+            sut.DataProvider.From<IGenericStreamEnumEntity>().OrderBy(x => x.Id).Select(x => new { x.State }));
+
+        actual.Should().Equal(Utf8(expected));
+    }
+
+    /// <summary>
+    /// A supported string-enum converter attribute on the enum type must produce exactly the STJ output
+    /// (names) even though the column is stored as the integer value.
+    /// </summary>
+    internal static void EnumStorageStringMember(TestDataRepository sut)
+    {
+        var expected = JsonSerializer.Serialize(new[]
+        {
+            new { State = StringStreamEnumState.Active },
+            new { State = StringStreamEnumState.Disabled },
+            new { State = StringStreamEnumState.Unknown },
+        });
+
+        var actual = WriteJsonBytes(
+            sut.DataProvider.From<IStringStreamEnumEntity>().OrderBy(x => x.Id).Select(x => new { x.State }));
+
+        actual.Should().Equal(Utf8(expected));
+    }
+
+    /// <summary>Flat object member: enum number plus a nullable enum (SQL NULL stays JSON null).</summary>
+    [Fact]
+    public void EnumStorage_FlatObject_ShouldMatchJsonSerializer() => EnumStorageFlatObject(_sut);
+
+    /// <summary>
+    /// The flat object form resolves the enum member provenance and keeps the existing null rules; the
+    /// expected document is STJ over the same shape and seed values.
+    /// </summary>
+    internal static void EnumStorageFlatObject(TestDataRepository sut)
+    {
+        var expected = JsonSerializer.Serialize(new[]
+        {
+            new { Id = 1, State = StreamEnumState.Active, NullableState = (StreamEnumState?)null },
+            new { Id = 2, State = StreamEnumState.Disabled, NullableState = (StreamEnumState?)StreamEnumState.Active },
+            new { Id = 3, State = StreamEnumState.Unknown, NullableState = (StreamEnumState?)StreamEnumState.Disabled },
+        });
+
+        var actual = WriteJsonBytes(
+            sut.DataProvider.From<IStreamEnumEntity>()
+                .OrderBy(x => x.Id)
+                .Select(x => new { x.Id, x.State, x.NullableState }));
+
+        actual.Should().Equal(Utf8(expected));
+    }
+
+    /// <summary>Records the provider's actual <see cref="IDataRecord.GetFieldType"/> for the enum column.</summary>
+    [Fact]
+    public void EnumStorage_FieldType_ShouldBeNumeric() => RecordEnumStorageFieldType(_sut, Provider.Name);
+
+    private static readonly object FieldTypeDumpGate = new();
+
+    /// <summary>
+    /// Reads the raw provider field type of the enum-backed column and asserts it is a native numeric
+    /// type (the contract the numeric JSON writer relies on). With <c>NEXTORM_ENUM_FIELDTYPE_DUMP</c>
+    /// set to a file path it appends <c>provider\tfullTypeName\tvalue</c>, which is how the D178 provider
+    /// matrix is captured from a real provider run.
+    /// </summary>
+    internal static void RecordEnumStorageFieldType(TestDataRepository sut, string provider)
+    {
+        var context = (DataContext)sut.DataProvider;
+        context.EnsureConnectionOpen();
+        using var command = context.CreateCommand("select state from enum_entity where id = 1");
+        using var reader = command.ExecuteReader();
+        reader.Read().Should().BeTrue();
+
+        var fieldType = reader.GetFieldType(0);
+        fieldType.Name.Should().BeOneOf("SByte", "Byte", "Int16", "UInt16", "Int32", "UInt32", "Int64", "UInt64");
+
+        var dump = Environment.GetEnvironmentVariable("NEXTORM_ENUM_FIELDTYPE_DUMP");
+        if (!string.IsNullOrEmpty(dump))
+        {
+            lock (FieldTypeDumpGate)
+                File.AppendAllText(dump, $"{provider}\t{fieldType.FullName}\t{reader.GetValue(0)}\n");
+        }
+    }
+
+    /// <summary>Plain numeric enum stored by every provider; the underlying value is an <c>int</c>.</summary>
+    public enum StreamEnumState
+    {
+        Unknown = 0,
+        Active = 7,
+        Disabled = -3,
+    }
+
+    /// <summary>The supported stock STJ string-enum converter form declared on the enum type.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum StringStreamEnumState
+    {
+        Unknown = 0,
+        Active = 7,
+        Disabled = -3,
+    }
+
+    /// <summary>The generic stock STJ string-enum converter form declared on the enum type.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter<GenericStreamEnumState>))]
+    public enum GenericStreamEnumState
+    {
+        Unknown = 0,
+        Active = 7,
+        Disabled = -3,
+    }
+
+    [SqlTable("enum_entity")]
+    public interface IStreamEnumEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+
+        [Column("state")]
+        StreamEnumState State { get; set; }
+
+        [Column("nullable_state")]
+        StreamEnumState? NullableState { get; set; }
+    }
+
+    [SqlTable("enum_entity")]
+    public interface IStringStreamEnumEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+
+        [Column("state")]
+        StringStreamEnumState State { get; set; }
+    }
+
+    [SqlTable("enum_entity")]
+    public interface IGenericStreamEnumEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+
+        [Column("state")]
+        GenericStreamEnumState State { get; set; }
     }
 }

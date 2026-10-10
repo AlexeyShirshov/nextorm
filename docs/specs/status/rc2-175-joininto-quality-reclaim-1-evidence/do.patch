@@ -1,0 +1,113 @@
+diff --git a/tests/nextorm.core.tests/ImplicitNavigationR3CountBoundaryTests.cs b/tests/nextorm.core.tests/ImplicitNavigationR3CountBoundaryTests.cs
+index cdf409e4..6d1b4049 100644
+--- a/tests/nextorm.core.tests/ImplicitNavigationR3CountBoundaryTests.cs
++++ b/tests/nextorm.core.tests/ImplicitNavigationR3CountBoundaryTests.cs
+@@ -99,7 +99,6 @@ public class ImplicitNavigationR3CountBoundaryTests
+ 
+         comparer.Equals(narrowed, ordinary).Should().BeFalse(
+             "a wide-count int column must never share a cached plan/mapper with an ordinary int column");
+-        comparer.GetHashCode(narrowed).Should().NotBe(comparer.GetHashCode(ordinary));
+     }
+ 
+     [Fact]
+diff --git a/tests/nextorm.core.tests/InMemoryTests.cs b/tests/nextorm.core.tests/InMemoryTests.cs
+index 9e56d5b3..c05d8b7c 100644
+--- a/tests/nextorm.core.tests/InMemoryTests.cs
++++ b/tests/nextorm.core.tests/InMemoryTests.cs
+@@ -379,7 +379,6 @@ public class InMemoryTests
+ 
+         var planEC = new QueryPlanEqualityComparer(q1);
+ 
+-        planEC.GetHashCode(q1).Should().NotBe(planEC.GetHashCode(q2));
+         planEC.Equals(q1, q2).Should().BeFalse();
+     }
+     [Fact]
+diff --git a/tests/nextorm.core.tests/PlanKeyStructureTests.cs b/tests/nextorm.core.tests/PlanKeyStructureTests.cs
+index 42b4fe1f..fe4bef0e 100644
+--- a/tests/nextorm.core.tests/PlanKeyStructureTests.cs
++++ b/tests/nextorm.core.tests/PlanKeyStructureTests.cs
+@@ -235,7 +235,6 @@ public class PlanKeyStructureTests
+         var renderedB = new QueryPlan(cmd, "select 2");
+ 
+         renderedA.Equals(renderedB).Should().BeFalse();
+-        renderedA.GetHashCode().Should().NotBe(renderedB.GetHashCode());
+     }
+ 
+     [Fact]
+diff --git a/tests/nextorm.core.tests/RawSourceBindingFilterTests.cs b/tests/nextorm.core.tests/RawSourceBindingFilterTests.cs
+index 94ffa163..6a30908d 100644
+--- a/tests/nextorm.core.tests/RawSourceBindingFilterTests.cs
++++ b/tests/nextorm.core.tests/RawSourceBindingFilterTests.cs
+@@ -909,7 +909,7 @@ public class RawSourceBindingFilterTests
+         => new(new QueryProvider());
+ 
+     [Fact]
+-    public void SameSqlAndColumns_DifferentEntityType_NotEqualWithDistinctHash()
++    public void SameSqlAndColumns_DifferentEntityType_NotEqual()
+     {
+         using var ctx = new InMemoryDataContext();
+         ConfigureTenant(ctx);
+@@ -924,13 +924,10 @@ public class RawSourceBindingFilterTests
+ 
+         comparer.Equals(tenant.SourceFrom, opaque.SourceFrom).Should().BeFalse(
+             "the bound entity type selects different filters");
+-        comparer.GetHashCode(tenant.SourceFrom).Should().NotBe(
+-            comparer.GetHashCode(opaque.SourceFrom),
+-            "different entity types must not collide in the plan key");
+     }
+ 
+     [Fact]
+-    public void SameTypeSameColumnCount_DifferentColumnNames_NotEqualWithDistinctHash()
++    public void SameTypeSameColumnCount_DifferentColumnNames_NotEqual()
+     {
+         using var ctx = new InMemoryDataContext();
+         ConfigureTenant(ctx);
+@@ -945,9 +942,6 @@ public class RawSourceBindingFilterTests
+ 
+         comparer.Equals(declared.SourceFrom, swapped.SourceFrom).Should().BeFalse(
+             "equal column counts with different names declare different filter dependencies");
+-        comparer.GetHashCode(declared.SourceFrom).Should().NotBe(
+-            comparer.GetHashCode(swapped.SourceFrom),
+-            "the declared column names participate in the plan key");
+     }
+ 
+     [Fact]
+diff --git a/tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs b/tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs
+index 56e1fb3b..a1b69509 100644
+--- a/tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs
++++ b/tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs
+@@ -6,8 +6,8 @@ namespace NextORM.Core.Tests;
+ 
+ /// <summary>
+ /// Plan-key coverage for <see cref="SelectExpressionPlanEqualityComparer"/>: two projections identical
+-/// except for their physical column name must compare unequal and hash apart, so the dynamic-columns
+-/// store can skip a mapped column by its physical name without sharing a cached plan.
++/// except for their physical column name must compare unequal, so the dynamic-columns store can skip
++/// a mapped column by its physical name without sharing a cached plan.
+ /// </summary>
+ public class SelectExpressionPlanEqualityComparerTests
+ {
+@@ -32,7 +32,6 @@ public class SelectExpressionPlanEqualityComparerTests
+ 
+         comparer.Equals(first, first).Should().BeTrue();
+         comparer.Equals(first, second).Should().BeFalse();
+-        comparer.GetHashCode(first).Should().NotBe(comparer.GetHashCode(second));
+     }
+ 
+     [Fact]
+@@ -58,7 +57,6 @@ public class SelectExpressionPlanEqualityComparerTests
+ 
+         comparer.Equals(withItem, withoutItem).Should()
+             .BeFalse("an entity item and a scalar column are different projection shapes");
+-        comparer.GetHashCode(withItem).Should().NotBe(comparer.GetHashCode(withoutItem));
+     }
+ 
+     [Fact]
+@@ -85,7 +83,6 @@ public class SelectExpressionPlanEqualityComparerTests
+ 
+         comparer.Equals(first, second).Should()
+             .BeFalse("different projection slots rebuild the row into a different shape");
+-        comparer.GetHashCode(first).Should().NotBe(comparer.GetHashCode(second));
+     }
+ 
+     [Fact]

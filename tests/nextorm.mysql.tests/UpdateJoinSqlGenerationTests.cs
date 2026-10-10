@@ -54,4 +54,36 @@ public class UpdateJoinSqlGenerationTests
             .ToSql()
             .Should().Be("update simple_entity as `t1` join simple_entity as `t2` on t1.id = t2.id set t1.id = t2.id where t1.id = 1");
     }
+
+    [Fact]
+    public void UpdateJoin_DmlScopeHint_ShouldFoldIntoInlineComment()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = ctx.From<IMergeEntity>()
+            .WithTablesInScopeHint("NO_RANGE_OPTIMIZATION(t1)")
+            .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.Name, "x")
+            .ToSql();
+
+        sql.Should().Be("update /*+ NO_RANGE_OPTIMIZATION(t1) */ merge_entity as `t1` join merge_entity as `t2` on t1.id = t2.id set t1.name = @p0");
+        (sql.Split("/*+").Length - 1).Should().Be(1);
+    }
+
+    [Fact]
+    public void UpdateJoin_DmlScopeHint_ShouldComposeWithJoinHintInOneComment()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = ctx.From<IMergeEntity>()
+            .WithTablesInScopeHint("NO_RANGE_OPTIMIZATION(t1)")
+            .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinHint("JOIN_ORDER(t1,t2)"))
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.Name, "x")
+            .ToSql();
+
+        sql.Should().Be("update /*+ NO_RANGE_OPTIMIZATION(t1) JOIN_ORDER(t1,t2) */ merge_entity as `t1` join merge_entity as `t2` on t1.id = t2.id set t1.name = @p0");
+        (sql.Split("/*+").Length - 1).Should().Be(1);
+    }
 }

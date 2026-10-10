@@ -1,0 +1,39 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+failed NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.Native_RepeatedCalls_ChangedParams_ShouldIsolateStateAndNotLeakCachePolicy (8s 278ms)
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+  Expected command.Cache to be True because a native JSON call must not disable the caller's plan cache, but found False.
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.BooleanAssertions`1.BeTrue(String because, Object[] becauseArgs)
+    at NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.Native_RepeatedCalls_ChangedParams_ShouldIsolateStateAndNotLeakCachePolicy() in /home/alex/sources/nextorm/tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:395
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) failed with 1 error(s) (19s 641ms)
+Exit code: 2
+  Standard output: [testcontainers.org 00:00:00.28] Connected to Docker:
+    Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+    Server Version: 5.8.6
+    Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+    API Version: 1.44
+    Operating System: fedora
+    Total Memory: 11.68 GB
+  [testcontainers.org 00:00:00.28] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+  [testcontainers.org 00:00:00.35] Reusable resource found
+  [testcontainers.org 00:00:00.44] Start Docker container 4ab2d4542432
+  [testcontainers.org 00:00:01.81] Wait for Docker container 4ab2d4542432 to complete readiness checks
+  [testcontainers.org 00:00:01.82] Execute "/bin/sh -c find /opt/mssql-tools*/bin/sqlcmd -type f -print -quit" at Docker container 4ab2d4542432
+  [testcontainers.org 00:00:01.97] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 4ab2d4542432
+  [testcontainers.org 00:00:06.76] Docker container 4ab2d4542432 ready
+  [testcontainers.org 00:00:08.13] Stop Docker container 4ab2d4542432
+
+Test run summary: Failed!
+  total: 1
+  failed: 1
+  succeeded: 0
+  skipped: 0
+  duration: 19s 881ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

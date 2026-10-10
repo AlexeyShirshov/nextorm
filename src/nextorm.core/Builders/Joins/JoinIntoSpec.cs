@@ -150,7 +150,7 @@ internal interface IJoinIntoSpec<TEntity>
 
     /// <summary>
     /// Whether this declaration is a many-to-many declaration contributing a link item before the child.
-    /// Single-query (<c>AsSingleQuery</c>) loading does not support it because it maps one join per
+    /// Single-query (<c>EagerLoadMode.SingleQuery</c>) loading does not support it because it maps one join per
     /// declaration. Defaults to <see langword="false"/>.
     /// </summary>
     bool IsManyToMany => false;
@@ -662,6 +662,14 @@ internal static class JoinIntoSpecHelpers
     }
 
     private static readonly ConcurrentDictionary<Type, Delegate> IdentitySelectorCache = new();
+
+    /// <summary>
+    /// Clears the process-wide cache of compiled identity selectors so the next
+    /// <see cref="BuildIdentitySelector{T}"/> re-derives its key choice from the current entity metadata.
+    /// Invoked by <see cref="DataContextCache.Clear()"/>: a cached selector outlives the metadata it was
+    /// compiled from otherwise, and after a metadata replacement it would still return the old key.
+    /// </summary>
+    internal static void ClearIdentitySelectorCache() => IdentitySelectorCache.Clear();
 
     private static Func<T, object?>? BuildIdentitySelectorCore<T>()
     {

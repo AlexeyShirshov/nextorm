@@ -108,6 +108,10 @@ internal sealed class SqliteTestProvider : ITestProvider
         create table binary_entity (id integer primary key, data blob);
         insert into binary_entity (id, data) values (1, X'01020304'), (2, null);
 
+        -- D178 (#178) enum storage: an enum is persisted as its underlying integer.
+        create table enum_entity (id integer primary key, state integer not null, nullable_state integer);
+        insert into enum_entity (id, state, nullable_state) values (1, 7, null), (2, -3, 7), (3, 0, -3);
+
         -- 8 MiB of 0xAB and 8 MiB of 'x'. hex(zeroblob(n)) is 2n zero characters, so replacing each
         -- '00' pair produces the repeated payload; unhex turns the blob hex back into bytes.
         create table lob_entity (id integer primary key, data blob, body text);

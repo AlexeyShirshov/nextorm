@@ -134,6 +134,11 @@ set-operation branches), ordered dependency-before-consumer, and omits declarati
 references. A descriptor used more than once contributes a single declaration; two different declarations
 sharing a name are still rejected, as with the string API.
 
+The descriptor itself can be passed straight to the join family, so the conversion
+(`dataContext.From(cte)`) can be dropped when the receiving builder already carries the context — see
+[Joining a typed CTE directly](#joining-a-typed-cte-directly). This works for the whole operator set,
+including `AsCte`-descriptors that project an anonymous type.
+
 Entity filters are **not** injected on the typed source — neither on the main `From(Cte<T>)` source nor on a
 joined one; the defining query's own filters stay inside the CTE body.
 
@@ -410,6 +415,57 @@ with l as (select id from complex_entity), r as (select id from simple_entity) s
 > The CTE source has no mapped entity, so its columns are read by name (`t.GetInt64("id")` /
 > `t["id"].AsInt`) and the names must match the CTE body's output aliases. Name the projection members
 > after the SQL aliases (lower-case `snake_case`) so the outer references stay exact.
+
+### Joining a typed CTE directly
+
+Once a descriptor exists, every join operator accepts it directly: `Join`, `LeftJoin`, `RightJoin`,
+`FullJoin`, `CrossJoin`, `CrossApply` and `OuterApply` each take a [`Cte<T>`](xref:NextORM.Core.Cte`1) and convert it with the
+receiving builder's context before delegating to the existing [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1)-source overload. The direct form
+produces exactly the SQL, parameters and materialized shape of converting it first:
+
+```csharp
+var left = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id })
+    .AsCte("l");
+var right = dataContext.From<ISimpleEntity>()
+    .Select(s => new { s.Id })
+    .AsCte("r");
+
+// direct: the descriptor is converted with this context
+var rows = dataContext.From(left)
+    .Join(right, (l, r) => l.Id == r.Id)
+    .Select(p => new { Id = p.Item1.Id, Other = p.Item2.Id })
+    .ToList();
+
+// equivalent explicit form
+var converted = dataContext.From(left)
+    .Join(dataContext.From(right), (l, r) => l.Id == r.Id)
+    .Select(p => new { Id = p.Item1.Id, Other = p.Item2.Id })
+    .ToList();
+```
+
+```sql
+-- SQLite: both forms produce this
+with l as (select id as 'Id' from complex_entity where (id > 1)), r as (select id as 'Id' from simple_entity) select t1.Id, t2.Id from l as 't1' join r as 't2' on t1.Id = cast(t2.Id as bigint)
+```
+
+All seven operators are covered. The conditionless three (`CrossJoin`/`CrossApply`/`OuterApply`) take
+only the descriptor; the four conditional ones take the predicate and an optional trailing
+`Action<JoinOptions>`. The options overloads have **no** default value, so an omitted options argument
+selects the concise overload:
+
+```csharp
+var rows = dataContext.From(left)
+    .Join(right, (l, r) => l.Id == r.Id, o => o.SuppressCartesianWarning());
+```
+
+A direct descriptor behaves exactly like the converted one everywhere: dependencies are hoisted in
+dependency-before-consumer order, the same instance used twice is declared once, a distinct descriptor
+with a duplicate name is still rejected, entity filters stay inside the defining body, and repeated
+calls do not mutate the shared command or its cache flag. On a [`JoinedEntityBuilder<T1..Tn>`](xref:NextORM.Core.JoinedEntityBuilder`2) the same
+overloads exist for receiver arities 2–7, so a CTE can be joined at any continuation; the projection
+still stops at eight slots.
 
 A CTE scope also drives a multi-table `UPDATE`/`DELETE`. Put the CTE on the **joined** side and keep the
 physical table as the target; the declaration is hoisted before the mutation:

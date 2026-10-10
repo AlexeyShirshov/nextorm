@@ -63,6 +63,22 @@
 скалярами — массив объектов. Вложенные проекции/коллекции и `Projection<T1,T2>` — фаза 2,
 DB-side JSON — фаза 3.
 
+**Фаза 2 реализована (issue [#176](https://github.com/AlexeyShirshov/nextorm/issues/176)).**
+Реализована интерпретация: JSON-специфичный захват формы до того, как подготовка сделает вложенную
+конструкцию непрозрачной; каждый скалярный лист привязывается к назначенному ordinal'у reader'а
+(никакой реконструкции по SQL-алиасу/имени/порядку); вложенные `new`/member-init пишутся как
+объектные узлы; реальный `Projection<T1,T2>` даёт верхнеуровневые `Item1`/`Item2`; нативные
+rank-one массивы (включая зубчатые) сериализуются рекурсивно, а `byte[]` остаётся Base64
+(проверяется до общего массива); уникальность имён проверяется **на область объекта**; присутствие
+объекта представлено отдельно от значений (`new` всегда объект; null-ветка условия — `null`; слот
+outer-join — `null`, когда все его сопоставленные столбцы — SQL `NULL`); условная вложенная
+конструкция опускает скрытую nullable-колонку-сентинел через существующий CASE-путь. Остающиеся
+границы вынесены в отдельные issue: `Projection<T1>`/`#160` недоступен, дочерние коллекции —
+[#172](https://github.com/AlexeyShirshov/nextorm/issues/172), именование/опции —
+[#177](https://github.com/AlexeyShirshov/nextorm/issues/177), перечисления/конвертеры —
+[#178](https://github.com/AlexeyShirshov/nextorm/issues/178), DB-side JSON и не-массивы-коллекции —
+вне этой области.
+
 **API.**
 
 ```csharp
@@ -86,6 +102,16 @@ public enum JsonStreamMode { Array, NdJson }
 
 Перегрузки для `EntityBuilder<TEntity>` — в `Builders/EntityBuilderExtensions.cs` по образцу
 `ToAsyncEnumerable` (`ToCommand()` + делегирование в `QueryCommand`).
+
+> **Реализовано (#180/D180, r=2; CHECK PASS r=2/n=2/rv=2; #180 закрыт).** Скетч выше не совпадает с итоговой
+> поверхностью: опциональные `options = null` и необязательный `CancellationToken` **не** приняты.
+> Итоговые сигнатуры: базовые overloads без `params` сохранены, а позиционные значения привязывает
+> отдельная перегрузка с **обязательными** `JsonStreamOptions options` и `CancellationToken
+> cancellationToken` (без значений по умолчанию, чтобы `(stream, null)` не был неоднозначным):
+> `WriteJson(Stream, JsonStreamOptions, CancellationToken, params ReadOnlySpan<object?>)` /
+> `WriteJsonAsync(Stream, JsonStreamOptions, CancellationToken, params object?[])` — по одной на
+> `QueryCommand<TResult>` и `EntityBuilder<TEntity>`. Пустой набор ничего не привязывает, `null`-элемент
+> → `DBNull`, в `QueryCommandExtensions` перегрузки нет. Детали — Q7 ниже.
 
 **Контракт.** Выходной `Stream` — владение вызывающего: не закрывается и не `Dispose`-ится,
 выполняется только `Flush`/`FlushAsync`. Ридер и команда освобождаются внутри метода. Требуется
@@ -120,7 +146,7 @@ storage-типизированным геттером (общий `GetNumericGet
 | string | provider-aware typed reading/conversion (to design) | `WriteStringValue` |
 | Guid | provider-aware typed reading/conversion (to design) | `WriteStringValue(Guid)` |
 | DateTime / DateTimeOffset / DateOnly / TimeOnly / TimeSpan | provider-aware typed reading/conversion (to design, ISO) | `WriteStringValue` |
-| enum | provider-aware typed reading/conversion (to design) | `WriteNumberValue` (default, см. «Открытые вопросы») |
+| enum | provider-aware typed numeric reading (реализовано в D178, #178): все 8 below-integral типов, без сужения `uint`/`ulong`; string-форма через штатный STJ `[JsonConverter]` | `WriteNumberValue` (default); pre-built converter `Write` для string-формы |
 | byte[] | provider-aware typed reading/conversion (to design, `GetValue`, см. `:130-137`) | `WriteBase64String` |
 | вложенный/сложный массив, `Tuple`, `Map`, document, кастомный `JsonConverter` | — | **fail-fast исключение** (в фазе 1 не поддерживается) |
 
@@ -192,12 +218,19 @@ naming policy). Компиляция — не чаще одного раза н�
 
 ### Валидация
 
-- Нет явного `Select`/`SelectList` пуст (`IgnoreColumns`) → `InvalidOperationException` с подсказкой
-  использовать `Select(...)`.
+- Нет явного `Select`/`SelectList` пуст (`IgnoreColumns`) → `NotSupportedException` с токеном
+  `[projection]` (унифицировано в #180/D180 r=2; ранее был `InvalidOperationException`).
 - `NdJson` + `Root` **или** `NdJson` + `WriteIndented` → явная **ошибка валидации** (исключение),
   без тихого игнора. В `NdJson` каждая строка — одно скалярное значение или объект, без root/indent.
-- Неподдерживаемый shape в фазе 1 (вложенная/сложная проекция, `Tuple`, `Map`, document) или
-  кастомный `JsonConverter` → **fail-fast** исключение; silent managed-сериализации нет.
+- Поддерживаемые фазы 2 формы: вложенные `new`/member-init объекты, слоты `Projection<T1,T2>`
+  (`Item1`/`Item2`, скалярный слот не оборачивается), нативные rank-one/зубчатые массивы,
+  условная null-ветка конструкции; null-семантика — явная конструкция всегда объект, null-ветка
+  даёт `null`, outer-join слот — `null` при всех `NULL`-столбцах, массив `NULL`/пустой/элемент —
+  `null`/`[]`/`null`. Неподдерживаемое (вложенная коллекция/`List<T>`, `Tuple`, `Map`, document,
+  enum/конвертер, многомерный массив, неранжируемый элемент) или кастомный `JsonConverter` →
+  **fail-fast** исключение; silent managed-сериализации нет. Отложенные границы: дочерние
+  коллекции — #172, именование/опции — #177, enum/конвертеры — #178; `Projection<T1>` (#160)
+  недоступен и не добавляет предусловий.
 - In-memory (`DataContext` без роли `IJsonStreamWriter`) → `NotSupportedException`.
 - Скалярная (`oneColumn`) проекция **поддерживается** в фазе 1: `Array` → массив скалярных значений,
   `NdJson` → одно значение на строку (решение принято, не открытый вопрос).
@@ -208,8 +241,11 @@ naming policy). Компиляция — не чаще одного раза н�
   (`Select(x => new { x.Id })`/DTO); DB-стриминг только по SQL-провайдерам, in-memory —
   `NotSupportedException` (без fallback); `Array` (по умолчанию)/`NdJson`, `Root` (для `Array`),
   `IgnoreNull`, naming policy; `NdJson` + `Root`/`WriteIndented` — ошибка валидации.
-- **Фаза 2:** вложенные проекции и `Projection<T1,T2>` через рекурсию `StartObject`/`EndObject`;
-  коллекции — по контракту STJ. В фазе 1 не поддерживаются и **не сериализуются молча** (fail-fast).
+- **Фаза 2 (реализована, #176):** вложенные проекции и `Projection<T1,T2>` через рекурсию
+  `StartObject`/`EndObject`; нативные rank-one/зубчатые массивы; условная null-ветка конструкции;
+  скалярные листья по контракту STJ. Ранее неподдерживаемые вложенные формы больше не отклоняются;
+  дочерние коллекции (#172), enum/конвертеры (#178) и новое именование (#177) остаются
+  fail-fast-границами.
 - **Фаза 3 (опционально):** DB-side JSON fast-path — если `ISqlDialect.SupportsForJson` (SQL Server
   `FOR JSON`), PostgreSQL `json_agg`/`row_to_json`, MySQL `JSON_ARRAYAGG`, ClickHouse `JSONEachRow` —
   просто перекачать байты без managed-сериализации.
@@ -277,12 +313,42 @@ naming policy). Компиляция — не чаще одного раза н�
 
 1. Имя роли/делегата: `IJsonStreamWriter`/`JsonRowWriter` vs `IJsonStreamer`/`JsonRowSerializer`.
 2. Делать ли DB-side JSON (фаза 3) или ограничиться managed-сериализацией.
-3. Формат enum: число (как STJ по умолчанию) или строка по `[JsonConverter]`.
-4. Взаимодействие с `Projection<T1,T2>`/join: плоский список `Item1/Item2` (фаза 2).
-5. Поведение при частичном выводе/ошибке (откат/дописать ли валидный JSON) — не согласовано в #39.
+3. ~~Формат enum: число (как STJ по умолчанию) или строка по `[JsonConverter]`.~~ **Решено в #178/D178**: число по умолчанию; строка для штатного STJ `JsonStringEnumConverter`/`JsonStringEnumConverter<TEnum>` на свойстве или типе (атрибут свойства приоритетнее); произвольные JSON-конвертеры и нативное/текстовое хранение — guard, отложены с триггером. Атрибут `[JsonConverter]` на не-перечислении отклоняется до вывода (не игнорируется).
+4. ~~Взаимодействие с `Projection<T1,T2>`/join: плоский список `Item1/Item2` (фаза 2).~~
+   **Решено в #176**: реальный `Projection<T1,T2>` даёт верхнеуровневые `Item1`/`Item2`
+   (объект/скаляр по типу элемента), имена проверяются на область объекта.
+5. ~~Поведение при частичном выводе/ошибке (откат/дописать ли валидный JSON) — не согласовано в #39.~~
+   **Решено в #179/D179:** политика **fail-stop / partial-output** — исходная ошибка (или
+   `OperationCanceledException`) распространяется, уже записанные байты остаются на месте, без отката
+   и без recovery-хвоста, приёмник остаётся открытым, библиотека не добавляет `Stream.Flush`; отказы
+   до вывода (preflight, in-memory, ленивый temp-table) не трогают приёмник. Задокументировано (EN/RU,
+   XML, API reference) и проверено тестами на обоих маршрутах — управляемом writer'е и нативном
+   быстром пути SQL Server `FOR JSON`. Провайдерные гарантии конверсии колонок остаются отдельным
+   carve-out: см. `../status/rc2-180-json-stream-provider-conversion-1.md`.
 6. Точная сигнатура роли: sync + async entry paths (J4) — форма sync-метода пока не определена.
-7. Провайдер-специфичные детали конверсии колонок/ридеров (сверх направления J1) и общий
-   тип/сообщение исключений валидации (для in-memory зафиксирован `NotSupportedException`).
+7. ~~Провайдер-специфичные детали конверсии колонок/ридеров (сверх направления J1) и общий
+   тип/сообщение исключений валидации (для in-memory зафиксирован `NotSupportedException`).~~
+   **Решено в #180/D180 (r=2; CHECK PASS r=2/n=2/rv=2; #180 закрыт):**
+   - **Матрица конверсии (подтверждение реальными reader'ами).** Объявленные
+     `sbyte`/`ushort`/`uint`/`ulong` остаются preflight-неподдерживаемыми (расширение отложено);
+     reader-типы `SByte`/unsigned сохраняются только для достижимых разрешённых проекций; белый
+     список сужается привязками, а не именем; несовместимая схема reader'а → `[reader-binding]`
+     **после** открытия reader'а, но **до** первой записи; overflow, зависящий от значения, остаётся
+     ошибкой времени чтения (`ulong.MaxValue → long` не маскируется под `NotSupported`); J1 +
+     ClickHouse decimal сохранены; новой провайдерной абстракции и боксящего fallback'а нет.
+   - **Контракт исключений/токенов.** Preflight-валидация всегда `NotSupportedException` с сообщением
+     `JSON streaming validation [<token>]: <context>.`; фиксированные токены: `mode-options`,
+     `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory`,
+     `unsupported-execution-form` (пустой `Select` → `[projection]`). Lifecycle-ошибки остаются
+     `InvalidOperationException`/`ObjectDisposedException`; ошибки ввода-вывода провайдера, отмена и
+     value-dependent overflow категорию не меняют. Несовместимая схема reader'а отклоняется до
+     обрамления (`QueryExecutor.cs` sync/async: позиционирование + `ValidateReaderBinding` до создания
+     writer'а).
+   - **Перегрузки `params` (решение).** Добавлены четыре публичные перегрузки с позиционными
+     SQL-значениями на `QueryCommand<TResult>` и `EntityBuilder<TEntity>` (см. блок «Реализовано» в
+     разделе «API»): `options` и `CancellationToken` обязательны; пустой набор ничего не привязывает;
+     `null`-элемент → `DBNull`; значения позиционные, не селекторы колонок. Существующие overloads
+     сохранены, в `QueryCommandExtensions` перегрузки нет.
 8. ~~**Блокер:** SQL Server numeric converter без боксинга + провайдерная паритетность
    (`GetValue`+`Convert.ChangeType` боксит) — типизированный эквивалент не спроектирован.~~
    **Снято в #168**: рантайм-диспетчеризация по `GetFieldType` + storage-типизированные геттеры,

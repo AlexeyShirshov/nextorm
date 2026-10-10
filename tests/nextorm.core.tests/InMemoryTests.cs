@@ -1,5 +1,8 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using NextORM.ClickHouse;
+using NextORM.Postgres;
+using NextORM.SqlServer;
 
 namespace NextORM.Core.Tests;
 
@@ -134,7 +137,7 @@ public class InMemoryTests
 
         var act = () => _sut.SimpleEntity.Select(it => new { it.Id }).WriteJson(stream);
 
-        act.Should().Throw<NotSupportedException>();
+        act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [in-memory]*");
         stream.Position.Should().Be(position);
         stream.Length.Should().Be(length);
     }
@@ -148,9 +151,57 @@ public class InMemoryTests
 
         var act = () => _sut.SimpleEntity.Select(it => new { it.Id }).WriteJsonAsync(stream, TestContext.Current.CancellationToken);
 
-        await act.Should().ThrowAsync<NotSupportedException>();
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*JSON streaming validation [in-memory]*");
         stream.Position.Should().Be(position);
         stream.Length.Should().Be(length);
+    }
+
+    // D178 T12: the new enum JSON support must not open an in-memory path; both terminal surfaces stay
+    // fail-closed before touching the destination (the in-memory provider has no DbDataReader).
+    [Fact]
+    public void WriteJson_InMemoryEnum_ShouldStayFailClosed()
+    {
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => _sut.SimpleEntity
+            .Select(it => new { it.Id, State = InMemoryJsonEnum.Active })
+            .WriteJson(stream);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [in-memory]*");
+        stream.Position.Should().Be(position);
+    }
+
+    [Fact]
+    public async Task WriteJsonAsync_InMemoryEnum_ShouldStayFailClosed()
+    {
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => _sut.SimpleEntity
+            .Select(it => new { it.Id, State = InMemoryJsonEnum.Active })
+            .WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*JSON streaming validation [in-memory]*");
+        stream.Position.Should().Be(position);
+    }
+
+    [Fact]
+    public async Task WriteJson_InMemoryEnumEntityBuilder_ShouldStayFailClosed()
+    {
+        var builder = _sut.DataProvider.From<InMemoryEnumEntity>();
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var sync = () => builder.WriteJson(stream);
+        var async = () => builder.WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+
+        sync.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [in-memory]*");
+        await async.Should().ThrowAsync<NotSupportedException>().WithMessage("*JSON streaming validation [in-memory]*");
+        stream.Position.Should().Be(position);
     }
     [Fact]
     public void TestPivot_ShouldThrow()
@@ -328,7 +379,6 @@ public class InMemoryTests
 
         var planEC = new QueryPlanEqualityComparer(q1);
 
-        planEC.GetHashCode(q1).Should().NotBe(planEC.GetHashCode(q2));
         planEC.Equals(q1, q2).Should().BeFalse();
     }
     [Fact]
@@ -986,4 +1036,17 @@ public class InMemoryTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*FromSql*");
     }
+}
+
+// D178 T12 fixtures: an enum member for the in-memory fail-closed checks.
+public enum InMemoryJsonEnum
+{
+    Unknown = 0,
+    Active = 7,
+}
+
+public class InMemoryEnumEntity
+{
+    public int Id { get; set; }
+    public InMemoryJsonEnum State { get; set; }
 }

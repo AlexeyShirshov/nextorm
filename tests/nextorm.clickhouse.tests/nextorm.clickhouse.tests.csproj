@@ -18,6 +18,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
     <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
+    <!-- DistinctOn/Pivot moved to the PostgreSQL/SQL Server providers; the ClickHouse generation tests
+         call them as public extension methods to assert the cross-dialect rejection. -->
+    <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
     <!-- The join-alias generator runs as an analyzer over this test assembly so Alias.Buyer and the
          generated projection/builder types bind in JoinAliasSqlGenerationTests. -->
     <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"

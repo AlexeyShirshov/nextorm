@@ -28,6 +28,14 @@ public static class EntityBuilderExtensions
     /// builder is returned.
     /// </para>
     /// <para>
+    /// Binding is self-sufficient: it registers <typeparamref name="TEntity"/>'s mapping on the context
+    /// through the same path as <c>From&lt;TEntity&gt;()</c>, so typed member projections and entity
+    /// materialization work with no prior <c>From&lt;TEntity&gt;</c>. The registration is process-wide,
+    /// exactly like <c>From&lt;TEntity&gt;()</c>; a repeated bind is a no-op. A mapping already
+    /// configured with <c>From&lt;TEntity&gt;(cfg)</c> is preserved (the configured mapping wins over
+    /// the auto mapping), so register a custom mapping <b>before</b> binding when one is needed.
+    /// </para>
+    /// <para>
     /// A filter whose declared columns are all present is injected; a filter with missing columns is
     /// skipped rather than failing the query. With an empty declared-column list, a filter with a proven
     /// zero-column dependency is applied, while a column-dependent or undetermined filter is skipped.
@@ -58,16 +66,29 @@ public static class EntityBuilderExtensions
 
         var binding = new FromExpression.EntityBinding(typeof(TEntity), NormalizeColumns(availableColumns));
 
-        // Resolve the mapping eagerly so binding is never a silent no-op: a configured mapping wins over
-        // the auto mapping, an unmapped type is auto-resolved, and a broken mapping fails here instead of
-        // producing a query whose filters were silently dropped. The metadata is not frozen into the
-        // binding; the filter resolver re-resolves it per preparation, so DataContextCache.Clear() is
-        // honored. TableAlias is rejected later with NotSupportedException and has no mapping to resolve.
-        if (typeof(TEntity) != typeof(TableAlias))
-            _ = DataContextExtensions.ResolveMetadata(source.DataProvider, typeof(TEntity));
+        // Register the mapping eagerly so binding is never a silent no-op and is self-sufficient: it
+        // goes through the very same generic registration path as From<TEntity>(), so typed member
+        // projections and entity materialization work with no prior From<TEntity>(). A mapping already
+        // present in the configured cache (a user's From<TEntity>(cfg)) is left untouched, and a broken
+        // mapping fails here instead of producing a query whose filters were silently dropped. The
+        // registration is process-wide, exactly like From<TEntity>(); a repeated bind is a no-op. The
+        // metadata is not frozen into the binding; the filter resolver re-resolves it per preparation,
+        // so DataContextCache.Clear() is honored. TableAlias is rejected later with NotSupportedException
+        // and has no mapping to register.
+        if (typeof(TEntity) != typeof(TableAlias) && !IsRegisteredInMetadata(typeof(TEntity)))
+            _ = DataContextExtensions.ResolveMetadata<TEntity>(source.DataProvider, null);
 
         return source.BindEntitySource<TEntity>(binding);
     }
+
+    /// <summary>
+    /// Whether <paramref name="entityType"/> already has a usable entry in the process-wide configured
+    /// metadata cache. An entry without a table name is not a registration (the registration path
+    /// rebuilds it), matching the lookup in <see cref="DataContextExtensions.ResolveMetadata{TEntity}"/>.
+    /// </summary>
+    private static bool IsRegisteredInMetadata(Type entityType)
+        => DataContextCache.Metadata.TryGetValue(entityType, out var metadata)
+            && !string.IsNullOrEmpty(metadata.TableName);
 
     /// <summary>Copies, deduplicates and case-insensitively sorts the declared output columns.</summary>
     /// <param name="availableColumns">The caller-declared columns.</param>
@@ -152,7 +173,7 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <exception cref="NotSupportedException">The query runs on the in-memory provider.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void WriteJson<TEntity>(this EntityBuilder<TEntity> builder, Stream destination)
@@ -165,7 +186,7 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <exception cref="NotSupportedException">The query runs on the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -179,7 +200,7 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     /// <returns>A task that completes when the whole document has been written.</returns>
     /// <exception cref="NotSupportedException">The query runs on the in-memory provider.</exception>
@@ -194,7 +215,7 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     /// <returns>A task that completes when the whole document has been written.</returns>
@@ -202,6 +223,55 @@ public static class EntityBuilderExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task WriteJsonAsync<TEntity>(this EntityBuilder<TEntity> builder, Stream destination, JsonStreamOptions options, CancellationToken cancellationToken = default)
         => builder.ToParentCommand().WriteJsonAsync(destination, options, cancellationToken);
+
+    /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="stream"/> as JSON using
+    /// <paramref name="options"/> and binding the positional SQL parameter values in
+    /// <paramref name="params"/>, without materializing a <typeparamref name="TEntity"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="stream">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
+    /// <param name="params">
+    /// The positional SQL parameter values, in the order their placeholders appear. An empty set binds
+    /// nothing; a <see langword="null"/> element binds <see cref="System.DBNull"/>.
+    /// </param>
+    /// <exception cref="NotSupportedException">The query runs on the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="stream"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void WriteJson<TEntity>(this EntityBuilder<TEntity> builder, Stream stream, JsonStreamOptions options, CancellationToken cancellationToken, params ReadOnlySpan<object?> @params)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        builder.ToParentCommand().WriteJson(stream, options, cancellationToken, @params);
+    }
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="stream"/> as JSON
+    /// using <paramref name="options"/> and binding the positional SQL parameter values in
+    /// <paramref name="params"/>, without materializing a <typeparamref name="TEntity"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="stream">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
+    /// <param name="params">
+    /// The positional SQL parameter values, in the order their placeholders appear. An empty set binds
+    /// nothing; a <see langword="null"/> element binds <see cref="System.DBNull"/>.
+    /// </param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The query runs on the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="stream"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task WriteJsonAsync<TEntity>(this EntityBuilder<TEntity> builder, Stream stream, JsonStreamOptions options, CancellationToken cancellationToken, params object?[] @params)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.ToParentCommand().WriteJsonAsync(stream, options, cancellationToken, @params);
+    }
 
     /// <summary>
     /// Determines whether the query matches at least one row.
@@ -335,7 +405,7 @@ public static class EntityBuilderExtensions
 
     /// <summary>
     /// Executes the query and materializes the matching entities into a list. When the builder carries a
-    /// <c>JoinInto</c> declaration or a single-query (<c>AsSingleQuery</c>) eager load, one denormalized
+    /// <c>JoinInto</c> declaration or a single-query (<c>EagerLoadMode.SingleQuery</c>) eager load, one denormalized
     /// command is executed and its rows are stitched; otherwise the parent query is executed and any
     /// split <c>LoadWith</c> children are loaded afterwards.
     /// </summary>
@@ -409,7 +479,7 @@ public static class EntityBuilderExtensions
 
     /// <summary>
     /// Whether the builder materializes through a stitched result: a <c>JoinInto</c> declaration, a
-    /// single-query (<c>AsSingleQuery</c>) eager-load set, or a split <c>LoadWith</c> set. The
+    /// single-query (<c>EagerLoadMode.SingleQuery</c>) eager-load set, or a split <c>LoadWith</c> set. The
     /// non-stitching terminals bypass this and evaluate the parent only.
     /// </summary>
     private static bool UsesStitching<TEntity>(EntityBuilder<TEntity> builder)
