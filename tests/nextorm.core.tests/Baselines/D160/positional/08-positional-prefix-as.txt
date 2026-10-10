@@ -1,0 +1,4 @@
+case=08-positional-prefix-as
+projection=x => x.Id
+condition=<none>
+join_count=0

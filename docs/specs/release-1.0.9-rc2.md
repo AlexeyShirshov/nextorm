@@ -80,6 +80,10 @@
       стартовал контейнеры (1m 25s), все 6 провайдеров исполнены, скипы 198 — **capability-based**
       (напр. «SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON»), ни одного
       skip по недоступности провайдера.
+- [x] Краснота CI воспроизведена и устранена (см. §3.5): локальный прогон был зелёным из-за
+      наличия gitignored `artifacts/`, а в свежем CI-checkout падали 2 теста #160
+      (`PositionalChainSqlInvariantTests`, `JoinAliasMixingSeamTests`) — их baseline-корпус не коммитился.
+      После выноса корпуса в tracked fixtures: прогон при **удалённом** `artifacts/…/baseline` зелёный.
 - [x] Покрытие (репро CI: `dotnet-coverage collect -s coverage.settings.xml` + `reportgenerator`) —
       **Line 88.4 % / Branch 80.4 %** (порог 85 / 75). Разбивка: `nextorm.core` 88.3 %,
       `nextorm.sqlite` 90.5 %, `nextorm.postgres` 90.2 %, `nextorm.sqlserver` 95 %.
@@ -94,7 +98,7 @@
       additive, инвентарь для заморозки), `NJSON2`/`N184-2` (косметика/нейминг), `IVT-bench`
       (`InternalsVisibleTo nextorm.benchmark`), god-class `EntityBuilder` (pre-existing).
 
-## 3. Изменения в репозитории (поверх HEAD `a2dd5aca`)
+## 3. Изменения в репозитории (поверх HEAD `a2dd5aca`; §3.5 — поверх `75f38b52`, `release prepare`)
 
 ### 3.1. Бамб версии
 
@@ -114,6 +118,31 @@
 - **`docs/specs/release-1.0.9-rc2.md`** — этот план.
 - **`docs/specs/design/code-smells-review.md`**, **`docs/specs/design/API-NAMING-REVIEW.md`** — записи
   предрелизного аудита (§2; только регистры, продуктовый код не менялся).
+
+### 3.5. Fix красноты CI: baseline-корпус #160 вынесен в tracked fixtures
+
+CI (`build` job, шаг `Test with coverage`) падал на 2 тестах, добавленных #160 (`a60ecb84`):
+
+- `nextorm.sqlite.tests` → `PositionalChainSqlInvariantTests.Positional_chain_sql_is_byte_identical_to_the_frozen_baseline`
+  (`artifacts/pdca/D160/rv1/N2/baseline/positional/sqlite/01-inner.sql`);
+- `nextorm.core.tests` → `JoinAliasMixingSeamTests.Positional_chain_expression_identity_is_frozen_and_deterministic`
+  (`artifacts/pdca/D160/rv1/N2/baseline/positional/01-inner.txt`).
+
+Причина: «замороженный» baseline-корпус лежал под `artifacts/` — каталог в `.gitignore` (снят с учёта
+в rc1, см. §3.4 `release-1.0.9-rc1.md`), поэтому в свежем CI-checkout файлов нет и
+`File.Exists(baselinePath)` = false. Локально тесты были зелёными, т.к. файлы оставались на диске.
+
+Фикс (только тесты, продуктовый код не менялся):
+
+- baseline-корпус закоммичен: `tests/nextorm.core.tests/Baselines/D160/positional/*.txt` (8 файлов) и
+  `tests/nextorm.sqlite.tests/Baselines/D160/positional/sqlite/{*.sql,*.sha256}` (16 файлов);
+- `DefaultBaselineRoot` в обоих тестах указывает на tracked-fixtures (env-override `D160_BASELINE_DIR`
+  сохранён); `DefaultEvidenceRoot` (revised, запись) остаётся в `artifacts/` — он только генерируется;
+- добавлен `.gitattributes` с `tests/nextorm.{core,sqlite}.tests/Baselines/** -text`: корпус сравнивается
+  побайтово, и при `core.autocrlf=true` git иначе перезаписал бы его в CRLF на checkout и сломал бы
+  сравнение. Проверено `git checkout-index` при `autocrlf=true`: байты на выходе LF и идентичны эталону;
+- герметичная проверка: при **удалённом** `artifacts/pdca/D160/rv1/N2/baseline` оба класса зелёные
+  (core 3/3, sqlite 3/3) — тест читает именно закоммиченный корпус.
 
 ## 4. Публикация (шаги владельца)
 
@@ -137,6 +166,11 @@
 
 ## 6. Открытые вопросы
 
+- **CI был красным (исправлено, ждёт push).** Пуш `release prepare` (`75f38b52`) и предыдущий пуш
+  (`a2dd5aca`) упали на `build` → `Test with coverage` с **2** падениями `PositionalChainSqlInvariantTests`
+  (sqlite) и `JoinAliasMixingSeamTests` (core) — baseline-корпус #160 не коммитился (gitignored `artifacts/`).
+  Фикс §3.5 (только тесты; продуктовый код не менялся) проверен герметично. **До зелёного CI тег
+  `v1.0.9-rc2` создавать нельзя.**
 - **Breaking changes (source):** #184 (`AsSingleQuery()` удалён, `LoadWith(..., EagerLoadMode mode = EagerLoadMode.Default)`),
   #191 (provider-specific fluent API перемещён в провайдерные assemblies). Релиз prerelease (`rc`),
   backward compatibility между пререлизами не гарантируется (см. `readme.md` §Status).

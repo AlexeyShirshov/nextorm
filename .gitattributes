@@ -1,0 +1,6 @@
+# D160 frozen positional baselines (issue #160) are compared byte-for-byte by
+# PositionalChainSqlInvariantTests / JoinAliasMixingSeamTests. They must never
+# undergo any EOL conversion: with core.autocrlf=true git would otherwise rewrite
+# them to CRLF on checkout and break the byte comparison.
+tests/nextorm.core.tests/Baselines/** -text
+tests/nextorm.sqlite.tests/Baselines/** -text

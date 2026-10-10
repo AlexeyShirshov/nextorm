@@ -1,0 +1,5 @@
+case=01-inner
+projection=p => p.Item2.Id
+condition=<none>
+join_count=1
+join[0]=Inner;cond=(a, b) => (a.Id == b.Id)

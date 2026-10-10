@@ -1,0 +1,1 @@
+select t2.id from simple_entity as 't1' cross join complex_entity as 't2'

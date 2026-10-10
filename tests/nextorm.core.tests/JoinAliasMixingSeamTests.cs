@@ -18,7 +18,9 @@ namespace NextORM.Core.Tests;
 public class JoinAliasMixingSeamTests
 {
     private const string DefaultEvidenceRoot = "artifacts/pdca/D160/rv1/N2/revised";
-    private const string DefaultBaselineRoot = "artifacts/pdca/D160/rv1/N2/baseline/positional";
+    // Committed fixture (tracked): the frozen positional expression corpus captured at HEAD 0495ee84.
+    // It must NOT live under artifacts/ (gitignored) — a CI checkout only has tracked files.
+    private const string DefaultBaselineRoot = "tests/nextorm.core.tests/Baselines/D160/positional";
 
     private static readonly string[] Cases =
     [

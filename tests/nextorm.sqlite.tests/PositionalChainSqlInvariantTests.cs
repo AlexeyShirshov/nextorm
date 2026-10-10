@@ -9,21 +9,23 @@ namespace NextORM.Sqlite.Tests;
 /// <summary>
 /// D160 R160-02' oracle (issue #160, cycle N=2). Test-only: it regenerates the frozen positional-only
 /// join chain on the current (revised) tree and compares the generated SQL <b>byte-for-byte</b> against
-/// the baseline corpus captured at HEAD <c>0495ee84</c> under
-/// <c>artifacts/pdca/D160/rv1/N2/baseline/positional/sqlite</c>. It is a genuine baseline&lt;-&gt;revised
+/// the committed baseline corpus captured at HEAD <c>0495ee84</c> under
+/// <c>tests/nextorm.sqlite.tests/Baselines/D160/positional/sqlite</c>. It is a genuine baseline&lt;-&gt;revised
 /// comparator, not a self-read: a single differing byte fails the test.
 ///
 /// <para>
 /// Inputs are env-driven: <c>D160_EVIDENCE_DIR</c> is the revised artifact root (default
 /// <c>artifacts/pdca/D160/rv1/N2/revised</c>, so SQL lands in <c>&lt;root&gt;/positional/sqlite</c>) and
 /// <c>D160_BASELINE_DIR</c> is the frozen baseline root (default
-/// <c>artifacts/pdca/D160/rv1/N2/baseline/positional</c>). Relative values resolve against the repo root.
+/// <c>tests/nextorm.sqlite.tests/Baselines/D160/positional</c>). Relative values resolve against the repo root.
 /// </para>
 /// </summary>
 public class PositionalChainSqlInvariantTests
 {
     private const string DefaultEvidenceRoot = "artifacts/pdca/D160/rv1/N2/revised";
-    private const string DefaultBaselineRoot = "artifacts/pdca/D160/rv1/N2/baseline/positional";
+    // Committed fixture (tracked): the frozen positional SQL corpus captured at HEAD 0495ee84.
+    // It must NOT live under artifacts/ (gitignored) — a CI checkout only has tracked files.
+    private const string DefaultBaselineRoot = "tests/nextorm.sqlite.tests/Baselines/D160/positional";
 
     private static readonly string[] Cases =
     [

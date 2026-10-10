@@ -1,0 +1,6 @@
+case=06-three-join-chain
+projection=p => p.Item2.Id
+condition=<none>
+join_count=2
+join[0]=Inner;cond=(a, b) => (a.Id == b.Id)
+join[1]=Inner;cond=(p, c) => (p.Item1.Id == c.Id)
