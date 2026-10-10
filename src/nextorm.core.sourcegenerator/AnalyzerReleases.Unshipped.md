@@ -12,3 +12,4 @@ NORMGEN004 | NextORM.JoinAlias | Error | Alias projection exceeds the maximum ar
 NORMGEN005 | NextORM.JoinAlias | Error | Alias argument is not in the approved form
 NORMGEN006 | NextORM.JoinAlias | Error | Assembly name cannot be normalized to a namespace
 NORMGEN007 | NextORM.JoinAlias | Error | Join alias extension signature collision
+NORMGEN008 | NextORM.JoinAlias | Error | WithAlias applied to a non-root source

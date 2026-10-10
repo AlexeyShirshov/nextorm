@@ -5656,3 +5656,21 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
 | N190-2 | ℹ️ (naming) | те же | Новые имена не вводятся: распознаётся существующая позиционная поверхность `Item1..Item8`; wildcard/`WHERE`-сравнение/casts вне scope (см. `code-smells-review.md`) | Без изменений |
 
 ℹ️ **Наблюдения.** (1) P0/P1 по именам — нет. (2) Публичные доки EN+RU синхронны: `advanced/limitations.md` (+RU — запрет снят ровно для direct `ItemN`), `guide/02-joins.md` (+RU — пример direct whole entity, nullable outer side); ссылок на `docs/specs/**` нет. (3) Автор — `coder`, сертификатор — отдельный `check`; закрытие — только после CHECK PASS. Кодовая сторона/приёмка — `docs/specs/status/rc2-190-join-whole-entity-1.md`.
+
+---
+
+## Аудит 10.10.2026 — issue #160: свободное смешивание positional/alias джойнов и алиас корня (ветка `1.0.9-rc2`; P0 — нет; P1 по именам — нет; P2 — N160-1 (Шаг 5); ℹ️ — N160-2)
+
+**Область.** #160 снимает alias-only ограничение #113: позиционные и алиасные джойны можно свободно смешивать (`p.ItemK` ≡ alias слота K; алиас необязателен), и корень можно именовать `.WithAlias(Alias.X)` (слот 1) для всех семейств root-источников. Заморозка публичной поверхности #113 («alias-only») **пересмотрена**: mixed-chain и root-alias поверхность теперь тоже stable. Новые публичные имена:
+
+- `NextORM.Core.Projection<T1>` (`src/nextorm.core/Builders/Projection.cs`) — единственная dim-1-проекция, **plain `IProjection` без `Extend`** (раньше `Projection` начинался с arity 2); переход slot 1→2 поставляют сгенерированные `public new` instance-члены.
+- `EntityBuilder<TEntity>.AliasRoot<TNext,TNextEntity>(Func<IDataContext,TNext>)` (`src/nextorm.core/Builders/EntityBuilder.cs:2861`) — root-only seam; генерируемый `.WithAlias` вызывает его.
+- Генерируемые (в `NextORM.Generated.<AssemblyName>`, как и #113): extension `JoinAliasExtensions.WithAlias<T>(this EntityBuilder<T>, Alias.RootMarker)`, маркер `Alias.RootMarker`/`Alias.<Name>Marker`, типы `AliasProjection_<suffix>`/`AliasJoin_<suffix>` со **slot-encoded** суффиксом (`P{slot}`/`A{slot}_{name}`) и сгенерированные позиционные переходы как **`public new` instance-члены** на `AliasJoin_<suffix>` (extension не может затенять применимый instance-метод `EntityBuilder.Join`).
+- Диагностика: `NORMGEN008` — `.WithAlias` не на корне (сохранены 001–007).
+
+| # | Ур. | Место | Оценка | Рекомендация |
+|---|-----|-------|--------|--------------|
+| N160-1 | **P2 (Шаг 5)** | `src/nextorm.core/Builders/{Projection.cs,EntityBuilder.cs}`; `src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs` | #113-claim «alias-only» больше не действует; новые имена следуют существующим конвенциям (`Projection<T1>` продолжает `Projection<T1..T8>`; `AliasRoot` — терминатор-двойник `JoinAlias`; generated-префиксы/namespace те же). `find -name 'PublicAPI*.txt'` — **0** (Шаг 5, issue #53) | При заморозке внести `Projection<T1>`, `AliasRoot`, generated `WithAlias`/`RootMarker`/slot-encoded `AliasJoin_*`/`AliasProjection_*` + `NORMGEN008`; в release notes описать mixing и root alias |
+| N160-2 | ℹ️ (naming) | те же | Новые публичные **типы**: только `Projection<T1>` (`IProjection`/`IExtendableProjection` уже существуют с #113); `AliasRoot` — описательное имя root-seam'а; `WithAlias` зеркалит существующий DSL-термин. BCL-конфликтов нет | Без изменений; форму считать зафиксированной |
+
+ℹ️ **Наблюдения.** (1) P0/P1 по именам — нет. (2) Публичные доки EN+RU синхронны: `guide/02-joins.md` (+RU — mixing, root alias, slot-encoded нейминг), `querying/01-projections.md` (+RU — dim-1 `Projection<T1>`, expression-only), `advanced/limitations.md` (+RU — in-memory fail-closed, `JoinInto` без alias-поверхности, arity ≤ 8 через `As<T>`); ссылок на `docs/specs/**` нет; `dotnet docfx docs/docfx.json` exit 0. (3) Внутренние спеки приведены в соответствие: `join-alias-mixing-and-root-alias.md` §3–§6 (позиционный переход — generated `public new` instance-член, `Projection<T1>` без `Extend`), `join-alias-variant-matrix.md` (mixing/root rows; gap #1 закрыт как T). (4) Кодовая сторона/приёмка — статус `rc2-160-join-alias-mixing-1.md`.

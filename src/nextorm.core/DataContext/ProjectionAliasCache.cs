@@ -26,6 +26,21 @@ internal static class ProjectionAliasCache
     // is memoized. ConditionalWeakTable keeps the map from rooting the member's declaring assembly.
     private static readonly ConditionalWeakTable<MemberInfo, StrongBox<int>> _memberPositions = new();
 
+    // Resolved Item1 property per projection type. AliasRoot reflects it on every construction of a
+    // root-alias builder, but the closed projection type is stable, so the PropertyInfo is memoized the
+    // same way (ConditionalWeakTable does not root the type's assembly). A null value is a real, stable
+    // result: the type exposes no Item1, which AliasRoot turns into a fail-closed diagnostic.
+    private static readonly ConditionalWeakTable<Type, StrongBox<PropertyInfo?>> _item1Properties = new();
+
+    /// <summary>
+    /// Returns the public instance <c>Item1</c> property of <paramref name="projectionType"/>, or
+    /// <see langword="null"/> when the type does not expose one. Memoized because
+    /// <c>AliasRoot</c> needs it per construction while the projection type is a stable closed generic.
+    /// </summary>
+    public static PropertyInfo? GetItem1Property(Type projectionType)
+        => _item1Properties.GetValue(projectionType, static type => new StrongBox<PropertyInfo?>(
+            type.GetProperty("Item1", BindingFlags.Public | BindingFlags.Instance))).Value;
+
     /// <summary>
     /// Returns the zero-based projection slot a member addresses. Engine projections keep addressing
     /// their position through the trailing digits of <c>ItemN</c>, so that cheap parse runs first; only
@@ -172,5 +187,9 @@ internal static class ProjectionAliasCache
         return aliases;
     }
 
-    public static void Clear() => _occurrences.Clear();
+    public static void Clear()
+    {
+        _occurrences.Clear();
+        _item1Properties.Clear();
+    }
 }

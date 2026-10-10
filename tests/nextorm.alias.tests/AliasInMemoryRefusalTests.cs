@@ -27,6 +27,40 @@ public class AliasInMemoryRefusalTests
         AssertRefused(() => orders.OuterApply(people, Alias.Buyer));
     }
 
+    /// <summary>
+    /// A root alias (<c>.WithAlias(Alias.Root)</c>) names slot 1 through the same alias-projection
+    /// machinery, so it must fail closed on the in-memory provider even without any join.
+    /// </summary>
+    [Fact]
+    public void A_root_WithAlias_is_refused_by_the_in_memory_provider()
+    {
+        using var ctx = new InMemoryDataContext();
+        var orders = ctx.From<Order>();
+
+        Action act = () => orders.WithAlias(Alias.Root);
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    /// <summary>
+    /// The alias refusal is not bypassed by a preceding positional join: the alias step itself is
+    /// refused at construction, so a positional-prefix -&gt; alias chain never yields a partial result.
+    /// </summary>
+    [Fact]
+    public void An_alias_join_after_a_positional_prefix_is_refused_by_the_in_memory_provider()
+    {
+        using var ctx = new InMemoryDataContext();
+        var orders = ctx.From<Order>();
+        var people = ctx.From<Person>();
+
+        // A positional join is perfectly fine in memory; the alias step that follows must fail closed.
+        var positionalPrefix = orders.Join(people, (o, p) => o.BuyerId == p.Id);
+
+        Action act = () => positionalPrefix.Join<Person>(people, (p, a) => p.Item2.Id == a.Id, Alias.Approver);
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
     private static void AssertRefused(Action action)
         => action.Should().Throw<NotSupportedException>();
 }

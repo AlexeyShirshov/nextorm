@@ -2762,6 +2762,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         QueryCommand? query)
         where TNext : EntityBuilder<TNextEntity>
     {
+        // C1-analogue (issue #160): the alias-join re-root drops SourceEntityType/BindArrayJoinElement
+        // through the shared state copy exactly like AliasRoot, so an ArrayJoinElement/LeftArrayJoinElement
+        // receiver must fail closed here too. Positional CreateJoined is deliberately not guarded.
+        EnsureReRootable();
+
         if (_joinIntos is { Count: > 0 })
             throw new NotSupportedException(
                 "JoinInto cannot be combined with other joins on the same builder; declare JoinInto on a plain entity source only.");
@@ -2777,7 +2782,222 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         joined.Ctes = CteMerge.Merge(Ctes, rightCtes);
         ApplyWhereToAliasJoined(joined);
+        ApplyPreAliasStateToAliasJoined(joined);
         return joined;
+    }
+
+    /// <summary>
+    /// Re-bases the query state written before an alias join that is not covered by
+    /// <see cref="ApplyWhereToAliasJoined{TNextEntity}"/> (<c>OrderBy</c>, <c>GroupBy</c>, <c>Having</c>,
+    /// <c>PreWhere</c> and <c>Paging</c>) onto the extended alias projection, so a state applied before
+    /// <c>.WithAlias</c> is not silently dropped when a join follows it. Only a preceding alias
+    /// projection is handled: a plain/derived entity source's modifiers are carried by the join base
+    /// (see <see cref="ResolveJoinBase"/>), exactly as on the positional path, so they are left alone.
+    /// </summary>
+    private void ApplyPreAliasStateToAliasJoined<TNextEntity>(EntityBuilder<TNextEntity> joined)
+    {
+        if (!typeof(TEntity).TryGetProjectionDimension(out _))
+            return;
+
+        // Paging has no lambda and is copied verbatim; it is not part of the join base for a projection
+        // source (ResolveAliasJoinBase returns null there because the projection shape cannot be wrapped).
+        joined.Paging = Paging;
+
+        (ParameterExpression Param, Expression Body) Rebase(LambdaExpression source)
+        {
+            var param = Expression.Parameter(typeof(TNextEntity), source.Parameters[0].Name);
+            var body = new RebaseAliasProjectionVisitor(source.Parameters[0], param, typeof(TNextEntity)).Visit(source.Body);
+            return (param, body);
+        }
+
+        if (_preWhere is not null)
+        {
+            var (param, body) = Rebase(_preWhere);
+            joined._preWhere = Expression.Lambda(body, param);
+        }
+
+        if (_having is not null)
+        {
+            var (param, body) = Rebase(_having);
+            joined._having = Expression.Lambda<Func<TNextEntity, bool>>(body, param);
+        }
+
+        if (_group is not null)
+        {
+            var (param, body) = Rebase(_group);
+            joined._group = Expression.Lambda(body, param);
+        }
+
+        if (_sorting is { Count: > 0 })
+        {
+            var sorting = new List<Sorting>(_sorting.Count);
+            foreach (var key in _sorting)
+            {
+                if (key.SortExpression is LambdaExpression { Parameters.Count: 1 } sort)
+                {
+                    var (param, body) = Rebase(sort);
+                    sorting.Add(new Sorting(Expression.Lambda(body, param)) { Direction = key.Direction });
+                }
+                else
+                {
+                    sorting.Add(key);
+                }
+            }
+
+            joined._sorting = sorting;
+        }
+    }
+
+    /// <summary>
+    /// Guards every alias re-root path (root alias via <see cref="AliasRoot{TNext,TNextEntity}"/> and
+    /// alias join via <see cref="CreateAliasJoined{TNext,TNextEntity}"/>) against a
+    /// <c>ArrayJoinElement</c>/<c>LeftArrayJoinElement</c> receiver (issue #160, C1). Such a source is a
+    /// projection whose <c>Element</c> member is bound through <c>_bindArrayJoinElement</c>/
+    /// <c>_sourceEntityType</c>: the shared join-state copy (<see cref="ApplyJoinStateTo{TOther}"/>)
+    /// deliberately omits those flags, so re-rooting it would silently drop the element binding and fail
+    /// later with an unrelated error. Fail closed at construction instead. Applied only to the alias
+    /// re-root paths; the positional <see cref="CreateJoined{TJoinEntity}"/> path must observe the
+    /// baseline behavior (R160-02′).
+    /// </summary>
+    private void EnsureReRootable()
+    {
+        if (_bindArrayJoinElement || _sourceEntityType is not null)
+            throw new NotSupportedException(
+                "An ArrayJoinElement/LeftArrayJoinElement source cannot be re-rooted as a named root/slot (WithAlias or an alias Join): a bound ARRAY JOIN element is carried by source flags the alias re-root cannot preserve. Apply the alias to a plain root source and reference the array join element without a named slot.");
+    }
+
+    /// <summary>
+    /// Root-alias seam (issue #160, Phase 2): re-roots a plain source builder into a caller-created
+    /// builder whose projection shape names the root slot 1 lexically (for example
+    /// <c>AliasProjection_A1_Order&lt;Order&gt;</c>), preserving the source's query state (physical table
+    /// or derived source, CTE declarations, overrides, source options and hints). The generated
+    /// <c>.WithAlias(Alias.X)</c> extension supplies <paramref name="create"/>. It is root-only: a
+    /// builder that already carries a join, <c>JoinInto</c> or a projection shape is rejected, and the
+    /// in-memory provider fails closed because it cannot project named aliases.
+    /// </summary>
+    /// <typeparam name="TNext">The generated builder type that receives the root alias.</typeparam>
+    /// <typeparam name="TNextEntity">The root-alias projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's source state and no joins.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The in-memory provider cannot project named aliases, or the receiver is not the root source.</exception>
+    public TNext AliasRoot<TNext, TNextEntity>(Func<IDataContext, TNext> create)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+
+        if (_dataProvider is InMemoryDataContext)
+            throw new NotSupportedException(
+                "Named alias projections are not supported by the in-memory provider; run the query against a SQL provider.");
+
+        if (_joins is { Count: > 0 } || _joinIntos is { Count: > 0 })
+            throw new NotSupportedException(
+                "WithAlias names the root source (slot 1) and must be applied before any Join/JoinInto.");
+
+        if (typeof(TEntity).TryGetProjectionDimension(out _))
+            throw new NotSupportedException(
+                "WithAlias must be applied to a plain root source, not to a join or alias projection.");
+
+        // C1 (issue #160): a bound ArrayJoinElement/LeftArrayJoinElement source is a projection whose
+        // Element member is bound through _bindArrayJoinElement/_sourceEntityType. The shared join-state
+        // copy deliberately omits those flags, so re-rooting such a source would silently drop the element
+        // binding; fail closed at construction instead. Shared with the alias-join re-root path.
+        EnsureReRootable();
+
+        if (_windows is not null)
+            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
+
+        EnsureNoEagerLoadState("WithAlias");
+
+        var rooted = create(_dataProvider);
+        ApplyJoinStateTo(rooted, Query);
+
+        // A mapped-entity root carries no explicit FROM source (it is resolved from entity metadata by
+        // the planner from the query's source type). After re-rooting, that source type is the projection,
+        // which is not a registered entity, so the projection's slot 1 could not be resolved. Materialize
+        // the mapped root's physical source once, without touching the planner: every other root kind
+        // already carries an explicit source (table name, FromExpression or derived Query).
+        if (rooted.SourceFrom is null && rooted.Query is null && string.IsNullOrEmpty(rooted.Table))
+        {
+            rooted.SourceFrom = _dataProvider.GetFrom(_sourceEntityType ?? typeof(TEntity), null);
+        }
+        // A derived root source (From(builder) / From(QueryCommand<T>)) is carried as _query. After
+        // re-rooting, the projection type would make ResolveJoinBase treat it as a joined projection that
+        // cannot be joined again, even though the physical source is a derived query. Materialize it once
+        // as an explicit derived-table FromExpression and clear _query, so the derived root is preserved
+        // and aliased 't1', exactly like FromSql. The projection guard in ResolveJoinBase is not touched.
+        else if (rooted.Query is not null)
+        {
+            rooted.SourceFrom = new FromExpression(rooted.Query);
+            rooted.Query = null;
+        }
+
+        // Query state written before '.WithAlias' is typed over the plain root entity. Move every
+        // entity-typed lambda (Where, OrderBy, GroupBy, Having, PreWhere) onto the projection's Item1 so
+        // it keeps pointing at the same table after re-rooting; Paging carries no lambda and is copied
+        // verbatim. A projection exposing Item1 is required for any of these, so fail closed instead of
+        // silently dropping the state when it is missing.
+        if (_condition is not null || _sorting is { Count: > 0 } || _group is not null
+            || _having is not null || _preWhere is not null)
+        {
+            var item1 = ProjectionAliasCache.GetItem1Property(typeof(TNextEntity))
+                ?? throw new NotSupportedException(
+                    $"WithAlias requires the root projection '{typeof(TNextEntity)}' to derive from a Projection type exposing Item1.");
+
+            (ParameterExpression Param, Expression Body) Rebind(LambdaExpression source)
+            {
+                var param = Expression.Parameter(typeof(TNextEntity), source.Parameters[0].Name);
+                var body = new ReplaceTargetParameterVisitor(source.Parameters[0], Expression.Property(param, item1)).Visit(source.Body);
+                return (param, body);
+            }
+
+            if (_condition is not null)
+            {
+                var (param, body) = Rebind(_condition);
+                rooted.Condition = Expression.Lambda<Func<TNextEntity, bool>>(body, param);
+            }
+
+            if (_having is not null)
+            {
+                var (param, body) = Rebind(_having);
+                rooted._having = Expression.Lambda<Func<TNextEntity, bool>>(body, param);
+            }
+
+            if (_group is not null)
+            {
+                var (param, body) = Rebind(_group);
+                rooted._group = Expression.Lambda(body, param);
+            }
+
+            if (_preWhere is not null)
+            {
+                var (param, body) = Rebind(_preWhere);
+                rooted._preWhere = Expression.Lambda(body, param);
+            }
+
+            if (_sorting is { Count: > 0 })
+            {
+                var sorting = new List<Sorting>(_sorting.Count);
+                foreach (var key in _sorting)
+                {
+                    if (key.SortExpression is LambdaExpression { Parameters.Count: 1 } sort)
+                    {
+                        var (param, body) = Rebind(sort);
+                        sorting.Add(new Sorting(Expression.Lambda(body, param)) { Direction = key.Direction });
+                    }
+                    else
+                    {
+                        sorting.Add(key);
+                    }
+                }
+
+                rooted._sorting = sorting;
+            }
+        }
+
+        rooted.Paging = Paging;
+
+        return rooted;
     }
 
     /// <summary>
@@ -2858,7 +3078,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         if (_query is null)
             return;
 
-        var item1 = typeof(TNextEntity).GetProperty(nameof(Projection<TEntity, object>.Item1), BindingFlags.Public | BindingFlags.Instance)
+        var item1 = ProjectionAliasCache.GetItem1Property(typeof(TNextEntity))
             ?? throw new NotSupportedException(
                 $"An alias join over a derived source requires the alias projection '{typeof(TNextEntity)}' to derive from a Projection type exposing Item1.");
 

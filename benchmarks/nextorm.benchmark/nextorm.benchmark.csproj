@@ -22,6 +22,11 @@
     <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
     <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
     <ProjectReference Include="..\..\src\nextorm.entityframeworkcore\nextorm.entityframeworkcore.csproj" />
+    <!-- The join-alias generator runs as an analyzer over the benchmark assembly so the alias-mixed
+         perf cases (issue #160) compile against the generated Alias.* / AliasJoin_* / WithAlias surface. -->
+    <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

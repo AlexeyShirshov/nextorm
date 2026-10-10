@@ -93,6 +93,21 @@ internal readonly struct SqlBuilder
             var needAlias = hasJoins || _ctx.QueryProvider.OuterReferences?.Count > 0
                 || (hasDynamicStore && _ctx.Dialect.RequiresQualifiedSelectStar);
 
+            // Whether the FROM source is rendered with an alias. A bare physical table with no joins and
+            // no column shape stays unaliased; every derived/raw/shaped source is aliased even without
+            // joins. Predicates and sort keys must be table-qualified whenever the source is aliased (a
+            // projection item over a derived root resolves through that alias), and must stay unqualified
+            // over an unaliased physical source. This mirrors the alias decision in MakeFrom; keep the
+            // two in sync.
+            var dontNeedAlias = !needAlias
+                && from is not null
+                && from.ColumnShape is null
+                && from.SubQuery is null
+                && from.TableExpressionOverride is null
+                && from.Pivot is null
+                && from.XmlNodes is null
+                && !((from.RawSqlSource is not null || from.TableFunction is not null) && _ctx.Dialect.RequireSubqueryAlias);
+
             // Tables-in-scope hints are structural on SQL Server (a WITH(...) on every physical table)
             // and part of the statement-level comment elsewhere. A dialect that supports neither rejects
             // them here, before any SQL is assembled.
@@ -197,12 +212,12 @@ internal readonly struct SqlBuilder
                         throw new NotSupportedException("The PREWHERE clause is not supported by this SQL dialect");
 
                     if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" prewhere "));
-                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedPreWhere, 0);
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedPreWhere, 0, dontNeedAlias);
                 }
                 if (cmd.PreparedCondition is not null)
                 {
                     if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" where "));
-                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0);
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0, dontNeedAlias);
                 }
 
                 var grouping = cmd.GroupingList;
@@ -225,8 +240,9 @@ internal readonly struct SqlBuilder
                         var item = grouping[i];
 
                         // GROUP BY repeats the grouping expression; an `AS alias` is not valid here on
-                        // any supported dialect (the alias belongs to the SELECT list only).
-                        var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, false);
+                        // any supported dialect (the alias belongs to the SELECT list only). A zero-join
+                        // source is unaliased, so a projection-item key must resolve unqualified.
+                        var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias);
 
                         if (!_ctx.ParamMode)
                             columns![i] = column;
@@ -284,7 +300,7 @@ internal readonly struct SqlBuilder
                     if (having is not null)
                     {
                         if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" having "));
-                        SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0);
+                        SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0, dontNeedAlias);
                     }
                 }
 
@@ -343,7 +359,7 @@ internal readonly struct SqlBuilder
                         var sorting = sortingList[i];
                         if (sorting.PreparedExpression is not null)
                         {
-                            var sortingSql = SqlSourceRenderer.MakeSort(in _ctx, entityType, sorting.PreparedExpression, 0);
+                            var sortingSql = SqlSourceRenderer.MakeSort(in _ctx, entityType, sorting.PreparedExpression, 0, dontNeedAlias);
                             if (!_ctx.ParamMode)
                             {
                                 sqlBuilder!.Append(sortingSql);

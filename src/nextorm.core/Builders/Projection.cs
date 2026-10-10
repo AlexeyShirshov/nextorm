@@ -32,6 +32,20 @@ public interface IExtendableProjection : IProjection
 }
 
 /// <summary>
+/// Accumulated result of a single-table (root-only) source; the item is exposed as <c>Item1</c>.
+/// A generated root-alias projection derives from this type to name slot 1 lexically, and it is the
+/// only projection with dimension 1. It is a plain <see cref="IProjection"/>: a root alias is
+/// expression-only and always extended by the generated <c>public new</c> positional-transition
+/// members, so no <see cref="IExtendableProjection"/> consumer exists for dimension 1 (leaving
+/// <c>Extend</c> off also makes an accidental in-memory extension fail closed instead of guessing).
+/// </summary>
+public class Projection<T1> : IProjection
+{
+    /// <summary>The value contributed by the root table.</summary>
+    public T1 Item1 { get; init; } = default!;
+}
+
+/// <summary>
 /// Accumulated result of a two-table join; items are exposed as <c>Item1</c> and <c>Item2</c>.
 /// </summary>
 public class Projection<T1, T2> : IExtendableProjection

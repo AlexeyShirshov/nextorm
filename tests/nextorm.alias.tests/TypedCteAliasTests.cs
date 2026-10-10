@@ -232,6 +232,42 @@ public class TypedCteAliasTests
     }
 
     // ---------------------------------------------------------------------------------------------
+    // #160 root alias on a recursive self-reference: '.WithAlias(Alias.Root)' names slot 1 of the
+    // AsRecursiveCte step source (From(CteReference<T>)), and the step keeps reading the CTE by name.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Root_alias_on_a_recursive_cte_self_reference_names_slot_one()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var peopleCte = ctx.From<Person>(b => b.Table("person"))
+                .Where(p => p.Id == 10)
+                .ToCommand()
+                .AsRecursiveCte("people_root_alias", self =>
+                    ctx.From(self)
+                        .WithAlias(Alias.Root)
+                        .Where(p => p.Root.Id < 20)
+                        .Select(p => new Person { Id = p.Root.Id + 10, Name = p.Root.Name }));
+
+            var rows = ctx.From(peopleCte).Select(p => new { p.Id, p.Name }).ToList();
+            rows.Select(r => r.Id).OrderBy(id => id).Should().Equal(10, 20);
+
+            var last = sql.Statements[^1];
+            last.Should().Contain("with recursive people_root_alias as (");
+            last.Should().Contain("union all");
+            last.Should().Contain("from people_root_alias as 't1'");
+            last.Should().NotContain("join (select");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // #159 C1 regression: two chains with the SAME base, alias sequence, operators and joined types
     // that differ only in an INTERMEDIATE step's source kind (EntityBuilder<Person> vs Cte<Person>)
     // previously emitted the tail method twice (CS0111). Both branches must now compile in this one

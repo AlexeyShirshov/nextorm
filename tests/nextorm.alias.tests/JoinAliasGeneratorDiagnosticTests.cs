@@ -81,6 +81,59 @@ public class JoinAliasGeneratorDiagnosticTests
     }
 
     [Fact]
+    public void Root_alias_emits_a_dim1_projection_and_a_withalias_extension()
+    {
+        var harness = RunDiagnosticCase("var q = orders.WithAlias(Alias.Root);");
+
+        harness.Run.Diagnostics.Should().BeEmpty();
+        harness.Run.GeneratedTrees.Should().HaveCount(1);
+        var generated = harness.Run.GeneratedTrees[0].ToString();
+        generated.Should().Contain("class AliasProjection_A1_Root<T1> : global::NextORM.Core.Projection<T1>");
+        generated.Should().Contain("AliasJoin_A1_Root<T1>");
+        generated.Should().Contain("WithAlias<T>");
+        generated.Should().Contain("AliasRoot<");
+        // The root alias names slot 1; Item1 is inherited from Projection<T1> and the generated alias
+        // member is expression-only (slot 1), so the generated text carries the slot attribute + member.
+        generated.Should().Contain("[global::NextORM.Core.JoinSlot(1)]");
+        generated.Should().Contain("public T1 Root => throw new global::System.NotSupportedException();");
+    }
+
+    [Fact]
+    public void WithAlias_after_a_join_reports_NORMGEN008()
+    {
+        var harness = RunDiagnosticCase(
+            "var q = orders.Join<Person>(people, (a, b) => true, Alias.Buyer).WithAlias(Alias.Root);");
+
+        AssertSingleDiagnostic(harness, "NORMGEN008", "Alias.Root");
+    }
+
+    [Fact]
+    public void Repeated_WithAlias_reports_NORMGEN008_on_the_second_root_alias()
+    {
+        var harness = RunDiagnosticCase(
+            "var q = orders.WithAlias(Alias.First).WithAlias(Alias.Second);");
+
+        AssertSingleDiagnostic(harness, "NORMGEN008", "Alias.Second");
+    }
+
+    [Fact]
+    public void Root_alias_colliding_with_a_retained_ItemN_reports_NORMGEN002()
+    {
+        var harness = RunDiagnosticCase("var q = orders.WithAlias(Alias.Item1);");
+
+        AssertSingleDiagnostic(harness, "NORMGEN002", "Alias.Item1");
+    }
+
+    [Fact]
+    public void Root_alias_duplicating_a_join_alias_reports_NORMGEN001()
+    {
+        var harness = RunDiagnosticCase(
+            "var q = orders.WithAlias(Alias.X).Join<Person>(people, (a, b) => true, Alias.X);");
+
+        AssertSingleDiagnostic(harness, "NORMGEN001", "Alias.X");
+    }
+
+    [Fact]
     public void Non_normalizable_assembly_name_reports_NORMGEN006()
     {
         const string body = "var q = orders.Join<Person>(people, (a, b) => true, Alias.Buyer);";
@@ -170,7 +223,7 @@ public class JoinAliasGeneratorDiagnosticTests
         run.Diagnostics.Should().BeEmpty();
         run.GeneratedTrees.Should().HaveCount(1);
         var generated = run.GeneratedTrees[0].ToString();
-        generated.Should().Contain("AliasJoin_X").And.Contain("AliasJoin_Y");
+        generated.Should().Contain("AliasJoin_P1_A2_X").And.Contain("AliasJoin_P1_A2_Y");
         generated.Should().Contain("global::NextORM.Core.EntityBuilder<TJoin> _,");
         generated.Should().Contain("global::NextORM.Core.Cte<TJoin> cte,");
 
@@ -186,7 +239,7 @@ public class JoinAliasGeneratorDiagnosticTests
 
         harness.Run.Diagnostics.Should().BeEmpty();
         harness.Run.GeneratedTrees.Should().HaveCount(1);
-        harness.Run.GeneratedTrees[0].ToString().Should().Contain("class AliasProjection_Buyer");
+        harness.Run.GeneratedTrees[0].ToString().Should().Contain("class AliasProjection_P1_A2_Buyer");
     }
 
     [Fact]
@@ -228,9 +281,75 @@ public class JoinAliasGeneratorDiagnosticTests
         outputs.Should().OnlyContain(output => output.Reason == IncrementalStepRunReason.Cached);
     }
 
+    [Fact]
+    public void Digit_ending_alias_at_a_later_slot_keeps_its_positional_slot()
+    {
+        // R160-01 / D:160-03 harness negative for the F1 gap (E160-13 M4): 'Buyer2' is a name whose
+        // trailing digit is 2, but here it occupies slot 3 (a positional join takes slot 2), so the
+        // digit and the slot differ. The emitted slot attribute and the property's generic index must
+        // be the positional slot 3; a generator that derived the slot from the trailing digit would
+        // emit JoinSlot(2) on a T2 property instead.
+        var harness = RunDiagnosticCase(
+            "var q = orders" +
+            ".Join<Person>(people, (a, b) => true)" +
+            ".Join<Person>(people, (a, b) => true, Alias.Buyer2);");
+
+        harness.Run.Diagnostics.Should().BeEmpty();
+        harness.Run.GeneratedTrees.Should().HaveCount(1);
+        var generated = harness.Run.GeneratedTrees[0].ToString();
+
+        generated.Should().Contain("class AliasProjection_P1_P2_A3_Buyer2");
+        generated.Should().MatchRegex(@"\[global::NextORM\.Core\.JoinSlot\(3\)\]\s+public T3 Buyer2 =>");
+        generated.Should().NotMatchRegex(@"\[global::NextORM\.Core\.JoinSlot\(2\)\]\s+public T2 Buyer2 =>");
+    }
+
+    [Fact]
+    public void Distinct_root_aliases_emit_one_WithAlias_each_and_duplicates_are_deduped()
+    {
+        // `JoinAliasGenerator.cs:666-671` collects the distinct root-alias names, so the loop at
+        // `:1053` emits exactly one generic `WithAlias<T>` per name. The `continue` guard at `:1057`
+        // is unreachable for valid input: each name yields a distinct signature (its own marker type),
+        // so no root alias is ever skipped as an already-seen signature.
+        var distinct = RunDiagnosticCase(
+            "var q1 = orders.WithAlias(Alias.First);" +
+            "var q2 = people.WithAlias(Alias.Second);");
+
+        distinct.Run.Diagnostics.Should().BeEmpty();
+        distinct.Run.GeneratedTrees.Should().HaveCount(1);
+        var generated = distinct.Run.GeneratedTrees[0].ToString();
+        CountOccurrences(generated, "WithAlias<T>(").Should().Be(2);
+        generated.Should().Contain("AliasJoin_A1_First<T>");
+        generated.Should().Contain("AliasJoin_A1_Second<T>");
+
+        // The same root-alias name in two independent chains is deduped to a single method by the
+        // `Distinct` at `:669`, not emitted twice (which would be the collision `:1057` guards on).
+        var duplicate = RunDiagnosticCase(
+            "var q1 = orders.WithAlias(Alias.Root);" +
+            "var q2 = people.WithAlias(Alias.Root);");
+
+        duplicate.Run.Diagnostics.Should().BeEmpty();
+        duplicate.Run.GeneratedTrees.Should().HaveCount(1);
+        var generatedDuplicate = duplicate.Run.GeneratedTrees[0].ToString();
+        CountOccurrences(generatedDuplicate, "WithAlias<T>(").Should().Be(1);
+        generatedDuplicate.Should().Contain("AliasJoin_A1_Root<T>");
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Harness plumbing.
     // ---------------------------------------------------------------------------------------------
+
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+
+        return count;
+    }
 
     private static Harness RunDiagnosticCase(string body)
     {
