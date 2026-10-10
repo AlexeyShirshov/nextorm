@@ -146,6 +146,19 @@ class Iteration14GateTests(unittest.TestCase):
         self.assertEqual(code, 0, output)
         self.assertIn("within budget", output)
 
+    def test_default_reports_dir_is_the_pinned_benchmark_artifacts_dir(self):
+        # Regression: the benchmark pins its artifacts to benchmarks/BenchmarkDotNet.Artifacts
+        # (BenchmarkArtifacts.Path, used as NextormConfig.ArtifactsPath). The gate must read the
+        # reports from that same directory, never the legacy repo-root BenchmarkDotNet.Artifacts.
+        self.assertEqual(
+            gate.DEFAULT_REPORTS_DIR,
+            gate.REPO_ROOT / "benchmarks" / "BenchmarkDotNet.Artifacts" / "results",
+        )
+        self.assertNotEqual(
+            gate.DEFAULT_REPORTS_DIR,
+            gate.REPO_ROOT / "BenchmarkDotNet.Artifacts" / "results",
+        )
+
     def test_deliberate_over_budget_returns_nonzero(self):
         build_reports(self.tmp, {("Cte_Prepare_NoHash", "Default"): 15153})
         code, output = run_gate(self.tmp)

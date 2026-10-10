@@ -80,10 +80,10 @@
       стартовал контейнеры (1m 25s), все 6 провайдеров исполнены, скипы 198 — **capability-based**
       (напр. «SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON»), ни одного
       skip по недоступности провайдера.
-- [x] Краснота CI воспроизведена и устранена (см. §3.5): локальный прогон был зелёным из-за
-      наличия gitignored `artifacts/`, а в свежем CI-checkout падали 2 теста #160
-      (`PositionalChainSqlInvariantTests`, `JoinAliasMixingSeamTests`) — их baseline-корпус не коммитился.
-      После выноса корпуса в tracked fixtures: прогон при **удалённом** `artifacts/…/baseline` зелёный.
+- [x] Краснота CI воспроизведена и устранена (см. §3.5–§3.6): в свежем CI-checkout падали 2 теста #160
+      (`PositionalChainSqlInvariantTests`, `JoinAliasMixingSeamTests`) — их baseline-корпус не коммитился
+      (§3.5); затем шаг `Allocation regression gate` не находил ни одной строки — читал не тот каталог
+      отчётов (§3.6). Оба фикса проверены герметично/локально.
 - [x] Покрытие (репро CI: `dotnet-coverage collect -s coverage.settings.xml` + `reportgenerator`) —
       **Line 88.4 % / Branch 80.4 %** (порог 85 / 75). Разбивка: `nextorm.core` 88.3 %,
       `nextorm.sqlite` 90.5 %, `nextorm.postgres` 90.2 %, `nextorm.sqlserver` 95 %.
@@ -144,6 +144,26 @@ CI (`build` job, шаг `Test with coverage`) падал на 2 тестах, д
 - герметичная проверка: при **удалённом** `artifacts/pdca/D160/rv1/N2/baseline` оба класса зелёные
   (core 3/3, sqlite 3/3) — тест читает именно закоммиченный корпус.
 
+### 3.6. Fix красноты CI (2): Allocation regression gate читал не тот каталог отчётов
+
+После фикса §3.5 шаг `Test with coverage` стал зелёным, но job `build` упал дальше — на шаге
+`Allocation regression gate` (`eng/perf/iteration14_gate.py`) с **28** записями
+`missing row <id> (<type>.<method>): no result` по классам `SqliteBenchmarkWarmDecompose`,
+`SqliteBenchmarkCachedPlan`, `SqliteBenchmarkFeaturePlanBuild`.
+
+Причина: `BenchmarkArtifacts.Resolve()` (`benchmarks/nextorm.benchmark/BenchmarkArtifacts.cs`,
+изменён в `a2dd5aca`) теперь распознаёт `nextorm.slnx` в корне репозитория и возвращает канонический
+каталог `benchmarks/BenchmarkDotNet.Artifacts` (= `NextormConfig.ArtifactsPath`), поэтому BDN пишет
+отчёты в `benchmarks/BenchmarkDotNet.Artifacts/results/`. Гейт же читал legacy-путь
+`REPO_ROOT/BenchmarkDotNet.Artifacts/results` — там лежат лишь закоммиченные отчёты других классов,
+поэтому `load_results` не падал с «no reports», но целевых типов не видел → все строки манифеста
+«missing row». До `a2dd5aca` резолюция не находила корень (искался `nextorm.sln`, а репозиторий на
+`nextorm.slnx`) и падала на `Directory.GetCurrentDirectory()` = корень репо — совпадая с гейтом «случайно».
+
+Фикс (tooling, продуктовый код не менялся): `DEFAULT_REPORTS_DIR` в `eng/perf/iteration14_gate.py` →
+`REPO_ROOT / "benchmarks" / "BenchmarkDotNet.Artifacts" / "results"`. Проверка: `python3 eng/perf/iteration14_gate.py --no-run`
+— **56/56 row/job verdicts within budget, exit 0** (было 28 «missing row»).
+
 ## 4. Публикация (шаги владельца)
 
 - [ ] Закоммитить подготовленный объём (§3) на ветке `1.0.9-rc2` и запушить её.
@@ -168,9 +188,11 @@ CI (`build` job, шаг `Test with coverage`) падал на 2 тестах, д
 
 - **CI был красным (исправлено, ждёт push).** Пуш `release prepare` (`75f38b52`) и предыдущий пуш
   (`a2dd5aca`) упали на `build` → `Test with coverage` с **2** падениями `PositionalChainSqlInvariantTests`
-  (sqlite) и `JoinAliasMixingSeamTests` (core) — baseline-корпус #160 не коммитился (gitignored `artifacts/`).
-  Фикс §3.5 (только тесты; продуктовый код не менялся) проверен герметично. **До зелёного CI тег
-  `v1.0.9-rc2` создавать нельзя.**
+  (sqlite) и `JoinAliasMixingSeamTests` (core) — baseline-корпус #160 не коммитился (gitignored `artifacts/`)
+  (§3.5). После его фикса шаг тестов зелёный, но job упал дальше на `Allocation regression gate`:
+  гейт читал legacy-каталог отчётов `REPO_ROOT/BenchmarkDotNet.Artifacts`, тогда как BDN пишет в
+  `benchmarks/BenchmarkDotNet.Artifacts` (§3.6). Оба фикса (tooling/тесты; продуктовый код не менялся)
+  проверены локально/герметично. **До зелёного CI тег `v1.0.9-rc2` создавать нельзя.**
 - **Breaking changes (source):** #184 (`AsSingleQuery()` удалён, `LoadWith(..., EagerLoadMode mode = EagerLoadMode.Default)`),
   #191 (provider-specific fluent API перемещён в провайдерные assemblies). Релиз prerelease (`rc`),
   backward compatibility между пререлизами не гарантируется (см. `readme.md` §Status).

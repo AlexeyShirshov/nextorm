@@ -74,7 +74,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GATE_DIR = Path(__file__).resolve().parent
 MANIFEST_PATH = GATE_DIR / "iteration14-budgets.json"
-DEFAULT_REPORTS_DIR = REPO_ROOT / "BenchmarkDotNet.Artifacts" / "results"
+# BenchmarkDotNet artifacts are pinned to benchmarks/BenchmarkDotNet.Artifacts by
+# BenchmarkArtifacts.Path (NextormConfig.ArtifactsPath), the same location the canonical
+# committed reports and scripts/iteration15_evidence.py use. The gate must read the reports
+# where the benchmark actually writes them.
+DEFAULT_REPORTS_DIR = REPO_ROOT / "benchmarks" / "BenchmarkDotNet.Artifacts" / "results"
 BENCH_SRC_DIR = REPO_ROOT / "benchmarks" / "nextorm.benchmark"
 SEED_DB = REPO_ROOT / "benchmarks" / "nextorm.benchmark" / "data" / "test.db"
 
