@@ -253,3 +253,5 @@ After the scoped PASS (all six required rows `met`), ACT commits under `#206 ` (
 - **Evidence roots:** `artifacts/pdca/D206/rv2/**`, `artifacts/pdca/D206/rv3/**`.
 - **Hygiene:** no TODO plan file to delete; no public API / naming / registry change, so no `API-NAMING-REVIEW.md` or `code-smells-review.md` edit is required.
 - **Issue:** #206 remains **OPEN** in milestone `1.0.9-rc2`.
+
+- **ACT commit:** `8f31c9a4`.
