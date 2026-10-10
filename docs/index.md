@@ -105,7 +105,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.9-rc1) is a prof of concept.
+The current status (1.0.9-rc2) is a prof of concept.
 
 ## Installation
 
@@ -134,6 +134,36 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [Query reuse guide](infrastructure/01-query-reuse-and-caching.md).
 
 ## Releases
+
+### 1.0.9-rc2
+
+- [JSON streaming: вложенные проекции и `Projection<T1,T2>`](https://github.com/AlexeyShirshov/nextorm/issues/176)
+- [JSON streaming: DB-side fast-path (`FOR JSON` / `json_agg` / `JSONEachRow`)](https://github.com/AlexeyShirshov/nextorm/issues/177)
+- [JSON streaming: поддержка `enum` (числовая форма и STJ `[JsonConverter]`-строки)](https://github.com/AlexeyShirshov/nextorm/issues/178)
+- [JSON streaming: определена политика частичного вывода/ошибок (валидный JSON при сбое)](https://github.com/AlexeyShirshov/nextorm/issues/179)
+- [JSON streaming: провайдерные конвертации колонок и тип исключения валидации](https://github.com/AlexeyShirshov/nextorm/issues/180)
+- [CSV streaming: чтение `byte[]`-колонок чанками (bounded memory)](https://github.com/AlexeyShirshov/nextorm/issues/167)
+- [Join aliases: свободное смешивание positional/alias + алиас корня (`.WithAlias(Alias.X)`)](https://github.com/AlexeyShirshov/nextorm/issues/160)
+- [CTE: прямые перегрузки join-семьи и alias-API для `Cte<T>`](https://github.com/AlexeyShirshov/nextorm/issues/159)
+- [Source generator: устранён конфликт сигнатур CS0111 при двух alias-join с общим `Alias.X`](https://github.com/AlexeyShirshov/nextorm/issues/206)
+- [SQL Server native JSON: проекция `SqlFunctions.Parameter<T>` снова рендерится с alias (восстановлен `FOR JSON`)](https://github.com/AlexeyShirshov/nextorm/issues/208)
+- [Fix: выбор всей сущности из JOIN-проекций](https://github.com/AlexeyShirshov/nextorm/issues/190)
+- [Mapping: fold проекций больше не игнорирует `Member` (`SelectExpressionPlanEqualityComparer`/`RowMapperFactory`)](https://github.com/AlexeyShirshov/nextorm/issues/173)
+- [Fix: `BindEntity<T>` регистрирует маппинг сущности (типизированные проекции без предварительного `From<T>`)](https://github.com/AlexeyShirshov/nextorm/issues/185)
+- [Fix: `DataContextCache.Clear()` очищает кэш `JoinIntoSpec.IdentitySelectorCache`](https://github.com/AlexeyShirshov/nextorm/issues/174)
+- [Navigation: валидация уникальности FK для OneToOne](https://github.com/AlexeyShirshov/nextorm/issues/170)
+- [Table hints: сохранение `TablesInScopeHints` на multi-table DELETE/UPDATE join-путях](https://github.com/AlexeyShirshov/nextorm/issues/169)
+- [`LoadWith`: режим eager loading вынесен в параметр `EagerLoadMode` (`AsSingleQuery()` удалён)](https://github.com/AlexeyShirshov/nextorm/issues/184)
+- [Provider-specific fluent API вынесен из `EntityBuilder` в extensions провайдерных сборок](https://github.com/AlexeyShirshov/nextorm/issues/191)
+- [`ToDataReader`/`ToDataReaderAsync`: поддержка SQLite для не-LOB проекций](https://github.com/AlexeyShirshov/nextorm/issues/189)
+- [V32: навигация поверх temp-table/TVP-источников отклоняется fail-closed](https://github.com/AlexeyShirshov/nextorm/issues/162)
+- [Comparison benchmarks tier 1: проекции, агрегаты, пагинация, стриминг + cross-library JSON/CSV](https://github.com/AlexeyShirshov/nextorm/issues/188)
+- [PG/CH диалекты `sealed`→`class`: зафиксировано решение о публичной расширяемости](https://github.com/AlexeyShirshov/nextorm/issues/153)
+- [ExtremeRow capability DTO: публичная read-only конструкция вместо internal-конструкторов](https://github.com/AlexeyShirshov/nextorm/issues/154)
+- [Re-run Stryker mutation testing для native extreme-row (фиксация capture)](https://github.com/AlexeyShirshov/nextorm/issues/151)
+- [Согласована запись finding 25 в регистрах](https://github.com/AlexeyShirshov/nextorm/issues/157)
+- [JoinInto test-quality debt: проверки hash-inequality / видимость `EagerLoadSpec.Assign`](https://github.com/AlexeyShirshov/nextorm/issues/175)
+- Принятые ограничения (issue закрыты как `not_planned`, ревизия по появлении конкретного потребителя): [JoinInto поверх `As`/derived-источника](https://github.com/AlexeyShirshov/nextorm/issues/171) и [child-collection проекция в anonymous/derived-форму](https://github.com/AlexeyShirshov/nextorm/issues/172)
 
 ### 1.0.9-rc1
 
