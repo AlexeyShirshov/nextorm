@@ -135,3 +135,24 @@ record mirrors the same revision recorded in the companion status file
   warning(s) → `artifacts/pdca/D209/rv3/docs.log`.
 - r=3 remains `n=1/3`; no production mechanism changed. D209/D209-NL stay **not done** (D209.8 goes to
   the DO→CHECK boundary; CHECK renders the E209-01/E209-20 verdicts).
+
+## r=3 n=2 record — corrective `D:T209-required-tests` (tests-only; no production change)
+
+CHECK r=3 n=1 returned **FAIL** on evidence completeness only (no demonstrated production regression)
+and routed `D:T209-required-tests` at `r3/n2` (no priority reduction). The corrective adds tests and
+persistence only; production is unchanged (identical to `dd5d08fb` / rv3 `5e9f6756`).
+
+- **Async writers:** `WriteCsvAsync`/`WriteJsonAsync` added to the core + SQLite terminal matrices and
+  to dedicated tests asserting `NotSupportedException` before any SQL, 0 plan-cache entries, no child
+  SQL, and a 0-byte destination (closes `rv2/async-zerobuild.md:84-93`).
+- **Projection overloads:** `FirstOrFirstOrDefaultCommand(exp)` / `SingleOrSingleOrDefaultCommand(exp)`
+  reject before SQL/cache.
+- **`EagerLoadShape.Equals(object?)`:** direct `object?` equality test covers L167 2/2 and the L154
+  null-parts/length-mismatch sub-branches (targeted collect, exit 0) →
+  `artifacts/pdca/D209/rv3/eagerloadshape-branch.md`, `rv3/shape.cobertura.xml`.
+- **Verify (`--no-build`, exit 0):** core `~EagerTerminalGuard` 212/0, core `~EagerLoadShape` 5/0,
+  sqlite `~EagerTerminalGuard` 199/0 → `rv3/{core-guard,core-eagerloadshape,sqlite-guard}.log`.
+- **Manifest dispositions persisted:** E209-08/10/12/21 → **met**, E209-13 stays **open**;
+  `required_rows` E209-01..21 and `contract_rv: 2` unchanged; manifest validator exit 0. Candidate
+  crosswalk `rv3/candidate-crosswalk.md`. Commit `4b50672f`.
+- D209/D209-NL remain **not done**; D209.8 re-submitted to CHECK at `r3/n2`.
