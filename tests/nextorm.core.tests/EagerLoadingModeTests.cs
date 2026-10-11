@@ -846,6 +846,37 @@ public class EagerLoadingModeTests
             first.Equals(other).Should().BeFalse("a hash collision alone is never equality");
     }
 
+    /// <summary>
+    /// r=3 n=2 (#209, D:T209-required-tests): the non-generic <c>Equals(object?)</c> override
+    /// (<c>QueryCommand.EagerLoading.cs:167</c>) is a framework contract that must delegate to the generic
+    /// equality and never throw on a foreign type or <see langword="null"/>. This also exercises the
+    /// <c>other._parts is null</c> and length-mismatch sub-branches of the generic compare (L154) that the
+    /// existing shape tests never reach.
+    /// </summary>
+    [Fact]
+    public void EagerLoadShape_ObjectEquals_CoversTheNonGenericOverride()
+    {
+        var parts = new EagerLoadShape(["A", "B"]);
+        var same = new EagerLoadShape(["A", "B"]);
+        var other = new EagerLoadShape(["A", "C"]);
+        var shorter = new EagerLoadShape(["A"]);
+        EagerLoadShape @default = default;
+        EagerLoadShape empty = EagerLoadShape.Empty;
+
+        object boxed = parts;
+        boxed.Equals(same).Should().BeTrue("the non-generic override delegates to the generic equality");
+        boxed.Equals(other).Should().BeFalse();
+        boxed.Equals(shorter).Should().BeFalse("a length mismatch is not equal");
+        boxed.Equals(@default).Should().BeFalse("a non-empty shape compared to default(EagerLoadShape) covers the null-parts sub-branch");
+        boxed.Equals(empty).Should().BeFalse("a non-empty shape is not equal to the empty shape");
+        boxed.Equals("not a shape").Should().BeFalse("a foreign type is unequal, never a throw");
+        boxed.Equals(null).Should().BeFalse();
+
+        object boxedEmpty = empty;
+        boxedEmpty.Equals(EagerLoadShape.Empty).Should().BeTrue("empty equals empty through the object path");
+        boxedEmpty.Equals(@default).Should().BeTrue();
+    }
+
     [Fact]
     public void EagerPlan_ChildFilterParameterValueReusesThePlan_ButAStructureChangeIsolatesIt()
     {

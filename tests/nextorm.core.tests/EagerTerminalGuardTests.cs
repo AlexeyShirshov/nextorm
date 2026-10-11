@@ -97,6 +97,8 @@ public class EagerTerminalGuardTests
         "ToEnumerable", "ToHashSet", "ToDictionary",
         "First", "FirstOrDefault", "Single", "SingleOrDefault", "Last", "LastOrDefault",
         "Any", "Count", "LongCount", "Min", "Max", "Sum", "Avg", "Prepare",
+        "FirstProjection", "SingleProjection",
+        "WriteCsv", "WriteJson",
     ];
 
     private static readonly string[] AsyncTerminals =
@@ -104,6 +106,7 @@ public class EagerTerminalGuardTests
         "ToAsyncEnumerable", "ToHashSetAsync", "ToDictionaryAsync",
         "FirstAsync", "FirstOrDefaultAsync", "SingleAsync", "SingleOrDefaultAsync",
         "LastAsync", "LastOrDefaultAsync", "AnyAsync", "CountAsync", "LongCountAsync", "MinAsync",
+        "WriteCsvAsync", "WriteJsonAsync",
     ];
 
     private static void InvokeSync(string terminal, EntityBuilder<TgParent> builder)
@@ -127,6 +130,10 @@ public class EagerTerminalGuardTests
             case "Sum": builder.Sum(p => p.Id); break;
             case "Avg": builder.Avg(p => p.Id); break;
             case "Prepare": builder.Prepare(cancellationToken: CancellationToken.None); break;
+            case "FirstProjection": builder.FirstOrFirstOrDefaultCommand(p => p.Id); break;
+            case "SingleProjection": builder.SingleOrSingleOrDefaultCommand(p => p.Id); break;
+            case "WriteCsv": builder.WriteCsv(new MemoryStream()); break;
+            case "WriteJson": builder.WriteJson(new MemoryStream()); break;
             default: throw new ArgumentOutOfRangeException(nameof(terminal), terminal, null);
         }
     }
@@ -149,9 +156,17 @@ public class EagerTerminalGuardTests
             "CountAsync" => builder.CountAsync(token),
             "LongCountAsync" => builder.LongCountAsync(token),
             "MinAsync" => builder.MinAsync(p => p.Id, token),
+            "WriteCsvAsync" => WriteCsvAsync(builder, token),
+            "WriteJsonAsync" => WriteJsonAsync(builder, token),
             _ => throw new ArgumentOutOfRangeException(nameof(terminal), terminal, null),
         };
     }
+
+    private static async Task WriteCsvAsync(EntityBuilder<TgParent> builder, CancellationToken token)
+        => await builder.WriteCsvAsync(new MemoryStream(), cancellationToken: token);
+
+    private static async Task WriteJsonAsync(EntityBuilder<TgParent> builder, CancellationToken token)
+        => await builder.WriteJsonAsync(new MemoryStream(), token);
 
     private static async Task DrainAsync(EntityBuilder<TgParent> builder, CancellationToken token)
     {
@@ -349,5 +364,53 @@ public class EagerTerminalGuardTests
         act.Should().Throw<NotSupportedException>();
 
         QueryPlanStore.Values.Should().BeEmpty("a rejected terminal must not insert a plan-cache entry");
+    }
+
+    /// <summary>
+    /// r=3 n=2 (#209, D:T209-required-tests, gap `rv2/async-zerobuild.md:84-93`): the async writers
+    /// <c>WriteCsvAsync</c>/<c>WriteJsonAsync</c> are guarded terminals. With an unsupported load they
+    /// throw before any command is built or a plan is cached, and — unlike the scalar terminals — leave
+    /// the destination stream at zero bytes, the strongest direct observation of "no write started".
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Shapes))]
+    public async Task AsyncWriters_RejectUnsupportedLoad_WithoutBuildingACommand(Shape shape)
+    {
+        using var context = CreateContext();
+        var builder = WithShape(context.From<TgParent>(), shape);
+
+        var csv = new MemoryStream();
+        Func<Task> writeCsv = async () => await builder.WriteCsvAsync(csv);
+        await writeCsv.Should().ThrowAsync<NotSupportedException>().WithMessage(ExpectedMessage(shape));
+        csv.Length.Should().Be(0, "the terminal guard rejects before the CSV writer emits any byte");
+        QueryPlanStore.Values.Should().BeEmpty("a rejected async CSV writer must not insert a plan-cache entry");
+
+        var json = new MemoryStream();
+        Func<Task> writeJson = async () => await builder.WriteJsonAsync(json);
+        await writeJson.Should().ThrowAsync<NotSupportedException>().WithMessage(ExpectedMessage(shape));
+        json.Length.Should().Be(0, "the terminal guard rejects before the JSON writer emits any byte");
+        QueryPlanStore.Values.Should().BeEmpty("a rejected async JSON writer must not insert a plan-cache entry");
+    }
+
+    /// <summary>
+    /// r=3 n=2 (#209, D:T209-required-tests, gap `rv2/changed-branch-map.md` terminal families): the
+    /// projection terminal overloads <c>FirstOrFirstOrDefaultCommand(exp)</c> /
+    /// <c>SingleOrSingleOrDefaultCommand(exp)</c> route through <c>SelectParent</c> and are rejected before
+    /// the projected command is built or cached.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Shapes))]
+    public void ProjectionTerminalOverloads_RejectUnsupportedLoad_WithoutBuildingACommand(Shape shape)
+    {
+        using var context = CreateContext();
+        var builder = WithShape(context.From<TgParent>(), shape);
+
+        Action first = () => builder.FirstOrFirstOrDefaultCommand(p => p.Id);
+        first.Should().Throw<NotSupportedException>().WithMessage(ExpectedMessage(shape));
+
+        Action single = () => builder.SingleOrSingleOrDefaultCommand(p => p.Id);
+        single.Should().Throw<NotSupportedException>().WithMessage(ExpectedMessage(shape));
+
+        QueryPlanStore.Values.Should().BeEmpty("a rejected projection terminal must not insert a plan-cache entry");
     }
 }

@@ -7,11 +7,11 @@
 - cycle_id: N=1
 - plan_revision: r=3
 - baseline ref: branch `1.0.9` @ `58025147`; r=2/r=3 production base `dd5d08fb`
-- phase: D (DO) — r=3 n=1 (r=2 superseded by a wording-only revision; no production mechanism change; unit D209-NL)
-- DO complete: commits `ed9ac341`, `2700a59c`, `d69e6569`, `36956f9f`, `369830fd`, `e9737c85`, `5addd257`, `874b78bd`, `f90ffee3`; evidence: build 0W/0E; suites core 2087 / sqlite 1337 / postgres 855 / sqlserver 772 / mysql 332 / clickhouse 620 all 0 failed; integration all 5 providers executed, 0 failed, 0 "is not available"; coverage line 88.4% / branch 80.5%; benchmark 7/7 cases, no ratio >20%.
-- deferral: the P (collection TASK PLAN) STOPPED at the PLAN→DO boundary was the plan-authoring phase; DO is now dispatched against r=1
+- phase: D (DO) — r=3 n=2 (corrective `D:T209-required-tests`, tests-only; r=3 is a wording-only revision, no production mechanism change; unit D209-NL)
+- DO complete: rv3 boundary @ `5e9f6756` (production base `dd5d08fb`); build 0W/0E; suites core 2270 / sqlite 1532 / postgres 874 / sqlserver 791 / mysql 351 / clickhouse 639 all 0 failed; integration all 5 providers executed, 0 failed, 0 "is not available"; coverage line 88.5% / branch 80.5%; benchmark 7/7 cases, no ratio >20%. rv3 n=2 corrective adds the async-writer / projection / `EagerLoadShape(object?)` evidence: core `~EagerTerminalGuard` 212/0, sqlite `~EagerTerminalGuard` 199/0, `~EagerLoadShape` 5/0 (all exit 0).
+- deferral: the P (collection TASK PLAN) STOPPED at the PLAN→DO boundary was the plan-authoring phase; DO is now dispatched against r=3
 - plan_state: ready
-- evidence contract: rv=1 (manifest artifacts/pdca/D209/rv1/manifest.json)
+- evidence contract: rv=2 (manifest `artifacts/pdca/D209/rv2/manifest.json`, `contract_rv: 2`, rows E209-01..E209-21; rv3 artifacts under `artifacts/pdca/D209/rv3/`)
 - note: the earlier resource blocker (planner "Insufficient account funds") is RESOLVED; this plan was authored by planner with funds restored.
 
 ## Approved PLAN r=1
@@ -520,7 +520,7 @@ The original **D209** stays **active and blocked on D209-NL**; its acceptance cr
 - Call it at the terminal boundary on the **original** builder, before `WithoutJoinIntos`/projection:
   - `EntityBuilder<TEntity>.ToParentCommand()` (`src/nextorm.core/Builders/EntityBuilder.cs:1285`) — covers `ToEnumerable`, `ToAsyncEnumerable`, `HashSet`, `Dictionary`, `First/FirstOrDefault`, `Single/SingleOrDefault`, `Last/LastOrDefault`, `Any/AnyAsync`, `AnyCommand`, `Prepare`, `WriteCsv/WriteJson` extension terminals.
   - `EntityBuilder<TEntity>.SelectParent<TResult>(exp)` (`:1287`) — covers `Count`/`CountAsync`/`LongCount`/`LongCountAsync` and every aggregate (`Min`/`Max`/`Avg`/`Sum` cores at `EntityBuilderExtensions.cs:1408–1434`, entry points `:1002–1336`).
-- **Not** guarded: `WithoutJoinIntos` (`:1267`), `ToCommand` (`:449`), `CreatePairCommand` (`:1424`); `MarkPerParentTopN` (`EntityBuilderExtensions.cs:503`) and `MaterializeList` (`:522/:546`) are not modified. List-like terminals (`ToList`/`ToListAsync`, `ToArray`/`ToArrayAsync`) keep their existing stitching/rejection behavior.
+- **Not** itself guarded: `WithoutJoinIntos` (`:1267`), `ToCommand` (`:449`), `CreatePairCommand` (`:1441`) — although `CreatePairCommand`'s parent-paging branch calls `ToParentCommand()` (`:1520`) and therefore reaches the guard indirectly (same `NotSupportedException`, no false rejection; candidate #4 wording aligned). `MarkPerParentTopN` (`EntityBuilderExtensions.cs:503`) and `MaterializeList` (`:522/:546`) are not modified. List-like terminals (`ToList`/`ToListAsync`, `ToArray`/`ToArrayAsync`) keep their existing stitching/rejection behavior.
 
 ### New variants (added to the preserved contract)
 
@@ -621,3 +621,18 @@ Every other row keeps its rv2 wording unchanged. Both reformulated rows stay **c
 2026-10-11T08:37:08Z | DO | r3 | n1/3 | acceptance benchmark exit 0 in both trees: baseline wall 54 s / 7 cases, candidate wall 58 s / 7 cases (each ≤240 s, 0 failures); cached/prepared ratios Cached_ToList/Prepared -1.77%, Cached_PlanOnly_Param/Prepared -3.73%; no ratio >20% growth → `rv3/perf/{baseline,candidate}/console.log`, `rv3/perf/ratios.md`.
 2026-10-11T08:37:08Z | DO→CHECK | r3 | n1/3 | rv2 manifest refreshed in place: `tree` @ `5e9f6756`, `contract_rv` 2 unchanged; coder rows E209-01..07,09,11,14..20 `met` → rv3 evidence paths; CHECK/collection rows E209-08,10,12,13,21 remain `open` unchanged. `validate_inner_loop.py manifest artifacts/pdca/D209/rv2/manifest.json` exit 0 → `rv3/manifest-validation.log`; `validate_inner_loop.py report artifacts/pdca/D209/rv3/evidence.json` exit 0 → `rv3/evidence-validation.log`. D209-NL re-submitted to CHECK.
 2026-10-11T08:37:08Z | DO | r3 | n1/3 | committed | #209 T209 r3 n1/3 DO→CHECK boundary re-bind + rv2 manifest tree-pin refresh + rv3 evidence/status record; explicit-path commit, CRLF-normalized, not pushed.
+
+## r=3 n=2 corrective DO — `D:T209-required-tests` (tests-only, no product mechanism change)
+
+CHECK r=3 n=1 returned **FAIL** on evidence completeness only (no demonstrated production regression)
+and routed `D:T209-required-tests` at `r3/n2`, no priority reduction. This DO adds tests, persistence
+and status/metadata only; **production is unchanged** (identical to `dd5d08fb` / rv3 `5e9f6756`).
+
+2026-10-11T13:50:00Z | DO | r3 | n2/3 | build `dotnet build nextorm.slnx -c Debug` exit 0, 0 Warning(s) 0 Error(s) | `artifacts/pdca/D209/rv3/build-required-tests.log`
+2026-10-11T13:50:00Z | DO | r3 | n2/3 | async writers: `WriteCsvAsync`/`WriteJsonAsync` added to the core + SQLite terminal matrices and dedicated tests assert `NotSupportedException` before any SQL, 0 plan-cache entries, no child SQL, and a 0-byte destination (strongest available "no command construction" observation; no `CreateCommand` counter exists per `rv2/async-zerobuild.md:9-12`). Closes `rv2/async-zerobuild.md:84-93`. | `tests/nextorm.core.tests/EagerTerminalGuardTests.cs`, `tests/nextorm.sqlite.tests/EagerTerminalGuardTests.cs`
+2026-10-11T13:50:00Z | DO | r3 | n2/3 | projection terminal overloads: `FirstOrFirstOrDefaultCommand(exp)` / `SingleOrSingleOrDefaultCommand(exp)` added to the matrices + dedicated reject-before-SQL/cache tests. | same test files
+2026-10-11T13:50:00Z | DO | r3 | n2/3 | `EagerLoadShape.Equals(object?)` branch closure: direct `object?` equality unit test (true+false) covering L167 2/2 and the L154 null-parts/length-mismatch sub-branches (targeted collect → L154 100% 4/4, L167 100% 2/2). | `tests/nextorm.core.tests/EagerLoadingModeTests.cs`, `artifacts/pdca/D209/rv3/eagerloadshape-branch.md`, `rv3/shape.cobertura.xml`
+2026-10-11T13:50:00Z | DO | r3 | n2/3 | verify inner (`--no-build`, all exit 0): core `~EagerTerminalGuard` 212/0/0, core `~EagerLoadShape` 5/0/0, sqlite `~EagerTerminalGuard` 199/0/0 | `rv3/{core-guard,core-eagerloadshape,sqlite-guard}.log`
+2026-10-11T13:50:00Z | DO | r3 | n2/3 | CHECK dispositions persisted in the rv2 manifest: E209-08 → met, E209-10 → met (rv3 ratio pointer, no >20% investigation), E209-12 → met (D211:503-507/D212:95-99/D213:157-161 + ALL-barrier `collection-1.0.9-todo.md:58`), E209-21 → met (terminal-surface audit); E209-13 remains **open**; `required_rows` E209-01..21 and `contract_rv: 2` unchanged. `validate_inner_loop.py manifest` exit 0. | `rv2/manifest.json`, `rv3/manifest-validation.log`
+2026-10-11T13:50:00Z | DO | r3 | n2/3 | candidate crosswalk (#1,#3,#4,#5,#6,#7,#8,#9,#10,#11 + F5/F8/F11) with dispositions | `rv3/candidate-crosswalk.md`
+2026-10-11T13:50:00Z | DO | r3 | n2/3 | metadata refresh: this header (r=3 n=2, rv3 counts, `rv=2` contract), `artifacts/pdca/D209/status.md`, collection revision vector → T209 r=3; #4 wording aligned (`CreatePairCommand` `:1441`, parent-paging branch reaches `ToParentCommand()` `:1520`). | `docs/specs/status/D209-eager-strategy-1.md:8-15,523`, `docs/specs/status/collection-1.0.9-todo.md:16,42,60`

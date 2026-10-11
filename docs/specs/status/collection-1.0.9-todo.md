@@ -13,7 +13,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 
 | id | issue | title | selected_variant | plan_state |
 |---|---|---|---|---|
-| T209 | #209 | eager-load strategy — explicit strategy + auto-dispatcher | pdca-dotnet | ready (r=1) |
+| T209 | #209 | eager-load strategy — explicit strategy + auto-dispatcher | pdca-dotnet | ready (r=3) |
 | T211 | #211 | eager-load per-parent Take/Skip (absorbs #210) | pdca-dotnet | ready (r=1) |
 | T212 | #212 | eager-load nested — level 2+ LoadWith | pdca-dotnet | ready (r=1) |
 | T213 | #213 | JoinInto — composite keys / M:N single-query | pdca-dotnet | ready (r=1) |
@@ -39,7 +39,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 
 | id | issue | group | order | status | plan_state | selected_variant | cycle_id | plan_revision | PLAN commit | status file |
 |---|---|---|---|---|---|---|---|---|---|---|
-| T209 | #209 | G1 | 1 | pending | ready | pdca-dotnet | N=1 | r=1 | b4051b2b | docs/specs/status/D209-eager-strategy-1.md |
+| T209 | #209 | G1 | 1 | pending | ready | pdca-dotnet | N=1 | r=3 | 5e9f6756 | docs/specs/status/D209-eager-strategy-1.md |
 | T211 | #211 | G1 | 2 | pending | ready | pdca-dotnet | N=1 | r=1 | e18dc143 | docs/specs/status/D211-eager-perparent-topn-1.md |
 | T212 | #212 | G1 | 3 | pending | ready | pdca-dotnet | N=1 | r=1 | 034e5b45 | docs/specs/status/D212-eager-nested-1.md |
 | T213 | #213 | G1 | 4 | pending | ready | pdca-dotnet | N=1 | r=1 | 9e7facff | docs/specs/status/D213-joininto-remainder-1.md |
@@ -57,7 +57,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
   - excluded-gap: T201 (`9bf13403`) — genuine design gap; not autonomously satisfiable.
 - **ALL-barrier: PASSED** — every non-excluded task has a persisted `plan_state=ready`; T201 is a genuine `excluded-gap` (not a `ready` placeholder). Early DO was forbidden until here.
 - **Clustering (`planner`):** no genuine parallelism — `EntityBuilder.cs`, `EntityBuilderEagerLoading.cs`, `ISqlDialect.cs`, `SqlBuilder.cs`, `Builders/Joins/*`, `CommonTestSuite.*.cs` and shared specs/docs are co-written, and T53 must follow the eager-loading public-API work. **One group G1** (degradation to a single lane): T209 → T211 → T212 → T213 → T53. T201 outside the group and the barrier.
-- **PLAN revision vector (schedule binding):** T209 r=1, T211 r=1, T212 r=1, T213 r=1, T53 r=1; evidence contracts rv=1 each.
+- **PLAN revision vector (schedule binding):** T209 r=3, T211 r=1, T212 r=1, T213 r=1, T53 r=1; evidence contracts: T209 rv=2, others rv=1 each.
 
 ## Общая верификация и восстановление
 
