@@ -37,7 +37,20 @@ public partial class QueryCommand
             // neither an override nor a shape, so no eager-load-specific state is touched. Auto is
             // dispatched conservatively; Correlated fails closed before SQL/cache insertion.
             if (cmd.EagerLoadMode is not null || !cmd.EagerLoadShape.IsEmpty)
+            {
                 cmd.ResolvedEagerLoadMode = EagerLoadResolver.Resolve(cmd.EagerLoadMode, cmd._dataContext.EagerLoadMode);
+
+                // A per-parent top-N (a child Limit/Offset/Page) has no split/single execution path in
+                // this release: reject it here, during preparation and before any SQL is built/executed or
+                // a plan is inserted, instead of running the parent statement and then failing in the
+                // child loader. Auto does not reinterpret it as a global child limit. The execution-time
+                // guard in EntityBuilderEagerLoading.BuildChild stays as defence in depth.
+                if (cmd.HasPerParentEagerTopN)
+                    throw new NotSupportedException(
+                        "LoadWith cannot apply Limit/Offset/Page to a child query: a per-parent top-N requires " +
+                        "correlated execution, which is not supported. Remove the child paging or use an explicit " +
+                        "child query per parent.");
+            }
 
             // The shape of captured collections (value lists, dictionary lookups) is folded into the plan
             // key only when the command participates in the plan cache; otherwise a lookup may be rendered

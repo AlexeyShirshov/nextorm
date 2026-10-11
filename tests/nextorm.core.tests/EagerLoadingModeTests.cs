@@ -176,19 +176,19 @@ public class EagerLoadingModeTests
     }
 
     [Fact]
-    public void EmptyParentResult_SplitMode_DoesNotIssueAChildCommand()
+    public void EmptyParentResult_SplitMode_DoesNotExecuteAChildCommand()
     {
         using var context = new InMemoryDataContext();
         context.From<ModeChild>().WithData(Array.Empty<ModeChild>());
         context.From<ModeParent>().WithData(Array.Empty<ModeParent>());
 
-        var childCommands = 0;
+        var childQueryBuilds = 0;
         var parents = context.From<ModeParent>()
             .LoadWith(
                 p => p.Children,
                 c =>
                 {
-                    childCommands++;
+                    childQueryBuilds++;
                     return c.From<ModeChild>();
                 },
                 p => p.Id,
@@ -196,7 +196,9 @@ public class EagerLoadingModeTests
             .ToList();
 
         parents.Should().BeEmpty();
-        childCommands.Should().Be(0, "an empty parent result must not force a second (child) command in split mode");
+        // The child query is built once for the preparation-time per-parent top-N validation, but an
+        // empty parent result must not execute a second (child) command.
+        childQueryBuilds.Should().Be(1, "the child query is built for pre-SQL validation only, never executed for an empty parent result");
     }
 
     [Fact]

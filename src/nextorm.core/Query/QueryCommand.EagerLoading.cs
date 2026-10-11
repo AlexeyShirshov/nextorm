@@ -32,6 +32,15 @@ public partial class QueryCommand
     /// different eager graph cannot reuse an incompatible plan.
     /// </summary>
     internal EagerLoadShape EagerLoadShape;
+
+    /// <summary>
+    /// Whether one of this command's eager-load children requests a per-parent top-N (a child
+    /// <c>Limit</c>/<c>Offset</c>/<c>Page</c>). Recorded when the parent command is built so
+    /// <see cref="QueryPreparer"/> can reject the query during preparation — before any SQL is executed
+    /// or a plan is inserted — instead of running the parent statement and failing in the child loader.
+    /// It is command state, not a plan-key dimension: a rejected command never reaches the cache.
+    /// </summary>
+    internal bool HasPerParentEagerTopN;
 }
 
 /// <summary>

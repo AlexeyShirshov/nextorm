@@ -490,6 +490,32 @@ public static class EntityBuilderExtensions
         => builder.SingleQuery && builder.LoadSpecs is { Count: > 0 };
 
     /// <summary>
+    /// Marks a split parent command whose eager-load graph contains a child <c>Limit</c>/<c>Offset</c>/
+    /// <c>Page</c>. A per-parent top-N has no split/single execution path in this release, so preparation
+    /// of the marked command rejects the query before any SQL runs or a plan is inserted, instead of
+    /// executing the parent statement and then failing in the child loader. Building the child query here
+    /// (through <see cref="IEagerLoadSpec{TEntity}.RequiresPerParentTopN"/>) is what makes the paging
+    /// visible to preparation; the same child builder is reused by execution, so the child-query factory
+    /// is invoked at most once per load. Non-stitching terminals bypass this and never build a child.
+    /// </summary>
+    /// <param name="builder">The split eager-load builder about to execute its parent query.</param>
+    /// <param name="command">The parent command that preparation will validate.</param>
+    private static void MarkPerParentTopN<TEntity>(EntityBuilder<TEntity> builder, QueryCommand command)
+    {
+        if (builder.LoadSpecs is not { Count: > 0 } specs)
+            return;
+
+        for (var i = 0; i < specs.Count; i++)
+        {
+            if (specs[i].RequiresPerParentTopN(builder.DataProvider))
+            {
+                command.HasPerParentEagerTopN = true;
+                return;
+            }
+        }
+    }
+
+    /// <summary>
     /// Materializes the builder for the list terminals: one stitched command for <c>JoinInto</c> /
     /// single-query <c>LoadWith</c>, otherwise the parent query followed by the split child loads.
     /// </summary>
@@ -509,7 +535,9 @@ public static class EntityBuilderExtensions
             return joined;
         }
 
-        var list = builder.ToParentCommand().ToList(@params);
+        var command = builder.ToParentCommand();
+        MarkPerParentTopN(builder, command);
+        var list = command.ToList(@params);
         EntityBuilderEagerLoading.Execute(builder, list);
         return list;
     }
@@ -533,7 +561,9 @@ public static class EntityBuilderExtensions
             return joined;
         }
 
-        var list = await builder.ToParentCommand().ToListAsync(cancellationToken, @params).ConfigureAwait(false);
+        var command = builder.ToParentCommand();
+        MarkPerParentTopN(builder, command);
+        var list = await command.ToListAsync(cancellationToken, @params).ConfigureAwait(false);
         await EntityBuilderEagerLoading.ExecuteAsync(builder, list, cancellationToken).ConfigureAwait(false);
         return list;
     }

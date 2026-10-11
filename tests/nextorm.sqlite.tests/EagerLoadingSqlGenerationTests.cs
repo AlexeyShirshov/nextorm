@@ -462,6 +462,7 @@ public class EagerLoadingSqlGenerationTests
         try
         {
             ctx.PurgeQueryCache();
+            QueryPlanStore.Values.Should().BeEmpty("the purge must leave a clean plan cache for the no-entry assertion");
 
             var act = () => ctx.From<EagerParent>()
                 .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId)
@@ -469,12 +470,120 @@ public class EagerLoadingSqlGenerationTests
                 .ToList();
 
             act.Should().Throw<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
-            // The unsupported per-parent top-N is rejected when the child query is built, so the ordinary
-            // parent query already ran but the incorrectly-limited child query never did: exactly one
-            // statement (the parent), no child statement carrying the global Limit.
-            interceptor.Statements.Should().HaveCount(1);
-            interceptor.Statements.Should().OnlyContain(s => !s.Contains(" limit ", StringComparison.OrdinalIgnoreCase)
-                && !s.Contains(" in (", StringComparison.OrdinalIgnoreCase));
+            // The unsupported per-parent top-N is rejected during preparation, before the parent
+            // statement runs and before a plan is inserted: no SQL executes and no cache entry is left.
+            interceptor.Statements.Should().BeEmpty(
+                "the preparation-time guard must reject the query before the parent statement is executed");
+            QueryPlanStore.Values.Should().BeEmpty("a rejected preparation must not insert a plan-cache entry");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ContextAuto_PerParentTopN_IsRejectedBeforeSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.Auto);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // The conservative Auto rule dispatches ordinary loads to Split, but it must not erase a
+            // per-parent top-N requirement: the query still fails closed during preparation.
+            var act = () => ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
+            interceptor.Statements.Should().BeEmpty("Auto must not reinterpret a per-parent top-N as a global child limit");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ContextCorrelated_PerParentTopN_IsRejectedBeforeSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.Correlated);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var act = () => ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*Correlated*");
+            interceptor.Statements.Should().BeEmpty("the Correlated context default must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task Split_PerParentTopN_Async_IsRejectedBeforeTheChildSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var act = () => ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToListAsync(TestContext.Current.CancellationToken);
+
+            await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
+            interceptor.Statements.Should().BeEmpty("the async path must reject the per-parent top-N before any SQL is executed");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void RejectedPerParentTopN_LeavesNoCacheEntryAndLaterQueriesStillCache()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var act = () => ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+            act.Should().Throw<NotSupportedException>();
+
+            QueryPlanStore.Values.Should().BeEmpty("the rejected preparation must leave no cache entry behind");
+
+            // The sticky cache flag is not mutated and the plan cache still serves ordinary queries.
+            var command = ctx.From<EagerParent>().Select(p => p.Id);
+            command.Cache.Should().BeTrue("a rejected eager preparation must not poison the sticky cache flag");
+            var first = ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, CancellationToken.None);
+            var second = ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, CancellationToken.None);
+            second.Should().BeSameAs(first, "subsequent normal queries must still reuse the plan cache");
         }
         finally
         {

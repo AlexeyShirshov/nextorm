@@ -61,6 +61,17 @@ internal interface IEagerLoadSpec<TEntity>
     /// <param name="childSource">Receives the resolved <c>FROM</c> source of the joined child.</param>
     /// <returns>The join specification consumed by the pair command and the stitcher.</returns>
     IJoinIntoSpec<TEntity> ToJoinIntoSpec(IDataContext context, out FromExpression childSource);
+
+    /// <summary>
+    /// Whether this load's child query requests a per-parent top-N (a child <c>Limit</c>/<c>Offset</c>/
+    /// <c>Page</c>). Such a requirement has no split/single execution path in this release, so the parent
+    /// command records it and the preparation pipeline rejects the whole query before any SQL runs or a
+    /// plan is inserted. Building the child here is what makes the paging visible to preparation; the
+    /// built child is reused by execution, so the child-query factory is invoked at most once per load.
+    /// </summary>
+    /// <param name="context">The data context used to build the child query.</param>
+    /// <returns><see langword="true"/> when the child query pages per parent.</returns>
+    bool RequiresPerParentTopN(IDataContext context);
 }
 
 /// <summary>
@@ -86,6 +97,13 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     private readonly Expression<Func<TChild, TKey>> _childKeyExpression;
     private readonly MethodInfo _containsMethod;
     private readonly MemberInfo? _member;
+
+    // The child query is built at most once per data context: preparation asks for it to detect a
+    // per-parent top-N and execution reuses the same builder (a test-only counter on the user's child
+    // factory must therefore observe a single build). The builder is immutable by convention (its
+    // modifiers return copies), so sharing it across chunks is safe; a different context rebuilds it.
+    // A concurrent race only rebuilds an equivalent builder, so no lock is needed.
+    private EntityBuilder<TChild>? _resolvedChild;
 
     /// <summary>
     /// Initializes the specification, compiling the collection accessor, the two key selectors and the
@@ -151,6 +169,28 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
         ";PK=" + (JoinIntoSpecHelpers.TryResolveMemberName(_parentKeyExpression) ?? _parentKeyExpression.ToString()) +
         ";CK=" + (JoinIntoSpecHelpers.TryResolveMemberName(_childKeyExpression) ?? _childKeyExpression.ToString());
 
+    /// <inheritdoc/>
+    bool IEagerLoadSpec<TEntity>.RequiresPerParentTopN(IDataContext context)
+        => !ResolveChild(context).Paging.IsEmpty;
+
+    /// <summary>
+    /// Builds the child query for <paramref name="context"/> once and returns it on every later call, so
+    /// preparation (which detects a per-parent top-N) and execution share one built child builder.
+    /// </summary>
+    /// <param name="context">The data context the child query is built from.</param>
+    /// <returns>The reusable child builder.</returns>
+    private EntityBuilder<TChild> ResolveChild(IDataContext context)
+    {
+        var child = _resolvedChild;
+        if (child is null || !ReferenceEquals(child.DataProvider, context))
+        {
+            child = _childQuery(context);
+            _resolvedChild = child;
+        }
+
+        return child;
+    }
+
     /// <summary>The parent-side collection selector, retained for the single-query join conversion.</summary>
     internal Expression<Func<TEntity, ICollection<TChild>>> CollectionExpression => _collection;
 
@@ -198,7 +238,7 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var child = _childQuery(context);
+        var child = ResolveChild(context);
 
         var unsupported = child.UnsupportedSingleQueryChildShapes();
         if (unsupported.Count > 0)
@@ -249,7 +289,7 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     /// </summary>
     private EntityBuilder<TChild> BuildChild(IDataContext context, QueryFilterScope parentScope)
     {
-        var child = _childQuery(context).WithFilterScope(parentScope);
+        var child = ResolveChild(context).WithFilterScope(parentScope);
 
         // A child Limit/Offset/Page asks for a per-parent top-N: split loading would apply it globally
         // across all parents, which is silently wrong data. Reject before the child SQL runs (the child
