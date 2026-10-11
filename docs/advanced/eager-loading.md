@@ -52,6 +52,16 @@ The `mode` argument selects how the declared collections are loaded, using the p
 | `EagerLoadMode.Correlated` | `3` | Correlated per-parent loading. Recognized but **not supported** in this release; a query that resolves to it is rejected. |
 | `EagerLoadMode.Auto` | `4` | Automatic selection, resolved once by the conservative rule below. |
 
+The mode belongs to the **whole builder**, not to an individual declaration:
+
+- An explicit mode applies to every collection declared on the builder, including one declared earlier while the mode was still `Default`.
+- A later `LoadWith(..., EagerLoadMode.Default)` (or an omitted argument) inherits the current mode; it never resets it.
+- Repeating the same explicit mode is allowed.
+- Mixing two different explicit modes — `SingleQuery` then `SplitQuery`, or the reverse — throws [`NotSupportedException`](xref:System.NotSupportedException): a single SQL command cannot mix a denormalized join for one collection with a separate chunked statement for another.
+- A value other than the five defined enum members throws [`ArgumentOutOfRangeException`](xref:System.ArgumentOutOfRangeException) with `ParamName == "mode"`, and the original builder is left unchanged.
+
+The mode is resolved when `LoadWith` runs; the load specification is otherwise unchanged, so switching modes never changes the [assignment rule](#assignment-rule) or the [ordering guarantees](#ordering-and-deduplication).
+
 ### Context-wide default
 
 [`DataContextBuilder.UseEagerLoadMode(EagerLoadMode)`](xref:NextORM.Core.DataContextBuilder.UseEagerLoadMode(NextORM.Core.EagerLoadMode)) configures a context-wide default for `LoadWith` collections whose query declares no explicit mode. It defaults to `EagerLoadMode.SplitQuery`, so an unconfigured context keeps the historical behavior:
@@ -89,16 +99,6 @@ The effective strategy is `query override ?? context default`: an explicit `Load
 ### `Correlated` and per-parent top-N
 
 `Correlated` and any child query that requests a per-parent top-N (its own `Limit`/`Offset`/`Page`) have no implemented execution path in this release. Both are recognized and rejected with [`NotSupportedException`](xref:System.NotSupportedException) **during preparation — before any SQL is generated and before a plan entry is inserted**, so a rejected query neither runs the parent statement nor poisons the plan cache. The enum value is reserved for the correlated/per-parent top-N work tracked separately; neither an explicit `Correlated` nor `Auto` may reinterpret such a request as a global child limit or an unrestricted load, and per-parent paging is not silently re-expressed as a global `LIMIT`.
-
-The mode belongs to the **whole builder**, not to an individual declaration:
-
-- An explicit mode applies to every collection declared on the builder, including one declared earlier while the mode was still `Default`.
-- A later `LoadWith(..., EagerLoadMode.Default)` (or an omitted argument) inherits the current mode; it never resets it.
-- Repeating the same explicit mode is allowed.
-- Mixing two different explicit modes — `SingleQuery` then `SplitQuery`, or the reverse — throws [`NotSupportedException`](xref:System.NotSupportedException): a single SQL command cannot mix a denormalized join for one collection with a separate chunked statement for another.
-- A value other than the five defined enum members throws [`ArgumentOutOfRangeException`](xref:System.ArgumentOutOfRangeException) with `ParamName == "mode"`, and the original builder is left unchanged.
-
-The mode is resolved when `LoadWith` runs; the load specification is otherwise unchanged, so switching modes never changes the [assignment rule](#assignment-rule) or the [ordering guarantees](#ordering-and-deduplication).
 
 ## Split-query semantics
 
