@@ -38,6 +38,20 @@ internal interface IEagerLoadSpec<TEntity>
     MemberInfo? CollectionMember { get; }
 
     /// <summary>
+    /// The eager-load strategy requested for this specification (the <c>LoadWith</c> argument, so
+    /// <see cref="EagerLoadMode.Default"/> means "inherit"). Retained for validation/preparation; the
+    /// executable strategy is resolved centrally, not per specification.
+    /// </summary>
+    EagerLoadMode RequestedMode { get; }
+
+    /// <summary>
+    /// Canonical structural fingerprint of this load (parent/child types, collection member and key
+    /// identity), folded into the command's plan-key shape so two parent commands with different eager
+    /// graphs cannot share a cached plan. Reference identity is never used.
+    /// </summary>
+    string ShapeKey { get; }
+
+    /// <summary>
     /// Builds the single-query (<c>EagerLoadMode.SingleQuery</c>) equivalent of this split-query specification: an
     /// explicit-key <c>JoinInto</c> declaration whose <c>ON</c> predicate equates the two key selectors
     /// and folds in the child query's own <c>Where</c> condition, re-rooted onto the child join
@@ -81,17 +95,20 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     /// <param name="childQuery">The factory that builds the child query from a data context.</param>
     /// <param name="parentKey">The parent-side key selector.</param>
     /// <param name="childKey">The child-side key selector.</param>
+    /// <param name="requestedMode">The <c>LoadWith</c> strategy argument; <see cref="EagerLoadMode.Default"/> means inherit.</param>
     public EagerLoadSpec(
         Expression<Func<TEntity, ICollection<TChild>>> collection,
         Func<IDataContext, EntityBuilder<TChild>> childQuery,
         Expression<Func<TEntity, TKey>> parentKey,
-        Expression<Func<TChild, TKey>> childKey)
+        Expression<Func<TChild, TKey>> childKey,
+        EagerLoadMode requestedMode = EagerLoadMode.Default)
     {
         ArgumentNullException.ThrowIfNull(collection);
         ArgumentNullException.ThrowIfNull(childQuery);
         ArgumentNullException.ThrowIfNull(parentKey);
         ArgumentNullException.ThrowIfNull(childKey);
 
+        RequestedMode = requestedMode;
         _collectionGetter = collection.Compile();
         _childQuery = childQuery;
         _parentKey = parentKey.Compile();
@@ -121,6 +138,18 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
 
     /// <inheritdoc/>
     public MemberInfo? CollectionMember => _member;
+
+    /// <inheritdoc/>
+    public EagerLoadMode RequestedMode { get; }
+
+    /// <inheritdoc/>
+    public string ShapeKey =>
+        "P=" + typeof(TEntity).FullName +
+        ";C=" + typeof(TChild).FullName +
+        ";M=" + (_member is null ? "-" : _member.DeclaringType?.FullName + "." + _member.Name) +
+        ";K=" + typeof(TKey).FullName +
+        ";PK=" + (JoinIntoSpecHelpers.TryResolveMemberName(_parentKeyExpression) ?? _parentKeyExpression.ToString()) +
+        ";CK=" + (JoinIntoSpecHelpers.TryResolveMemberName(_childKeyExpression) ?? _childKeyExpression.ToString());
 
     /// <summary>The parent-side collection selector, retained for the single-query join conversion.</summary>
     internal Expression<Func<TEntity, ICollection<TChild>>> CollectionExpression => _collection;
@@ -219,7 +248,21 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     /// leak its selective scope to a sibling.
     /// </summary>
     private EntityBuilder<TChild> BuildChild(IDataContext context, QueryFilterScope parentScope)
-        => _childQuery(context).WithFilterScope(parentScope);
+    {
+        var child = _childQuery(context).WithFilterScope(parentScope);
+
+        // A child Limit/Offset/Page asks for a per-parent top-N: split loading would apply it globally
+        // across all parents, which is silently wrong data. Reject before the child SQL runs (the child
+        // command is not prepared or cached) until correlated execution is implemented. Auto does not
+        // erase the requirement.
+        if (!child.Paging.IsEmpty)
+            throw new NotSupportedException(
+                "LoadWith cannot apply Limit/Offset/Page to a child query: a per-parent top-N requires " +
+                "correlated execution, which is not supported. Remove the child paging or use an explicit " +
+                "child query per parent.");
+
+        return child;
+    }
 
     /// <summary>
     /// Runs one child query per key chunk and returns the children grouped by their key, keeping the

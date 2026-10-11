@@ -110,11 +110,36 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// </summary>
     internal EagerLoadMode Mode => _eagerLoadMode;
     /// <summary>
-    /// Whether <see cref="LoadWith{TChild, TKey}"/> switched the builder to single-query eager loading, so
-    /// the list terminals execute one denormalized command for the declared collections instead of the
-    /// default split child queries.
+    /// The executable eager-load strategy for this builder: the explicit <c>LoadWith</c> choice when one
+    /// was made, otherwise the context default (with <see cref="EagerLoadMode.Auto"/> conservatively
+    /// dispatched to <see cref="EagerLoadMode.SplitQuery"/>). A builder that declares no eager loads
+    /// resolves to <see cref="EagerLoadMode.Default"/> (no strategy). The <c>JoinInto</c> operation is always
+    /// the fixed Single path and is independent of the context default. Throws
+    /// <see cref="NotSupportedException"/> when the resolved strategy is <see cref="EagerLoadMode.Correlated"/>
+    /// so an unsupported request fails before any command is built.
     /// </summary>
-    internal bool SingleQuery => _eagerLoadMode == EagerLoadMode.SingleQuery;
+    internal EagerLoadMode ResolvedEagerLoadMode
+    {
+        get
+        {
+            if (_joinIntos is { Count: > 0 })
+                return EagerLoadMode.SingleQuery;
+
+            if (_loadSpecs is { Count: > 0 } || _eagerLoadMode != EagerLoadMode.Default)
+            {
+                EagerLoadMode? requested = _eagerLoadMode != EagerLoadMode.Default ? _eagerLoadMode : null;
+                return EagerLoadResolver.Resolve(requested, _dataProvider.EagerLoadMode);
+            }
+
+            return EagerLoadMode.Default;
+        }
+    }
+    /// <summary>
+    /// Whether <see cref="LoadWith{TChild, TKey}"/> switched the builder to single-query eager loading
+    /// (explicitly or through the context default), so the list terminals execute one denormalized command
+    /// for the declared collections instead of the default split child queries.
+    /// </summary>
+    internal bool SingleQuery => ResolvedEagerLoadMode == EagerLoadMode.SingleQuery;
     /// <summary>
     /// Whether <see cref="IgnoreFilters()"/> (the all-or-nothing form) was applied to this builder. Used
     /// by single-query eager loading to decide the child side's global filters independently of the
@@ -347,6 +372,32 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.TableSample = _tablesample;
         cmd.Temporal = _temporal;
         cmd.RowLock = _rowLock;
+
+        // Eager-load strategy and graph identity: only commands that actually carry eager loads record
+        // them, so a command with no eager loads is never touched. The requested override (or null to
+        // inherit the context default) is resolved centrally during preparation; the shape keys the plan
+        // so a different eager graph cannot reuse an incompatible parent plan.
+        if (_loadSpecs is { Count: > 0 } || _eagerLoadMode != EagerLoadMode.Default)
+        {
+            cmd.EagerLoadMode = _eagerLoadMode != EagerLoadMode.Default ? _eagerLoadMode : null;
+            cmd.EagerLoadShape = BuildEagerLoadShape();
+        }
+    }
+
+    /// <summary>
+    /// Builds the ordered structural shape of this builder's eager-load specifications, or the empty shape
+    /// when there are none. Used to key the plan cache by the eager graph.
+    /// </summary>
+    private EagerLoadShape BuildEagerLoadShape()
+    {
+        if (_loadSpecs is not { Count: > 0 })
+            return EagerLoadShape.Empty;
+
+        var parts = new string[_loadSpecs.Count];
+        for (var i = 0; i < _loadSpecs.Count; i++)
+            parts[i] = _loadSpecs[i].ShapeKey;
+
+        return new EagerLoadShape(parts);
     }
     /// <summary>
     /// Projects each row with <paramref name="selector"/> and exposes the result as a derived table,
@@ -576,7 +627,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         EnsureValidEagerLoadMode(mode);
         var resolvedMode = ResolveEagerLoadMode(mode);
 
-        var spec = new EagerLoadSpec<TEntity, TChild, TKey>(collection, childQuery, parentKey, childKey);
+        var spec = new EagerLoadSpec<TEntity, TChild, TKey>(collection, childQuery, parentKey, childKey, mode);
 
         if (spec.CollectionMember is { } member && _loadSpecs is not null)
         {
@@ -607,11 +658,13 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             case EagerLoadMode.Default:
             case EagerLoadMode.SplitQuery:
             case EagerLoadMode.SingleQuery:
+            case EagerLoadMode.Correlated:
+            case EagerLoadMode.Auto:
                 return;
             default:
                 throw new ArgumentOutOfRangeException(
                     nameof(mode), mode,
-                    $"'{mode}' is not a defined EagerLoadMode value; use Default, SplitQuery or SingleQuery.");
+                    $"'{mode}' is not a defined EagerLoadMode value; use Default, SplitQuery, SingleQuery, Correlated or Auto.");
         }
     }
     /// <summary>
@@ -1332,7 +1385,16 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// builder pages parents on a SQL provider the parent subquery carries the limit/offset so the join
     /// wraps around it; the in-memory provider pages the deduplicated parents instead.
     /// </summary>
-    internal QueryCommand CreateJoinIntoPairCommand() => CreatePairCommand(_joinIntos!, _joins);
+    internal QueryCommand CreateJoinIntoPairCommand()
+    {
+        var cmd = CreatePairCommand(_joinIntos!, _joins);
+        // JoinInto is the fixed Single operation: it never inherits the context default, so a Correlated
+        // or Auto context default cannot convert it into another execution model. The join identity is
+        // already part of the join plan key, so no separate eager shape is needed here.
+        cmd.EagerLoadMode = EagerLoadMode.SingleQuery;
+        cmd.EagerLoadShape = BuildEagerLoadShape();
+        return cmd;
+    }
 
     /// <summary>
     /// Builds the single denormalized command for the given stitching specifications and joins. Shared by

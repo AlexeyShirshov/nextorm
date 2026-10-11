@@ -33,6 +33,11 @@ public class EagerLoadingModeTests
     private static InMemoryDataContext CreateContext()
     {
         var context = new InMemoryDataContext();
+        // Declare the relationships once, before any data seeding, so JoinInto can resolve the
+        // collection navigation from metadata (LoadWith uses its explicit key selectors regardless).
+        context.From<ModeParent>(b => b
+            .HasMany(p => p.Children, c => c.ParentId)
+            .HasMany(p => p.Notes, n => n.ParentId));
         context.From<ModeChild>().WithData(new[]
         {
             new ModeChild { Id = 10, ParentId = 1 },
@@ -424,5 +429,268 @@ public class EagerLoadingModeTests
         inherited.ReturnType.GetGenericTypeDefinition().Should().Be(
             typeof(EntityBuilder<>),
             "the inherited LoadWith returns an EntityBuilder<TEntity> copy");
+    }
+
+    // --- D209 (#209): context default, conservative Auto dispatch, fail-closed Correlated/top-N, and
+    // --- structural plan identity (V01-V13, V15). Context-wide default wiring is exercised in the SQLite
+    // --- suite where a real builder/configurable context is available.
+
+    [Theory]
+    [InlineData(EagerLoadMode.SplitQuery)]
+    [InlineData(EagerLoadMode.SingleQuery)]
+    [InlineData(EagerLoadMode.Correlated)]
+    [InlineData(EagerLoadMode.Auto)]
+    public void UseEagerLoadMode_AcceptsEveryConcreteStrategy(EagerLoadMode mode)
+    {
+        var builder = new DataContextBuilder();
+
+        builder.UseEagerLoadMode(mode);
+
+        builder.EagerLoadMode.Should().Be(mode);
+    }
+
+    [Fact]
+    public void UseEagerLoadMode_RejectsDefaultAndUndefinedValuesWithoutChangingTheDefault()
+    {
+        var builder = new DataContextBuilder();
+
+        Action @default = () => builder.UseEagerLoadMode(EagerLoadMode.Default);
+        @default.Should().Throw<ArgumentOutOfRangeException>().Which.ParamName.Should().Be("mode");
+
+        Action undefined = () => builder.UseEagerLoadMode((EagerLoadMode)999);
+        undefined.Should().Throw<ArgumentOutOfRangeException>().Which.ParamName.Should().Be("mode");
+
+        builder.EagerLoadMode.Should().Be(
+            EagerLoadMode.SplitQuery,
+            "a rejected builder call must not change the context default");
+    }
+
+    [Fact]
+    public void InMemoryContext_DefaultEagerLoadMode_IsSplitQuery()
+    {
+        using var context = new InMemoryDataContext();
+        IContextEnvironment environment = context;
+
+        environment.EagerLoadMode.Should().Be(EagerLoadMode.SplitQuery, "the legacy default stays split");    }
+
+    [Fact]
+    public void Auto_ResolvesToSplitAndProducesTheSameResult()
+    {
+        using var context = CreateContext();
+
+        var builder = context.From<ModeParent>()
+            .LoadWith(p => p.Children, c => c.From<ModeChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.Auto);
+
+        builder.SingleQuery.Should().BeFalse("the conservative Auto rule selects the split path");
+
+        var parents = builder.OrderBy(p => p.Id).ToList();
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+        parents[1].Children.Select(c => c.Id).Should().Equal(12);
+    }
+
+    [Fact]
+    public void ExplicitCorrelated_FailsBeforeAnyExecution()
+    {
+        using var context = CreateContext();
+
+        var builder = context.From<ModeParent>()
+            .LoadWith(p => p.Children, c => c.From<ModeChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.Correlated);
+
+        Action act = () => builder.OrderBy(p => p.Id).ToList();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*Correlated*");
+    }
+
+    [Fact]
+    public void PerParentTopN_IsRejectedInsteadOfApplyingAGlobalChildLimit()
+    {
+        using var context = CreateContext();
+
+        var builder = context.From<ModeParent>()
+            .LoadWith(p => p.Children, c => c.From<ModeChild>().Limit(1), p => p.Id, c => c.ParentId);
+
+        Action act = () => builder.OrderBy(p => p.Id).ToList();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*Limit/Offset/Page*");
+    }
+
+    private QueryCommand<ModeParent> PlannedCommand(
+        InMemoryDataContext context,
+        EagerLoadMode mode,
+        bool children)
+    {
+        var builder = children
+            ? context.From<ModeParent>().LoadWith(p => p.Children, c => c.From<ModeChild>(), p => p.Id, c => c.ParentId, mode)
+            : context.From<ModeParent>().LoadWith(p => p.Notes, c => c.From<ModeNote>(), p => p.Id, n => n.ParentId, mode);
+        var cmd = builder.ToCommand();
+        cmd.PrepareCommand(TestContext.Current.CancellationToken);
+        return cmd;
+    }
+
+    [Fact]
+    public void AutoAndExplicitSplit_WithTheSameResolvedGraph_ReuseOnePlanKey()
+    {
+        using var context = CreateContext();
+
+        var auto = PlannedCommand(context, EagerLoadMode.Auto, children: true);
+        var split = PlannedCommand(context, EagerLoadMode.SplitQuery, children: true);
+
+        var comparer = auto.GetQueryPlanEqualityComparer();
+        comparer.Equals(auto, split).Should().BeTrue("Auto and explicit Split resolve to the same executable shape");
+        comparer.GetHashCode(auto).Should().Be(comparer.GetHashCode(split));
+    }
+
+    [Fact]
+    public void DifferentEagerGraph_OrStrategy_IsolatesPlanKeys()
+    {
+        using var context = CreateContext();
+
+        var childrenSplit = PlannedCommand(context, EagerLoadMode.SplitQuery, children: true);
+        var notesSplit = PlannedCommand(context, EagerLoadMode.SplitQuery, children: false);
+        var childrenSingle = PlannedCommand(context, EagerLoadMode.SingleQuery, children: true);
+
+        var comparer = childrenSplit.GetQueryPlanEqualityComparer();
+        comparer.Equals(childrenSplit, notesSplit).Should().BeFalse("a different load path/collection must not share a plan");
+        comparer.Equals(childrenSplit, childrenSingle).Should().BeFalse("a different resolved strategy must not share a plan");
+        comparer.Equals(childrenSplit, PlannedCommand(context, EagerLoadMode.SplitQuery, children: true))
+            .Should().BeTrue("a repeated equivalent graph reuses the plan");
+    }
+
+    [Fact]
+    public void DisabledQueryCache_StillResolvesAndExecutesEagerLoading()
+    {
+        using var context = CreateContext();
+        context.QueryCacheEnabled = false;
+
+        var parents = context.From<ModeParent>()
+            .LoadWith(p => p.Children, c => c.From<ModeChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.Auto)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Should().HaveCount(2);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+        context.From<ModeParent>().Select(p => p.Id).Cache.Should().BeTrue(
+            "a disabled cache resolves eagerly without mutating the sticky Cache flag");
+    }
+
+    // --- D209.5: the single central resolver shared by preparation, execution and plan-key construction
+    // --- (V02/V03/V05/V10). Context-default wiring end to end is exercised in the SQLite suite.
+
+    [Theory]
+    [InlineData(EagerLoadMode.SplitQuery)]
+    [InlineData(EagerLoadMode.SingleQuery)]
+    public void Resolver_AbsentOverride_InheritsTheContextDefault(EagerLoadMode contextDefault)
+        => EagerLoadResolver.Resolve(null, contextDefault).Should().Be(contextDefault);
+
+    [Fact]
+    public void Resolver_ContextAuto_DispatchesToSplit()
+        => EagerLoadResolver.Resolve(null, EagerLoadMode.Auto).Should().Be(EagerLoadMode.SplitQuery);
+
+    [Fact]
+    public void Resolver_QueryOverride_WinsOverTheContextDefault()
+    {
+        EagerLoadResolver.Resolve(EagerLoadMode.SplitQuery, EagerLoadMode.SingleQuery).Should().Be(EagerLoadMode.SplitQuery);
+        EagerLoadResolver.Resolve(EagerLoadMode.SingleQuery, EagerLoadMode.SplitQuery).Should().Be(EagerLoadMode.SingleQuery);
+        EagerLoadResolver.Resolve(EagerLoadMode.Auto, EagerLoadMode.SingleQuery).Should().Be(
+            EagerLoadMode.SplitQuery,
+            "Auto is dispatched by the conservative E1 rule, independent of the context default");
+    }
+
+    [Fact]
+    public void Resolver_ExplicitAndContextCorrelated_FailClosed()
+    {
+        Action requested = () => EagerLoadResolver.Resolve(EagerLoadMode.Correlated, EagerLoadMode.SplitQuery);
+        requested.Should().Throw<NotSupportedException>().WithMessage("*Correlated*");
+
+        Action context = () => EagerLoadResolver.Resolve(null, EagerLoadMode.Correlated);
+        context.Should().Throw<NotSupportedException>().WithMessage("*Correlated*");
+    }
+
+    [Fact]
+    public void Resolver_UndefinedValue_IsRejected()
+    {
+        Action act = () => EagerLoadResolver.Resolve((EagerLoadMode)999, EagerLoadMode.SplitQuery);
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
+    public void DifferentLoadOrder_ProducesDistinctShapesWhileTheModesStillMerge()
+    {
+        using var context = CreateContext();
+
+        var childrenFirst = context.From<ModeParent>()
+            .LoadWith(p => p.Children, c => c.From<ModeChild>(), p => p.Id, c => c.ParentId)
+            .LoadWith(p => p.Notes, c => c.From<ModeNote>(), p => p.Id, n => n.ParentId)
+            .ToCommand();
+        var notesFirst = context.From<ModeParent>()
+            .LoadWith(p => p.Notes, c => c.From<ModeNote>(), p => p.Id, n => n.ParentId)
+            .LoadWith(p => p.Children, c => c.From<ModeChild>(), p => p.Id, c => c.ParentId)
+            .ToCommand();
+
+        var comparer = childrenFirst.GetQueryPlanEqualityComparer();
+        comparer.Equals(childrenFirst, notesFirst).Should().BeFalse("a different eager-load order is a different shape");
+        comparer.Equals(childrenFirst, childrenFirst.CloneForCache()).Should().BeTrue("the same graph must round-trip through the cache clone");
+        comparer.GetHashCode(childrenFirst).Should().Be(comparer.GetHashCode(childrenFirst.CloneForCache()));
+    }
+
+    [Fact]
+    public void RejectedCorrelatedPreparation_DoesNotMutateTheStickyCacheFlag()
+    {
+        using var context = CreateContext();
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        var command = context.From<ModeParent>()
+            .LoadWith(p => p.Children, c => c.From<ModeChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.Correlated)
+            .ToCommand();
+        command.Cache.Should().BeTrue();
+
+        Action act = () => command.PrepareCommand(cancellationToken);
+        act.Should().Throw<NotSupportedException>().WithMessage("*Correlated*");
+
+        command.Cache.Should().BeTrue("a rejected strategy must not clear the sticky cache flag");
+        context.From<ModeParent>().Select(p => p.Id).Cache.Should().BeTrue(
+            "a rejected preparation must not poison subsequent scalar queries on the context");
+    }
+
+    [Fact]
+    public void UnCachedPreparation_KeepsTheStickyCacheFlagEnabled()
+    {
+        using var context = CreateContext();
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        var command = context.From<ModeParent>()
+            .LoadWith(p => p.Children, c => c.From<ModeChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.Auto)
+            .ToCommand();
+
+        var prepared = context.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: false, cancellationToken);
+
+        prepared.Should().NotBeNull();
+        command.Cache.Should().BeTrue("per-call uncached preparation must use storeInCache=false, never the sticky flag");
+        context.From<ModeParent>().Select(p => p.Id).Cache.Should().BeTrue();
+    }
+
+    [Fact]
+    public void JoinInto_ResolvedStrategy_IsAlwaysTheFixedSinglePath()
+    {
+        using var context = CreateContext();
+
+        var builder = context.From<ModeParent>()
+            .JoinInto(context.From<ModeChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
+
+        builder.ResolvedEagerLoadMode.Should().Be(
+            EagerLoadMode.SingleQuery,
+            "JoinInto is the fixed Single operation and must not inherit the context default");
+
+        var cmd = builder.CreateJoinIntoPairCommand();
+        cmd.EagerLoadMode.Should().Be(EagerLoadMode.SingleQuery);
+        cmd.PrepareCommand(TestContext.Current.CancellationToken);
+        cmd.ResolvedEagerLoadMode.Should().Be(EagerLoadMode.SingleQuery);
+
+        var parents = builder.OrderBy(p => p.Id).ToList();
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+        parents[1].Children.Select(c => c.Id).Should().Equal(12);
     }
 }

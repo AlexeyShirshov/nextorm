@@ -257,4 +257,100 @@ public class EagerLoadingTests
         act.Should().Throw<NotSupportedException>().WithMessage("*not settable*");
         filled.Children.Should().ContainSingle().Which.Should().BeSameAs(sentinel);
     }
+
+    // --- #209: value/string key linkage, the no-eager-load command contract, and the single-query
+    // --- child-shape guard (V06/V08/V09).
+
+    [Fact]
+    public void LoadWith_StringKeys_LinkByValueAndSkipNullKeys()
+    {
+        var context = new InMemoryDataContext();
+        // Distinct string instances with equal values prove the linkage is value-based, not reference-based.
+        var keyA = new string("a".ToCharArray());
+        var keyB = new string("b".ToCharArray());
+        context.From<NullableKeyChild>().WithData(new[]
+        {
+            new NullableKeyChild { Id = 1, Key = new string("a".ToCharArray()) },
+            new NullableKeyChild { Id = 2, Key = null! },
+            new NullableKeyChild { Id = 3, Key = new string("b".ToCharArray()) },
+        });
+        context.From<NullableKeyParent>().WithData(new[]
+        {
+            new NullableKeyParent { Id = 1, Key = keyA },
+            new NullableKeyParent { Id = 2, Key = keyB },
+        });
+
+        var parents = context.From<NullableKeyParent>()
+            .LoadWith(p => p.Children, c => c.From<NullableKeyChild>(), p => p.Key, c => c.Key)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Should().HaveCount(2);
+        parents[0].Children.Select(c => c.Id).Should().Equal(1);
+        parents[1].Children.Select(c => c.Id).Should().Equal(3);
+        parents.SelectMany(p => p.Children).Should().NotContain(c => c.Id == 2, "a null child key never matches a parent key");
+    }
+
+    [Fact]
+    public void NoEagerLoadDeclaration_CarriesNoStrategyOrShape()
+    {
+        var context = CreateContext();
+
+        var cmd = context.From<ParentEntity>().ToCommand();
+
+        cmd.EagerLoadMode.Should().BeNull("a command with no eager loads has no strategy override");
+        cmd.ResolvedEagerLoadMode.Should().Be(EagerLoadMode.Default, "no eager loads means no resolved strategy");
+        cmd.EagerLoadShape.IsEmpty.Should().BeTrue("no eager loads means the empty shape");
+    }
+
+    [Fact]
+    public void OneLoad_CarriesANonEmptyStrategyAndShape()
+    {
+        var context = CreateContext();
+
+        var cmd = context.From<ParentEntity>()
+            .LoadWith(p => p.Children, c => c.From<ChildEntity>(), p => p.Id, c => c.ParentId)
+            .ToCommand();
+
+        cmd.EagerLoadMode.Should().BeNull("an omitted mode inherits the context default, so the override stays null");
+        cmd.EagerLoadShape.IsEmpty.Should().BeFalse("a declared load populates the structural shape");
+    }
+
+    [Fact]
+    public void Split_EmptyCollectionAndMissingOptionalChild_AreMaterializedAsEmpty()
+    {
+        var context = new InMemoryDataContext();
+        // Child 13 belongs to parent 99 (an orphan): no parent matches it.
+        context.From<ChildEntity>().WithData(new[]
+        {
+            new ChildEntity { Id = 10, ParentId = 1 },
+            new ChildEntity { Id = 13, ParentId = 99 },
+        });
+        context.From<ParentEntity>().WithData(new[]
+        {
+            new ParentEntity { Id = 1 },
+            new ParentEntity { Id = 2 },
+        });
+
+        var parents = context.From<ParentEntity>()
+            .LoadWith(p => p.Children, c => c.From<ChildEntity>(), p => p.Id, c => c.ParentId)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents[0].Children.Select(c => c.Id).Should().Equal(10);
+        parents[1].Children.Should().BeEmpty("a parent with no matching child keeps an empty collection");
+        parents.SelectMany(p => p.Children).Should().NotContain(c => c.Id == 13, "an orphan child is never attached to an unrelated parent");
+    }
+
+    [Fact]
+    public void SingleQuery_UnsupportedChildModifier_IsRejectedAsAGuard()
+    {
+        var context = CreateContext();
+
+        var act = () => context.From<ParentEntity>()
+            .LoadWith(p => p.Children, c => c.From<ChildEntity>().OrderBy(x => x.Id), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*OrderBy*");
+    }
 }

@@ -17,6 +17,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private bool _disposed;
     private readonly ContextEnvironment _environment;
     private readonly Version? _serverVersion;
+    private readonly NextORM.Core.EagerLoadMode _eagerLoadMode;
     private readonly QueryCache _queryCache;
     private readonly DbConnectionManager _connectionManager;
     private readonly QueryExecutor _executor;
@@ -59,6 +60,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             optionsBuilder.CommandTimeout);
 
         QueryCacheEnabled = optionsBuilder.QueryCacheEnabled;
+
+        // The context-wide default eager-load strategy is snapshotted here; it never mutates a
+        // static/global value, so two contexts can carry different defaults concurrently.
+        _eagerLoadMode = optionsBuilder.EagerLoadMode;
 
         _queryCache = new QueryCache(QueryPlanStore.Clear);
 
@@ -191,6 +196,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <c>WithCommandTimeout</c>.
     /// </summary>
     public int? CommandTimeout => _environment.CommandTimeout;
+    /// <summary>
+    /// The context-wide default eager-load strategy applied to <c>LoadWith</c> collections when a query
+    /// declares no explicit mode (set with <c>DataContextBuilder.UseEagerLoadMode</c>). Defaults to
+    /// <see cref="EagerLoadMode.SplitQuery"/>. A query-level <c>LoadWith(..., mode)</c> overrides it.
+    /// </summary>
+    public EagerLoadMode EagerLoadMode => _eagerLoadMode;
     /// <summary>User-owned bag of arbitrary state attached to this context.</summary>
     public Dictionary<string, object> Properties => _environment.Properties;
     /// <summary>

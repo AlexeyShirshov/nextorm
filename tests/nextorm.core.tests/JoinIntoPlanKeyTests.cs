@@ -51,6 +51,25 @@ public class JoinIntoPlanKeyTests
     }
 
     [Fact]
+    public void JoinIntoPairCommand_IsFixedSingleQuery_AndCarriesNoEagerShape()
+    {
+        using var ctx = CreateContext();
+
+        var cmd = ctx.From<PlanParent>()
+            .JoinInto(ctx.From<PlanChild>(), (p, c) => p.Id == c.ParentId, p => p.As)
+            .CreateJoinIntoPairCommand();
+
+        cmd.EagerLoadMode.Should().Be(
+            EagerLoadMode.SingleQuery,
+            "JoinInto is the fixed Single operation, independent of the context default");
+        cmd.EagerLoadShape.IsEmpty.Should().BeTrue(
+            "the JoinInto declaration identity already belongs to the join plan key, not the eager shape");
+
+        cmd.PrepareCommand(CancellationToken.None);
+        cmd.ResolvedEagerLoadMode.Should().Be(EagerLoadMode.SingleQuery);
+    }
+
+    [Fact]
     public void RepeatedDeclaration_ShouldHitTheSamePlan()
     {
         using var ctx = CreateContext();

@@ -204,6 +204,13 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.ResolvedCommandTimeout != y.ResolvedCommandTimeout) return false;
 
+        // The resolved eager-load strategy and the structural eager-load graph change what is executed
+        // and materialized, so two commands that differ in either must not share a cached plan. An
+        // Auto->Split command and an explicit Split command with the same resolved graph compare equal.
+        if (x.ResolvedEagerLoadMode != y.ResolvedEagerLoadMode) return false;
+
+        if (!x.EagerLoadShape.Equals(y.EagerLoadShape)) return false;
+
         if (!IEqualityComparerExtensions.Equals(this, x.ReferencedQueries, y.ReferencedQueries)) return false;
 
         // The outer references are the actual expressions a correlated subquery points at (for
@@ -554,6 +561,10 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             hash.Add(obj.ResolvedKeywordCase);
 
             hash.Add(obj.ResolvedCommandTimeout);
+
+            hash.Add((int)obj.ResolvedEagerLoadMode);
+
+            obj.EagerLoadShape.AddTo(ref hash);
 
             if (obj.WindowsPlanHash != 0)
                 hash.Add(obj.WindowsPlanHash);

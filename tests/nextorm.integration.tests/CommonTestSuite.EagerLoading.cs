@@ -472,6 +472,40 @@ public abstract partial class CommonTestSuite
         parents[0].Children.Select(c => c.Id).Should().Equal([keep + 100], "the child's function filter is folded into the join ON");
         parents[1].Children.Should().BeEmpty("LEFT semantics keep a parent whose only children were filtered out");
     }
+
+    // --- #209: the conservative E1 Auto rule resolves every ordinary load to the split path, so Auto and
+    // --- an explicit SplitQuery must execute and materialize identically on every provider.
+
+    [Fact]
+    public void EagerLoading_Auto_And_ExplicitSplit_ExecuteAndMaterializeIdentically()
+    {
+        var ctx = _sut.DataProvider;
+        var parent = NextEagerId();
+
+        ctx.CreateInsertBuilder<EagerParent>().Values([
+            new EagerParent { Id = parent, Name = "auto" },
+        ]).Insert();
+
+        ctx.CreateInsertBuilder<EagerChild>().Values([
+            new EagerChild { Id = parent + 100, ParentId = parent, Name = "a" },
+            new EagerChild { Id = parent + 101, ParentId = parent, Name = "b" },
+        ]).Insert();
+
+        List<string> Run(EagerLoadMode mode)
+        {
+            var parents = ctx.From<EagerParent>()
+                .Where(p => p.Id == parent)
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().OrderBy(x => x.Id), p => p.Id, c => c.ParentId, mode)
+                .ToList();
+            return parents.Select(p => p.Id + ":" + string.Join("|", p.Children.Select(c => c.Id))).ToList();
+        }
+
+        var auto = Run(EagerLoadMode.Auto);
+        var split = Run(EagerLoadMode.SplitQuery);
+
+        auto.Should().Equal($"{parent}:{parent + 100}|{parent + 101}");
+        auto.Should().Equal(split, "Auto conservatively dispatches to the split path in E1");
+    }
 }
 
 [SqlTable("eager_parent")]

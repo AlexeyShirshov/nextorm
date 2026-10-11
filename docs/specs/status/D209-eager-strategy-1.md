@@ -7,7 +7,8 @@
 - cycle_id: N=1
 - plan_revision: r=1
 - baseline ref: branch `1.0.9` @ `58025147`
-- phase: P (collection TASK PLAN) — PLAN complete; STOPPED at the PLAN→DO boundary (no DO started)
+- phase: D (DO) — DO started by pdca-executor; D209.1 in progress
+- deferral: the P (collection TASK PLAN) STOPPED at the PLAN→DO boundary was the plan-authoring phase; DO is now dispatched against r=1
 - plan_state: ready
 - evidence contract: rv=1 (manifest artifacts/pdca/D209/rv1/manifest.json)
 - note: the earlier resource blocker (planner "Insufficient account funds") is RESOLVED; this plan was authored by planner with funds restored.
@@ -435,3 +436,10 @@ Perf acceptance (nextorm overlay, mandatory for query-path/plan-cache changes): 
 ## Next allowed step
 
 PLAN r=1 is written and `plan_state: ready`. The orchestrator STOPS here at the PLAN→DO boundary (COLLECTION TASK PLAN); DO is NOT started in this phase. Next: the collection parent dispatches DO for T209 against this r=1 plan and rv=1 evidence contract (D209.1–D209.8), beginning with D209.1 (status/artifacts + perf source pin) before any product edits.
+
+## DO (dispatched by pdca-executor, r=1, n=1)
+
+2026-10-11T04:52:45Z | DO started — D209.1 (scope validated exit 0; source-pin.json + sibling-contract.md written; baseline 58025147 archived to /tmp/nextorm-d209-baseline). Product edits begin with D209.2.
+2026-10-11T10:03:30Z | DO | r1 | n1 | PLAN r=1 approved footprint extension `src/nextorm.core/Query/QueryCommand.Clone.cs:62-64` (necessary plan-key wiring: clone must carry EagerLoadMode/ResolvedEagerLoadMode/EagerLoadShape); r=1 unchanged.
+2026-10-11T10:10:20Z | DO | r1 | n1 | D209.5 tests (V01–V17) added: `EagerLoadingModeTests`, `EagerLoadingTests`, `JoinIntoPlanKeyTests`, sqlite `EagerLoadingSqlGenerationTests`, four provider `EagerLoadingStrategyTests`, integration `CommonTestSuite.EagerLoading` Auto↔Split. Build 0W/0E. Inner loop: core EagerLoad 130/0, core JoinInto 116/0, sqlite EagerLoad 22/0, provider EagerLoad 4/0 each (amended scope validated exit 0). Integration scenario compile-verified; container execution deferred to DO→CHECK boundary.
+2026-10-11T10:10:20Z | DO | r1 | n1 | defect `per-parent-topn-guard-after-parent-sql`: the per-parent top-N guard fires in `BuildChild` after the parent statement (R209-05 "before SQL execution"). Incorrectly-limited child SQL is never issued; single-query variant is truly zero-SQL. Recorded as DO→PLAN candidate; no production change made in this test-only DO.

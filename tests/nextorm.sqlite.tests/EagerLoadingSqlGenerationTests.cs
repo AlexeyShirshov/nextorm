@@ -268,6 +268,327 @@ public class EagerLoadingSqlGenerationTests
         }
     }
 
+    // --- D209.5: context-default precedence (V02/V03), explicit/Auto dispatch (V10), zero-SQL rejection
+    // --- (V05/V09/V10) and the fixed-Single JoinInto under every context default (V11).
+
+    private static (SqliteDataContext Ctx, string Path) CreateDbWithEagerMode(EagerLoadMode contextMode)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nextorm-eager-mode-{Guid.NewGuid():N}.db");
+        using (var conn = new SqliteConnection($"Data Source={path}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                "create table eager_parent (id integer primary key, name text);" +
+                "create table eager_child (id integer primary key, parent_id int not null, name text);" +
+                "insert into eager_parent (id, name) values (1, 'a'), (2, 'b'), (3, 'zero');" +
+                "insert into eager_child (id, parent_id, name) values (10, 1, 'x'), (11, 1, 'y'), (12, 2, 'z');";
+            cmd.ExecuteNonQuery();
+        }
+
+        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder().UseEagerLoadMode(contextMode)), path);
+    }
+
+    [Fact]
+    public void ContextDefaultSingleQuery_MakesAnUnqualifiedLoadWithUseOneJoinCommand()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SingleQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+            interceptor.Statements.Should().HaveCount(1, "the context default SingleQuery dispatches the load to the single-query path");
+            interceptor.Statements[0].ToLowerInvariant().Should().Contain(" join ");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ContextDefaultSplitQuery_ExplicitSingleQueryOverrideWins()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+            interceptor.Statements.Should().HaveCount(1, "the explicit SingleQuery override wins over the SplitQuery context default");
+            interceptor.Statements[0].ToLowerInvariant().Should().Contain(" join ");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ContextDefaultSingleQuery_ExplicitSplitOverrideWins_AndLaterQueryStillInheritsTheDefault()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SingleQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var explicitSplit = ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.SplitQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+            explicitSplit[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+            interceptor.Statements.Should().HaveCount(2, "the explicit SplitQuery override wins over the SingleQuery context default");
+            interceptor.Statements.Should().OnlyContain(s => !s.Contains(" join ", StringComparison.OrdinalIgnoreCase));
+
+            // A later query that declares no mode must still inherit the unchanged context default.
+            interceptor.Statements.Clear();
+            var inherited = ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+            inherited[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+            interceptor.Statements.Should().HaveCount(1, "one query's explicit override must not change the context default for later queries");
+            interceptor.Statements[0].ToLowerInvariant().Should().Contain(" join ");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ContextDefaultAuto_DispatchesToTheSplitPath()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.Auto);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+            interceptor.Statements.Should().HaveCount(2, "the conservative Auto rule selects the split path");
+            interceptor.Statements.Should().OnlyContain(s => !s.Contains(" join ", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ExplicitCorrelated_IsRejectedWithZeroSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var act = () => ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.Correlated)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*Correlated*");
+            interceptor.Statements.Should().BeEmpty("an unsupported strategy must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ContextDefaultCorrelated_UnqualifiedLoadWith_IsRejectedWithZeroSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.Correlated);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var act = () => ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*Correlated*");
+            interceptor.Statements.Should().BeEmpty("the Correlated context default must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_PerParentTopN_IsRejectedBeforeTheChildSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var act = () => ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
+            // The unsupported per-parent top-N is rejected when the child query is built, so the ordinary
+            // parent query already ran but the incorrectly-limited child query never did: exactly one
+            // statement (the parent), no child statement carrying the global Limit.
+            interceptor.Statements.Should().HaveCount(1);
+            interceptor.Statements.Should().OnlyContain(s => !s.Contains(" limit ", StringComparison.OrdinalIgnoreCase)
+                && !s.Contains(" in (", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_PerParentTopN_IsRejectedWithZeroSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var act = () => ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
+            interceptor.Statements.Should().BeEmpty(
+                "the single-query guard runs while the pair command is built, before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_UnsupportedChildShape_IsRejectedWithZeroSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var act = () => ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().OrderBy(x => x.Id), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*OrderBy*");
+            interceptor.Statements.Should().BeEmpty("an unsupported single-query child shape must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ContextBuilder_RejectsDefaultAndUndefinedEagerModes()
+    {
+        Action @default = () => new DataContextBuilder().UseEagerLoadMode(EagerLoadMode.Default);
+        @default.Should().Throw<ArgumentOutOfRangeException>();
+
+        Action undefined = () => new DataContextBuilder().UseEagerLoadMode((EagerLoadMode)999);
+        undefined.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Theory]
+    [InlineData(EagerLoadMode.SplitQuery)]
+    [InlineData(EagerLoadMode.SingleQuery)]
+    [InlineData(EagerLoadMode.Auto)]
+    [InlineData(EagerLoadMode.Correlated)]
+    public void JoinInto_IsFixedSingleUnderEveryContextDefault(EagerLoadMode contextMode)
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var path = Path.Combine(Path.GetTempPath(), $"nextorm-joininto-mode-{Guid.NewGuid():N}.db");
+        using (var conn = new SqliteConnection($"Data Source={path}"))
+        {
+            conn.Open();
+            using var seed = conn.CreateCommand();
+            seed.CommandText =
+                "create table strategy_parent (id integer primary key, name text);" +
+                "create table strategy_child (id integer primary key, parent_id int not null, name text);" +
+                "insert into strategy_parent (id, name) values (1, 'p1'), (2, 'p2'), (3, 'p3');" +
+                "insert into strategy_child (id, parent_id, name) values (10, 1, 'c1'), (11, 1, 'c2'), (12, 2, 'c3');";
+            seed.ExecuteNonQuery();
+        }
+
+        var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder().UseEagerLoadMode(contextMode));
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<StrategyParent>(b => b.HasMany(p => p.Children, c => c.ParentId))
+                .JoinInto(ctx.From<StrategyChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+            parents[2].Children.Should().BeEmpty();
+            interceptor.Statements.Should().HaveCount(1, "JoinInto stays the fixed Single operation regardless of the context default");
+            interceptor.Statements[0].ToLowerInvariant().Should().Contain(" join ");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
     // --- D14a: split vs single eager-load filter-scope inheritance. The alias types below map to the
     // --- same eager_parent/eager_child tables but declare a named filter, so no other test's entity
     // --- metadata is affected (the first registration per type wins process-wide).
@@ -405,6 +726,33 @@ public sealed class FilteredSqlEagerParent
 
 [SqlTable("eager_child")]
 public sealed class FilteredSqlEagerChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+}
+
+[SqlTable("strategy_parent")]
+public sealed class StrategyParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<StrategyChild> Children { get; set; } = new List<StrategyChild>();
+}
+
+[SqlTable("strategy_child")]
+public sealed class StrategyChild
 {
     [Key]
     [Column("id")]

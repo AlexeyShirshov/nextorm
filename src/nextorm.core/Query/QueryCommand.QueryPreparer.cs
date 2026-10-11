@@ -32,6 +32,13 @@ public partial class QueryCommand
                 ? commandTimeout
                 : cmd._dataContext.CommandTimeout is int contextTimeout && contextTimeout > 0 ? contextTimeout : null;
 
+            // Eager-load strategy: resolve the query override against the context default exactly once,
+            // here, before any SQL is built or a plan is inserted. A command with no eager loads carries
+            // neither an override nor a shape, so no eager-load-specific state is touched. Auto is
+            // dispatched conservatively; Correlated fails closed before SQL/cache insertion.
+            if (cmd.EagerLoadMode is not null || !cmd.EagerLoadShape.IsEmpty)
+                cmd.ResolvedEagerLoadMode = EagerLoadResolver.Resolve(cmd.EagerLoadMode, cmd._dataContext.EagerLoadMode);
+
             // The shape of captured collections (value lists, dictionary lookups) is folded into the plan
             // key only when the command participates in the plan cache; otherwise a lookup may be rendered
             // without a shape entry, so it must be evaluated on the fly instead of reusing a stale form.

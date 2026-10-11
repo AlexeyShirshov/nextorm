@@ -73,6 +73,15 @@ public class DataContextBuilder
     public bool QueryCacheEnabled { get; private set; } = true;
     // public bool CacheQueryCommand { get; set; } = true;
     // public bool CacheExpressions { get; set; } = true;
+
+    /// <summary>
+    /// The context-wide default eager-load strategy applied to <c>LoadWith</c> collections when a query
+    /// declares no explicit mode. Defaults to <see cref="EagerLoadMode.SplitQuery"/> (the historical
+    /// behavior); set through <see cref="UseEagerLoadMode"/>. A query override
+    /// (<c>LoadWith(..., mode)</c>) always wins over this default, and configuring a context never
+    /// changes a static/global value.
+    /// </summary>
+    public EagerLoadMode EagerLoadMode { get; private set; } = EagerLoadMode.SplitQuery;
     /// <summary>
     /// Factory invoked by <see cref="CreateDataContext"/> to materialize the configured context.
     /// <see langword="null"/> until one of the provider extensions (for example
@@ -207,6 +216,43 @@ public class DataContextBuilder
     {
         QueryCacheEnabled = enabled;
         return this;
+    }
+
+    /// <summary>
+    /// Sets the context-wide default eager-load strategy used by <c>LoadWith</c> when a query declares
+    /// no explicit mode. The default is <see cref="EagerLoadMode.SplitQuery"/> (the historical behavior).
+    /// An explicit <c>LoadWith(..., mode)</c> always overrides this setting.
+    /// <para>
+    /// <see cref="EagerLoadMode.Default"/> is rejected: it is an inheritance sentinel, not a context
+    /// setting. <see cref="EagerLoadMode.Correlated"/> is accepted as configuration, but a
+    /// <c>LoadWith</c> that resolves to it fails with <see cref="NotSupportedException"/> during
+    /// preparation (correlated/per-parent top-N execution is not implemented in this release).
+    /// </para>
+    /// </summary>
+    /// <param name="mode">The context default; one of SplitQuery, SingleQuery, Correlated or Auto.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="mode"/> is <see cref="EagerLoadMode.Default"/> or an undefined numeric value.
+    /// </exception>
+    public DataContextBuilder UseEagerLoadMode(EagerLoadMode mode)
+    {
+        switch (mode)
+        {
+            case EagerLoadMode.SplitQuery:
+            case EagerLoadMode.SingleQuery:
+            case EagerLoadMode.Correlated:
+            case EagerLoadMode.Auto:
+                EagerLoadMode = mode;
+                return this;
+            case EagerLoadMode.Default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(mode), mode,
+                    "EagerLoadMode.Default is an inheritance sentinel, not a context setting; pass a concrete strategy.");
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(mode), mode,
+                    $"'{mode}' is not a defined EagerLoadMode value; use SplitQuery, SingleQuery, Correlated or Auto.");
+        }
     }
 
     /// <summary>
