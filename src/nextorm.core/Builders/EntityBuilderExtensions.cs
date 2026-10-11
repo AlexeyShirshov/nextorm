@@ -535,7 +535,7 @@ public static class EntityBuilderExtensions
             return joined;
         }
 
-        var command = builder.ToParentCommand();
+        var command = builder.ToParentCommand(allowPerParentTopN: true);
         MarkPerParentTopN(builder, command);
         var list = command.ToList(@params);
         EntityBuilderEagerLoading.Execute(builder, list);
@@ -561,7 +561,7 @@ public static class EntityBuilderExtensions
             return joined;
         }
 
-        var command = builder.ToParentCommand();
+        var command = builder.ToParentCommand(allowPerParentTopN: true);
         MarkPerParentTopN(builder, command);
         var list = await command.ToListAsync(cancellationToken, @params).ConfigureAwait(false);
         await EntityBuilderEagerLoading.ExecuteAsync(builder, list, cancellationToken).ConfigureAwait(false);

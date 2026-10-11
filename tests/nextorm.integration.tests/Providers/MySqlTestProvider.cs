@@ -113,6 +113,8 @@ internal sealed class MySqlTestProvider : ITestProvider
         "drop table if exists eager_note",
         "drop table if exists eager_child",
         "drop table if exists eager_parent",
+        "drop table if exists eager_composite_child",
+        "drop table if exists eager_composite_parent",
         "drop table if exists query_filter_target",
         "drop table if exists query_filter_entity",
         "drop table if exists extrema_entity",
@@ -236,6 +238,25 @@ internal sealed class MySqlTestProvider : ITestProvider
             id int not null primary key,
             parent_id int not null,
             text varchar(100) null
+        )
+        """,
+
+        """
+        create table eager_composite_parent
+        (
+            row_id int not null primary key,
+            tenant int not null,
+            link_id int not null
+        )
+        """,
+
+        """
+        create table eager_composite_child
+        (
+            id int not null primary key,
+            tenant int not null,
+            parent_id int not null,
+            sort_key int not null
         )
         """,
 

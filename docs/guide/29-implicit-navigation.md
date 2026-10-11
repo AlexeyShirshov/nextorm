@@ -264,6 +264,7 @@ the explicit join operators; see [Limitations](../advanced/limitations.md) for t
 ## See also
 
 - [Relationships and single-query loading (`JoinInto`)](../advanced/relationships.md) — declaring the metadata this page builds on.
+- [Per-parent paging in eager loading](../advanced/eager-loading-per-parent-paging.md) — where a child `Take`/`Skip` is applied independently per parent.
 - [Joins](02-joins.md) — the explicit join surface.
 - [Subqueries](05-subqueries.md) — the correlated forms nextorm renders.
 - [Entities and metadata](../getting-started/03-entities-and-metadata.md) — keys and column mapping.

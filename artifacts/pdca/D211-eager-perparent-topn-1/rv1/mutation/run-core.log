@@ -1,0 +1,92 @@
+
+   _____ _              _               _   _ ______ _______  
+  / ____| |            | |             | \ | |  ____|__   __| 
+ | (___ | |_ _ __ _   _| | _____ _ __  |  \| | |__     | |    
+  \___ \| __| '__| | | | |/ / _ \ '__| | . ` |  __|    | |    
+  ____) | |_| |  | |_| |   <  __/ |    | |\  | |____   | |    
+ |_____/ \__|_|   \__, |_|\_\___|_| (_)|_| \_|______|  |_|    
+                   __/ |                                      
+                  |___/                                       
+
+
+Version: 5.0.0
+
+[00:54:12 INF] Stryker will use a max of 4 parallel testsessions.
+[00:54:12 INF] Analysis starting.
+[00:54:12 INF] Using solution configuration/platform 'Debug|Any CPU'.
+[00:54:12 INF] Identifying projects to mutate in nextorm.slnx. This can take a while.
+[00:54:14 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.clickhouse/nextorm.clickhouse.csproj. Using analysis results: net10.0
+[00:54:14 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.integration.tests/nextorm.integration.tests.csproj. Using analysis results: net10.0
+[00:54:14 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj. Using analysis results: net10.0
+[00:54:14 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.sqlserver/nextorm.sqlserver.csproj. Using analysis results: net10.0
+[00:54:16 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/examples/nextorm.examples.clickhouse.analytics/nextorm.examples.clickhouse.analytics.csproj. Using analysis results: net10.0
+[00:54:16 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.publicextensibility.tests/nextorm.publicextensibility.tests.csproj. Using analysis results: net10.0
+[00:54:16 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.entityframeworkcore.tests/nextorm.entityframeworkcore.tests.csproj. Using analysis results: net10.0
+[00:54:18 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.mysql/nextorm.mysql.csproj. Using analysis results: net10.0
+[00:54:18 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj. Using analysis results: net10.0
+[00:54:18 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj. Using analysis results: net10.0
+[00:54:18 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj. Using analysis results: net10.0
+[00:54:20 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.core/nextorm.core.csproj. Using analysis results: net10.0
+[00:54:20 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj. Using analysis results: net10.0
+[00:54:20 WRN] Project src/nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj simulated build failed. Trying again with a nuget restore.
+[00:54:20 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj. Using analysis results: net10.0
+[00:54:20 WRN] Project tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj simulated build failed. Trying again with a nuget restore.
+[00:54:20 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj. Using analysis results: net10.0
+[00:54:20 WRN] Project tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj simulated build failed. Trying again with a nuget restore.
+[00:54:22 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.core.tests/nextorm.core.tests.csproj. Using analysis results: net10.0
+[00:54:22 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj. Using analysis results: net10.0
+[00:54:22 WRN] Project src/nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj simulated build failed. Use '--diag' option to have the build log.
+[00:54:22 WRN] Analysis of project src/nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj succeeded but simulated build failed; Stryker may fail later.
+[00:54:22 WRN] Project tests/nextorm.core.tests/nextorm.core.tests.csproj simulated build failed. Trying again with a nuget restore.
+[00:54:22 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj. Using analysis results: net10.0
+[00:54:22 WRN] Project tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj simulated build failed. Use '--diag' option to have the build log.
+[00:54:22 WRN] Analysis of project tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj succeeded but simulated build failed; Stryker may fail later.
+[00:54:22 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj. Using analysis results: net10.0
+[00:54:22 WRN] Project tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj simulated build failed. Use '--diag' option to have the build log.
+[00:54:22 WRN] Analysis of project tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj succeeded but simulated build failed; Stryker may fail later.
+[00:54:24 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.postgres/nextorm.postgres.csproj. Using analysis results: net10.0
+[00:54:24 WRN] Project src/nextorm.postgres/nextorm.postgres.csproj simulated build failed. Trying again with a nuget restore.
+[00:54:24 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.alias.tests/nextorm.alias.tests.csproj. Using analysis results: net10.0
+[00:54:24 WRN] Project tests/nextorm.alias.tests/nextorm.alias.tests.csproj simulated build failed. Trying again with a nuget restore.
+[00:54:25 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.core.tests/nextorm.core.tests.csproj. Using analysis results: net10.0
+[00:54:25 WRN] Project tests/nextorm.core.tests/nextorm.core.tests.csproj simulated build failed. Use '--diag' option to have the build log.
+[00:54:25 WRN] Analysis of project tests/nextorm.core.tests/nextorm.core.tests.csproj succeeded but simulated build failed; Stryker may fail later.
+[00:54:25 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.sqlite/nextorm.sqlite.csproj. Using analysis results: net10.0
+[00:54:25 WRN] Project src/nextorm.sqlite/nextorm.sqlite.csproj simulated build failed. Trying again with a nuget restore.
+[00:54:26 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.postgres/nextorm.postgres.csproj. Using analysis results: net10.0
+[00:54:26 WRN] Project src/nextorm.postgres/nextorm.postgres.csproj simulated build failed. Use '--diag' option to have the build log.
+[00:54:26 WRN] Analysis of project src/nextorm.postgres/nextorm.postgres.csproj succeeded but simulated build failed; Stryker may fail later.
+[00:54:26 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.alias.tests/nextorm.alias.tests.csproj. Using analysis results: net10.0
+[00:54:26 WRN] Project tests/nextorm.alias.tests/nextorm.alias.tests.csproj simulated build failed. Use '--diag' option to have the build log.
+[00:54:26 WRN] Analysis of project tests/nextorm.alias.tests/nextorm.alias.tests.csproj succeeded but simulated build failed; Stryker may fail later.
+[00:54:27 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/examples/nextorm.examples.postgres.aviasales/nextorm.examples.postgres.aviasales.csproj. Using analysis results: net10.0
+[00:54:27 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.sqlite/nextorm.sqlite.csproj. Using analysis results: net10.0
+[00:54:27 WRN] Project src/nextorm.sqlite/nextorm.sqlite.csproj simulated build failed. Use '--diag' option to have the build log.
+[00:54:27 WRN] Analysis of project src/nextorm.sqlite/nextorm.sqlite.csproj succeeded but simulated build failed; Stryker may fail later.
+[00:54:29 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.clickhouse.extensions.tests/nextorm.clickhouse.extensions.tests.csproj. Using analysis results: net10.0
+[00:54:29 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.mariadb/nextorm.mariadb.csproj. Using analysis results: net10.0
+[00:54:29 WRN] Project src/nextorm.mariadb/nextorm.mariadb.csproj simulated build failed. Trying again with a nuget restore.
+[00:54:29 WRN] Project tests/nextorm.clickhouse.extensions.tests/nextorm.clickhouse.extensions.tests.csproj simulated build failed. Trying again with a nuget restore.
+[00:54:29 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/benchmarks/nextorm.benchmark/nextorm.benchmark.csproj. Using analysis results: net10.0
+[00:54:29 WRN] Project benchmarks/nextorm.benchmark/nextorm.benchmark.csproj simulated build failed. Trying again with a nuget restore.
+[00:54:31 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.mariadb/nextorm.mariadb.csproj. Using analysis results: net10.0
+[00:54:31 WRN] Project src/nextorm.mariadb/nextorm.mariadb.csproj simulated build failed. Use '--diag' option to have the build log.
+[00:54:31 WRN] Analysis of project src/nextorm.mariadb/nextorm.mariadb.csproj succeeded but simulated build failed; Stryker may fail later.
+[00:54:31 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.clickhouse.extensions.tests/nextorm.clickhouse.extensions.tests.csproj. Using analysis results: net10.0
+[00:54:31 WRN] Project tests/nextorm.clickhouse.extensions.tests/nextorm.clickhouse.extensions.tests.csproj simulated build failed. Use '--diag' option to have the build log.
+[00:54:31 WRN] Analysis of project tests/nextorm.clickhouse.extensions.tests/nextorm.clickhouse.extensions.tests.csproj succeeded but simulated build failed; Stryker may fail later.
+[00:54:31 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/benchmarks/nextorm.benchmark/nextorm.benchmark.csproj. Using analysis results: net10.0
+[00:54:31 WRN] Project benchmarks/nextorm.benchmark/nextorm.benchmark.csproj simulated build failed. Use '--diag' option to have the build log.
+[00:54:31 WRN] Analysis of project benchmarks/nextorm.benchmark/nextorm.benchmark.csproj succeeded but simulated build failed; Stryker may fail later.
+[00:54:32 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj. Using analysis results: net10.0
+[00:54:32 WRN] Project tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj simulated build failed. Trying again with a nuget restore.
+[00:54:34 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj. Using analysis results: net10.0
+[00:54:34 WRN] Project tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj simulated build failed. Use '--diag' option to have the build log.
+[00:54:34 WRN] Analysis of project tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj succeeded but simulated build failed; Stryker may fail later.
+[00:54:34 INF] Picking net10.0 for project /home/alex/sources/nextorm/src/nextorm.core/nextorm.core.csproj. 
+[00:54:37 INF] Found project /home/alex/sources/nextorm/src/nextorm.core/nextorm.core.csproj to mutate.
+[00:54:37 INF] Analysis complete.
+[00:54:37 INF] Building solution nextorm.slnx.
+[00:54:37 INF] Building project nextorm.slnx using dotnet build nextorm.slnx -c Debug --property:Platform="Any CPU" (directory /home/alex/sources/nextorm.)
+[00:55:37 WRN] The Microsoft Test Platform testrunner is currently in preview. Results should be verified since this feature is still being tested.
+[00:55:47 INF] Number of tests found: 10761 for project /home/alex/sources/nextorm/src/nextorm.core/nextorm.core.csproj. Initial test run started.

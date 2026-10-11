@@ -1,0 +1,599 @@
+{
+  "task": "D211-eager-perparent-topn-1",
+  "tree": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1 + T211 41-file change set on branch 1.0.9 (uncommitted worktree; see freeze/tree.json, file_set_sha256)",
+  "contract_rv": 1,
+  "status_file": "docs/specs/status/D211-eager-perparent-topn-1.md",
+  "required_rows": [
+    "EV-01",
+    "EV-02",
+    "EV-03",
+    "EV-04",
+    "EV-05",
+    "EV-06",
+    "EV-07",
+    "EV-08",
+    "EV-09",
+    "EV-10",
+    "EV-11",
+    "EV-12",
+    "EV-13",
+    "EV-14"
+  ],
+  "rows": [
+    {
+      "id": "EV-01",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "status-file-git-identity",
+          "path": "docs/specs/status/D211-eager-perparent-topn-1.md"
+        },
+        {
+          "kind": "baseline-prefix-red-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/eagerloading-class-prefix-red.log",
+          "exit": 1
+        },
+        {
+          "kind": "baseline-prefix-core",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/d04a/prefix-core.log",
+          "exit": 0
+        },
+        {
+          "kind": "baseline-prefix-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/d04a/prefix-sqlite.log",
+          "exit": 0
+        },
+        {
+          "kind": "baseline-prefix-eagerloading",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/d04b/prefix-eagerloading.log",
+          "exit": 0
+        },
+        {
+          "kind": "baseline-acceptance-reference",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/summary.md"
+        },
+        {
+          "kind": "baseline-page",
+          "path": "docs/specs/performance/acceptance-benchmarks.md"
+        },
+        {
+          "kind": "source-revision-binding",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression.json",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-02",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "oracle-adversarial-integration",
+          "path": "tests/nextorm.integration.tests/CommonTestSuite.EagerLoadPerParentPaging.cs"
+        },
+        {
+          "kind": "oracle-reference-benchmark",
+          "path": "benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs"
+        },
+        {
+          "kind": "oracle-run-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/sqlite.log",
+          "exit": 0
+        },
+        {
+          "kind": "oracle-run-perf",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/eager-perparent.log",
+          "exit": 0
+        },
+        {
+          "kind": "oracle-json",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-03",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "core-matrix-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/core-trait-D211.log",
+          "exit": 0
+        },
+        {
+          "kind": "sqlite-matrix-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/sqlite-trait-D211.log",
+          "exit": 0
+        },
+        {
+          "kind": "sqlite-sqlgen-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/eagerloading-class-postfix.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-matrix-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/composite/sqlite-composite-class.log",
+          "exit": 0
+        },
+        {
+          "kind": "core-matrix-source",
+          "path": "tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "sqlite-matrix-source",
+          "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs"
+        }
+      ]
+    },
+    {
+      "id": "EV-04",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "sqlite-sqlgen-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/eagerloading-class-postfix.log",
+          "exit": 0
+        },
+        {
+          "kind": "provider-sqlgen-binding",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json",
+          "exit": 0
+        },
+        {
+          "kind": "postgres-suite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/postgres.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "sqlserver-suite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlserver.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "mysql-mariadb-suite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/mysql.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "clickhouse-suite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/clickhouse.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "postgres-sql-source",
+          "path": "tests/nextorm.postgres.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "sqlserver-sql-source",
+          "path": "tests/nextorm.sqlserver.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "mysql-sql-source",
+          "path": "tests/nextorm.mysql.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "clickhouse-sql-source",
+          "path": "tests/nextorm.clickhouse.tests/EagerLoadPerParentPagingTests.cs"
+        }
+      ]
+    },
+    {
+      "id": "EV-05",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "integration-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/sqlite.log",
+          "exit": 0
+        },
+        {
+          "kind": "integration-postgres",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/postgres.log",
+          "exit": 0
+        },
+        {
+          "kind": "integration-sqlserver",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/sqlserver.log",
+          "exit": 0
+        },
+        {
+          "kind": "integration-mysql",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/mysql.log",
+          "exit": 0
+        },
+        {
+          "kind": "integration-clickhouse",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/clickhouse.log",
+          "exit": 0
+        },
+        {
+          "kind": "integration-mariadb",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/mariadb.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-sqlite.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-postgres",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-postgres.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-sqlserver",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-sqlserver.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-mysql",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-mysql.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-clickhouse",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-clickhouse.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-mariadb",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-mariadb.log",
+          "exit": 0
+        },
+        {
+          "kind": "integration-binding",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-06",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "sync-async-surfaces",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/sqlite-trait-D211.log",
+          "exit": 0
+        },
+        {
+          "kind": "pre-cancelled",
+          "path": "tests/nextorm.core.tests/EagerLoadingTests.cs"
+        },
+        {
+          "kind": "cache-rebind-ownership",
+          "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "plan-cache",
+          "path": "tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs"
+        },
+        {
+          "kind": "public-api-surface",
+          "path": "tests/nextorm.core.tests/EagerLoadingModeTests.cs"
+        },
+        {
+          "kind": "broad-core-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/core.tests.log",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-07",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "in-memory-guards",
+          "path": "tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "provider-failclosed",
+          "path": "tests/nextorm.postgres.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "composite-guard-source",
+          "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "guards-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/core-trait-D211.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-guards-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/composite/sqlite-composite-class.log",
+          "exit": 0
+        },
+        {
+          "kind": "guards-binding",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-08",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "regression-manifest",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression.json",
+          "exit": 0
+        },
+        {
+          "kind": "regression-solution-build",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/build-solution.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-core",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/core.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlite.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-postgres",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/postgres.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-sqlserver",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlserver.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-mysql",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/mysql.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-clickhouse",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/clickhouse.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-integration-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlite.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-integration-postgres",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-postgres.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-integration-sqlserver",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlserver.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-integration-mysql",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-mysql.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-integration-clickhouse",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-clickhouse.log",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-09",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "build-debug-solution",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/build-solution.log",
+          "exit": 0
+        },
+        {
+          "kind": "build-debug-inner",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/build-solution.log",
+          "exit": 0
+        },
+        {
+          "kind": "build-integration-tests",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/d05/build-integration-tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "build-sqlite-tests",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/composite/build-sqlite-tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "build-integration-composite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/composite/build-integration-tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "build-release-benchmark",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/benchmark-build.log",
+          "exit": 0
+        },
+        {
+          "kind": "crlf-tree",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/tree.json"
+        }
+      ]
+    },
+    {
+      "id": "EV-10",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "coverage-summary",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/summary.txt"
+        },
+        {
+          "kind": "coverage-cobertura",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/coverage.xml"
+        },
+        {
+          "kind": "coverage-report-summary",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/report/Summary.txt"
+        },
+        {
+          "kind": "coverage-collect-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/coverage.log"
+        },
+        {
+          "kind": "changed-branch-delta",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/branch-delta.json"
+        },
+        {
+          "kind": "changed-branch-delta-merged",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/branch-delta-merged.json"
+        }
+      ]
+    },
+    {
+      "id": "EV-11",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "mutation-readme",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/README.md"
+        },
+        {
+          "kind": "mutation-survivors-md",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/survivors.md"
+        },
+        {
+          "kind": "mutation-survivors-json",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/survivors.json"
+        },
+        {
+          "kind": "mutation-report",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/mutation-report.json"
+        },
+        {
+          "kind": "mutation-groupb-classification",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/groupb-classification.md"
+        },
+        {
+          "kind": "mutation-disposition-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/mutation-disposition.log"
+        },
+        {
+          "kind": "mutation-config",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/stryker-config.corrected.json"
+        }
+      ]
+    },
+    {
+      "id": "EV-12",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "docfx-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/docfx.log",
+          "exit": 0
+        },
+        {
+          "kind": "doc-en",
+          "path": "docs/advanced/eager-loading-per-parent-paging.md"
+        },
+        {
+          "kind": "doc-ru",
+          "path": "docs/ru/advanced/eager-loading-per-parent-paging.md"
+        },
+        {
+          "kind": "toc-en",
+          "path": "docs/advanced/toc.yml"
+        },
+        {
+          "kind": "toc-ru",
+          "path": "docs/ru/toc.yml"
+        },
+        {
+          "kind": "guide-02-en",
+          "path": "docs/guide/02-joins.md"
+        },
+        {
+          "kind": "guide-02-ru",
+          "path": "docs/ru/guide/02-joins.md"
+        },
+        {
+          "kind": "guide-29-en",
+          "path": "docs/guide/29-implicit-navigation.md"
+        },
+        {
+          "kind": "guide-29-ru",
+          "path": "docs/ru/guide/29-implicit-navigation.md"
+        },
+        {
+          "kind": "corrected-en",
+          "path": "docs/advanced/eager-loading.md"
+        },
+        {
+          "kind": "corrected-ru",
+          "path": "docs/ru/advanced/eager-loading.md"
+        }
+      ]
+    },
+    {
+      "id": "EV-13",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "perf-summary",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/summary.md"
+        },
+        {
+          "kind": "acceptance-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/acceptance.log",
+          "exit": 0
+        },
+        {
+          "kind": "eager-perparent-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/eager-perparent.log",
+          "exit": 0
+        },
+        {
+          "kind": "acceptance-baseline-page",
+          "path": "docs/specs/performance/acceptance-benchmarks.md"
+        },
+        {
+          "kind": "native-eager-report",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/native/NextORM.Benchmark.EagerPerParentPagingBenchmark-report-github.md"
+        },
+        {
+          "kind": "native-acceptance-cached",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/native/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md"
+        }
+      ]
+    },
+    {
+      "id": "EV-14",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/tree.json"
+        },
+        {
+          "kind": "ledger",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/ledger.json"
+        },
+        {
+          "kind": "manifest",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/manifest.json"
+        },
+        {
+          "kind": "manifest-validation-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/manifest-validation.log",
+          "exit": 0
+        }
+      ]
+    }
+  ]
+}

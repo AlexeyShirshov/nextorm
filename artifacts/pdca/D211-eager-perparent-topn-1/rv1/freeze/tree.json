@@ -1,0 +1,318 @@
+{
+  "task": "D211-eager-perparent-topn-1",
+  "contract_rv": 1,
+  "base_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc",
+  "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+  "tree_kind": "working tree (uncommitted T211 change set) on branch 1.0.9",
+  "footprint": {
+    "production": [
+      "src/nextorm.core/Builders/EntityBuilder.cs",
+      "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
+      "src/nextorm.core/Builders/EntityBuilderExtensions.cs",
+      "src/nextorm.core/Builders/Joins/JoinIntoStitcher.cs",
+      "src/nextorm.core/DataContext/SqlBuilder.cs",
+      "src/nextorm.core/Expressions/JoinExpression.cs",
+      "src/nextorm.core/Query/QueryCommand.Clone.cs",
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "src/nextorm.core/Query/QueryCommand.cs",
+      "src/nextorm.core/Query/QueryPlanEqualityComparer.cs"
+    ],
+    "tests": [
+      "tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs",
+      "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs",
+      "tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs",
+      "tests/nextorm.postgres.tests/EagerLoadPerParentPagingTests.cs",
+      "tests/nextorm.sqlserver.tests/EagerLoadPerParentPagingTests.cs",
+      "tests/nextorm.mysql.tests/EagerLoadPerParentPagingTests.cs",
+      "tests/nextorm.mysql.tests/MariaDbEagerLoadPerParentPagingTests.cs",
+      "tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj",
+      "tests/nextorm.clickhouse.tests/EagerLoadPerParentPagingTests.cs",
+      "tests/nextorm.integration.tests/CommonTestSuite.EagerLoadPerParentPaging.cs",
+      "tests/nextorm.integration.tests/ClickHouseEagerPerParentPagingTests.cs",
+      "tests/nextorm.integration.tests/MariaDbEagerPagingTests.cs",
+      "tests/nextorm.integration.tests/Entities.cs",
+      "tests/nextorm.integration.tests/Providers/ClickHouseTestProvider.cs",
+      "tests/nextorm.integration.tests/Providers/ITestProvider.cs",
+      "tests/nextorm.integration.tests/Providers/MySqlTestProvider.cs",
+      "tests/nextorm.integration.tests/Providers/PostgresTestProvider.cs",
+      "tests/nextorm.integration.tests/Providers/SqlServerTestProvider.cs",
+      "tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs"
+    ],
+    "benchmark": [
+      "benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs"
+    ],
+    "docs_status": [
+      "docs/advanced/eager-loading-per-parent-paging.md",
+      "docs/ru/advanced/eager-loading-per-parent-paging.md",
+      "docs/advanced/toc.yml",
+      "docs/ru/toc.yml",
+      "docs/guide/02-joins.md",
+      "docs/ru/guide/02-joins.md",
+      "docs/guide/29-implicit-navigation.md",
+      "docs/ru/guide/29-implicit-navigation.md",
+      "docs/advanced/eager-loading.md",
+      "docs/ru/advanced/eager-loading.md",
+      "docs/specs/status/D211-eager-perparent-topn-1.md"
+    ]
+  },
+  "files": [
+    {
+      "path": "src/nextorm.core/Builders/EntityBuilder.cs",
+      "sha256": "9c17930dd72c37176d4c6002b107591b607ab1f3fe00de81470f7ce28fe257f5",
+      "bytes": 255977,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
+      "sha256": "c368e46417f96548ef4130dad0315c1eedbcbda8b18b845419a24a820f7704dd",
+      "bytes": 35528,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "src/nextorm.core/Builders/EntityBuilderExtensions.cs",
+      "sha256": "4cd53beb59b4c194be7d5bd9e30219e451956566d8e9fc8e3dd5e08c3e405368",
+      "bytes": 112594,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "src/nextorm.core/Builders/Joins/JoinIntoStitcher.cs",
+      "sha256": "e16c5d3d80fc0b2ebc8a38e9a234f4e52db3235d4a8ebdb76c29e5dff6ce90ef",
+      "bytes": 14944,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "src/nextorm.core/DataContext/SqlBuilder.cs",
+      "sha256": "92f86f0f82c55f651b6451cc224256b891d852aa8bdf8067b212fd04c2dc9a95",
+      "bytes": 106661,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "src/nextorm.core/Expressions/JoinExpression.cs",
+      "sha256": "d158d350febc6b63feb63d3ce1432b61bda8a26168ccd63f6213e97676bc1d30",
+      "bytes": 13909,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "src/nextorm.core/Query/QueryCommand.Clone.cs",
+      "sha256": "d789d16bdc9ddeddf2249f6888e70789bb60f3463a1c6d23708c9b0574e99012",
+      "bytes": 11056,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "sha256": "0ebcf4a9dde41d8c99ccf70bdca8827f7bdae65df3b772fb29780d941085b2b6",
+      "bytes": 181910,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "src/nextorm.core/Query/QueryCommand.cs",
+      "sha256": "6cb9cf6a73995cd4e5d0b34cf0ca1c4b3f114cf0dde3999672e27789c3538de0",
+      "bytes": 57620,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "src/nextorm.core/Query/QueryPlanEqualityComparer.cs",
+      "sha256": "a1b75dc7594d31754afcdc67cc1553c82902e2f27cc832d47a37ca9c0cf49caa",
+      "bytes": 22818,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs",
+      "sha256": "91b2dfaff9e17bba4c0c7bbc61d0d9acd2c0a49bc9f7701df210ba1dc8519477",
+      "bytes": 3848,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs",
+      "sha256": "a00b593d9f0708cb9014806aa34f1567b14fdb4bf53dc52b68b08591c7b3a8bc",
+      "bytes": 40018,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs",
+      "sha256": "07a4334b9faf5d726331c595599a06a8e895b4734a1178f6e652fd56d20f5dca",
+      "bytes": 56681,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.postgres.tests/EagerLoadPerParentPagingTests.cs",
+      "sha256": "114a2ddccdf86884fcf8d0c9682d868e4b3dc290e28377042392b51aac316f4e",
+      "bytes": 8449,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.sqlserver.tests/EagerLoadPerParentPagingTests.cs",
+      "sha256": "f42e2689e1c467f52b39dac54e8ef50a4e3b2f6fb9a7aff0e86f4d781f536f93",
+      "bytes": 8437,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.mysql.tests/EagerLoadPerParentPagingTests.cs",
+      "sha256": "70d0557e43d6ed808aec1e3741d6e5a84d4afa54680a76b4ffc87a60c8528de8",
+      "bytes": 8429,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.mysql.tests/MariaDbEagerLoadPerParentPagingTests.cs",
+      "sha256": "186e834e4838175bbb31a3c36619276f6ae4d41bb85b17edf4342e1b761f736f",
+      "bytes": 4205,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj",
+      "sha256": "37a3f9481b8e8a4dd930c7c31632a9570ac5cf9e4db3791c342fcd65f7b1133f",
+      "bytes": 2307,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.clickhouse.tests/EagerLoadPerParentPagingTests.cs",
+      "sha256": "be369f6bf4e0656e816e82d3ae41208082dfabf0bd47cdfda6dbe39f9b56235b",
+      "bytes": 8439,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.integration.tests/CommonTestSuite.EagerLoadPerParentPaging.cs",
+      "sha256": "924cd040019fee32c529e84e7878b18939d9771df0a2f49dc188cef7edfcbe13",
+      "bytes": 17282,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.integration.tests/ClickHouseEagerPerParentPagingTests.cs",
+      "sha256": "65042c22d187846d42640cad6beb271157b94d2054500a879de4859954d04091",
+      "bytes": 6357,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.integration.tests/MariaDbEagerPagingTests.cs",
+      "sha256": "da86d3cb207ba8ad0743eaa00ca520dc8a84a1edd53126dd5fa7894dd9aa5f3f",
+      "bytes": 8278,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.integration.tests/Entities.cs",
+      "sha256": "5d477b14b626d3a2b49d978e8eb54c2b49ea5a49efbba14068e0ea5ef02e171b",
+      "bytes": 5991,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.integration.tests/Providers/ClickHouseTestProvider.cs",
+      "sha256": "32860e56545318834b51dce5790660a276083193cbfae4870c5df75c35603e90",
+      "bytes": 20801,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.integration.tests/Providers/ITestProvider.cs",
+      "sha256": "8ae9f70c36de405ef949ac680b07f13630ba55dd4669a90454166d34532f4d45",
+      "bytes": 9889,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.integration.tests/Providers/MySqlTestProvider.cs",
+      "sha256": "be57f77d1d087a0a4d1de97e1b7831b89d90d4565567afec28c84b95ee06e0b4",
+      "bytes": 12198,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.integration.tests/Providers/PostgresTestProvider.cs",
+      "sha256": "03d03fd31f205af6ec8e59dd94605beba3164eeb9d55f6902e5c677bc66765ec",
+      "bytes": 13049,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.integration.tests/Providers/SqlServerTestProvider.cs",
+      "sha256": "747927e999e2bd29c60795449e33e7368d1a023db5a234655997bcc43b783bd8",
+      "bytes": 12517,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs",
+      "sha256": "1902e60165201ce673eca2b7c5217c2a112ca10aa05aad575903162b1bce7102",
+      "bytes": 8791,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs",
+      "sha256": "0181537eaf6b25ac75e0b90a09b48db896bd0cbcecbd8ead5b44ce172a6306c2",
+      "bytes": 11385,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "docs/advanced/eager-loading-per-parent-paging.md",
+      "sha256": "e5b066cced85ac96fa19b186219985939e6bf4a51393cbb43f98789afab065ee",
+      "bytes": 10357,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "docs/ru/advanced/eager-loading-per-parent-paging.md",
+      "sha256": "352efa4fc2e34c51d24d0f02ae9913d5ff9762d23242b9703ede4dec901e56d8",
+      "bytes": 17561,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "docs/advanced/toc.yml",
+      "sha256": "b9c8c2cdc229068e9142f90bad51260b5a865e90f4dd259888533a8033aa5ee8",
+      "bytes": 635,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "docs/ru/toc.yml",
+      "sha256": "546431fe3932a29d9a6d8a1044bd4b911341f6b171aad31dffbc5a4fac21059d",
+      "bytes": 7913,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "docs/guide/02-joins.md",
+      "sha256": "50ee7b6949d2ec73c3cb09c32e93e7efccc5e101f7c4ebc2eeca6827de7f8ab6",
+      "bytes": 45769,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "docs/ru/guide/02-joins.md",
+      "sha256": "d63621803a57e042684d1d131934517ff5fe2444a02ed229ffbe30f1d9a4f4bc",
+      "bytes": 61501,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "docs/guide/29-implicit-navigation.md",
+      "sha256": "f34aa0fd67435f07cf578593e19b050852099e850f5982f69db55238ba6c96fa",
+      "bytes": 15329,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "docs/ru/guide/29-implicit-navigation.md",
+      "sha256": "3b82acd8f34e34f43fb3dce5847a3e5548ea4fd277d5b1857ee34f67cdc05232",
+      "bytes": 23566,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "docs/advanced/eager-loading.md",
+      "sha256": "2cd433dd891560bc5f5cf4db7ce9f5f86abf332d225f9ec1f09997a07ac20ca1",
+      "bytes": 23152,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "docs/ru/advanced/eager-loading.md",
+      "sha256": "8a6fcba0600252c3d122ab87c23e2eb1936efe91382f495b88d7227c1f8cfc21",
+      "bytes": 37178,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "docs/specs/status/D211-eager-perparent-topn-1.md",
+      "sha256": "be10e0adafeb590e2cd2eab50be666a8ce3733e4f0653291c7c9b59ecfd69437",
+      "bytes": 55024,
+      "line_endings": "CRLF"
+    }
+  ],
+  "file_count": 41,
+  "file_set_sha256": "08c967271098018e5d0273e981cf3d60dabb34170255fb20f212213628b54d75",
+  "line_endings": {
+    "CRLF": 41,
+    "non_crlf": [],
+    "all_crlf": true
+  },
+  "excludes": [
+    "generated evidence reports under artifacts/pdca/D211-eager-perparent-topn-1/**",
+    "manifest.json and freeze/ledger.json (self-reference avoidance)",
+    "out-of-footprint sibling documentation changes (see ledger.out_of_footprint)"
+  ]
+}

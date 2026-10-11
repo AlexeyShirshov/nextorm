@@ -160,6 +160,15 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset || x.Paging.HasWithTies != y.Paging.HasWithTies) return false;
 
+        // A per-parent eager top-N child lowers to a ranked derived table keyed by its partition
+        // selector, so the flag and the partition selector must be part of the plan key: otherwise a
+        // cached plain plan (or one partitioned on a different key) could be reused.
+        if (x.PerParentPaging != y.PerParentPaging) return false;
+        if (x.PerParentPaging && !_expComparer.Equals(x.PerParentPartition, y.PerParentPartition)) return false;
+        // Embedded (nested derived join source) vs top-level (split statement) render different SQL
+        // from the same ranked shape, so the rendering mode must not share a cached plan.
+        if (x.PerParentPaging && x.PerParentPagingEmbedded != y.PerParentPagingEmbedded) return false;
+
         // First vs FirstOrDefault (and Single vs SingleOrDefault) share SQL and Paging.Limit, so the
         // terminal flags must be part of the key; otherwise the cached plan's materializer would
         // default-on-null for the wrong terminal (or throw for the other one).
@@ -455,6 +464,12 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             hash.Add(obj.Paging.Limit);
             hash.Add(obj.Paging.Offset);
             hash.Add(obj.Paging.HasWithTies);
+
+            hash.Add(obj.PerParentPaging);
+            if (obj.PerParentPaging && obj.PerParentPartition is { } perParentPartition)
+                hash.Add(perParentPartition, _expComparer);
+            if (obj.PerParentPaging && obj.PerParentPagingEmbedded)
+                hash.Add(true);
 
             hash.Add(obj.DefaultOnEmpty);
             hash.Add(obj.SingleScalar);

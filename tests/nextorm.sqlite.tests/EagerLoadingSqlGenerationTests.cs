@@ -454,7 +454,7 @@ public class EagerLoadingSqlGenerationTests
     }
 
     [Fact]
-    public void Split_PerParentTopN_IsRejectedBeforeTheChildSql()
+    public void Split_PerParentTopN_IsAppliedPerParentWithPartitionedRanking()
     {
         var interceptor = new SqlRecordingInterceptor();
         var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
@@ -462,19 +462,26 @@ public class EagerLoadingSqlGenerationTests
         try
         {
             ctx.PurgeQueryCache();
-            QueryPlanStore.Values.Should().BeEmpty("the purge must leave a clean plan cache for the no-entry assertion");
 
-            var act = () => ctx.From<EagerParent>()
-                .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId)
+            // #211: the child Limit/Offset/Page is no longer a blanket rejection on the split path. It is
+            // applied independently to each parent through a ranked child source, so a globally limited
+            // child query can no longer starve later parents.
+            var parents = ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().OrderBy(x => x.Id).Limit(1), p => p.Id, c => c.ParentId)
                 .OrderBy(p => p.Id)
                 .ToList();
 
-            act.Should().Throw<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
-            // The unsupported per-parent top-N is rejected during preparation, before the parent
-            // statement runs and before a plan is inserted: no SQL executes and no cache entry is left.
-            interceptor.Statements.Should().BeEmpty(
-                "the preparation-time guard must reject the query before the parent statement is executed");
-            QueryPlanStore.Values.Should().BeEmpty("a rejected preparation must not insert a plan-cache entry");
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents[0].Children.Select(c => c.Id).Should().Equal([10], "each parent gets its own lowest child");
+            parents[1].Children.Select(c => c.Id).Should().Equal(12);
+            parents[2].Children.Should().BeEmpty("a childless parent is not dropped by the ranked child source");
+
+            // One parent statement plus one batched child statement: still two round trips, no N+1.
+            interceptor.Statements.Should().HaveCount(2);
+            interceptor.Statements[0].ToLowerInvariant().Should().Contain("eager_parent").And.NotContain("join");
+            var childSql = interceptor.Statements[1].ToLowerInvariant();
+            childSql.Should().Contain("eager_child").And.Contain("row_number()").And.Contain("over (").And.Contain("partition by");
+            childSql.Should().Contain("__nextorm_rn").And.Contain("<= ", "the per-partition page bound is applied inside the ranked child source");
         }
         finally
         {
@@ -484,7 +491,7 @@ public class EagerLoadingSqlGenerationTests
     }
 
     [Fact]
-    public void ContextAuto_PerParentTopN_IsRejectedBeforeSql()
+    public void ContextAuto_PerParentTopN_IsAppliedPerParentViaSplit()
     {
         var interceptor = new SqlRecordingInterceptor();
         var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.Auto);
@@ -493,15 +500,19 @@ public class EagerLoadingSqlGenerationTests
         {
             ctx.PurgeQueryCache();
 
-            // The conservative Auto rule dispatches ordinary loads to Split, but it must not erase a
-            // per-parent top-N requirement: the query still fails closed during preparation.
-            var act = () => ctx.From<EagerParent>()
-                .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId)
+            // The conservative Auto rule dispatches ordinary loads to Split; a per-parent top-N is honored
+            // there (ranked child source) instead of being rejected or silently reinterpreted as a global
+            // child limit.
+            var parents = ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().OrderBy(x => x.Id).Limit(1), p => p.Id, c => c.ParentId)
                 .OrderBy(p => p.Id)
                 .ToList();
 
-            act.Should().Throw<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
-            interceptor.Statements.Should().BeEmpty("Auto must not reinterpret a per-parent top-N as a global child limit");
+            parents[0].Children.Select(c => c.Id).Should().Equal(10);
+            parents[1].Children.Select(c => c.Id).Should().Equal(12);
+            parents[2].Children.Should().BeEmpty();
+            interceptor.Statements.Should().HaveCount(2, "Auto still dispatches the paged load to the split path");
+            interceptor.Statements.Should().OnlyContain(s => !s.Contains(" join ", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -536,7 +547,7 @@ public class EagerLoadingSqlGenerationTests
     }
 
     [Fact]
-    public async Task Split_PerParentTopN_Async_IsRejectedBeforeTheChildSql()
+    public async Task Split_PerParentTopN_Async_IsAppliedPerParent()
     {
         var interceptor = new SqlRecordingInterceptor();
         var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
@@ -545,13 +556,18 @@ public class EagerLoadingSqlGenerationTests
         {
             ctx.PurgeQueryCache();
 
-            var act = () => ctx.From<EagerParent>()
-                .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId)
+            // The async split path applies the child page per parent through the same ranked child
+            // source, batched into one child statement instead of rejecting the per-parent top-N.
+            var parents = await ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().OrderBy(x => x.Id).Limit(1), p => p.Id, c => c.ParentId)
                 .OrderBy(p => p.Id)
                 .ToListAsync(TestContext.Current.CancellationToken);
 
-            await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
-            interceptor.Statements.Should().BeEmpty("the async path must reject the per-parent top-N before any SQL is executed");
+            parents[0].Children.Select(c => c.Id).Should().Equal(10);
+            parents[1].Children.Select(c => c.Id).Should().Equal(12);
+            parents[2].Children.Should().BeEmpty();
+            interceptor.Statements.Should().HaveCount(2, "the async split path applies the per-parent page in one batched child statement");
+            interceptor.Statements[1].ToLowerInvariant().Should().Contain("row_number()").And.Contain("partition by");
         }
         finally
         {
@@ -561,7 +577,7 @@ public class EagerLoadingSqlGenerationTests
     }
 
     [Fact]
-    public void RejectedPerParentTopN_LeavesNoCacheEntryAndLaterQueriesStillCache()
+    public void PerParentTopN_PopulatesThePlanCacheAndLaterQueriesStillCache()
     {
         var interceptor = new SqlRecordingInterceptor();
         var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
@@ -570,17 +586,29 @@ public class EagerLoadingSqlGenerationTests
         {
             ctx.PurgeQueryCache();
 
-            var act = () => ctx.From<EagerParent>()
-                .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId)
+            // A supported per-parent paged preparation is cached; it no longer relies on a rejection.
+            var parents = ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().OrderBy(x => x.Id).Limit(1), p => p.Id, c => c.ParentId)
                 .OrderBy(p => p.Id)
                 .ToList();
-            act.Should().Throw<NotSupportedException>();
+            parents[0].Children.Select(c => c.Id).Should().Equal([10]);
 
-            QueryPlanStore.Values.Should().BeEmpty("the rejected preparation must leave no cache entry behind");
+            var planCount = QueryPlanStore.Values.Count();
+            planCount.Should().BeGreaterThan(0, "a supported per-parent paged preparation must insert a plan-cache entry");
+
+            // The identical paged shape re-emits identical SQL: the ranked bounds are rebound, not
+            // accumulated or leaked across preparations.
+            var firstRun = interceptor.Statements.ToArray();
+            interceptor.Statements.Clear();
+            _ = ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().OrderBy(x => x.Id).Limit(1), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+            interceptor.Statements.Should().Equal(firstRun, "the identical paged shape must rebind to the same deterministic SQL");
 
             // The sticky cache flag is not mutated and the plan cache still serves ordinary queries.
             var command = ctx.From<EagerParent>().Select(p => p.Id);
-            command.Cache.Should().BeTrue("a rejected eager preparation must not poison the sticky cache flag");
+            command.Cache.Should().BeTrue("a supported eager preparation must not poison the sticky cache flag");
             var first = ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, CancellationToken.None);
             var second = ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, CancellationToken.None);
             second.Should().BeSameAs(first, "subsequent normal queries must still reuse the plan cache");
@@ -593,23 +621,70 @@ public class EagerLoadingSqlGenerationTests
     }
 
     [Fact]
-    public void SingleQuery_PerParentTopN_IsRejectedWithZeroSql()
+    public void SingleQuery_PerParentTopN_IsAppliedPerParentWithOneSql()
     {
         var interceptor = new SqlRecordingInterceptor();
-        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
+        var (ctx, path) = CreateDb();
         ctx.AddInterceptor(interceptor);
         try
         {
             ctx.PurgeQueryCache();
 
-            var act = () => ctx.From<EagerParent>()
-                .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+            // #211: the child's own Limit is honored per parent inside the single-query join (a ranked
+            // derived source partitioned by the child key), instead of the previously rejected blanket.
+            var parents = ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().OrderBy(x => x.Id).Limit(1), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
                 .OrderBy(p => p.Id)
                 .ToList();
 
-            act.Should().Throw<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
-            interceptor.Statements.Should().BeEmpty(
-                "the single-query guard runs while the pair command is built, before any SQL is generated");
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents[0].Children.Select(c => c.Id).Should().Equal(10);
+            parents[1].Children.Select(c => c.Id).Should().Equal(12);
+            parents[2].Children.Should().BeEmpty();
+
+            // One denormalized command: the ranked per-parent paging stays a single round trip.
+            interceptor.Statements.Should().HaveCount(1, "single-query per-parent paging stays one command");
+            var sql = interceptor.Statements[0].ToLowerInvariant();
+            sql.Should().Contain("row_number()").And.Contain("partition by").And.Contain("join");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    [Trait("Feature", "D211")]
+    public void SingleQuery_PerParentTopN_OrdersOuterPairByReboundChildKeyWithLegalNestedSource()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            _ = ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().OrderBy(x => x.Id).Limit(1), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            interceptor.Statements.Should().HaveCount(1);
+            var sql = interceptor.Statements[0].ToLowerInvariant();
+
+            // The ranking window keeps the child's own ordering.
+            sql.Should().Contain("over (partition by parent_id order by id)");
+
+            // The nested ranked derived source carries no statement-level ORDER BY (SQL Server rejects one
+            // in a derived table); the order moves to the outer pair command, which rebinds the child key
+            // to the join alias after the parent key.
+            var lastRankReference = sql.LastIndexOf("__nextorm_rn", StringComparison.Ordinal);
+            lastRankReference.Should().BeGreaterThanOrEqualTo(0);
+            var derivedClose = sql.IndexOf(") as '", lastRankReference, StringComparison.Ordinal);
+            derivedClose.Should().BeGreaterThan(lastRankReference);
+            sql[lastRankReference..derivedClose].Should().NotContain("order by");
+            sql.Should().Contain("order by t1.id, t3.id");
         }
         finally
         {
@@ -642,6 +717,43 @@ public class EagerLoadingSqlGenerationTests
             File.Delete(path);
         }
     }
+
+    [Theory]
+    [InlineData("Distinct")]
+    [InlineData("GroupBy")]
+    public void SingleQuery_PerParentTopN_UnsupportedChildShape_IsRejectedWithZeroSql(string shape)
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Retain the fail-closed guard for the child shapes the ranked per-parent paging source cannot
+            // fold in (aggregate/grouped/distinct): ordering and paging are consumed by the window, but
+            // every other unsupported shape is still rejected before any SQL is generated.
+            var act = () => ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => PagedUnsupportedChild(c, shape), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{shape}*");
+            interceptor.Statements.Should().BeEmpty("an unsupported paged child shape must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    private static EntityBuilder<EagerChild> PagedUnsupportedChild(IDataContext ctx, string shape) => shape switch
+    {
+        "Distinct" => ctx.From<EagerChild>().Distinct().OrderBy(x => x.Id).Limit(1),
+        "GroupBy" => ctx.From<EagerChild>().GroupBy(x => x.ParentId).OrderBy(x => x.Id).Limit(1),
+        _ => throw new ArgumentOutOfRangeException(nameof(shape), shape, "unknown child shape"),
+    };
 
     [Fact]
     public void ContextBuilder_RejectsDefaultAndUndefinedEagerModes()

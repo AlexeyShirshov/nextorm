@@ -164,6 +164,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private SelectExpression[]? _distinctOnColumns;
     private SelectExpression[]? _extremeRowColumns;
     private SelectExpression[]? _extremeRowGroupByColumns;
+    private SelectExpression[]? _perParentPartitionColumns;
     /// <summary>The sort columns before preparation, or <c>null</c> when the query has no <c>ORDER BY</c>.</summary>
     protected Sorting[]? _sorting;
 
@@ -448,6 +449,30 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     internal SelectExpression[]? ExtremeRowColumns => _extremeRowColumns;
     /// <summary>The prepared group-by columns of <see cref="ExtremeRow"/>, or <c>null</c> when the clause has no group.</summary>
     internal SelectExpression[]? ExtremeRowGroupByColumns => _extremeRowGroupByColumns;
+    /// <summary>
+    /// Whether this command is the child query of an eager load that carries a per-parent
+    /// <c>Limit</c>/<c>Offset</c>/<c>Page</c>. When set, the builder lowers the command to a
+    /// <c>row_number() over (partition by &lt;child key&gt; ...)</c> derived table and applies the page
+    /// bounds to each partition, so the paging is per parent instead of global. It is an internal
+    /// execution detail of the eager loader; a command with no eager load never sets it.
+    /// </summary>
+    internal bool PerParentPaging { get; set; }
+    /// <summary>
+    /// The child-side partition selector used by <see cref="PerParentPaging"/> (the load's child key
+    /// selector, whose parameter is the child entity type). Prepared into
+    /// <see cref="PerParentPartitionColumns"/> during preparation.
+    /// </summary>
+    internal LambdaExpression? PerParentPartition { get; set; }
+    /// <summary>The prepared partition columns of <see cref="PerParentPaging"/>, or <c>null</c> when absent.</summary>
+    internal SelectExpression[]? PerParentPartitionColumns => _perParentPartitionColumns;
+    /// <summary>
+    /// Whether a <see cref="PerParentPaging"/> command is rendered as a nested derived source (the
+    /// single-query eager join) rather than as a top-level statement (the split child loader). A nested
+    /// derived table must not carry the child's output <c>ORDER BY</c> - it is meaningless inside the
+    /// join and is rejected by SQL Server - while the split statement keeps it so the loaded children
+    /// preserve the child query's order. Set before preparation; a rendering detail, not query state.
+    /// </summary>
+    internal bool PerParentPagingEmbedded { get; set; }
     /// <summary>
     /// The <c>TABLESAMPLE</c> table modifier, or <c>null</c> when the query has none. A dialect that does
     /// not support it rejects the command when its SQL is built.
@@ -854,6 +879,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _distinctOnColumns = null;
         _extremeRowColumns = null;
         _extremeRowGroupByColumns = null;
+        _perParentPartitionColumns = null;
         PreparedPreWhere = null;
         _preparedArrayJoin = null;
         PreWhereShapeHash = 0;

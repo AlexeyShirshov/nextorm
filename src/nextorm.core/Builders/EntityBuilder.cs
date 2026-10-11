@@ -1187,12 +1187,32 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// </summary>
     /// <returns>The unsupported shape names; empty when the child query carries only a <c>Where</c>.</returns>
     internal IReadOnlyList<string> UnsupportedSingleQueryChildShapes()
+        => UnsupportedChildShapes(allowOrderingAndPaging: false);
+
+    /// <summary>
+    /// Names the child-query shapes the single-query per-parent paging source cannot fold into its ranked
+    /// derived table. Unlike <see cref="UnsupportedSingleQueryChildShapes"/>, the child's own ordering and
+    /// paging are consumed by the <c>row_number()</c> window and its page bounds, so they are supported;
+    /// every other unsupported shape is reported and rejected before SQL execution.
+    /// </summary>
+    /// <returns>The unsupported shape names; empty when only the child's own <c>Where</c>/<c>OrderBy</c>/paging are present.</returns>
+    internal IReadOnlyList<string> UnsupportedPerParentPagingChildShapes()
+        => UnsupportedChildShapes(allowOrderingAndPaging: true);
+
+    /// <summary>
+    /// Collects the child-query shape names the single-query fold cannot carry. Ordering and paging are
+    /// reported only when <paramref name="allowOrderingAndPaging"/> is <see langword="false"/>; the
+    /// per-parent paging source consumes them, so it allows them.
+    /// </summary>
+    /// <param name="allowOrderingAndPaging">Whether <c>OrderBy</c> and <c>Limit</c>/<c>Offset</c>/<c>Page</c> are supported.</param>
+    /// <returns>The unsupported shape names.</returns>
+    private IReadOnlyList<string> UnsupportedChildShapes(bool allowOrderingAndPaging)
     {
         var shapes = new List<string>();
-        if (_sorting is { Count: > 0 })
+        if (!allowOrderingAndPaging && _sorting is { Count: > 0 })
             shapes.Add("OrderBy");
 
-        if (!Paging.IsEmpty)
+        if (!allowOrderingAndPaging && !Paging.IsEmpty)
             shapes.Add("Limit/Offset/Page");
 
         if (IsDistinct)
@@ -1293,9 +1313,22 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return WithoutJoinIntos().ToCommand();
     }
     /// <summary>
+    /// Builds the parent-only command for the split list terminal. A per-parent top-N child is accepted
+    /// (<paramref name="allowPerParentTopN"/>), because the split list loader applies it through the
+    /// ranked child source; every other unsupported shape (an explicit <see cref="EagerLoadMode.Correlated"/>)
+    /// is still rejected before any command is built.
+    /// </summary>
+    /// <param name="allowPerParentTopN">Whether a child <c>Limit</c>/<c>Offset</c>/<c>Page</c> is accepted.</param>
+    /// <returns>The parent command.</returns>
+    internal QueryCommand<TEntity> ToParentCommand(bool allowPerParentTopN)
+    {
+        EntityBuilderEagerLoading.ValidateLoadWithForJoinInto(this, allowPerParentTopN);
+        return WithoutJoinIntos().ToCommand();
+    }
+    /// <summary>
     /// Builds a parent-only projection command for the aggregate terminals (excludes the <c>JoinInto</c>
     /// joins). Rejects an unsupported eager-load request before any command is built, mirroring
-    /// <see cref="ToParentCommand"/>.
+    /// <see cref="ToParentCommand()"/>.
     /// </summary>
     internal QueryCommand<TResult> SelectParent<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
@@ -1371,7 +1404,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         {
             foreach (var load in _loadSpecs)
             {
-                var spec = load.ToJoinIntoSpec(_dataProvider, out var childSource);
+                var spec = load.ToJoinIntoSpec(_dataProvider, _filterScope, out var childSource);
                 specs.Add(spec);
                 joins.Add(new JoinExpression(spec.Predicate, spec.JoinType)
                 {
@@ -1381,6 +1414,12 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
                     // The child query's own selective filter scope, independent of the parent's scope;
                     // an empty scope is normalized to null (both mean "inherit").
                     FilterScope = spec.ChildFilterScope.IsEmpty ? null : spec.ChildFilterScope,
+                    // A per-parent paging child is rendered as an embedded ranked derived source that
+                    // cannot carry its own ORDER BY; its ordered keys are appended to the pair command so
+                    // the stitched children keep the child query's order (resolved against this join alias).
+                    EagerPerParentOrdering = childSource.SubQuery is { PerParentPagingEmbedded: true } embeddedChild
+                        ? embeddedChild.Sorting
+                        : null,
                 });
             }
         }
@@ -1467,7 +1506,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         var sourceType = isSql ? _sourceEntityType ?? typeof(TEntity) : projectionType;
         LambdaExpression? condition = _condition;
-        var sorting = _sorting?.ToArray();
+        var sorting = AppendEmbeddedChildOrdering(_sorting?.ToArray(), isSql ? joins : null);
         LambdaExpression? group = _group;
         LambdaExpression? having = _having;
         FromExpression? from = null;
@@ -1517,7 +1556,9 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         // command itself must not carry the limit/offset, or the denormalized rows (not parents) page.
         if (isSql && !Paging.IsEmpty)
         {
-            from = new FromExpression(ToParentCommand());
+            // Root paging wraps the parent in its own subquery; a paged eager child is handled by the
+            // join (split loader or ranked single-query source), so it must not reject here.
+            from = new FromExpression(ToParentCommand(allowPerParentTopN: true));
             condition = null;
         }
 
@@ -1581,6 +1622,40 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.PendingJoinIntoCartesianWarning = collectionCount >= 2 && !suppressed;
 
         return cmd;
+    }
+
+    /// <summary>
+    /// Appends each embedded per-parent paging child join's own ordered keys to the pair command's
+    /// parent ordering, so the stitched children of every parent keep the child query's <c>ORDER BY</c>.
+    /// The embedded ranked derived source cannot carry a statement-level <c>ORDER BY</c> (a nested
+    /// derived table rejects it on SQL Server), so the order moves to the denormalized pair statement
+    /// where each key is resolved against that join's own outer alias. Existing parent keys keep their
+    /// precedence; each paged navigation contributes its own keys, so multiple navigations are
+    /// independent. Returns the parent ordering unchanged when the command has no embedded paging child.
+    /// </summary>
+    /// <param name="parentSorting">The parent builder's own ordering, or <c>null</c>.</param>
+    /// <param name="joins">The pair command's joins, or <c>null</c> when it has none.</param>
+    /// <returns>The combined ordering, or <paramref name="parentSorting"/> when no child contributes.</returns>
+    private static Sorting[]? AppendEmbeddedChildOrdering(Sorting[]? parentSorting, List<JoinExpression>? joins)
+    {
+        if (joins is not { Count: > 0 })
+            return parentSorting;
+
+        List<Sorting>? combined = null;
+        for (var i = 0; i < joins.Count; i++)
+        {
+            if (joins[i].EagerPerParentOrdering is not { Length: > 0 } childOrdering)
+                continue;
+
+            combined ??= parentSorting is null ? [] : [.. parentSorting];
+            for (var s = 0; s < childOrdering.Length; s++)
+            {
+                if (childOrdering[s].SortExpression is { } key)
+                    combined.Add(new Sorting(key) { Direction = childOrdering[s].Direction });
+            }
+        }
+
+        return combined?.ToArray() ?? parentSorting;
     }
 
     /// <summary>

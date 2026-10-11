@@ -89,6 +89,10 @@ public partial class QueryCommand
         dst.ExtremeRow = ExtremeRow;
         dst._extremeRowColumns = _extremeRowColumns;
         dst._extremeRowGroupByColumns = _extremeRowGroupByColumns;
+        dst.PerParentPaging = PerParentPaging;
+        dst.PerParentPagingEmbedded = PerParentPagingEmbedded;
+        dst.PerParentPartition = PerParentPartition;
+        dst._perParentPartitionColumns = _perParentPartitionColumns;
         dst.TableSample = TableSample;
         dst.Temporal = Temporal;
         dst.RowLock = RowLock;

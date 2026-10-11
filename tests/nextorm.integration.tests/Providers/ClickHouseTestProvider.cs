@@ -468,12 +468,16 @@ internal sealed class ClickHouseTestProvider : ITestProvider
         // Implicit-navigation reference fixtures (#148-B D8): ClickHouse does not derive
         // CommonTestSuite, so the reference-navigation cases are re-pinned by
         // ClickHouseImplicitNavigationTests over these Memory tables.
+        "drop table if exists eager_composite_child",
+        "drop table if exists eager_composite_parent",
         "drop table if exists eager_link",
         "drop table if exists eager_tag",
         "drop table if exists eager_child",
         "drop table if exists eager_parent",
         "create table eager_parent (id Int32, name Nullable(String)) engine = Memory",
         "create table eager_child (id Int32, parent_id Int32, name Nullable(String)) engine = Memory",
+        "create table eager_composite_parent (row_id Int32, tenant Int32, link_id Int32) engine = Memory",
+        "create table eager_composite_child (id Int32, tenant Int32, parent_id Int32, sort_key Int32) engine = Memory",
         "create table eager_tag (id Int32, name Nullable(String)) engine = Memory",
         "create table eager_link (id Int32, parent_id Int32, child_id Int32) engine = Memory"
     ];

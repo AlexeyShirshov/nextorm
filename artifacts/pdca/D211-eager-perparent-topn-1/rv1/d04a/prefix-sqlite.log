@@ -1,0 +1,74 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.sqlite.tests
+  Discovered:  nextorm.sqlite.tests
+  Starting:    nextorm.sqlite.tests
+    NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests.SingleQuery_Take_AppliesToEachParentIndependently [FAIL]
+      Expected parents[1].Children.Select(c => c.SortKey) to be equal to {5, 50}, but {50, 5} differs at index 0.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+           at FluentAssertions.Execution.GivenSelector`1.FailWith(String message, Object[] args)
+           at FluentAssertions.Execution.GivenSelector`1.FailWith(String message, Func`2[] args)
+           at FluentAssertions.Execution.GivenSelectorExtensions.AssertCollectionsHaveSameItems[TActual,TExpected](GivenSelector`1 givenSelector, ICollection`1 expected, Func`3 findIndex)
+           at FluentAssertions.Collections.GenericCollectionAssertions`3.AssertSubjectEquality[TExpectation](IEnumerable`1 expectation, Func`3 equalityComparison, String because, Object[] becauseArgs)
+           at FluentAssertions.Collections.GenericCollectionAssertions`3.Equal(T[] elements)
+        tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs(254,0): at NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests.SingleQuery_Take_AppliesToEachParentIndependently()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+    NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests.SingleQuery_And_Split_ProduceSamePerParentResultWithDifferentQueryCounts [FAIL]
+      Expected split[i].Children.Select(c => c.SortKey) to be equal to {30, 20}, but {20, 30} differs at index 0.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+           at FluentAssertions.Execution.GivenSelector`1.FailWith(String message, Object[] args)
+           at FluentAssertions.Execution.GivenSelector`1.FailWith(String message, Func`2[] args)
+           at FluentAssertions.Execution.GivenSelectorExtensions.AssertCollectionsHaveSameItems[TActual,TExpected](GivenSelector`1 givenSelector, ICollection`1 expected, Func`3 findIndex)
+           at FluentAssertions.Collections.GenericCollectionAssertions`3.AssertSubjectEquality[TExpectation](IEnumerable`1 expectation, Func`3 equalityComparison, String because, Object[] becauseArgs)
+           at FluentAssertions.Collections.GenericCollectionAssertions`3.Equal(IEnumerable`1 expected, String because, Object[] becauseArgs)
+        tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs(368,0): at NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests.SingleQuery_And_Split_ProduceSamePerParentResultWithDifferentQueryCounts()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+    NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests.SingleQuery_ChildFilterPrecedesRanking [FAIL]
+      Expected parents[1].Children.Select(c => c.SortKey) to be equal to {5, 50}, but {50, 5} differs at index 0.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+           at FluentAssertions.Execution.GivenSelector`1.FailWith(String message, Object[] args)
+           at FluentAssertions.Execution.GivenSelector`1.FailWith(String message, Func`2[] args)
+           at FluentAssertions.Execution.GivenSelectorExtensions.AssertCollectionsHaveSameItems[TActual,TExpected](GivenSelector`1 givenSelector, ICollection`1 expected, Func`3 findIndex)
+           at FluentAssertions.Collections.GenericCollectionAssertions`3.AssertSubjectEquality[TExpectation](IEnumerable`1 expectation, Func`3 equalityComparison, String because, Object[] becauseArgs)
+           at FluentAssertions.Collections.GenericCollectionAssertions`3.Equal(T[] elements)
+        tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs(305,0): at NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests.SingleQuery_ChildFilterPrecedesRanking()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+    NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests.SingleQuery_PagedSql_UsesNestedPartitionedRowNumberWithoutADerivedOrderBy [FAIL]
+      Did not expect embedded "from (select *, row_number() over (partition by parent_id order by sort_key) as '__nextorm_rn' from per_page_child) as 't2'
+       where t2.__nextorm_rn > 1 and t2.__nextorm_rn <= 3
+      order by t2.sort_key) as 't3' on t1.id = t3.parentid
+       order by t1.id" to contain "order by sort_key" because the nested derived table must drop the child ORDER BY.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+           at FluentAssertions.Primitives.StringAssertions`1.NotContain(String unexpected, String because, Object[] becauseArgs)
+        tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs(410,0): at NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests.SingleQuery_PagedSql_UsesNestedPartitionedRowNumberWithoutADerivedOrderBy()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Finished:    nextorm.sqlite.tests (ID = 'a5abfb47315c331d69873aec368d5caeca8b1b317eae0481172250d5022c1251')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.sqlite.tests  Total: 13, Errors: 0, Failed: 4, Skipped: 0, Not Run: 0, Time: 1.083s

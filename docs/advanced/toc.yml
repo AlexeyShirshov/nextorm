@@ -6,6 +6,8 @@
   href: ef-core-query-filters.md
 - name: Eager loading child collections
   href: eager-loading.md
+- name: Per-parent paging in eager loading
+  href: eager-loading-per-parent-paging.md
 - name: Relationships and single-query loading
   href: relationships.md
 - name: Limitations and out-of-scope features

@@ -48,6 +48,11 @@ internal readonly struct SqlBuilder
         if (cmd.ExtremeRow is not null)
             return MakeExtremeRowSelect(cmd, selectInto);
 
+        // A per-parent eager top-N child is lowered to a ranked derived table whose page bounds apply
+        // inside each partition of the eager load's child key, instead of the global paging below.
+        if (cmd.PerParentPaging)
+            return MakePerParentPagingSelect(cmd, selectInto);
+
         var selectList = cmd.SelectList;
         var from = cmd.From;
         // A command whose declarations were hoisted into the enclosing statement's top-level WITH must
@@ -617,6 +622,270 @@ internal readonly struct SqlBuilder
 
             if (sqlBuilder is not null)
                 StringBuilderPool.Shared.Return(sqlBuilder);
+        }
+    }
+
+    /// <summary>
+    /// Renders the child command of a per-parent eager load. The command's own
+    /// <c>Limit</c>/<c>Offset</c>/<c>Page</c> is applied independently to each partition of the eager
+    /// load's child key by lowering the command to a <c>row_number()</c> ranked derived table:
+    /// <code>
+    /// select &lt;entity columns&gt; from (
+    ///     select *, row_number() over (partition by &lt;child key&gt; order by &lt;sorting&gt;) as rn
+    ///     from &lt;source&gt; where &lt;condition&gt;
+    /// ) t1 where t1.rn &gt; &lt;offset&gt; and t1.rn &lt;= &lt;offset + limit&gt;
+    /// </code>
+    /// Mirrors the portable <see cref="MakePortableExtremeRowSelect"/> lowering, but keeps the page
+    /// bounds instead of <c>rn = 1</c> and drops the synthetic rank column from the projection.
+    /// </summary>
+    private string? MakePerParentPagingSelect(QueryCommand cmd, string? selectInto)
+    {
+        if (selectInto is not null)
+            throw new BuildSqlCommandException("A per-parent eager top-N child cannot be rendered as a SELECT ... INTO source.");
+
+        if (cmd.From is null || cmd.From.SubQuery is not null)
+            throw new BuildSqlCommandException("A per-parent eager top-N child requires a single physical-table source.");
+
+        var entityType = cmd.EntityType!;
+        var from = cmd.From!;
+        var rankColumn = MakeExtremeRowRankName(entityType);
+        var innerSql = MakePerParentPagingInner(cmd, entityType, from, rankColumn);
+        return MakePerParentPagingOuter(cmd, entityType, innerSql, rankColumn);
+    }
+
+    /// <summary>
+    /// Builds the inner derived table of the per-parent paging lowering: the filtered child rows plus
+    /// the synthetic <c>row_number()</c> partition rank.
+    /// </summary>
+    private string? MakePerParentPagingInner(QueryCommand cmd, Type entityType, FromExpression from, string rankColumn)
+    {
+        string? innerSql = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var inner = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var fromSql = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(false, entityType, false));
+                var rankSql = MakePerParentRankExpression(cmd, entityType, rankColumn);
+
+                if (!_ctx.ParamMode)
+                    inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(Kw(" from ")).Append(fromSql);
+
+                if (cmd.PreparedCondition is { } condition)
+                {
+                    if (!_ctx.ParamMode)
+                        inner!.AppendLine().Append(Kw(" where "));
+
+                    SqlSourceRenderer.MakeWhere(in _ctx, inner, entityType, condition, 0);
+                }
+
+                innerSql = inner?.ToString();
+            }
+            finally
+            {
+                if (inner is not null) StringBuilderPool.Shared.Return(inner);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return innerSql;
+    }
+
+    /// <summary>
+    /// Renders <c>row_number() over (partition by &lt;child key&gt; [order by &lt;child sorting&gt;])</c>.
+    /// The window order follows the child query's own <c>ORDER BY</c>; with no order the window has no
+    /// <c>ORDER BY</c> and the selected rows are intentionally unspecified, exactly like unordered
+    /// paging. Parameter mode visits the partition and sort expressions but emits nothing.
+    /// </summary>
+    private string MakePerParentRankExpression(QueryCommand cmd, Type entityType, string rankColumn)
+    {
+        var partition = cmd.PerParentPartitionColumns ?? [];
+        var sorting = cmd.Sorting ?? [];
+
+        var builder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+        try
+        {
+            if (builder is not null && sorting.Length == 0 && partition.Length == 0)
+                throw new BuildSqlCommandException("A per-parent eager top-N child requires a partition key.");
+
+            if (builder is not null)
+                builder.Append("row_number()").Append(Kw(" over ("));
+
+            // Partition first, matching the window grammar.
+            var wrotePartition = false;
+            for (var i = 0; i < partition.Length; i++)
+            {
+                if (builder is not null)
+                {
+                    builder.Append(i == 0 ? Kw("partition by ") : ", ");
+                    wrotePartition = true;
+                }
+
+                var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, partition[i], entityType, dontNeedAlias: true);
+                if (builder is not null) builder.Append(column);
+            }
+
+            for (var i = 0; i < sorting.Length; i++)
+            {
+                if (builder is not null)
+                {
+                    if (i == 0)
+                        builder.Append(wrotePartition ? Kw(" order by ") : Kw("order by "));
+                    else
+                        builder.Append(", ");
+                }
+
+                if (sorting[i].PreparedExpression is { } prepared)
+                {
+                    var sort = SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
+                    if (builder is not null) builder.Append(sort);
+                }
+                else if (builder is not null)
+                {
+                    builder.Append(sorting[i].ColumnIndex);
+                }
+
+                if (builder is not null && sorting[i].Direction == OrderDirection.Desc)
+                    builder.Append(Kw(" desc"));
+            }
+
+            if (builder is not null)
+                builder.Append(')').Append(_ctx.Dialect.MakeColumnAlias(rankColumn, _ctx.KeywordCase));
+
+            return builder?.ToString() ?? string.Empty;
+        }
+        finally
+        {
+            if (builder is not null) StringBuilderPool.Shared.Return(builder);
+        }
+    }
+
+    /// <summary>
+    /// Wraps the ranked inner source in the outer statement: the entity projection (dropping the
+    /// synthetic rank column), the per-partition page-bound filter and the child's output ordering.
+    /// </summary>
+    private string? MakePerParentPagingOuter(QueryCommand cmd, Type entityType, string? innerSql, string rankColumn)
+    {
+        string? result = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            string? alias = null;
+            if (!_ctx.ParamMode)
+            {
+                // Register the derived table as a physical-shaped source so member access of the
+                // command's select list resolves to its aliased columns.
+                _ctx.ColumnsProvider.Add(entityType, false);
+                alias = _ctx.AliasProvider!.GetNextAlias(new FromExpression(entityType));
+            }
+
+            var outer = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var entityColumns = BuildExtremeRowEntitySelectList(entityType);
+
+                if (!_ctx.ParamMode)
+                {
+                    outer!.Append(Kw("select "));
+                    if (cmd.Tag is { Length: > 0 } tag)
+                        outer.Append(MakeTagComment(tag)).Append(' ');
+
+                    for (var i = 0; i < entityColumns.Length; i++)
+                    {
+                        if (i > 0) outer.Append(", ");
+
+                        var item = entityColumns[i];
+                        var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias: false, renameAware: true);
+                        outer.Append(column);
+
+                        if (needAliasForColumn)
+                            outer.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
+                    }
+
+                    outer.AppendLine().Append(Kw("from ")).Append('(').Append(innerSql).Append(')')
+                        .Append(_ctx.Dialect.MakeTableAlias(alias!, _ctx.KeywordCase));
+
+                    AppendPerParentRankFilter(cmd, outer, alias!, rankColumn);
+                    // A nested derived source (the embedded single-query join) cannot carry a
+                    // statement-level ORDER BY: SQL Server rejects one inside a derived table, and the
+                    // order is instead applied on the outer pair command, which resolves the child keys
+                    // against this source's join alias. A top-level split child statement keeps it so the
+                    // loaded children preserve the child query's order.
+                    if (!cmd.PerParentPagingEmbedded)
+                        AppendOrderBy(cmd, entityType, outer);
+                }
+                else
+                {
+                    // Parameter pass: walk the same expressions in the same order as the SQL pass.
+                    for (var i = 0; i < entityColumns.Length; i++)
+                        SqlSourceRenderer.MakeColumn(in _ctx, entityColumns[i], entityType, dontNeedAlias: false, renameAware: true);
+
+                    if (!cmd.PerParentPagingEmbedded && cmd.Sorting is { Length: > 0 } sorting)
+                    {
+                        for (var i = 0; i < sorting.Length; i++)
+                        {
+                            if (sorting[i].PreparedExpression is { } prepared)
+                                SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
+                        }
+                    }
+                }
+
+                result = outer?.ToString();
+            }
+            finally
+            {
+                if (outer is not null) StringBuilderPool.Shared.Return(outer);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Appends the per-partition page-bound filter on the ranked derived table. Only the bounds the
+    /// command actually requests are emitted, and the inclusive upper bound is computed in
+    /// <see cref="long"/> arithmetic so a near-<see cref="int.MaxValue"/> offset plus limit cannot
+    /// overflow into a wrong window.
+    /// </summary>
+    private void AppendPerParentRankFilter(QueryCommand cmd, StringBuilder outer, string alias, string rankColumn)
+    {
+        var offset = cmd.Paging.Offset;
+        var limit = cmd.Paging.Limit;
+        var hasLower = offset > 0;
+        var hasUpper = limit > 0;
+
+        if (!hasLower && !hasUpper)
+        {
+            // Paging.IsEmpty would not have routed here, but keep the renderer total: with no bound the
+            // ranked source is filtered to its first row's rank (never removes a partition).
+            outer.AppendLine().Append(Kw(" where ")).Append(alias).Append('.')
+                .Append(_ctx.Dialect.MakeColumnReference(rankColumn)).Append(" >= 1");
+            return;
+        }
+
+        outer.AppendLine().Append(Kw(" where "));
+
+        if (hasLower)
+        {
+            outer.Append(alias).Append('.').Append(_ctx.Dialect.MakeColumnReference(rankColumn))
+                .Append(" > ").Append(offset);
+        }
+
+        if (hasLower && hasUpper)
+            outer.Append(Kw(" and "));
+
+        if (hasUpper)
+        {
+            outer.Append(alias).Append('.').Append(_ctx.Dialect.MakeColumnReference(rankColumn))
+                .Append(" <= ").Append((long)offset + limit);
         }
     }
 

@@ -1,0 +1,992 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using FluentAssertions;
+using Microsoft.Data.Sqlite;
+using NextORM.Core;
+using NextORM.Sqlite;
+
+namespace NextORM.Sqlite.Tests;
+
+/// <summary>
+/// Per-parent top-N eager loading (#211): a child query's own <c>Limit</c>/<c>Offset</c>/<c>Page</c> is
+/// applied independently to each parent through the split loader. The child source is lowered to a
+/// <c>row_number() over (partition by &lt;child key&gt;)</c> derived table whose page bounds filter each
+/// partition, so a globally limited child query can no longer starve later parents.
+/// </summary>
+[Trait("Feature", "D211")]
+public sealed class EagerLoadPerParentPagingTests
+{
+    private sealed class SqlRecordingInterceptor : IQueryInterceptor
+    {
+        public List<string> Statements { get; } = [];
+
+        public void CommandExecuting(CommandEventData eventData, System.Data.Common.DbCommand command)
+            => Statements.Add(command.CommandText);
+    }
+
+    private static (SqliteDataContext Ctx, string Path) CreateDb()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nextorm-perparent-{Guid.NewGuid():N}.db");
+        using (var conn = new SqliteConnection($"Data Source={path}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                "create table per_page_parent (id integer primary key, name text);" +
+                "create table per_page_child (id integer primary key, parent_id int not null, sort_key int not null, group_key int not null, flag int not null);" +
+                "create table per_page_note (id integer primary key, parent_id int not null, rank int not null);" +
+                "insert into per_page_parent (id, name) values (1, 'a'), (2, 'b'), (3, 'empty');" +
+                // Parent 1 has four children, parent 2 has two, parent 3 none. group_key deliberately
+                // disagrees with sort_key so a two-key ordering is distinguishable from a single key.
+                "insert into per_page_child (id, parent_id, sort_key, group_key, flag) values" +
+                " (11, 1, 40, 2, 1), (12, 1, 10, 1, 1), (13, 1, 30, 1, 1), (14, 1, 20, 2, 0)," +
+                " (21, 2, 50, 1, 1), (22, 2, 5, 2, 1);" +
+                "insert into per_page_note (id, parent_id, rank) values" +
+                " (101, 1, 2), (102, 1, 1), (103, 1, 3), (201, 2, 7);" +
+                // Composite parent-link key fixture: the link key is (tenant, link_id), which is NOT a
+                // table key (row_id is). The three parents are (1,10), (1,20), (2,10): each parent shares
+                // one component with another, so a partition that used only tenant or only link_id blends
+                // two parents. Children are interleaved by sort_key across parents, so a global page or a
+                // one-component partition changes every per-parent id set.
+                "create table per_page_composite_parent (row_id integer primary key, tenant int not null, link_id int not null, name text);" +
+                "create table per_page_composite_child (id integer primary key, tenant int not null, parent_id int not null, sort_key int not null);" +
+                "insert into per_page_composite_parent (row_id, tenant, link_id, name) values" +
+                " (1, 1, 10, 'p1'), (2, 1, 20, 'p2'), (3, 2, 10, 'p3');" +
+                "insert into per_page_composite_child (id, tenant, parent_id, sort_key) values" +
+                " (101, 1, 10, 1), (104, 1, 10, 4), (107, 1, 10, 7), (110, 1, 10, 10)," +
+                " (202, 1, 20, 2), (205, 1, 20, 5), (208, 1, 20, 8)," +
+                " (303, 2, 10, 3), (306, 2, 10, 6), (309, 2, 10, 9);";
+            cmd.ExecuteNonQuery();
+        }
+
+        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+    }
+
+    [Fact]
+    public void Split_Take_AppliesToEachParentIndependently()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            // Parent 1: two lowest sort keys among its four children.
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(10, 20);
+            // Parent 2: two lowest (has only two).
+            parents[1].Children.Select(c => c.SortKey).Should().Equal(5, 50);
+            // Parent 3 stays and is empty: no parent disappears for zero qualifying children.
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_SkipAndTake_AppliesToEachParentIndependently()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(1).Limit(1), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(20);
+            parents[1].Children.Select(c => c.SortKey).Should().Equal(50);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_SkipOnly_AppliesToEachParentIndependently()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Skip with no Take: each parent drops only its own first ranked child; a mutation that
+            // collapses the lower-only bound to the `rn >= 1` branch or adds a spurious upper bound
+            // (limit >= 0) changes these per-parent results.
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(1), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(20, 30, 40);
+            parents[1].Children.Select(c => c.SortKey).Should().Equal(50);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_ChildFilterPrecedesRanking()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().Where(x => x.Flag == 1).OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            // Parent 1's flag=0 child (sort 20) is filtered out before ranking, so flags {10,30,40} page to {10,30}.
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(10, 30);
+            parents[1].Children.Select(c => c.SortKey).Should().Equal(5, 50);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task Split_Async_AppliesToEachParentIndependently()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = await ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(1), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToListAsync();
+
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(10);
+            parents[1].Children.Select(c => c.SortKey).Should().Equal(5);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_UnpagedChild_RetainsEveryChild()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents[0].Children.Should().HaveCount(4);
+            parents[1].Children.Should().HaveCount(2);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_PagedSql_UsesPartitionedRowNumberAndBounds()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            _ = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(1).Limit(2), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            // One parent statement plus one child statement: still batched, never N+1.
+            interceptor.Statements.Should().HaveCount(2);
+            var childSql = interceptor.Statements[1].ToLowerInvariant();
+            childSql.Should().Contain("row_number()").And.Contain("over (").And.Contain("partition by");
+            childSql.Should().Contain("> ").And.Contain("<= ");
+            // The rank lives in the inner derived table and is dropped from the outer projection (the
+            // outer selects the entity columns explicitly, never `t1.*`).
+            childSql.Should().Contain("from (select *");
+            childSql.Should().NotContain("select t1.*");
+            // The rank appears only in the derived table and its outer filter, never in the outer
+            // projection (the part before `from (select`).
+            var outerProjection = childSql.Split("from (select")[0];
+            outerProjection.Should().NotContain("__nextorm_rn");
+            // Two ORDER BY clauses: the window's rank order and the top-level split child's own output
+            // order after the derived table. Dropping the outer one silently loses the child's guaranteed
+            // order for Take > 1.
+            (childSql.Split("order by", StringSplitOptions.None).Length - 1).Should().Be(2);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_PagedChild_RespectsRootPagingIndependently()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Root Take/Skip selects parents 2 and 3; the child paging still applies per parent.
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(1), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .Offset(1)
+                .Limit(2)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(2, 3);
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(5);
+            parents[1].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    // --- single-query mode (#211): the same per-parent paging semantics through one ranked derived join ---
+
+    [Fact]
+    public void SingleQuery_Take_AppliesToEachParentIndependently()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(10, 20);
+            parents[1].Children.Select(c => c.SortKey).Should().Equal(5, 50);
+            // No parent disappears for zero qualifying children.
+            parents[2].Children.Should().BeEmpty();
+            interceptor.Statements.Should().HaveCount(1, "single-query paging stays one denormalized command");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_SkipAndTake_AppliesToEachParentIndependently()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(1).Limit(1), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(20);
+            parents[1].Children.Select(c => c.SortKey).Should().Equal(50);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_SkipOnly_AppliesToEachParentIndependently()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(1), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(20, 30, 40);
+            parents[1].Children.Select(c => c.SortKey).Should().Equal(50);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_ChildFilterPrecedesRanking()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().Where(x => x.Flag == 1).OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            // Parent 1's flag=0 child (sort 20) is filtered out before ranking, so flags {10,30,40} page to {10,30}.
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(10, 30);
+            parents[1].Children.Select(c => c.SortKey).Should().Equal(5, 50);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_PagedChild_RespectsRootPagingIndependently()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(1), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .Offset(1)
+                .Limit(2)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(2, 3);
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(5);
+            parents[1].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_And_Split_ProduceSamePerParentResultWithDifferentQueryCounts()
+    {
+        var splitInterceptor = new SqlRecordingInterceptor();
+        var (splitCtx, splitPath) = CreateDb();
+        splitCtx.AddInterceptor(splitInterceptor);
+        var singleInterceptor = new SqlRecordingInterceptor();
+        var (singleCtx, singlePath) = CreateDb();
+        singleCtx.AddInterceptor(singleInterceptor);
+        try
+        {
+            splitCtx.PurgeQueryCache();
+            singleCtx.PurgeQueryCache();
+
+            var split = splitCtx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(1).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SplitQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            var single = singleCtx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(1).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            split.Select(p => p.Id).Should().Equal(single.Select(p => p.Id));
+            for (var i = 0; i < split.Count; i++)
+            {
+                split[i].Children.Select(c => c.SortKey).Should().Equal(single[i].Children.Select(c => c.SortKey));
+                split[i].Children.Should().HaveCount(single[i].Children.Count);
+            }
+
+            // Split batches (one parent + one child statement); single merges into one denormalized command.
+            splitInterceptor.Statements.Should().HaveCount(2);
+            singleInterceptor.Statements.Should().HaveCount(1);
+        }
+        finally
+        {
+            splitCtx.Dispose();
+            singleCtx.Dispose();
+            File.Delete(splitPath);
+            File.Delete(singlePath);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_PagedSql_MovesChildOrderOutOfTheNestedDerivedSource()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            _ = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(1).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            interceptor.Statements.Should().HaveCount(1);
+            var sql = interceptor.Statements[0].ToLowerInvariant();
+            sql.Should().Contain("row_number()").And.Contain("over (").And.Contain("partition by");
+            sql.Should().Contain("> ").And.Contain("<= ");
+
+            // The ranking window keeps its order by the child key.
+            sql.Should().Contain("over (partition by parent_id order by sort_key)");
+
+            // The ranked child is a nested derived source inside the join, not a top-level statement. A
+            // nested derived table must not carry the child's output ORDER BY (SQL Server rejects it), so
+            // the statement-level ORDER BY moves to the outer pair command. Verify the region after the
+            // rank filter up to the derived table's closing parenthesis carries no ORDER BY; the ranking
+            // window above is the only remaining "order by" inside the nested source.
+            var lastRankReference = sql.LastIndexOf("__nextorm_rn", StringComparison.Ordinal);
+            lastRankReference.Should().BeGreaterThanOrEqualTo(0, "the ranked child exposes its partition rank");
+            var derivedClose = sql.IndexOf(") as '", lastRankReference, StringComparison.Ordinal);
+            derivedClose.Should().BeGreaterThan(lastRankReference, "the ranked child is a derived table");
+            sql[lastRankReference..derivedClose].Should().NotContain(
+                "order by", "the nested derived table must drop the statement-level child ORDER BY");
+
+            // The outer pair command carries the child key rebound to the join alias, after the parent key.
+            sql.Should().Contain("order by t1.id, t3.sortkey");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_OrdinalOrderBy_RendersTheColumnIndexInTheRankingWindow()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            _ = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(1).Limit(2), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            interceptor.Statements.Should().HaveCount(2);
+            var childSql = interceptor.Statements[1].ToLowerInvariant();
+            // A child ordered by the public OrderBy(int) ordinal carries a column-index Sorting with no
+            // prepared expression; the rank window and the outer statement emit that ordinal verbatim.
+            childSql.Should().Contain("over (partition by parent_id order by 1)");
+            childSql.Should().Contain("order by 1");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_PagedChild_RepeatedOnSameContext_StaysCorrectThroughThePlanCache()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // The second execution hits the child plan cache. A paged child carries sorting, so it has no
+            // fast param recipe and the cache-hit refresh walks the per-parent source in parameter mode.
+            for (var run = 0; run < 2; run++)
+            {
+                var parents = ctx.From<PerPagePageParent>()
+                    .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId)
+                    .OrderBy(p => p.Id)
+                    .ToList();
+
+                parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+                parents[0].Children.Select(c => c.SortKey).Should().Equal(10, 20);
+                parents[1].Children.Select(c => c.SortKey).Should().Equal(5, 50);
+                parents[2].Children.Should().BeEmpty();
+            }
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_DescendingOrder_AppliesToEachParent()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderByDescending(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            // Parent 1 descending: 40, 30, 20, 10 -> the two highest are 11 and 13.
+            parents[0].Children.Select(c => c.Id).Should().Equal(11, 13);
+            // Parent 2 descending: 50, 5 -> both.
+            parents[1].Children.Select(c => c.Id).Should().Equal(21, 22);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_MultipleSortKeys_ApplyInOrder()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Two keys: group first, then sort. Differs from a single sort_key key, proving both bind.
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.GroupKey).OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            // Parent 1: (group1,10)=12, (group1,30)=13, (group2,20)=14, (group2,40)=11 -> first two 12, 13.
+            parents[0].Children.Select(c => c.Id).Should().Equal(12, 13);
+            parents[1].Children.Select(c => c.Id).Should().Equal(21, 22);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_DescendingAndMultipleKeys_MatchSingleQuery()
+    {
+        var (splitCtx, splitPath) = CreateDb();
+        var (singleCtx, singlePath) = CreateDb();
+        try
+        {
+            splitCtx.PurgeQueryCache();
+            singleCtx.PurgeQueryCache();
+
+            var split = splitCtx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderByDescending(x => x.GroupKey).OrderByDescending(x => x.SortKey).Offset(1).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SplitQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            var single = singleCtx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderByDescending(x => x.GroupKey).OrderByDescending(x => x.SortKey).Offset(1).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            // Both modes honor the same per-parent Skip+Take over the two-key descending order.
+            split.Select(p => p.Id).Should().Equal(single.Select(p => p.Id));
+            for (var i = 0; i < split.Count; i++)
+                split[i].Children.Select(c => c.Id).Should().Equal(single[i].Children.Select(c => c.Id));
+        }
+        finally
+        {
+            splitCtx.Dispose();
+            singleCtx.Dispose();
+            File.Delete(splitPath);
+            File.Delete(singlePath);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_NoOrder_PagedChild_ReturnsMembershipAndCountOnly()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            // Without an ORDER BY the exact tied membership is unspecified: assert count, membership and
+            // parent isolation only, never an invented deterministic order.
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents[0].Children.Should().HaveCount(2);
+            parents[0].Children.Select(c => c.Id).Should().BeSubsetOf([11, 12, 13, 14]);
+            parents[1].Children.Select(c => c.Id).Should().BeEquivalentTo([21, 22]);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_TiedOrder_PagedChild_ReturnsMembershipAndCountOnly()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Ordering by flag ties three of parent 1's children, so the surviving row is not promised.
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.Flag).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents[0].Children.Should().HaveCount(2);
+            parents[0].Children.Select(c => c.Id).Should().Contain(14, "flag=0 sorts first");
+            parents[0].Children.Select(c => c.Id).Should().BeSubsetOf([11, 12, 13, 14]);
+            parents[1].Children.Select(c => c.Id).Should().BeEquivalentTo([21, 22]);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_MultiplePagedNavigations_ArePagedIndependently()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(1), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .LoadWith(p => p.Notes, c => c.From<PerPagePageNote>().OrderBy(x => x.Rank).Limit(1), p => p.Id, n => n.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            // Each navigation ranks within its own partition independently.
+            parents[0].Children.Select(c => c.Id).Should().Equal(12);
+            parents[0].Notes.Select(n => n.Id).Should().Equal(102);
+            parents[1].Children.Select(c => c.Id).Should().Equal(22);
+            parents[1].Notes.Select(n => n.Id).Should().Equal(201);
+            parents[2].Children.Should().BeEmpty();
+            parents[2].Notes.Should().BeEmpty();
+
+            interceptor.Statements.Should().HaveCount(1, "both paged navigations merge into one denormalized command");
+            var sql = interceptor.Statements[0].ToLowerInvariant();
+            // Two independent partition windows, one per paged navigation.
+            sql.Should().Contain("partition by parent_id order by sort_key");
+            sql.Should().Contain("partition by parent_id order by rank");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    // --- composite parent-link key (#211, variant matrix :236/:241) ---------------------------------
+    // The link key is a ValueTuple built with an explicit constructor (not tuple-literal syntax) so the
+    // expression tree carries a ValueTuple NewExpression the partition builder can resolve. The key is
+    // (tenant, link_id) and the three parents (1,10), (1,20), (2,10) overlap on one component each: a
+    // partition that collapsed to either component, or a global page, changes every asserted id set.
+
+    [Fact]
+    public void Split_CompositeKey_Take_PartitionsByBothKeyComponents()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPageCompositeParent>()
+                .LoadWith(
+                    p => p.Children,
+                    c => c.From<PerPageCompositeChild>().OrderBy(x => x.SortKey).Limit(2),
+                    p => new ValueTuple<int, int>(p.Tenant, p.LinkId),
+                    c => new ValueTuple<int, int>(c.Tenant, c.ParentId))
+                .OrderBy(p => p.RowId)
+                .ToList();
+
+            parents.Select(p => p.RowId).Should().Equal(1, 2, 3);
+            // Interleaved sort values across parents: only the complete two-column partition gives these.
+            parents[0].Children.Select(c => c.Id).Should().Equal(101, 104);
+            parents[1].Children.Select(c => c.Id).Should().Equal(202, 205);
+            parents[2].Children.Select(c => c.Id).Should().Equal(303, 306);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_CompositeKey_SkipAndTake_PartitionsByBothKeyComponents()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPageCompositeParent>()
+                .LoadWith(
+                    p => p.Children,
+                    c => c.From<PerPageCompositeChild>().OrderBy(x => x.SortKey).Offset(1).Limit(2),
+                    p => new ValueTuple<int, int>(p.Tenant, p.LinkId),
+                    c => new ValueTuple<int, int>(c.Tenant, c.ParentId))
+                .OrderBy(p => p.RowId)
+                .ToList();
+
+            parents[0].Children.Select(c => c.Id).Should().Equal(104, 107);
+            parents[1].Children.Select(c => c.Id).Should().Equal(205, 208);
+            parents[2].Children.Select(c => c.Id).Should().Equal(306, 309);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_CompositeKey_PagedSql_PartitionsByBothColumns()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            _ = ctx.From<PerPageCompositeParent>()
+                .LoadWith(
+                    p => p.Children,
+                    c => c.From<PerPageCompositeChild>().OrderBy(x => x.SortKey).Limit(2),
+                    p => new ValueTuple<int, int>(p.Tenant, p.LinkId),
+                    c => new ValueTuple<int, int>(c.Tenant, c.ParentId))
+                .OrderBy(p => p.RowId)
+                .ToList();
+
+            interceptor.Statements.Should().HaveCount(2);
+            var childSql = interceptor.Statements[1].ToLowerInvariant();
+            // Both link-key components reach the window partition; a single-column partition would drop one.
+            childSql.Should().Contain("partition by tenant, parent_id");
+            // The split key membership predicate is a two-column row-value list, not a scalar key.
+            childSql.Should().Contain("(tenant, parent_id) in");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_CompositeKey_IsRejectedByThePreExistingKeyEqualityGuard()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Single-query mode needs a translatable Equal node for the join predicate. System.ValueTuple
+            // defines no equality operator, so the pre-existing JoinIntoSpec guard (not added by #211)
+            // rejects the load before any SQL runs. Split mode above is the supported composite path; this
+            // is the :241 split/single-query intersection for a composite key (positive / fail-closed).
+            var act = () => ctx.From<PerPageCompositeParent>()
+                .LoadWith(
+                    p => p.Children,
+                    c => c.From<PerPageCompositeChild>().OrderBy(x => x.SortKey).Limit(1),
+                    p => new ValueTuple<int, int>(p.Tenant, p.LinkId),
+                    c => new ValueTuple<int, int>(c.Tenant, c.ParentId),
+                    EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.RowId)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage("*no join predicate can be built*");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_AnonymousKey_IsRejectedByThePreExistingReferenceEqualityGuard()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // An anonymous key is a reference type with no value-equality operator: Expression.Equal
+            // would compare references, so the pre-existing JoinIntoSpec guard (not added by #211) rejects
+            // the single-query load before any SQL runs. Split mode keeps working for anonymous keys.
+            var act = () => ctx.From<PerPagePageParent>()
+                .LoadWith(
+                    p => p.Children,
+                    c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(1),
+                    p => new { A = p.Id, B = p.Id },
+                    c => new { A = c.ParentId, B = c.SortKey },
+                    EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage("*would compare references*");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+}
+
+
+[SqlTable("per_page_parent")]
+public sealed class PerPagePageParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<PerPagePageChild> Children { get; } = new List<PerPagePageChild>();
+
+    public ICollection<PerPagePageNote> Notes { get; } = new List<PerPagePageNote>();
+}
+
+[SqlTable("per_page_child")]
+public sealed class PerPagePageChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("sort_key")]
+    public int SortKey { get; set; }
+
+    [Column("group_key")]
+    public int GroupKey { get; set; }
+
+    [Column("flag")]
+    public int Flag { get; set; }
+}
+
+[SqlTable("per_page_note")]
+public sealed class PerPagePageNote
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("rank")]
+    public int Rank { get; set; }
+}
+
+/// <summary>
+/// Parent whose eager link key is the composite <c>(Tenant, LinkId)</c>, deliberately not the table key
+/// (<see cref="RowId"/>). The variant-matrix :236 fixture: <c>(1,10)</c>, <c>(1,20)</c> and <c>(2,10)</c>
+/// overlap on one component each, so a partition on a single component blends two parents.
+/// </summary>
+[SqlTable("per_page_composite_parent")]
+public sealed class PerPageCompositeParent
+{
+    [Key]
+    [Column("row_id")]
+    public int RowId { get; set; }
+
+    [Column("tenant")]
+    public int Tenant { get; set; }
+
+    [Column("link_id")]
+    public int LinkId { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<PerPageCompositeChild> Children { get; } = new List<PerPageCompositeChild>();
+}
+
+/// <summary>Child keyed to its parent by the same composite <c>(Tenant, ParentId)</c> link key.</summary>
+[SqlTable("per_page_composite_child")]
+public sealed class PerPageCompositeChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("tenant")]
+    public int Tenant { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("sort_key")]
+    public int SortKey { get; set; }
+}

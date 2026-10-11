@@ -1,0 +1,14 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.sqlite.tests
+  Discovered:  nextorm.sqlite.tests
+  Starting:    nextorm.sqlite.tests
+    NextORM.Sqlite.Tests.ScratchCacheProbe.Probe [FAIL]
+      PROBE_LOG=[Debug] Preparing command ||| [Debug] Query plan cache miss with hash: 1064916916 ||| [Debug] Making sql with param mode False ||| [Debug] Generated sql with param mode False: select id, name from per_page_parent
+       order by id ||| [Debug] Preparing command ||| [Debug] Query plan cache miss with hash: -537947611 ||| [Debug] Making sql with param mode False ||| [Debug] Preparing command ||| [Debug] Query plan cache hit ||| [Debug] Preparing command ||| [Debug] Query plan cache miss with hash: 1982198788 ||| [Debug] Making sql with param mode False
+      Stack Trace:
+        tests/nextorm.sqlite.tests/ScratchCacheProbe.cs(62,0): at NextORM.Sqlite.Tests.ScratchCacheProbe.Probe()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Finished:    nextorm.sqlite.tests (ID = 'a5abfb47315c331d69873aec368d5caeca8b1b317eae0481172250d5022c1251')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.sqlite.tests  Total: 1, Errors: 0, Failed: 1, Skipped: 0, Not Run: 0, Time: 0.446s

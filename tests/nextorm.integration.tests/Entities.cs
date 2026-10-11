@@ -205,3 +205,36 @@ public sealed class EagerChild
     [Column("name")]
     public string? Name { get; set; }
 }
+
+/// <summary>
+/// Parent whose eager link key is the composite <c>(Tenant, LinkId)</c>, deliberately not the table key
+/// (<see cref="RowId"/>). The variant-matrix :236 integration fixture: the seeded keys overlap on one
+/// component each, so a partition that used only one component blends two parents.
+/// </summary>
+[SqlTable("eager_composite_parent")]
+public sealed class EagerCompositeParent
+{
+    [Key]
+    [Column("row_id")]
+    public int RowId { get; set; }
+    [Column("tenant")]
+    public int Tenant { get; set; }
+    [Column("link_id")]
+    public int LinkId { get; set; }
+    public ICollection<EagerCompositeChild> Children { get; } = new List<EagerCompositeChild>();
+}
+
+/// <summary>Child keyed to its parent by the same composite <c>(Tenant, ParentId)</c> link key.</summary>
+[SqlTable("eager_composite_child")]
+public sealed class EagerCompositeChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("tenant")]
+    public int Tenant { get; set; }
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+    [Column("sort_key")]
+    public int SortKey { get; set; }
+}

@@ -1,0 +1,22 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.sqlite.tests
+  Discovered:  nextorm.sqlite.tests
+  Starting:    nextorm.sqlite.tests
+    NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests.SingleQuery_PagedSql_UsesNestedPartitionedRowNumberWithoutADerivedOrderBy [FAIL]
+      Did not expect embedded "from (select *, row_number() over (partition by parent_id order by sort_key) as '__nextorm_rn' from per_page_child) as 't2'
+       where t2.__nextorm_rn > 1 and t2.__nextorm_rn <= 3) as 't3' on t1.id = t3.parentid
+       order by t1.id, t3.sortkey" to contain "order by sort_key" because the nested derived table must drop the child ORDER BY.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+           at FluentAssertions.Primitives.StringAssertions`1.NotContain(String unexpected, String because, Object[] becauseArgs)
+        tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs(410,0): at NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests.SingleQuery_PagedSql_UsesNestedPartitionedRowNumberWithoutADerivedOrderBy()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Finished:    nextorm.sqlite.tests (ID = 'a5abfb47315c331d69873aec368d5caeca8b1b317eae0481172250d5022c1251')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.sqlite.tests  Total: 13, Errors: 0, Failed: 1, Skipped: 0, Not Run: 0, Time: 1.343s

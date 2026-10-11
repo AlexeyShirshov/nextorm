@@ -109,8 +109,9 @@ internal static class JoinIntoStitcher
     {
         // Also guards any caller that stitches directly (single-query / list / stream / first): the same
         // side-effect-free check, so no entry point can skip it. The JoinInto entry points above already
-        // ran it before their SQL.
-        EntityBuilderEagerLoading.ValidateLoadWithForJoinInto(builder);
+        // ran it before their SQL. A child Limit/Offset/Page is accepted here: #211 applies it per parent
+        // through the ranked single-query source (or the split loader for a JoinInto+LoadWith builder).
+        EntityBuilderEagerLoading.ValidateLoadWithForJoinInto(builder, allowPerParentTopN: true);
         var parents = new List<TEntity>();
         var parentsByKey = new Dictionary<object, TEntity>();
         var perSpec = new List<(TEntity Parent, object? Child)>?[specs.Count];

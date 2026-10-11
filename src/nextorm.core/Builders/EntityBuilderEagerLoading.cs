@@ -60,9 +60,10 @@ internal interface IEagerLoadSpec<TEntity>
     /// parameter, so a <c>LEFT JOIN</c> keeps childless parents while filtering the children.
     /// </summary>
     /// <param name="context">The data context used to build the child query.</param>
+    /// <param name="parentScope">The parent command's global-query-filter scope, folded into a per-parent paging child.</param>
     /// <param name="childSource">Receives the resolved <c>FROM</c> source of the joined child.</param>
     /// <returns>The join specification consumed by the pair command and the stitcher.</returns>
-    IJoinIntoSpec<TEntity> ToJoinIntoSpec(IDataContext context, out FromExpression childSource);
+    IJoinIntoSpec<TEntity> ToJoinIntoSpec(IDataContext context, QueryFilterScope parentScope, out FromExpression childSource);
 
     /// <summary>
     /// Whether this load's child query requests a per-parent top-N (a child <c>Limit</c>/<c>Offset</c>/
@@ -235,11 +236,19 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     }
 
     /// <inheritdoc/>
-    IJoinIntoSpec<TEntity> IEagerLoadSpec<TEntity>.ToJoinIntoSpec(IDataContext context, out FromExpression childSource)
+    IJoinIntoSpec<TEntity> IEagerLoadSpec<TEntity>.ToJoinIntoSpec(IDataContext context, QueryFilterScope parentScope, out FromExpression childSource)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         var child = ResolveChild(context);
+
+        // Per-parent top-N on a SQL provider: the child's own Where, ordering and page bounds are
+        // honored inside a ranked derived source the single-query join selects from, so the bounds apply
+        // within each partition of the child key instead of globally. The in-memory provider has no SQL
+        // window and keeps its existing rejection (the UnsupportedSingleQueryChildShapes path below),
+        // matching the plan's "retain the existing in-memory rejection" rule.
+        if (context.NeedMapping && EntityBuilderEagerLoading.HasPerParentTopN(child))
+            return ToPerParentPagingJoinIntoSpec(context, parentScope, out childSource);
 
         var unsupported = child.UnsupportedSingleQueryChildShapes();
         if (unsupported.Count > 0)
@@ -253,6 +262,44 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
                 $"The single-query child source for type {typeof(TChild)} could not be resolved.");
 
         return new EagerLoadJoinIntoSpec<TEntity, TChild, TKey>(this, child.Condition, child.FilterScope);
+    }
+
+    /// <summary>
+    /// Builds the single-query join for a child that pages per parent. The child's own <c>Where</c>,
+    /// ordering and <c>Limit</c>/<c>Offset</c>/<c>Page</c> are consumed by a ranked derived source
+    /// (<c>row_number() over (partition by &lt;child key&gt; order by &lt;child order&gt;)</c> with the page
+    /// bounds applied to each partition), reused through the same lowering the split loader uses. The
+    /// derived command is marked embedded so its rendering drops the child's output <c>ORDER BY</c>,
+    /// which a nested derived table cannot carry. The parent's global-query-filter scope is folded in
+    /// exactly as the split loader does, so the two modes agree on filter semantics.
+    /// </summary>
+    /// <param name="context">The SQL data context used to build the child query.</param>
+    /// <param name="parentScope">The parent command's global-query-filter scope.</param>
+    /// <param name="childSource">Receives the ranked derived-table source of the joined child.</param>
+    /// <returns>The join specification whose predicate is the key equality alone.</returns>
+    private IJoinIntoSpec<TEntity> ToPerParentPagingJoinIntoSpec(IDataContext context, QueryFilterScope parentScope, out FromExpression childSource)
+    {
+        var child = BuildChild(context, parentScope);
+
+        var unsupported = child.UnsupportedPerParentPagingChildShapes();
+        if (unsupported.Count > 0)
+            throw new NotSupportedException(
+                $"LoadWith with EagerLoadMode.SingleQuery cannot fold the child query's {string.Join(", ", unsupported)} into the " +
+                "ranked per-parent paging source: only the child's own Where and OrderBy are supported. Remove the modifier or " +
+                "use split-query loading (omit the SingleQuery mode), which honors every child-query shape.");
+
+        var command = child.ToCommand();
+        command.From ??= context.GetFrom(typeof(TChild), null);
+        command.PerParentPaging = true;
+        command.PerParentPagingEmbedded = true;
+        command.PerParentPartition = _childKeyExpression;
+        childSource = new FromExpression(command);
+
+        // The child's Where/order/paging and its global-filter scope are folded into the derived source,
+        // so the join predicate is the key equality alone. A SubQuery join source never receives the
+        // join-level filter injection (InjectJoinFilters returns early for it), so no child scope is
+        // needed here.
+        return new EagerLoadJoinIntoSpec<TEntity, TChild, TKey>(this, null, QueryFilterScope.None);
     }
 
     /// <summary>Whether the member can be assigned from a fresh list.</summary>
@@ -279,28 +326,34 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
         Assign(parents, await LoadAsync(context, parentScope, parents, cancellationToken).ConfigureAwait(false));
     }
 
-    /// <summary>
-    /// Builds a fresh child builder for one query and folds the parent command's global-query-filter
-    /// scope into the child's own scope, so the split path applies exactly the same union rule as the
-    /// single-query (<c>EagerLoadMode.SingleQuery</c>/<c>JoinInto</c>) path: a child's selective scope combines with
-    /// the parent's, <c>All</c> absorbs the union, and <c>null</c>/empty child scopes inherit the parent.
-    /// <see cref="EntityBuilder{TEntity}.WithFilterScope(QueryFilterScope)"/> returns a scoped copy when
-    /// the parent scope is non-empty, so the user's child builder is never mutated and one child cannot
-    /// leak its selective scope to a sibling.
-    /// </summary>
     private EntityBuilder<TChild> BuildChild(IDataContext context, QueryFilterScope parentScope)
+        => ResolveChild(context).WithFilterScope(parentScope);
+
+    /// <summary>
+    /// Builds the child command for one key chunk. When the child query's own <c>Limit</c>/<c>Offset</c>/
+    /// <c>Page</c> is present it is applied per parent: the command is marked
+    /// <see cref="QueryCommand.PerParentPaging"/> and its child-key selector becomes the window
+    /// partition, so the SQL builder lowers it to a ranked derived table whose page bounds apply inside
+    /// each parent partition. The child builder is never mutated.
+    /// </summary>
+    private QueryCommand<TChild> BuildChildCommand(IDataContext context, QueryFilterScope parentScope, List<TKey> chunk)
     {
-        var child = ResolveChild(context).WithFilterScope(parentScope);
+        var child = BuildChild(context, parentScope);
+        var command = child.Where(BuildPredicate(chunk)).ToCommand();
 
-        // A child Limit/Offset/Page asks for a per-parent top-N: split loading would apply it globally
-        // across all parents, which is silently wrong data. Reject before the child SQL runs (the child
-        // command is not prepared or cached) until correlated execution is implemented. Auto does not
-        // erase the requirement. This is defence in depth: the JoinInto entry guard rejects the same
-        // shape before any command is built, through the same shared predicate and message.
         if (EntityBuilderEagerLoading.HasPerParentTopN(child))
-            throw EntityBuilderEagerLoading.PerParentTopNNotSupported();
+        {
+            // The in-memory provider has no SQL window and cannot apply a per-parent top-N; retain the
+            // existing fail-closed rejection (this also covers the JoinInto+LoadWith path, which does not
+            // mark the parent command for the preparation-time guard).
+            if (!context.NeedMapping)
+                throw EntityBuilderEagerLoading.PerParentTopNNotSupported();
 
-        return child;
+            command.PerParentPaging = true;
+            command.PerParentPartition = _childKeyExpression;
+        }
+
+        return command;
     }
 
     /// <summary>
@@ -311,7 +364,7 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     {
         var grouped = new Dictionary<TKey, List<TChild>>();
         foreach (var chunk in KeyChunks(parents))
-            AddChildren(grouped, BuildChild(context, parentScope).Where(BuildPredicate(chunk)).ToList());
+            AddChildren(grouped, BuildChildCommand(context, parentScope, chunk).ToList());
 
         return grouped;
     }
@@ -323,7 +376,7 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
         foreach (var chunk in KeyChunks(parents))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var children = await BuildChild(context, parentScope).Where(BuildPredicate(chunk)).ToListAsync(cancellationToken).ConfigureAwait(false);
+            var children = await BuildChildCommand(context, parentScope, chunk).ToListAsync(cancellationToken).ConfigureAwait(false);
             AddChildren(grouped, children);
         }
 
@@ -499,11 +552,17 @@ internal static class EntityBuilderEagerLoading
     /// </summary>
     /// <typeparam name="TEntity">The parent entity type.</typeparam>
     /// <param name="builder">The builder about to execute its <c>JoinInto</c> path.</param>
+    /// <param name="allowPerParentTopN">
+    /// When <see langword="true"/>, a child <c>Limit</c>/<c>Offset</c>/<c>Page</c> is accepted: the split
+    /// list terminal applies it per parent through the ranked child loader. The non-list terminals and
+    /// the single-query path keep the default <see langword="false"/> and still fail closed.
+    /// </param>
     /// <exception cref="NotSupportedException">
     /// An explicit <see cref="EagerLoadMode.Correlated"/> is requested, or a load's child query pages per
-    /// parent (<c>Limit</c>/<c>Offset</c>/<c>Page</c>).
+    /// parent (<c>Limit</c>/<c>Offset</c>/<c>Page</c>) when <paramref name="allowPerParentTopN"/> is
+    /// <see langword="false"/>.
     /// </exception>
-    public static void ValidateLoadWithForJoinInto<TEntity>(EntityBuilder<TEntity> builder)
+    public static void ValidateLoadWithForJoinInto<TEntity>(EntityBuilder<TEntity> builder, bool allowPerParentTopN = false)
     {
         // Same explicit-vs-default criterion as EntityBuilder<TEntity>.SingleQuery: the builder's
         // _eagerLoadMode is set only by an explicit LoadWith choice, so an inherited context-default
@@ -512,6 +571,9 @@ internal static class EntityBuilderEagerLoading
             throw EagerLoadResolver.CorrelatedNotSupported();
 
         if (builder.LoadSpecs is not { Count: > 0 } specs)
+            return;
+
+        if (allowPerParentTopN)
             return;
 
         for (var i = 0; i < specs.Count; i++)

@@ -1,0 +1,13 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.sqlite.tests
+  Discovered:  nextorm.sqlite.tests
+  Starting:    nextorm.sqlite.tests
+    NextORM.Sqlite.Tests.ScratchCacheProbe.Probe [FAIL]
+      PROBE_A=paged: [Debug] Preparing command > [Debug] Query plan cache miss with hash: -836302661 > [Debug] Preparing command > [Debug] Query plan cache miss with hash: -665948566 > [Debug] Preparing command > [Debug] Query plan cache hit > [Debug] Preparing command > [Debug] Query plan cache miss with hash: 1417499762 ||| PROBE_B=unpaged: [Debug] Preparing command > [Debug] Query plan cache miss with hash: -836302661 > [Debug] Preparing command > [Debug] Query plan cache miss with hash: 383837502 > [Debug] Preparing command > [Debug] Query plan cache hit > [Debug] Preparing command > [Debug] Query plan cache miss with hash: 817739875
+      Stack Trace:
+        tests/nextorm.sqlite.tests/ScratchCacheProbe.cs(79,0): at NextORM.Sqlite.Tests.ScratchCacheProbe.Probe()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Finished:    nextorm.sqlite.tests (ID = 'a5abfb47315c331d69873aec368d5caeca8b1b317eae0481172250d5022c1251')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.sqlite.tests  Total: 1, Errors: 0, Failed: 1, Skipped: 0, Not Run: 0, Time: 0.437s

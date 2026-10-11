@@ -40,16 +40,12 @@ public partial class QueryCommand
             {
                 cmd.ResolvedEagerLoadMode = EagerLoadResolver.Resolve(cmd.EagerLoadMode, cmd._dataContext.EagerLoadMode);
 
-                // A per-parent top-N (a child Limit/Offset/Page) has no split/single execution path in
-                // this release: reject it here, during preparation and before any SQL is built/executed or
-                // a plan is inserted, instead of running the parent statement and then failing in the
-                // child loader. Auto does not reinterpret it as a global child limit. The execution-time
-                // guard in EntityBuilderEagerLoading.BuildChild stays as defence in depth.
-                if (cmd.HasPerParentEagerTopN)
-                    throw new NotSupportedException(
-                        "LoadWith cannot apply Limit/Offset/Page to a child query: a per-parent top-N requires " +
-                        "correlated execution, which is not supported. Remove the child paging or use an explicit " +
-                        "child query per parent.");
+                // A per-parent top-N (a child Limit/Offset/Page) is applied by the split child loader on a
+                // SQL provider: the child command is lowered to a ranked derived table partitioned by the
+                // child key (see SqlBuilder.MakePerParentPagingSelect). The in-memory provider has no SQL
+                // window, so it retains the fail-closed rejection here, before any command executes.
+                if (cmd.HasPerParentEagerTopN && !cmd._dataContext!.NeedMapping)
+                    throw EntityBuilderEagerLoading.PerParentTopNNotSupported();
             }
 
             // The shape of captured collections (value lists, dictionary lookups) is folded into the plan
@@ -103,6 +99,7 @@ public partial class QueryCommand
             var limitByColumns = PrepareLimitBy(cmd, cancellationToken);
             var distinctOnColumns = PrepareDistinctOn(cmd, cancellationToken);
             var (extremeRowColumns, extremeRowGroupByColumns) = PrepareExtremeRow(cmd, cancellationToken);
+            var perParentPartitionColumns = PreparePerParentPartition(cmd, cancellationToken);
             PrepareWindows(cmd, dontCalculateHash);
             var sortingPlanHash = PrepareSorting(cmd, selectList, dontCalculateHash, cancellationToken);
 
@@ -131,6 +128,7 @@ public partial class QueryCommand
             cmd._distinctOnColumns = distinctOnColumns ?? [];
             cmd._extremeRowColumns = extremeRowColumns ?? [];
             cmd._extremeRowGroupByColumns = extremeRowGroupByColumns ?? [];
+            cmd._perParentPartitionColumns = perParentPartitionColumns ?? [];
             cmd._srcType = srcType;
             cmd._from = from;
 
@@ -3217,6 +3215,21 @@ public partial class QueryCommand
             }
 
             return (valueColumns, groupByColumns);
+        }
+
+        /// <summary>
+        /// Prepares the partition-key columns of a per-parent paging child command: the eager load's
+        /// child key selector resolved into select expressions so the SQL builder can render the
+        /// <c>partition by</c> of its <c>row_number()</c> window.
+        /// </summary>
+        private static SelectExpression[]? PreparePerParentPartition(QueryCommand cmd, CancellationToken cancellationToken)
+        {
+            var columns = cmd._perParentPartitionColumns;
+
+            if (cmd.PerParentPaging && cmd.PerParentPartition is { } partition && columns is null)
+                columns = BuildKeyColumns(partition, "per-parent eager top-N partition", cancellationToken);
+
+            return columns;
         }
 
         /// <summary>

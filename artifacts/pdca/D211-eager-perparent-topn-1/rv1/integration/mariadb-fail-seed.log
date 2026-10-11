@@ -1,0 +1,89 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.integration.tests
+  Discovered:  nextorm.integration.tests
+  Starting:    nextorm.integration.tests
+[testcontainers.org 00:00:00.49] Connected to Docker:
+  Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+  Server Version: 5.8.6
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.44
+  Operating System: fedora
+  Total Memory: 11.68 GB
+[testcontainers.org 00:00:00.49] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.63] Reusable resource found
+[testcontainers.org 00:00:00.80] Start Docker container 914f06a0ba5f
+[testcontainers.org 00:00:02.23] Wait for Docker container 914f06a0ba5f to complete readiness checks
+[testcontainers.org 00:00:02.24] Execute "healthcheck.sh --connect --innodb_initialized" at Docker container 914f06a0ba5f
+[testcontainers.org 00:00:03.41] Execute "healthcheck.sh --connect --innodb_initialized" at Docker container 914f06a0ba5f
+[testcontainers.org 00:00:04.57] Execute "healthcheck.sh --connect --innodb_initialized" at Docker container 914f06a0ba5f
+[testcontainers.org 00:00:04.66] Docker container 914f06a0ba5f ready
+    NextORM.Integration.Tests.MariaDbEagerPagingTests.MariaDb_SingleQuery_SkipAndTake_AppliesPerParent [FAIL]
+      System.NotSupportedException : Parameter type List`1 is not supported; see https://mysqlconnector.net/param-type. Value: System.Collections.Generic.List`1[NextORM.Integration.Tests.MariaDbEagerPagingChild]
+      Stack Trace:
+        /_/src/MySqlConnector/MySqlParameter.cs(565,0): at MySqlConnector.MySqlParameter.AppendSqlString(ByteBufferWriter writer, StatementPreparerOptions options)
+        /_/src/MySqlConnector/Core/StatementPreparer.cs(77,0): at MySqlConnector.Core.StatementPreparer.ParameterSqlParser.DoAppendParameter(Int32 parameterIndex, Int32 textIndex, Int32 textLength)
+        /_/src/MySqlConnector/Core/StatementPreparer.cs(65,0): at MySqlConnector.Core.StatementPreparer.ParameterSqlParser.OnNamedParameter(Int32 index, Int32 length)
+        /_/src/MySqlConnector/Core/SqlParser.cs(205,0): at MySqlConnector.Core.SqlParser.Parse(String sql)
+        /_/src/MySqlConnector/Core/StatementPreparer.cs(32,0): at MySqlConnector.Core.StatementPreparer.ParseAndBindParameters(ByteBufferWriter writer)
+        /_/src/MySqlConnector/Core/SingleCommandPayloadCreator.cs(434,0): at MySqlConnector.Core.SingleCommandPayloadCreator.WriteCommand(IMySqlCommand command, ByteBufferWriter writer, Boolean appendSemicolon, Boolean isFirstCommand, Boolean isLastCommand)
+        /_/src/MySqlConnector/Core/SingleCommandPayloadCreator.cs(144,0): at MySqlConnector.Core.SingleCommandPayloadCreator.WriteQueryPayload(IMySqlCommand command, IDictionary`2 cachedProcedures, ByteBufferWriter writer, Boolean appendSemicolon, Boolean isFirstCommand, Boolean isLastCommand)
+        /_/src/MySqlConnector/Core/SingleCommandPayloadCreator.cs(111,0): at MySqlConnector.Core.SingleCommandPayloadCreator.WriteQueryCommand(CommandListPosition& commandListPosition, IDictionary`2 cachedProcedures, ByteBufferWriter writer, Boolean appendSemicolon, Activity activity)
+        /_/src/MySqlConnector/Core/CommandExecutor.cs(46,0): at MySqlConnector.Core.CommandExecutor.ExecuteReaderAsync(CommandListPosition commandListPosition, ICommandPayloadCreator payloadCreator, CommandBehavior behavior, Activity activity, MySqlConnectorSemanticConventionsKinds conventionsKinds, IOBehavior ioBehavior, CancellationToken cancellationToken)
+        /_/src/MySqlConnector/MySqlCommand.cs(304,0): at MySqlConnector.MySqlCommand.ExecuteNonQueryAsync(IOBehavior ioBehavior, CancellationToken cancellationToken)
+        /_/src/MySqlConnector/MySqlCommand.cs(108,0): at MySqlConnector.MySqlCommand.ExecuteNonQuery()
+        src/nextorm.core/DataContext/QueryExecutor.cs(89,0): at NextORM.Core.QueryExecutor.RunNonQuery(DbCommand command)
+        src/nextorm.core/DataContext/QueryExecutor.cs(519,0): at NextORM.Core.QueryExecutor.ExecuteNonQuery(String sql, IReadOnlyList`1 parameters)
+        src/nextorm.core/DataContext/DataContext.cs(853,0): at NextORM.Core.DataContext.NextORM.Core.IMutationExecutor.Execute(MutationCommand command)
+        src/nextorm.core/Builders/InsertBuilder.cs(238,0): at NextORM.Core.InsertBuilder`1.Insert()
+        tests/nextorm.integration.tests/MariaDbEagerPagingTests.cs(39,0): at NextORM.Integration.Tests.MariaDbEagerPagingTests.Seed()
+        tests/nextorm.integration.tests/MariaDbEagerPagingTests.cs(27,0): at NextORM.Integration.Tests.MariaDbEagerPagingTests..ctor()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Constructor(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+    NextORM.Integration.Tests.MariaDbEagerPagingTests.MariaDb_Split_RootPagingAndChildPagingAreIndependent [FAIL]
+      System.NotSupportedException : Parameter type List`1 is not supported; see https://mysqlconnector.net/param-type. Value: System.Collections.Generic.List`1[NextORM.Integration.Tests.MariaDbEagerPagingChild]
+      Stack Trace:
+        /_/src/MySqlConnector/MySqlParameter.cs(565,0): at MySqlConnector.MySqlParameter.AppendSqlString(ByteBufferWriter writer, StatementPreparerOptions options)
+        /_/src/MySqlConnector/Core/StatementPreparer.cs(77,0): at MySqlConnector.Core.StatementPreparer.ParameterSqlParser.DoAppendParameter(Int32 parameterIndex, Int32 textIndex, Int32 textLength)
+        /_/src/MySqlConnector/Core/StatementPreparer.cs(65,0): at MySqlConnector.Core.StatementPreparer.ParameterSqlParser.OnNamedParameter(Int32 index, Int32 length)
+        /_/src/MySqlConnector/Core/SqlParser.cs(205,0): at MySqlConnector.Core.SqlParser.Parse(String sql)
+        /_/src/MySqlConnector/Core/StatementPreparer.cs(32,0): at MySqlConnector.Core.StatementPreparer.ParseAndBindParameters(ByteBufferWriter writer)
+        /_/src/MySqlConnector/Core/SingleCommandPayloadCreator.cs(434,0): at MySqlConnector.Core.SingleCommandPayloadCreator.WriteCommand(IMySqlCommand command, ByteBufferWriter writer, Boolean appendSemicolon, Boolean isFirstCommand, Boolean isLastCommand)
+        /_/src/MySqlConnector/Core/SingleCommandPayloadCreator.cs(144,0): at MySqlConnector.Core.SingleCommandPayloadCreator.WriteQueryPayload(IMySqlCommand command, IDictionary`2 cachedProcedures, ByteBufferWriter writer, Boolean appendSemicolon, Boolean isFirstCommand, Boolean isLastCommand)
+        /_/src/MySqlConnector/Core/SingleCommandPayloadCreator.cs(111,0): at MySqlConnector.Core.SingleCommandPayloadCreator.WriteQueryCommand(CommandListPosition& commandListPosition, IDictionary`2 cachedProcedures, ByteBufferWriter writer, Boolean appendSemicolon, Activity activity)
+        /_/src/MySqlConnector/Core/CommandExecutor.cs(46,0): at MySqlConnector.Core.CommandExecutor.ExecuteReaderAsync(CommandListPosition commandListPosition, ICommandPayloadCreator payloadCreator, CommandBehavior behavior, Activity activity, MySqlConnectorSemanticConventionsKinds conventionsKinds, IOBehavior ioBehavior, CancellationToken cancellationToken)
+        /_/src/MySqlConnector/MySqlCommand.cs(304,0): at MySqlConnector.MySqlCommand.ExecuteNonQueryAsync(IOBehavior ioBehavior, CancellationToken cancellationToken)
+        /_/src/MySqlConnector/MySqlCommand.cs(108,0): at MySqlConnector.MySqlCommand.ExecuteNonQuery()
+        src/nextorm.core/DataContext/QueryExecutor.cs(89,0): at NextORM.Core.QueryExecutor.RunNonQuery(DbCommand command)
+        src/nextorm.core/DataContext/QueryExecutor.cs(519,0): at NextORM.Core.QueryExecutor.ExecuteNonQuery(String sql, IReadOnlyList`1 parameters)
+        src/nextorm.core/DataContext/DataContext.cs(853,0): at NextORM.Core.DataContext.NextORM.Core.IMutationExecutor.Execute(MutationCommand command)
+        src/nextorm.core/Builders/InsertBuilder.cs(238,0): at NextORM.Core.InsertBuilder`1.Insert()
+        tests/nextorm.integration.tests/MariaDbEagerPagingTests.cs(39,0): at NextORM.Integration.Tests.MariaDbEagerPagingTests.Seed()
+        tests/nextorm.integration.tests/MariaDbEagerPagingTests.cs(27,0): at NextORM.Integration.Tests.MariaDbEagerPagingTests..ctor()
+           at InvokeStub_MariaDbEagerPagingTests..ctor(Object, Object, IntPtr*)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+    NextORM.Integration.Tests.MariaDbEagerPagingTests.MariaDb_Split_Take_AppliesPerParent [FAIL]
+      System.NotSupportedException : Parameter type List`1 is not supported; see https://mysqlconnector.net/param-type. Value: System.Collections.Generic.List`1[NextORM.Integration.Tests.MariaDbEagerPagingChild]
+      Stack Trace:
+        /_/src/MySqlConnector/MySqlParameter.cs(565,0): at MySqlConnector.MySqlParameter.AppendSqlString(ByteBufferWriter writer, StatementPreparerOptions options)
+        /_/src/MySqlConnector/Core/StatementPreparer.cs(77,0): at MySqlConnector.Core.StatementPreparer.ParameterSqlParser.DoAppendParameter(Int32 parameterIndex, Int32 textIndex, Int32 textLength)
+        /_/src/MySqlConnector/Core/StatementPreparer.cs(65,0): at MySqlConnector.Core.StatementPreparer.ParameterSqlParser.OnNamedParameter(Int32 index, Int32 length)
+        /_/src/MySqlConnector/Core/SqlParser.cs(205,0): at MySqlConnector.Core.SqlParser.Parse(String sql)
+        /_/src/MySqlConnector/Core/StatementPreparer.cs(32,0): at MySqlConnector.Core.StatementPreparer.ParseAndBindParameters(ByteBufferWriter writer)
+        /_/src/MySqlConnector/Core/SingleCommandPayloadCreator.cs(434,0): at MySqlConnector.Core.SingleCommandPayloadCreator.WriteCommand(IMySqlCommand command, ByteBufferWriter writer, Boolean appendSemicolon, Boolean isFirstCommand, Boolean isLastCommand)
+        /_/src/MySqlConnector/Core/SingleCommandPayloadCreator.cs(144,0): at MySqlConnector.Core.SingleCommandPayloadCreator.WriteQueryPayload(IMySqlCommand command, IDictionary`2 cachedProcedures, ByteBufferWriter writer, Boolean appendSemicolon, Boolean isFirstCommand, Boolean isLastCommand)
+        /_/src/MySqlConnector/Core/SingleCommandPayloadCreator.cs(111,0): at MySqlConnector.Core.SingleCommandPayloadCreator.WriteQueryCommand(CommandListPosition& commandListPosition, IDictionary`2 cachedProcedures, ByteBufferWriter writer, Boolean appendSemicolon, Activity activity)
+        /_/src/MySqlConnector/Core/CommandExecutor.cs(46,0): at MySqlConnector.Core.CommandExecutor.ExecuteReaderAsync(CommandListPosition commandListPosition, ICommandPayloadCreator payloadCreator, CommandBehavior behavior, Activity activity, MySqlConnectorSemanticConventionsKinds conventionsKinds, IOBehavior ioBehavior, CancellationToken cancellationToken)
+        /_/src/MySqlConnector/MySqlCommand.cs(304,0): at MySqlConnector.MySqlCommand.ExecuteNonQueryAsync(IOBehavior ioBehavior, CancellationToken cancellationToken)
+        /_/src/MySqlConnector/MySqlCommand.cs(108,0): at MySqlConnector.MySqlCommand.ExecuteNonQuery()
+        src/nextorm.core/DataContext/QueryExecutor.cs(89,0): at NextORM.Core.QueryExecutor.RunNonQuery(DbCommand command)
+        src/nextorm.core/DataContext/QueryExecutor.cs(519,0): at NextORM.Core.QueryExecutor.ExecuteNonQuery(String sql, IReadOnlyList`1 parameters)
+        src/nextorm.core/DataContext/DataContext.cs(853,0): at NextORM.Core.DataContext.NextORM.Core.IMutationExecutor.Execute(MutationCommand command)
+        src/nextorm.core/Builders/InsertBuilder.cs(238,0): at NextORM.Core.InsertBuilder`1.Insert()
+        tests/nextorm.integration.tests/MariaDbEagerPagingTests.cs(39,0): at NextORM.Integration.Tests.MariaDbEagerPagingTests.Seed()
+        tests/nextorm.integration.tests/MariaDbEagerPagingTests.cs(27,0): at NextORM.Integration.Tests.MariaDbEagerPagingTests..ctor()
+           at InvokeStub_MariaDbEagerPagingTests..ctor(Object, Object, IntPtr*)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[testcontainers.org 00:00:05.30] Stop Docker container 914f06a0ba5f
+  Finished:    nextorm.integration.tests (ID = 'b4ece81caced377475cbe4ebc5ceca7103a9595a1230fab7f41a6fb60ce4340a')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.integration.tests  Total: 3, Errors: 0, Failed: 3, Skipped: 0, Not Run: 0, Time: 5.790s

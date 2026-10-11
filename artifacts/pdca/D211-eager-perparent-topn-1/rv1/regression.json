@@ -1,0 +1,359 @@
+{
+  "row": "EV-08",
+  "description": "DO->CHECK comprehensive boundary regression sweep (N=1, r=1, rv=1): seven projects, serial, --no-build after one full Debug solution build; integration one provider at a time.",
+  "revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+  "build": {
+    "name": "build-solution",
+    "kind": "build",
+    "command": [
+      "dotnet",
+      "build",
+      "nextorm.slnx",
+      "-c",
+      "Debug"
+    ],
+    "phase": "boundary",
+    "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+    "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+    "exit_code": 0,
+    "warnings": 0,
+    "errors": 0,
+    "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/build-solution.log",
+    "binds": [
+      "EV-08"
+    ],
+    "note": "one full solution build (Debug) before the broad sweep; 0 Warning(s)/0 Error(s)"
+  },
+  "runs": [
+    {
+      "name": "core",
+      "kind": "project-test",
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build"
+      ],
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 2315,
+      "total": 2315,
+      "failed": 0,
+      "skipped": 0,
+      "provider": "core",
+      "provider_status": "executed",
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/core.tests.log",
+      "binds": [
+        "EV-08"
+      ],
+      "note": "broad regression, no trait filter, --no-build after the solution build"
+    },
+    {
+      "name": "sqlite",
+      "kind": "project-test",
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build"
+      ],
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 1587,
+      "total": 1587,
+      "failed": 0,
+      "skipped": 1,
+      "provider": "sqlite",
+      "provider_status": "executed",
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlite.tests.log",
+      "binds": [
+        "EV-08"
+      ],
+      "note": "broad regression, no trait filter, --no-build after the solution build"
+    },
+    {
+      "name": "postgres",
+      "kind": "project-test",
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.postgres.tests",
+        "-c",
+        "Debug",
+        "--no-build"
+      ],
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 881,
+      "total": 881,
+      "failed": 0,
+      "skipped": 0,
+      "provider": "postgres",
+      "provider_status": "executed",
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/postgres.tests.log",
+      "binds": [
+        "EV-08"
+      ],
+      "note": "broad regression, no trait filter, --no-build after the solution build"
+    },
+    {
+      "name": "sqlserver",
+      "kind": "project-test",
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlserver.tests",
+        "-c",
+        "Debug",
+        "--no-build"
+      ],
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 798,
+      "total": 798,
+      "failed": 0,
+      "skipped": 0,
+      "provider": "sqlserver",
+      "provider_status": "executed",
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlserver.tests.log",
+      "binds": [
+        "EV-08"
+      ],
+      "note": "broad regression, no trait filter, --no-build after the solution build"
+    },
+    {
+      "name": "mysql",
+      "kind": "project-test",
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.mysql.tests",
+        "-c",
+        "Debug",
+        "--no-build"
+      ],
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 362,
+      "total": 362,
+      "failed": 0,
+      "skipped": 0,
+      "provider": "mysql",
+      "provider_status": "executed",
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/mysql.tests.log",
+      "binds": [
+        "EV-08"
+      ],
+      "note": "broad regression, no trait filter, --no-build after the solution build"
+    },
+    {
+      "name": "clickhouse",
+      "kind": "project-test",
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.clickhouse.tests",
+        "-c",
+        "Debug",
+        "--no-build"
+      ],
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 646,
+      "total": 646,
+      "failed": 0,
+      "skipped": 0,
+      "provider": "clickhouse",
+      "provider_status": "executed",
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/clickhouse.tests.log",
+      "binds": [
+        "EV-08"
+      ],
+      "note": "broad regression, no trait filter, --no-build after the solution build"
+    },
+    {
+      "name": "integration-sqlite-integration",
+      "kind": "integration-test",
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-class",
+        "nextorm.integration.tests.SqliteIntegrationTests"
+      ],
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 687,
+      "total": 687,
+      "failed": 0,
+      "skipped": 40,
+      "provider": "sqlite-integration",
+      "provider_status": "executed",
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlite.log",
+      "binds": [
+        "EV-08"
+      ],
+      "note": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock; one provider at a time, container started/reused, not a whole-class skip"
+    },
+    {
+      "name": "integration-postgres-integration",
+      "kind": "integration-test",
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-class",
+        "nextorm.integration.tests.PostgresIntegrationTests"
+      ],
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 687,
+      "total": 687,
+      "failed": 0,
+      "skipped": 26,
+      "provider": "postgres-integration",
+      "provider_status": "executed",
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-postgres.log",
+      "binds": [
+        "EV-08"
+      ],
+      "note": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock; one provider at a time, container started/reused, not a whole-class skip"
+    },
+    {
+      "name": "integration-sqlserver-integration",
+      "kind": "integration-test",
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-class",
+        "nextorm.integration.tests.SqlServerIntegrationTests"
+      ],
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 687,
+      "total": 687,
+      "failed": 0,
+      "skipped": 48,
+      "provider": "sqlserver-integration",
+      "provider_status": "executed",
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlserver.log",
+      "binds": [
+        "EV-08"
+      ],
+      "note": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock; one provider at a time, container started/reused, not a whole-class skip"
+    },
+    {
+      "name": "integration-mysql-integration",
+      "kind": "integration-test",
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-class",
+        "nextorm.integration.tests.MySqlIntegrationTests"
+      ],
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 687,
+      "total": 687,
+      "failed": 0,
+      "skipped": 80,
+      "provider": "mysql-integration",
+      "provider_status": "executed",
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-mysql.log",
+      "binds": [
+        "EV-08"
+      ],
+      "note": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock; one provider at a time, container started/reused, not a whole-class skip"
+    },
+    {
+      "name": "integration-clickhouse-integration",
+      "kind": "integration-test",
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-class",
+        "nextorm.integration.tests.ClickHouseIntegrationTests"
+      ],
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 148,
+      "total": 148,
+      "failed": 0,
+      "skipped": 0,
+      "provider": "clickhouse-integration",
+      "provider_status": "executed",
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-clickhouse.log",
+      "binds": [
+        "EV-08"
+      ],
+      "note": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock; one provider at a time, container started/reused, not a whole-class skip"
+    }
+  ],
+  "totals": {
+    "projects_total": 6589,
+    "integrations_total": 2896,
+    "failed": 0,
+    "skipped": 195,
+    "required_providers_executed": 5,
+    "grand_total": 9485
+  }
+}

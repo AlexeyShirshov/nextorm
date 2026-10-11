@@ -1,0 +1,5 @@
+$ python3 scripts/validate_inner_loop.py report artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json
+exit=0
+
+$ python3 scripts/validate_inner_loop.py brief artifacts/pdca/D211-eager-perparent-topn-1/rv1/scope.json
+exit=0

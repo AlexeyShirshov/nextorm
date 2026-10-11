@@ -1,0 +1,118 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.integration.tests
+  Discovered:  nextorm.integration.tests
+  Starting:    nextorm.integration.tests
+[testcontainers.org 00:00:00.26] Connected to Docker:
+  Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+  Server Version: 5.8.6
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.44
+  Operating System: fedora
+  Total Memory: 11.68 GB
+[testcontainers.org 00:00:00.26] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.32] Reusable resource found
+[testcontainers.org 00:00:00.40] Start Docker container 4ab2d4542432
+[testcontainers.org 00:00:01.80] Wait for Docker container 4ab2d4542432 to complete readiness checks
+[testcontainers.org 00:00:01.82] Execute "/bin/sh -c find /opt/mssql-tools*/bin/sqlcmd -type f -print -quit" at Docker container 4ab2d4542432
+[testcontainers.org 00:00:02.04] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 4ab2d4542432
+[testcontainers.org 00:00:08.78] Docker container 4ab2d4542432 ready
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_RowStream_UnsupportedProvider_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.LobDataReader_UnsupportedProvider_ShouldThrowNotSupported [SKIP]
+      This provider implements the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Contains_TupleIn_CapturedList_ShouldFilter [SKIP]
+      This provider has no row-value constructor.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Batch_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider supports batches.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReaderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TempTableSource_ShouldMaterialiseOnRead [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStreamAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Iteration14_MutationBesideRecursiveRead_ExecutesEveryTime [SKIP]
+      Data-modifying CTE bodies are only supported by PostgreSQL.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Iteration14_PreparedDml_ExecutesEveryTime [SKIP]
+      Data-modifying CTE bodies are only supported by PostgreSQL.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Batch_CreateTempTableThenQuery_ShouldReadTheTableInTheSameBatch [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Contains_TupleIn_MismatchedComponents_ShouldReturnEmpty [SKIP]
+      This provider has no row-value constructor.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TableFunction_JsonEach_ShouldReturnRows [SKIP]
+      The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TableFunction_WhereAndOrderBy_ShouldFilterAndSort [SKIP]
+      The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_ToStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Insert_Returning_ShouldThrow_WhenProviderCannot [SKIP]
+      This provider can return inserted rows.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.ExecuteProcedure_UnsupportedProvider_ThrowsNotSupported [SKIP]
+      This provider supports stored procedures.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TempTableSource_ShouldStreamTheRows [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.IntersectAll_WhenSupported_ShouldReturnCommonRows [SKIP]
+      This provider does not support INTERSECT ALL.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.LobBlob_ZeroColumnProjection_ShouldThrowInvalidOperationException [SKIP]
+      This provider cannot return a zero-column result set.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.LobDataReader_UnsupportedProviderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TableFunction_GroupBy_ShouldAggregate [SKIP]
+      The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.BulkInsert_IgnoreDuplicates_WithReturning_ShouldReturnOnlyInsertedRows [SKIP]
+      This provider cannot both skip conflicting rows and return written rows.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_ToTextReaderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.BulkInsert_IgnoreDuplicates_ShouldSkipConflictingKeys [SKIP]
+      This provider cannot skip conflicting rows.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.ExecuteProcedureAsync_UnsupportedProvider_ThrowsNotSupported [SKIP]
+      This provider supports stored procedures.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Contains_TupleIn_Empty_ShouldReturnEmpty [SKIP]
+      This provider has no row-value constructor.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Contains_TupleIn_Negation_ShouldExcludeNullComponentMatch [SKIP]
+      This provider has no row-value constructor.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_ToTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.CreateTableAs_TempTable_ShouldBeReadableOnTheSameContext [SKIP]
+      This provider cannot materialise a query into a temporary table.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Batch_CreateTempTableThenQuery_ToAsyncEnumerable_ShouldStreamTheRows [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.AvgAsync_ShouldReturn6 [SKIP]
+      This provider evaluates AVG over an integer column as an integer.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TempTableSource_NestedTempTables_ShouldWork [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.ExceptAll_WhenSupported_ShouldReturnOnlyLeftRows [SKIP]
+      This provider does not support EXCEPT ALL.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TempTableSource_Any_ShouldSeeTheMaterialisedRows [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Avg_ShouldReturn6 [SKIP]
+      This provider evaluates AVG over an integer column as an integer.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Batch_CreateTempTableThenQueryAsync_ShouldReadTheTableInTheSameBatch [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Contains_TupleIn_NullComponent_ShouldMatchNullRow [SKIP]
+      This provider has no row-value constructor.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_ToStreamAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TempTableSource_ScalarTerminals_ShouldWork [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.CreateTableAs_TempTableIfNotExists_ShouldBeRepeatable [SKIP]
+      This provider cannot materialise a query into a temporary table.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TempTableSource_ShouldRematerialiseOnEachExecution [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TableFunction_JoinedToTable_ShouldReturnRows [SKIP]
+      The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Batch_CapturedParameterWithSameName_ShouldNotCollideAcrossStatements [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.CreateTableAs_WithCteBody_ShouldBeReadableOnTheSameContext [SKIP]
+      This provider cannot materialise a query into a temporary table.
+[testcontainers.org 00:00:22.91] Stop Docker container 4ab2d4542432
+  Finished:    nextorm.integration.tests (ID = 'b4ece81caced377475cbe4ebc5ceca7103a9595a1230fab7f41a6fb60ce4340a')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.integration.tests  Total: 687, Errors: 0, Failed: 0, Skipped: 48, Not Run: 0, Time: 23.023s

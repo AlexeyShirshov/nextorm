@@ -1,0 +1,870 @@
+{
+  "task": "D211-eager-perparent-topn-1",
+  "contract_rv": 1,
+  "base_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc",
+  "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+  "generated_utc": "2026-10-11T21:12:47Z",
+  "required_rows": [
+    "EV-01",
+    "EV-02",
+    "EV-03",
+    "EV-04",
+    "EV-05",
+    "EV-06",
+    "EV-07",
+    "EV-08",
+    "EV-09",
+    "EV-10",
+    "EV-11",
+    "EV-12",
+    "EV-13",
+    "EV-14"
+  ],
+  "summary": {
+    "met": 14,
+    "open": 0,
+    "na": 0,
+    "total": 14
+  },
+  "rows": [
+    {
+      "id": "EV-01",
+      "requirements": "REQ-11",
+      "check": "Baseline identity and obtainable fixture/oracle",
+      "status": "met",
+      "artifacts": [
+        "docs/specs/status/D211-eager-perparent-topn-1.md",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/eagerloading-class-prefix-red.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/d04a/prefix-core.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/d04a/prefix-sqlite.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/d04b/prefix-eagerloading.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/summary.md",
+        "docs/specs/performance/acceptance-benchmarks.md",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression.json"
+      ],
+      "evidence": [
+        {
+          "kind": "status-file-git-identity",
+          "path": "docs/specs/status/D211-eager-perparent-topn-1.md"
+        },
+        {
+          "kind": "baseline-prefix-red-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/eagerloading-class-prefix-red.log",
+          "exit": 1
+        },
+        {
+          "kind": "baseline-prefix-core",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/d04a/prefix-core.log",
+          "exit": 0
+        },
+        {
+          "kind": "baseline-prefix-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/d04a/prefix-sqlite.log",
+          "exit": 0
+        },
+        {
+          "kind": "baseline-prefix-eagerloading",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/d04b/prefix-eagerloading.log",
+          "exit": 0
+        },
+        {
+          "kind": "baseline-acceptance-reference",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/summary.md"
+        },
+        {
+          "kind": "baseline-page",
+          "path": "docs/specs/performance/acceptance-benchmarks.md"
+        },
+        {
+          "kind": "source-revision-binding",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression.json",
+          "exit": 0
+        }
+      ],
+      "verification": "Input tree pinned to git base b527be6f37b9301ed9d2245b803a1bd3e5e43ffc (clean worktree, recorded in the status file); pre-fix red/prefix logs capture the baseline (obsolete per-parent rejection) behaviour; the acceptance baseline page is cited by perf/summary.md; regression.json binds every run to b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1.",
+      "gaps": [],
+      "caveats": [
+        "The plan's dedicated probe.py `baseline` artifacts (baseline.log/baseline.json/baseline/) were not produced; baseline identity is bound to git base b527be6f37b9301ed9d2245b803a1bd3e5e43ffc and the retained pre-fix run logs instead."
+      ]
+    },
+    {
+      "id": "EV-02",
+      "requirements": "REQ-01",
+      "check": "Independent per-parent oracle; adversarial global-limit case",
+      "status": "met",
+      "artifacts": [
+        "tests/nextorm.integration.tests/CommonTestSuite.EagerLoadPerParentPaging.cs",
+        "benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/sqlite.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/eager-perparent.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json"
+      ],
+      "evidence": [
+        {
+          "kind": "oracle-adversarial-integration",
+          "path": "tests/nextorm.integration.tests/CommonTestSuite.EagerLoadPerParentPaging.cs"
+        },
+        {
+          "kind": "oracle-reference-benchmark",
+          "path": "benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs"
+        },
+        {
+          "kind": "oracle-run-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/sqlite.log",
+          "exit": 0
+        },
+        {
+          "kind": "oracle-run-perf",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/eager-perparent.log",
+          "exit": 0
+        },
+        {
+          "kind": "oracle-json",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json",
+          "exit": 0
+        }
+      ],
+      "verification": "The integration fixture seeds three parents (rich/few/empty) with uneven child counts and asserts the per-parent page while documenting the adversarial global-limit starvation case; the benchmark's Split_Unpaged_ReferencePage independently materialises every child and pages in memory, and its setup proves both server-paged modes reproduce that reference exactly at 1x8/100x20/1000x20.",
+      "gaps": [],
+      "caveats": [
+        "The planned probe.py `oracle` artifact (oracle.log/oracle.json/oracle/) is absent; the oracle is the benchmark reference + the integration adversarial test + their run logs."
+      ]
+    },
+    {
+      "id": "EV-03",
+      "requirements": "REQ-01, REQ-03",
+      "check": "Paging/order/filter/key/default/overflow matrix",
+      "status": "met",
+      "artifacts": [
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/core-trait-D211.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/sqlite-trait-D211.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/eagerloading-class-postfix.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/composite/sqlite-composite-class.log",
+        "tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs",
+        "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs"
+      ],
+      "evidence": [
+        {
+          "kind": "core-matrix-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/core-trait-D211.log",
+          "exit": 0
+        },
+        {
+          "kind": "sqlite-matrix-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/sqlite-trait-D211.log",
+          "exit": 0
+        },
+        {
+          "kind": "sqlite-sqlgen-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/eagerloading-class-postfix.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-matrix-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/composite/sqlite-composite-class.log",
+          "exit": 0
+        },
+        {
+          "kind": "core-matrix-source",
+          "path": "tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "sqlite-matrix-source",
+          "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs"
+        }
+      ],
+      "verification": "core Feature=D211 4/4; sqlite Feature=D211 24/24; sqlite EagerLoadingSqlGenerationTests 49/49; D211-COMP sqlite EagerLoadPerParentPagingTests 28/28. Matrix covers Take/Skip/Skip+Take, filter-before-rank, asc/desc/multi-key, ordinal OrderBy, tied/unordered membership, composite partition keys, root-vs-child bounds and plan-cache repeats.",
+      "gaps": [],
+      "caveats": []
+    },
+    {
+      "id": "EV-04",
+      "requirements": "REQ-02, REQ-06",
+      "check": "Both-mode provider SQL, partition/bound/alias/projection correctness",
+      "status": "met",
+      "artifacts": [
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/eagerloading-class-postfix.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/postgres.tests.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlserver.tests.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/mysql.tests.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/clickhouse.tests.log",
+        "tests/nextorm.postgres.tests/EagerLoadPerParentPagingTests.cs",
+        "tests/nextorm.sqlserver.tests/EagerLoadPerParentPagingTests.cs",
+        "tests/nextorm.mysql.tests/EagerLoadPerParentPagingTests.cs",
+        "tests/nextorm.clickhouse.tests/EagerLoadPerParentPagingTests.cs"
+      ],
+      "evidence": [
+        {
+          "kind": "sqlite-sqlgen-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/eagerloading-class-postfix.log",
+          "exit": 0
+        },
+        {
+          "kind": "provider-sqlgen-binding",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json",
+          "exit": 0
+        },
+        {
+          "kind": "postgres-suite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/postgres.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "sqlserver-suite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlserver.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "mysql-mariadb-suite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/mysql.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "clickhouse-suite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/clickhouse.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "postgres-sql-source",
+          "path": "tests/nextorm.postgres.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "sqlserver-sql-source",
+          "path": "tests/nextorm.sqlserver.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "mysql-sql-source",
+          "path": "tests/nextorm.mysql.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "clickhouse-sql-source",
+          "path": "tests/nextorm.clickhouse.tests/EagerLoadPerParentPagingTests.cs"
+        }
+      ],
+      "verification": "Provider SQL-generation classes (7 postgres, 7 sqlserver, 11 mysql+mariadb, 7 clickhouse) recorded in inner-loop-evidence.json (all selected>0, exit 0) are the same classes exercised green inside the broad-regression project runs (postgres 881/0, sqlserver 798/0, mysql 362/0, clickhouse 646/0); sqlite SQL-generation is retained as a dedicated 49/49 log.",
+      "gaps": [],
+      "caveats": [
+        "The dedicated per-provider SQL-generation stdout was executed inline and not persisted as separate log files; only the sqlite SQL-generation run has a dedicated log. The run rows (selected counts, exit 0) are retained in inner-loop-evidence.json and the same classes passed in the broad-regression logs."
+      ]
+    },
+    {
+      "id": "EV-05",
+      "requirements": "REQ-01, REQ-02, REQ-06",
+      "check": "Real execution across six providers, both modes, root/nested paging and batching",
+      "status": "met",
+      "artifacts": [
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/sqlite.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/postgres.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/sqlserver.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/mysql.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/clickhouse.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/mariadb.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-sqlite.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-postgres.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-sqlserver.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-mysql.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-clickhouse.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-mariadb.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json"
+      ],
+      "evidence": [
+        {
+          "kind": "integration-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/sqlite.log",
+          "exit": 0
+        },
+        {
+          "kind": "integration-postgres",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/postgres.log",
+          "exit": 0
+        },
+        {
+          "kind": "integration-sqlserver",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/sqlserver.log",
+          "exit": 0
+        },
+        {
+          "kind": "integration-mysql",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/mysql.log",
+          "exit": 0
+        },
+        {
+          "kind": "integration-clickhouse",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/clickhouse.log",
+          "exit": 0
+        },
+        {
+          "kind": "integration-mariadb",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/mariadb.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-sqlite.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-postgres",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-postgres.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-sqlserver",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-sqlserver.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-mysql",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-mysql.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-clickhouse",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-clickhouse.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-mariadb",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/composite-mariadb.log",
+          "exit": 0
+        },
+        {
+          "kind": "integration-binding",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json",
+          "exit": 0
+        }
+      ],
+      "verification": "Six provider families executed with zero required skips: SQLite 12/0, PostgreSQL 12/0, SQL Server 12/0, MySQL 12/0, ClickHouse 3/0, MariaDB 3/0 (composite follow-up: 14/14/14/14/4/4). MariaDB re-run green after the fixture seed defect (mariadb-fail-seed.log retained as the red-then-green record). Both eager modes, sync/async and query-count batching asserted.",
+      "gaps": [],
+      "caveats": []
+    },
+    {
+      "id": "EV-06",
+      "requirements": "REQ-04, REQ-05, REQ-07",
+      "check": "Public surfaces, sync/async, cancellation, ownership, cache/rebinding and unchanged API",
+      "status": "met",
+      "artifacts": [
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/sqlite-trait-D211.log",
+        "tests/nextorm.core.tests/EagerLoadingTests.cs",
+        "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs",
+        "tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs",
+        "tests/nextorm.core.tests/EagerLoadingModeTests.cs",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/core.tests.log"
+      ],
+      "evidence": [
+        {
+          "kind": "sync-async-surfaces",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/sqlite-trait-D211.log",
+          "exit": 0
+        },
+        {
+          "kind": "pre-cancelled",
+          "path": "tests/nextorm.core.tests/EagerLoadingTests.cs"
+        },
+        {
+          "kind": "cache-rebind-ownership",
+          "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "plan-cache",
+          "path": "tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs"
+        },
+        {
+          "kind": "public-api-surface",
+          "path": "tests/nextorm.core.tests/EagerLoadingModeTests.cs"
+        },
+        {
+          "kind": "broad-core-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/core.tests.log",
+          "exit": 0
+        }
+      ],
+      "verification": "Both public surfaces (EntityBuilder.LoadWith and the JoinInto family) are exercised; sync and async variants assert per-parent pages and query counts; the pre-cancelled eager split test (EagerLoadingTests.LoadWith_SplitAsync_PreCancelled_ThrowsWithoutLoadingChildren) and the whole-suite run cover cancellation/ownership; per-parent plan-cache population plus repeated same-context paged loads cover cache/rebinding; EagerLoadMode_ApiSurface_HasTheExpectedShape pins the enum values/optional mode parameter (unchanged public API).",
+      "gaps": [],
+      "caveats": [
+        "Cancellation is evidenced by the pre-existing eager split pre-cancelled test run inside the broad core regression, not by a new Feature=D211 cancellation test; no dedicated public-API-diff report was retained (the structural API-surface test plus the green core suite stand in)."
+      ]
+    },
+    {
+      "id": "EV-07",
+      "requirements": "REQ-03, REQ-06, REQ-07",
+      "check": "Unsupported capability/shape/version rejection; applicable in-memory positive or negative behavior",
+      "status": "met",
+      "artifacts": [
+        "tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs",
+        "tests/nextorm.postgres.tests/EagerLoadPerParentPagingTests.cs",
+        "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/core-trait-D211.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/composite/sqlite-composite-class.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json"
+      ],
+      "evidence": [
+        {
+          "kind": "in-memory-guards",
+          "path": "tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "provider-failclosed",
+          "path": "tests/nextorm.postgres.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "composite-guard-source",
+          "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs"
+        },
+        {
+          "kind": "guards-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/core-trait-D211.log",
+          "exit": 0
+        },
+        {
+          "kind": "composite-guards-run",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/composite/sqlite-composite-class.log",
+          "exit": 0
+        },
+        {
+          "kind": "guards-binding",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json",
+          "exit": 0
+        }
+      ],
+      "verification": "Fail-closed guards proved: in-memory split/single paged eager child rejected (NotSupportedException) while unpaged in-memory loading is unchanged; provider unsupported derived-source shape and unsupported window strategy fail closed with zero SQL (postgres/sqlserver/mysql/clickhouse guard tests); composite single-query and SQL Server tuple-IN rejected before execution; legacy Correlated stays rejected before SQL. Guard runs green.",
+      "gaps": [],
+      "caveats": [
+        "EV-07 is unconditional and is not marked na: the in-memory subscenario is a negative (unchanged rejection) branch, observed as such."
+      ]
+    },
+    {
+      "id": "EV-08",
+      "requirements": "REQ-07, REQ-09",
+      "check": "Broad regression across seven projects",
+      "status": "met",
+      "artifacts": [
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression.json",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/build-solution.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/core.tests.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlite.tests.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/postgres.tests.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlserver.tests.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/mysql.tests.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/clickhouse.tests.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlite.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-postgres.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlserver.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-mysql.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-clickhouse.log"
+      ],
+      "evidence": [
+        {
+          "kind": "regression-manifest",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression.json",
+          "exit": 0
+        },
+        {
+          "kind": "regression-solution-build",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/build-solution.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-core",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/core.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlite.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-postgres",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/postgres.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-sqlserver",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlserver.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-mysql",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/mysql.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-clickhouse",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/clickhouse.tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-integration-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlite.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-integration-postgres",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-postgres.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-integration-sqlserver",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlserver.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-integration-mysql",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-mysql.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-integration-clickhouse",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-clickhouse.log",
+          "exit": 0
+        }
+      ],
+      "verification": "Seven projects + five integration families swept after one full Debug solution build: core 2315/0, sqlite 1586/0 (+1 pre-existing skip), postgres 881/0, sqlserver 798/0, mysql 362/0, clickhouse 646/0, integration 687/0/0/0/148 with 0 errors, all exit 0; regression.json binds every command, revision and exit.",
+      "gaps": [],
+      "caveats": []
+    },
+    {
+      "id": "EV-09",
+      "requirements": "REQ-09",
+      "check": "Debug/Release warning-free build and CRLF",
+      "status": "met",
+      "artifacts": [
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/build-solution.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/build-solution.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/d05/build-integration-tests.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/composite/build-sqlite-tests.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/composite/build-integration-tests.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/benchmark-build.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/tree.json"
+      ],
+      "evidence": [
+        {
+          "kind": "build-debug-solution",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/build-solution.log",
+          "exit": 0
+        },
+        {
+          "kind": "build-debug-inner",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/build-solution.log",
+          "exit": 0
+        },
+        {
+          "kind": "build-integration-tests",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/d05/build-integration-tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "build-sqlite-tests",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/composite/build-sqlite-tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "build-integration-composite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/composite/build-integration-tests.log",
+          "exit": 0
+        },
+        {
+          "kind": "build-release-benchmark",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/benchmark-build.log",
+          "exit": 0
+        },
+        {
+          "kind": "crlf-tree",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/tree.json"
+        }
+      ],
+      "verification": "Debug full-solution build 0 Warning(s)/0 Error(s); Debug integration/sqlite test-project rebuilds 0/0; Release benchmark build 0/0. CRLF verified over all 41 T211 footprint files and recorded in freeze/tree.json (line_endings.all_crlf=true).",
+      "gaps": [],
+      "caveats": [
+        "The plan's probe.py `build` step also named a dedicated `dotnet build -c Release` of the solution; the retained Release build is the benchmark project build (0/0). Debug covers the full solution; CRLF is verified directly in freeze/tree.json."
+      ]
+    },
+    {
+      "id": "EV-10",
+      "requirements": "REQ-09",
+      "check": "Aggregate coverage and changed-P1 branch coverage",
+      "status": "met",
+      "artifacts": [
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/summary.txt",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/coverage.xml",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/report/Summary.txt",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/coverage.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/branch-delta.json",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/branch-delta-merged.json"
+      ],
+      "evidence": [
+        {
+          "kind": "coverage-summary",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/summary.txt"
+        },
+        {
+          "kind": "coverage-cobertura",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/coverage.xml"
+        },
+        {
+          "kind": "coverage-report-summary",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/report/Summary.txt"
+        },
+        {
+          "kind": "coverage-collect-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/coverage.log"
+        },
+        {
+          "kind": "changed-branch-delta",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/branch-delta.json"
+        },
+        {
+          "kind": "changed-branch-delta-merged",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/branch-delta-merged.json"
+        }
+      ],
+      "verification": "Aggregate line coverage 88.5% (>=85), branch coverage 80.5% (>=75), no comparable regression; changed-path delta = 241/262 changed lines and 154/190 changed branch conditions; the unresolved branches were resolved (ordinal/plan-cache tests) or classified defensive (Group B split-loader child plan-key divergence; composite-key renderer pre-existing).",
+      "gaps": [],
+      "caveats": [
+        "Aggregate denominator/consolidation differs between coverage.xml (80.5% branch) and the merged report; both recorded and explained in coverage/summary.txt."
+      ]
+    },
+    {
+      "id": "EV-11",
+      "requirements": "REQ-09",
+      "check": "Targeted mutation evidence",
+      "status": "met",
+      "artifacts": [
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/README.md",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/survivors.md",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/survivors.json",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/mutation-report.json",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/groupb-classification.md",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/mutation-disposition.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/stryker-config.corrected.json"
+      ],
+      "evidence": [
+        {
+          "kind": "mutation-readme",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/README.md"
+        },
+        {
+          "kind": "mutation-survivors-md",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/survivors.md"
+        },
+        {
+          "kind": "mutation-survivors-json",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/survivors.json"
+        },
+        {
+          "kind": "mutation-report",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/mutation-report.json"
+        },
+        {
+          "kind": "mutation-groupb-classification",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/groupb-classification.md"
+        },
+        {
+          "kind": "mutation-disposition-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/mutation-disposition.log"
+        },
+        {
+          "kind": "mutation-config",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/mutation/stryker-config.corrected.json"
+        }
+      ],
+      "verification": "Changed-line-scoped Stryker run (corrected CRLF byte spans): 138 Killed / 40 Survived / 26 NoCoverage, all 204 active mutants inside the T211 changed-line ranges; all 66 non-killed mutants disposed (28 equivalent, 35 defensive, 3 closed by Feature=D211 Skip-only/outer-ORDER-BY tests). No non-equivalent P1 mutant left undisposed.",
+      "gaps": [],
+      "caveats": [
+        "The canonical mutation report predates the 3 tests that kill 3 listed survivors (README records them as killed; a confirming re-run was not executed in this freeze dispatch). The multi-column composite-key partition renderer is defensive-only through a successful public path (pre-existing split-loader composite-key gap, out of D211 scope, recorded as open risk)."
+      ]
+    },
+    {
+      "id": "EV-12",
+      "requirements": "REQ-08",
+      "check": "EN/RU documentation and generated-site/link validity",
+      "status": "met",
+      "artifacts": [
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/docfx.log",
+        "docs/advanced/eager-loading-per-parent-paging.md",
+        "docs/ru/advanced/eager-loading-per-parent-paging.md",
+        "docs/advanced/toc.yml",
+        "docs/ru/toc.yml",
+        "docs/guide/02-joins.md",
+        "docs/ru/guide/02-joins.md",
+        "docs/guide/29-implicit-navigation.md",
+        "docs/ru/guide/29-implicit-navigation.md",
+        "docs/advanced/eager-loading.md",
+        "docs/ru/advanced/eager-loading.md"
+      ],
+      "evidence": [
+        {
+          "kind": "docfx-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/docfx.log",
+          "exit": 0
+        },
+        {
+          "kind": "doc-en",
+          "path": "docs/advanced/eager-loading-per-parent-paging.md"
+        },
+        {
+          "kind": "doc-ru",
+          "path": "docs/ru/advanced/eager-loading-per-parent-paging.md"
+        },
+        {
+          "kind": "toc-en",
+          "path": "docs/advanced/toc.yml"
+        },
+        {
+          "kind": "toc-ru",
+          "path": "docs/ru/toc.yml"
+        },
+        {
+          "kind": "guide-02-en",
+          "path": "docs/guide/02-joins.md"
+        },
+        {
+          "kind": "guide-02-ru",
+          "path": "docs/ru/guide/02-joins.md"
+        },
+        {
+          "kind": "guide-29-en",
+          "path": "docs/guide/29-implicit-navigation.md"
+        },
+        {
+          "kind": "guide-29-ru",
+          "path": "docs/ru/guide/29-implicit-navigation.md"
+        },
+        {
+          "kind": "corrected-en",
+          "path": "docs/advanced/eager-loading.md"
+        },
+        {
+          "kind": "corrected-ru",
+          "path": "docs/ru/advanced/eager-loading.md"
+        }
+      ],
+      "verification": "dotnet docfx docs/docfx.json exit 0 (2 pre-existing generator warnings, 0 errors); matching EN/RU advanced pages added and linked from guide 02/29 and the advanced toc; stale per-parent-top-N rejection text corrected in advanced/eager-loading.md EN+RU; no public links into docs/specs/**; no renumbering.",
+      "gaps": [],
+      "caveats": [
+        "docs/ru/toc.yml also carries unrelated scalar-functions entries from a sibling task; only the T211 advanced-page hunk is staged in the collection autocommit (the file is otherwise left as-is in the worktree)."
+      ]
+    },
+    {
+      "id": "EV-13",
+      "requirements": "REQ-10",
+      "check": "Seven-case acceptance and dedicated eager measurements",
+      "status": "met",
+      "artifacts": [
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/summary.md",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/acceptance.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/eager-perparent.log",
+        "docs/specs/performance/acceptance-benchmarks.md",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/native/NextORM.Benchmark.EagerPerParentPagingBenchmark-report-github.md",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/native/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md"
+      ],
+      "evidence": [
+        {
+          "kind": "perf-summary",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/summary.md"
+        },
+        {
+          "kind": "acceptance-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/acceptance.log",
+          "exit": 0
+        },
+        {
+          "kind": "eager-perparent-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/eager-perparent.log",
+          "exit": 0
+        },
+        {
+          "kind": "acceptance-baseline-page",
+          "path": "docs/specs/performance/acceptance-benchmarks.md"
+        },
+        {
+          "kind": "native-eager-report",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/native/NextORM.Benchmark.EagerPerParentPagingBenchmark-report-github.md"
+        },
+        {
+          "kind": "native-acceptance-cached",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/native/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md"
+        }
+      ],
+      "verification": "Acceptance --anyCategories=acceptance exit 0: exactly 7 completed cases, 0 failures, wall 51 s (<=240 s); cached/prepared ratio 2.19 vs baseline 1.87 = +17% (<20%, no investigation). Dedicated EagerPerParentPagingBenchmark --filter/--job short exit 0, 9 in-process cases over 1x8/100x20/1000x20 with split/single/unpaged-reference and asserted query counts; benchmark category is not acceptance.",
+      "gaps": [],
+      "caveats": [
+        "The dedicated run's extra out-of-process `Default` job could not generate because of the pre-existing gitignored D208 benchmark-project snapshot (environment collision, not code); the in-process job executed all 9 cases."
+      ]
+    },
+    {
+      "id": "EV-14",
+      "requirements": "REQ-11",
+      "check": "Content-tree binding, row completeness and manifest validity",
+      "status": "met",
+      "artifacts": [
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/tree.json",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/ledger.json",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/manifest.json",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/manifest-validation.log"
+      ],
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/tree.json"
+        },
+        {
+          "kind": "ledger",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/ledger.json"
+        },
+        {
+          "kind": "manifest",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/manifest.json"
+        },
+        {
+          "kind": "manifest-validation-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/manifest-validation.log",
+          "exit": 0
+        }
+      ],
+      "verification": "Content-tree identity of the 41-file T211 footprint (paths + sha256 + CRLF status) frozen against base b527be6f37b9301ed9d2245b803a1bd3e5e43ffc @D211-rv1; row ledger covers EV-01..EV-14; scripts/validate_inner_loop.py manifest exit 0 (manifest-validation.log).",
+      "gaps": [],
+      "caveats": []
+    }
+  ],
+  "out_of_footprint": [
+    "docs/guide/provider-specific/mysql.md",
+    "docs/index.md",
+    "docs/querying/01-projections.md",
+    "docs/querying/02-query-sources.md",
+    "docs/ru/guide/provider-specific/mysql.md",
+    "docs/ru/index.md",
+    "docs/ru/providers/postgres.md",
+    "docs/ru/querying/01-projections.md",
+    "docs/ru/querying/02-query-sources.md",
+    "docs/ru/scalar-functions/03-date-and-time.md",
+    "docs/ru/scalar-functions/04-conditionals-and-conversion.md",
+    "docs/ru/scalar-functions/05-aggregates.md",
+    "docs/scalar-functions/03-date-and-time.md",
+    "docs/scalar-functions/04-conditionals-and-conversion.md",
+    "docs/scalar-functions/toc.yml",
+    "docs/ru/scalar-functions/09-postgres-system-functions.md",
+    "docs/ru/scalar-functions/10-system-functions.md",
+    "docs/ru/scalar-functions/11-sqlserver-scalars.md",
+    "docs/ru/scalar-functions/12-sequences.md",
+    "docs/scalar-functions/09-postgres-system-functions.md",
+    "docs/scalar-functions/10-system-functions.md",
+    "docs/scalar-functions/11-sqlserver-scalars.md",
+    "docs/scalar-functions/12-sequences.md"
+  ],
+  "gaps": [],
+  "caveats": [
+    "The plan's dedicated probe.py `baseline` artifacts (baseline.log/baseline.json/baseline/) were not produced; baseline identity is bound to git base b527be6f37b9301ed9d2245b803a1bd3e5e43ffc and the retained pre-fix run logs instead.",
+    "The planned probe.py `oracle` artifact (oracle.log/oracle.json/oracle/) is absent; the oracle is the benchmark reference + the integration adversarial test + their run logs.",
+    "The dedicated per-provider SQL-generation stdout was executed inline and not persisted as separate log files; only the sqlite SQL-generation run has a dedicated log. The run rows (selected counts, exit 0) are retained in inner-loop-evidence.json and the same classes passed in the broad-regression logs.",
+    "Cancellation is evidenced by the pre-existing eager split pre-cancelled test run inside the broad core regression, not by a new Feature=D211 cancellation test; no dedicated public-API-diff report was retained (the structural API-surface test plus the green core suite stand in).",
+    "EV-07 is unconditional and is not marked na: the in-memory subscenario is a negative (unchanged rejection) branch, observed as such.",
+    "The plan's probe.py `build` step also named a dedicated `dotnet build -c Release` of the solution; the retained Release build is the benchmark project build (0/0). Debug covers the full solution; CRLF is verified directly in freeze/tree.json.",
+    "Aggregate denominator/consolidation differs between coverage.xml (80.5% branch) and the merged report; both recorded and explained in coverage/summary.txt.",
+    "The canonical mutation report predates the 3 tests that kill 3 listed survivors (README records them as killed; a confirming re-run was not executed in this freeze dispatch). The multi-column composite-key partition renderer is defensive-only through a successful public path (pre-existing split-loader composite-key gap, out of D211 scope, recorded as open risk).",
+    "docs/ru/toc.yml also carries unrelated scalar-functions entries from a sibling task; only the T211 advanced-page hunk is staged in the collection autocommit (the file is otherwise left as-is in the worktree).",
+    "The dedicated run's extra out-of-process `Default` job could not generate because of the pre-existing gitignored D208 benchmark-project snapshot (environment collision, not code); the in-process job executed all 9 cases."
+  ]
+}

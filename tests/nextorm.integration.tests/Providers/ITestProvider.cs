@@ -179,6 +179,13 @@ public interface ITestProvider
     string DynamicColumnsReadSkipReason =>
         "This provider cannot read a dynamic-columns store.";
 
+    /// <summary>
+    /// True when the provider can translate a tuple (row-value) <c>IN</c>/<c>Contains</c> list. A
+    /// composite eager link key is filtered with such a list, so SQL Server — which has no row-value
+    /// constructor — cannot translate a composite split eager load and fails closed instead.
+    /// </summary>
+    bool SupportsTupleIn => true;
+
     void EnsureSeeded();
 
     IDataContext CreateContext();

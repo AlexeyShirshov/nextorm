@@ -744,6 +744,7 @@ select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on
 - [Группировка и агрегаты](03-grouping-and-aggregates.md) - агрегат по соединению.
 - [Хинты запросов](13-query-hints.md) - хинты уровня инструкции, например SQL Server `OPTION (RECOMPILE)`.
 - [Связи и однозапросная загрузка (`JoinInto`)](../advanced/relationships.md) - объявленные метаданные связей и однозапросный загрузчик дочерней коллекции.
+- [Постраничная выборка на родителя при жадной загрузке](../advanced/eager-loading-per-parent-paging.md) - применение собственных `Take`/`Skip` дочернего запроса независимо к каждому родителю.
 - [Специфичный для провайдеров SQL](provider-specific/overview.md) - полный каталог конструкций, доступных только у отдельных провайдеров.
 - [Запросы и проекции](../querying/index.md)
 

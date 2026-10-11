@@ -730,6 +730,7 @@ it supports [`Inner`](xref:NextORM.Core.JoinType.Inner), [`Left`](xref:NextORM.C
 - [Grouping and aggregates](03-grouping-and-aggregates.md) - aggregate over a join.
 - [Query hints](13-query-hints.md) - statement-level hints such as SQL Server `OPTION (RECOMPILE)`.
 - [Relationships and single-query loading (`JoinInto`)](../advanced/relationships.md) - declared relationship metadata and the single-query child-collection loader.
+- [Per-parent paging in eager loading](../advanced/eager-loading-per-parent-paging.md) - applying a child query's own `Take`/`Skip` independently to each parent.
 - [Provider-specific SQL](provider-specific/overview.md) - the full catalogue of provider-only constructs.
 - [Querying and projections](../querying/index.md)
 

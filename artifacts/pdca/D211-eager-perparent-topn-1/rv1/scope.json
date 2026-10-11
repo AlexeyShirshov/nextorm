@@ -1,0 +1,31 @@
+{
+  "unit": "D211-eager-perparent-topn-1 rv1 inner loop",
+  "scope": {
+    "projects": [
+      "nextorm.core.tests",
+      "nextorm.sqlite.tests"
+    ],
+    "selectors": [
+      "Feature=D211",
+      "nextorm.sqlite.tests.EagerLoadingSqlGenerationTests"
+    ],
+    "files": [
+      "src/nextorm.core/Builders/EntityBuilder.cs",
+      "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
+      "src/nextorm.core/Builders/EntityBuilderExtensions.cs",
+      "src/nextorm.core/Builders/Joins/JoinIntoStitcher.cs",
+      "src/nextorm.core/DataContext/SqlBuilder.cs",
+      "src/nextorm.core/Expressions/JoinExpression.cs",
+      "src/nextorm.core/Query/QueryCommand.cs",
+      "src/nextorm.core/Query/QueryCommand.Clone.cs",
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "src/nextorm.core/Query/QueryPlanEqualityComparer.cs",
+      "tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs",
+      "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs",
+      "tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs"
+    ],
+    "rationale": "D211 per-parent top-N eager loading: the affected subset is the core metadata/translation layer plus the SQLite SQL-generation and execution fixtures; PostgreSQL/SQL Server/MySQL/ClickHouse/Integration are boundary-only. The inner loop edits the obsolete per-parent rejection tests to the new supported semantics and adds a fail-closed guard for unsupported paged child shapes.",
+    "rebuild": "affected",
+    "boundary": "DO->CHECK boundary: one full solution build (Debug) plus the seven-project filtered trait runs, broad regressions, provider integration, coverage/mutation, docs and perf are separate boundary/perf dispatches and are not executed here."
+  }
+}

@@ -1,0 +1,63 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.sqlite.tests
+  Discovered:  nextorm.sqlite.tests
+  Starting:    nextorm.sqlite.tests
+    NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.ContextAuto_PerParentTopN_IsRejectedBeforeSql [FAIL]
+      Expected a <System.NotSupportedException> to be thrown, but no exception was thrown.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+           at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+           at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+        tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs(503,0): at NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.ContextAuto_PerParentTopN_IsRejectedBeforeSql()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+    NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.Split_PerParentTopN_Async_IsRejectedBeforeTheChildSql [FAIL]
+      Expected a <System.NotSupportedException> to be thrown, but no exception was thrown.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+           at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+           at FluentAssertions.Specialized.AsyncFunctionAssertions`2.ThrowAsync[TException](String because, Object[] becauseArgs)
+           at FluentAssertions.ExceptionAssertionsExtensions.WithMessage[TException](Task`1 task, String expectedWildcardPattern, String because, Object[] becauseArgs)
+        tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs(553,0): at NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.Split_PerParentTopN_Async_IsRejectedBeforeTheChildSql()
+        --- End of stack trace from previous location ---
+    NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.RejectedPerParentTopN_LeavesNoCacheEntryAndLaterQueriesStillCache [FAIL]
+      Expected a <System.NotSupportedException> to be thrown, but no exception was thrown.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+           at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+           at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+        tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs(577,0): at NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.RejectedPerParentTopN_LeavesNoCacheEntryAndLaterQueriesStillCache()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+    NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.Split_PerParentTopN_IsRejectedBeforeTheChildSql [FAIL]
+      Expected a <System.NotSupportedException> to be thrown, but no exception was thrown.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+           at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+           at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+        tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs(472,0): at NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.Split_PerParentTopN_IsRejectedBeforeTheChildSql()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Finished:    nextorm.sqlite.tests (ID = 'a5abfb47315c331d69873aec368d5caeca8b1b317eae0481172250d5022c1251')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.sqlite.tests  Total: 47, Errors: 0, Failed: 4, Skipped: 0, Not Run: 0, Time: 3.548s

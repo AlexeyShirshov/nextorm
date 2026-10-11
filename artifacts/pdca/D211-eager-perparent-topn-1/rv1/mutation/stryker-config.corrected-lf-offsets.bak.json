@@ -1,0 +1,72 @@
+{
+  "stryker-config": {
+    "project": "/home/alex/sources/nextorm/src/nextorm.core/nextorm.core.csproj",
+    "test-projects": [
+      "/home/alex/sources/nextorm/tests/nextorm.core.tests/nextorm.core.tests.csproj",
+      "/home/alex/sources/nextorm/tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj"
+    ],
+    "mutate": [
+      "Builders/EntityBuilder.cs{67754..69126}",
+      "Builders/EntityBuilder.cs{69174..69240}",
+      "Builders/EntityBuilder.cs{69277..69332}",
+      "Builders/EntityBuilder.cs{72289..73087}",
+      "Builders/EntityBuilder.cs{73291..73331}",
+      "Builders/EntityBuilder.cs{77307..77404}",
+      "Builders/EntityBuilder.cs{77948..78464}",
+      "Builders/EntityBuilder.cs{83106..83199}",
+      "Builders/EntityBuilder.cs{85525..85803}",
+      "Builders/EntityBuilder.cs{88081..89930}",
+      "Builders/EntityBuilderEagerLoading.cs{3478..3606}",
+      "Builders/EntityBuilderEagerLoading.cs{3808..3934}",
+      "Builders/EntityBuilderEagerLoading.cs{12875..13024}",
+      "Builders/EntityBuilderEagerLoading.cs{13128..13795}",
+      "Builders/EntityBuilderEagerLoading.cs{14643..17246}",
+      "Builders/EntityBuilderEagerLoading.cs{18136..18296}",
+      "Builders/EntityBuilderEagerLoading.cs{18315..18769}",
+      "Builders/EntityBuilderEagerLoading.cs{18789..18909}",
+      "Builders/EntityBuilderEagerLoading.cs{18916..19039}",
+      "Builders/EntityBuilderEagerLoading.cs{19104..19628}",
+      "Builders/EntityBuilderEagerLoading.cs{19630..19653}",
+      "Builders/EntityBuilderEagerLoading.cs{20096..20186}",
+      "Builders/EntityBuilderEagerLoading.cs{20708..20841}",
+      "Builders/EntityBuilderEagerLoading.cs{28877..29240}",
+      "Builders/EntityBuilderEagerLoading.cs{29397..29531}",
+      "Builders/EntityBuilderEagerLoading.cs{29553..29677}",
+      "Builders/EntityBuilderEagerLoading.cs{30181..30233}",
+      "Builders/EntityBuilderExtensions.cs{37869..37941}",
+      "Builders/EntityBuilderExtensions.cs{39204..39276}",
+      "Builders/Joins/JoinIntoStitcher.cs{6239..6548}",
+      "DataContext/SqlBuilder.cs{1668..1967}",
+      "DataContext/SqlBuilder.cs{31687..43121}",
+      "Expressions/JoinExpression.cs{9900..10595}",
+      "Expressions/JoinExpression.cs{11966..12026}",
+      "Expressions/JoinExpression.cs{12744..12804}",
+      "Query/QueryCommand.cs{9957..10016}",
+      "Query/QueryCommand.cs{25483..27209}",
+      "Query/QueryCommand.cs{50840..50882}",
+      "Query/QueryCommand.Clone.cs{4758..4989}",
+      "Query/QueryCommand.QueryPreparer.cs{2668..3253}",
+      "Query/QueryCommand.QueryPreparer.cs{6686..6780}",
+      "Query/QueryCommand.QueryPreparer.cs{8596..8673}",
+      "Query/QueryCommand.QueryPreparer.cs{171318..172070}",
+      "Query/QueryPlanEqualityComparer.cs{6823..7583}",
+      "Query/QueryPlanEqualityComparer.cs{18326..18618}"
+    ],
+    "coverage-analysis": "perTest",
+    "test-runner": "mtp",
+    "mutation-level": "Standard",
+    "additional-timeout": 30000,
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    },
+    "reporters": [
+      "Progress",
+      "Html",
+      "Json",
+      "ClearText"
+    ],
+    "report-file-name": "mutation-report"
+  }
+}
