@@ -68,6 +68,9 @@ internal static class JoinIntoStitcher
     /// <returns>The deduplicated parents in first-occurrence order.</returns>
     public static List<TEntity> Execute<TEntity>(EntityBuilder<TEntity> builder, ReadOnlySpan<object?> @params)
     {
+        // Fail closed on an unsupported LoadWith before the pair command is built/prepared/cached and
+        // before any SQL runs (the dispatcher must not be relied on for this; a JoinInto bypasses it).
+        EntityBuilderEagerLoading.ValidateLoadWithForJoinInto(builder);
         var specs = builder.JoinIntos!;
         var rows = builder.CreateJoinIntoPairCommand().ToObjectList(@params);
         return Stitch(builder, specs, rows);
@@ -81,6 +84,8 @@ internal static class JoinIntoStitcher
     /// <returns>A task producing the deduplicated parents in first-occurrence order.</returns>
     public static async Task<List<TEntity>> ExecuteAsync<TEntity>(EntityBuilder<TEntity> builder, object[] @params, CancellationToken cancellationToken)
     {
+        // Before the first await/SQL and before the pair command is built/prepared/cached.
+        EntityBuilderEagerLoading.ValidateLoadWithForJoinInto(builder);
         var specs = builder.JoinIntos!;
         var rows = await builder.CreateJoinIntoPairCommand().ToObjectListAsync(@params, cancellationToken).ConfigureAwait(false);
         return Stitch(builder, specs, rows);
@@ -102,6 +107,10 @@ internal static class JoinIntoStitcher
     /// <returns>The deduplicated parents in first-occurrence order.</returns>
     internal static List<TEntity> Stitch<TEntity>(EntityBuilder<TEntity> builder, IReadOnlyList<IJoinIntoSpec<TEntity>> specs, List<object?> rows, bool requireMappedParentKey = false)
     {
+        // Also guards any caller that stitches directly (single-query / list / stream / first): the same
+        // side-effect-free check, so no entry point can skip it. The JoinInto entry points above already
+        // ran it before their SQL.
+        EntityBuilderEagerLoading.ValidateLoadWithForJoinInto(builder);
         var parents = new List<TEntity>();
         var parentsByKey = new Dictionary<object, TEntity>();
         var perSpec = new List<(TEntity Parent, object? Child)>?[specs.Count];

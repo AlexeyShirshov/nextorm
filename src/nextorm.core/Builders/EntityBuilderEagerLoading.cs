@@ -174,7 +174,7 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
 
     /// <inheritdoc/>
     bool IEagerLoadSpec<TEntity>.RequiresPerParentTopN(IDataContext context)
-        => !ResolveChild(context).Paging.IsEmpty;
+        => EntityBuilderEagerLoading.HasPerParentTopN(ResolveChild(context));
 
     /// <summary>
     /// Builds the child query for <paramref name="context"/> once and returns it on every later call, so
@@ -295,12 +295,10 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
         // A child Limit/Offset/Page asks for a per-parent top-N: split loading would apply it globally
         // across all parents, which is silently wrong data. Reject before the child SQL runs (the child
         // command is not prepared or cached) until correlated execution is implemented. Auto does not
-        // erase the requirement.
-        if (!child.Paging.IsEmpty)
-            throw new NotSupportedException(
-                "LoadWith cannot apply Limit/Offset/Page to a child query: a per-parent top-N requires " +
-                "correlated execution, which is not supported. Remove the child paging or use an explicit " +
-                "child query per parent.");
+        // erase the requirement. This is defence in depth: the JoinInto entry guard rejects the same
+        // shape before any command is built, through the same shared predicate and message.
+        if (EntityBuilderEagerLoading.HasPerParentTopN(child))
+            throw EntityBuilderEagerLoading.PerParentTopNNotSupported();
 
         return child;
     }
@@ -464,6 +462,62 @@ internal static class EntityBuilderEagerLoading
         {
             cancellationToken.ThrowIfCancellationRequested();
             await spec.ExecuteAsync(builder.DataProvider, builder.FilterScope, parents, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="child"/> requests a per-parent top-N (a child <c>Limit</c>/<c>Offset</c>/
+    /// <c>Page</c>). Stated once and reused by the preparation-time marker
+    /// (<see cref="EntityBuilderExtensions.MarkPerParentTopN"/>), the child loader and the <c>JoinInto</c>
+    /// entry guard, so the three sites cannot drift apart.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="child">The resolved child builder.</param>
+    /// <returns><see langword="true"/> when the child query pages per parent.</returns>
+    public static bool HasPerParentTopN<TChild>(EntityBuilder<TChild> child)
+        => !child.Paging.IsEmpty;
+
+    /// <summary>
+    /// The rejection for a child query that requests a per-parent top-N. Shared so the child loader and
+    /// the <c>JoinInto</c> entry guard report the identical message.
+    /// </summary>
+    /// <returns>The per-parent top-N rejection.</returns>
+    internal static NotSupportedException PerParentTopNNotSupported() =>
+        new("LoadWith cannot apply Limit/Offset/Page to a child query: a per-parent top-N requires " +
+            "correlated execution, which is not supported. Remove the child paging or use an explicit " +
+            "child query per parent.");
+
+    /// <summary>
+    /// Validates the eager-load specifications carried by a builder that is about to run its
+    /// <c>JoinInto</c> path, <b>before</b> any command is built, prepared, cached or executed. An
+    /// explicit <see cref="EagerLoadMode.Correlated"/> choice and a per-parent top-N child both have no
+    /// implemented execution path, so they fail closed here instead of after the pair SQL ran or being
+    /// silently reinterpreted. Side-effect free: it builds no command, writes no cache and never touches
+    /// <see cref="QueryCommand.Cache"/>. A context-default <see cref="EagerLoadMode.Correlated"/> is
+    /// ignored, because the <c>JoinInto</c> pair command is the fixed Single path and never resolves the
+    /// context default.
+    /// </summary>
+    /// <typeparam name="TEntity">The parent entity type.</typeparam>
+    /// <param name="builder">The builder about to execute its <c>JoinInto</c> path.</param>
+    /// <exception cref="NotSupportedException">
+    /// An explicit <see cref="EagerLoadMode.Correlated"/> is requested, or a load's child query pages per
+    /// parent (<c>Limit</c>/<c>Offset</c>/<c>Page</c>).
+    /// </exception>
+    public static void ValidateLoadWithForJoinInto<TEntity>(EntityBuilder<TEntity> builder)
+    {
+        // Same explicit-vs-default criterion as EntityBuilder<TEntity>.SingleQuery: the builder's
+        // _eagerLoadMode is set only by an explicit LoadWith choice, so an inherited context-default
+        // Correlated must not be rejected (or JoinInto + Default under that default would break).
+        if (builder.Mode == EagerLoadMode.Correlated)
+            throw EagerLoadResolver.CorrelatedNotSupported();
+
+        if (builder.LoadSpecs is not { Count: > 0 } specs)
+            return;
+
+        for (var i = 0; i < specs.Count; i++)
+        {
+            if (specs[i].RequiresPerParentTopN(builder.DataProvider))
+                throw PerParentTopNNotSupported();
         }
     }
 }

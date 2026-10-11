@@ -77,10 +77,7 @@ internal static class EagerLoadResolver
                 // does not select Single automatically and does not erase a per-parent top-N requirement.
                 return EagerLoadMode.SplitQuery;
             case EagerLoadMode.Correlated:
-                throw new NotSupportedException(
-                    "EagerLoadMode.Correlated is not supported in this release: per-parent top-N / " +
-                    "correlated eager loading has no implemented execution path. Use SplitQuery or " +
-                    "SingleQuery, or remove the per-parent limit.");
+                throw CorrelatedNotSupported();
             case EagerLoadMode.Default:
                 // "Default" is an inheritance sentinel, not an executable strategy; an absent choice maps
                 // to the context default, which is already applied above. Treat a bare sentinel as split.
@@ -94,6 +91,17 @@ internal static class EagerLoadResolver
                     $"'{effective}' is not a defined EagerLoadMode value.");
         }
     }
+
+    /// <summary>
+    /// The <see cref="NotSupportedException"/> for an explicit <see cref="EagerLoadMode.Correlated"/>
+    /// request, which has no implemented execution path. Shared so the preparation resolver and the
+    /// <c>JoinInto</c> entry guard report the identical message.
+    /// </summary>
+    /// <returns>The rejection for an explicit Correlated request.</returns>
+    internal static NotSupportedException CorrelatedNotSupported() =>
+        new("EagerLoadMode.Correlated is not supported in this release: per-parent top-N / " +
+            "correlated eager loading has no implemented execution path. Use SplitQuery or " +
+            "SingleQuery, or remove the per-parent limit.");
 }
 
 /// <summary>

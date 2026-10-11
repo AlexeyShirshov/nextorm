@@ -797,6 +797,183 @@ public class EagerLoadingSqlGenerationTests
         }
     }
 
+    // --- D209 r=1 n=2 (escalation): the JoinInto entry guard validates the LoadWith set before any SQL,
+    // --- so a per-parent top-N (Limit/Offset/Page, empty or non-empty parent) or an explicit Correlated
+    // --- fails closed with zero statements and no plan-cache growth, instead of running the pair SQL and
+    // --- failing in the child loader (or being silently reinterpreted).
+
+    private static EntityBuilder<MixedNote> PagedNotes(EntityBuilder<MixedNote> child, string paging) => paging switch
+    {
+        "Limit" => child.Limit(1),
+        "Offset" => child.Offset(1),
+        "Page" => child.Page(1, 1),
+        _ => throw new ArgumentOutOfRangeException(nameof(paging), paging, "unknown paging kind"),
+    };
+
+    private static EntityBuilder<MixedParent> MixedRoot(SqliteDataContext ctx)
+        => ctx.From<MixedParent>(b => b.HasMany(p => p.Children, c => c.ParentId).HasMany(p => p.Notes, n => n.ParentId));
+
+    [Theory]
+    [InlineData("Limit", false)]
+    [InlineData("Offset", false)]
+    [InlineData("Page", false)]
+    [InlineData("Limit", true)]
+    [InlineData("Offset", true)]
+    [InlineData("Page", true)]
+    public void JoinInto_WithPagedLoadWith_IsRejectedBeforeAnySql(string paging, bool emptyParent)
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateMixedDb(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+            QueryPlanStore.Values.Should().BeEmpty("the purge must leave a clean plan cache for the no-entry assertion");
+
+            var root = MixedRoot(ctx);
+            var parents = emptyParent ? root.Where(p => p.Id == -1) : root;
+
+            var act = () => parents
+                .JoinInto(ctx.From<MixedChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+                .LoadWith(p => p.Notes, c => PagedNotes(c.From<MixedNote>(), paging), p => p.Id, n => n.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
+            interceptor.Statements.Should().BeEmpty(
+                "the JoinInto entry guard must reject the per-parent top-N before the pair statement runs");
+            QueryPlanStore.Values.Should().BeEmpty("a rejected JoinInto preparation must not insert a plan-cache entry");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData("Limit", false)]
+    [InlineData("Offset", false)]
+    [InlineData("Page", false)]
+    [InlineData("Limit", true)]
+    [InlineData("Offset", true)]
+    [InlineData("Page", true)]
+    public async Task JoinInto_WithPagedLoadWith_Async_IsRejectedBeforeAnySql(string paging, bool emptyParent)
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateMixedDb(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+            QueryPlanStore.Values.Should().BeEmpty("the purge must leave a clean plan cache for the no-entry assertion");
+
+            var root = MixedRoot(ctx);
+            var parents = emptyParent ? root.Where(p => p.Id == -1) : root;
+
+            var act = () => parents
+                .JoinInto(ctx.From<MixedChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+                .LoadWith(p => p.Notes, c => PagedNotes(c.From<MixedNote>(), paging), p => p.Id, n => n.ParentId)
+                .OrderBy(p => p.Id)
+                .ToListAsync(TestContext.Current.CancellationToken);
+
+            await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
+            interceptor.Statements.Should().BeEmpty(
+                "the async JoinInto entry guard must reject the per-parent top-N before the first SQL await");
+            QueryPlanStore.Values.Should().BeEmpty("a rejected JoinInto preparation must not insert a plan-cache entry");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void JoinInto_WithExplicitCorrelatedLoadWith_IsRejectedBeforeAnySql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateMixedDb(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+            QueryPlanStore.Values.Should().BeEmpty("the purge must leave a clean plan cache for the no-entry assertion");
+
+            var act = () => MixedRoot(ctx)
+                .JoinInto(ctx.From<MixedChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+                .LoadWith(p => p.Notes, c => c.From<MixedNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.Correlated)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*Correlated*");
+            interceptor.Statements.Should().BeEmpty("an explicit Correlated LoadWith must fail before any SQL");
+            QueryPlanStore.Values.Should().BeEmpty("a rejected JoinInto preparation must not insert a plan-cache entry");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task JoinInto_WithExplicitCorrelatedLoadWith_Async_IsRejectedBeforeAnySql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateMixedDb(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+            QueryPlanStore.Values.Should().BeEmpty("the purge must leave a clean plan cache for the no-entry assertion");
+
+            var act = () => MixedRoot(ctx)
+                .JoinInto(ctx.From<MixedChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+                .LoadWith(p => p.Notes, c => c.From<MixedNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.Correlated)
+                .OrderBy(p => p.Id)
+                .ToListAsync(TestContext.Current.CancellationToken);
+
+            await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*Correlated*");
+            interceptor.Statements.Should().BeEmpty("an explicit Correlated LoadWith must fail before the first SQL await");
+            QueryPlanStore.Values.Should().BeEmpty("a rejected JoinInto preparation must not insert a plan-cache entry");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void JoinInto_WithDefaultLoadWith_UnderContextCorrelated_KeepsPairAndSplit()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateMixedDb(EagerLoadMode.Correlated);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = MixedRoot(ctx)
+                .JoinInto(ctx.From<MixedChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+                .LoadWith(p => p.Notes, c => c.From<MixedNote>(), p => p.Id, n => n.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            interceptor.Statements.Should().HaveCount(2,
+                "an inherited Correlated context default must not reject the JoinInto + Default combination");
+            interceptor.Statements.Should().ContainSingle(s => s.Contains(" join ", StringComparison.OrdinalIgnoreCase));
+            interceptor.Statements.Should().ContainSingle(s => s.Contains(" in (", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
     // --- D14a: split vs single eager-load filter-scope inheritance. The alias types below map to the
     // --- same eager_parent/eager_child tables but declare a named filter, so no other test's entity
     // --- metadata is affected (the first registration per type wins process-wide).

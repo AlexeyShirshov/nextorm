@@ -746,6 +746,46 @@ public class EagerLoadingModeTests
         parents[1].Notes.Select(n => n.Id).Should().Equal(101);
     }
 
+    // --- D209 r=1 n=2 (escalation): the JoinInto entry guard fails closed on an explicit Correlated
+    // --- LoadWith and on a per-parent top-N before the pair command is built.
+
+    [Fact]
+    public void JoinInto_WithExplicitCorrelatedLoadWith_IsRejected()
+    {
+        using var context = CreateContext();
+
+        var builder = context.From<ModeParent>()
+            .JoinInto(context.From<ModeChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+            .LoadWith(p => p.Notes, c => c.From<ModeNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.Correlated);
+
+        Action act = () => builder.OrderBy(p => p.Id).ToList();
+        act.Should().Throw<NotSupportedException>().WithMessage("*Correlated*");
+    }
+
+    [Theory]
+    [InlineData("Limit")]
+    [InlineData("Offset")]
+    [InlineData("Page")]
+    public void JoinInto_WithPagedLoadWith_IsRejected(string paging)
+    {
+        using var context = CreateContext();
+
+        var builder = context.From<ModeParent>()
+            .JoinInto(context.From<ModeChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+            .LoadWith(p => p.Notes, c => Paged(paging, c.From<ModeNote>()), p => p.Id, n => n.ParentId);
+
+        Action act = () => builder.OrderBy(p => p.Id).ToList();
+        act.Should().Throw<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
+
+        static EntityBuilder<ModeNote> Paged(string kind, EntityBuilder<ModeNote> child) => kind switch
+        {
+            "Limit" => child.Limit(1),
+            "Offset" => child.Offset(1),
+            "Page" => child.Page(1, 1),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "unknown paging kind"),
+        };
+    }
+
     // --- D209 r=1 n=2 (F13): direct structural identity for EagerLoadShape plus the V12 plan-cache
     // --- contract — a changed captured parameter value alone reuses the plan, a changed child-filter
     // --- structure (which changes the executed command) isolates it.
