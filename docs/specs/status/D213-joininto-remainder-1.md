@@ -154,6 +154,12 @@ CHECK re-gather budget: at most two targeted read-only rounds, owned by CHECK, f
 - Providers: SQL-gen for SQLite/Postgres/SqlServer/MySQL/ClickHouse; MariaDB `tests/nextorm.mariadb.tests` has zero JoinInto tests (project exists). Integration containers all exist incl. `Providers/MariaDbContainer.cs:17` (image `mariadb:11.4`, env `NEXTORM_MARIADB_CONNECTION`); `CommonTestSuite` derived = SQLite/Postgres/SqlServer/MySQL only; ClickHouse has `ClickHouseJoinIntoOneToOneTests.cs:14 : ProviderTestSuite`; MariaDB has ~10 standalone `IDisposable` integration classes. Integration cmd `AGENTS.md:60-61`; skipped≠green `AGENTS.md:65`.
 - Evidence-contract definition: `~/.config/opencode/skills/pdca-dotnet/SKILL.md:919-979` + `:1147-1168`; validator `scripts/validate_inner_loop.py` (`:586`,`:495-562`,`:554-561`, exit 2 `:606-610`); `artifacts/pdca/<task>/rv<k>/` is an existing convention; coverage scope `coverage.settings.xml:11-13`; thresholds `.github/workflows/dotnet.yml:27-28`.
 
+## Acknowledgement — T209 rv1 shared contract
+
+- Contract revision: `rv=1` — `artifacts/pdca/D209/rv1/sibling-contract.md`.
+- This sibling keeps its own plan revision: **r=1** (unchanged).
+- Compatibility verdict: **compatible; obligation noted** — #213 preserves the fixed-Single `JoinInto` behavior T209 freezes (R209-06), must extend plan-key identity for any admitted composite/junction shape, and must never mutate the shared `QueryCommand.Cache`.
+
 ## Done / Verified / Incomplete
 
 - Done: reconnaissance; PLAN pass 1 (planner draft, all gate-1 sections present); PLAN r=1 finalized as ready (planner, medium tier).

@@ -92,6 +92,12 @@ Evidence supports execution surfaces + current test deficit, not nested runtime 
 - PLAN(r1) started (collection phase P).
 - PLAN(r1) complete — stopped at PLAN->DO boundary. No DO, no branches, no worktrees, no product code.
 
+## Acknowledgement — T209 rv1 shared contract
+
+- Contract revision: `rv=1` — `artifacts/pdca/D209/rv1/sibling-contract.md`.
+- This sibling keeps its own plan revision: **r=1** (unchanged).
+- Compatibility verdict: **compatible; obligation noted** — #212 must extend `EagerLoadShape` identity and add negative tests wherever nested execution changes, must not bypass T209 precedence/resolution, and must never mutate the shared `QueryCommand.Cache`.
+
 ## Done / Verified / Incomplete
 - Done: own PLAN r1.
 - Verified: —

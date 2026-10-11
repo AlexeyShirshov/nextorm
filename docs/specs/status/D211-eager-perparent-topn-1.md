@@ -499,3 +499,9 @@ Two prior PLAN-decide attempts failed with upstream `Insufficient account funds`
 (subagent ids `ses_ed8bea5ffffeuNStTpCrG952Zk`, `ses_ed8bd4d84ffei2tAIePgbxBQep`).
 Funds restored; this first issued r=1 plan supersedes the earlier `plan_state: gap`.
 No content blocker remains.
+
+## Acknowledgement — T209 rv1 shared contract
+
+- Contract revision: `rv=1` — `artifacts/pdca/D209/rv1/sibling-contract.md`.
+- This sibling keeps its own plan revision: **r=1** (unchanged).
+- Compatibility verdict: **compatible; obligation noted** — #211 consumes T209's frozen `EagerLoadMode`/`DataContextBuilder`/`EntityBuilderEagerLoading`/`ISqlDialect` surface and owns the deferred correlated/per-parent top-N **execution** that T209 rejects fail-closed (V10/V18). Obligations: revise the `Auto` rule deliberately when correlated execution lands, test provider-supported **and** provider-unsupported branches, do not rename enum members/values, and never mutate the shared `QueryCommand.Cache`.
