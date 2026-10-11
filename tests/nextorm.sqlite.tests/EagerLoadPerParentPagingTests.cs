@@ -1063,6 +1063,142 @@ public sealed class EagerLoadPerParentPagingTests
             File.Delete(path);
         }
     }
+
+    // --- V9/V11 applicability probe: a derived (As / From(builder)) or set-operation child source is
+    // excluded from single-query folding by the `_query is not null` shape check. The split per-parent
+    // paging loader consumes the same ranked source, so the reachable split shape must fail closed too. ---
+
+    [Fact]
+    public void Split_DerivedChildSource_IsRejectedFailClosedBeforeSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // V9: c.From(c.From<Child>().Select(...)) makes the child's primary source a derived subquery
+            // whose condition/ordering live inside it, so the ranked per-parent paging source cannot fold
+            // the child shape in. The split loader must reject before any SQL is built, not drop the
+            // derived source or page it globally.
+            var act = () => ctx.From<PerPagePageParent>()
+                .LoadWith(
+                    p => p.Children,
+                    c => c.From(c.From<PerPagePageChild>().Where(x => x.Flag == 1).Select(x => x)).OrderBy(x => x.SortKey).Limit(2),
+                    p => p.Id,
+                    c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*derived (As) source*");
+            interceptor.Statements.Should().BeEmpty("a derived child shape must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_DerivedChildSource_IsRejectedFailClosedBeforeSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var act = () => ctx.From<PerPagePageParent>()
+                .LoadWith(
+                    p => p.Children,
+                    c => c.From(c.From<PerPagePageChild>().Where(x => x.Flag == 1).Select(x => x)).OrderBy(x => x.SortKey).Limit(2),
+                    p => p.Id,
+                    c => c.ParentId,
+                    EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*derived (As) source*");
+            interceptor.Statements.Should().BeEmpty("a derived child shape must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_SetOperationChildSource_IsRejectedFailClosedBeforeSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // V11: a UNION child source is carried as a derived (_query) builder, so the ranked per-parent
+            // paging source cannot fold it. The split loader must reject before SQL.
+            var act = () => ctx.From<PerPagePageParent>()
+                .LoadWith(
+                    p => p.Children,
+                    c => c.From(
+                            c.From<PerPagePageChild>().Where(x => x.Flag == 1).ToCommand()
+                                .Union(c.From<PerPagePageChild>().Where(x => x.Flag == 0).ToCommand()))
+                        .OrderBy(x => x.SortKey)
+                        .Limit(2),
+                    p => p.Id,
+                    c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*derived (As) source*");
+            interceptor.Statements.Should().BeEmpty("a set-operation child shape must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_SetOperationChildSource_IsRejectedFailClosedBeforeSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var act = () => ctx.From<PerPagePageParent>()
+                .LoadWith(
+                    p => p.Children,
+                    c => c.From(
+                            c.From<PerPagePageChild>().Where(x => x.Flag == 1).ToCommand()
+                                .Union(c.From<PerPagePageChild>().Where(x => x.Flag == 0).ToCommand()))
+                        .OrderBy(x => x.SortKey)
+                        .Limit(2),
+                    p => p.Id,
+                    c => c.ParentId,
+                    EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*derived (As) source*");
+            interceptor.Statements.Should().BeEmpty("a set-operation child shape must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
 }
 
 

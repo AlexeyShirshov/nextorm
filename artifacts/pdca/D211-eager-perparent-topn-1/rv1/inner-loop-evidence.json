@@ -294,7 +294,7 @@
       "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/mariadb-fail-seed.log",
       "provider": "mariadb",
       "provider_status": "executed",
-      "note": "red: fixture seed failed — settable ICollection navigation bound as a parameter (MySqlConnector List`1 not supported); fixed in test fixture"
+      "note": "red: fixture seed failed \u2014 settable ICollection navigation bound as a parameter (MySqlConnector List`1 not supported); fixed in test fixture"
     },
     {
       "command": [
@@ -968,6 +968,105 @@
       "exit_code": 0,
       "selected_count": 52,
       "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/p2a-sqlite-trait-D211.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "5bd3028f@D211-rv1-n3",
+      "artifact_revision": "5bd3028f@D211-rv1-n3",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n3-build-sqlite-tests.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-trait",
+        "Feature=D211"
+      ],
+      "phase": "inner",
+      "source_revision": "5bd3028f@D211-rv1-n3",
+      "artifact_revision": "5bd3028f@D211-rv1-n3",
+      "exit_code": 0,
+      "selected_count": 9,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n3-core-trait-D211.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-trait",
+        "Feature=D211"
+      ],
+      "phase": "inner",
+      "source_revision": "5bd3028f@D211-rv1-n3",
+      "artifact_revision": "5bd3028f@D211-rv1-n3",
+      "exit_code": 0,
+      "selected_count": 58,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n3-sqlite-trait-D211.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-class",
+        "NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests"
+      ],
+      "phase": "inner",
+      "source_revision": "5bd3028f@D211-rv1-n3",
+      "artifact_revision": "5bd3028f@D211-rv1-n3",
+      "exit_code": 0,
+      "selected_count": 38,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n3-sqlite-class-D211.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-class",
+        "NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "5bd3028f@D211-rv1-n3",
+      "artifact_revision": "5bd3028f@D211-rv1-n3",
+      "exit_code": 0,
+      "selected_count": 54,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n3-sqlite-class-eager-sqlgen.log"
     }
   ],
   "amendments": [

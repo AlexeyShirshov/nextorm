@@ -1,6 +1,8 @@
 {
   "task": "D211-eager-perparent-topn-1",
-  "tree": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1 + T211 42-file change set on branch 1.0.9 (uncommitted worktree; see freeze/tree.json, file_set_sha256)",
+  "tree": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1 + T211 48-file final change set on branch 1.0.9 (uncommitted worktree; see freeze/tree.json, file_set_sha256 6efc5e311d89b9411fb9c4624221a7e70f9edf922aa9528572c48bdc091d6f61)",
+  "file_count": 48,
+  "file_set_sha256": "6efc5e311d89b9411fb9c4624221a7e70f9edf922aa9528572c48bdc091d6f61",
   "contract_rv": 1,
   "status_file": "docs/specs/status/D211-eager-perparent-topn-1.md",
   "required_rows": [
@@ -605,5 +607,8 @@
         }
       ]
     }
+  ],
+  "caveats": [
+    "Finalize re-snapshot (r=1, n=3/3, rv=1): coverage re-run on the final tree is provider-green (total 10850, succeeded 10652, failed 0, skipped 198, exit 0), aggregate line 88.5% / branch 80.6%; the changed-path delta is unchanged versus D:06 (254/279 lines, 160/194 branch conditions; the only intervening production edit is comment-only). Content tree re-frozen to 48 files including the r1-n3 applicability artifacts and the coverage/tool configs; single hashed input snapshot file_set_sha256 = 6efc5e311d89b9411fb9c4624221a7e70f9edf922aa9528572c48bdc091d6f61."
   ]
 }

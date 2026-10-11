@@ -696,10 +696,11 @@ internal readonly struct SqlBuilder
     }
 
     /// <summary>
-    /// Renders <c>row_number() over (partition by &lt;child key&gt; [order by &lt;child sorting&gt;])</c>.
-    /// The window order follows the child query's own <c>ORDER BY</c>; with no order the window has no
-    /// <c>ORDER BY</c> and the selected rows are intentionally unspecified, exactly like unordered
-    /// paging. Parameter mode visits the partition and sort expressions but emits nothing.
+    /// Renders <c>row_number() over (partition by &lt;child key&gt; order by &lt;child sorting&gt;)</c>.
+    /// The window order follows the child query's own <c>ORDER BY</c>. A page with no window ordering is
+    /// rejected (a <c>row_number()</c> window without <c>ORDER BY</c> is invalid on providers such as
+    /// SQL Server), and a per-parent page without a partition key is rejected too. Parameter mode visits
+    /// the partition and sort expressions but emits nothing.
     /// </summary>
     private string MakePerParentRankExpression(QueryCommand cmd, Type entityType, string rankColumn)
     {

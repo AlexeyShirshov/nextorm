@@ -54,6 +54,16 @@
       "docs/advanced/eager-loading.md",
       "docs/ru/advanced/eager-loading.md",
       "docs/specs/status/D211-eager-perparent-topn-1.md"
+    ],
+    "applicability_evidence": [
+      "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/applicability/V9.md",
+      "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/applicability/V11.md",
+      "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/applicability/V13.md",
+      "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/applicability/V21.md"
+    ],
+    "config": [
+      "coverage.settings.xml",
+      ".config/dotnet-tools.json"
     ]
   },
   "files": [
@@ -83,8 +93,8 @@
     },
     {
       "path": "src/nextorm.core/DataContext/SqlBuilder.cs",
-      "sha256": "afc20d59d9209924da4aaeb3663f3b15aa9e45bde44e402c0c5e522aec78fc00",
-      "bytes": 107393,
+      "sha256": "5f85cc6412727374051f6c89db7152556ea3f20702f4c8163fe0df7b0214fc1f",
+      "bytes": 107473,
       "line_endings": "CRLF"
     },
     {
@@ -125,8 +135,8 @@
     },
     {
       "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs",
-      "sha256": "c176f3abbc146c46e7cf35b994902d1d9f5384bdb91ad5329058e3c91a9eaa61",
-      "bytes": 46998,
+      "sha256": "288f699c036c8b61c52ce18d651c84f995e7209c5e310d475480733aaa42acee",
+      "bytes": 52466,
       "line_endings": "CRLF"
     },
     {
@@ -305,15 +315,51 @@
     },
     {
       "path": "docs/specs/status/D211-eager-perparent-topn-1.md",
-      "sha256": "0251246dfd80f7a350271e498563a3b7fee97382efaac5e69692c19805063973",
-      "bytes": 58523,
+      "sha256": "254e6530bf2eff22ecdd81acf1d6620497266f2d600665b03368066486468fd6",
+      "bytes": 60138,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/applicability/V9.md",
+      "sha256": "480c0eab360dae24ae27a8770c577685993d959246aace7a1b14f18c261548e3",
+      "bytes": 2603,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/applicability/V11.md",
+      "sha256": "b1af6ec3952150074f001eac564dc6f1b01a24e6c9e711aa2e6dcb8c76296bdb",
+      "bytes": 1976,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/applicability/V13.md",
+      "sha256": "5ddbe0557905ee7ebfc4bcce683d22c22273a0eb170974111422e5d2f810d961",
+      "bytes": 1984,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/applicability/V21.md",
+      "sha256": "90c65c176a07f14fd07f06606c706416866ccdbf20b4db5aa6eb0ffa70b7ed2d",
+      "bytes": 1882,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": "coverage.settings.xml",
+      "sha256": "dfed1c07943210a94afc238a8e098d6a7bcd6284d08d75307edb15737ba461be",
+      "bytes": 1147,
+      "line_endings": "CRLF"
+    },
+    {
+      "path": ".config/dotnet-tools.json",
+      "sha256": "26643bc7214b1886e7378ac96e19f76f9dc31737e1ff8968fbed2309c299f126",
+      "bytes": 646,
       "line_endings": "CRLF"
     }
   ],
-  "file_count": 42,
-  "file_set_sha256": "a270418af71f89aad4cf1ef5388f682bb49937fc16d54728dc41a95476ab3a81",
+  "file_count": 48,
+  "file_set_sha256": "6efc5e311d89b9411fb9c4624221a7e70f9edf922aa9528572c48bdc091d6f61",
   "line_endings": {
-    "CRLF": 42,
+    "CRLF": 48,
     "non_crlf": [],
     "all_crlf": true
   },

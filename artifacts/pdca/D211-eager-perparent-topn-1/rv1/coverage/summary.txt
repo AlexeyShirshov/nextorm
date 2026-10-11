@@ -1,11 +1,11 @@
-# T211 D:06 coverage — CI-equivalent aggregate (coverage.xml), final corrected tree
+# T211 coverage — CI-equivalent aggregate (coverage.xml), final corrected tree (rv1 finalize re-snapshot)
 
 Command (mirrors .github/workflows/dotnet.yml):
   dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o <art>/coverage.xml "dotnet test --no-build --verbosity normal"
   dotnet tool run reportgenerator -reports:<art>/coverage.xml -targetdir:<art>/report -reporttypes:"Html;TextSummary;Cobertura"
 
 Run: DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
-Test-run summary: total 10846, succeeded 10648, failed 0, skipped 198 (exit 0). Provider-green run.
+Test-run summary: total 10850, succeeded 10652, failed 0, skipped 198 (exit 0). Provider-green run.
   - nextorm.core.tests, nextorm.sqlite.tests, nextorm.postgres.tests, nextorm.sqlserver.tests,
     nextorm.integration.tests (all providers) passed; no required provider skipped.
 
@@ -24,8 +24,12 @@ Line coverage: 88.5% -> PASS (>=85).
 Branch coverage: 80.6% -> PASS (>=75).
 
 Changed-path delta (vs pre-T211 base b527be6f): lines 254/279, branch conditions 160/194.
-  - Resolved: SqlBuilder.cs:734 (rv1 label 724, partition separator, 2/2); QueryPlanEqualityComparer.cs:166/167/170 (2/2, 4/4, 4/4);
+  - UNCHANGED versus the D:06 run. The only production edit since then is a comment-only XML-doc
+    change in SqlBuilder.MakePerParentRankExpression (final line numbers shift +1 after it).
+  - Resolved: SqlBuilder.cs:735 (rv1 label 724, partition separator, 2/2); QueryPlanEqualityComparer.cs:166/167/170 (2/2, 4/4, 4/4);
     EntityBuilder.cs:1650 (4/4). See branch-dispositions.md.
   - Remaining partials are defensive guards / param-mode mirrors (Group B root cause: child plan-key divergence).
-  - Added tests: SingleQuery_PagedChild_WithoutParentOrder_KeepsChildPageOrder;
+  - Added tests (D:06): SingleQuery_PagedChild_WithoutParentOrder_KeepsChildPageOrder;
     PerParentPaging_PlanKey_SeparatesPagedPartitionAndEmbeddedShapes.
+  - Added tests (r1-n3 applicability): Split/SingleQuery_DerivedChildSource_IsRejectedFailClosedBeforeSql;
+    Split/SingleQuery_SetOperationChildSource_IsRejectedFailClosedBeforeSql (negative fail-closed only).

@@ -3,7 +3,7 @@
   "contract_rv": 1,
   "base_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc",
   "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
-  "generated_utc": "2026-10-11T21:12:47Z",
+  "generated_utc": "2026-10-11T23:18:10Z",
   "required_rows": [
     "EV-01",
     "EV-02",
@@ -363,6 +363,21 @@
           "path": "tests/nextorm.core.tests/EagerLoadingTests.cs"
         },
         {
+          "kind": "pre-cancelled-feature-d211",
+          "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingEdgeTests.cs",
+          "exit": 0
+        },
+        {
+          "kind": "cancelled-during-child-read-feature-d211",
+          "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingEdgeTests.cs",
+          "exit": 0
+        },
+        {
+          "kind": "cancellation-run-log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/d211-cancellation-eager.log",
+          "exit": 0
+        },
+        {
           "kind": "cache-rebind-ownership",
           "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs"
         },
@@ -380,10 +395,10 @@
           "exit": 0
         }
       ],
-      "verification": "Both public surfaces (EntityBuilder.LoadWith and the JoinInto family) are exercised; sync and async variants assert per-parent pages and query counts; the pre-cancelled eager split test (EagerLoadingTests.LoadWith_SplitAsync_PreCancelled_ThrowsWithoutLoadingChildren) and the whole-suite run cover cancellation/ownership; per-parent plan-cache population plus repeated same-context paged loads cover cache/rebinding; EagerLoadMode_ApiSurface_HasTheExpectedShape pins the enum values/optional mode parameter (unchanged public API).",
+      "verification": "Both public surfaces (EntityBuilder.LoadWith and the JoinInto family) are exercised; sync and async variants assert per-parent pages and query counts; cancellation/ownership is covered by the two dedicated Feature=D211 tests EagerLoadPerParentPagingEdgeTests.Split_PreCancelledToken_ThrowsAndLeavesTheContextUsable (:384) and Split_CancelledDuringChildRead_ThrowsAndLeavesTheContextUsable (:411) (2/2 green) plus the pre-existing EagerLoadingTests.LoadWith_SplitAsync_PreCancelled_ThrowsWithoutLoadingChildren in the broad run; per-parent plan-cache population plus repeated same-context paged loads cover cache/rebinding; EagerLoadMode_ApiSurface_HasTheExpectedShape pins the enum values/optional mode parameter (unchanged public API).",
       "gaps": [],
       "caveats": [
-        "Cancellation is evidenced by the pre-existing eager split pre-cancelled test run inside the broad core regression, not by a new Feature=D211 cancellation test; no dedicated public-API-diff report was retained (the structural API-surface test plus the green core suite stand in)."
+        "Correction (r=1, n=3/3): the earlier caveat that cancellation relied only on the pre-existing core test is superseded. The two dedicated Feature=D211 cancellation tests in tests/nextorm.sqlite.tests/EagerLoadPerParentPagingEdgeTests.cs are green (2/2, exit 0): Split_PreCancelledToken_ThrowsAndLeavesTheContextUsable (:384) and Split_CancelledDuringChildRead_ThrowsAndLeavesTheContextUsable (:411); log artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/d211-cancellation-eager.log. No dedicated public-API-diff report was retained (the structural API-surface test plus the green suite stand in)."
       ]
     },
     {
@@ -586,7 +601,7 @@
           "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/tree.json"
         }
       ],
-      "verification": "Debug full-solution build 0 Warning(s)/0 Error(s); Debug integration/sqlite test-project rebuilds 0/0; Release benchmark build 0/0. CRLF verified over all 41 T211 footprint files and recorded in freeze/tree.json (line_endings.all_crlf=true).",
+      "verification": "Debug full-solution build 0 Warning(s)/0 Error(s); Debug integration/sqlite test-project rebuilds 0/0; Release benchmark build 0/0. CRLF verified over all 48 T211 footprint files (including the r1-n3 applicability artifacts and the coverage/tool config inputs) and recorded in freeze/tree.json (line_endings.all_crlf=true).",
       "gaps": [],
       "caveats": [
         "The plan's probe.py `build` step also named a dedicated `dotnet build -c Release` of the solution; the retained Release build is the benchmark project build (0/0). Debug covers the full solution; CRLF is verified directly in freeze/tree.json."
@@ -835,7 +850,7 @@
           "exit": 0
         }
       ],
-      "verification": "Corrected content-tree identity of the 42-file T211 footprint (paths + sha256 + CRLF status) frozen against base b527be6f37b9301ed9d2245b803a1bd3e5e43ffc @D211-rv1; row ledger covers EV-01..EV-14; scripts/validate_inner_loop.py manifest exit 0 (manifest-validation.log).",
+      "verification": "Finalize content-tree identity of the 48-file T211 footprint (paths + sha256 + CRLF status; includes the r1-n3 applicability artifacts and coverage/tool configs) frozen against base b527be6f37b9301ed9d2245b803a1bd3e5e43ffc @D211-rv1; file_set_sha256 6efc5e311d89b9411fb9c4624221a7e70f9edf922aa9528572c48bdc091d6f61; row ledger covers EV-01..EV-14; scripts/validate_inner_loop.py manifest exit 0 (manifest-validation.log).",
       "gaps": [],
       "caveats": []
     }
@@ -867,17 +882,26 @@
   ],
   "gaps": [],
   "caveats": [
+    "Finalize re-snapshot (r=1, n=3/3, rv=1): coverage re-run on the final tree is provider-green (total 10850, succeeded 10652, failed 0, skipped 198, exit 0), aggregate line 88.5% (threshold 85) / branch 80.6% (threshold 75); the changed-path delta is unchanged versus D:06 (254/279 lines, 160/194 branch conditions) because the only intervening production edit is comment-only XML-doc prose. The content tree was re-frozen to 48 files including the r1-n3 applicability artifacts (freeze/applicability/V9,V11,V13,V21.md) and the coverage/tool configs (coverage.settings.xml, .config/dotnet-tools.json); single hashed input snapshot file_set_sha256 = 6efc5e311d89b9411fb9c4624221a7e70f9edf922aa9528572c48bdc091d6f61.",
     "Correction dispatch (r=1, n=2/3, rv=1): the freeze/tree.json content hashes were regenerated for the corrected worktree (12 production/test/doc/status files were edited after the n1 freeze; the added tests/nextorm.sqlite.tests/EagerLoadPerParentPagingEdgeTests.cs brings the T211 footprint to 42 files). EV-08 boundary evidence was refreshed on this corrected tree (build + seven broad project suites + the Feature=D211 integration sweep).",
     "The frozen freeze/tree.json captures the corrected n2 content revision; the n1 per-file hashes it previously held are superseded. No re-plan and no footprint widening beyond the added T211 edge test.",
     "The plan's dedicated probe.py `baseline` artifacts (baseline.log/baseline.json/baseline/) were not produced; baseline identity is bound to git base b527be6f37b9301ed9d2245b803a1bd3e5e43ffc and the retained pre-fix run logs instead.",
     "The planned probe.py `oracle` artifact (oracle.log/oracle.json/oracle/) is absent; the oracle is the benchmark reference + the integration adversarial test + their run logs.",
     "The dedicated per-provider SQL-generation stdout was executed inline and not persisted as separate log files; only the sqlite SQL-generation run has a dedicated log. The run rows (selected counts, exit 0) are retained in inner-loop-evidence.json and the same classes passed in the broad-regression logs.",
-    "Cancellation is evidenced by the pre-existing eager split pre-cancelled test run inside the broad core regression, not by a new Feature=D211 cancellation test; no dedicated public-API-diff report was retained (the structural API-surface test plus the green core suite stand in).",
+    "Cancellation corrected (r=1, n=3/3): the two dedicated Feature=D211 cancellation tests in tests/nextorm.sqlite.tests/EagerLoadPerParentPagingEdgeTests.cs (:384 Split_PreCancelledToken_ThrowsAndLeavesTheContextUsable, :411 Split_CancelledDuringChildRead_ThrowsAndLeavesTheContextUsable) are green (2/2, exit 0, log artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/d211-cancellation-eager.log); the earlier pre-existing-core-test-only caveat is superseded. No dedicated public-API-diff report was retained (the structural API-surface test plus the green core suite stand in).",
     "EV-07 is unconditional and is not marked na: the in-memory subscenario is a negative (unchanged rejection) branch, observed as such.",
     "The plan's probe.py `build` step also named a dedicated `dotnet build -c Release` of the solution; the retained Release build is the benchmark project build (0/0). Debug covers the full solution; CRLF is verified directly in freeze/tree.json.",
     "Aggregate denominator/consolidation differs between coverage.xml (80.5% branch) and the merged report; both recorded and explained in coverage/summary.txt.",
     "The canonical mutation report predates the 3 tests that kill 3 listed survivors (README records them as killed; a confirming re-run was not executed in this freeze dispatch). The multi-column composite-key partition renderer is defensive-only through a successful public path (pre-existing split-loader composite-key gap, out of D211 scope, recorded as open risk).",
     "docs/ru/toc.yml also carries unrelated scalar-functions entries from a sibling task; only the T211 advanced-page hunk is staged in the collection autocommit (the file is otherwise left as-is in the worktree).",
     "The dedicated run's extra out-of-process `Default` job could not generate because of the pre-existing gitignored D208 benchmark-project snapshot (environment collision, not code); the in-process job executed all 9 cases."
-  ]
+  ],
+  "content_tree": {
+    "tree_file": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/tree.json",
+    "file_count": 48,
+    "file_set_sha256": "6efc5e311d89b9411fb9c4624221a7e70f9edf922aa9528572c48bdc091d6f61",
+    "algorithm": "sha256 of newline-joined '<path>:<file-sha256>' in footprint order (production, tests, benchmark, docs_status, applicability_evidence, config)",
+    "finalized_utc": "2026-10-11T23:18:10Z",
+    "base_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc"
+  }
 }

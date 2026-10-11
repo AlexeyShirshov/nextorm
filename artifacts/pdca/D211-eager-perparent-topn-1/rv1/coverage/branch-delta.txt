@@ -6,15 +6,14 @@ uncovered changed lines (25):
   src/nextorm.core/Builders/EntityBuilderEagerLoading.cs:578
   src/nextorm.core/DataContext/SqlBuilder.cs:644
   src/nextorm.core/DataContext/SqlBuilder.cs:647
-  src/nextorm.core/DataContext/SqlBuilder.cs:715
-  src/nextorm.core/DataContext/SqlBuilder.cs:718
+  src/nextorm.core/DataContext/SqlBuilder.cs:716
   src/nextorm.core/DataContext/SqlBuilder.cs:719
   src/nextorm.core/DataContext/SqlBuilder.cs:720
-  src/nextorm.core/DataContext/SqlBuilder.cs:805
-  src/nextorm.core/DataContext/SqlBuilder.cs:832
-  src/nextorm.core/DataContext/SqlBuilder.cs:834
+  src/nextorm.core/DataContext/SqlBuilder.cs:721
+  src/nextorm.core/DataContext/SqlBuilder.cs:806
+  src/nextorm.core/DataContext/SqlBuilder.cs:833
   src/nextorm.core/DataContext/SqlBuilder.cs:835
-  src/nextorm.core/DataContext/SqlBuilder.cs:837
+  src/nextorm.core/DataContext/SqlBuilder.cs:836
   src/nextorm.core/DataContext/SqlBuilder.cs:838
   src/nextorm.core/DataContext/SqlBuilder.cs:839
   src/nextorm.core/DataContext/SqlBuilder.cs:840
@@ -23,10 +22,11 @@ uncovered changed lines (25):
   src/nextorm.core/DataContext/SqlBuilder.cs:843
   src/nextorm.core/DataContext/SqlBuilder.cs:844
   src/nextorm.core/DataContext/SqlBuilder.cs:845
-  src/nextorm.core/DataContext/SqlBuilder.cs:876
-  src/nextorm.core/DataContext/SqlBuilder.cs:879
+  src/nextorm.core/DataContext/SqlBuilder.cs:846
+  src/nextorm.core/DataContext/SqlBuilder.cs:877
   src/nextorm.core/DataContext/SqlBuilder.cs:880
   src/nextorm.core/DataContext/SqlBuilder.cs:881
+  src/nextorm.core/DataContext/SqlBuilder.cs:882
 uncovered/partial changed branches (23):
   src/nextorm.core/Builders/EntityBuilderEagerLoading.cs:363 (1/2)
   src/nextorm.core/Builders/EntityBuilderEagerLoading.cs:577 (1/2)
@@ -34,21 +34,21 @@ uncovered/partial changed branches (23):
   src/nextorm.core/DataContext/SqlBuilder.cs:646 (2/4)
   src/nextorm.core/DataContext/SqlBuilder.cs:666 (1/2)
   src/nextorm.core/DataContext/SqlBuilder.cs:683 (1/2)
-  src/nextorm.core/DataContext/SqlBuilder.cs:706 (1/2)
   src/nextorm.core/DataContext/SqlBuilder.cs:707 (1/2)
-  src/nextorm.core/DataContext/SqlBuilder.cs:714 (1/2)
-  src/nextorm.core/DataContext/SqlBuilder.cs:717 (1/2)
-  src/nextorm.core/DataContext/SqlBuilder.cs:722 (1/2)
-  src/nextorm.core/DataContext/SqlBuilder.cs:747 (1/2)
-  src/nextorm.core/DataContext/SqlBuilder.cs:762 (3/4)
-  src/nextorm.core/DataContext/SqlBuilder.cs:769 (2/4)
-  src/nextorm.core/DataContext/SqlBuilder.cs:796 (1/2)
-  src/nextorm.core/DataContext/SqlBuilder.cs:801 (1/2)
-  src/nextorm.core/DataContext/SqlBuilder.cs:804 (2/4)
-  src/nextorm.core/DataContext/SqlBuilder.cs:834 (0/2)
-  src/nextorm.core/DataContext/SqlBuilder.cs:837 (0/6)
-  src/nextorm.core/DataContext/SqlBuilder.cs:839 (0/2)
-  src/nextorm.core/DataContext/SqlBuilder.cs:841 (0/2)
-  src/nextorm.core/DataContext/SqlBuilder.cs:847 (1/2)
-  src/nextorm.core/DataContext/SqlBuilder.cs:875 (3/4)
--> branch-delta.json
+  src/nextorm.core/DataContext/SqlBuilder.cs:708 (1/2)
+  src/nextorm.core/DataContext/SqlBuilder.cs:715 (1/2)
+  src/nextorm.core/DataContext/SqlBuilder.cs:718 (1/2)
+  src/nextorm.core/DataContext/SqlBuilder.cs:723 (1/2)
+  src/nextorm.core/DataContext/SqlBuilder.cs:748 (1/2)
+  src/nextorm.core/DataContext/SqlBuilder.cs:763 (3/4)
+  src/nextorm.core/DataContext/SqlBuilder.cs:770 (2/4)
+  src/nextorm.core/DataContext/SqlBuilder.cs:797 (1/2)
+  src/nextorm.core/DataContext/SqlBuilder.cs:802 (1/2)
+  src/nextorm.core/DataContext/SqlBuilder.cs:805 (2/4)
+  src/nextorm.core/DataContext/SqlBuilder.cs:835 (0/2)
+  src/nextorm.core/DataContext/SqlBuilder.cs:838 (0/6)
+  src/nextorm.core/DataContext/SqlBuilder.cs:840 (0/2)
+  src/nextorm.core/DataContext/SqlBuilder.cs:842 (0/2)
+  src/nextorm.core/DataContext/SqlBuilder.cs:848 (1/2)
+  src/nextorm.core/DataContext/SqlBuilder.cs:876 (3/4)
+-> artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/branch-delta.json
