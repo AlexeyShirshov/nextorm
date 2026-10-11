@@ -1,19 +1,17 @@
-# T211 D:06 coverage — CI-equivalent aggregate (coverage.xml)
+# T211 D:06 coverage — CI-equivalent aggregate (coverage.xml), final corrected tree
 
 Command (mirrors .github/workflows/dotnet.yml):
   dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o <art>/coverage.xml "dotnet test --no-build --verbosity normal"
   dotnet tool run reportgenerator -reports:<art>/coverage.xml -targetdir:<art>/report -reporttypes:"Html;TextSummary;Cobertura"
 
 Run: DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
-Test-run summary: total 10792, succeeded 10057, failed 537, skipped 198 (exit 2).
-  - nextorm.core.tests PASSED (23s), nextorm.sqlite.tests PASSED (1m10s), nextorm.postgres.tests PASSED (11s), nextorm.sqlserver.tests PASSED (10s)
-  - nextorm.integration.tests FAILED 537/... : environmental container timeouts under full-parallel run (SQL Server auth/timeout, MySQL/ClickHouse connect timeouts). Not a T211 regression; D:05 proved all six providers green when run serialized.
+Test-run summary: total 10846, succeeded 10648, failed 0, skipped 198 (exit 0). Provider-green run.
+  - nextorm.core.tests, nextorm.sqlite.tests, nextorm.postgres.tests, nextorm.sqlserver.tests,
+    nextorm.integration.tests (all providers) passed; no required provider skipped.
 
 Aggregate (assemblies nextorm.core, nextorm.sqlite, nextorm.postgres, nextorm.sqlserver):
-  Line coverage: 88.5%
-  Branch coverage: 80.5% (27617 of 34287)
-  Covered branches: 27617
-  Total branches: 34287
+  Line coverage: 88.5% (51345 of 57955)
+  Branch coverage: 80.6% (27651 of 34299)
 
 Per-assembly line coverage:
 nextorm.core                                                                      88.4%
@@ -23,7 +21,11 @@ nextorm.sqlserver                                                               
 
 Thresholds: MIN_LINE_COVERAGE=85, MIN_BRANCH_COVERAGE=75 (hard-fail on main only; branch 1.0.9 = warn-only).
 Line coverage: 88.5% -> PASS (>=85).
-Branch coverage: 80.5% -> PASS (>=75).
+Branch coverage: 80.6% -> PASS (>=75).
 
-Supplementary serialized integration run: coverage-integration.xml (total 3588, failed 760, skipped 190; SQL Server container auth/timeout).
-Merged: coverage-merged.xml (dotnet-coverage merge) -> line 88.5%, branch 87.2% (tool-consolidated denominator).
+Changed-path delta (vs pre-T211 base b527be6f): lines 254/279, branch conditions 160/194.
+  - Resolved: SqlBuilder.cs:734 (rv1 label 724, partition separator, 2/2); QueryPlanEqualityComparer.cs:166/167/170 (2/2, 4/4, 4/4);
+    EntityBuilder.cs:1650 (4/4). See branch-dispositions.md.
+  - Remaining partials are defensive guards / param-mode mirrors (Group B root cause: child plan-key divergence).
+  - Added tests: SingleQuery_PagedChild_WithoutParentOrder_KeepsChildPageOrder;
+    PerParentPaging_PlanKey_SeparatesPagedPartitionAndEmbeddedShapes.

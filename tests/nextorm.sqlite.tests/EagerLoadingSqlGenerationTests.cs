@@ -721,6 +721,7 @@ public class EagerLoadingSqlGenerationTests
     [Theory]
     [InlineData("Distinct")]
     [InlineData("GroupBy")]
+    [InlineData("Having")]
     public void SingleQuery_PerParentTopN_UnsupportedChildShape_IsRejectedWithZeroSql(string shape)
     {
         var interceptor = new SqlRecordingInterceptor();
@@ -748,10 +749,70 @@ public class EagerLoadingSqlGenerationTests
         }
     }
 
+    [Theory]
+    [InlineData("Distinct")]
+    [InlineData("GroupBy")]
+    [InlineData("Having")]
+    public void Split_PerParentTopN_UnsupportedChildShape_IsRejectedWithZeroSql(string shape)
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // The split loader lowers a paged child to the same ranked derived source the single-query
+            // path uses. It must apply the same fail-closed shape guard: a shape the ranked source cannot
+            // fold in (Distinct/GroupBy/Having) is rejected before any SQL instead of being silently
+            // dropped into wrong rows.
+            var act = () => ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => PagedUnsupportedChild(c, shape), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{shape}*");
+            interceptor.Statements.Should().BeEmpty("an unsupported paged child shape must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_PerParentTopN_NoOrder_IsRejectedWithZeroSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDbWithEagerMode(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // A paged child without an ordering cannot lower to a valid window (SQL Server rejects a
+            // row_number() with no ORDER BY). It is rejected at preparation, before the parent statement.
+            var act = () => ctx.From<EagerParent>()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().Limit(1), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*OrderBy*");
+            interceptor.Statements.Should().BeEmpty("an unordered per-parent page must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
     private static EntityBuilder<EagerChild> PagedUnsupportedChild(IDataContext ctx, string shape) => shape switch
     {
         "Distinct" => ctx.From<EagerChild>().Distinct().OrderBy(x => x.Id).Limit(1),
         "GroupBy" => ctx.From<EagerChild>().GroupBy(x => x.ParentId).OrderBy(x => x.Id).Limit(1),
+        "Having" => ctx.From<EagerChild>().GroupBy(x => x.ParentId).Having(x => x.ParentId > 0).OrderBy(x => x.Id).Limit(1),
         _ => throw new ArgumentOutOfRangeException(nameof(shape), shape, "unknown child shape"),
     };
 

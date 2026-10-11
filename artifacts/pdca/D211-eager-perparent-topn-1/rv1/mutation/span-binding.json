@@ -1,0 +1,17 @@
+{
+  "source_report": "run-final2/reports/mutation-report.json",
+  "source_report_sha256": "8acbd8a27cd3be1368fc12b2aa786367f6fb46f7968e1828a6321c065c9b3b6c",
+  "config": "stryker-config.corrected.json",
+  "spans": "mutate-spans.json (from git diff -U0 b527be6f -- src/**/*.cs, CRLF raw-byte offsets)",
+  "active_mutants": 214,
+  "active_per_file": {
+    "Builders/EntityBuilder.cs": 12,
+    "Builders/EntityBuilderEagerLoading.cs": 28,
+    "Builders/EntityBuilderExtensions.cs": 2,
+    "DataContext/SqlBuilder.cs": 149,
+    "Query/QueryCommand.QueryPreparer.cs": 8,
+    "Query/QueryPlanEqualityComparer.cs": 15
+  },
+  "outside_changed_ranges": [],
+  "bound": true
+}

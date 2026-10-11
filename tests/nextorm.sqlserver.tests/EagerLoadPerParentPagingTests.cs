@@ -6,7 +6,7 @@ using NextORM.Core;
 namespace NextORM.SqlServer.Tests;
 
 /// <summary>
-/// #211 per-parent top-N SQL generation on PostgreSQL. A child query's own
+/// #211 per-parent top-N SQL generation on SQL Server. A child query's own
 /// <c>Limit</c>/<c>Offset</c>/<c>Page</c> is lowered to a <c>row_number() over (partition by &lt;child key&gt;
 /// order by &lt;child sort&gt;)</c> derived source whose page bounds filter each partition, on both eager
 /// modes. These tests never open a connection: the command is prepared and its text inspected.

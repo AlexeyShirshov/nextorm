@@ -1,6 +1,6 @@
 {
   "task": "D211-eager-perparent-topn-1",
-  "tree": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1 + T211 41-file change set on branch 1.0.9 (uncommitted worktree; see freeze/tree.json, file_set_sha256)",
+  "tree": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1 + T211 42-file change set on branch 1.0.9 (uncommitted worktree; see freeze/tree.json, file_set_sha256)",
   "contract_rv": 1,
   "status_file": "docs/specs/status/D211-eager-perparent-topn-1.md",
   "required_rows": [
@@ -359,28 +359,38 @@
           "exit": 0
         },
         {
-          "kind": "regression-integration-sqlite",
-          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlite.log",
+          "kind": "regression-d211-integration-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-sqlite.log",
           "exit": 0
         },
         {
-          "kind": "regression-integration-postgres",
-          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-postgres.log",
+          "kind": "regression-d211-integration-postgres",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-postgres.log",
           "exit": 0
         },
         {
-          "kind": "regression-integration-sqlserver",
-          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlserver.log",
+          "kind": "regression-d211-integration-sqlserver",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-sqlserver.log",
           "exit": 0
         },
         {
-          "kind": "regression-integration-mysql",
-          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-mysql.log",
+          "kind": "regression-d211-integration-mysql",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-mysql.log",
           "exit": 0
         },
         {
-          "kind": "regression-integration-clickhouse",
-          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-clickhouse.log",
+          "kind": "regression-d211-integration-clickhouse",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-clickhouse.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-d211-integration-mariadb",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-mariadb.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-d211-binding",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json",
           "exit": 0
         }
       ]
@@ -495,7 +505,7 @@
       "evidence": [
         {
           "kind": "docfx-log",
-          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/docfx.log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/docfx-final.log",
           "exit": 0
         },
         {

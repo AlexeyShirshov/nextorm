@@ -1,0 +1,3 @@
+select t1.id, t1.parent_id as 'ParentId', t1.sort_key as 'SortKey', t1.flag
+from (select *, row_number() over (partition by parent_id order by 'o'ops--') as '__nextorm_rn' from edge_child) as 't1'
+ where t1.__nextorm_rn <= 1

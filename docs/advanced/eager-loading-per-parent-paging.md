@@ -30,7 +30,7 @@ For every parent the effective pipeline is:
 3. **Skip** — the normalized `Offset`/`Skip` drops that many leading candidates.
 4. **Take** — the normalized `Limit`/`Take` keeps that many of the remaining candidates.
 
-Paging normalization follows the existing [`Paging`](../guide/04-sorting-and-paging.md) contract, not a second implementation: `Take(0)`, a `Skip` past the end of a parent's children and a parent with no matching children all produce an empty collection. Bounds are overflow-safe exactly as ordinary paging.
+Paging normalization follows the existing [`Paging`](../guide/04-sorting-and-paging.md) contract, not a second implementation: `Take(0)` means "no limit" and does **not** activate paging, so a parent keeps every child; a `Skip` past the end of a parent's children and a parent with no matching children produce an empty collection. An actual page needs a child `OrderBy` (see below). Bounds are overflow-safe exactly as ordinary paging.
 
 ## Root paging stays independent
 
@@ -71,7 +71,7 @@ where t1.order_id in (@k0, @k1, @k2)
   and t1.__nextorm_rn > 1 and t1.__nextorm_rn <= 3
 ```
 
-The partition key is the complete parent-link key, and the window ordering is the child query's effective ordering. Composite parent-link keys (a `ValueTuple` of key components) are supported on this split path on SQLite, PostgreSQL, MySQL and ClickHouse; SQL Server rejects the composite form before execution (see below). The rank column is internal: it is used only to filter the derived source and never reaches the outer projection or the materialized entity. Batching is unchanged — two round trips for up to 1000 parents, no N+1.
+The partition key is the complete parent-link key, and the window ordering is the child query's effective ordering. Composite parent-link keys (a `ValueTuple` of key components) are supported on this split path on SQLite, PostgreSQL, MySQL, MariaDB and ClickHouse; SQL Server rejects the composite form before execution (see below). The rank column is internal: it is used only to filter the derived source and never reaches the outer projection or the materialized entity. Batching is unchanged — two round trips for up to 1000 parents, no N+1.
 
 ### Single-query (`EagerLoadMode.SingleQuery`)
 
@@ -96,23 +96,24 @@ Supported by the ranked child source:
 
 - a child `Where` predicate, applied **before** ranking;
 - a child `OrderBy` (single or multiple keys, ascending/descending) that accompanies paging;
-- `Limit`/`Offset`/`Page` (skip-only, take-only, skip+take), including `Take(0)` and a skip past the end;
+- `Limit`/`Offset`/`Page` (skip-only, take-only, skip+take), including a skip past the end; `Take(0)` is "no limit" and does not activate paging, so it is an ordinary unpaged load;
 - the same parent-link key shapes and projections that ordinary `LoadWith` supports.
 
 Rejected **before any SQL is generated**:
 
 - a **bare child `OrderBy`** in `SingleQuery` mode that is not accompanied by paging — the denormalized join still cannot express an output-only child ordering (split mode does not have this restriction);
-- child shapes the ranked source cannot fold in — `Distinct`, `GroupBy`, `Having` and the other aggregate/grouped/set shapes that ordinary single-query `LoadWith` already refuses;
+- a child shape the ranked source cannot fold in — `Distinct`, `GroupBy`, `Having` and the other aggregate/grouped/set shapes — rejected in **both modes** (split and single-query), because the ranked lowering renders only the child's own `Where` and `OrderBy`;
+- a paged child with **no `OrderBy`** in either mode — a per-parent page needs a window ordering, and a `row_number()` window with no `ORDER BY` is invalid on providers such as SQL Server;
 - `EagerLoadMode.Correlated`, which remains reserved and rejected in this release;
 - per-parent paging through **`JoinInto`**, which keeps its own fail-closed guard;
 - per-parent paging on the **in-memory** provider, which has no SQL window and rejects a paged eager child with `NotSupportedException` (unpaged eager loading is unchanged there);
-- composite / `ValueTuple` parent-link keys on the **single-query** path and on **SQL Server** (both paths) — the pre-existing tuple-`IN` and key-equality guards reject them before any SQL runs, whereas the split path supports them on SQLite, PostgreSQL, MySQL and ClickHouse; scalar (single-column) parent-link keys are unaffected.
+- composite / `ValueTuple` parent-link keys on the **single-query** path and on **SQL Server** (both paths) — the pre-existing tuple-`IN` and key-equality guards reject them before any SQL runs, whereas the split path supports them on SQLite, PostgreSQL, MySQL, MariaDB and ClickHouse; scalar (single-column) parent-link keys are unaffected.
 
 The rejection is terminal-agnostic: it happens during preparation, before the parent statement runs and before a plan entry is inserted. There is no client-side relational fallback — a page is never re-expressed as a global child `LIMIT`.
 
-## Ordering ties and unordered paging
+## Ordering ties and unordered pages
 
-The ranking gives each parent a deterministic sequence only for a **total** ordering. When the child ordering ties, the exact members that fall inside the page are not promised: the same row set is guaranteed only up to count and membership, exactly as with ordinary unordered paging. To make the per-parent page deterministic, order by a unique key. With no child `ORDER BY` at all, a provider-valid constant-order window is used and the selection is intentionally unspecified.
+The ranking gives each parent a deterministic sequence only for a **total** ordering. When the child ordering ties, the exact members that fall inside the page are not promised: the same row set is guaranteed only up to count and membership. To make the per-parent page deterministic, order by a unique key. A paged child with no `ORDER BY` at all is rejected before execution: the window would have no valid order (see above).
 
 ## Provider notes
 
@@ -121,12 +122,12 @@ The ranking gives each parent a deterministic sequence only for a **total** orde
 | SQLite | yes — window functions and a derived source |
 | PostgreSQL | yes — window functions and a derived source |
 | SQL Server | yes — the rank filter is applied inside a derived source; the nested source carries no statement-level `ORDER BY` |
-| MySQL / MariaDB | yes where the engine supports window functions; the existing negotiated version/capability gate decides |
-| ClickHouse | yes on the supported configuration |
+| MySQL / MariaDB | yes, where the server supports window functions (see the server prerequisite below) |
+| ClickHouse | yes, where the server supports window functions and derived sources |
 | In-memory | rejected fail-closed (`NotSupportedException`) — no SQL window; client-side relational paging is never substituted |
 | `JoinInto` | rejected fail-closed — per-parent top-N is a `LoadWith` capability |
 
-Existing provider capability/version decisions are reused; no new minimum version is introduced. A configuration whose engine cannot express the ranking, derived source or ordering is rejected **before execution** rather than served by an optimistic statement or a relational client fallback.
+Window-function support is a **server compatibility prerequisite**, not an auto-negotiated capability: nextorm emits the partitioned `row_number()` lowering against the provider you configure, and you target an engine that supports window functions and a derived source. No `ISqlDialect` capability is negotiated for this rewrite and no minimum version is detected automatically. The in-memory provider is rejected fail-closed because it has no SQL window; there is no relational client fallback.
 
 ## See also
 

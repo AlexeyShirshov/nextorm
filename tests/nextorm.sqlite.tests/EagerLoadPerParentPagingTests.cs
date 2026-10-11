@@ -362,6 +362,64 @@ public sealed class EagerLoadPerParentPagingTests
     }
 
     [Fact]
+    public void SingleQuery_PagedChild_WithoutParentOrder_KeepsChildPageOrder()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // The parent has no ORDER BY: the embedded child ordering must start from an empty parent
+            // ordering and still render each child's own order (the null-parentSorting branch of
+            // EntityBuilder.AppendEmbeddedChildOrdering).
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .ToList();
+
+            parents.Should().HaveCount(3);
+            var byId = parents.ToDictionary(p => p.Id);
+            byId[1].Children.Select(c => c.SortKey).Should().Equal(10, 20);
+            byId[2].Children.Select(c => c.SortKey).Should().Equal(5, 50);
+            byId[3].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void PerParentPaging_PlanKey_SeparatesPagedPartitionAndEmbeddedShapes()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        static QueryCommand Child(IDataContext c, System.Linq.Expressions.Expression<Func<PerPagePageChild, int>> partition, bool paged, bool embedded)
+        {
+            var cmd = c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2).Select(x => x.Id);
+            cmd.PerParentPaging = paged;
+            cmd.PerParentPartition = partition;
+            cmd.PerParentPagingEmbedded = embedded;
+            return cmd;
+        }
+
+        var pagedEmbedded = Child(ctx, x => x.ParentId, paged: true, embedded: true);
+        var pagedSplit = Child(ctx, x => x.ParentId, paged: true, embedded: false);
+        var pagedOtherPartition = Child(ctx, x => x.SortKey, paged: true, embedded: true);
+        var unpaged = Child(ctx, x => x.ParentId, paged: false, embedded: false);
+        var control = Child(ctx, x => x.ParentId, paged: true, embedded: true);
+
+        var comparer = pagedEmbedded.GetQueryPlanEqualityComparer();
+
+        // REQ-05: the per-parent plan-key separations must not alias a cached plan.
+        comparer.Equals(pagedEmbedded, unpaged).Should().BeFalse("a paged child must not reuse an unpaged plan");
+        comparer.Equals(pagedEmbedded, pagedOtherPartition).Should().BeFalse("a different partition selector must not share the plan");
+        comparer.Equals(pagedEmbedded, pagedSplit).Should().BeFalse("embedded and split render different SQL from the same ranked shape");
+        comparer.Equals(pagedEmbedded, control).Should().BeTrue("an identical paged shape must reuse the plan");
+        comparer.GetHashCode(pagedEmbedded).Should().Be(comparer.GetHashCode(control));
+    }
+
+    [Fact]
     public void SingleQuery_ChildFilterPrecedesRanking()
     {
         var (ctx, path) = CreateDb();
@@ -647,24 +705,132 @@ public sealed class EagerLoadPerParentPagingTests
     }
 
     [Fact]
-    public void SingleQuery_NoOrder_PagedChild_ReturnsMembershipAndCountOnly()
+    public void SingleQuery_NoOrder_PagedChild_IsRejectedBeforeSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // An actual per-parent page without a window ordering would lower to
+            // `row_number() over (partition by ...)` with no ORDER BY: invalid on providers such as
+            // SQL Server and without a deterministic per-parent meaning. It fails closed before any SQL
+            // rather than emitting the invalid window.
+            var act = () => ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*OrderBy*");
+            interceptor.Statements.Should().BeEmpty("an unordered per-parent page must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    // --- zero/default page bounds follow the existing Paging contract (#211, variant matrix :232) -----
+
+    [Fact]
+    public void Split_LimitZero_DoesNotActivatePagingAndKeepsEveryChild()
     {
         var (ctx, path) = CreateDb();
         try
         {
             ctx.PurgeQueryCache();
 
+            // Paging.Limit == 0 means "no limit" (Paging.IsEmpty), so the child is not paged and no window
+            // ordering is required: every child survives and the lack of an OrderBy is not rejected.
             var parents = ctx.From<PerPagePageParent>()
-                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().Limit(0), p => p.Id, c => c.ParentId)
                 .OrderBy(p => p.Id)
                 .ToList();
 
-            // Without an ORDER BY the exact tied membership is unspecified: assert count, membership and
-            // parent isolation only, never an invented deterministic order.
             parents.Select(p => p.Id).Should().Equal(1, 2, 3);
-            parents[0].Children.Should().HaveCount(2);
-            parents[0].Children.Select(c => c.Id).Should().BeSubsetOf([11, 12, 13, 14]);
-            parents[1].Children.Select(c => c.Id).Should().BeEquivalentTo([21, 22]);
+            parents[0].Children.Should().HaveCount(4);
+            parents[1].Children.Should().HaveCount(2);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_OffsetZero_PreservesPositiveLimit()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Skip(0) adds no offset and must not erase the positive Take: each parent keeps its two
+            // lowest children, exactly as Take-only paging.
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(0).Limit(2), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(10, 20);
+            parents[1].Children.Select(c => c.SortKey).Should().Equal(5, 50);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_DefaultBounds_AreUnpaged()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Both bounds default/zero normalize to no paging (Paging.IsEmpty): the child is loaded whole.
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().Offset(0).Limit(0), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents[0].Children.Should().HaveCount(4);
+            parents[1].Children.Should().HaveCount(2);
+            parents[2].Children.Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_LimitZeroWithPositiveOffset_SkipsWithoutLimit()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Limit(0) with a positive Offset is skip-only (Paging.IsEmpty is false on the offset): each
+            // parent drops its first ranked child and keeps every remaining one, with no upper bound.
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(1).Limit(0), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(20, 30, 40);
+            parents[1].Children.Select(c => c.SortKey).Should().Equal(50);
             parents[2].Children.Should().BeEmpty();
         }
         finally

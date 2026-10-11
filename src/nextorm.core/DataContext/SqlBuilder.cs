@@ -706,12 +706,22 @@ internal readonly struct SqlBuilder
         var partition = cmd.PerParentPartitionColumns ?? [];
         var sorting = cmd.Sorting ?? [];
 
+        // Shape validation is mode-independent, so it runs before and regardless of whether a SQL string
+        // is being built (it must also hold in the parameter pass). A partition key is mandatory: without
+        // one the emitted rank is global rather than per parent. An actual page also needs a window
+        // ordering, because a row_number() window with no ORDER BY is invalid on providers such as
+        // SQL Server; an unordered page must be rejected instead of emitting an invalid window.
+        if (partition.Length == 0)
+            throw new BuildSqlCommandException("A per-parent eager top-N child requires a partition key.");
+
+        if (sorting.Length == 0)
+            throw new BuildSqlCommandException(
+                "A per-parent eager top-N child requires a window ordering: a row_number() window with no " +
+                "ORDER BY is invalid on providers such as SQL Server.");
+
         var builder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
         try
         {
-            if (builder is not null && sorting.Length == 0 && partition.Length == 0)
-                throw new BuildSqlCommandException("A per-parent eager top-N child requires a partition key.");
-
             if (builder is not null)
                 builder.Append("row_number()").Append(Kw(" over ("));
 

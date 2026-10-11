@@ -36,7 +36,8 @@
       "tests/nextorm.integration.tests/Providers/MySqlTestProvider.cs",
       "tests/nextorm.integration.tests/Providers/PostgresTestProvider.cs",
       "tests/nextorm.integration.tests/Providers/SqlServerTestProvider.cs",
-      "tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs"
+      "tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs",
+      "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingEdgeTests.cs"
     ],
     "benchmark": [
       "benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs"
@@ -64,14 +65,14 @@
     },
     {
       "path": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
-      "sha256": "c368e46417f96548ef4130dad0315c1eedbcbda8b18b845419a24a820f7704dd",
-      "bytes": 35528,
+      "sha256": "b1741d5f9f4df1eaedbc932f6d5fafaa3c4ce3f1f36608d6acf6c630fa076582",
+      "bytes": 38628,
       "line_endings": "CRLF"
     },
     {
       "path": "src/nextorm.core/Builders/EntityBuilderExtensions.cs",
-      "sha256": "4cd53beb59b4c194be7d5bd9e30219e451956566d8e9fc8e3dd5e08c3e405368",
-      "bytes": 112594,
+      "sha256": "eb21239f41c9dbcce8992bcf2fa496faaf9585deaa0e40c35e77477d84ada229",
+      "bytes": 113139,
       "line_endings": "CRLF"
     },
     {
@@ -82,8 +83,8 @@
     },
     {
       "path": "src/nextorm.core/DataContext/SqlBuilder.cs",
-      "sha256": "92f86f0f82c55f651b6451cc224256b891d852aa8bdf8067b212fd04c2dc9a95",
-      "bytes": 106661,
+      "sha256": "afc20d59d9209924da4aaeb3663f3b15aa9e45bde44e402c0c5e522aec78fc00",
+      "bytes": 107393,
       "line_endings": "CRLF"
     },
     {
@@ -118,20 +119,20 @@
     },
     {
       "path": "tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs",
-      "sha256": "91b2dfaff9e17bba4c0c7bbc61d0d9acd2c0a49bc9f7701df210ba1dc8519477",
-      "bytes": 3848,
+      "sha256": "0b907a1f674c47f198082c9ecfb5139a778571a5455a014729bbe70bdb2b9ab6",
+      "bytes": 10506,
       "line_endings": "CRLF"
     },
     {
       "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs",
-      "sha256": "a00b593d9f0708cb9014806aa34f1567b14fdb4bf53dc52b68b08591c7b3a8bc",
-      "bytes": 40018,
+      "sha256": "c176f3abbc146c46e7cf35b994902d1d9f5384bdb91ad5329058e3c91a9eaa61",
+      "bytes": 46998,
       "line_endings": "CRLF"
     },
     {
       "path": "tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs",
-      "sha256": "07a4334b9faf5d726331c595599a06a8e895b4734a1178f6e652fd56d20f5dca",
-      "bytes": 56681,
+      "sha256": "eba2d94eace037391553c55da85e2e76948bcc05e9b985a76c648382946112f8",
+      "bytes": 59285,
       "line_endings": "CRLF"
     },
     {
@@ -142,14 +143,14 @@
     },
     {
       "path": "tests/nextorm.sqlserver.tests/EagerLoadPerParentPagingTests.cs",
-      "sha256": "f42e2689e1c467f52b39dac54e8ef50a4e3b2f6fb9a7aff0e86f4d781f536f93",
+      "sha256": "dd9a18acd50a1fed7ca1583115baccac0c2b13c7add40162d83129631ee461b5",
       "bytes": 8437,
       "line_endings": "CRLF"
     },
     {
       "path": "tests/nextorm.mysql.tests/EagerLoadPerParentPagingTests.cs",
-      "sha256": "70d0557e43d6ed808aec1e3741d6e5a84d4afa54680a76b4ffc87a60c8528de8",
-      "bytes": 8429,
+      "sha256": "af46e1f205b5e08c7a869bd2b00c8f06400df323e61bbe10a3aca98f6e4e498f",
+      "bytes": 8424,
       "line_endings": "CRLF"
     },
     {
@@ -166,7 +167,7 @@
     },
     {
       "path": "tests/nextorm.clickhouse.tests/EagerLoadPerParentPagingTests.cs",
-      "sha256": "be369f6bf4e0656e816e82d3ae41208082dfabf0bd47cdfda6dbe39f9b56235b",
+      "sha256": "cc8c3f2eb27d2b735d7cf073a9e174a6c998c7b744375751b9aac8d8330b195a",
       "bytes": 8439,
       "line_endings": "CRLF"
     },
@@ -231,6 +232,12 @@
       "line_endings": "CRLF"
     },
     {
+      "path": "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingEdgeTests.cs",
+      "sha256": "f7d4b124d97d0bf21b68665295ea9062aed6889605c3693e148c58943e9ef379",
+      "bytes": 29851,
+      "line_endings": "CRLF"
+    },
+    {
       "path": "benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs",
       "sha256": "0181537eaf6b25ac75e0b90a09b48db896bd0cbcecbd8ead5b44ce172a6306c2",
       "bytes": 11385,
@@ -238,14 +245,14 @@
     },
     {
       "path": "docs/advanced/eager-loading-per-parent-paging.md",
-      "sha256": "e5b066cced85ac96fa19b186219985939e6bf4a51393cbb43f98789afab065ee",
-      "bytes": 10357,
+      "sha256": "2e8eac3951281c110da457d4528a5d97d68ffab2f434ef4f4c4c014e21b89378",
+      "bytes": 11019,
       "line_endings": "CRLF"
     },
     {
       "path": "docs/ru/advanced/eager-loading-per-parent-paging.md",
-      "sha256": "352efa4fc2e34c51d24d0f02ae9913d5ff9762d23242b9703ede4dec901e56d8",
-      "bytes": 17561,
+      "sha256": "3cc1a11f7b4694ccaa256dd5aec49147271f61a9a3f76c8be1f23c83b40ef07b",
+      "bytes": 18648,
       "line_endings": "CRLF"
     },
     {
@@ -298,15 +305,15 @@
     },
     {
       "path": "docs/specs/status/D211-eager-perparent-topn-1.md",
-      "sha256": "be10e0adafeb590e2cd2eab50be666a8ce3733e4f0653291c7c9b59ecfd69437",
-      "bytes": 55024,
+      "sha256": "0251246dfd80f7a350271e498563a3b7fee97382efaac5e69692c19805063973",
+      "bytes": 58523,
       "line_endings": "CRLF"
     }
   ],
-  "file_count": 41,
-  "file_set_sha256": "08c967271098018e5d0273e981cf3d60dabb34170255fb20f212213628b54d75",
+  "file_count": 42,
+  "file_set_sha256": "a270418af71f89aad4cf1ef5388f682bb49937fc16d54728dc41a95476ab3a81",
   "line_endings": {
-    "CRLF": 41,
+    "CRLF": 42,
     "non_crlf": [],
     "all_crlf": true
   },

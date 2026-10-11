@@ -491,12 +491,14 @@ public static class EntityBuilderExtensions
 
     /// <summary>
     /// Marks a split parent command whose eager-load graph contains a child <c>Limit</c>/<c>Offset</c>/
-    /// <c>Page</c>. A per-parent top-N has no split/single execution path in this release, so preparation
-    /// of the marked command rejects the query before any SQL runs or a plan is inserted, instead of
-    /// executing the parent statement and then failing in the child loader. Building the child query here
-    /// (through <see cref="IEagerLoadSpec{TEntity}.RequiresPerParentTopN"/>) is what makes the paging
-    /// visible to preparation; the same child builder is reused by execution, so the child-query factory
-    /// is invoked at most once per load. Non-stitching terminals bypass this and never build a child.
+    /// <c>Page</c>, and validates every paged child before any SQL runs. The marked command is rejected by
+    /// preparation on the in-memory provider (no SQL window); on a SQL provider the paged child is
+    /// validated here through <see cref="IEagerLoadSpec{TEntity}.ValidatePerParentPaging"/> so an
+    /// unsupported shape or an unordered page fails closed before the parent statement executes or a plan
+    /// is inserted, instead of emitting silently wrong rows. Building the child query here (through
+    /// <see cref="IEagerLoadSpec{TEntity}.RequiresPerParentTopN"/>) is what makes the paging visible to
+    /// preparation; the same child builder is reused by execution, so the child-query factory is invoked
+    /// at most once per load. Non-stitching terminals bypass this and never build a child.
     /// </summary>
     /// <param name="builder">The split eager-load builder about to execute its parent query.</param>
     /// <param name="command">The parent command that preparation will validate.</param>
@@ -509,8 +511,11 @@ public static class EntityBuilderExtensions
         {
             if (specs[i].RequiresPerParentTopN(builder.DataProvider))
             {
+                // Fail closed here, at preparation, before the parent statement runs and before a plan is
+                // inserted: the ranked child source cannot lower an unsupported child shape or an
+                // unordered page, so it must be rejected rather than silently emit wrong rows.
+                specs[i].ValidatePerParentPaging(builder.DataProvider);
                 command.HasPerParentEagerTopN = true;
-                return;
             }
         }
     }

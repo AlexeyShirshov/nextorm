@@ -75,6 +75,19 @@ internal interface IEagerLoadSpec<TEntity>
     /// <param name="context">The data context used to build the child query.</param>
     /// <returns><see langword="true"/> when the child query pages per parent.</returns>
     bool RequiresPerParentTopN(IDataContext context);
+
+    /// <summary>
+    /// Validates a per-parent paging child (if any) against the shapes the ranked child source can
+    /// lower, throwing before any SQL is built or executed. The split loader and the single-query join
+    /// call this through this shared seam so a child the ranked lowering cannot render fails closed
+    /// instead of being silently dropped. A non-paged child is a no-op.
+    /// </summary>
+    /// <param name="context">The data context used to build the child query.</param>
+    /// <exception cref="NotSupportedException">
+    /// The child pages per parent and carries a shape the ranked source cannot fold in, or pages per
+    /// parent without a window ordering.
+    /// </exception>
+    void ValidatePerParentPaging(IDataContext context);
 }
 
 /// <summary>
@@ -176,6 +189,10 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     /// <inheritdoc/>
     bool IEagerLoadSpec<TEntity>.RequiresPerParentTopN(IDataContext context)
         => EntityBuilderEagerLoading.HasPerParentTopN(ResolveChild(context));
+
+    /// <inheritdoc/>
+    void IEagerLoadSpec<TEntity>.ValidatePerParentPaging(IDataContext context)
+        => EntityBuilderEagerLoading.ValidatePerParentPagingChild(ResolveChild(context));
 
     /// <summary>
     /// Builds the child query for <paramref name="context"/> once and returns it on every later call, so
@@ -281,12 +298,9 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     {
         var child = BuildChild(context, parentScope);
 
-        var unsupported = child.UnsupportedPerParentPagingChildShapes();
-        if (unsupported.Count > 0)
-            throw new NotSupportedException(
-                $"LoadWith with EagerLoadMode.SingleQuery cannot fold the child query's {string.Join(", ", unsupported)} into the " +
-                "ranked per-parent paging source: only the child's own Where and OrderBy are supported. Remove the modifier or " +
-                "use split-query loading (omit the SingleQuery mode), which honors every child-query shape.");
+        // The same fail-closed shape/ordering guard the split loader applies, so both eager modes reject
+        // a child the ranked source cannot lower before any SQL is built.
+        EntityBuilderEagerLoading.ValidatePerParentPagingChild(child);
 
         var command = child.ToCommand();
         command.From ??= context.GetFrom(typeof(TChild), null);
@@ -348,6 +362,11 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
             // mark the parent command for the preparation-time guard).
             if (!context.NeedMapping)
                 throw EntityBuilderEagerLoading.PerParentTopNNotSupported();
+
+            // The split loader shares the single-query path's fail-closed shape/ordering guard: the
+            // ranked lowering renders only the child's own Where, ordering and page bounds, so any other
+            // child shape (or an unordered page) must be rejected rather than silently dropped.
+            EntityBuilderEagerLoading.ValidatePerParentPagingChild(child);
 
             command.PerParentPaging = true;
             command.PerParentPartition = _childKeyExpression;
@@ -539,6 +558,38 @@ internal static class EntityBuilderEagerLoading
         new("LoadWith cannot apply Limit/Offset/Page to a child query: a per-parent top-N requires " +
             "correlated execution, which is not supported. Remove the child paging or use an explicit " +
             "child query per parent.");
+
+    /// <summary>
+    /// Validates that <paramref name="child"/>, when it requests a per-parent top-N, can be lowered by
+    /// the ranked child source (<c>row_number() over (partition by ... order by ...)</c>). That lowering
+    /// renders only the child's own <c>Where</c>, ordering and page bounds, so every other child shape is
+    /// rejected instead of being silently dropped, and an actual page without an ordering is rejected
+    /// because the window would have no valid order. A non-paged child is a no-op. Shared by the split
+    /// loader and the single-query join so the two modes cannot drift.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="child">The resolved child builder.</param>
+    /// <exception cref="NotSupportedException">
+    /// The child pages per parent but carries an unsupported shape or no ordering.
+    /// </exception>
+    internal static void ValidatePerParentPagingChild<TChild>(EntityBuilder<TChild> child)
+    {
+        if (!HasPerParentTopN(child))
+            return;
+
+        var unsupported = child.UnsupportedPerParentPagingChildShapes();
+        if (unsupported.Count > 0)
+            throw new NotSupportedException(
+                $"LoadWith cannot apply Limit/Offset/Page to a child query that also carries " +
+                $"{string.Join(", ", unsupported)}: the ranked per-parent paging source folds in only the " +
+                "child's own Where and OrderBy. Remove the modifier or use an explicit child query per parent.");
+
+        if (child.Sorting is not { Count: > 0 })
+            throw new NotSupportedException(
+                "LoadWith cannot apply Limit/Offset/Page to a child query without an OrderBy: a per-parent " +
+                "page needs a window ordering, and a row_number() window with no OrderBy is invalid on " +
+                "providers such as SQL Server. Add an OrderBy to the child query, or remove the child paging.");
+    }
 
     /// <summary>
     /// Validates the eager-load specifications carried by a builder that is about to run its

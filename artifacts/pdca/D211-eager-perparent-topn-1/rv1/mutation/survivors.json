@@ -1,5 +1,6 @@
 [
   {
+    "id": "1458",
     "status": "Survived",
     "file": "src/nextorm.core/Builders/EntityBuilder.cs",
     "line": 1212,
@@ -12,6 +13,7 @@
     "in_changed_lines": true
   },
   {
+    "id": "1568",
     "status": "Survived",
     "file": "src/nextorm.core/Builders/EntityBuilder.cs",
     "line": 1325,
@@ -19,50 +21,15 @@
     "mutator": "Statement mutation",
     "replacement": ";",
     "disposition": "defensive",
-    "reason": "With allowPerParentTopN=true this call only rejects an explicit Correlated mode, which EagerLoadResolver.Resolve already rejects during command preparation; removing the call leaves that rejection in place.",
+    "reason": "With `allowPerParentTopN: true` this call only rejects an explicit Correlated mode, which `EagerLoadResolver.Resolve` already rejects during command preparation; removing the call leaves that rejection in place.",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
+    "id": "2632",
     "status": "Survived",
     "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
-    "line": 287,
-    "column": 102,
-    "mutator": "String mutation",
-    "replacement": "\"\"",
-    "disposition": "equivalent",
-    "reason": "Exception-message interpolation text only; the NotSupportedException type and the throwing path are unchanged.",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "Survived",
-    "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
-    "line": 288,
-    "column": 17,
-    "mutator": "String mutation",
-    "replacement": "\"\"",
-    "disposition": "equivalent",
-    "reason": "Exception-message literal only; type/path unchanged.",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "Survived",
-    "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
-    "line": 289,
-    "column": 17,
-    "mutator": "String mutation",
-    "replacement": "\"\"",
-    "disposition": "equivalent",
-    "reason": "Exception-message literal only; type/path unchanged.",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "Survived",
-    "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
-    "line": 292,
+    "line": 306,
     "column": 9,
     "mutator": "CoalesceAssignmentExpression to SimpleAssignmentExpression mutation",
     "replacement": "command.From = context.GetFrom(typeof(TChild), null)",
@@ -72,21 +39,36 @@
     "in_changed_lines": true
   },
   {
+    "id": "2652",
     "status": "NoCoverage",
     "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
-    "line": 350,
+    "line": 364,
     "column": 17,
     "mutator": "Statement mutation",
     "replacement": ";",
     "disposition": "defensive",
-    "reason": "In-memory per-parent top-N is rejected earlier: split-list at QueryCommand.QueryPreparer.cs:48 (parent marked HasPerParentEagerTopN) and single-query at 285-289 via UnsupportedSingleQueryChildShapes; this child-loader throw is an unreachable redundant net.",
+    "reason": "Unreachable redundant net: split in-memory per-parent top-N is rejected earlier at `QueryCommand.QueryPreparer.cs:48` (parent marked HasPerParentEagerTopN) and single-query at `UnsupportedSingleQueryChildShapes`; this child-loader throw is never reached.",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
+    "id": "2653",
     "status": "Survived",
     "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
-    "line": 379,
+    "line": 369,
+    "column": 13,
+    "mutator": "Statement mutation",
+    "replacement": ";",
+    "disposition": "defensive",
+    "reason": "Duplicated fail-closed guard: the ranked renderer re-validates the same shapes (`MakePerParentPagingSelect` throws on a non-physical source, a missing partition or a missing ordering) and the sibling single-query path calls the same helper, so removing this split-path call still fails closed rather than silently dropping the guard.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "2660",
+    "status": "Survived",
+    "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
+    "line": 398,
     "column": 127,
     "mutator": "Boolean mutation",
     "replacement": "true",
@@ -96,6 +78,98 @@
     "in_changed_lines": true
   },
   {
+    "id": "2728",
+    "status": "NoCoverage",
+    "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
+    "line": 578,
+    "column": 13,
+    "mutator": "Statement mutation",
+    "replacement": ";",
+    "disposition": "defensive",
+    "reason": "`ValidatePerParentPagingChild` is only invoked for paged specs (gated by `RequiresPerParentTopN`), so the `!HasPerParentTopN` early return is unreachable through the eager surface.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "2734",
+    "status": "Survived",
+    "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
+    "line": 583,
+    "column": 17,
+    "mutator": "String mutation",
+    "replacement": "$\"\"",
+    "disposition": "equivalent",
+    "reason": "Exception-message interpolation text only; the NotSupportedException type and the throwing path are unchanged.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "2736",
+    "status": "Survived",
+    "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
+    "line": 584,
+    "column": 32,
+    "mutator": "String mutation",
+    "replacement": "\"\"",
+    "disposition": "equivalent",
+    "reason": "Exception-message literal only; type/path unchanged.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "2737",
+    "status": "Survived",
+    "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
+    "line": 585,
+    "column": 17,
+    "mutator": "String mutation",
+    "replacement": "\"\"",
+    "disposition": "equivalent",
+    "reason": "Exception-message literal only; type/path unchanged.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "2740",
+    "status": "Survived",
+    "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
+    "line": 587,
+    "column": 43,
+    "mutator": "Equality mutation",
+    "replacement": ">= 0",
+    "disposition": "defensive",
+    "reason": "The unordered-page rejection is also enforced in `MakePerParentRankExpression` (`DataContext/SqlBuilder.cs:718`), which throws before any SQL is emitted; removing this early check changes the exception type/point but still fails closed, and no test asserts the NotSupportedException type for this path.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "2743",
+    "status": "Survived",
+    "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
+    "line": 590,
+    "column": 17,
+    "mutator": "String mutation",
+    "replacement": "\"\"",
+    "disposition": "equivalent",
+    "reason": "Exception-message literal only; type/path unchanged.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "2744",
+    "status": "Survived",
+    "file": "src/nextorm.core/Builders/EntityBuilderEagerLoading.cs",
+    "line": 591,
+    "column": 17,
+    "mutator": "String mutation",
+    "replacement": "\"\"",
+    "disposition": "equivalent",
+    "reason": "Exception-message literal only; type/path unchanged.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "14981",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
     "line": 644,
@@ -103,11 +177,12 @@
     "mutator": "Statement mutation",
     "replacement": ";",
     "disposition": "defensive",
-    "reason": "MakePerParentPagingSelect is only reached for an eager child command, whose selectInto is always null; the SELECT...INTO guard is unreachable through the public eager surface.",
+    "reason": "`MakePerParentPagingSelect` is only reached for an eager child command, whose `selectInto` is always null; the SELECT...INTO guard is unreachable through the public eager surface.",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
+    "id": "14982",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
     "line": 644,
@@ -120,6 +195,7 @@
     "in_changed_lines": true
   },
   {
+    "id": "14983",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
     "line": 646,
@@ -132,6 +208,7 @@
     "in_changed_lines": true
   },
   {
+    "id": "14987",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
     "line": 647,
@@ -144,6 +221,7 @@
     "in_changed_lines": true
   },
   {
+    "id": "14988",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
     "line": 647,
@@ -156,6 +234,7 @@
     "in_changed_lines": true
   },
   {
+    "id": "14993",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
     "line": 666,
@@ -163,11 +242,12 @@
     "mutator": "Conditional (false) mutation",
     "replacement": "(false?null :StringBuilderPool.Shared.Get())",
     "disposition": "equivalent",
-    "reason": "In parameter mode the allocated builder is never appended to (appends are guarded by `if (!_ctx.ParamMode)`) and its value is discarded; only the SQL pass uses it.",
+    "reason": "In parameter mode the allocated builder is never appended to (appends are guarded by `if (builder is not null)`) and its value is discarded; only the SQL pass uses it.",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
+    "id": "14996",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
     "line": 669,
@@ -180,6 +260,7 @@
     "in_changed_lines": true
   },
   {
+    "id": "15016",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
     "line": 687,
@@ -192,6 +273,7 @@
     "in_changed_lines": true
   },
   {
+    "id": "15017",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
     "line": 687,
@@ -204,6 +286,7 @@
     "in_changed_lines": true
   },
   {
+    "id": "15022",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
     "line": 706,
@@ -211,86 +294,106 @@
     "mutator": "Null coalescing mutation (remove right)",
     "replacement": "cmd.PerParentPartitionColumns",
     "disposition": "defensive",
-    "reason": "PerParentPartitionColumns is set non-null by the per-parent paging preparation; the `?? []` is a defensive total-ness guard.",
+    "reason": "`PerParentPartitionColumns` is set non-null by the per-parent paging preparation; the `?? []` is a defensive total-ness guard.",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
+    "id": "15024",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 709,
+    "line": 707,
+    "column": 23,
+    "mutator": "Null coalescing mutation (remove right)",
+    "replacement": "cmd.Sorting",
+    "disposition": "defensive",
+    "reason": "`Sorting ?? []` null fallback; a per-parent page requires a child ordering (validated by `ValidatePerParentPagingChild`), so Sorting is non-null on every reaching path.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "15026",
+    "status": "NoCoverage",
+    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
+    "line": 715,
+    "column": 13,
+    "mutator": "Statement mutation",
+    "replacement": ";",
+    "disposition": "defensive",
+    "reason": "The partition-empty throw is pre-empted by preparation-time validation; a per-parent child always has a partition key.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "15027",
+    "status": "NoCoverage",
+    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
+    "line": 715,
+    "column": 48,
+    "mutator": "String mutation",
+    "replacement": "\"\"",
+    "disposition": "defensive",
+    "reason": "Message text of the pre-empted partition-empty throw.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "15029",
+    "status": "NoCoverage",
+    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
+    "line": 718,
+    "column": 13,
+    "mutator": "Statement mutation",
+    "replacement": ";",
+    "disposition": "defensive",
+    "reason": "The sorting-empty throw is pre-empted by the unordered-page rejection in the child validation and preparation; a reaching per-parent child always has a window ordering.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "15030",
+    "status": "NoCoverage",
+    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
+    "line": 719,
+    "column": 17,
+    "mutator": "String mutation",
+    "replacement": "\"\"",
+    "disposition": "defensive",
+    "reason": "Message text of the pre-empted sorting-empty throw.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "15031",
+    "status": "NoCoverage",
+    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
+    "line": 720,
+    "column": 17,
+    "mutator": "String mutation",
+    "replacement": "\"\"",
+    "disposition": "defensive",
+    "reason": "Message text of the pre-empted sorting-empty throw.",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "15033",
+    "status": "Survived",
+    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
+    "line": 722,
     "column": 23,
     "mutator": "Conditional (false) mutation",
     "replacement": "(false?null :StringBuilderPool.Shared.Get())",
     "disposition": "equivalent",
-    "reason": "Parameter-mode builder is never appended to and its value discarded (mirror of 666).",
+    "reason": "Parameter-mode builder is never appended to and its value discarded (mirror of line 666).",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
+    "id": "15041",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 712,
-    "column": 17,
-    "mutator": "Logical mutation",
-    "replacement": "builder is not null || sorting.Length == 0",
-    "disposition": "defensive",
-    "reason": "Parameter-mode mirror of the partition-key guard; builder is null in the parameter pass, so the mutated condition cannot change a reachable outcome.",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "Survived",
-    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 712,
-    "column": 17,
-    "mutator": "Equality mutation",
-    "replacement": "builder is null",
-    "disposition": "defensive",
-    "reason": "Parameter-mode mirror of the partition-key guard; the SQL pass runs the same guard first and throws, so this branch cannot decide.",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "Survived",
-    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 712,
-    "column": 40,
-    "mutator": "Equality mutation",
-    "replacement": "sorting.Length != 0",
-    "disposition": "defensive",
-    "reason": "Parameter-mode mirror of the partition-key guard; unreachable as the decider (SQL pass threw first).",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "NoCoverage",
-    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 713,
-    "column": 17,
-    "mutator": "Statement mutation",
-    "replacement": ";",
-    "disposition": "defensive",
-    "reason": "Parameter-mode mirror of the 'requires a partition key' rejection; the SQL pass already threw.",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "NoCoverage",
-    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 713,
-    "column": 52,
-    "mutator": "String mutation",
-    "replacement": "\"\"",
-    "disposition": "defensive",
-    "reason": "Message text of the parameter-mode mirror of the partition-key rejection.",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "Survived",
-    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 719,
+    "line": 729,
     "column": 34,
     "mutator": "Boolean mutation",
     "replacement": "true",
@@ -300,33 +403,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15056",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 724,
-    "column": 36,
-    "mutator": "Conditional (true) mutation",
-    "replacement": "(true?Kw(\"partition by \") :\", \")",
-    "disposition": "defensive",
-    "reason": "Multiple partition columns require a composite child key, which the split loader cannot execute (pre-existing BuildPredicate renders `parent_idparent_id`) and single-query rejects in JoinIntoSpecHelpers.BuildKeyEquality; no successful public path reaches it (composite-key support is an open risk, out of D211).",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "NoCoverage",
-    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 724,
-    "column": 67,
-    "mutator": "String mutation",
-    "replacement": "\"\"",
-    "disposition": "defensive",
-    "reason": "Same unreachable composite-key partition separator; no successful public path.",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "Survived",
-    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 728,
+    "line": 738,
     "column": 114,
     "mutator": "Boolean mutation",
     "replacement": "false",
@@ -336,9 +416,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15069",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 737,
+    "line": 747,
     "column": 40,
     "mutator": "Conditional (true) mutation",
     "replacement": "(true?Kw(\" order by \") :Kw(\"order by \"))",
@@ -348,9 +429,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15072",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 737,
+    "line": 747,
     "column": 79,
     "mutator": "String mutation",
     "replacement": "\"\"",
@@ -360,9 +442,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15097",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 759,
+    "line": 769,
     "column": 43,
     "mutator": "String mutation",
     "replacement": "\"Stryker was here!\"",
@@ -372,9 +455,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15099",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 763,
+    "line": 773,
     "column": 17,
     "mutator": "Equality mutation",
     "replacement": "builder is null",
@@ -384,9 +468,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15100",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 763,
+    "line": 773,
     "column": 38,
     "mutator": "Statement mutation",
     "replacement": ";",
@@ -396,9 +481,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15107",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 782,
+    "line": 792,
     "column": 54,
     "mutator": "Boolean mutation",
     "replacement": "true",
@@ -408,21 +494,23 @@
     "in_changed_lines": true
   },
   {
+    "id": "15109",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 786,
+    "line": 796,
     "column": 25,
     "mutator": "Conditional (false) mutation",
     "replacement": "(false?null :StringBuilderPool.Shared.Get())",
     "disposition": "equivalent",
-    "reason": "Parameter-mode builder is never appended to and its value discarded (mirror of 666).",
+    "reason": "Parameter-mode builder is never appended to and its value discarded (mirror of line 666).",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
+    "id": "15132",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 802,
+    "line": 812,
     "column": 131,
     "mutator": "Boolean mutation",
     "replacement": "true",
@@ -432,45 +520,36 @@
     "in_changed_lines": true
   },
   {
-    "status": "Survived",
-    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 819,
-    "column": 25,
-    "mutator": "Statement mutation",
-    "replacement": ";",
-    "disposition": "killed",
-    "reason": "The top-level split child must emit its own output ORDER BY after the ranked derived table; removing it loses the child's guaranteed order for Take>1.",
-    "kill_test": "Split_PagedSql_UsesPartitionedRowNumberAndBounds (strengthened: asserts two `order by` clauses)",
-    "in_changed_lines": true
-  },
-  {
+    "id": "15151",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 824,
-    "column": 37,
-    "mutator": "Equality mutation",
-    "replacement": "i > entityColumns.Length",
-    "disposition": "defensive",
-    "reason": "Group B: parameter-mode mirror of MakePerParentPagingOuter; the per-parent child command never cache-hits (pre-existing fresh Expression.Constant(List<TKey>) plan-key divergence), so RefreshParameters/ExtractParams never enter the parameter pass (see groupb-classification.md).",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "NoCoverage",
-    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 824,
+    "line": 834,
     "column": 37,
     "mutator": "Equality mutation",
     "replacement": "i <= entityColumns.Length",
     "disposition": "defensive",
-    "reason": "Group B parameter-mode mirror; unreachable (see groupb-classification.md).",
+    "reason": "Group B parameter-mode mirror; unreachable (groupb-classification.md).",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
+    "id": "15150",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 824,
+    "line": 834,
+    "column": 37,
+    "mutator": "Equality mutation",
+    "replacement": "i > entityColumns.Length",
+    "disposition": "defensive",
+    "reason": "Group B: parameter-mode mirror of MakePerParentPagingOuter; the per-parent child command never cache-hits (pre-existing fresh Expression.Constant(List<TKey>) plan-key divergence), so RefreshParameters/ExtractParams never enter the parameter pass (groupb-classification.md).",
+    "kill_test": null,
+    "in_changed_lines": true
+  },
+  {
+    "id": "15152",
+    "status": "NoCoverage",
+    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
+    "line": 834,
     "column": 63,
     "mutator": "PostIncrementExpression to PostDecrementExpression mutation",
     "replacement": "i--",
@@ -480,9 +559,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15153",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 825,
+    "line": 835,
     "column": 25,
     "mutator": "Statement mutation",
     "replacement": ";",
@@ -492,9 +572,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15154",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 825,
+    "line": 835,
     "column": 108,
     "mutator": "Boolean mutation",
     "replacement": "true",
@@ -504,9 +585,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15155",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 825,
+    "line": 835,
     "column": 128,
     "mutator": "Boolean mutation",
     "replacement": "false",
@@ -516,9 +598,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15158",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 827,
+    "line": 837,
     "column": 25,
     "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
     "replacement": "cmd.PerParentPagingEmbedded",
@@ -528,9 +611,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15163",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 829,
+    "line": 839,
     "column": 41,
     "mutator": "Equality mutation",
     "replacement": "i > sorting.Length",
@@ -540,9 +624,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15166",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 830,
+    "line": 840,
     "column": 25,
     "mutator": "Block removal mutation",
     "replacement": "{}",
@@ -552,9 +637,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15170",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 841,
+    "line": 851,
     "column": 21,
     "mutator": "Equality mutation",
     "replacement": "outer is null",
@@ -564,9 +650,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15171",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 841,
+    "line": 851,
     "column": 40,
     "mutator": "Statement mutation",
     "replacement": ";",
@@ -576,45 +663,23 @@
     "in_changed_lines": true
   },
   {
+    "id": "15176",
     "status": "Survived",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 862,
+    "line": 872,
     "column": 24,
     "mutator": "Equality mutation",
     "replacement": "offset >= 0",
     "disposition": "equivalent",
-    "reason": "Paging.Offset is >= 0 and rank >= 1, so the extra `rn > 0` predicate is always true (redundant).",
+    "reason": "Paging.Offset is >= 0, so the extra `rn > 0` predicate is always true (redundant).",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
-    "status": "Survived",
-    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 863,
-    "column": 24,
-    "mutator": "Equality mutation",
-    "replacement": "limit >= 0",
-    "disposition": "killed",
-    "reason": "For a Skip-only child (Limit=0) the mutated hasUpper adds `rn <= offset`, which drops every row; the Skip-only tests assert the correct per-parent pages.",
-    "kill_test": "Split_SkipOnly_AppliesToEachParentIndependently / SingleQuery_SkipOnly_AppliesToEachParentIndependently",
-    "in_changed_lines": true
-  },
-  {
-    "status": "Survived",
-    "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 865,
-    "column": 13,
-    "mutator": "LogicalNotExpression to un-LogicalNotExpression mutation",
-    "replacement": "hasLower",
-    "disposition": "killed",
-    "reason": "For a Skip-only child the mutated condition takes the `rn >= 1` fallback and ignores the offset; the Skip-only tests assert the shifted per-parent pages.",
-    "kill_test": "Split_SkipOnly_AppliesToEachParentIndependently / SingleQuery_SkipOnly_AppliesToEachParentIndependently",
-    "in_changed_lines": true
-  },
-  {
+    "id": "15184",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 869,
+    "line": 879,
     "column": 13,
     "mutator": "Statement mutation",
     "replacement": ";",
@@ -624,9 +689,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15190",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 869,
+    "line": 879,
     "column": 42,
     "mutator": "String mutation",
     "replacement": "\"\"",
@@ -636,9 +702,10 @@
     "in_changed_lines": true
   },
   {
+    "id": "15191",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 870,
+    "line": 880,
     "column": 78,
     "mutator": "String mutation",
     "replacement": "\"\"",
@@ -648,18 +715,20 @@
     "in_changed_lines": true
   },
   {
+    "id": "15192",
     "status": "NoCoverage",
     "file": "src/nextorm.core/DataContext/SqlBuilder.cs",
-    "line": 871,
+    "line": 881,
     "column": 13,
     "mutator": "Statement mutation",
     "replacement": ";",
     "disposition": "defensive",
-    "reason": "The no-bound fallback is unreachable (Paging.IsEmpty never routes here).",
+    "reason": "The unreachable no-bound fallback.",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
+    "id": "22168",
     "status": "Survived",
     "file": "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
     "line": 48,
@@ -667,23 +736,25 @@
     "mutator": "Statement mutation",
     "replacement": ";",
     "disposition": "defensive",
-    "reason": "In-memory rejection is duplicated by the child-loader throw (EntityBuilderEagerLoading.cs:350); removing either leaves the other.",
+    "reason": "In-memory rejection is duplicated by the child-loader throw; removing either leaves the other.",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
-    "status": "Survived",
+    "id": "22212",
+    "status": "Timeout",
     "file": "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
     "line": 131,
     "column": 46,
     "mutator": "Null coalescing mutation (remove right)",
     "replacement": "perParentPartitionColumns",
-    "disposition": "equivalent",
-    "reason": "A null assignment is treated identically downstream by PreparePerParentPartition/MakePerParentRankExpression (`?? []`).",
+    "disposition": "timeout",
+    "reason": "The mutant drops the `?? []` null-coalescing; a null assignment is treated identically downstream (`PreparePerParentPartition`/`MakePerParentRankExpression` apply `?? []`), so no result changes. Stryker classified the isolated run Timeout (non-terminating mutant execution), which the score counts as detected.",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
+    "id": "24153",
     "status": "Survived",
     "file": "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
     "line": 3230,
@@ -696,78 +767,46 @@
     "in_changed_lines": true
   },
   {
-    "status": "NoCoverage",
-    "file": "src/nextorm.core/Query/QueryPlanEqualityComparer.cs",
-    "line": 166,
-    "column": 60,
-    "mutator": "Boolean mutation",
-    "replacement": "true",
-    "disposition": "defensive",
-    "reason": "Forcing the child plan comparer to return false only yields cache misses; results are unchanged and no result assertion can observe it.",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "NoCoverage",
-    "file": "src/nextorm.core/Query/QueryPlanEqualityComparer.cs",
-    "line": 167,
-    "column": 107,
-    "mutator": "Boolean mutation",
-    "replacement": "true",
-    "disposition": "defensive",
-    "reason": "Cache-miss-only mutation of the partition-selector comparison; results unchanged.",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "NoCoverage",
-    "file": "src/nextorm.core/Query/QueryPlanEqualityComparer.cs",
-    "line": 170,
-    "column": 97,
-    "mutator": "Boolean mutation",
-    "replacement": "true",
-    "disposition": "defensive",
-    "reason": "Cache-miss-only mutation of the embedded-mode comparison; results unchanged.",
-    "kill_test": null,
-    "in_changed_lines": true
-  },
-  {
-    "status": "Survived",
+    "id": "25461",
+    "status": "Timeout",
     "file": "src/nextorm.core/Query/QueryPlanEqualityComparer.cs",
     "line": 468,
     "column": 13,
     "mutator": "Statement mutation",
     "replacement": ";",
-    "disposition": "equivalent",
-    "reason": "Plan-hash composition only; Equals still distinguishes the flags, so only a hash collision is possible, never a wrong result.",
+    "disposition": "timeout",
+    "reason": "Plan-hash composition only; Equals still distinguishes the per-parent flags, so only a hash collision is possible, never a wrong result. Stryker classified the isolated run Timeout (counted as detected).",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
-    "status": "Survived",
+    "id": "25466",
+    "status": "Timeout",
     "file": "src/nextorm.core/Query/QueryPlanEqualityComparer.cs",
     "line": 471,
     "column": 17,
     "mutator": "Logical mutation",
     "replacement": "obj.PerParentPaging || obj.PerParentPagingEmbedded",
-    "disposition": "equivalent",
-    "reason": "Plan-hash composition only (mirror of 468).",
+    "disposition": "timeout",
+    "reason": "Plan-hash composition only (mirror of the per-parent hash contribution); no wrong result is possible. Stryker classified the isolated run Timeout (counted as detected).",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
-    "status": "Survived",
+    "id": "25467",
+    "status": "Timeout",
     "file": "src/nextorm.core/Query/QueryPlanEqualityComparer.cs",
     "line": 471,
     "column": 17,
     "mutator": "Negate expression",
     "replacement": "!(obj.PerParentPaging && obj.PerParentPagingEmbedded)",
-    "disposition": "equivalent",
-    "reason": "Plan-hash composition only (mirror of 468).",
+    "disposition": "timeout",
+    "reason": "Plan-hash composition only (mirror of the per-parent hash contribution); no wrong result is possible. Stryker classified the isolated run Timeout (counted as detected).",
     "kill_test": null,
     "in_changed_lines": true
   },
   {
+    "id": "25468",
     "status": "Survived",
     "file": "src/nextorm.core/Query/QueryPlanEqualityComparer.cs",
     "line": 472,
@@ -780,6 +819,7 @@
     "in_changed_lines": true
   },
   {
+    "id": "25469",
     "status": "Survived",
     "file": "src/nextorm.core/Query/QueryPlanEqualityComparer.cs",
     "line": 472,

@@ -294,7 +294,7 @@
       "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/integration/mariadb-fail-seed.log",
       "provider": "mariadb",
       "provider_status": "executed",
-      "note": "red: fixture seed failed \u2014 settable ICollection navigation bound as a parameter (MySqlConnector List`1 not supported); fixed in test fixture"
+      "note": "red: fixture seed failed — settable ICollection navigation bound as a parameter (MySqlConnector List`1 not supported); fixed in test fixture"
     },
     {
       "command": [
@@ -692,6 +692,282 @@
       "provider": "mariadb",
       "provider_status": "executed",
       "note": "Total: 4, Errors: 0, Failed: 0, Skipped: 0; mariadb container 914f06a0ba5f started; composite split positive"
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 25,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n2-build-sqlite-tests.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-trait",
+        "Feature=D211"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 4,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n2-core-trait-D211.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-trait",
+        "Feature=D211"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 33,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n2-sqlite-trait-D211.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-class",
+        "nextorm.sqlite.tests.EagerLoadingSqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 53,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n2-sqlite-class.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.postgres.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-trait",
+        "Feature=D211"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 7,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n2-postgres-trait-D211.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.sqlserver.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-trait",
+        "Feature=D211"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 7,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n2-sqlserver-trait-D211.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.mysql.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-trait",
+        "Feature=D211"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 11,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n2-mysql-trait-D211.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.clickhouse.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-trait",
+        "Feature=D211"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 7,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/n2-clickhouse-trait-D211.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/p2a-build-sqlite-tests.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/p2a-build-core-tests.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-trait",
+        "Feature=D211"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 9,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/p2a-core-trait-D211.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-class",
+        "nextorm.sqlite.tests.EagerLoadPerParentPagingEdgeTests"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 19,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/p2a-sqlite-edge-class.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-class",
+        "nextorm.sqlite.tests.EagerLoadingSqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 54,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/p2a-sqlite-eagerclass.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-trait",
+        "Feature=D211"
+      ],
+      "phase": "inner",
+      "source_revision": "e98ae60e@D211-rv1-n2",
+      "artifact_revision": "e98ae60e@D211-rv1-n2",
+      "exit_code": 0,
+      "selected_count": 52,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop/p2a-sqlite-trait-D211.log"
     }
   ],
   "amendments": [
@@ -705,8 +981,23 @@
   ],
   "boundary_executions": [
     {
+      "name": "build-solution",
+      "command": [
+        "dotnet",
+        "build",
+        "nextorm.slnx",
+        "-c",
+        "Debug"
+      ],
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 6,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/build-solution.log"
+    },
+    {
       "name": "core",
-      "kind": "project-test",
       "command": [
         "dotnet",
         "test",
@@ -719,21 +1010,12 @@
       "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "exit_code": 0,
-      "selected_count": 2315,
-      "total": 2315,
-      "failed": 0,
-      "skipped": 0,
-      "provider": "core",
-      "provider_status": "executed",
+      "selected_count": 2320,
       "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/core.tests.log",
-      "binds": [
-        "EV-08"
-      ],
-      "note": "broad regression, no trait filter, --no-build after the solution build"
+      "provider": "core"
     },
     {
       "name": "sqlite",
-      "kind": "project-test",
       "command": [
         "dotnet",
         "test",
@@ -746,21 +1028,12 @@
       "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "exit_code": 0,
-      "selected_count": 1587,
-      "total": 1587,
-      "failed": 0,
-      "skipped": 1,
-      "provider": "sqlite",
-      "provider_status": "executed",
+      "selected_count": 1617,
       "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlite.tests.log",
-      "binds": [
-        "EV-08"
-      ],
-      "note": "broad regression, no trait filter, --no-build after the solution build"
+      "provider": "sqlite"
     },
     {
       "name": "postgres",
-      "kind": "project-test",
       "command": [
         "dotnet",
         "test",
@@ -774,20 +1047,11 @@
       "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "exit_code": 0,
       "selected_count": 881,
-      "total": 881,
-      "failed": 0,
-      "skipped": 0,
-      "provider": "postgres",
-      "provider_status": "executed",
       "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/postgres.tests.log",
-      "binds": [
-        "EV-08"
-      ],
-      "note": "broad regression, no trait filter, --no-build after the solution build"
+      "provider": "postgres"
     },
     {
       "name": "sqlserver",
-      "kind": "project-test",
       "command": [
         "dotnet",
         "test",
@@ -801,20 +1065,11 @@
       "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "exit_code": 0,
       "selected_count": 798,
-      "total": 798,
-      "failed": 0,
-      "skipped": 0,
-      "provider": "sqlserver",
-      "provider_status": "executed",
       "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlserver.tests.log",
-      "binds": [
-        "EV-08"
-      ],
-      "note": "broad regression, no trait filter, --no-build after the solution build"
+      "provider": "sqlserver"
     },
     {
       "name": "mysql",
-      "kind": "project-test",
       "command": [
         "dotnet",
         "test",
@@ -828,20 +1083,11 @@
       "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "exit_code": 0,
       "selected_count": 362,
-      "total": 362,
-      "failed": 0,
-      "skipped": 0,
-      "provider": "mysql",
-      "provider_status": "executed",
       "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/mysql.tests.log",
-      "binds": [
-        "EV-08"
-      ],
-      "note": "broad regression, no trait filter, --no-build after the solution build"
+      "provider": "mysql"
     },
     {
       "name": "clickhouse",
-      "kind": "project-test",
       "command": [
         "dotnet",
         "test",
@@ -855,20 +1101,11 @@
       "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "exit_code": 0,
       "selected_count": 646,
-      "total": 646,
-      "failed": 0,
-      "skipped": 0,
-      "provider": "clickhouse",
-      "provider_status": "executed",
       "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/clickhouse.tests.log",
-      "binds": [
-        "EV-08"
-      ],
-      "note": "broad regression, no trait filter, --no-build after the solution build"
+      "provider": "clickhouse"
     },
     {
-      "name": "integration-sqlite-integration",
-      "kind": "integration-test",
+      "name": "d211-integration-sqlite",
       "command": [
         "dotnet",
         "run",
@@ -880,27 +1117,20 @@
         "--",
         "-noColor",
         "-class",
-        "nextorm.integration.tests.SqliteIntegrationTests"
+        "nextorm.integration.tests.SqliteIntegrationTests",
+        "-trait",
+        "Feature=D211"
       ],
       "phase": "boundary",
       "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "exit_code": 0,
-      "selected_count": 687,
-      "total": 687,
-      "failed": 0,
-      "skipped": 40,
-      "provider": "sqlite-integration",
-      "provider_status": "executed",
-      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlite.log",
-      "binds": [
-        "EV-08"
-      ],
-      "note": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock; one provider at a time, container started/reused, not a whole-class skip"
+      "selected_count": 14,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-sqlite.log",
+      "provider": "sqlite-integration"
     },
     {
-      "name": "integration-postgres-integration",
-      "kind": "integration-test",
+      "name": "d211-integration-postgres",
       "command": [
         "dotnet",
         "run",
@@ -912,27 +1142,20 @@
         "--",
         "-noColor",
         "-class",
-        "nextorm.integration.tests.PostgresIntegrationTests"
+        "nextorm.integration.tests.PostgresIntegrationTests",
+        "-trait",
+        "Feature=D211"
       ],
       "phase": "boundary",
       "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "exit_code": 0,
-      "selected_count": 687,
-      "total": 687,
-      "failed": 0,
-      "skipped": 26,
-      "provider": "postgres-integration",
-      "provider_status": "executed",
-      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-postgres.log",
-      "binds": [
-        "EV-08"
-      ],
-      "note": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock; one provider at a time, container started/reused, not a whole-class skip"
+      "selected_count": 14,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-postgres.log",
+      "provider": "postgres-integration"
     },
     {
-      "name": "integration-sqlserver-integration",
-      "kind": "integration-test",
+      "name": "d211-integration-sqlserver",
       "command": [
         "dotnet",
         "run",
@@ -944,27 +1167,20 @@
         "--",
         "-noColor",
         "-class",
-        "nextorm.integration.tests.SqlServerIntegrationTests"
+        "nextorm.integration.tests.SqlServerIntegrationTests",
+        "-trait",
+        "Feature=D211"
       ],
       "phase": "boundary",
       "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "exit_code": 0,
-      "selected_count": 687,
-      "total": 687,
-      "failed": 0,
-      "skipped": 48,
-      "provider": "sqlserver-integration",
-      "provider_status": "executed",
-      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlserver.log",
-      "binds": [
-        "EV-08"
-      ],
-      "note": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock; one provider at a time, container started/reused, not a whole-class skip"
+      "selected_count": 14,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-sqlserver.log",
+      "provider": "sqlserver-integration"
     },
     {
-      "name": "integration-mysql-integration",
-      "kind": "integration-test",
+      "name": "d211-integration-mysql",
       "command": [
         "dotnet",
         "run",
@@ -976,27 +1192,20 @@
         "--",
         "-noColor",
         "-class",
-        "nextorm.integration.tests.MySqlIntegrationTests"
+        "nextorm.integration.tests.MySqlIntegrationTests",
+        "-trait",
+        "Feature=D211"
       ],
       "phase": "boundary",
       "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "exit_code": 0,
-      "selected_count": 687,
-      "total": 687,
-      "failed": 0,
-      "skipped": 80,
-      "provider": "mysql-integration",
-      "provider_status": "executed",
-      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-mysql.log",
-      "binds": [
-        "EV-08"
-      ],
-      "note": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock; one provider at a time, container started/reused, not a whole-class skip"
+      "selected_count": 14,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-mysql.log",
+      "provider": "mysql-integration"
     },
     {
-      "name": "integration-clickhouse-integration",
-      "kind": "integration-test",
+      "name": "d211-integration-clickhouse",
       "command": [
         "dotnet",
         "run",
@@ -1008,23 +1217,42 @@
         "--",
         "-noColor",
         "-class",
-        "nextorm.integration.tests.ClickHouseIntegrationTests"
+        "nextorm.integration.tests.ClickHouseEagerPerParentPagingTests",
+        "-trait",
+        "Feature=D211"
       ],
       "phase": "boundary",
       "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
       "exit_code": 0,
-      "selected_count": 148,
-      "total": 148,
-      "failed": 0,
-      "skipped": 0,
-      "provider": "clickhouse-integration",
-      "provider_status": "executed",
-      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-clickhouse.log",
-      "binds": [
-        "EV-08"
+      "selected_count": 4,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-clickhouse.log",
+      "provider": "clickhouse-integration"
+    },
+    {
+      "name": "d211-integration-mariadb",
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor",
+        "-class",
+        "nextorm.integration.tests.MariaDbEagerPagingTests",
+        "-trait",
+        "Feature=D211"
       ],
-      "note": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock; one provider at a time, container started/reused, not a whole-class skip"
+      "phase": "boundary",
+      "source_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "artifact_revision": "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc@D211-rv1",
+      "exit_code": 0,
+      "selected_count": 4,
+      "log": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-mariadb.log",
+      "provider": "mariadb-integration"
     }
   ]
 }

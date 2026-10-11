@@ -7,6 +7,7 @@ report to report line hits and branch condition coverage for those lines only.
 Uncovered / partially covered changed lines are listed explicitly.
 """
 import json
+import os
 import re
 import subprocess
 import sys
@@ -23,16 +24,16 @@ else:
     OUT = ART / "branch-delta.json"
     COVERAGE_FILES = [ART / "coverage.xml"]
 
-# T211 production files = uncommitted src/ modifications (working tree vs HEAD).
-status = subprocess.run(
-    ["git", "-C", str(ROOT), "status", "--porcelain", "--", "src/"],
+# Base revision for the T211 change set. The full task change is committed (e98ae60e)
+# plus uncommitted corrections, so default to the pre-T211 base rather than HEAD;
+# override with T211_DELTA_BASE (e.g. HEAD for a working-tree-only delta).
+BASE = os.environ.get("T211_DELTA_BASE", "b527be6f37b9301ed9d2245b803a1bd3e5e43ffc")
+
+# T211 production files = src/ changes of the working tree vs BASE.
+diff_names = subprocess.run(
+    ["git", "-C", str(ROOT), "diff", "--name-only", BASE, "--", "src/"],
     capture_output=True, text=True, check=True).stdout
-files = []
-for line in status.splitlines():
-    st, _, path = line.partition(" ")
-    path = path.strip()
-    if st.strip() in ("M", "A") and path.endswith(".cs"):
-        files.append(path)
+files = [p for p in diff_names.splitlines() if p.endswith(".cs")]
 
 # Fall back to explicit T211 file list if nothing uncommitted (defensive).
 if not files:
@@ -53,7 +54,7 @@ HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 changed = {}  # relpath -> set of line numbers
 for rel in files:
     diff = subprocess.run(
-        ["git", "-C", str(ROOT), "diff", "-U0", "HEAD", "--", rel],
+        ["git", "-C", str(ROOT), "diff", "-U0", BASE, "--", rel],
         capture_output=True, text=True, check=True).stdout
     lines = set()
     for dl in diff.splitlines():
@@ -138,8 +139,9 @@ for rel, lines in sorted(changed.items()):
     report[rel] = entry
 
 summary = {
-    "tree": "working tree (uncommitted T211 changes) vs HEAD "
-            f"{subprocess.run(['git','-C',str(ROOT),'rev-parse','--short','HEAD'],capture_output=True,text=True).stdout.strip()}",
+    "tree": "working tree (T211 commits + uncommitted corrections) vs "
+            f"{BASE} "
+            f"(HEAD {subprocess.run(['git','-C',str(ROOT),'rev-parse','--short','HEAD'],capture_output=True,text=True).stdout.strip()})",
     "files": report,
     "changed_line_coverage": {
         "covered": tot_changed_covered, "total": tot_changed},

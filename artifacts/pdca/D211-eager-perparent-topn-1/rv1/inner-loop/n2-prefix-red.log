@@ -1,0 +1,91 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.sqlite.tests
+  Discovered:  nextorm.sqlite.tests
+  Starting:    nextorm.sqlite.tests
+    NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.Split_PerParentTopN_UnsupportedChildShape_IsRejectedWithZeroSql(shape: "Distinct") [FAIL]
+      Expected a <System.NotSupportedException> to be thrown, but no exception was thrown.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+           at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+           at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+        tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs(773,0): at NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.Split_PerParentTopN_UnsupportedChildShape_IsRejectedWithZeroSql(String shape)
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeDirectByRefWithFewArgs(Object obj, Span`1 copyOfArgs, BindingFlags invokeAttr)
+    NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.Split_PerParentTopN_UnsupportedChildShape_IsRejectedWithZeroSql(shape: "GroupBy") [FAIL]
+      Expected a <System.NotSupportedException> to be thrown, but no exception was thrown.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+           at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+           at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+        tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs(773,0): at NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.Split_PerParentTopN_UnsupportedChildShape_IsRejectedWithZeroSql(String shape)
+           at InvokeStub_EagerLoadingSqlGenerationTests.Split_PerParentTopN_UnsupportedChildShape_IsRejectedWithZeroSql(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithOneArg(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.Split_PerParentTopN_UnsupportedChildShape_IsRejectedWithZeroSql(shape: "Having") [FAIL]
+      Expected a <System.NotSupportedException> to be thrown, but no exception was thrown.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+           at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+           at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+        tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs(773,0): at NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.Split_PerParentTopN_UnsupportedChildShape_IsRejectedWithZeroSql(String shape)
+           at InvokeStub_EagerLoadingSqlGenerationTests.Split_PerParentTopN_UnsupportedChildShape_IsRejectedWithZeroSql(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithOneArg(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+  Finished:    nextorm.sqlite.tests (ID = 'a5abfb47315c331d69873aec368d5caeca8b1b317eae0481172250d5022c1251')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.sqlite.tests  Total: 3, Errors: 0, Failed: 3, Skipped: 0, Not Run: 0, Time: 0.492s
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.sqlite.tests
+  Discovered:  nextorm.sqlite.tests
+  Starting:    nextorm.sqlite.tests
+    NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.Split_PerParentTopN_NoOrder_IsRejectedWithZeroSql [FAIL]
+      Expected a <System.NotSupportedException> to be thrown, but no exception was thrown.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+           at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+           at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+        tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs(800,0): at NextORM.Sqlite.Tests.EagerLoadingSqlGenerationTests.Split_PerParentTopN_NoOrder_IsRejectedWithZeroSql()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Finished:    nextorm.sqlite.tests (ID = 'a5abfb47315c331d69873aec368d5caeca8b1b317eae0481172250d5022c1251')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.sqlite.tests  Total: 1, Errors: 0, Failed: 1, Skipped: 0, Not Run: 0, Time: 0.435s
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.sqlite.tests
+  Discovered:  nextorm.sqlite.tests
+  Starting:    nextorm.sqlite.tests
+    NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests.SingleQuery_NoOrder_PagedChild_IsRejectedBeforeSql [FAIL]
+      Expected a <System.NotSupportedException> to be thrown, but no exception was thrown.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+           at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+           at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+        tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs(668,0): at NextORM.Sqlite.Tests.EagerLoadPerParentPagingTests.SingleQuery_NoOrder_PagedChild_IsRejectedBeforeSql()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Finished:    nextorm.sqlite.tests (ID = 'a5abfb47315c331d69873aec368d5caeca8b1b317eae0481172250d5022c1251')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.sqlite.tests  Total: 1, Errors: 0, Failed: 1, Skipped: 0, Not Run: 0, Time: 0.484s

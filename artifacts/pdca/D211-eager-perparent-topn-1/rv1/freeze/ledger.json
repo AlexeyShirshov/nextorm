@@ -448,11 +448,12 @@
         "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/sqlserver.tests.log",
         "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/mysql.tests.log",
         "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/clickhouse.tests.log",
-        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlite.log",
-        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-postgres.log",
-        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlserver.log",
-        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-mysql.log",
-        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-clickhouse.log"
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-sqlite.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-postgres.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-sqlserver.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-mysql.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-clickhouse.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-mariadb.log"
       ],
       "evidence": [
         {
@@ -496,32 +497,42 @@
           "exit": 0
         },
         {
-          "kind": "regression-integration-sqlite",
-          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlite.log",
+          "kind": "regression-d211-integration-sqlite",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-sqlite.log",
           "exit": 0
         },
         {
-          "kind": "regression-integration-postgres",
-          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-postgres.log",
+          "kind": "regression-d211-integration-postgres",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-postgres.log",
           "exit": 0
         },
         {
-          "kind": "regression-integration-sqlserver",
-          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-sqlserver.log",
+          "kind": "regression-d211-integration-sqlserver",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-sqlserver.log",
           "exit": 0
         },
         {
-          "kind": "regression-integration-mysql",
-          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-mysql.log",
+          "kind": "regression-d211-integration-mysql",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-mysql.log",
           "exit": 0
         },
         {
-          "kind": "regression-integration-clickhouse",
-          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/integration-clickhouse.log",
+          "kind": "regression-d211-integration-clickhouse",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-clickhouse.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-d211-integration-mariadb",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/d211-integration-mariadb.log",
+          "exit": 0
+        },
+        {
+          "kind": "regression-d211-binding",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/inner-loop-evidence.json",
           "exit": 0
         }
       ],
-      "verification": "Seven projects + five integration families swept after one full Debug solution build: core 2315/0, sqlite 1586/0 (+1 pre-existing skip), postgres 881/0, sqlserver 798/0, mysql 362/0, clickhouse 646/0, integration 687/0/0/0/148 with 0 errors, all exit 0; regression.json binds every command, revision and exit.",
+      "verification": "Corrected-tree boundary re-verification: one full Debug solution build 0 Warning(s)/0 Error(s); seven broad project suites --no-build all exit 0 (core 2320/0, sqlite 1617/1 pre-existing skip, postgres 881/0, sqlserver 798/0, mysql 362/0, clickhouse 646/0); Feature=D211 integration sweep one provider at a time under DOCKER_HOST, all executed with 0 skipped (SQLite 14/0, PostgreSQL 14/0, SQL Server 14/0, MySQL 14/0, ClickHouse 4/0, MariaDB 4/0); regression.json binds every command, revision and exit.",
       "gaps": [],
       "caveats": []
     },
@@ -682,7 +693,7 @@
       "check": "EN/RU documentation and generated-site/link validity",
       "status": "met",
       "artifacts": [
-        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/docfx.log",
+        "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/docfx-final.log",
         "docs/advanced/eager-loading-per-parent-paging.md",
         "docs/ru/advanced/eager-loading-per-parent-paging.md",
         "docs/advanced/toc.yml",
@@ -697,7 +708,7 @@
       "evidence": [
         {
           "kind": "docfx-log",
-          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/docfx.log",
+          "path": "artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/docfx-final.log",
           "exit": 0
         },
         {
@@ -824,7 +835,7 @@
           "exit": 0
         }
       ],
-      "verification": "Content-tree identity of the 41-file T211 footprint (paths + sha256 + CRLF status) frozen against base b527be6f37b9301ed9d2245b803a1bd3e5e43ffc @D211-rv1; row ledger covers EV-01..EV-14; scripts/validate_inner_loop.py manifest exit 0 (manifest-validation.log).",
+      "verification": "Corrected content-tree identity of the 42-file T211 footprint (paths + sha256 + CRLF status) frozen against base b527be6f37b9301ed9d2245b803a1bd3e5e43ffc @D211-rv1; row ledger covers EV-01..EV-14; scripts/validate_inner_loop.py manifest exit 0 (manifest-validation.log).",
       "gaps": [],
       "caveats": []
     }
@@ -856,6 +867,8 @@
   ],
   "gaps": [],
   "caveats": [
+    "Correction dispatch (r=1, n=2/3, rv=1): the freeze/tree.json content hashes were regenerated for the corrected worktree (12 production/test/doc/status files were edited after the n1 freeze; the added tests/nextorm.sqlite.tests/EagerLoadPerParentPagingEdgeTests.cs brings the T211 footprint to 42 files). EV-08 boundary evidence was refreshed on this corrected tree (build + seven broad project suites + the Feature=D211 integration sweep).",
+    "The frozen freeze/tree.json captures the corrected n2 content revision; the n1 per-file hashes it previously held are superseded. No re-plan and no footprint widening beyond the added T211 edge test.",
     "The plan's dedicated probe.py `baseline` artifacts (baseline.log/baseline.json/baseline/) were not produced; baseline identity is bound to git base b527be6f37b9301ed9d2245b803a1bd3e5e43ffc and the retained pre-fix run logs instead.",
     "The planned probe.py `oracle` artifact (oracle.log/oracle.json/oracle/) is absent; the oracle is the benchmark reference + the integration adversarial test + their run logs.",
     "The dedicated per-provider SQL-generation stdout was executed inline and not persisted as separate log files; only the sqlite SQL-generation run has a dedicated log. The run rows (selected counts, exit 0) are retained in inner-loop-evidence.json and the same classes passed in the broad-regression logs.",
