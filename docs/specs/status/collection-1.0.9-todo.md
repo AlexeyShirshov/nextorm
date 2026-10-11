@@ -43,10 +43,10 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 | T211 | #211 | G1 | 2 | pending | ready | pdca-dotnet | N=1 | r=1 | e18dc143 | docs/specs/status/D211-eager-perparent-topn-1.md |
 | T212 | #212 | G1 | 3 | pending | ready | pdca-dotnet | N=1 | r=1 | 034e5b45 | docs/specs/status/D212-eager-nested-1.md |
 | T213 | #213 | G1 | 4 | pending | ready | pdca-dotnet | N=1 | r=1 | 9e7facff | docs/specs/status/D213-joininto-remainder-1.md |
-| T201 | #201 | — | — | incomplete (excluded-gap) | gap | pdca-dotnet | N=1 | r=1 | 9bf13403 | docs/specs/status/D201-cached-parity-1.md |
-| T53  | #53  | G1 | 5 | pending | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
+| T201 | #201 | G1 | 5 | pending (PLAN re-open needed) | gap | pdca-dotnet | N=1 | r=1 | 9bf13403 | docs/specs/status/D201-cached-parity-1.md |
+| T53  | #53  | G1 | 6 | pending | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
 
-- T201 reason: design prerequisite unmet (external approval gate), not a resource/defect gap → excluded from the barrier and the lane.
+- T201 reason: design prerequisite unmet (external approval gate), not a resource/defect gap. **Amended by user directive:** T201 belongs **in G1 before the freeze** (T53) because its outcome may change the public API. T201 cannot start until its PLAN is re-opened/finalized `ready` (blocked by the issue's design gate).
 - Evidence contract (per task, frozen at that task's DO→CHECK): `rv=1`; manifests `artifacts/pdca/<task>/rv1/manifest.json`.
 
 ## Phase decisions
@@ -56,8 +56,15 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
   - ready: T209 (`b4051b2b`), T211 (`e18dc143`), T212 (`034e5b45`), T213 (`9e7facff`), T53 (untracked D53 file).
   - excluded-gap: T201 (`9bf13403`) — genuine design gap; not autonomously satisfiable.
 - **ALL-barrier: PASSED** — every non-excluded task has a persisted `plan_state=ready`; T201 is a genuine `excluded-gap` (not a `ready` placeholder). Early DO was forbidden until here.
-- **Clustering (`planner`):** no genuine parallelism — `EntityBuilder.cs`, `EntityBuilderEagerLoading.cs`, `ISqlDialect.cs`, `SqlBuilder.cs`, `Builders/Joins/*`, `CommonTestSuite.*.cs` and shared specs/docs are co-written, and T53 must follow the eager-loading public-API work. **One group G1** (degradation to a single lane): T209 → T211 → T212 → T213 → T53. T201 outside the group and the barrier.
+- **Clustering (`planner`):** no genuine parallelism — `EntityBuilder.cs`, `EntityBuilderEagerLoading.cs`, `ISqlDialect.cs`, `SqlBuilder.cs`, `Builders/Joins/*`, `CommonTestSuite.*.cs` and shared specs/docs are co-written, and T53 must follow the eager-loading public-API work. **One group G1** (degradation to a single lane): T209 → T211 → T212 → T213 → T201 → T53 (amended: T201 before the freeze, so T53's API baseline includes any public-API change from #201).
 - **PLAN revision vector (schedule binding):** T209 r=3 (done), T211 r=1, T212 r=1, T213 r=1, T53 r=1; evidence contracts: T209 rv=2 (done), others rv=1 each.
+
+## Schedule amendment (user directive, post-lane-start)
+
+- Directive: **#201 must precede the freeze (#53)** — T201's outcome may change the public API, so T53's API baseline must include T201's result. Amended G1 order: `T209 → T211 → T212 → T213 → T201 → T53` (T53 remains last).
+- Blocker: T201's own PLAN is `gap` (issue #201 approves only goal+tolerance; the mandatory separately-reviewed design `docs/specs/performance/m12-3-prepare-command-design.md` does not exist and cannot be produced/approved by the task's own autonomous cycle). T201 cannot enter the lane until its PLAN is re-opened and finalized `ready`.
+- Consequence: the freeze (T53) is **held** — it will not run before T201 is resolved. Post-lane-start scope/schedule change → routed to `planner`/`escalate` per the collection contract (no silent re-cluster).
+- Status: awaiting owner unblock of T201's design gate (or an explicit decision to defer T201+T53 together to a later milestone).
 
 ## Общая верификация и восстановление
 
@@ -66,7 +73,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 - Blocker: —
 - Defect id / history: —
 - Corrective-task status file: —
-- Next allowed step: drive lane **G1** (T209 done/verified; continue each remaining task's saved PLAN from DO, in order T211 → T212 → T213 → T53); then collection-wide `C` on the integrated current branch.
+- Next allowed step: drive lane **G1** (T209 done/verified; continue T211 → T212 → T213, then T201 **after its PLAN is unblocked**, then T53 last); then collection-wide `C` on the integrated current branch.
 
 ## Done / Verified / Incomplete
 
