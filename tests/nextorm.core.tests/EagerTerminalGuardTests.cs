@@ -69,21 +69,22 @@ public class EagerTerminalGuardTests
         return context;
     }
 
-    private static EntityBuilder<TgParent> WithShape(EntityBuilder<TgParent> builder, Shape shape)
+    private static EntityBuilder<TgParent> WithShape(EntityBuilder<TgParent> builder, Shape shape, Action? onFactory = null)
     {
+        Action factory = onFactory ?? (() => { });
         if (shape == Shape.JoinIntoLimit)
             builder = builder.JoinInto(builder.DataProvider.From<TgChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
 
         return shape switch
         {
             Shape.Limit or Shape.JoinIntoLimit
-                => builder.LoadWith(p => p.Notes, c => c.From<TgNote>().Limit(1), p => p.Id, n => n.ParentId),
+                => builder.LoadWith(p => p.Notes, c => { factory(); return c.From<TgNote>().Limit(1); }, p => p.Id, n => n.ParentId),
             Shape.Offset
-                => builder.LoadWith(p => p.Notes, c => c.From<TgNote>().Offset(1), p => p.Id, n => n.ParentId),
+                => builder.LoadWith(p => p.Notes, c => { factory(); return c.From<TgNote>().Offset(1); }, p => p.Id, n => n.ParentId),
             Shape.Page
-                => builder.LoadWith(p => p.Notes, c => c.From<TgNote>().Page(1, 1), p => p.Id, n => n.ParentId),
+                => builder.LoadWith(p => p.Notes, c => { factory(); return c.From<TgNote>().Page(1, 1); }, p => p.Id, n => n.ParentId),
             Shape.Correlated
-                => builder.LoadWith(p => p.Notes, c => c.From<TgNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.Correlated),
+                => builder.LoadWith(p => p.Notes, c => { factory(); return c.From<TgNote>(); }, p => p.Id, n => n.ParentId, EagerLoadMode.Correlated),
             _ => builder,
         };
     }
@@ -249,5 +250,104 @@ public class EagerTerminalGuardTests
         command.EagerLoadMode.Should().BeNull("a command with no eager loads carries no strategy");
         command.EagerLoadShape.IsEmpty.Should().BeTrue("a command with no eager loads carries the empty shape");
         context.From<TgParent>().ToEnumerable().ToList().Should().HaveCount(2);
+    }
+
+    /// <summary>
+    /// r=3 (#209, R209-01 wording): driving the whole non-list terminal matrix on one builder must
+    /// invoke the child factory at most once per <c>(spec, context)</c> — at the first terminal
+    /// validation, which builds the child once to detect a per-parent top-N. A second invocation would
+    /// make this assertion fail. An explicit <c>Correlated</c> is rejected before the factory is needed.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Shapes))]
+    public async Task RejectedTerminalMatrix_InvokesTheChildFactoryAtMostOncePerSpecAndContext(Shape shape)
+    {
+        using var context = CreateContext();
+        var calls = 0;
+        var builder = WithShape(context.From<TgParent>(), shape, () => calls++);
+
+        foreach (var terminal in SyncTerminals)
+        {
+            try { InvokeSync(terminal, builder); }
+            catch (NotSupportedException) { }
+        }
+
+        foreach (var terminal in AsyncTerminals)
+        {
+            try { await InvokeAsync(terminal, builder); }
+            catch (NotSupportedException) { }
+        }
+
+        if (shape == Shape.Correlated)
+            calls.Should().Be(0, "an explicit Correlated is rejected before the child factory is invoked");
+        else
+            calls.Should().Be(1, "the factory is invoked at most once per (spec, context) at the first terminal validation");
+    }
+
+    /// <summary>r=3 (#209, R209-01 wording): a valid non-paged <c>LoadWith</c> builds the child once and reuses the memo.</summary>
+    [Fact]
+    public void ValidNonPagedLoadWith_ReusesTheChildMemoAcrossTheNonListMatrix()
+    {
+        using var context = CreateContext();
+        var calls = 0;
+        var builder = context.From<TgParent>()
+            .LoadWith(p => p.Notes, c => { calls++; return c.From<TgNote>(); }, p => p.Id, n => n.ParentId);
+
+        builder.ToEnumerable().ToList().Should().HaveCount(2);
+        builder.Count().Should().Be(2);
+        builder.Any().Should().BeTrue();
+        builder.First().Should().NotBeNull();
+        builder.ToHashSet().Should().HaveCount(2);
+        builder.Min(p => p.Id).Should().Be(1);
+
+        calls.Should().Be(1, "a valid non-paged LoadWith builds the child at most once per (spec, context) and reuses it");
+    }
+
+    /// <summary>r=3 (#209, R209-01 wording): a child-factory exception propagates unchanged (not swallowed/replaced).</summary>
+    [Fact]
+    public async Task FactoryException_PropagatesUnchanged()
+    {
+        using var context = CreateContext();
+        var marker = new InvalidOperationException("child-factory-boom");
+        var builder = context.From<TgParent>()
+            .LoadWith(p => p.Notes, c => throw marker, p => p.Id, n => n.ParentId);
+
+        Action sync = () => builder.Count();
+        sync.Should().Throw<InvalidOperationException>().Which.Should().BeSameAs(marker);
+
+        Func<Task> asyncAct = () => builder.CountAsync(CancellationToken.None);
+        (await asyncAct.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(marker);
+    }
+
+    /// <summary>r=3 (#209, V25 wording): memoization is strictly per <c>(spec, context)</c>, with no static state.</summary>
+    [Fact]
+    public void Factory_MemoizedPerContext_NoStaticReuse()
+    {
+        using var first = CreateContext();
+        using var second = CreateContext();
+        var calls = 0;
+
+        EntityBuilder<TgParent> Build(InMemoryDataContext ctx) => ctx.From<TgParent>()
+            .LoadWith(p => p.Notes, c => { calls++; return c.From<TgNote>(); }, p => p.Id, n => n.ParentId);
+
+        Build(first).ToParentCommand();
+        calls.Should().Be(1, "the first context resolves its own memoized child");
+
+        Build(second).ToParentCommand();
+        calls.Should().Be(2, "a second context must resolve independently; no static/global reuse");
+    }
+
+    /// <summary>r=3 (#209, V25 wording): a rejected terminal leaves no plan-cache entry behind.</summary>
+    [Theory]
+    [MemberData(nameof(Shapes))]
+    public void RejectedLoad_LeavesNoPlanCacheEntry(Shape shape)
+    {
+        using var context = CreateContext();
+        var builder = WithShape(context.From<TgParent>(), shape);
+
+        Action act = () => builder.Count();
+        act.Should().Throw<NotSupportedException>();
+
+        QueryPlanStore.Values.Should().BeEmpty("a rejected terminal must not insert a plan-cache entry");
     }
 }

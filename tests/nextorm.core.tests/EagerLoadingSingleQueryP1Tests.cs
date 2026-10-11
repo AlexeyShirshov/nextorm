@@ -809,9 +809,30 @@ public class EagerLoadingSingleQueryP1Tests
             streamed.Add(parent);
 
         streamed.Should().ContainSingle().Which.Children.Should().BeEmpty();
-        // r=2 D209-NL: the terminals validate the eager-load set once (a single structural child build,
-        // memoized per context) to detect a per-parent top-N, but never issue eager-load queries.
-        childQueryCalls.Should().Be(1, "non-stitching terminals validate the load once but never load children");
+        // r=3 D209 (#209, R209-01): the child factory is invoked at most once per (spec, context) at the
+        // first terminal validation; the memoized child is reused by every later terminal and no eager
+        // child query is issued.
+        childQueryCalls.Should().Be(1, "non-stitching terminals validate the load at most once per (spec, context) and never load children");
+
+        // Tightened to the revised acceptance: memoization is strictly per (spec, context), so a second
+        // context must resolve its own child (a static/global memo would make otherCalls == 0).
+        using var otherContext = CreateContext();
+        var otherCalls = 0;
+        var otherBuilder = otherContext.From<P1Parent>()
+            .Where(p => p.Id == 1)
+            .LoadWith(
+                p => p.Children,
+                c =>
+                {
+                    otherCalls++;
+                    return c.From<P1Child>();
+                },
+                p => p.Id,
+                c => c.ParentId, EagerLoadMode.SingleQuery);
+
+        otherBuilder.Count().Should().Be(1);
+        otherCalls.Should().Be(1, "a second (spec, context) resolves its own child; no static/global memo");
+        childQueryCalls.Should().Be(1, "the first (spec, context) is unaffected by the second");
     }
 
     [Fact]

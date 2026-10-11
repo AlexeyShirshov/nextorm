@@ -67,21 +67,22 @@ public class EagerTerminalGuardTests
     private static EntityBuilder<TerminalGuardParent> Parents(SqliteDataContext ctx)
         => ctx.From<TerminalGuardParent>();
 
-    private static EntityBuilder<TerminalGuardParent> WithShape(EntityBuilder<TerminalGuardParent> builder, Shape shape)
+    private static EntityBuilder<TerminalGuardParent> WithShape(EntityBuilder<TerminalGuardParent> builder, Shape shape, Action? onFactory = null)
     {
+        Action factory = onFactory ?? (() => { });
         if (shape == Shape.JoinIntoLimit)
             builder = builder.JoinInto(builder.DataProvider.From<TerminalGuardChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
 
         return shape switch
         {
             Shape.Limit or Shape.JoinIntoLimit
-                => builder.LoadWith(p => p.Notes, c => c.From<TerminalGuardNote>().Limit(1), p => p.Id, n => n.ParentId),
+                => builder.LoadWith(p => p.Notes, c => { factory(); return c.From<TerminalGuardNote>().Limit(1); }, p => p.Id, n => n.ParentId),
             Shape.Offset
-                => builder.LoadWith(p => p.Notes, c => c.From<TerminalGuardNote>().Offset(1), p => p.Id, n => n.ParentId),
+                => builder.LoadWith(p => p.Notes, c => { factory(); return c.From<TerminalGuardNote>().Offset(1); }, p => p.Id, n => n.ParentId),
             Shape.Page
-                => builder.LoadWith(p => p.Notes, c => c.From<TerminalGuardNote>().Page(1, 1), p => p.Id, n => n.ParentId),
+                => builder.LoadWith(p => p.Notes, c => { factory(); return c.From<TerminalGuardNote>().Page(1, 1); }, p => p.Id, n => n.ParentId),
             Shape.Correlated
-                => builder.LoadWith(p => p.Notes, c => c.From<TerminalGuardNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.Correlated),
+                => builder.LoadWith(p => p.Notes, c => { factory(); return c.From<TerminalGuardNote>(); }, p => p.Id, n => n.ParentId, EagerLoadMode.Correlated),
             _ => builder,
         };
     }
@@ -316,6 +317,160 @@ public class EagerTerminalGuardTests
                 .ToArray();
             toArray.Should().HaveCount(3);
             toArray.Single(p => p.Id == 2).Children.Select(c => c.Id).Should().Equal(12);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    public static IEnumerable<object[]> Shapes() => Enum.GetValues<Shape>().Select(shape => new object[] { shape });
+
+    /// <summary>
+    /// r=3 (#209, R209-01 wording): driving the whole non-list terminal matrix on one builder invokes the
+    /// child factory at most once per <c>(spec, context)</c>, at the first terminal validation, while
+    /// every rejection stays side-effect free — no executed SQL and no plan-cache entry. An explicit
+    /// <c>Correlated</c> is rejected before the factory is needed.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Shapes))]
+    public async Task RejectedTerminalMatrix_InvokesTheChildFactoryAtMostOnce_WithZeroSqlAndNoCacheEntry(Shape shape)
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+            var calls = 0;
+            var builder = WithShape(Parents(ctx), shape, () => calls++);
+
+            foreach (var terminal in Terminals)
+            {
+                try
+                {
+                    if (IsAsync(terminal))
+                        await InvokeAsync(terminal, builder);
+                    else
+                        Invoke(terminal, builder);
+                }
+                catch (NotSupportedException)
+                {
+                }
+            }
+
+            interceptor.Statements.Should().BeEmpty("the terminal guard must reject the query before any SQL is executed");
+            QueryPlanStore.Values.Should().BeEmpty("a rejected terminal must not insert a plan-cache entry");
+            if (shape == Shape.Correlated)
+                calls.Should().Be(0, "an explicit Correlated is rejected before the child factory is invoked");
+            else
+                calls.Should().Be(1, "the factory is invoked at most once per (spec, context) at the first terminal validation");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// r=3 (#209, R209-01 wording): a valid non-paged <c>LoadWith</c> keeps its baseline parent-only
+    /// results and SQL on a non-list terminal, and builds the child once.
+    /// </summary>
+    [Fact]
+    public void ValidNonPagedLoadWith_KeepsBaselineResultsAndSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+            var calls = 0;
+            var builder = ctx.From<TerminalGuardParent>()
+                .LoadWith(p => p.Notes, c => { calls++; return c.From<TerminalGuardNote>(); }, p => p.Id, n => n.ParentId);
+
+            var parents = builder.ToEnumerable().ToList();
+            parents.Should().HaveCount(3);
+            parents.Should().OnlyContain(p => p.Notes.Count == 0, "a non-list terminal does not materialize the collection");
+
+            interceptor.Statements.Should().ContainSingle("a valid non-paged LoadWith keeps the parent-only baseline SQL on a non-list terminal");
+            calls.Should().Be(1, "the valid load is validated at most once per (spec, context)");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>r=3 (#209, R209-01 wording): a child-factory exception propagates unchanged, before any SQL runs.</summary>
+    [Fact]
+    public void FactoryException_PropagatesUnchanged_WithZeroSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+            var marker = new InvalidOperationException("child-factory-boom");
+            var builder = ctx.From<TerminalGuardParent>()
+                .LoadWith(p => p.Notes, c => throw marker, p => p.Id, n => n.ParentId);
+
+            Action act = () => builder.Count();
+            act.Should().Throw<InvalidOperationException>().Which.Should().BeSameAs(marker);
+            interceptor.Statements.Should().BeEmpty("a throwing child factory must propagate before any SQL runs");
+            QueryPlanStore.Values.Should().BeEmpty("a throwing child factory must not insert a plan-cache entry");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>r=3 (#209, V25 wording): memoization is strictly per <c>(spec, context)</c>; two contexts never share a child.</summary>
+    [Fact]
+    public void Factory_MemoizedPerContext_NoCrossContextReuse()
+    {
+        var (first, firstPath) = CreateDb();
+        var (second, secondPath) = CreateDb();
+        try
+        {
+            var calls = 0;
+            EntityBuilder<TerminalGuardParent> Build(SqliteDataContext ctx) => ctx.From<TerminalGuardParent>()
+                .LoadWith(p => p.Notes, c => { calls++; return c.From<TerminalGuardNote>(); }, p => p.Id, n => n.ParentId);
+
+            Build(first).Count().Should().Be(3);
+            calls.Should().Be(1, "the first context resolves its own memoized child");
+
+            Build(second).Count().Should().Be(3);
+            calls.Should().Be(2, "each (spec, context) resolves independently; no cross-context reuse");
+        }
+        finally
+        {
+            first.Dispose();
+            File.Delete(firstPath);
+            second.Dispose();
+            File.Delete(secondPath);
+        }
+    }
+
+    /// <summary>r=3 (#209, V19–V22): <c>Limit</c>, <c>Offset</c> and <c>Page</c> are rejected alike.</summary>
+    [Theory]
+    [InlineData(Shape.Limit)]
+    [InlineData(Shape.Offset)]
+    [InlineData(Shape.Page)]
+    public void LimitOffsetPage_AreRejectedAlike(Shape shape)
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var builder = WithShape(Parents(ctx), shape);
+            Action act = () => builder.Count();
+            act.Should().Throw<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
         }
         finally
         {

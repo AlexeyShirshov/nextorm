@@ -230,9 +230,29 @@ public class EagerLoadingSingleQueryTests
         builder.Any().Should().BeTrue();
         builder.First().Children.Should().BeEmpty();
         builder.ToHashSet().Single().Children.Should().BeEmpty();
-        // r=2 D209-NL: the non-list terminals now validate the eager-load set before building their parent
-        // command, so the child factory is invoked once (a single structural build, memoized per context)
-        // to detect a per-parent top-N. No child query is executed and no collection is materialized.
-        childQueryCalls.Should().Be(1, "the terminals validate the load once but never issue eager-load queries");
+        // r=3 D209 (#209, R209-01): the child factory is invoked at most once per (spec, context) at the
+        // first terminal validation, and the memoized child is reused by every later terminal. No child
+        // query is executed and no collection is materialized.
+        childQueryCalls.Should().Be(1, "the terminals validate the load at most once per (spec, context) and never issue eager-load queries");
+
+        // Tightened to the revised acceptance: memoization is strictly per (spec, context), so a second
+        // context must resolve its own child (a static/global memo would make otherCalls == 0).
+        using var otherContext = CreateContext();
+        otherContext.From<SingleQueryParent>().WithData(new[] { new SingleQueryParent { Id = 1 } });
+        var otherCalls = 0;
+        var otherBuilder = otherContext.From<SingleQueryParent>()
+            .LoadWith(
+                p => p.Children,
+                c =>
+                {
+                    otherCalls++;
+                    return c.From<SingleQueryChild>();
+                },
+                p => p.Id,
+                c => c.ParentId, EagerLoadMode.SingleQuery);
+
+        otherBuilder.Count().Should().Be(1);
+        otherCalls.Should().Be(1, "a second (spec, context) resolves its own child; no static/global memo");
+        childQueryCalls.Should().Be(1, "the first (spec, context) is unaffected by the second");
     }
 }

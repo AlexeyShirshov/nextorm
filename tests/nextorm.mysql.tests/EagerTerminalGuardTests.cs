@@ -31,8 +31,9 @@ public class EagerTerminalGuardTests
             .HasMany(p => p.Children, c => c.ParentId)
             .HasMany(p => p.Notes, n => n.ParentId));
 
-    private static EntityBuilder<TerminalGuardParent> WithShape(IDataContext ctx, Shape shape)
+    private static EntityBuilder<TerminalGuardParent> WithShape(IDataContext ctx, Shape shape, Action? onFactory = null)
     {
+        Action factory = onFactory ?? (() => { });
         var builder = Parents(ctx);
         if (shape == Shape.JoinIntoLimit)
             builder = builder.JoinInto(ctx.From<TerminalGuardChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
@@ -40,13 +41,13 @@ public class EagerTerminalGuardTests
         return shape switch
         {
             Shape.Limit or Shape.JoinIntoLimit
-                => builder.LoadWith(p => p.Notes, c => c.From<TerminalGuardNote>().Limit(1), p => p.Id, n => n.ParentId),
+                => builder.LoadWith(p => p.Notes, c => { factory(); return c.From<TerminalGuardNote>().Limit(1); }, p => p.Id, n => n.ParentId),
             Shape.Offset
-                => builder.LoadWith(p => p.Notes, c => c.From<TerminalGuardNote>().Offset(1), p => p.Id, n => n.ParentId),
+                => builder.LoadWith(p => p.Notes, c => { factory(); return c.From<TerminalGuardNote>().Offset(1); }, p => p.Id, n => n.ParentId),
             Shape.Page
-                => builder.LoadWith(p => p.Notes, c => c.From<TerminalGuardNote>().Page(1, 1), p => p.Id, n => n.ParentId),
+                => builder.LoadWith(p => p.Notes, c => { factory(); return c.From<TerminalGuardNote>().Page(1, 1); }, p => p.Id, n => n.ParentId),
             Shape.Correlated
-                => builder.LoadWith(p => p.Notes, c => c.From<TerminalGuardNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.Correlated),
+                => builder.LoadWith(p => p.Notes, c => { factory(); return c.From<TerminalGuardNote>(); }, p => p.Id, n => n.ParentId, EagerLoadMode.Correlated),
             _ => builder,
         };
     }
@@ -84,6 +85,72 @@ public class EagerTerminalGuardTests
 
         Action act = () => builder.ToParentCommand();
         act.Should().NotThrow();
+    }
+
+    /// <summary>r=3 (#209, R209-01 wording): the factory is invoked at most once per (spec, context).</summary>
+    [Theory]
+    [MemberData(nameof(Cases))]
+    public void RejectedLoad_InvokesTheChildFactoryAtMostOnce(Shape shape)
+    {
+        using var ctx = Context();
+        var calls = 0;
+        var builder = WithShape(ctx, shape, () => calls++);
+
+        for (var i = 0; i < 3; i++)
+        {
+            Action act = () => builder.ToParentCommand();
+            act.Should().Throw<NotSupportedException>().WithMessage(Expected(shape));
+        }
+
+        if (shape == Shape.Correlated)
+            calls.Should().Be(0, "an explicit Correlated is rejected before the child factory is invoked");
+        else
+            calls.Should().Be(1, "the factory is invoked at most once per (spec, context)");
+    }
+
+    /// <summary>r=3 (#209, R209-01 wording): a valid non-paged LoadWith builds the child once and reuses it.</summary>
+    [Fact]
+    public void ValidNonPagedLoadWith_ReusesTheChildMemo()
+    {
+        using var ctx = Context();
+        var calls = 0;
+        var builder = Parents(ctx)
+            .LoadWith(p => p.Notes, c => { calls++; return c.From<TerminalGuardNote>(); }, p => p.Id, n => n.ParentId);
+
+        builder.ToParentCommand();
+        builder.ToParentCommand();
+        calls.Should().Be(1, "the memoized child is reused across terminal validations");
+    }
+
+    /// <summary>r=3 (#209, V25 wording): memoization is strictly per (spec, context), with no static state.</summary>
+    [Fact]
+    public void Factory_MemoizedPerContext_NoCrossContextReuse()
+    {
+        using var first = Context();
+        using var second = Context();
+        var calls = 0;
+
+        EntityBuilder<TerminalGuardParent> Build(IDataContext ctx) => Parents(ctx)
+            .LoadWith(p => p.Notes, c => { calls++; return c.From<TerminalGuardNote>(); }, p => p.Id, n => n.ParentId);
+
+        Build(first).ToParentCommand();
+        calls.Should().Be(1, "the first context resolves its own memoized child");
+
+        Build(second).ToParentCommand();
+        calls.Should().Be(2, "each (spec, context) resolves independently; no static/global reuse");
+    }
+
+    /// <summary>r=3 (#209, R209-01 wording): a child-factory exception propagates unchanged.</summary>
+    [Fact]
+    public void FactoryException_PropagatesUnchanged()
+    {
+        using var ctx = Context();
+        var marker = new InvalidOperationException("child-factory-boom");
+        var builder = Parents(ctx)
+            .LoadWith(p => p.Notes, c => throw marker, p => p.Id, n => n.ParentId);
+
+        Action act = () => builder.ToParentCommand();
+        act.Should().Throw<InvalidOperationException>().Which.Should().BeSameAs(marker);
     }
 }
 

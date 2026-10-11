@@ -90,3 +90,48 @@ third fix. The dispatcher (`EntityBuilder.SingleQuery`, `EntityBuilder.cs:151-15
 | Commit | `dd5d08fb` — source + tests; a follow-up `#209` record commit carries this corrective/status update. |
 
 **Red → green.** With the guard disabled: `dotnet test tests/nextorm.sqlite.tests --filter FullyQualifiedName~EagerLoad` → 46 total / **14 failed** (12 paged + 2 explicit-Correlated; the two regression tests still pass) and `dotnet test tests/nextorm.core.tests --filter FullyQualifiedName~EagerLoad` → 141 total / **1 failed**. With the guard restored: sqlite ~EagerLoad 46/0, core ~EagerLoad 141/0, core ~JoinInto 122/0; full core 2098/0/0 and full SQLite 1357 total / 1356 succeeded / 1 approved skip.
+
+## r=3 record — wording-only revision (no production mechanism change)
+
+`plan_revision: r=3`, cycle `N=1`, attempt `n=1`. The r=2 plan is superseded by a **wording-only
+revision**: r=3 changes **no production mechanism** — the r=2 guard/memoization implementation
+(production base `dd5d08fb`) is unchanged and the evidence contract stays **`contract_rv: 2`**. This
+record mirrors the same revision recorded in the companion status file
+`docs/specs/status/D209-eager-strategy-1.md` (§Approved PLAN r=3).
+
+- **Preserved losslessly:** the rv2 manifest `E209-01..E209-21` rows (ids and statuses unchanged) and
+  all other R209-* / V* wording.
+- **Reformulated wording only:** `E209-01` (R209-01) becomes "public signatures and valid-query
+  results/SQL unchanged; the child factory is invoked at most once per `(spec, context)` at first
+  terminal validation; factory side effects are a documented assumption (factory must be pure and
+  idempotent)."; `E209-20` (V25) becomes "Memoization strictly per `(spec, context)`, no static state,
+  memoized child reused during execution. Perf one-time per spec/context, hot path unaffected." Both
+  rows stay **check-owned**.
+- **D209-NL** stays **active** with its unchanged remaining work/criteria; this is **additive**, not a
+  `superseded→replacement` of D209 or D209-NL.
+- **New planned evidence:** D209-T (terminal-matrix factory-count / 0-SQL / 0-cache / exception
+  propagation / per-context independence / valid baseline pins, plus the two tightened r=2 relaxed
+  assertions) and D209-D (EN+RU factory-purity sentence + docfx) — both **planned**, not yet passing.
+
+### r=3 DO outcome (evidence, no production change)
+
+- **Scope:** `python3 scripts/validate_inner_loop.py brief artifacts/pdca/D209/rv3/scope.json` exit 0
+  (amendment `FullyQualifiedName~EagerTerminalGuard`, `validated_before_run: true`).
+- **Build:** `dotnet build nextorm.slnx -c Debug` exit 0, 0 Warning(s) 0 Error(s) →
+  `artifacts/pdca/D209/rv3/build.log`.
+- **D209-T (tests):** the six `EagerTerminalGuardTests.cs` (core, SQLite and four providers) and the
+  two tightened `EagerLoadingSingleQuery*Tests.cs` assertions; inner loop `--no-build` all exit 0 —
+  core `~EagerTerminalGuard` 172/0, core `~EagerLoad` 142/0, core `~JoinInto` 123/0, sqlite
+  `~EagerTerminalGuard` 175/0, sqlite `~EagerLoad` 46/0, provider `~EagerTerminalGuard`
+  19/0 each (postgres/sqlserver/mysql/clickhouse) → `artifacts/pdca/D209/rv3/*.log`.
+  - **Factory-count pins:** `Limit`/`Offset`/`Page`/`JoinInto+Limit` → exactly **1** invocation per
+    `(spec, context)` at the first terminal validation (a second invocation fails); explicit
+    `Correlated` → **0** (rejected before the factory). Valid non-paged `LoadWith` → 1 and reused.
+  - **Rejection pins:** SQLite interceptor **0 statements / 0 plan-cache entries / 0 child SQL** across
+    the matrix; core plan cache empty. A throwing factory propagates the same exception instance; two
+    contexts resolve independently (shared counter 1→2).
+- **D209-D (docs):** factory-purity/idempotence sentence in `docs/advanced/eager-loading.md` and its RU
+  mirror `docs/ru/advanced/eager-loading.md`; `dotnet docfx docs/docfx.json` exit 0, 0 error(s) 2
+  warning(s) → `artifacts/pdca/D209/rv3/docs.log`.
+- r=3 remains `n=1/3`; no production mechanism changed. D209/D209-NL stay **not done** (D209.8 goes to
+  the DO→CHECK boundary; CHECK renders the E209-01/E209-20 verdicts).
