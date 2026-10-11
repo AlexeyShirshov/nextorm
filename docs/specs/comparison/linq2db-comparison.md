@@ -230,8 +230,9 @@ surface, which nextorm matches or exceeds. linq2db covers them:
   `HasOne`/`HasOneToOne`/`HasManyThrough` + `JoinInto`) with level-1 `LoadWith` eager loading and
   declared-relationship implicit navigation ([relationships](../../advanced/relationships.md),
   [eager loading](../../advanced/eager-loading.md), [implicit navigation](../../guide/29-implicit-navigation.md));
-  what linq2db still adds is eager-load ordering/strategy — convention-over-FK inference is absent in both,
-  since associations are declared in each library.
+  nextorm also ships an explicit eager-load strategy (`EagerLoadMode` with split, single-query and a
+  conservative `Auto`, plus a context-wide default), so what linq2db still adds is per-parent eager-load
+  ordering/top-N — convention-over-FK inference is absent in both, since associations are declared in each library.
 * **Database-first tooling**: linq2db ships a CLI/T4 code-generation toolchain that scaffolds entity and
   table-function mappings from a live database; nextorm declares mappings in code. The dynamic-schema
   sources nextorm supports through a caller-declared `TRow` schema (ClickHouse `values()`, PostgreSQL
@@ -274,9 +275,9 @@ allocation footprint, benchmark results at or above Dapper, EF Core and linq2db 
 and more configurable SQL output (identifier quoting, naming conventions and keyword casing are opt-in and
 overridable per command, whereas linq2db quotes by default and fixes names through its mapping schema).
 linq2db remains the better fit only when the same layer must also track changes, generate the data layer from
-a live schema, or expose eager-load ordering/strategy — surface nextorm deliberately leaves out (O2M/M2O/O2O
+a live schema, or eager-load per-parent ordered/top-N children — surface nextorm deliberately leaves out (O2M/M2O/O2O
 relationships, many-to-many through a junction, declared-relationship implicit navigation and level-1 eager
-loading are already covered).
+loading with explicit split/single/auto strategies and `JoinInto` are already covered).
 
 ## See also
 

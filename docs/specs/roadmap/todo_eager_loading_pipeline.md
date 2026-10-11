@@ -5,8 +5,8 @@
 > [#211](https://github.com/AlexeyShirshov/nextorm/issues/211) (E3 per-parent top-N),
 > [#212](https://github.com/AlexeyShirshov/nextorm/issues/212) (E4 nested),
 > [#213](https://github.com/AlexeyShirshov/nextorm/issues/213) (E5 JoinInto-остаток).
-> Milestone **1.0.9**. Статус: дизайн согласован в штурме (Q1–Q10), черновик спеки — **на ревью**;
-> реализация не начата.
+> Milestone **1.0.9**. Статус: дизайн согласован в штурме (Q1–Q10); E1 (стратегия, #209) **отгружен**;
+> E3/E4/E5 (#211/#212/#213) — в работе/запланированы; черновик спеки — на ревью.
 
 > **Граница (Q1).** Спека — **builder-only**. IR-путь #20 (`IQueryable → IR → QueryCommand/QueryDefinition`,
 > `docs/superpowers/specs/2026-10-04-linq-provider-roadmap-design.md:71,83`) проектируется независимо;
@@ -53,21 +53,21 @@ implicit navigation (#148) — тонкие фронтенды над общим
 
 ## 3. Стратегии (E1)
 
-Публичные значения (имена финализируются на **API-naming review**, не 1:1 linq2db):
+Публичные значения **отгружены** в E1 (#209, 1.0.9; не 1:1 linq2db). Enum `NextORM.Core.EagerLoadMode`:
+`Default=0`, `SplitQuery=1`, `SingleQuery=2`, `Correlated=3`, `Auto=4` (числовые значения совместимы при миграции).
 
 | Стратегия | Смысл |
 |---|---|
-| `Split` | Наш текущий split: `WHERE childKey IN (...)` батчами ≤1000 (`docs/advanced/eager-loading.md:61-79`). Экв. linq2db `KeyedQuery`. |
-| `Single` | Один денормализованный `LEFT JOIN` (`eager-loading.md:83-121`). Аналога у linq2db нет. |
-| `Correlated` | Коррелированная per-parent выборка (`CROSS APPLY`/`LATERAL`/окно), нужна для top-N. |
-| `Auto` | Авто-диспетчер: выбирает стратегию по форме узла (см. ниже). |
+| `SplitQuery` | Наш текущий split: `WHERE childKey IN (...)` батчами ≤1000 (`docs/advanced/eager-loading.md`). Экв. linq2db `KeyedQuery`. |
+| `SingleQuery` | Один денормализованный `LEFT JOIN`. Аналога у linq2db нет. |
+| `Correlated` | Коррелированная per-parent выборка (`CROSS APPLY`/`LATERAL`/окно), нужна для top-N. **Распознаётся, но не поддерживается в E1** — `LoadWith`, сводящийся к ней, отвергается до SQL/кэша. |
+| `Auto` | Консервативный авто-диспетчер E1: любая поддерживаемая ordinary-загрузка → `SplitQuery`. |
 
-- **Авто-диспетчер (`Auto`)**: top-N запрошен → `Correlated`; иначе дефолт `Split`; `Single` — только явно.
-- **Context-level default (Q10.3a):** на `DataContextBuilder` (аналог linq2db `LinqOptions.DefaultEagerLoadingStrategy`);
-  явный marker на узле/builder'е выигрывает у глобального default.
-- **Fail-closed (Q7.i):** невыразимая/неподдержанная провайдером стратегия → `NotSupportedException`;
-  **никакого тихого fallback** (осознанное расхождение с linq2db #5904).
-- `JoinInto` — фиксированный `Single`-фронтенд (стратегия не настраивается); `LoadWith`/implicit-nav конфигурируемы.
+- **Авто-диспетчер (`Auto`, E1):** консервативный — обычная поддерживаемая `LoadWith` → `SplitQuery`; `SingleQuery` — только явно; per-parent top-N/`Correlated` **отвергаются** (`NotSupportedException` во время подготовки, до генерации SQL и без записи в план-кэш), а не перенаправляются в коррелированную форму. Агрессивный Auto (`SingleQuery`/коррелированная форма по форме узла) — задача **#211**.
+- **Context-level default (Q10.3a):** `DataContextBuilder.UseEagerLoadMode(EagerLoadMode)` (read-only `EagerLoadMode`, DIM-дефолт `SplitQuery` на `IContextEnvironment`); явный `LoadWith(..., mode)` на builder'е выигрывает у default; precedence — `query override ?? context default`.
+- **Fail-closed (Q7.i):** невыразимая/неподдерживаемая стратегия → `NotSupportedException` во время подготовки;
+  **никакого тихого fallback** (осознанное расхождение с linq2db #5904); `Default` отвергается в `UseEagerLoadMode`.
+- `JoinInto` — фиксированный `SingleQuery`-фронтенд (стратегия не настраивается и не зависит от context default); `LoadWith`/implicit-nav конфигурируемы. Per-parent top-N/correlated SQL и его кэш-обязательства остаются за **#211**.
 
 ## 4. Ordering + per-parent top-N (E2 свёрнут в E3)
 
@@ -169,8 +169,14 @@ EN+RU: `docs/advanced/eager-loading.md`, `docs/advanced/relationships.md`, `docs
 
 ## 15. Открытые вопросы (решаются при реализации)
 
-- Точные имена публичного API стратегии/ordering/limit/nested (API-naming review).
-- Размещение типов pipeline (namespace/package) и форма context-level default.
+**E1 (стратегия) закрыт в #209 (1.0.9); имена и размещение отгружены:**
+- `NextORM.Core.EagerLoadMode` (`src/nextorm.core/EagerLoadMode.cs`): `Default=0`, `SplitQuery=1`, `SingleQuery=2`, `Correlated=3`, `Auto=4`.
+- Context-level default: `DataContextBuilder.UseEagerLoadMode(EagerLoadMode)` → `DataContextBuilder` (`src/nextorm.core/DI/DataContextBuilder.cs`); read-only `EagerLoadMode` на `IContextEnvironment` (DIM-дефолт `SplitQuery`) и `DataContext`.
+- Per-query override: trailing-параметр `LoadWith(..., EagerLoadMode mode = EagerLoadMode.Default)`; на команде — nullable `QueryCommand.EagerLoadMode` (`null` = inherit) и `internal QueryCommand.ResolvedEagerLoadMode`.
+- Размещение pipeline: `Query/QueryCommand.EagerLoading.cs` (`EagerLoadResolver`, `EagerLoadShape`), `Builders/EntityBuilderEagerLoading.cs`, `DI/DataContextBuilder.cs`.
+
+**Открыто (E3/E4/E5):**
+- Точные имена публичного API ordering/limit/nested (API-naming review).
 - Точная форма оконной vs коррелированной генерации по диалектам (нормализация/эмуляция).
 - Единый stitcher: объём рефакторинга `EntityBuilderEagerLoading` + `JoinIntoStitcher` без регрессий.
 

@@ -1,6 +1,6 @@
 # Eager loading child collections (`LoadWith`)
 
-> `LoadWith` fills a parent-side collection and stitches the children onto the already materialized parents in memory. Split-query is the default — one extra child query per key chunk, two round trips for at most 1000 parents, never N+1 — and passing `EagerLoadMode.SingleQuery` fetches the parents and every declared collection in one denormalized round trip instead.
+> `LoadWith` fills a parent-side collection and stitches the children onto the already materialized parents in memory. Split-query is the default — one extra child query per key chunk, two round trips for at most 1000 parents, never N+1 — and passing `EagerLoadMode.SingleQuery` (or configuring the context-wide default) fetches the parents and every declared collection in one denormalized round trip instead. The strategy is explicit: split, single-query, a conservative `Auto`, or a context default; `Correlated` and per-parent top-N fail closed until a later release.
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Joins](../guide/02-joins.md) · [Correlated queries](../guide/05-subqueries.md)
 
@@ -25,7 +25,7 @@ public EntityBuilder<TEntity> LoadWith<TChild, TKey>(
 - `collection` — the parent-side [`ICollection<TChild>`](xref:System.Collections.Generic.ICollection`1) member to fill.
 - `childQuery` — builds the child query from the data context that owns the parent query.
 - `parentKey` / `childKey` — the selectors paired to decide which children belong to which parent.
-- `mode` — the whole-builder eager-load mode (see [Mode selection](#mode-selection)); `EagerLoadMode.Default` inherits the builder's current choice, which is split when none was made.
+- `mode` — the whole-builder eager-load mode (see [Mode selection](#mode-selection)); `EagerLoadMode.Default` inherits the builder's current choice, which falls back to the context-wide default (`DataContextBuilder.UseEagerLoadMode`, `SplitQuery` unless configured).
 - `TKey` must be a non-nullable type (`where TKey : notnull`), for example `int` or `string`. A null key value observed at runtime is skipped and never matches.
 
 `LoadWith` returns a **copy** of the builder carrying the declaration, so the original builder is unchanged and several loads can be chained:
@@ -42,11 +42,53 @@ Like every builder modifier, `LoadWith` needs the generic key type to be known a
 
 ## Mode selection
 
-The `mode` argument selects how the declared collections are loaded, using the public [`EagerLoadMode`](xref:NextORM.Core.EagerLoadMode) enum:
+The `mode` argument selects how the declared collections are loaded, using the public [`EagerLoadMode`](xref:NextORM.Core.EagerLoadMode) enum. The numeric values are fixed and migration-compatible: `Default=0`, `SplitQuery=1` and `SingleQuery=2` keep their historical meaning for callers that persist or compare the enum, and `Correlated=3`/`Auto=4` are appended:
 
-- `EagerLoadMode.Default` (`0`) — no explicit choice: inherit the mode already active on the builder, which is split when no explicit mode was chosen.
-- `EagerLoadMode.SplitQuery` (`1`) — force split loading for the whole builder.
-- `EagerLoadMode.SingleQuery` (`2`) — force single-query loading for the whole builder.
+| Member | Value | Meaning |
+|---|---|---|
+| `EagerLoadMode.Default` | `0` | No explicit choice: inherit the mode already active on the builder, falling back to the context default below. |
+| `EagerLoadMode.SplitQuery` | `1` | Force split loading for the whole builder. |
+| `EagerLoadMode.SingleQuery` | `2` | Force single-query loading for the whole builder. |
+| `EagerLoadMode.Correlated` | `3` | Correlated per-parent loading. Recognized but **not supported** in this release; a query that resolves to it is rejected. |
+| `EagerLoadMode.Auto` | `4` | Automatic selection, resolved once by the conservative rule below. |
+
+### Context-wide default
+
+[`DataContextBuilder.UseEagerLoadMode(EagerLoadMode)`](xref:NextORM.Core.DataContextBuilder.UseEagerLoadMode(NextORM.Core.EagerLoadMode)) configures a context-wide default for `LoadWith` collections whose query declares no explicit mode. It defaults to `EagerLoadMode.SplitQuery`, so an unconfigured context keeps the historical behavior:
+
+```csharp
+var builder = new DataContextBuilder()
+    .UseSqlite(connection)
+    .UseEagerLoadMode(EagerLoadMode.SingleQuery);
+using var dataContext = builder.CreateDataContext();
+```
+
+- The default must be one of the four concrete strategies — `SplitQuery`, `SingleQuery`, `Correlated` or `Auto`. `EagerLoadMode.Default` is rejected with [`ArgumentOutOfRangeException`](xref:System.ArgumentOutOfRangeException): it is an inheritance sentinel, not a context setting, and it must not be applied recursively.
+- Configuring a context never changes a static/global value; each context carries its own setting, exposed read-only as `EagerLoadMode` on [`IDataContext`](xref:NextORM.Core.IDataContext) / [`DataContext`](xref:NextORM.Core.DataContext).
+- The default is resolved once, before any SQL is generated, and the resolved value is folded into the plan-cache key, so two queries that resolve to different strategies never share a cached plan.
+
+### Precedence
+
+The effective strategy is `query override ?? context default`: an explicit `LoadWith(..., mode)` wins over the context default, and when the query makes no explicit choice the context default applies. Within a builder, `EagerLoadMode.Default` keeps inheriting the mode already chosen by an earlier `LoadWith`.
+
+### Conservative `Auto`
+
+`Auto` is a **conservative dispatcher**, not a cost-based optimizer. It never guesses provider capabilities and never retries a failed execution with another strategy:
+
+| Requested operation | Behavior in this release |
+|---|---|
+| Ordinary supported `LoadWith`, `Auto` | Resolves to `SplitQuery`. |
+| Ordinary `LoadWith`, explicit `SplitQuery`/`SingleQuery` | Existing split/single implementation and guards. |
+| `LoadWith`, explicit `Correlated` | Rejected before any SQL is generated and before a plan is cached. |
+| A request needing per-parent top-N (a child `Limit`/`Offset`/`Page`) | Rejected the same way; `Auto` never reinterprets it as a global child limit or an unrestricted load. |
+| `JoinInto` | Fixed single-query; unaffected by the context default (see [Relationship metadata and `JoinInto`](#relationship-metadata-and-joininto)). |
+| No eager loads | No eager-loading dispatch or eager-load-specific command mutation. |
+
+`Auto` selects `SingleQuery` only when it is asked explicitly; automatic single selection, arbitrary `APPLY`/`LATERAL` construction and provider capability guessing are not introduced.
+
+### `Correlated` and per-parent top-N
+
+`Correlated` and any child query that requests a per-parent top-N (its own `Limit`/`Offset`/`Page`) have no implemented execution path in this release. Both are recognized and rejected with [`NotSupportedException`](xref:System.NotSupportedException) **during preparation — before any SQL is generated and before a plan entry is inserted**, so a rejected query neither runs the parent statement nor poisons the plan cache. The enum value is reserved for the correlated/per-parent top-N work tracked separately; neither an explicit `Correlated` nor `Auto` may reinterpret such a request as a global child limit or an unrestricted load, and per-parent paging is not silently re-expressed as a global `LIMIT`.
 
 The mode belongs to the **whole builder**, not to an individual declaration:
 
@@ -54,7 +96,7 @@ The mode belongs to the **whole builder**, not to an individual declaration:
 - A later `LoadWith(..., EagerLoadMode.Default)` (or an omitted argument) inherits the current mode; it never resets it.
 - Repeating the same explicit mode is allowed.
 - Mixing two different explicit modes — `SingleQuery` then `SplitQuery`, or the reverse — throws [`NotSupportedException`](xref:System.NotSupportedException): a single SQL command cannot mix a denormalized join for one collection with a separate chunked statement for another.
-- A value other than the three defined enum members throws [`ArgumentOutOfRangeException`](xref:System.ArgumentOutOfRangeException) with `ParamName == "mode"`, and the original builder is left unchanged.
+- A value other than the five defined enum members throws [`ArgumentOutOfRangeException`](xref:System.ArgumentOutOfRangeException) with `ParamName == "mode"`, and the original builder is left unchanged.
 
 The mode is resolved when `LoadWith` runs; the load specification is otherwise unchanged, so switching modes never changes the [assignment rule](#assignment-rule) or the [ordering guarantees](#ordering-and-deduplication).
 
@@ -82,7 +124,7 @@ When `ToListAsync`/`ToArrayAsync` is cancelled, the token is checked between key
 
 ## Single-query mode (`EagerLoadMode.SingleQuery`)
 
-By default `LoadWith` uses the split shape above — two or more round trips, one per key chunk. Pass `EagerLoadMode.SingleQuery` as the last argument to `LoadWith` (the mode applies to the whole builder) to fetch the parents and every declared collection with **one** denormalized command instead:
+By default `LoadWith` uses the split shape above — two or more round trips, one per key chunk. Pass `EagerLoadMode.SingleQuery` as the last argument to `LoadWith` (the mode applies to the whole builder), or configure the context-wide default with `UseEagerLoadMode(EagerLoadMode.SingleQuery)`, to fetch the parents and every declared collection with **one** denormalized command instead:
 
 ```csharp
 var orders = ctx.From<Order>()
@@ -185,4 +227,4 @@ Every other terminal evaluates the parent query **only** and does not run eager 
 
 ## Relationship metadata and `JoinInto`
 
-`LoadWith` does not create or consume navigation metadata; the association is expressed by the two key selectors at each call site. nextorm also has a metadata model for **declared** relationships (`HasMany`/`HasOne` or [`[Relationship]`](xref:NextORM.Core.RelationshipAttribute)) and a single-query loader, [`JoinInto`](relationships.md), which fills one child collection from one `LEFT JOIN` (or `INNER JOIN`) and stitches the denormalized rows back onto the deduplicated parents. Use `JoinInto` when the association is declared as relationship metadata, and `LoadWith` when it is expressed ad hoc by key selectors at the call site; `LoadWith` with `EagerLoadMode.SingleQuery` also reduces to one denormalized query, so the two share the same single-query materialization, assignment contract and ordering guarantees. Relationships are still never inferred from conventions or foreign keys. A graph is loaded explicitly, one declared level per call.
+`LoadWith` does not create or consume navigation metadata; the association is expressed by the two key selectors at each call site. nextorm also has a metadata model for **declared** relationships (`HasMany`/`HasOne` or [`[Relationship]`](xref:NextORM.Core.RelationshipAttribute)) and a single-query loader, [`JoinInto`](relationships.md), which fills one child collection from one `LEFT JOIN` (or `INNER JOIN`) and stitches the denormalized rows back onto the deduplicated parents. Use `JoinInto` when the association is declared as relationship metadata, and `LoadWith` when it is expressed ad hoc by key selectors at the call site; `LoadWith` with `EagerLoadMode.SingleQuery` also reduces to one denormalized query, so the two share the same single-query materialization, assignment contract and ordering guarantees. `JoinInto` is a **fixed** single-query operation: unlike `LoadWith`, it never consults the context default, so a context configured with `UseEagerLoadMode(EagerLoadMode.SplitQuery)`, `Correlated` or `Auto` leaves `JoinInto` on the single-query path. Relationships are still never inferred from conventions or foreign keys. A graph is loaded explicitly, one declared level per call.
