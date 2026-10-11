@@ -70,3 +70,23 @@ All boundary evidence re-run fresh against n=2 HEAD:
   (evidence now exists; CHECK renders the verdicts and closes them).
 - `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D209/rv1/manifest.json` → exit 0.
 - D209.8 re-submitted to CHECK; D209 is **not** marked done by this record.
+
+## Escalation corrective round (r=1, n=2/3) — 2nd fix of the JoinInto+LoadWith class
+
+A **strong-tier `escalate` decision** (rendered after the CHECK r=1 n=2 return) replaced the previous fix
+approach and was implemented **as-is**. The plan revision `r=1` is unchanged and the attempt stays
+`n=2/3`: this is the **second fix of the same defect class** and a further return triggers STOP, not a
+third fix. The dispatcher (`EntityBuilder.SingleQuery`, `EntityBuilder.cs:151-155`) was deliberately
+**not** touched — editing it is what reintroduced the defect in the previous round.
+
+| Item | Detail |
+|---|---|
+| Defect key | `joininto-loadwith-unsupported-child-unguarded` (2nd fix of the JoinInto+LoadWith class) |
+| Root cause | The `JoinIntos` branch of `EntityBuilderExtensions.MaterializeList*` (`:531-536`/`:557-562`) never calls `MarkPerParentTopN`, so the pair command runs and is plan-cached before `BuildChild` rejects — and an empty parent is fail-open; an explicit `LoadWith(..., Correlated)` never reaches `EagerLoadResolver.Resolve`. |
+| Fix | One side-effect-free `EntityBuilderEagerLoading.ValidateLoadWithForJoinInto<TEntity>`, called as the **first statement** of `JoinIntoStitcher.Execute` (sync), `JoinIntoStitcher.ExecuteAsync` (before the first SQL `await`) and the shared `JoinIntoStitcher.Stitch`. |
+| Rejects | Explicit `Correlated` (same explicit-vs-default criterion as the `SingleQuery` getter; identical text via shared `EagerLoadResolver.CorrelatedNotSupported`); a child `Limit`/`Offset`/`Page` (shared `HasPerParentTopN` + `PerParentTopNNotSupported`, reused by `MarkPerParentTopN`/`RequiresPerParentTopN` and the `BuildChild` defence-in-depth guard). |
+| Preserves | Un-paged child; `JoinInto + Default` under **every** context default incl. `Correlated` → pair + split (exactly 2 statements); explicit `SingleQuery` merge unchanged; no new fields/interfaces/public API; no sticky/global state. |
+| Evidence | `artifacts/pdca/D209/rv1/n2/{core-eager-inner-final,core-joininto-inner-final,sqlite-eager-inner-final,core-tests-final,sqlite-tests-final}.log`; build `n2/build-final-guard.log`; red→green `n2/{core-eager-red-guard,sqlite-eager-red-guard}.log` → `n2/*-green-guard.log`. |
+| Commit | `dd5d08fb` — source + tests; a follow-up `#209` record commit carries this corrective/status update. |
+
+**Red → green.** With the guard disabled: `dotnet test tests/nextorm.sqlite.tests --filter FullyQualifiedName~EagerLoad` → 46 total / **14 failed** (12 paged + 2 explicit-Correlated; the two regression tests still pass) and `dotnet test tests/nextorm.core.tests --filter FullyQualifiedName~EagerLoad` → 141 total / **1 failed**. With the guard restored: sqlite ~EagerLoad 46/0, core ~EagerLoad 141/0, core ~JoinInto 122/0; full core 2098/0/0 and full SQLite 1357 total / 1356 succeeded / 1 approved skip.
