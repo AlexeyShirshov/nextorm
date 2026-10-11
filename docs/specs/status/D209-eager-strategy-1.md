@@ -7,7 +7,7 @@
 - cycle_id: N=1
 - plan_revision: r=1
 - baseline ref: branch `1.0.9` @ `58025147`
-- phase: C (CHECK) — DO complete (D209.1–D209.7); D209.8 CHECK submitted
+- phase: D (DO) — CHECK r=1 n=1 FAIL→DO; attempt n=2/3 corrective fixes applied (F1/F2, F3, F4 production; F13/F14 tests); D209.8 re-submitted
 - DO complete: commits `ed9ac341`, `2700a59c`, `d69e6569`, `36956f9f`, `369830fd`, `e9737c85`, `5addd257`, `874b78bd`, `f90ffee3`; evidence: build 0W/0E; suites core 2087 / sqlite 1337 / postgres 855 / sqlserver 772 / mysql 332 / clickhouse 620 all 0 failed; integration all 5 providers executed, 0 failed, 0 "is not available"; coverage line 88.4% / branch 80.5%; benchmark 7/7 cases, no ratio >20%.
 - deferral: the P (collection TASK PLAN) STOPPED at the PLAN→DO boundary was the plan-authoring phase; DO is now dispatched against r=1
 - plan_state: ready
@@ -455,3 +455,24 @@ PLAN r=1 is written and `plan_state: ready`. The orchestrator STOPS here at the 
 2026-10-11T05:40:50Z | DO | r1 | n1 | D209.7 acceptance benchmark (C12) exit 0 in both trees: baseline wall 55s / 7 cases, candidate wall 52s / 7 cases (each <=240s, 0 failures); cached/prepared ratios Cached_ToList/Prepared_ToList 2.1366->2.0600 (-3.58%), Cached_PlanOnly_Param/Prepared_ToList 0.6411->0.6247 (-2.56%); no ratio >20% growth, no GAP; no optimization conclusion drawn | artifacts/pdca/D209/rv1/perf/baseline/console.log; artifacts/pdca/D209/rv1/perf/candidate/console.log; artifacts/pdca/D209/rv1/perf/ratios.md
 2026-10-11T05:41:12Z | DO | r1 | n1 | D209.7 evidence manifest (C15): rv1 manifest written with E209-01..E209-13 (9 coder rows met, 4 check rows open); `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D209/rv1/manifest.json` exit 0; validator unmodified | artifacts/pdca/D209/rv1/manifest.json; artifacts/pdca/D209/rv1/manifest-validation.log
 2026-10-11T10:46:43Z | DO→CHECK | r1 | n1 | DO complete (D209.1–D209.7); D209.8 CHECK submitted. Commits ed9ac341, 2700a59c, d69e6569, 36956f9f, 369830fd, e9737c85, 5addd257, 874b78bd, f90ffee3. Evidence: build 0W/0E; suites core 2087 / sqlite 1337 / postgres 855 / sqlserver 772 / mysql 332 / clickhouse 620 all 0 failed; integration all 5 providers executed 0 failed 0 "is not available"; coverage line 88.4% / branch 80.5%; benchmark 7/7 cases, no >20% ratio. Re-validated: report + manifest validators exit 0, 0 FAIL lines. | artifacts/pdca/D209/rv1/evidence-validation.log; artifacts/pdca/D209/rv1/manifest-validation.log
+
+## Defect history (durable)
+
+| Defect key | Observed at r/n | Fixes applied | Evidence | Last occurrence / disposition |
+|---|---|---|---|---|
+| per-parent-topn-guard-after-parent-sql | r1/n1 | 1 | artifacts/pdca/D209/rv1/sqlite-eager-inner.log | fixed r1/n1 (guard moved to preparation) |
+| fi-f2-joininto-loadwith-reroute | r1/n1 | 1 | artifacts/pdca/D209/rv1/core-f14-red.log; artifacts/pdca/D209/rv1/sqlite-f14-red.log | fixed r1/n2 — `EntityBuilder.SingleQuery` no longer treats a JoinInto as forcing the merged LoadWith path; mixed combination takes the baseline pair+split dispatch under every context default |
+| f3-aoore-paramname | r1/n1 | 1 | artifacts/pdca/D209/rv1/core-f3-red.log | fixed r1/n2 — `EagerLoadResolver.Resolve` attributes `ParamName` to `requested` vs `contextDefault` |
+| f4-resolvedchild-racy-memo | r1/n1 | 1 | artifacts/pdca/D209/rv1/core-eager-inner-n2.log | fixed r1/n2 — per-context `ConditionalWeakTable<IDataContext, Lazy<EntityBuilder<TChild>>>` (ExecutionAndPublication) replaces the unsynchronized `_resolvedChild` field |
+| f13-eagerloadshape-identity-tests | r1/n1 | 1 | artifacts/pdca/D209/rv1/core-eager-inner-n2.log | fixed r1/n2 — direct `EagerLoadShape` equality/hash + V12 plan-cache tests added |
+| f14-mixed-dispatch-regression | r1/n1 | 1 | artifacts/pdca/D209/rv1/core-eager-inner-n2.log; artifacts/pdca/D209/rv1/sqlite-eager-inner-n2.log | fixed r1/n2 — core + SQLite (4 context defaults) mixed-dispatch regressions added, red→green demonstrated |
+
+## DO n=2/3 corrective round (r=1, plan unchanged)
+
+2026-10-11T11:07:00Z | CHECK FAIL→DO | r1 | n2/3 | CHECK r=1 returned FAIL with confirmed P1 defects F1/F2 (JoinInto+LoadWith mixed-shape reroute), F3 (AOORE ParamName), F4 (unsynchronized `_resolvedChild`), F13/F14 (missing identity/dispatch regressions); plan r=1 unchanged, no replan.
+2026-10-11T11:07:00Z | DO | r1 | n2/3 | F1/F2 fixed: `EntityBuilder.SingleQuery` gates the merged path (explicit SingleQuery, or context-default Single with no JoinInto); `JoinInto + LoadWith(Default)` keeps the baseline JoinInto pair command + split child loads under Split/Single/Auto/Correlated; `CreateJoinIntoPairCommand` stays pinned SingleQuery.
+2026-10-11T11:07:00Z | DO | r1 | n2/3 | F3 fixed: `EagerLoadResolver.Resolve` attributes `ArgumentOutOfRangeException.ParamName` to `requested` (query override) vs `contextDefault` per the actual offending source.
+2026-10-11T11:07:00Z | DO | r1 | n2/3 | F4 fixed: `EagerLoadSpec.ResolveChild` resolves through a per-context `ConditionalWeakTable<IDataContext, Lazy<EntityBuilder<TChild>>>` (ExecutionAndPublication) — no unsynchronized mutable cache, single child build preserved.
+2026-10-11T11:07:00Z | DO | r1 | n2/3 | F13/F14 tests: `EagerLoadShape` empty/default, order-sensitivity, equal⇒equal hash, collision-consistency; V12 param-value reuse vs child-filter structure isolation; core + SQLite mixed JoinInto+LoadWith dispatch (4 context defaults) + explicit SingleQuery merge.
+2026-10-11T11:07:00Z | DO | r1 | n2/3 | red→green: with F1/F2 reverted the F14 regressions fail (core SingleQuery=true; SQLite Split/Single/Auto 1 merged statement, Correlated throws); with F3 reverted the resolver ParamName test fails (contextDefault vs requested); restored → both green.
+2026-10-11T11:07:00Z | DO | r1 | n2/3 | verify: build 0W/0E (`build-attempt-n2-final.log`); core ~EagerLoad 137/0 (`core-eager-inner-n2.log`), core ~JoinInto 118/0 (`core-joininto-inner-n2.log`), sqlite ~EagerLoad 31/0 (`sqlite-eager-inner-n2.log`).

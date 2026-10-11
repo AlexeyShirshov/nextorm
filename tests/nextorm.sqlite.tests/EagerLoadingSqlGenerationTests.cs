@@ -698,6 +698,105 @@ public class EagerLoadingSqlGenerationTests
         }
     }
 
+    // --- D209 r=1 n=2 (F14): JoinInto + LoadWith(Default) keeps the baseline pair+split dispatch under
+    // --- every context default; only an explicit SingleQuery merges the JoinInto and the load.
+
+    private static (SqliteDataContext Ctx, string Path) CreateMixedDb(EagerLoadMode contextMode)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nextorm-mixed-{Guid.NewGuid():N}.db");
+        using (var conn = new SqliteConnection($"Data Source={path}"))
+        {
+            conn.Open();
+            using var seed = conn.CreateCommand();
+            seed.CommandText =
+                "create table mixed_parent (id integer primary key, name text);" +
+                "create table mixed_child (id integer primary key, parent_id int not null, name text);" +
+                "create table mixed_note (id integer primary key, parent_id int not null, name text);" +
+                "insert into mixed_parent (id, name) values (1, 'p1'), (2, 'p2'), (3, 'p3');" +
+                "insert into mixed_child (id, parent_id, name) values (10, 1, 'c1'), (11, 1, 'c2'), (12, 2, 'c3');" +
+                "insert into mixed_note (id, parent_id, name) values (100, 1, 'n1'), (101, 2, 'n2');";
+            seed.ExecuteNonQuery();
+        }
+
+        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder().UseEagerLoadMode(contextMode)), path);
+    }
+
+    [Theory]
+    [InlineData(EagerLoadMode.SplitQuery)]
+    [InlineData(EagerLoadMode.SingleQuery)]
+    [InlineData(EagerLoadMode.Auto)]
+    [InlineData(EagerLoadMode.Correlated)]
+    public void JoinInto_WithLoadWithDefault_KeepsTheBaselinePairAndSplitDispatch(EagerLoadMode contextMode)
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateMixedDb(contextMode);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<MixedParent>(b => b.HasMany(p => p.Children, c => c.ParentId).HasMany(p => p.Notes, n => n.ParentId))
+                .JoinInto(ctx.From<MixedChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+                .LoadWith(p => p.Notes, c => c.From<MixedNote>(), p => p.Id, n => n.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+            parents[0].Notes.Select(n => n.Id).Should().Equal(100);
+            parents[1].Children.Select(c => c.Id).Should().Equal(12);
+            parents[1].Notes.Select(n => n.Id).Should().Equal(101);
+            parents[2].Children.Should().BeEmpty("a childless parent survives the Left Join");
+
+            // Baseline mixed dispatch under every context default: the JoinInto pair command (one join
+            // statement) plus one split child statement for Notes. The context default must not reroute the
+            // combination into the merged LoadWith path and must not throw for Correlated.
+            interceptor.Statements.Should().HaveCount(2,
+                "the JoinInto pair command and the split LoadWith child must both run under every context default");
+            interceptor.Statements.Should().ContainSingle(s => s.Contains(" join ", StringComparison.OrdinalIgnoreCase));
+            interceptor.Statements.Should().ContainSingle(s => s.Contains(" in (", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void JoinInto_WithExplicitSingleQueryLoadWith_IssuesOneMergedCommand()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateMixedDb(EagerLoadMode.SplitQuery);
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<MixedParent>(b => b.HasMany(p => p.Children, c => c.ParentId).HasMany(p => p.Notes, n => n.ParentId))
+                .JoinInto(ctx.From<MixedChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+                .LoadWith(p => p.Notes, c => c.From<MixedNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+            parents[0].Notes.Select(n => n.Id).Should().Equal(100);
+            parents[1].Children.Select(c => c.Id).Should().Equal(12);
+            parents[1].Notes.Select(n => n.Id).Should().Equal(101);
+
+            interceptor.Statements.Should().HaveCount(1,
+                "an explicit SingleQuery LoadWith merges the JoinInto and the load into one denormalized command");
+            var sql = interceptor.Statements[0].ToLowerInvariant();
+            sql.Should().Contain(" join ").And.Contain("mixed_child").And.Contain("mixed_note");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
     // --- D14a: split vs single eager-load filter-scope inheritance. The alias types below map to the
     // --- same eager_parent/eager_child tables but declare a named filter, so no other test's entity
     // --- metadata is affected (the first registration per type wins process-wide).
@@ -862,6 +961,48 @@ public sealed class StrategyParent
 
 [SqlTable("strategy_child")]
 public sealed class StrategyChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+}
+
+[SqlTable("mixed_parent")]
+public sealed class MixedParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<MixedChild> Children { get; set; } = new List<MixedChild>();
+    public ICollection<MixedNote> Notes { get; set; } = new List<MixedNote>();
+}
+
+[SqlTable("mixed_child")]
+public sealed class MixedChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+}
+
+[SqlTable("mixed_note")]
+public sealed class MixedNote
 {
     [Key]
     [Column("id")]

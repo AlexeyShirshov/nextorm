@@ -611,11 +611,17 @@ public class EagerLoadingModeTests
     }
 
     [Fact]
-    public void Resolver_UndefinedValue_IsRejected()
+    public void Resolver_UndefinedValue_IsRejectedWithTheOffendingSourceName()
     {
-        Action act = () => EagerLoadResolver.Resolve((EagerLoadMode)999, EagerLoadMode.SplitQuery);
+        Action requested = () => EagerLoadResolver.Resolve((EagerLoadMode)999, EagerLoadMode.SplitQuery);
+        requested.Should().Throw<ArgumentOutOfRangeException>()
+            .Which.ParamName.Should().Be("requested",
+                "an undefined query override must blame the override, not the context default");
 
-        act.Should().Throw<ArgumentOutOfRangeException>();
+        Action context = () => EagerLoadResolver.Resolve(null, (EagerLoadMode)999);
+        context.Should().Throw<ArgumentOutOfRangeException>()
+            .Which.ParamName.Should().Be("contextDefault",
+                "an undefined context default with no override must blame the context default");
     }
 
     [Fact]
@@ -694,5 +700,143 @@ public class EagerLoadingModeTests
         var parents = builder.OrderBy(p => p.Id).ToList();
         parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
         parents[1].Children.Select(c => c.Id).Should().Equal(12);
+    }
+
+    // --- D209 r=1 n=2 (F14): the mixed JoinInto + LoadWith dispatch. A JoinInto keeps its fixed pair
+    // --- command plus split child loads when the LoadWith inherits the context default; only an explicit
+    // --- SingleQuery merges the two into one denormalized command.
+
+    [Fact]
+    public void JoinInto_WithInheritedLoadWith_KeepsTheBaselinePairAndSplitDispatch()
+    {
+        using var context = CreateContext();
+
+        var builder = context.From<ModeParent>()
+            .JoinInto(context.From<ModeChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+            .LoadWith(p => p.Notes, c => c.From<ModeNote>(), p => p.Id, n => n.ParentId);
+
+        builder.SingleQuery.Should().BeFalse(
+            "a JoinInto plus an inherited LoadWith keeps the JoinInto pair command and the split child loads");
+
+        var parents = builder.OrderBy(p => p.Id).ToList();
+        parents.Should().HaveCount(2);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+        parents[0].Notes.Select(n => n.Id).Should().Equal(100);
+        parents[1].Children.Select(c => c.Id).Should().Equal(12);
+        parents[1].Notes.Select(n => n.Id).Should().Equal(101);
+    }
+
+    [Fact]
+    public void JoinInto_WithExplicitSingleQueryLoadWith_StillMerges()
+    {
+        using var context = CreateContext();
+
+        var builder = context.From<ModeParent>()
+            .JoinInto(context.From<ModeChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+            .LoadWith(p => p.Notes, c => c.From<ModeNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.SingleQuery);
+
+        builder.SingleQuery.Should().BeTrue(
+            "an explicit SingleQuery LoadWith still merges the JoinInto and the load into one command");
+
+        var parents = builder.OrderBy(p => p.Id).ToList();
+        parents.Should().HaveCount(2);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+        parents[0].Notes.Select(n => n.Id).Should().Equal(100);
+        parents[1].Children.Select(c => c.Id).Should().Equal(12);
+        parents[1].Notes.Select(n => n.Id).Should().Equal(101);
+    }
+
+    // --- D209 r=1 n=2 (F13): direct structural identity for EagerLoadShape plus the V12 plan-cache
+    // --- contract — a changed captured parameter value alone reuses the plan, a changed child-filter
+    // --- structure (which changes the executed command) isolates it.
+
+    [Fact]
+    public void EagerLoadShape_EmptyAndDefault_AreEquivalentAndHashToZero()
+    {
+        var empty = EagerLoadShape.Empty;
+        EagerLoadShape @default = default;
+
+        empty.IsEmpty.Should().BeTrue();
+        @default.IsEmpty.Should().BeTrue();
+        empty.Equals(@default).Should().BeTrue("the empty shape and default(EagerLoadShape) describe the same graph");
+        @default.Equals(empty).Should().BeTrue();
+        empty.Equals(empty).Should().BeTrue();
+        empty.GetHashCode().Should().Be(0);
+        @default.GetHashCode().Should().Be(0);
+        empty.GetHashCode().Should().Be(@default.GetHashCode());
+    }
+
+    [Fact]
+    public void EagerLoadShape_IsOrderSensitive()
+    {
+        var forward = new EagerLoadShape(["P=P;C=C", "P=P;C=N"]);
+        var reordered = new EagerLoadShape(["P=P;C=N", "P=P;C=C"]);
+
+        forward.Equals(reordered).Should().BeFalse("the ordered load paths are part of the identity");
+        reordered.Equals(forward).Should().BeFalse();
+        forward.IsEmpty.Should().BeFalse();
+        reordered.IsEmpty.Should().BeFalse();
+    }
+
+    [Fact]
+    public void EagerLoadShape_EqualParts_AreEqualWithEqualHashes()
+    {
+        var first = new EagerLoadShape(["P=P;C=C", "P=P;C=N"]);
+        var second = new EagerLoadShape(["P=P;C=C", "P=P;C=N"]);
+
+        first.Equals(second).Should().BeTrue();
+        second.Equals(first).Should().BeTrue();
+        first.GetHashCode().Should().Be(second.GetHashCode(), "equal shapes must produce equal hashes");
+    }
+
+    [Fact]
+    public void EagerLoadShape_HashIsDeterministic_AndACollisionNeverImpliesEquality()
+    {
+        var first = new EagerLoadShape(["A", "B"]);
+        var same = new EagerLoadShape(["A", "B"]);
+        var other = new EagerLoadShape(["A", "C"]);
+
+        first.GetHashCode().Should().Be(first.GetHashCode(), "the structural hash must be deterministic");
+        first.Equals(same).Should().BeTrue();
+        first.GetHashCode().Should().Be(same.GetHashCode());
+
+        // A hash collision between different shapes, when it happens, must never be treated as equality.
+        first.Equals(other).Should().BeFalse();
+        if (first.GetHashCode() == other.GetHashCode())
+            first.Equals(other).Should().BeFalse("a hash collision alone is never equality");
+    }
+
+    [Fact]
+    public void EagerPlan_ChildFilterParameterValueReusesThePlan_ButAStructureChangeIsolatesIt()
+    {
+        using var context = CreateContext();
+
+        static QueryCommand SingleQueryCommand(InMemoryDataContext context, int excludedId, bool extraFilter)
+        {
+            var builder = context.From<ModeParent>()
+                .LoadWith(
+                    p => p.Children,
+                    c => extraFilter
+                        ? c.From<ModeChild>().Where(x => x.Id != excludedId && x.ParentId != 1)
+                        : c.From<ModeChild>().Where(x => x.Id != excludedId),
+                    p => p.Id,
+                    c => c.ParentId,
+                    EagerLoadMode.SingleQuery);
+            var (specs, joins) = builder.BuildSingleQueryJoins();
+            var cmd = builder.CreatePairCommand(specs, joins);
+            cmd.PrepareCommand(TestContext.Current.CancellationToken);
+            return cmd;
+        }
+
+        var valueOne = SingleQueryCommand(context, excludedId: 10, extraFilter: false);
+        var valueTwo = SingleQueryCommand(context, excludedId: 11, extraFilter: false);
+        var differentStructure = SingleQueryCommand(context, excludedId: 10, extraFilter: true);
+
+        var comparer = valueOne.GetQueryPlanEqualityComparer();
+        comparer.Equals(valueOne, valueTwo).Should().BeTrue(
+            "a changed captured parameter value alone does not change the executed command's plan shape");
+        comparer.GetHashCode(valueOne).Should().Be(comparer.GetHashCode(valueTwo));
+        comparer.Equals(valueOne, differentStructure).Should().BeFalse(
+            "a changed child-filter structure changes the executed command and must isolate the plan");
     }
 }

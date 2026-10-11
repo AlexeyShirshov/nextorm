@@ -1,5 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace NextORM.Core;
 
@@ -100,10 +102,11 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
 
     // The child query is built at most once per data context: preparation asks for it to detect a
     // per-parent top-N and execution reuses the same builder (a test-only counter on the user's child
-    // factory must therefore observe a single build). The builder is immutable by convention (its
-    // modifiers return copies), so sharing it across chunks is safe; a different context rebuilds it.
-    // A concurrent race only rebuilds an equivalent builder, so no lock is needed.
-    private EntityBuilder<TChild>? _resolvedChild;
+    // factory must therefore observe a single build). The memo is thread-safe so concurrent executions of
+    // the same shareable builder observe one build and the specification carries no unsynchronized mutable
+    // cache; it is keyed by the data context, so a different context resolves its own builder and no
+    // builder is leaked from one context into another.
+    private readonly ConditionalWeakTable<IDataContext, Lazy<EntityBuilder<TChild>>> _resolvedChildren = new();
 
     /// <summary>
     /// Initializes the specification, compiling the collection accessor, the two key selectors and the
@@ -175,21 +178,19 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
 
     /// <summary>
     /// Builds the child query for <paramref name="context"/> once and returns it on every later call, so
-    /// preparation (which detects a per-parent top-N) and execution share one built child builder.
+    /// preparation (which detects a per-parent top-N) and execution share one built child builder. The
+    /// per-context <see cref="Lazy{T}"/> memo is published thread-safely, so a concurrent execution of the
+    /// same shareable builder never invokes the child factory twice and never observes a partially built
+    /// child.
     /// </summary>
     /// <param name="context">The data context the child query is built from.</param>
     /// <returns>The reusable child builder.</returns>
     private EntityBuilder<TChild> ResolveChild(IDataContext context)
-    {
-        var child = _resolvedChild;
-        if (child is null || !ReferenceEquals(child.DataProvider, context))
-        {
-            child = _childQuery(context);
-            _resolvedChild = child;
-        }
-
-        return child;
-    }
+        => _resolvedChildren.GetValue(
+            context,
+            ctx => new Lazy<EntityBuilder<TChild>>(
+                () => _childQuery(ctx),
+                LazyThreadSafetyMode.ExecutionAndPublication)).Value;
 
     /// <summary>The parent-side collection selector, retained for the single-query join conversion.</summary>
     internal Expression<Func<TEntity, ICollection<TChild>>> CollectionExpression => _collection;

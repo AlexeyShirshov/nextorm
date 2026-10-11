@@ -135,11 +135,28 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         }
     }
     /// <summary>
-    /// Whether <see cref="LoadWith{TChild, TKey}"/> switched the builder to single-query eager loading
-    /// (explicitly or through the context default), so the list terminals execute one denormalized command
-    /// for the declared collections instead of the default split child queries.
+    /// Whether the list terminals must run the declared <see cref="LoadWith{TChild, TKey}"/> collections
+    /// through the merged single-query path (one denormalized command) instead of the split child queries.
+    /// A query's own explicit choice is authoritative: <see cref="EagerLoadMode.SingleQuery"/> selects the
+    /// merged path and every other explicit choice stays on its own path (Split/Auto run the split child
+    /// loads, Correlated fails during preparation). With no explicit choice, a <c>JoinInto</c> declaration
+    /// keeps its fixed baseline path — the pair command built by <see cref="CreateJoinIntoPairCommand"/> plus
+    /// the split child loads — so the context default only selects the merged path for a plain
+    /// <c>LoadWith</c> set whose context default resolves to <see cref="EagerLoadMode.SingleQuery"/>.
     /// </summary>
-    internal bool SingleQuery => ResolvedEagerLoadMode == EagerLoadMode.SingleQuery;
+    internal bool SingleQuery
+    {
+        get
+        {
+            if (_eagerLoadMode != EagerLoadMode.Default)
+                return _eagerLoadMode == EagerLoadMode.SingleQuery;
+
+            if (_joinIntos is { Count: > 0 } || _loadSpecs is not { Count: > 0 })
+                return false;
+
+            return ResolvedEagerLoadMode == EagerLoadMode.SingleQuery;
+        }
+    }
     /// <summary>
     /// Whether <see cref="IgnoreFilters()"/> (the all-or-nothing form) was applied to this builder. Used
     /// by single-query eager loading to decide the child side's global filters independently of the

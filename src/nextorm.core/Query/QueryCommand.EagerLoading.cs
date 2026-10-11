@@ -86,8 +86,11 @@ internal static class EagerLoadResolver
                 // to the context default, which is already applied above. Treat a bare sentinel as split.
                 return EagerLoadMode.SplitQuery;
             default:
+                // The offending value is the query override when one was supplied, otherwise the context
+                // default (effective == requested ?? contextDefault above), so attribute ParamName to the
+                // actual source instead of always blaming the context default.
                 throw new ArgumentOutOfRangeException(
-                    nameof(contextDefault), effective,
+                    requested is not null ? nameof(requested) : nameof(contextDefault), effective,
                     $"'{effective}' is not a defined EagerLoadMode value.");
         }
     }
