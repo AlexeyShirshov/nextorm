@@ -1281,10 +1281,27 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         b._joinIntos = null;
         return b;
     }
-    /// <summary>Builds the parent-only command for the non-list terminals (excludes the <c>JoinInto</c> joins).</summary>
-    internal QueryCommand<TEntity> ToParentCommand() => WithoutJoinIntos().ToCommand();
-    /// <summary>Builds a parent-only projection command for the aggregate terminals (excludes the <c>JoinInto</c> joins).</summary>
-    internal QueryCommand<TResult> SelectParent<TResult>(Expression<Func<TEntity, TResult>> exp) => WithoutJoinIntos().SelectCore(exp);
+    /// <summary>
+    /// Builds the parent-only command for the non-list terminals (excludes the <c>JoinInto</c> joins).
+    /// Rejects an unsupported eager-load request (an explicit <see cref="EagerLoadMode.Correlated"/> or a
+    /// per-parent top-N child) before any command is built, so the non-list terminals cannot silently drop
+    /// it.
+    /// </summary>
+    internal QueryCommand<TEntity> ToParentCommand()
+    {
+        EntityBuilderEagerLoading.ValidateLoadWithForJoinInto(this);
+        return WithoutJoinIntos().ToCommand();
+    }
+    /// <summary>
+    /// Builds a parent-only projection command for the aggregate terminals (excludes the <c>JoinInto</c>
+    /// joins). Rejects an unsupported eager-load request before any command is built, mirroring
+    /// <see cref="ToParentCommand"/>.
+    /// </summary>
+    internal QueryCommand<TResult> SelectParent<TResult>(Expression<Func<TEntity, TResult>> exp)
+    {
+        EntityBuilderEagerLoading.ValidateLoadWithForJoinInto(this);
+        return WithoutJoinIntos().SelectCore(exp);
+    }
     /// <summary>
     /// Materializes the single-query stitching metadata for <see cref="EagerLoadMode.SingleQuery"/>: the existing
     /// <c>JoinInto</c> declarations (if any) followed by one explicit-key join per

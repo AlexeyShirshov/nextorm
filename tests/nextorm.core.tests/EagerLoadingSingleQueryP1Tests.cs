@@ -809,7 +809,9 @@ public class EagerLoadingSingleQueryP1Tests
             streamed.Add(parent);
 
         streamed.Should().ContainSingle().Which.Children.Should().BeEmpty();
-        childQueryCalls.Should().Be(0, "non-stitching terminals must not issue eager-load queries");
+        // r=2 D209-NL: the terminals validate the eager-load set once (a single structural child build,
+        // memoized per context) to detect a per-parent top-N, but never issue eager-load queries.
+        childQueryCalls.Should().Be(1, "non-stitching terminals validate the load once but never load children");
     }
 
     [Fact]

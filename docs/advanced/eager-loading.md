@@ -98,7 +98,7 @@ The effective strategy is `query override ?? context default`: an explicit `Load
 
 ### `Correlated` and per-parent top-N
 
-`Correlated` and any child query that requests a per-parent top-N (its own `Limit`/`Offset`/`Page`) have no implemented execution path in this release. Both are recognized and rejected with [`NotSupportedException`](xref:System.NotSupportedException) **during preparation — before any SQL is generated and before a plan entry is inserted**, so a rejected query neither runs the parent statement nor poisons the plan cache. The enum value is reserved for the correlated/per-parent top-N work tracked separately; neither an explicit `Correlated` nor `Auto` may reinterpret such a request as a global child limit or an unrestricted load, and per-parent paging is not silently re-expressed as a global `LIMIT`.
+`Correlated` and any child query that requests a per-parent top-N (its own `Limit`/`Offset`/`Page`) have no implemented execution path in this release. Both are recognized and rejected with [`NotSupportedException`](xref:System.NotSupportedException) **during preparation — before any SQL is generated and before a plan entry is inserted**, so a rejected query neither runs the parent statement nor poisons the plan cache. The enum value is reserved for the correlated/per-parent top-N work tracked separately; neither an explicit `Correlated` nor `Auto` may reinterpret such a request as a global child limit or an unrestricted load, and per-parent paging is not silently re-expressed as a global `LIMIT`. The rejection is terminal-agnostic: it also holds on the **non-list** terminals below, which evaluate the parent only. Such a terminal first validates the `LoadWith` set, so an explicit `Correlated` or a per-parent top-N child is rejected before its parent command is built instead of being silently dropped; the non-list terminal still does not materialize the collection.
 
 ## Split-query semantics
 
@@ -223,7 +223,7 @@ Every other terminal evaluates the parent query **only** and does not run eager 
 - `ToEnumerable` and `ToAsyncEnumerable`.
 - `ToCommand` and any `QueryCommand<T>` obtained from it.
 
-`Any` / `AnyAsync` and `Count` / `CountAsync` are **scalar** terminals: they return a single value and never run eager loading either. `ToCommand()` ignoring the specification is deliberate — it is what lets the child query run without recursing into the parent's loader. Materialize the parents with one of the four stitching terminals when the collections must be filled.
+`Any` / `AnyAsync` and `Count` / `CountAsync` are **scalar** terminals: they return a single value and never run eager loading either. `ToCommand()` ignoring the specification is deliberate — it is what lets the child query run without recursing into the parent's loader. Materialize the parents with one of the four stitching terminals when the collections must be filled. A non-list terminal still validates the `LoadWith` set before building its parent-only command: an explicit `Correlated` or a per-parent top-N child is rejected with [`NotSupportedException`](xref:System.NotSupportedException) (no SQL and no plan-cache entry) rather than silently ignoring the unsupported request.
 
 ## Relationship metadata and `JoinInto`
 

@@ -5,9 +5,9 @@
 - collection: 1.0.9-todo (docs/specs/status/collection-1.0.9-todo.md)
 - selected_variant: pdca-dotnet
 - cycle_id: N=1
-- plan_revision: r=1
-- baseline ref: branch `1.0.9` @ `58025147`
-- phase: D (DO) — CHECK r=1 n=1 FAIL→DO; attempt n=2/3 corrective fixes applied (F1/F2, F3, F4 production; F13/F14 tests); D209.8 re-submitted
+- plan_revision: r=2
+- baseline ref: branch `1.0.9` @ `58025147`; r=2 production base `dd5d08fb`
+- phase: D (DO) — r=2 n=1 (r=1 exhausted; escalate-mandated revised plan P209-r2; unit D209-NL)
 - DO complete: commits `ed9ac341`, `2700a59c`, `d69e6569`, `36956f9f`, `369830fd`, `e9737c85`, `5addd257`, `874b78bd`, `f90ffee3`; evidence: build 0W/0E; suites core 2087 / sqlite 1337 / postgres 855 / sqlserver 772 / mysql 332 / clickhouse 620 all 0 failed; integration all 5 providers executed, 0 failed, 0 "is not available"; coverage line 88.4% / branch 80.5%; benchmark 7/7 cases, no ratio >20%.
 - deferral: the P (collection TASK PLAN) STOPPED at the PLAN→DO boundary was the plan-authoring phase; DO is now dispatched against r=1
 - plan_state: ready
@@ -503,3 +503,61 @@ PLAN r=1 is written and `plan_state: ready`. The orchestrator STOPS here at the 
 2026-10-11T11:47:00Z | DO | r1 | n2/3 | acceptance benchmark (C12) exit 0 in both trees: baseline wall 49 s / 7 cases, candidate wall 55 s / 7 cases (each ≤240 s, 0 failures); cached/prepared ratios Cached_ToList/Prepared +0.83%, Cached_PlanOnly/Prepared -3.68%; no ratio >20% growth, no GAP → `final/perf/{baseline,candidate}/console.log`, `final/perf/ratios.md`.
 2026-10-11T11:47:00Z | DO | r1 | n2/3 | guard-test regression sanity (all 0 failed): F13 `~EagerLoadShape` 4, core F1/F2/F14 `~JoinInto_With` 9, F3 `~Resolver_` 6, F4 `~Poison` 5, SQLite F1/F2/F14 `~JoinInto_With` 20 (44 focused cases) → `final/guard-tests.md`, `final/guard-*.log`.
 2026-10-11T11:47:00Z | DO→CHECK | r1 | n2/3 | re-bound: `validate_inner_loop.py report artifacts/pdca/D209/rv1/evidence.json` exit 0 (`final/evidence-validation.log`); `validate_inner_loop.py manifest` exit 0 (`final/manifest-validation.log`). Manifest pins baseline `d12b740ea804322b65367fbb6ef734b94db76013` + HEAD `dd5d08fbf4b634b944d277da1016499b1d43e025`; coder rows E209-01..07,09,11 `met` → `final/`; CHECK rows E209-08/10/12/13 remain `open`. D209.8 re-submitted to CHECK.
+
+## Approved PLAN r=2 — escalate-mandated revised plan (P209-r2)
+
+`plan_revision: r=2`, cycle `N=1`, attempt `n=1`. r=1 is exhausted (two failed CHECK attempts on the JoinInto+LoadWith class; the second returned via strong-tier escalate). This section supersedes the r=1 execution content only where stated; it **preserves R209-01..R209-12, E1, V01–V18 and E209-01..E209-13 unchanged**.
+
+### Single product unit D209-NL
+
+**D209-NL** (guards + tests + docs) — close the R209-05 silent-drop for **non-list terminals**: a `LoadWith` per-parent top-N (`Limit`/`Offset`/`Page`) or an explicit `LoadWith(..., Correlated)` must be rejected early (`NotSupportedException`) before any command build / shared-command mutation / cache insertion / SQL. No new eager materialization.
+
+The original **D209** stays **active and blocked on D209-NL**; its acceptance criteria and remaining scope are unchanged. D209-NL is an **additive** active dependency — not a `superseded→replacement` of D209.
+
+### Change
+
+- Reuse the existing side-effect-free `EntityBuilderEagerLoading.ValidateLoadWithForJoinInto<TEntity>` (`src/nextorm.core/Builders/EntityBuilderEagerLoading.cs:506`). It throws on an explicit `Mode == Correlated` and on any load spec whose `RequiresPerParentTopN` is true; it ignores a context-default Correlated and does not touch `QueryCommand.Cache`.
+- Call it at the terminal boundary on the **original** builder, before `WithoutJoinIntos`/projection:
+  - `EntityBuilder<TEntity>.ToParentCommand()` (`src/nextorm.core/Builders/EntityBuilder.cs:1285`) — covers `ToEnumerable`, `ToAsyncEnumerable`, `HashSet`, `Dictionary`, `First/FirstOrDefault`, `Single/SingleOrDefault`, `Last/LastOrDefault`, `Any/AnyAsync`, `AnyCommand`, `Prepare`, `WriteCsv/WriteJson` extension terminals.
+  - `EntityBuilder<TEntity>.SelectParent<TResult>(exp)` (`:1287`) — covers `Count`/`CountAsync`/`LongCount`/`LongCountAsync` and every aggregate (`Min`/`Max`/`Avg`/`Sum` cores at `EntityBuilderExtensions.cs:1408–1434`, entry points `:1002–1336`).
+- **Not** guarded: `WithoutJoinIntos` (`:1267`), `ToCommand` (`:449`), `CreatePairCommand` (`:1424`); `MarkPerParentTopN` (`EntityBuilderExtensions.cs:503`) and `MaterializeList` (`:522/:546`) are not modified. List-like terminals (`ToList`/`ToListAsync`, `ToArray`/`ToArrayAsync`) keep their existing stitching/rejection behavior.
+
+### New variants (added to the preserved contract)
+
+| Variant ID | Execution-path variant | Closure |
+|---|---|---|
+| V19 | `JoinInto + LoadWith(child.Limit)` on non-list terminals | **Test:** `NotSupportedException`, zero SQL/cache. |
+| V20 | plain `LoadWith(child.Limit)` on non-list terminals | **Test:** `NotSupportedException`, zero SQL/cache. |
+| V21 | plain `LoadWith(child.Offset)` | **Test:** `NotSupportedException`, zero SQL/cache. |
+| V22 | plain `LoadWith(child.Page)` | **Test:** `NotSupportedException`, zero SQL/cache. |
+| V23 | explicit `LoadWith(..., Correlated)` on non-list terminals | **Test:** `NotSupportedException`, zero SQL/cache. |
+| V24 | post-throw state: cache count unchanged, `QueryCache.AnyCommand` not replaced/mutated, later valid query still caches | **Test:** SQLite assertions. |
+| V25 | positive controls: plain `LoadWith` (no top-N) on non-list terminals unchanged; no eager loads → no dispatch; context-default `Correlated` does not trigger the guard; list/`ToArray` paths unchanged | **Test:** core + SQLite. |
+
+Each negative variant is exercised across the terminal families (`ToEnumerable`, `ToAsyncEnumerable`, HashSet, Dictionary, First/FirstOrDefault, Single/SingleOrDefault, Last/LastOrDefault, Any/AnyAsync, Count/LongCount, aggregates, Prepare, WriteCsv/WriteJson), sync **and** async, asserting `NotSupportedException` with zero command-build / cache / executed-SQL events (interceptor / recording connection). A terminal family is marked structural N/A only where the overload does not exist.
+
+### Evidence contract rv2 (supersedes rv1)
+
+- Contract `D209-eager-strategy` revision **rv=2**; base path `B=artifacts/pdca/D209/rv2/`.
+- Preserves all rv1 row/requirement IDs (`E209-01..E209-13`) and their obligations. Adds planned rows **E209-14..E209-21**:
+  - **E209-14** (V19–V23, non-list terminal families, sync+async): core guard tests → `B/core-guard.log`.
+  - **E209-15** (V19–V23, zero-SQL/zero-cache): SQLite guard tests with interceptor + plan store → `B/sqlite-guard.log`.
+  - **E209-16** (V14 portability): four provider guard files → `B/{postgres,sqlserver,mysql,clickhouse}-guard.log`.
+  - **E209-17** (V24): rejected preparation leaves the cache clean and the shared `AnyCommand` unmutated; later valid queries still cache → `B/cache-guard.md`.
+  - **E209-18** (V25): positive controls (plain LoadWith, no-eager, context-default Correlated, list/ToArray) → `B/guard-positive.md`.
+  - **E209-19** (red→green): revert guard → negative test fails (SQL/cache observed); restore → passes; both exit codes → `B/red/`, `B/green/`.
+  - **E209-20** (R209-05 wording): the non-list per-parent top-N and explicit Correlated now fail before parent SQL, before command build/cache insertion → `B/no-sql-evidence.md`.
+  - **E209-21** (R209-09): EN/RU eager-loading docs updated without promising eager materialization; docfx exit 0 → `B/docs.log`.
+- Integration A (rv1) and B (rv2) never rewrite each other.
+
+### Recurrence rule
+
+A further return of the `per-parent-topn-guard` defect class → **escalate/STOP**; no 4th attempt. No fourth failed CHECK attempt of the same revision.
+
+### DO r=2 n=1 — inner-loop re-run and docs (r=2, plan unchanged)
+
+2026-10-11T07:17:59Z | DO | r2 | n1/3 | docs parity: EN terminal-boundary non-list-validation/rejection-before-materialization sentence mirrored into `docs/ru/advanced/eager-loading.md`; both eager-loading docs CRLF-normalized → `docs/advanced/eager-loading.md`, `docs/ru/advanced/eager-loading.md`.
+2026-10-11T07:17:59Z | DO | r2 | n1/3 | `dotnet docfx docs/docfx.json` exit 0, 0 error(s) 2 warning(s) → `artifacts/pdca/D209/rv2/docs.log`.
+2026-10-11T07:17:59Z | DO | r2 | n1/3 | affected build `dotnet build nextorm.slnx -c Debug` exit 0, 0 Warning(s) 0 Error(s) after final guard restore → `artifacts/pdca/D209/rv2/build.log`.
+2026-10-11T07:17:59Z | DO | r2 | n1/3 | inner loop all `--no-build` exit 0: core `~EagerLoad` 142, core `~JoinInto` 123, core `~EagerTerminalGuard` 159, sqlite `~EagerLoad` 46, sqlite `~EagerTerminalGuard` 164 → `rv2/{core-eager,core-joininto,core-guard,sqlite-eager,sqlite-guard}.log`.
+2026-10-11T07:17:59Z | DO→CHECK | r2 | n1/3 | `validate_inner_loop.py brief artifacts/pdca/D209/rv2/scope.json` exit 0; `validate_inner_loop.py report artifacts/pdca/D209/rv2/evidence.json` exit 0 → `artifacts/pdca/D209/rv2/evidence-validation.log`.

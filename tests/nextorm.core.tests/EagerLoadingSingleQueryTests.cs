@@ -230,6 +230,9 @@ public class EagerLoadingSingleQueryTests
         builder.Any().Should().BeTrue();
         builder.First().Children.Should().BeEmpty();
         builder.ToHashSet().Single().Children.Should().BeEmpty();
-        childQueryCalls.Should().Be(0, "scalar and non-stitching terminals must not issue load queries");
+        // r=2 D209-NL: the non-list terminals now validate the eager-load set before building their parent
+        // command, so the child factory is invoked once (a single structural build, memoized per context)
+        // to detect a per-parent top-N. No child query is executed and no collection is materialized.
+        childQueryCalls.Should().Be(1, "the terminals validate the load once but never issue eager-load queries");
     }
 }
