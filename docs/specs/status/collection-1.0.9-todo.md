@@ -5,52 +5,68 @@
 - base: branch `1.0.9` @ `58025147` (merge of #214 `1.0.9-rc2`)
 - mode: autonomous; auto-commit authorized (task/collection status files and task paths only, explicit paths, never `-A`, message prefix `#<issue>`); push **never**
 - skills: `pdca-collection` + `pdca-dotnet` + `nextorm-pdca`
-- phase: **P BLOCKED — ALL-barrier NOT passed. Environment blocker: medium-tier provider `opencode/gpt-6.1-sol` returns "Insufficient account funds"; role `planner` (and by extension `check`) unavailable.**
+- phase: **D — lane G1 executing** (ALL-barrier passed; single group → current worktree/branch `1.0.9`, no worktree/branches/merge)
 
 ## Input task list
 
-Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its own real PLAN at the P phase and stops at the PLAN→DO boundary.
+Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its own real PLAN at the P phase, stops at the PLAN→DO boundary, and the lane resumes the **same** cycle from DO.
 
-| id | issue | title | selected_variant | state |
+| id | issue | title | selected_variant | plan_state |
 |---|---|---|---|---|
-| T209 | #209 | eager-load strategy — explicit strategy + auto-dispatcher | pdca-dotnet | own PLAN **gap** (resource) |
-| T211 | #211 | eager-load per-parent Take/Skip (absorbs #210) | pdca-dotnet | own PLAN **gap** (resource) |
-| T212 | #212 | eager-load nested — level 2+ LoadWith | pdca-dotnet | own PLAN **ready** |
-| T213 | #213 | JoinInto — composite keys / M:N single-query | pdca-dotnet | own PLAN **gap** (resource) |
-| T201 | #201 | Perf: M12 #3 — cached-path parity with LINQ to DB | pdca-dotnet | own PLAN **gap** (design prerequisite) |
-| T53 | #53 | IF6: public API freeze (PublicApiAnalyzers + PublicAPI.*) | pdca-dotnet | own PLAN **ready** |
+| T209 | #209 | eager-load strategy — explicit strategy + auto-dispatcher | pdca-dotnet | ready (r=1) |
+| T211 | #211 | eager-load per-parent Take/Skip (absorbs #210) | pdca-dotnet | ready (r=1) |
+| T212 | #212 | eager-load nested — level 2+ LoadWith | pdca-dotnet | ready (r=1) |
+| T213 | #213 | JoinInto — composite keys / M:N single-query | pdca-dotnet | ready (r=1) |
+| T201 | #201 | Perf: M12 #3 — cached-path parity with LINQ to DB | pdca-dotnet | **gap → excluded-gap** |
+| T53 | #53 | IF6: public API freeze (PublicApiAnalyzers + PublicAPI.*) | pdca-dotnet | ready (r=1) |
 
 ## Groups
 
-_not built — ALL-barrier NOT passed (§P.3). Early DO forbidden._
+| id | tasks (order) | worktree | branch/ref | status |
+|---|---|---|---|---|
+| G1 | T209 → T211 → T212 → T213 → T53 | no (single group) | current branch `1.0.9` | in-progress |
+
+### G1 execution contract
+
+- A task starts only after the previous task is `done` (including its CHECK). `plan_state=ready` ≠ `done`.
+- `T201` is an `excluded-gap`: genuine gap (issue #201 approves only goal+tolerance; the mandatory separately-reviewed design `docs/specs/performance/m12-3-prepare-command-design.md` does not exist and is not satisfiable by the task's own autonomous cycle). Milestone **1.0.9** kept (metadata/body mismatch with `1.1-a.1` left to the issue owner).
+- File-level serialization: `EntityBuilder.cs`, `EntityBuilderEagerLoading.cs`, `SqlBuilder.cs`, `ISqlDialect.cs` (read-only for T209), `Builders/Joins/*`, `CommonTestSuite.*.cs`, shared specs and EN/RU docs are written by one task at a time in the stated order; T53 last (its API baseline must include every accepted eager-loading public-API change).
+- Fail-stop: a definitively `incomplete` task stops the whole group — remaining `pending` tasks → `incomplete` («группа остановлена»), never executed; already-made commits stay in the current branch (no auto-rollback); the failing task's uncommitted changes are saved as a patch.
+- Integration: single group → no `merge --no-ff`. Result = the current branch `1.0.9`. Push never.
+- Integration-tests precondition: `DOCKER_HOST`/Podman; a skipped required provider is unrun, not green.
 
 ## Tasks
 
-| id | issue | group | order | branch | status | plan_state | selected_variant | cycle_id | plan_revision | status file | reason + patch |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| T209 | #209 | — | — | — | pending | gap (resource) | pdca-dotnet | N=1 | r=1 | docs/specs/status/D209-eager-strategy-1.md | gather+design/test lenses done; PLAN decide blocked — `planner` (medium) "Insufficient account funds" (3 dispatches) |
-| T211 | #211 | — | — | — | pending | gap (resource) | pdca-dotnet | N=1 | r=1 | docs/specs/status/D211-eager-perparent-topn-1.md | 5 scout streams done; PLAN decide blocked — `planner` (medium) out of funds (2 dispatches) |
-| T212 | #212 | — | — | — | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/D212-eager-nested-1.md | own PLAN r=1 persisted (commit `034e5b45`); deps: #209/#211/#213 results for affected shapes |
-| T213 | #213 | — | — | — | pending | gap (resource) | pdca-dotnet | N=1 | r=1 | docs/specs/status/D213-joininto-remainder-1.md | reconnaissance done (artifact committed `43b63ab7`); PLAN finalize blocked — `planner` (medium) out of funds |
-| T201 | #201 | — | — | — | pending | gap (design) | pdca-dotnet | N=1 | r=1 | docs/specs/status/D201-cached-parity-1.md | issue approves only goal+tolerance; mandatory separately-reviewed design (`m12-3-prepare-command-design.md`) does not exist → not plannable in-cycle; **excluded-gap candidate** |
-| T53  | #53  | — | — | — | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/D53-public-api-freeze-1.md | own PLAN r=1/rv1 persisted (untracked, P-phase no commit); depends on #209/#211/#212/#213 public-API results before final baseline |
+| id | issue | group | order | status | plan_state | selected_variant | cycle_id | plan_revision | PLAN commit | status file |
+|---|---|---|---|---|---|---|---|---|---|---|
+| T209 | #209 | G1 | 1 | pending | ready | pdca-dotnet | N=1 | r=1 | b4051b2b | docs/specs/status/D209-eager-strategy-1.md |
+| T211 | #211 | G1 | 2 | pending | ready | pdca-dotnet | N=1 | r=1 | e18dc143 | docs/specs/status/D211-eager-perparent-topn-1.md |
+| T212 | #212 | G1 | 3 | pending | ready | pdca-dotnet | N=1 | r=1 | 034e5b45 | docs/specs/status/D212-eager-nested-1.md |
+| T213 | #213 | G1 | 4 | pending | ready | pdca-dotnet | N=1 | r=1 | 9e7facff | docs/specs/status/D213-joininto-remainder-1.md |
+| T201 | #201 | — | — | incomplete (excluded-gap) | gap | pdca-dotnet | N=1 | r=1 | 9bf13403 | docs/specs/status/D201-cached-parity-1.md |
+| T53  | #53  | G1 | 5 | pending | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
+
+- T201 reason: design prerequisite unmet (external approval gate), not a resource/defect gap → excluded from the barrier and the lane.
+- Evidence contract (per task, frozen at that task's DO→CHECK): `rv=1`; manifests `artifacts/pdca/<task>/rv1/manifest.json`.
 
 ## Phase decisions
 
-- **Bootstrap:** input list, ids, selected variants; no code, no branches, no worktrees.
-- **Own PLANs (P):** executed for all 6 tasks via `pdca-orchestrator` (COLLECTION TASK PLAN). Result:
-  - **ready (2):** T212 (commit `034e5b45`), T53 (status file `docs/specs/status/D53-public-api-freeze-1.md`, untracked).
-  - **gap — resource (3):** T209 (`5ad1f161`), T211 (`abd35b2a`), T213 (`43b63ab7`). Reconnaissance complete in each, but the **PLAN decide role `planner` (medium tier = `opencode/gpt-6.1-sol`) returns "Insufficient account funds"** — no role substitution allowed, orchestrator must not author the plan.
-  - **gap — design prerequisite (1):** T201 (`9bf13403`). Issue #201 approves only goal+tolerance; a separately reviewed written design is mandatory and absent. Not satisfiable by the task's own autonomous cycle; `ready` placeholder forbidden.
-- **ALL-barrier: NOT PASSED.** Not all plannable tasks have `plan_state=ready`. Early DO is forbidden.
-- **DAG/groups:** not built (barrier not passed).
+- **Bootstrap:** input list of 6 tasks, stable ids, briefs, `selected_variant=pdca-dotnet`; no code, no DAG precomputation.
+- **Own PLANs (P):** all 6 executed via `pdca-orchestrator` (COLLECTION TASK PLAN). After the medium-tier `planner` provider (`opencode/gpt-6.1-sol`) was funded again, T209/T211/T213 re-finalized:
+  - ready: T209 (`b4051b2b`), T211 (`e18dc143`), T212 (`034e5b45`), T213 (`9e7facff`), T53 (untracked D53 file).
+  - excluded-gap: T201 (`9bf13403`) — genuine design gap; not autonomously satisfiable.
+- **ALL-barrier: PASSED** — every non-excluded task has a persisted `plan_state=ready`; T201 is a genuine `excluded-gap` (not a `ready` placeholder). Early DO was forbidden until here.
+- **Clustering (`planner`):** no genuine parallelism — `EntityBuilder.cs`, `EntityBuilderEagerLoading.cs`, `ISqlDialect.cs`, `SqlBuilder.cs`, `Builders/Joins/*`, `CommonTestSuite.*.cs` and shared specs/docs are co-written, and T53 must follow the eager-loading public-API work. **One group G1** (degradation to a single lane): T209 → T211 → T212 → T213 → T53. T201 outside the group and the barrier.
+- **PLAN revision vector (schedule binding):** T209 r=1, T211 r=1, T212 r=1, T213 r=1, T53 r=1; evidence contracts rv=1 each.
 
 ## Общая верификация и восстановление
 
-- Verification state: n/a (P phase; no integration tree).
-- Blocker: **environment/resource** — medium-tier provider (`opencode` / `gpt-6.1-sol`, used by `planner`, `check`, `architect`, `security-auditor`) is out of funds. The PDCA cycle cannot decide PLAN or issue a CHECK verdict without it.
-- Not a product defect; no code changed beyond status/plan artifacts.
-- Next allowed step (after unblock): retry `planner` decide for T209/T211/T213 (gather already done; no re-gather needed) → ALL-barrier; decide T201 exclude-gap; then cluster.
+- Verification state (C): not reached — lane G1 in progress.
+- Last collection `C` result: —
+- Blocker: —
+- Defect id / history: —
+- Corrective-task status file: —
+- Next allowed step: drive lane **G1** (continue each task's saved PLAN from DO, in order T209 → T211 → T212 → T213 → T53); then collection-wide `C` on the integrated current branch.
 
 ## Done / Verified / Incomplete
 
