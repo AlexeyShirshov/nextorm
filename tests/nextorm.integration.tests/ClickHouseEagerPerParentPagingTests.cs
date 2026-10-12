@@ -138,4 +138,94 @@ public sealed class ClickHouseEagerPerParentPagingTests : ProviderTestSuite
         parents[1].Children.Select(c => c.Id).Should().Equal(b + 201, b + 204);
         parents[2].Children.Select(c => c.Id).Should().Equal(b + 302, b + 305);
     }
+
+    // --- T212-D5: nested (level 2+) eager loading on ClickHouse. The level-two fixture reuses the
+    // --- eager_child Memory table through EagerGrandChild (a grandchild's parent_id points at a
+    // --- level-one child id), since ClickHouse does not derive CommonTestSuite. A dedicated seed with a
+    // --- wide stride keeps the level-two parent ids of consecutive tests from aliasing.
+
+    private static int _nestedSeed = -665_000_000;
+
+    private static int NextNestedBase() => Interlocked.Add(ref _nestedSeed, -1000);
+
+    private (int Rich, int Few, int Empty) SeedNested()
+    {
+        var ctx = _sut.DataProvider;
+        var rich = NextNestedBase();
+        var few = rich + 1;
+        var empty = rich + 2;
+
+        ctx.CreateInsertBuilder<EagerParent>().Values([
+            new EagerParent { Id = rich, Name = "n-rich" },
+            new EagerParent { Id = few, Name = "n-few" },
+            new EagerParent { Id = empty, Name = "n-empty" },
+        ]).Insert();
+
+        ctx.CreateInsertBuilder<EagerChild>().Values([
+            new EagerChild { Id = rich + 100, ParentId = rich, Name = "n1" },
+            new EagerChild { Id = rich + 101, ParentId = rich, Name = "n2" },
+            new EagerChild { Id = rich + 102, ParentId = rich, Name = "n3" },
+            new EagerChild { Id = rich + 103, ParentId = rich, Name = "n4" },
+            new EagerChild { Id = rich + 110, ParentId = few, Name = "n5" },
+            new EagerChild { Id = rich + 111, ParentId = few, Name = "n6" },
+        ]).Insert();
+
+        return (rich, few, empty);
+    }
+
+    private void SeedNestedGrandChildren(int baseId)
+        => _sut.DataProvider.CreateInsertBuilder<EagerGrandChild>().Values([
+            new EagerGrandChild { Id = baseId + 200, ChildId = baseId + 100, Name = "n1" },
+            new EagerGrandChild { Id = baseId + 201, ChildId = baseId + 100, Name = "n2" },
+            new EagerGrandChild { Id = baseId + 202, ChildId = baseId + 110, Name = "n3" },
+        ]).Insert();
+
+    [Fact]
+    [Trait("Feature", "D212")]
+    public void ClickHouse_EagerLoading_Nested_Split_LoadsLevelTwoByAncestor()
+    {
+        var (rich, few, empty) = SeedNested();
+        SeedNestedGrandChildren(rich);
+
+        var parents = Parents(rich, few, empty)
+            .LoadWith(
+                p => p.Children,
+                c => c.From<EagerChild>().OrderBy(x => x.Id)
+                    .LoadWith(x => x.GrandChildren, g => g.From<EagerGrandChild>().OrderBy(y => y.Id), x => x.Id, g => g.ChildId),
+                p => p.Id,
+                c => c.ParentId)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(rich, few, empty);
+        parents[0].Children.Single(c => c.Id == rich + 100).GrandChildren.Select(g => g.Id).Should().Equal(rich + 200, rich + 201);
+        parents[0].Children.Single(c => c.Id == rich + 101).GrandChildren.Should().BeEmpty();
+        parents[1].Children.Single(c => c.Id == rich + 110).GrandChildren.Select(g => g.Id).Should().Equal(rich + 202);
+        parents[2].Children.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait("Feature", "D212")]
+    public void ClickHouse_EagerLoading_Nested_SingleQuery_LoadsLevelTwoInOneCommand()
+    {
+        var (rich, few, empty) = SeedNested();
+        SeedNestedGrandChildren(rich);
+
+        var parents = Parents(rich, few, empty)
+            .LoadWith(
+                p => p.Children,
+                c => c.From<EagerChild>()
+                    .LoadWith(x => x.GrandChildren, g => g.From<EagerGrandChild>(), x => x.Id, g => g.ChildId),
+                p => p.Id,
+                c => c.ParentId,
+                EagerLoadMode.SingleQuery)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(rich, few, empty);
+        parents[0].Children.Select(c => c.Id).Should().BeEquivalentTo([rich + 100, rich + 101, rich + 102, rich + 103]);
+        parents[0].Children.Single(c => c.Id == rich + 100).GrandChildren.Select(g => g.Id).Should().BeEquivalentTo([rich + 200, rich + 201]);
+        parents[1].Children.Single(c => c.Id == rich + 110).GrandChildren.Select(g => g.Id).Should().Equal(rich + 202);
+        parents[2].Children.Should().BeEmpty();
+    }
 }

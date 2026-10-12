@@ -152,3 +152,33 @@ public sealed class EagerTwoNote
     [Column("parent_id")]
     public int ParentId { get; set; }
 }
+
+[SqlTable("eager_nested_parent")]
+public sealed class EagerNestedParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    public ICollection<EagerNestedMid> Mids { get; } = new List<EagerNestedMid>();
+}
+
+[SqlTable("eager_nested_mid")]
+public sealed class EagerNestedMid
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+    public ICollection<EagerNestedLeaf> Leaves { get; } = new List<EagerNestedLeaf>();
+}
+
+[SqlTable("eager_nested_leaf")]
+public sealed class EagerNestedLeaf
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("mid_id")]
+    public int MidId { get; set; }
+}

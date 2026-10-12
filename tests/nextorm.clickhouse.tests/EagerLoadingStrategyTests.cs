@@ -77,6 +77,73 @@ public class EagerLoadingStrategyTests
         var split = Parents(ctx).LoadWith(p => p.Children, c => c.From<EagerStratChild>(), p => p.Id, c => c.ParentId).ToCommand();
         SqlOf(ctx, split).ToLowerInvariant().Should().NotContain("lateral").And.NotContain(" apply ");
     }
+
+    // --- T212-D5: a nested (level 2+) LoadWith on the single-query path renders one join per level; an
+    // --- unexpressible nested child shape fails closed before any SQL is generated. A dedicated trio of
+    // --- nested entities keeps the level-1 strategy fixtures scalar-only, so the existing projections
+    // --- are untouched.
+
+    private static EntityBuilder<EagerStratNestedParent> NestedSingleParents(IDataContext ctx)
+        => ctx.From<EagerStratNestedParent>(b => b.HasMany(p => p.Mids, m => m.ParentId))
+            .LoadWith(
+                p => p.Mids,
+                c => c.From<EagerStratNestedMid>().LoadWith(m => m.Leaves, l => l.From<EagerStratNestedLeaf>(), m => m.Id, l => l.MidId),
+                p => p.Id,
+                m => m.ParentId,
+                EagerLoadMode.SingleQuery);
+
+    [Fact]
+    public void NestedSingleQuery_JoinsEveryLevelIntoOneCommand()
+    {
+        using var ctx = Context();
+
+        var builder = NestedSingleParents(ctx);
+        builder.ResolvedEagerLoadMode.Should().Be(EagerLoadMode.SingleQuery);
+
+        var (specs, joins) = builder.BuildSingleQueryJoins();
+        var sql = SqlOf(ctx, builder.CreatePairCommand(specs, joins)).ToLowerInvariant();
+
+        sql.Should().Contain("eager_strategy_nested_parent").And.Contain("eager_strategy_nested_mid").And.Contain("eager_strategy_nested_leaf");
+        sql.Split(" join ").Should().HaveCount(3, "two nested joins split the chain into three segments");
+        sql.Should().NotContain(" in (");
+    }
+
+    [Fact]
+    public void NestedSingleQuery_InexpressibleGrandChildShape_FailsClosedBeforeSql()
+    {
+        using var ctx = Context();
+
+        var builder = ctx.From<EagerStratNestedParent>(b => b.HasMany(p => p.Mids, m => m.ParentId))
+            .LoadWith(
+                p => p.Mids,
+                c => c.From<EagerStratNestedMid>().LoadWith(m => m.Leaves, l => l.From<EagerStratNestedLeaf>().Distinct(), m => m.Id, l => l.MidId),
+                p => p.Id,
+                m => m.ParentId,
+                EagerLoadMode.SingleQuery);
+
+        Action act = () => builder.BuildSingleQueryJoins();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Distinct*");
+    }
+
+    [Fact]
+    public void NestedSingleQuery_PerParentPagedGrandChild_FailsClosedBeforeSql()
+    {
+        using var ctx = Context();
+
+        var builder = ctx.From<EagerStratNestedParent>(b => b.HasMany(p => p.Mids, m => m.ParentId))
+            .LoadWith(
+                p => p.Mids,
+                c => c.From<EagerStratNestedMid>().OrderBy(m => m.Id).Limit(1)
+                    .LoadWith(m => m.Leaves, l => l.From<EagerStratNestedLeaf>(), m => m.Id, l => l.MidId),
+                p => p.Id,
+                m => m.ParentId,
+                EagerLoadMode.SingleQuery);
+
+        Action act = () => builder.BuildSingleQueryJoins();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Limit/Offset/Page*");
+    }
 }
 
 [SqlTable("eager_strategy_parent")]
@@ -98,4 +165,38 @@ public sealed class EagerStratChild
 
     [Column("parent_id")]
     public int ParentId { get; set; }
+}
+
+[SqlTable("eager_strategy_nested_parent")]
+public sealed class EagerStratNestedParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    public ICollection<EagerStratNestedMid> Mids { get; } = new List<EagerStratNestedMid>();
+}
+
+[SqlTable("eager_strategy_nested_mid")]
+public sealed class EagerStratNestedMid
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    public ICollection<EagerStratNestedLeaf> Leaves { get; } = new List<EagerStratNestedLeaf>();
+}
+
+[SqlTable("eager_strategy_nested_leaf")]
+public sealed class EagerStratNestedLeaf
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("mid_id")]
+    public int MidId { get; set; }
 }

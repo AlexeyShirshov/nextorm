@@ -35,6 +35,27 @@ public class EagerLoadingSingleQueryP1Tests
         public int ParentId { get; set; }
     }
 
+    // T212-D5: a dedicated nested trio so the child-shape rejection matrix can be exercised one level
+    // deeper without touching the level-1 P1 entities' projections.
+    public sealed class P1NestRoot
+    {
+        public int Id { get; set; }
+        public ICollection<P1NestMid> Mids { get; set; } = new List<P1NestMid>();
+    }
+
+    public sealed class P1NestMid
+    {
+        public int Id { get; set; }
+        public int RootId { get; set; }
+        public ICollection<P1NestLeaf> Leaves { get; } = new List<P1NestLeaf>();
+    }
+
+    public sealed class P1NestLeaf
+    {
+        public int Id { get; set; }
+        public int MidId { get; set; }
+    }
+
     public sealed class KeylessParent
     {
         public string Name { get; set; } = "";
@@ -1242,5 +1263,42 @@ public class EagerLoadingSingleQueryP1Tests
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's TablesInScopeHint*");
+    }
+
+    // --- T212-D5: the single-level child-shape rejection must recurse: an unexpressible shape on a
+    // --- nested (level 2+) grandchild is rejected with the same guard instead of being silently dropped.
+
+    [Fact]
+    public void SingleQuery_NestedGrandChildGroupBy_IsRejected()
+    {
+        using var context = CreateContext();
+
+        var act = () => context.From<P1NestRoot>()
+            .LoadWith(
+                p => p.Mids,
+                c => c.From<P1NestMid>().LoadWith(m => m.Leaves, l => l.From<P1NestLeaf>().GroupBy(x => x.MidId), m => m.Id, l => l.MidId),
+                p => p.Id,
+                m => m.RootId,
+                EagerLoadMode.SingleQuery)
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*child query's GroupBy*");
+    }
+
+    [Fact]
+    public void SingleQuery_NestedGrandChildDistinctOn_IsRejected()
+    {
+        using var context = CreateContext();
+
+        var act = () => context.From<P1NestRoot>()
+            .LoadWith(
+                p => p.Mids,
+                c => c.From<P1NestMid>().LoadWith(m => m.Leaves, l => l.From<P1NestLeaf>().DistinctOn(x => x.MidId), m => m.Id, l => l.MidId),
+                p => p.Id,
+                m => m.RootId,
+                EagerLoadMode.SingleQuery)
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*child query's DistinctOn*");
     }
 }

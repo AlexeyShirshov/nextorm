@@ -506,6 +506,149 @@ public abstract partial class CommonTestSuite
         auto.Should().Equal($"{parent}:{parent + 100}|{parent + 101}");
         auto.Should().Equal(split, "Auto conservatively dispatches to the split path in E1");
     }
+
+    // --- T212-D5: nested (level 2+) eager loading on a real server. The level-two fixture reuses the
+    // --- eager_child table through EagerGrandChild: a grandchild row's parent_id points at a level-one
+    // --- child id, so the level-one IN (parent ids) filter never picks it up.
+
+    /// <summary>
+    /// Seeds one parent, two children (<c>childA</c>, <c>childB</c>) and three grandchildren in the
+    /// shared <c>eager_child</c> table: <c>childA</c> has two, <c>childB</c> has one.
+    /// </summary>
+    private int SeedNestedEager(out int childA, out int childB)
+    {
+        var ctx = _sut.DataProvider;
+        var parent = NextEagerId();
+        childA = parent + 100;
+        childB = parent + 101;
+
+        ctx.CreateInsertBuilder<EagerParent>().Values([
+            new EagerParent { Id = parent, Name = "nested" },
+        ]).Insert();
+
+        ctx.CreateInsertBuilder<EagerChild>().Values([
+            new EagerChild { Id = childA, ParentId = parent, Name = "a" },
+            new EagerChild { Id = childB, ParentId = parent, Name = "b" },
+        ]).Insert();
+
+        ctx.CreateInsertBuilder<EagerGrandChild>().Values([
+            new EagerGrandChild { Id = parent + 200, ChildId = childA, Name = "ga" },
+            new EagerGrandChild { Id = parent + 201, ChildId = childA, Name = "gb" },
+            new EagerGrandChild { Id = parent + 202, ChildId = childB, Name = "gc" },
+        ]).Insert();
+
+        return parent;
+    }
+
+    /// <summary>Split loader with ordering at both levels (single-query forbids child ordering).</summary>
+    private EntityBuilder<EagerParent> NestedOrderedParents(int parent)
+        => _sut.DataProvider.From<EagerParent>()
+            .Where(p => p.Id == parent)
+            .LoadWith(
+                p => p.Children,
+                c => c.From<EagerChild>().OrderBy(x => x.Id)
+                    .LoadWith(x => x.GrandChildren, g => g.From<EagerGrandChild>().OrderBy(y => y.Id), x => x.Id, g => g.ChildId),
+                p => p.Id,
+                c => c.ParentId,
+                EagerLoadMode.SplitQuery)
+            .OrderBy(p => p.Id);
+
+    /// <summary>Single-query loader: only the child's own <c>Where</c> is foldable, so no ordering.</summary>
+    private EntityBuilder<EagerParent> NestedPlainParents(int parent)
+        => _sut.DataProvider.From<EagerParent>()
+            .Where(p => p.Id == parent)
+            .LoadWith(
+                p => p.Children,
+                c => c.From<EagerChild>()
+                    .LoadWith(x => x.GrandChildren, g => g.From<EagerGrandChild>(), x => x.Id, g => g.ChildId),
+                p => p.Id,
+                c => c.ParentId,
+                EagerLoadMode.SingleQuery)
+            .OrderBy(p => p.Id);
+
+    [Fact]
+    public void EagerLoading_Nested_Split_LoadsEveryLevelAndGroupsByAncestor()
+    {
+        var parent = SeedNestedEager(out var childA, out var childB);
+
+        var parents = NestedOrderedParents(parent).ToList();
+
+        parents.Should().ContainSingle();
+        parents[0].Children.Select(c => c.Id).Should().Equal(childA, childB);
+        parents[0].Children.Single(c => c.Id == childA).GrandChildren.Select(g => g.Id).Should().Equal(parent + 200, parent + 201);
+        parents[0].Children.Single(c => c.Id == childB).GrandChildren.Select(g => g.Id).Should().Equal(parent + 202);
+    }
+
+    [Fact]
+    public void EagerLoading_Nested_SingleQuery_LoadsEveryLevelInOneCommand()
+    {
+        var parent = SeedNestedEager(out var childA, out var childB);
+
+        var interceptor = new CountingQueryInterceptor();
+        ((DataContext)_sut.DataProvider).AddInterceptor(interceptor);
+
+        var parents = NestedPlainParents(parent).ToList();
+
+        parents.Should().ContainSingle();
+        parents[0].Children.Select(c => c.Id).Should().BeEquivalentTo([childA, childB]);
+        parents[0].Children.Single(c => c.Id == childA).GrandChildren.Select(g => g.Id).Should().BeEquivalentTo([parent + 200, parent + 201]);
+        parents[0].Children.Single(c => c.Id == childB).GrandChildren.Select(g => g.Id).Should().Equal(parent + 202);
+        interceptor.Executing.Should().Be(1, "the whole nested graph stitches from one denormalized command");
+        interceptor.Executed.Should().Be(1);
+    }
+
+    [Fact]
+    public void EagerLoading_Nested_Split_GrandChildFilter_AppliesPerChild()
+    {
+        var parent = SeedNestedEager(out var childA, out _);
+
+        var parents = _sut.DataProvider.From<EagerParent>()
+            .Where(p => p.Id == parent)
+            .LoadWith(
+                p => p.Children,
+                c => c.From<EagerChild>().Where(x => x.Id == childA).OrderBy(x => x.Id)
+                    .LoadWith(x => x.GrandChildren, g => g.From<EagerGrandChild>().Where(y => y.Id == parent + 200).OrderBy(y => y.Id), x => x.Id, g => g.ChildId),
+                p => p.Id,
+                c => c.ParentId,
+                EagerLoadMode.SplitQuery)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Should().ContainSingle();
+        parents[0].Children.Select(c => c.Id).Should().Equal(childA);
+        parents[0].Children.Single().GrandChildren.Select(g => g.Id).Should().Equal([parent + 200], "the grandchild's own Where filters the level-two rows");
+    }
+
+    [Fact]
+    public async Task EagerLoading_Nested_Split_Async_MatchesSync()
+    {
+        var parent = SeedNestedEager(out var childA, out _);
+
+        var parents = await NestedOrderedParents(parent).ToListAsync(TestContext.Current.CancellationToken);
+
+        parents.Should().ContainSingle();
+        parents[0].Children.Select(c => c.Id).Should().Equal(childA, parent + 101);
+        parents[0].Children.Single(c => c.Id == childA).GrandChildren.Select(g => g.Id).Should().Equal(parent + 200, parent + 201);
+    }
+
+    [Fact]
+    public void EagerLoading_Nested_SingleQuery_GrandChildOrderBy_FailsClosed()
+    {
+        var parent = SeedNestedEager(out _, out _);
+
+        var act = () => _sut.DataProvider.From<EagerParent>()
+            .Where(p => p.Id == parent)
+            .LoadWith(
+                p => p.Children,
+                c => c.From<EagerChild>()
+                    .LoadWith(x => x.GrandChildren, g => g.From<EagerGrandChild>().OrderBy(y => y.Id), x => x.Id, g => g.ChildId),
+                p => p.Id,
+                c => c.ParentId,
+                EagerLoadMode.SingleQuery)
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*OrderBy*");
+    }
 }
 
 [SqlTable("eager_parent")]

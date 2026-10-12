@@ -19,7 +19,7 @@ namespace NextORM.Core;
 /// <c>IDataContext.From&lt;TEntity&gt;()</c>.
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type the query projects.</typeparam>
-public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncEnumerable<TEntity>
 {
     // private const string AnyCommandProperty = "NextORM.Core.AnyCommand";
     #region Fields
@@ -97,6 +97,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// them so building the command cannot recurse into the loader.
     /// </summary>
     internal IReadOnlyList<IEagerLoadSpec<TEntity>>? LoadSpecs => _loadSpecs;
+    /// <inheritdoc/>
+    IReadOnlyList<IEagerLoadNodeSpec>? IEagerLoadNodeSource.EagerLoadNodeSpecs => _loadSpecs;
     /// <summary>
     /// The <c>JoinInto</c> declarations applied to this builder, or <c>null</c> when the builder carries
     /// none. The list terminals execute one denormalized command and stitch the children onto the
@@ -1404,23 +1406,14 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         {
             foreach (var load in _loadSpecs)
             {
-                var spec = load.ToJoinIntoSpec(_dataProvider, _filterScope, out var childSource);
-                specs.Add(spec);
-                joins.Add(new JoinExpression(spec.Predicate, spec.JoinType)
-                {
-                    From = childSource,
-                    IsJoinInto = true,
-                    JoinIntoIdentity = spec.Identity,
-                    // The child query's own selective filter scope, independent of the parent's scope;
-                    // an empty scope is normalized to null (both mean "inherit").
-                    FilterScope = spec.ChildFilterScope.IsEmpty ? null : spec.ChildFilterScope,
-                    // A per-parent paging child is rendered as an embedded ranked derived source that
-                    // cannot carry its own ORDER BY; its ordered keys are appended to the pair command so
-                    // the stitched children keep the child query's order (resolved against this join alias).
-                    EagerPerParentOrdering = childSource.SubQuery is { PerParentPagingEmbedded: true } embeddedChild
-                        ? embeddedChild.Sorting
-                        : null,
-                });
+                // A declaration whose child carries its own LoadWith graph is planned as a nested graph:
+                // its plan contributes the declaration's join followed, recursively, by one join per
+                // descendant, and a specification that exposes the flattened projection items so the
+                // stitcher can assemble every level from the one result set. An unexpressible child shape
+                // (or a nested per-parent page) fails closed here, before any SQL is built or executed.
+                var plan = load.PlanSingleQuery(_dataProvider, _filterScope);
+                specs.Add(plan.Spec);
+                joins.AddRange(plan.Joins);
             }
         }
 
@@ -1700,47 +1693,17 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
                 continue;
             }
 
-            var join = source[cursor++];
-
-            // The first join already starts from the bare parent (arity 1); every later JoinInto reads
-            // the parent through Item1 of the projection accumulated so far.
-            if (join.IsJoinInto && joins.Count > 0 && join.JoinCondition is { Parameters.Count: 2 } condition)
+            // A nested single-query declaration contributes one join per node of its subtree (pre-order);
+            // a flat declaration contributes exactly one. Each join after the first re-roots its parent
+            // parameter onto the accumulated projection item that holds that parent type, so a level-2+
+            // join reads its own parent (for example the already joined child) instead of always Item1.
+            var joinCount = spec is IEagerSingleQueryStitch<TEntity> ? spec.ItemTypes.Count : 1;
+            for (var j = 0; j < joinCount && cursor < source.Count; j++)
             {
-                var leftType = JoinIntoProjectionFactory.Create(
-                    typeof(TEntity),
-                    precedingTypes.Select(static type => (IReadOnlyList<Type>)new[] { type }).ToArray());
-                var leftParameter = Expression.Parameter(leftType, "l");
-                var rewritten = ReRootJoinCondition(condition, leftParameter);
-                // Re-root the original condition too: the preparer injects the joined entity's global
-                // filters from this field and installs the result as the join condition, so a bare-parent
-                // original would overwrite the re-rooted condition below with the wrong parameter.
-                var original = join.OriginalJoinCondition is { Parameters.Count: 2 } originalCondition
-                    ? ReRootJoinCondition(originalCondition, leftParameter)
-                    : join.OriginalJoinCondition;
-
-                joins.Add(new JoinExpression(rewritten, join.JoinType)
-                {
-                    From = join.From,
-                    EntityType = join.EntityType,
-                    Strictness = join.Strictness,
-                    IsGlobal = join.IsGlobal,
-                    JoinHint = join.JoinHint,
-                    TableHints = join.TableHints,
-                    OriginalJoinCondition = original,
-                    IsJoinInto = true,
-                    JoinIntoIdentity = join.JoinIntoIdentity,
-                    SuppressCartesianWarning = join.SuppressCartesianWarning,
-                    // Preserve the child's own filter scope; dropping it would make the 2nd+ spec
-                    // inherit the parent's IgnoreFilters() and silently apply the wrong child filters.
-                    FilterScope = join.FilterScope,
-                });
+                var join = source[cursor++];
+                joins.Add(RewriteInMemoryJoinIntoJoin(join, precedingTypes, hasPreceding: joins.Count > 0));
+                precedingTypes.Add(JoinSecondType(join));
             }
-            else
-            {
-                joins.Add(join);
-            }
-
-            precedingTypes.Add(JoinSecondType(join));
         }
 
         // Defensive: the declaration and join lists are paired by construction, but any unpaired trailing
@@ -1774,7 +1737,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             var leftType = JoinIntoProjectionFactory.Create(
                 typeof(TEntity),
                 precedingTypes.Select(static type => (IReadOnlyList<Type>)new[] { type }).ToArray());
-            condition = ReRootJoinCondition(condition, Expression.Parameter(leftType, "l"));
+            condition = ReRootJoinConditionAt(condition, Expression.Parameter(leftType, "l"), 1);
         }
 
         return new JoinExpression(condition, stored.JoinType)
@@ -1849,16 +1812,93 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     }
 
     /// <summary>
-    /// Re-roots a two-parameter join condition onto the projection the in-memory join engine has
-    /// accumulated so far: the left-hand (parent) parameter reads through <c>Item1</c>, exactly like the
-    /// rewritten <see cref="JoinExpression.JoinCondition"/>. Applied to the original condition as well,
-    /// because the preparer injects the joined entity's global filters from that field and installs the
-    /// result as the condition — a bare-parent original would silently overwrite the re-rooted condition.
+    /// Rewrites one stored <c>JoinInto</c> join for the in-memory provider. The first join of the
+    /// accumulated chain already starts from the bare parent (arity 1); every later join's parent
+    /// parameter must read through the projection item that holds that parent type. A nested single-query
+    /// graph makes the parent a previously joined child (not just the root), so the item is resolved by
+    /// the condition's left-parameter type rather than hard-coded to <c>Item1</c>.
     /// </summary>
-    private static LambdaExpression ReRootJoinCondition(LambdaExpression condition, ParameterExpression leftParameter)
+    /// <param name="join">The stored join.</param>
+    /// <param name="precedingTypes">The entity types already appended to the accumulated projection.</param>
+    /// <param name="hasPreceding">Whether the accumulated projection already carries at least one item.</param>
+    /// <returns>The join the in-memory engine executes.</returns>
+    private JoinExpression RewriteInMemoryJoinIntoJoin(JoinExpression join, List<Type> precedingTypes, bool hasPreceding)
     {
-        var body = new ReplaceTargetParameterVisitor(condition.Parameters[0], Expression.Property(leftParameter, "Item1"))
-            .Visit(condition.Body);
+        if (!hasPreceding || !join.IsJoinInto || join.JoinCondition is not { Parameters.Count: 2 } condition)
+            return join;
+
+        var leftType = JoinIntoProjectionFactory.Create(
+            typeof(TEntity),
+            precedingTypes.Select(static type => (IReadOnlyList<Type>)new[] { type }).ToArray());
+        var leftParameter = Expression.Parameter(leftType, "l");
+        var itemNumber = ResolveJoinLeftItemNumber(condition.Parameters[0].Type, precedingTypes);
+
+        var rewritten = ReRootJoinConditionAt(condition, leftParameter, itemNumber);
+        // Re-root the original condition too: the preparer injects the joined entity's global filters from
+        // this field and installs the result as the join condition, so a bare-parent original would
+        // overwrite the re-rooted condition below with the wrong parameter.
+        var original = join.OriginalJoinCondition is { Parameters.Count: 2 } originalCondition
+            ? ReRootJoinConditionAt(originalCondition, leftParameter, itemNumber)
+            : join.OriginalJoinCondition;
+
+        return new JoinExpression(rewritten, join.JoinType)
+        {
+            From = join.From,
+            EntityType = join.EntityType,
+            Strictness = join.Strictness,
+            IsGlobal = join.IsGlobal,
+            JoinHint = join.JoinHint,
+            TableHints = join.TableHints,
+            OriginalJoinCondition = original,
+            IsJoinInto = true,
+            JoinIntoIdentity = join.JoinIntoIdentity,
+            SuppressCartesianWarning = join.SuppressCartesianWarning,
+            // Preserve the child's own filter scope; dropping it would make the 2nd+ spec inherit the
+            // parent's IgnoreFilters() and silently apply the wrong child filters.
+            FilterScope = join.FilterScope,
+        };
+    }
+
+    /// <summary>
+    /// Resolves the 1-based accumulated-projection item that holds <paramref name="leftParamType"/>:
+    /// <c>Item1</c> is the root entity type and <c>precedingTypes[k]</c> is <c>Item(k+2)</c>. The most
+    /// recent match wins, so a repeated child type resolves to the just-joined occurrence rather than an
+    /// earlier sibling. Falls back to <c>Item1</c> when the line is not on the projection (a flat
+    /// declaration's root parent, which is always <c>Item1</c>).
+    /// </summary>
+    private static int ResolveJoinLeftItemNumber(Type leftParamType, List<Type> precedingTypes)
+    {
+        for (var i = precedingTypes.Count - 1; i >= 0; i--)
+        {
+            if (precedingTypes[i] == leftParamType)
+                return i + 2;
+        }
+
+        return 1;
+    }
+
+    /// <summary>
+    /// Re-roots a two-parameter join condition onto the projection the in-memory join engine has
+    /// accumulated so far: the left-hand (parent) parameter reads through <c>Item{itemNumber}</c>, exactly
+    /// like the rewritten <see cref="JoinExpression.JoinCondition"/>. Applied to the original condition as
+    /// well, because the preparer injects the joined entity's global filters from that field and installs
+    /// the result as the condition — a bare-parent original would silently overwrite the re-rooted one.
+    /// </summary>
+    private static LambdaExpression ReRootJoinConditionAt(LambdaExpression condition, ParameterExpression leftParameter, int itemNumber)
+    {
+        var itemExpression = Expression.Property(leftParameter, "Item" + itemNumber);
+        var body = new ReplaceTargetParameterVisitor(condition.Parameters[0], itemExpression).Visit(condition.Body);
+
+        // A level-2+ nested join reads its parent from an earlier LEFT JOIN item, which is null when that
+        // outer join matched no row. SQL's null-propagating ON yields "no match"; in memory the parent
+        // accessor must be guarded so a childless intermediate does not dereference null (a null parent
+        // matches no child, it does not throw).
+        if (itemNumber > 1 && !itemExpression.Type.IsValueType)
+        {
+            var guard = Expression.NotEqual(itemExpression, Expression.Constant(null, itemExpression.Type));
+            body = Expression.AndAlso(guard, body);
+        }
+
         return Expression.Lambda(body, leftParameter, condition.Parameters[1]);
     }
 

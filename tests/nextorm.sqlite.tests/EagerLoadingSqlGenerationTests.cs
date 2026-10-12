@@ -1267,6 +1267,99 @@ public class EagerLoadingSqlGenerationTests
             File.Delete(path);
         }
     }
+
+    // --- T212-D4: a nested (level 2+) LoadWith on the single-query path renders one join chain and issues
+    // --- exactly one denormalized command; an unexpressible nested child shape fails closed before any SQL.
+
+    private static (SqliteDataContext Ctx, string Path) CreateNestedDb()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nextorm-eager-nested-{Guid.NewGuid():N}.db");
+        using (var conn = new SqliteConnection($"Data Source={path}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                "create table eager_nested_parent (id integer primary key);" +
+                "create table eager_nested_mid (id integer primary key, parent_id int not null);" +
+                "create table eager_nested_leaf (id integer primary key, mid_id int not null);" +
+                "insert into eager_nested_parent (id) values (1), (2), (3);" +
+                "insert into eager_nested_mid (id, parent_id) values (10, 1), (11, 1), (12, 2);" +
+                "insert into eager_nested_leaf (id, mid_id) values (100, 10), (101, 10), (110, 11), (120, 12);";
+            cmd.ExecuteNonQuery();
+        }
+
+        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+    }
+
+    [Fact]
+    public void SingleQuery_Nested_JoinsEveryLevelIntoOneCommand()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateNestedDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<EagerNestedParent>()
+                .LoadWith(
+                    p => p.Mids,
+                    c => c.From<EagerNestedMid>().LoadWith(m => m.Leaves, l => l.From<EagerNestedLeaf>(), m => m.Id, l => l.MidId),
+                    p => p.Id,
+                    m => m.ParentId,
+                    EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents[0].Mids.Select(m => m.Id).Should().Equal(10, 11);
+            parents[2].Mids.Should().BeEmpty("a childless parent survives the nested Left Join chain");
+            parents.Single(p => p.Id == 1).Mids.Single(m => m.Id == 10).Leaves.Select(l => l.Id).Should().Equal(100, 101);
+            parents.Single(p => p.Id == 2).Mids.Single().Leaves.Select(l => l.Id).Should().Equal(120);
+
+            // One denormalized command carrying the whole nested graph: no chunked IN list, no split fallback.
+            interceptor.Statements.Should().HaveCount(1, "the nested graph must stitch from one command");
+            var sql = interceptor.Statements[0].ToLowerInvariant();
+            sql.Should().Contain("eager_nested_parent").And.Contain("eager_nested_mid").And.Contain("eager_nested_leaf");
+            CountOccurrences(sql, " join ").Should().Be(2, "one join per nested level");
+            sql.Should().NotContain(" in (");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_NestedInexpressibleChildShape_IsRejectedWithZeroSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateNestedDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var act = () => ctx.From<EagerNestedParent>()
+                .LoadWith(
+                    p => p.Mids,
+                    c => c.From<EagerNestedMid>().LoadWith(m => m.Leaves, l => l.From<EagerNestedLeaf>().OrderBy(x => x.Id), m => m.Id, l => l.MidId),
+                    p => p.Id,
+                    m => m.ParentId,
+                    EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*OrderBy*");
+            interceptor.Statements.Should().BeEmpty("an unexpressible nested child shape must fail before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
 }
 
 [SqlTable("eager_parent")]

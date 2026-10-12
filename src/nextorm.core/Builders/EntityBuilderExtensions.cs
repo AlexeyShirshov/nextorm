@@ -490,6 +490,21 @@ public static class EntityBuilderExtensions
         => builder.SingleQuery && builder.LoadSpecs is { Count: > 0 };
 
     /// <summary>
+    /// Frontend normalization for the shared nested eager-load contract: turns the declarations on
+    /// <paramref name="builder"/> into an <see cref="EagerLoadGraph"/> for <paramref name="context"/>,
+    /// resolving the single graph-wide mode, carrying the root's global-query-filter scope, and validating
+    /// the declared finite graph. A cyclic declaration or a nested declaration whose explicit mode conflicts
+    /// with the graph-wide mode fails closed with <see cref="NotSupportedException"/> before any command is
+    /// built. It builds no command and never touches <see cref="QueryCommand.Cache"/>.
+    /// </summary>
+    /// <typeparam name="TEntity">The root entity type.</typeparam>
+    /// <param name="builder">The builder whose eager-load declarations are normalized.</param>
+    /// <param name="context">The data context used to resolve child query builders.</param>
+    /// <returns>The normalized nested eager-load graph.</returns>
+    internal static EagerLoadGraph NormalizeEagerLoadGraph<TEntity>(this EntityBuilder<TEntity> builder, IDataContext context)
+        => EagerLoadGraph.Build(builder, context);
+
+    /// <summary>
     /// Marks a split parent command whose eager-load graph contains a child <c>Limit</c>/<c>Offset</c>/
     /// <c>Page</c>, and validates every paged child before any SQL runs. The marked command is rejected by
     /// preparation on the in-memory provider (no SQL window); on a SQL provider the paged child is
@@ -528,6 +543,10 @@ public static class EntityBuilderExtensions
     {
         if (UsesSingleQueryLoading(builder))
         {
+            // Validate the whole declared graph once (deterministic cycle guard, one graph-wide mode, no
+            // conflicting nested mode) before any nested join is built or recursed, so an invalid graph
+            // fails closed instead of recursing without limit or being reinterpreted.
+            _ = builder.NormalizeEagerLoadGraph(builder.DataProvider);
             var (specs, joins) = builder.BuildSingleQueryJoins();
             var rows = builder.CreatePairCommand(specs, joins).ToObjectList(@params);
             return JoinIntoStitcher.Stitch(builder, specs, rows, requireMappedParentKey: true);
@@ -553,6 +572,8 @@ public static class EntityBuilderExtensions
         if (UsesSingleQueryLoading(builder))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            // Same single-graph validation as the synchronous terminal (see MaterializeList).
+            _ = builder.NormalizeEagerLoadGraph(builder.DataProvider);
             var (specs, joins) = builder.BuildSingleQueryJoins();
             var rows = await builder.CreatePairCommand(specs, joins).ToObjectListAsync(@params, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();

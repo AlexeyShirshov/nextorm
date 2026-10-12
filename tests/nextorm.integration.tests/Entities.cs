@@ -204,6 +204,30 @@ public sealed class EagerChild
     public int ParentId { get; set; }
     [Column("name")]
     public string? Name { get; set; }
+    // T212-D5 nested (level 2+) fixture: a second level in the same eager_child table, keyed by the
+    // child-level id. Get-only so the level-1 single-query projection ignores it (a settable collection
+    // would be mapped as an unsupported column) while split/single nested loaders can still fill it.
+    public ICollection<EagerGrandChild> GrandChildren { get; } = new List<EagerGrandChild>();
+}
+
+/// <summary>
+/// T212-D5 level-two child of <see cref="EagerChild"/>: the same <c>eager_child</c> table, so nested
+/// integration coverage needs no new provider DDL. Rows are grandchildren when their
+/// <c>parent_id</c> points at a level-one child id.
+/// </summary>
+[SqlTable("eager_child")]
+public sealed class EagerGrandChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    // Deliberately named ChildId (column stays parent_id): the single-query projection aliases this key
+    // as ChildId, so a nested join of the same table does not collide with the level-one child's
+    // ParentId alias (ClickHouse rejects two SELECT items sharing one alias).
+    [Column("parent_id")]
+    public int ChildId { get; set; }
+    [Column("name")]
+    public string? Name { get; set; }
 }
 
 /// <summary>

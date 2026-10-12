@@ -12,6 +12,13 @@ internal static class JoinIntoProjectionFactory
     private const int MaxArity = 8;
 
     /// <summary>
+    /// The maximum number of child collections one pair command can carry (the parent plus this many
+    /// items must fit the <c>Projection&lt;T1..T8&gt;</c> arity). Nested single-query loading uses it to
+    /// fail closed before declaring a graph the projection cannot flatten.
+    /// </summary>
+    internal const int MaxChildCount = MaxArity - 1;
+
+    /// <summary>
     /// Creates the closed projection type <c>Projection&lt;TParent, …&gt;</c> for the given parent and the
     /// per-declaration item types, flattened in declaration order.
     /// </summary>
@@ -155,6 +162,9 @@ internal static class JoinIntoStitcher
 
         var childProperties = new PropertyInfo[specs.Count];
         var linkProperties = new PropertyInfo?[specs.Count];
+        // For a nested single-query declaration the first item of its slice is the level-one child and the
+        // descendants follow; the recursive stitcher starts from that zero-based column.
+        var sliceStarts = new int[specs.Count];
         var offset = 1;
         for (var i = 0; i < specs.Count; i++)
         {
@@ -166,6 +176,7 @@ internal static class JoinIntoStitcher
             if (specs[i] is IJoinIntoManyToManySpec)
                 linkProperties[i] = ResolveItemPropertyNumber(projectionType, offset + 1);
 
+            sliceStarts[i] = offset;
             childProperties[i] = ResolveItemProperty(i, projectionType, offset, itemCount);
             offset += itemCount;
         }
@@ -193,6 +204,9 @@ internal static class JoinIntoStitcher
 
                 for (var i = 0; i < specs.Count; i++)
                 {
+                    if (specs[i] is IEagerSingleQueryStitch<TEntity>)
+                        continue; // assembled recursively from the whole row below
+
                     if (specs[i] is IJoinIntoManyToManySpec)
                     {
                         perManyToMany[i]!.Add(new JoinIntoManyToManyRow<TEntity>(
@@ -215,10 +229,21 @@ internal static class JoinIntoStitcher
 
         for (var i = 0; i < specs.Count; i++)
         {
-            if (specs[i] is IJoinIntoManyToManySpec manyToMany)
+            if (specs[i] is IEagerSingleQueryStitch<TEntity> nested)
+            {
+                // A nested declaration assembles every level of its subtree from the one result set: the
+                // top-level parents are Item1, the declaration's own child is the first item of its slice.
+                if (properties is not null)
+                    nested.StitchSingleQuery(parents, rows, properties, parentColumn: 0, childColumn: sliceStarts[i], builder.DataProvider);
+            }
+            else if (specs[i] is IJoinIntoManyToManySpec manyToMany)
+            {
                 manyToMany.AssignChildrenFromLinks(parents, perManyToMany[i]!);
+            }
             else
+            {
                 specs[i].AssignChildren(parents, perSpec[i]!);
+            }
         }
 
         return parents;
