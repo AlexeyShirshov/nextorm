@@ -795,6 +795,9 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string WrapCount(string countExpression, bool big) => countExpression;
 
     /// <inheritdoc/>
+    public virtual string WrapIntegerWindowResult(string windowExpression) => windowExpression;
+
+    /// <inheritdoc/>
     public virtual string MakeSubqueryPredicate(string keyword, string query, bool asPredicate) => $"{keyword}({query})";
 
     /// <inheritdoc/>

@@ -104,9 +104,11 @@ public class JoinIntoSqlGenerationTests
         // The parent-only terminal must still drop the JoinInto; the modifier must not degrade it to a
         // regular join (which would leak the child join into the parent command).
         parentOnly.Trim().Should().Be("select id, name from join_into_parent");
+        // The outer JoinInto pair needs real SQL nulls on the unmatched side, so ClickHouse injects its
+        // query-local join_use_nulls setting into the denormalized statement.
         pairSql.Trim().Should().Be(
             "select t1.id, t1.name, t2.id, t2.parent_id as `ParentId` from join_into_parent as `t1` "
-            + "global left join join_into_child as `t2` on t1.id = t2.parent_id");
+            + "global left join join_into_child as `t2` on t1.id = t2.parent_id\n settings join_use_nulls = 1");
 
         var plain = Parents(ctx)
             .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)

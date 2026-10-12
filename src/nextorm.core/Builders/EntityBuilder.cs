@@ -1590,6 +1590,21 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         cmd.PendingJoinIntoCartesianWarning = collectionCount >= 2 && !suppressed;
 
+        // An outer JoinInto/LoadWith pair needs real SQL nulls on the unmatched side so the stitcher can
+        // see an absent link/child; a provider whose outer join fills defaults (ClickHouse) injects its
+        // query-local null-producing setting during preparation. Inner-only pairs are unaffected.
+        if (isSql && joins is not null)
+        {
+            for (var i = 0; i < joins.Count; i++)
+            {
+                if (joins[i].JoinType is JoinType.Left or JoinType.Right or JoinType.Full)
+                {
+                    cmd.NeedsOuterJoinNullSettings = true;
+                    break;
+                }
+            }
+        }
+
         return cmd;
     }
 

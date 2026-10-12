@@ -1239,6 +1239,15 @@ public interface ISqlDialect
     /// </summary>
     string WrapCount(string countExpression, bool big);
     /// <summary>
+    /// Wraps a fully rendered ranking window-function expression (<c>row_number()</c>, <c>rank()</c>,
+    /// <c>dense_rank()</c>, <c>ntile()</c>) whose declared CLR result is a CLR integer, or returns it
+    /// unchanged. Declared as a default interface method returning the expression unchanged so existing
+    /// external implementations keep compiling; ClickHouse overrides it because its ranking window
+    /// functions return <c>UInt64</c>, which the row reader cannot materialise into the declared
+    /// <see cref="int"/> (the many-to-many <c>JoinInto</c> link occurrence is the first victim).
+    /// </summary>
+    string WrapIntegerWindowResult(string windowExpression) => windowExpression;
+    /// <summary>
     /// Renders a subquery predicate (exists/any/all). <paramref name="asPredicate"/> is true when the
     /// expression is used as a condition (WHERE/HAVING) rather than as a projected value; a dialect
     /// without a boolean type (SQL Server) has to render the two forms differently.

@@ -1,0 +1,50 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.integration.tests
+  Discovered:  nextorm.integration.tests
+  Starting:    nextorm.integration.tests
+[testcontainers.org 00:00:00.39] Connected to Docker:
+  Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+  Server Version: 5.8.6
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.44
+  Operating System: fedora
+  Total Memory: 11.68 GB
+[testcontainers.org 00:00:00.40] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.47] Reusable resource found
+[testcontainers.org 00:00:00.56] Start Docker container 525af9d6a314
+[testcontainers.org 00:00:02.22] Wait for Docker container 525af9d6a314 to complete readiness checks
+[testcontainers.org 00:00:06.02] Docker container 525af9d6a314 ready
+    NextORM.Integration.Tests.ClickHouseJoinIntoRemainderTests.JoinInto_ManyToMany_WithSingleQueryLoadWith_ShouldStitchTagsAndNotes [FAIL]
+      Expected parents[0].Tags.Select(t => t.Id) to be a collection with 3 item(s), but {-5009700, -5009700, -5009699, 0}
+      contains 1 item(s) more than
+      {-5009700, -5009699, -5009700}.
+      
+      With configuration:
+      - Use declared types and members
+      - Compare enums by value
+      - Compare tuples by their properties
+      - Compare anonymous types by their properties
+      - Compare records by their members
+      - Include non-browsable members
+      - Include all non-private properties
+      - Include all non-private fields
+      - Match member by name (or throw)
+      - Be strict about the order of items in byte arrays
+      - Without automatic conversion.
+      
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.CollectingAssertionStrategy.ThrowIfAny(IDictionary`2 context)
+           at FluentAssertions.Execution.AssertionScope.Dispose()
+           at FluentAssertions.Equivalency.EquivalencyValidator.AssertEquality(Comparands comparands, EquivalencyValidationContext context)
+           at FluentAssertions.Equivalency.EquivalencyValidator.AssertEquality(Comparands comparands, EquivalencyValidationContext context)
+           at FluentAssertions.Collections.GenericCollectionAssertions`3.BeEquivalentTo[TExpectation](IEnumerable`1 expectation, Func`2 config, String because, Object[] becauseArgs)
+           at FluentAssertions.Collections.GenericCollectionAssertions`3.BeEquivalentTo[TExpectation](IEnumerable`1 expectation, String because, Object[] becauseArgs)
+        tests/nextorm.integration.tests/ClickHouseJoinIntoRemainderTests.cs(32,0): at NextORM.Integration.Tests.ClickHouseJoinIntoRemainderTests.JoinInto_ManyToMany_WithSingleQueryLoadWith_ShouldStitchTagsAndNotes()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[testcontainers.org 00:00:07.52] Stop Docker container 525af9d6a314
+  Finished:    nextorm.integration.tests (ID = 'b4ece81caced377475cbe4ebc5ceca7103a9595a1230fab7f41a6fb60ce4340a')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.integration.tests  Total: 1, Errors: 0, Failed: 1, Skipped: 0, Not Run: 0, Time: 8.020s

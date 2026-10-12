@@ -632,6 +632,17 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     internal bool PendingJoinIntoCartesianWarning { get; set; }
 
     /// <summary>
+    /// Whether this denormalized pair command (<c>JoinInto</c> or a single-query <c>LoadWith</c>) joins at
+    /// least one side with an outer join, so a provider whose outer join fills the unmatched side with
+    /// defaults (ClickHouse) must inject its query-local null-producing setting
+    /// (<see cref="ISqlDialect.OuterJoinNullSettings"/>). Set by <c>EntityBuilder.CreatePairCommand</c> on
+    /// the SQL path only; the provider-neutral injection lives in
+    /// <c>NavigationExpansion.ApplyProviderOuterJoinNullSettings</c>, which also honors it for a command
+    /// whose joins come from a navigation expansion.
+    /// </summary>
+    internal bool NeedsOuterJoinNullSettings { get; set; }
+
+    /// <summary>
     /// The raw-source global-filter skips collected during the current preparation, or <see langword="null"/>
     /// when no bound filter was skipped. Emitted by the planner on the next plan-cache miss (and cleared
     /// there) so a skipped filter warns once per completed preparation and never on a cache hit. Not part

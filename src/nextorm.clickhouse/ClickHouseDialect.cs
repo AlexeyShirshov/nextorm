@@ -397,6 +397,12 @@ public class ClickHouseDialect : SqlDialectBase
     public override string WrapCount(string countExpression, bool big) =>
         big ? $"toInt64({countExpression})" : $"toInt32({countExpression})";
 
+    // ClickHouse's ranking window functions (row_number/rank/dense_rank/ntile) return UInt64, which the
+    // row reader cannot materialise into the int the function declares (WindowFunction<int>), so the
+    // rendered window is narrowed to Int32 (the many-to-many JoinInto link occurrence reads it as int).
+    /// <summary>Casts a ranking window-function expression to <c>Int32</c> so it maps to the declared <see cref="int"/>.</summary>
+    public override string WrapIntegerWindowResult(string windowExpression) => $"toInt32({windowExpression})";
+
     /// <summary>ClickHouse implements the <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c> aggregates.</summary>
     public override ISequenceAggregateRenderer SequenceAggregates => ClickHouseSequenceAggregateRenderer.Instance;
 
