@@ -140,12 +140,18 @@ internal interface IEagerLoadSpec<TEntity> : IEagerLoadNodeSpec
     /// </summary>
     /// <param name="context">The data context used to build the child query.</param>
     /// <param name="parentScope">The parent command's global-query-filter scope.</param>
+    /// <param name="baseItemNumber">
+    /// The 1-based accumulated-projection item this subtree's own first join occupies (<c>Item1</c> is
+    /// the query root), so a nested join can resolve the item that holds its direct parent even when a
+    /// CLR type repeats at several depths.
+    /// </param>
+    /// <param name="parentItemNumber">The 1-based accumulated-projection item holding this subtree root's direct parent.</param>
     /// <returns>The single-query plan of this declaration's subtree.</returns>
     /// <exception cref="NotSupportedException">
     /// The child carries a shape the single-query fold cannot render, or a nested graph requests a
     /// per-parent top-N the ranked source cannot lower.
     /// </exception>
-    EagerLoadSingleQueryPlan<TEntity> PlanSingleQuery(IDataContext context, QueryFilterScope parentScope);
+    EagerLoadSingleQueryPlan<TEntity> PlanSingleQuery(IDataContext context, QueryFilterScope parentScope, int baseItemNumber, int parentItemNumber);
 }
 
 /// <summary>
@@ -329,7 +335,7 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
         => StitchSingleQueryCore(parents, rows, columns, parentColumn, childColumn, context);
 
     /// <inheritdoc/>
-    EagerLoadSingleQueryPlan<TEntity> IEagerLoadSpec<TEntity>.PlanSingleQuery(IDataContext context, QueryFilterScope parentScope)
+    EagerLoadSingleQueryPlan<TEntity> IEagerLoadSpec<TEntity>.PlanSingleQuery(IDataContext context, QueryFilterScope parentScope, int baseItemNumber, int parentItemNumber)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -347,9 +353,11 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
             // Level one stays on the exact existing fold: one synthesized join, the child's own Where
             // folded in, and the per-parent paging derived source when the provider supports it.
             var flat = ((IEagerLoadSpec<TEntity>)this).ToJoinIntoSpec(context, parentScope, out var childSource);
+            var flatJoin = EntityBuilderEagerLoading.BuildSingleQueryJoin(flat, childSource);
+            flatJoin.EagerParentItemNumber = parentItemNumber;
             return new EagerLoadSingleQueryPlan<TEntity>(
                 flat,
-                [EntityBuilderEagerLoading.BuildSingleQueryJoin(flat, childSource)],
+                [flatJoin],
                 [typeof(TChild)]);
         }
 
@@ -368,13 +376,18 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
 
         var level1 = new EagerLoadJoinIntoSpec<TEntity, TChild, TKey>(this, child.Condition, child.FilterScope);
 
-        var joins = new List<JoinExpression> { EntityBuilderEagerLoading.BuildSingleQueryJoin(level1, level1Source) };
+        var level1Join = EntityBuilderEagerLoading.BuildSingleQueryJoin(level1, level1Source);
+        level1Join.EagerParentItemNumber = parentItemNumber;
+        var joins = new List<JoinExpression> { level1Join };
         var itemTypes = new List<Type> { typeof(TChild) };
         for (var i = 0; i < nestedSpecs.Count; i++)
         {
             // Each descendant is itself planned through the same seam, so a deeper level recurses and an
-            // unexpressible descendant fails closed with the same rejection.
-            var descendant = ((IEagerLoadSpec<TChild>)nestedSpecs[i]).PlanSingleQuery(context, child.FilterScope);
+            // unexpressible descendant fails closed with the same rejection. The descendant's subtree
+            // starts right after the items already laid out, and its first join's direct parent is this
+            // node's own item, so a repeated CLR type resolves to the correct projection slot.
+            var descendantBase = baseItemNumber + 1 + (itemTypes.Count - 1);
+            var descendant = ((IEagerLoadSpec<TChild>)nestedSpecs[i]).PlanSingleQuery(context, child.FilterScope, descendantBase, baseItemNumber);
             joins.AddRange(descendant.Joins);
             itemTypes.AddRange(descendant.ItemTypes);
         }

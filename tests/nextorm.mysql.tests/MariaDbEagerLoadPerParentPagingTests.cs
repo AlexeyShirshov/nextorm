@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NextORM.Core;
 using NextORM.MariaDb;
+using NextORM.MySql;
 
 namespace NextORM.MySql.Tests;
 
@@ -85,4 +86,67 @@ public sealed class MariaDbEagerLoadPerParentPagingTests
         "GroupBy" => ctx.From<EagerLoadPerParentPagingTests.D211Child>().GroupBy(x => x.ParentId).OrderBy(x => x.Id).Limit(1),
         _ => throw new ArgumentOutOfRangeException(nameof(shape), shape, "unknown child shape"),
     };
+}
+
+/// <summary>
+/// T212-D7 row D: MariaDB inherits the MySQL dialect, so a nested (level 2+) single-query LoadWith must
+/// render the same level-per-join chain as MySQL and reject an inexpressible nested child shape before
+/// SQL. A distinct nested rendering would block the inherited-parity claim.
+/// </summary>
+[Trait("Feature", "T212-D7")]
+public sealed class MariaDbNestedEagerLoadingTests
+{
+    private const string ConnectionString =
+        "Server=localhost;Port=3306;Database=nextorm;User ID=nextorm;Password=nextorm";
+
+    private static IDataContext CreateMySql() => new MySqlDataContext(ConnectionString, new DataContextBuilder());
+
+    private static IDataContext CreateMariaDb() => new MariaDbDataContext(ConnectionString, new DataContextBuilder());
+
+    private static string SqlOf(IDataContext ctx, QueryCommand cmd)
+        => ((dynamic)ctx.GetPreparedQueryCommand((dynamic)cmd, false, false, CancellationToken.None)).DbCommand.CommandText;
+
+    private static EntityBuilder<EagerStratNestedParent> Nested(IDataContext ctx)
+        => ctx.From<EagerStratNestedParent>(b => b.HasMany(p => p.Mids, m => m.ParentId))
+            .LoadWith(
+                p => p.Mids,
+                c => c.From<EagerStratNestedMid>().LoadWith(m => m.Leaves, l => l.From<EagerStratNestedLeaf>(), m => m.Id, l => l.MidId),
+                p => p.Id,
+                m => m.ParentId,
+                EagerLoadMode.SingleQuery);
+
+    [Fact]
+    public void MariaDb_NestedSingleQuery_RendersTheSameChainAsMySql()
+    {
+        using var mysql = CreateMySql();
+        using var maria = CreateMariaDb();
+
+        var myBuilder = Nested(mysql);
+        var (mySpecs, myJoins) = myBuilder.BuildSingleQueryJoins();
+        var mySql = SqlOf(mysql, myBuilder.CreatePairCommand(mySpecs, myJoins));
+
+        var mariaBuilder = Nested(maria);
+        var (mariaSpecs, mariaJoins) = mariaBuilder.BuildSingleQueryJoins();
+        var mariaSql = SqlOf(maria, mariaBuilder.CreatePairCommand(mariaSpecs, mariaJoins));
+
+        mariaSql.Should().Be(mySql, "MariaDB inherits the MySQL dialect; the nested chain must not diverge");
+    }
+
+    [Fact]
+    public void MariaDb_NestedSingleQuery_InexpressibleGrandChildShape_FailsClosed()
+    {
+        using var ctx = CreateMariaDb();
+
+        var builder = ctx.From<EagerStratNestedParent>(b => b.HasMany(p => p.Mids, m => m.ParentId))
+            .LoadWith(
+                p => p.Mids,
+                c => c.From<EagerStratNestedMid>().LoadWith(m => m.Leaves, l => l.From<EagerStratNestedLeaf>().Distinct(), m => m.Id, l => l.MidId),
+                p => p.Id,
+                m => m.ParentId,
+                EagerLoadMode.SingleQuery);
+
+        var act = () => builder.BuildSingleQueryJoins();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Distinct*");
+    }
 }

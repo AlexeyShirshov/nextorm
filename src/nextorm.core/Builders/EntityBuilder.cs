@@ -1411,7 +1411,10 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
                 // descendant, and a specification that exposes the flattened projection items so the
                 // stitcher can assemble every level from the one result set. An unexpressible child shape
                 // (or a nested per-parent page) fails closed here, before any SQL is built or executed.
-                var plan = load.PlanSingleQuery(_dataProvider, _filterScope);
+                // The subtree's first join lands right after the items already laid out (Item1 is the
+                // root entity); its direct parent is the root, so a repeated CLR type at depth resolves
+                // to the correct projection slot.
+                var plan = load.PlanSingleQuery(_dataProvider, _filterScope, baseItemNumber: joins.Count + 2, parentItemNumber: 1);
                 specs.Add(plan.Spec);
                 joins.AddRange(plan.Joins);
             }
@@ -1831,7 +1834,13 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             typeof(TEntity),
             precedingTypes.Select(static type => (IReadOnlyList<Type>)new[] { type }).ToArray());
         var leftParameter = Expression.Parameter(leftType, "l");
-        var itemNumber = ResolveJoinLeftItemNumber(condition.Parameters[0].Type, precedingTypes);
+        // A nested single-query join carries the absolute projection item of its direct parent, set where
+        // the declaration tree was known: a repeated CLR type at several depths must not resolve to the
+        // most recent same-typed sibling (which can be a deeper node, or absent). A plain JoinInto leaves
+        // the sentinel 0 and keeps the structural type resolution.
+        var itemNumber = join.EagerParentItemNumber > 0
+            ? join.EagerParentItemNumber
+            : ResolveJoinLeftItemNumber(condition.Parameters[0].Type, precedingTypes);
 
         var rewritten = ReRootJoinConditionAt(condition, leftParameter, itemNumber);
         // Re-root the original condition too: the preparer injects the joined entity's global filters from
