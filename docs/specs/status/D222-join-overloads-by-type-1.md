@@ -1,0 +1,327 @@
+---
+task: T222
+issue: "#222"
+cycle: 1
+plan_revision: 1
+plan_state: ready
+evidence_contract_revision: 1
+variant: pdca-dotnet
+---
+
+# Goal
+
+Реализовать утверждённую спецификацию #222: перегрузки `Join`, `LeftJoin`, `RightJoin`, `FullJoin` без явного источника, с разрешением источника по типу присоединяемой сущности в **том же контексте**.
+
+Основание: `docs/specs/status/issue-222-evidence/evidence-01-alias-join-surface.md`; действующая поверхность — `EntityBuilder.cs:2515–2545`, `JoinedEntityBuilder.cs:31–55`. Устаревшие номера строк из issue не использовать как implementation evidence.
+
+## Минимальное решение
+
+1. **Суть:** убрать необходимость писать явный `context.From<TJoinEntity>()` для обычного типового join.
+2. **Ограничения:** сохранить существующие источники, семантику join, options, метаданные, максимальную арность 8 и изменения T213; не менять планировщик, кэш и материализацию.
+3. **Оптимум:** разрешать источник существующим `From<TJoinEntity>()` того же контекста и делегировать существующей source-explicit перегрузке. Дальнейшее разрешение остаётся в текущем пути `JoinSourceResolver.Resolve<T>` → `ResolveSource() ?? GetFrom(type, null)` (`JoinSourceResolver.cs:13–14`).
+
+| Альтернатива | Плюсы | Минусы / цена / риск |
+|---|---|---|
+| Делегация через существующий `From<T>()` и source-explicit join — **выбрано** | Минимальное изменение; единый путь метаданных, options и AST | Дополнительное создание builder на этапе построения запроса |
+| Прямой `GetFrom(type, null)` и вызов внутреннего join | Меньше промежуточных объектов | Риск обойти семантику `From<T>()` и продублировать обработку |
+| Новый общий механизм разрешения источников | Возможная будущая унификация | Ненужный рефакторинг общей области T213; существенно больше риск и footprint |
+
+## Точная API-поверхность
+
+Для каждого имени `M ∈ {Join, LeftJoin, RightJoin, FullJoin}` добавить:
+
+- На `EntityBuilder<TEntity>`:  
+  `M<TJoinEntity>(Expression<Func<TEntity, TJoinEntity, bool>> predicate, Action<JoinOptions>? options = null)`  
+  → `JoinedEntityBuilder<TEntity, TJoinEntity>`.
+- На каждом `JoinedEntityBuilder<T1,…,Tn>`, **n = 2, 3, 4, 5, 6, 7**:  
+  `M<TJoinEntity>(Expression<Func<Projection<T1,…,Tn>, TJoinEntity, bool>> predicate, Action<JoinOptions>? options = null)`  
+  → `JoinedEntityBuilder<T1,…,Tn,TJoinEntity>`.
+
+Это **28 новых публичных членов**:
+
+| Владелец | Новые члены | Результирующая арность |
+|---|---|---:|
+| `EntityBuilder<TEntity>` | `Join<TJoinEntity>`, `LeftJoin<TJoinEntity>`, `RightJoin<TJoinEntity>`, `FullJoin<TJoinEntity>` | 2 |
+| `JoinedEntityBuilder<T1,T2>` | Те же четыре source-less перегрузки | 3 |
+| `JoinedEntityBuilder<T1,T2,T3>` | Те же четыре | 4 |
+| `JoinedEntityBuilder<T1,T2,T3,T4>` | Те же четыре | 5 |
+| `JoinedEntityBuilder<T1,T2,T3,T4,T5>` | Те же четыре | 6 |
+| `JoinedEntityBuilder<T1,T2,T3,T4,T5,T6>` | Те же четыре | 7 |
+| `JoinedEntityBuilder<T1,T2,T3,T4,T5,T6,T7>` | Те же четыре | 8 |
+
+Ограничения generic-параметров сохраняются такими же, как у соответствующих существующих source-explicit методов; новых ограничений не вводить. Возвращаемые типы выше — явное предположение по представленному arity-chain; несовпадение с действующим контрактом требует DO → PLAN, а не молчаливой смены API.
+
+**Вне scope:** `CrossJoin`, `CrossApply`, `OuterApply`, негeneric raw-table `EntityBuilder`, source-less методы на терминальной арности 8, новые CTE/QueryCommand API. Issue перечисляет только четыре predicate-based join; `CrossJoin` не имеет такого predicate-контракта.
+
+# Acceptance criteria
+
+Все критерии ниже — **P1 по построению**. CHECK не понижает их.
+
+| ID | Критерий и проверка | Негативный случай |
+|---|---|---|
+| A222-01 | Добавлены ровно перечисленные 28 перегрузок; compile fixtures используют каждую форму и проверяют результирующую арность | Нет join до арности 9, raw-table/type-only или type-only Cross/Apply; нет изменения существующих сигнатур |
+| A222-02 | Type-only форма эквивалентна явному `sameContext.From<T>()`: источник, метаданные, SQL/AST и результат; options передаются существующему пути | Нельзя брать другой контекст, изобретать fallback-таблицу, обходить configured mapping, менять sticky cache flags или планировщик |
+| A222-03 | Четыре join kind, все поддерживаемые receiver-арности, omitted/null/non-null options и unmatched rows работают согласно existing explicit-source oracle | `null` predicate отклоняется `ArgumentNullException` до разрешения источника; неразрешимый через `From<T>()` источник не превращается в успешный запрос |
+| A222-04 | Существующие корректные вызовы с EntityBuilder, CTE и QueryCommand сохраняют компиляцию и поведение; inference документирован и проверен | Untyped lambda без выводимого `TJoinEntity` не должна случайно выбирать другой API; возможная неоднозначность invalid all-null вызовов не скрывается |
+| A222-05 | EN/RU joins guide обновлены в этом DO; все 28 членов записаны кандидатами T53; текущие dirty changes T213 сохранены | Не включать held freeze, не создавать `PublicAPI.*`, не менять unrelated файлы и не ссылаться из публичных docs на `docs/specs/**` |
+| A222-06 | Финальный build без warnings; core, шесть SQL-generation проектов и container-backed integration успешно выполнены; merged coverage ≥85% line и ≥75% branch | Skip/unavailable PostgreSQL, SQL Server, MySQL или ClickHouse не является passing evidence; ненулевой exit или недостигнутый порог не закрывает критерий |
+| A222-07 | Замороженный rv=1 evidence contract полностью заполнен фактическими результатами и provenance | Отсутствующий отчёт, неподтверждённый символ или запланированный источник не считается evidence |
+
+## Совместимость и inference
+
+- Корректный non-null явный источник не совместим с первым параметром новой перегрузки — `Expression<…>`; новая перегрузка не должна мешать таким вызовам.
+- Проверить также typed-null source с typed predicate, три аргумента старой формы, optional/named arguments и typed expression/lambda.
+- `Join<TJoinEntity>((left, right) => …)` — основной документированный вызов. Типизированный predicate может позволять inference; неполностью типизированная lambda без явного generic-аргумента не гарантирует его.
+- **Не обещаем отсутствие любой новой неоднозначности:** `JoinedEntityBuilder.Join<T>(null, null)` потенциально становится неоднозначным между `(source, predicate)` и `(predicate, options)`. Это invalid-input форма; проверка фиксирует фактический результат компилятора. Документировать typed cast для различения намерения.
+- Допущение: спецификация допускает указанное ограничение для invalid all-null вызовов. Если её действующий контракт требует сохранения компиляции таких вызовов, это конфликт API-формы → DO → PLAN.
+- Отсутствие явной регистрации типа **не означает** неразрешимость: convention mapping сохраняется. Отрицательный тест использует тип/конфигурацию, для которых existing `From<T>()` действительно не может получить корректный источник.
+
+# Planned write-footprint
+
+| Путь | Назначение |
+|---|---|
+| `src/nextorm.core/Builders/EntityBuilder.cs` | **Public API:** четыре перегрузки |
+| `src/nextorm.core/Builders/Joins/JoinedEntityBuilder.cs` | **Public API:** 24 перегрузки |
+| `tests/nextorm.core.tests/InMemoryJoinTests.cs` | Runtime equivalence, null/source guards, options, арности |
+| `tests/nextorm.sqlite.tests/TypeOnlyJoinSqlGenerationTests.cs` | Новый, планируемый файл |
+| `tests/nextorm.postgres.tests/TypeOnlyJoinSqlGenerationTests.cs` | Новый, планируемый файл |
+| `tests/nextorm.sqlserver.tests/TypeOnlyJoinSqlGenerationTests.cs` | Новый, планируемый файл |
+| `tests/nextorm.mysql.tests/TypeOnlyJoinSqlGenerationTests.cs` | Новый, планируемый файл |
+| `tests/nextorm.mariadb.tests/TypeOnlyJoinSqlGenerationTests.cs` | Новый, планируемый файл |
+| `tests/nextorm.clickhouse.tests/TypeOnlyJoinSqlGenerationTests.cs` | Новый, планируемый файл |
+| `tests/nextorm.integration.tests/CommonTestSuite.JoinByType.cs` | Новый, планируемый partial-файл существующего общего suite |
+| `docs/guide/02-joins.md` | EN API и примеры |
+| `docs/ru/guide/02-joins.md` | RU зеркальный контракт |
+| `docs/specs/status/collection-1.0.9-todo.md` | T222 result/progress и перечень T53 candidates; не менять held state T53 |
+| `docs/specs/status/D222-join-overloads-by-type-1.md` | Этот план, результаты, evidence index |
+| `artifacts/pdca/D222-join-overloads-by-type/rv1/**` | Планируемые runners, compile fixtures, логи, coverage, manifests |
+
+Существующий `docs/specs/status/issue-222-evidence/**` — вход, сохраняется. Не писать в `D213-joininto-remainder-1.md`, JoinInto-файлы и T213 benchmark reports. Генерируемые build/DocFX outputs не являются новыми исходниками. Сохранять CRLF.
+
+# Variant matrix
+
+Статусы относятся к обязательству проверки, а не к уже выполненным тестам.
+
+| ID | Вариант / наблюдаемая применимость | Закрытие |
+|---|---|---|
+| V01 | Обычный reference entity, разрешимый `From<T>()` | **test:** explicit/type-only equivalence |
+| V02 | Convention-resolvable тип без explicit registration | **test:** не отвергать только за отсутствие регистрации |
+| V03 | Configured mapping, отличающийся от convention mapping | **test:** тот же mapped source в обоих путях |
+| V04 | Тип/конфигурация, неразрешимые existing `From<T>()` | **test:** тот же отказ на соответствующей стадии, без fallback |
+| V05 | `Join` | **test:** совпавшие/несовпавшие строки, SQL/AST, все receiver-арности |
+| V06 | `LeftJoin` | **test:** сохранение unmatched left и nullable/default результата |
+| V07 | `RightJoin` | **test:** сохранение unmatched right; capability guard как у explicit формы |
+| V08 | `FullJoin` | **test:** unmatched с обеих сторон; capability guard как у explicit формы |
+| V09 | `EntityBuilder<TEntity>` → арность 2 | **test:** все четыре kind × omitted/non-null options |
+| V10 | Joined receiver арности 2 → 3 | **test:** те же восемь комбинаций |
+| V11 | Арность 3 → 4 | **test:** те же восемь комбинаций |
+| V12 | Арность 4 → 5 | **test:** те же восемь комбинаций |
+| V13 | Арность 5 → 6 | **test:** те же восемь комбинаций |
+| V14 | Арность 6 → 7 | **test:** те же восемь комбинаций |
+| V15 | Арность 7 → 8 | **test:** те же восемь комбинаций |
+| V16 | Терминальная арность 8, raw-table, Cross/Apply | **guard:** semantic API inventory подтверждает отсутствие новых форм |
+| V17 | Options omitted и explicit `null` | **test:** одинаковый результат/SQL с explicit-source oracle |
+| V18 | Non-null options callback | **test:** число вызовов совпадает с explicit oracle; callback не теряется |
+| V19 | Options callback бросает sentinel exception | **test:** исключение не поглощается и не заменяется |
+| V20 | `null` predicate на каждом receiver и kind | **test:** `ArgumentNullException` прежде source resolution |
+| V21 | Typed expression/typed lambda; explicit generic type | **test:** compile-positive fixtures |
+| V22 | Untyped lambda без выводимого join type | **guard:** compile-negative fixture; не обещать inference |
+| V23 | Existing EntityBuilder/CTE/QueryCommand source calls; named/optional args | **test:** compile-positive и existing regression suites |
+| V24 | Untyped all-null/default argument pairs | **guard:** compiler probe с baseline comparison; неоднозначность invalid-input формы отражена в docs |
+| V25 | Value-type entity / nullable entity type | **guard:** сохранить existing generic constraints; если тип разрешён существующим API — paired runtime test, иначе compile rejection |
+| V26 | Unmatched value/reference projection components | **test:** сохранить existing null/default semantics, не добавлять преобразования |
+| V27 | SQLite/Postgres/SQL Server/MySQL/MariaDB/ClickHouse dialects | **test:** все шесть SQL-generation suites; explicit/type-only сравнение |
+| V28 | SQLite + PostgreSQL/SQL Server/MySQL/ClickHouse real execution | **test:** общий integration suite; недоступность контейнера не capability guard |
+| V29 | Join kind не поддерживается данным dialect/provider | **guard:** утверждение эквивалентного отказа explicit/type-only, не skip новой проверки |
+| V30 | Отдельный real MariaDB server | **deferred:** триггер — появление отдельной MariaDB integration infrastructure или provider-specific regression; MariaDB SQL-gen обязателен сейчас |
+| V31 | Планировщик, shared command/cache flags, row mapper | **guard:** semantic/diff review — изменений нет |
+| V32 | Source-specific aliases, CTE и QueryCommand state | **test:** explicit APIs сохраняются; новое API не обещает переноса состояния из отсутствующего builder |
+
+# Task list
+
+Все задачи выполняются в одной ревизии; исходные критерии не заменяются.
+
+1. **D222-01 — fix now: закрепить план и baseline.**  
+   До production edits записать этот статус и rv=1; сохранить список dirty paths и baseline diff для shared files. Проверить завершённость передачи T213, загрузить действующие `pdca-dotnet`/`nextorm-pdca` правила и integration skill. Подготовить artifact runners с capture exit codes и compile fixtures.  
+   Опорные места: `collection-1.0.9-todo.md:25,56,66`; dirty paths из evidence pack.
+
+2. **D222-02 — fix now: добавить 28 перегрузок.**  
+   `EntityBuilder.cs:2515–2545`, `JoinedEntityBuilder.cs:31–55` и соответствующие арности до terminal builder. Применить ранний null-predicate guard; source resolution через текущий контекст и делегацию existing join. Не менять `JoinSourceResolver.cs:13–14`, `JoinCore:2725` и общую инфраструктуру.
+
+3. **D222-03 — fix now: core и compiler coverage.**  
+   Расширить `InMemoryJoinTests.cs:14`; использовать existing fixtures, включая join/left/right/full и арность 8 (`:23,:203,:241,:258,:161`). Закрыть V01–V26, включая **56 kind × receiver × options комбинаций**, negative source/predicate cases и explicit-source compatibility.
+
+4. **D222-04 — fix now: provider SQL и integration coverage.**  
+   Создать перечисленные семь планируемых файлов, используя существующие provider/common suite conventions. Проверять equivalence, а не вводить новые dialect rules. Выполнить real-provider случаи V28/V29 без infrastructure skips.
+
+5. **D222-05 — fix now: docs и T53 register.**  
+   Обновить EN/RU `02-joins.md` в текущем dirty состоянии: четыре метода, цепочки до восьми таблиц, predicate/options, inference, `From<T>()` resolution, invalid-null caveat, границы scope. Перечислить все 28 кандидатов T53, сохранив freeze held.
+
+6. **D222-06 — fix now: один финальный DO → CHECK boundary sweep.**  
+   После всех изменений выполнить build, compile fixtures, полный набор test projects с coverage, coverage merge/report, DocFX и final semantic/design audit. Записать receipts и actual locations, затем передать CHECK. Локальные focused runs во время DO разрешены, но не заменяют sweep.
+
+**Deferred:** новый resolver/refactoring, Cross/Apply/type-only raw-table API, activation T53, отдельная MariaDB database infrastructure. Триггеры соответственно: доказанное дублирование/новое требование, отдельная утверждённая задача, возобновление T53, появление infrastructure/regression. T213 remainder и performance reports не входят в этот DO.
+
+# Test strategy
+
+## Unit / compiler
+
+- `InMemoryJoinTests`: сравнение explicit/type-only результатов для четырёх kind, receiver-арностей 1–7, unmatched строк и null/default projection semantics.
+- Минимальный обязательный options набор: omitted, explicit null, счётчик callback и sentinel-throwing callback.
+- Configured mapping и convention mapping — отдельные случаи.
+- Unresolvable case выбирается по **доказанному отказу existing `From<T>()`**, а не по предположению «тип не зарегистрирован».
+- Compiler fixtures проверяют все 28 членов, return types, typed/untyped inference, named/optional arguments и существующие source overloads.
+- Compile-negative fixture считается успешной проверкой только при ожидаемом compiler diagnostic, а не при любой ошибке restore/build.
+- Новые классы тестов и test symbols — **планируемые**, не существующее evidence. Contract использует project-level запуск и не опирается на выдуманные FQN.
+
+## Provider SQL-generation
+
+Полные suites:
+
+- `tests/nextorm.sqlite.tests`
+- `tests/nextorm.postgres.tests`
+- `tests/nextorm.sqlserver.tests`
+- `tests/nextorm.mysql.tests`
+- `tests/nextorm.mariadb.tests`
+- `tests/nextorm.clickhouse.tests`
+
+В каждом — paired explicit/type-only SQL, join kind и chained projection, options forwarding, configured source. Поддержка right/full следует existing explicit oracle; unsupported поведение проверяется assertion, не infrastructure skip.
+
+## Integration
+
+`tests/nextorm.integration.tests/CommonTestSuite.JoinByType.cs`: common fixture проверяет результаты inner/left и right/full там, где explicit форма поддерживается; иначе проверяет эквивалентный отказ.
+
+Перед запуском загрузить `.opencode/skills/running-integration-tests/SKILL.md`. Использовать указанный Podman socket; при отсутствии socket выполнить предусмотренное skill восстановление и rerun. PostgreSQL, SQL Server, MySQL, ClickHouse должны действительно выполняться; SQLite тоже включён. Исключения инфраструктуры — DO → PLAN, не «зелёный со skip».
+
+## Coverage и boundary
+
+- Использовать `coverage.settings.xml`: scope `nextorm.{core,sqlite,postgres,sqlserver}`.
+- Итоговые пороги: **line ≥85%, branch ≥75%**.
+- На `1.0.9` CI может предупреждать вместо hard-fail; это не отменяет обязательного отчёта и критерий данного плана.
+- Один финальный sweep после D222-02…05; сбор coverage совмещён с full project tests, без второго дублирующего solution-wide запуска.
+- Pre-existing недостаток coverage не даёт права расширять scope или ослаблять порог: представить baseline evidence и вернуть в PLAN.
+
+# Docs plan
+
+**Трогаем:** EN/RU joins guide и внутренний status/collection register.
+
+**Не трогаем:** toc, нумерацию guide, ClickHouse guide, публичные API references и readme, если не обнаружена фактическая сломанная ссылка. Новые страницы/переименования не планируются.
+
+Требования:
+
+- EN/RU синхронны в том же DO.
+- Чётко отличать source-less overload от explicit source/CTE/QueryCommand.
+- Показывать явный generic type в основном примере.
+- Объяснить context-local `From<T>()` mapping и предел арности.
+- Не создавать публичные ссылки на внутреннюю спецификацию.
+- Не перезаписывать уже имеющиеся изменения guide от T213.
+
+# Perf decision
+
+**Новый benchmark не нужен.**
+
+План ограничен additive wrappers на этапе построения builder/AST: `EntityBuilder.cs:2515–2545,2725`, `JoinedEntityBuilder.cs:31–55`, `JoinSourceResolver.cs:13–14`, analog `DataContextExtensions.cs:1019`. Нет изменения per-row materialization, query execution или plan-cache path.
+
+Cached-path performance acceptance overlay здесь **не применяется**, поскольку существующие query-path/plan-cache алгоритмы не меняются. Это обязательный review guard, не предположение о незаметности любой нагрузки.
+
+Если DO потребует изменить planner/preparation/cache или per-row path, план инвалидируется: DO → PLAN для измерения с pre-change baseline и соответствующего evidence contract. T213 benchmark artifacts не использовать как baseline T222.
+
+# Reconnaissance decision
+
+**Design spike не нужен.** Type-only resolution доказан existing `From<T>()` (`DataContextExtensions.cs:1019`); join delegation/resolution уже существует.
+
+Compiler compatibility probe входит в D222-03 как обязательная проверка выбранного API, а не exploratory spike. Наблюдаемый результат: compile-positive cases проходят, negative cases дают ожидаемые diagnostics, explicit-source oracle сохраняется.
+
+# Unit execution mode
+
+**Последовательно, single tree, branch `1.0.9`; без worktree.**
+
+Причина: production builders, `Builders/Joins/**`, два guide и collection register пересекаются с T213/соседними задачами. Запретить параллельных писателей этих файлов до передачи D222 в CHECK. Независимые read-only gathers и независимые test processes допустимы, но не параллельная реализация.
+
+Никаких commit, push или merge.
+
+# Design checklist
+
+| Проверка | Решение PLAN |
+|---|---|
+| Утверждённая постановка / issue / milestone | #222, OPEN enhancement, milestone 1.0.9; implementation разрешена текущим циклом |
+| Минимальность | 28 thin overloads; existing source resolution и explicit joins |
+| Ответственность / дублирование | Не вводить resolver/framework и новые публичные типы |
+| API/naming | Четыре existing names, generic join type, predicate + optional options; arity limit сохранён |
+| Fail-closed | Null predicate — ранний guard; invalid source — existing resolution failure без fallback |
+| Совместимость | Positive compiler matrix + explicit oracle; all-null invalid-input caveat явно выделен |
+| Метаданные / cache | Не менять configured metadata, TVP cache, `QueryCommand.Cache`, `storeInCache` semantics |
+| Providers | Не добавлять capabilities; dialect/runtime equality с explicit источником |
+| Null/value/reference | Existing constraints и projection semantics; V20/V25/V26 обязательны |
+| Sealing / anti-pattern | Новые типы не планируются; sealing ratio в pack отсутствует и не заявляется измеренным |
+| Public API freeze | T53 held; перечислить 28 candidates, не включать анализатор и не создавать `PublicAPI.*` |
+| Docs / repo hygiene | EN/RU, CRLF, сохранение dirty изменений и source provenance |
+| Security / scope | Нет SQL identifier construction, новых connections, credentials или внешних записей |
+
+Результат: выбранный дизайн годен для DO при выполнении перечисленных prerequisites; final audit подтверждает, что фактический diff не вышел за него.
+
+# Risks/assumptions
+
+| Пробел / риск | Закрытие |
+|---|---|
+| Полный текст constraints/return signatures отсутствует в pack | Явное предположение: повторяют existing arity contract. Semantic inventory и compile fixtures обязательны; несовпадение → PLAN |
+| Конкретный rejected entity type не назван | DO устанавливает existing `From<T>()` rejection и сохраняет его как paired oracle; отсутствие registration само по себе не oracle |
+| Invalid all-null source calls могут стать ambiguous | Допустимость этого ограниченного изменения — явное допущение; compiler receipt и docs обязательны |
+| Возможное shadowing downstream extension methods | Внешняя ecosystem compatibility **deferred**; триггер — конкретный downstream compilation report. Repository calls проверяются сейчас |
+| Правильная настройка `JoinOptions` не описана в pack | Не выдумывать properties; обязательны callback count/null/sentinel tests и existing options regressions |
+| Dirty shared docs/builders | Baseline snapshot, последовательное владение, final preservation audit |
+| T53 может быть активирован sibling task | Текущее доказанное состояние held; изменение состояния → prerequisite/replan, не игнорировать RS0016 |
+| Контейнеры/tooling/coverage могут оказаться недоступны | Восстановление по skill; затем provisional DO report. Не объявлять done и не ослаблять criteria |
+| New overload wrappers могут потребовать инфраструктурных изменений | Не расширять scope молча; DO → PLAN |
+
+Уверенность высокая в минимальном подходе; constraints, точный invalid-type fixture, compiler corner cases и реальный provider run остаются обязательствами проверки, а не выполненными фактами.
+
+# Evidence contract rv=1
+
+## Frozen-contract note
+
+**До production DO coder записывает этот контракт в статус-файл.** Все перечисленные строки обязательны. Их planned sources не считаются полученным evidence.
+
+- Корень `B = artifacts/pdca/D222-join-overloads-by-type/rv1`.
+- Команды выполняются из `/home/alex/sources/nextorm`.
+- Планируемый producer `bash "$B/capture.sh" <row-id> -- <command…>` сохраняет:
+  `B/<row-id>/command.txt`, `stdout.log`, `stderr.log`, `exitcode.txt`, `receipt.json`.
+  Он возвращает exit code вызываемой команды, не маскирует pipeline failures.
+- `receipt.json` фиксирует row ID, requirement IDs, `rv=1`, рабочую директорию, revision/tree provenance, время, applicability и результаты.
+- Для compound runner обязательны отдельные exit/result receipts каждого дочернего вызова.
+- Production/test `file:line` записываются **после** реализации из фактического semantic evidence. Будущие locations/test symbols не заявляются.
+- Coverage/test applicability predicates ниже наблюдаемы; отсутствие отчёта не делает строку неприменимой.
+- Существующие ID требований/строк сохраняются при обоснованной ревизии; новая `rv` явно supersedes старую с сохранением обязательств и добавлением ID новых вариантов. Для r=1 supersession отсутствует.
+- Отсутствующий отчёт само по себе не обосновывает новую rv, DO iteration или сброс попыток.
+
+## Required rows
+
+| Stable row ID; rv | Требования; проверка / сценарий | Evidence kind и planned source | Точный producer / вызов | Oracle: exit / result / log | Обязательные artifacts | Поток-владелец; applicability |
+|---|---|---|---|---|---|---|
+| E222-BASE; 1 | A222-05,07; shared dirty baseline и prerequisites | Git/status + frozen-plan provenance | `bash "$B/capture.sh" E222-BASE -- bash "$B/baseline.sh"`; runner вызывает `git status --short`, `git diff -- src/nextorm.core/Builders docs/guide/02-joins.md docs/ru/guide/02-joins.md docs/specs/status/collection-1.0.9-todo.md` и сохраняет freeze state | Exit 0; исходный dirty diff сохранён, T213 handoff подтверждён, T53 held | `B/E222-BASE/**`, `baseline.patch`, `prerequisites.json`; этот status-файл | coder; **всегда**, до implementation |
+| E222-API; 1 | A222-01,02,04,05; 28 signatures и existing semantic surface | Roslyn semantic inventory + compiler coverage manifest | `Task(scout, "T222 rv1: Roslyn first; discover and inventory EntityBuilder<TEntity> and JoinedEntityBuilder arities 2..8, new and existing join signatures/constraints/returns; inspect source delegation and report actual file:line. No text-search symbol resolution.")`; coder сохраняет ответ | Invocation успешен; ровно 28 additions; constraints/returns подтверждены; исключённые additions отсутствуют | `B/E222-API/semantic-report.md`, `members.json`, `receipt.json`; T53 candidate перечень в collection status | scout → coder persistence; **всегда** |
+| E222-BUILD; 1 | A222-01,06; production/test compile | Build transcript | `bash "$B/capture.sh" E222-BUILD -- dotnet build -c Debug` | Exit 0; итог 0 warnings/0 errors, без suppressed new diagnostics | `B/E222-BUILD/**` | coder runs, check verifies; **всегда** |
+| E222-COMPAT; 1 | A222-01,03,04; V16,V21–V25 | Compiler positive/negative cases, baseline comparison | `bash "$B/capture.sh" E222-COMPAT -- bash "$B/compatibility/run.sh"`; runner выполняет `dotnet build <каждый manifest-listed fixture.csproj> -c Debug` | Runner exit 0; positive builds exit 0; negative имеют ожидаемый diagnostic. All-null pair зафиксирован относительно baseline; restore errors не принимаются | `B/compatibility/**`, `B/E222-COMPAT/**`, case manifest с точными project paths/commands/diagnostics | coder; **всегда**; constraint-dependent value-type branches решаются по E222-API |
+| E222-CORE; 1 | A222-02,03,04,06; V01–V26 | Full core suite + coverage | `bash "$B/capture.sh" E222-CORE -- dotnet-coverage collect "dotnet test tests/nextorm.core.tests -c Debug" -s coverage.settings.xml -f xml -o "$B/coverage/core.xml"` | Exit 0; tests реально обнаружены, 0 failed; matrix cases отражены в manifest и actual test evidence | `B/E222-CORE/**`, `B/coverage/core.xml`, core case manifest | coder; **всегда** |
+| E222-SQL; 1 | A222-02,03,04,06; V27,V29,V32 | Шесть full dialect suites + coverage | `bash "$B/capture.sh" E222-SQL -- bash "$B/sql-sweep.sh"`; для `p=sqlite,postgres,sqlserver,mysql,mariadb,clickhouse` точно выполняет `dotnet-coverage collect "dotnet test tests/nextorm.$p.tests -c Debug" -s coverage.settings.xml -f xml -o "$B/coverage/$p.xml"` | Runner и все шесть команд exit 0; каждая suite обнаружена, 0 failed; supported/unsupported oracle cases явно перечислены | `B/E222-SQL/**`, шесть per-provider receipts, `B/coverage/{sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}.xml`, SQL case manifest | coder; **все шесть безусловно** |
+| E222-INTEGRATION; 1 | A222-02,03,04,06; V28,V29 | Real-provider execution + coverage; infrastructure provenance | После integration skill: `bash "$B/capture.sh" E222-INTEGRATION -- env DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet-coverage collect "dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor" -s coverage.settings.xml -f xml -o "$B/coverage/integration.xml"` | Exit 0; SQLite/Postgres/SQL Server/MySQL/ClickHouse действительно выполнены, 0 failed; нет infrastructure/provider skips. Capability guards — assertions с explicit oracle | `B/E222-INTEGRATION/**`, `B/coverage/integration.xml`, provider execution manifest, recovery log при необходимости | coder; **всегда**, socket отсутствие не исключает строку |
+| E222-COVERAGE; 1 | A222-06; итоговые line/branch thresholds | Merged coverage + machine-readable gate | `bash "$B/capture.sh" E222-COVERAGE -- bash "$B/coverage-gate.sh"`; runner вызывает `dotnet-coverage merge ... merged.xml`, затем `reportgenerator ...` и проверяет totals | Все команды exit 0; included scope соответствует settings; line ≥85%, branch ≥75%; missing/zero denominator не трактуется как успех | `B/E222-COVERAGE/**`, `merged.xml`, `report/Cobertura.xml`, `report/Summary.txt`, `thresholds.json` | coder, check applies oracle; **всегда** |
+| E222-DOCS; 1 | A222-05,06; EN/RU и publication | DocFX build + bilingual docs review | `bash "$B/capture.sh" E222-DOCS -- dotnet docfx docs/docfx.json`; `Task(scout, …)` review EN/RU 02-joins.md | Exit 0; нет новых broken links/API samples; review удовлетворяет обоим языкам | `B/E222-DOCS/**`, `docs-review.md`; оба guide | coder + scout; **всегда** |
+| E222-DESIGN; 1 | A222-01…05,07; footprint, invariants, perf decision, dirty preservation | Final semantic/diff design audit | `Task(scout, "T222 rv1 final audit: Roslyn first for symbols; compare actual production change to 28-member contract and baseline; verify context-local From delegation, early predicate guard, options, no planner/cache/row/provider algorithm changes, no T213 overwrite, held T53 and CRLF; report actual file:line and failures.")`; coder сохраняет ответ | Invocation успешен; каждый checklist invariant PASS с provenance; новые perf applicability triggers отсутствуют | `B/E222-DESIGN/audit.md`, `receipt.json`, final footprint manifest | scout → coder; **всегда**, perf waiver подтверждается здесь |
+| E222-CHECK; 1 | A222-01…07; completeness и final verdict | Independent CHECK + evidence index | `Task(check, "Check D222-join-overloads-by-type-1.md, plan r1 / contract rv1; evaluate every required row and variant, P1 matrix and provenance; apply finite re-gather budget; return verdict without lowering criteria.")` | PASS только при полном evidence; missing report → bounded re-gather, не fictional PASS | `docs/specs/status/D222-join-overloads-by-type-1.md`, `B/E222-CHECK/check-report.md`, evidence index и re-gather ledger | check; **всегда** |
+
+**CHECK re-gather budget:** максимум **2 targeted rounds на данный CHECK**, владелец — `check`. В каждом раунде заранее перечисляются отсутствующие/невалидные row IDs; повторяются только нужные producer calls, scope не меняется. Coder запускает команды/сохраняет artifacts, scout собирает read-only facts. После исчерпания бюджета CHECK сообщает недостаток evidence; оркестратор передаёт в PLAN. Один лишь отсутствующий отчёт не запускает production DO заново.
+
+# Prerequisites / requirements on sibling results
+
+1. **T213:** завершённая передача текущего `Builders/Joins/**`; никакого параллельного writer. Сохраняются его resolver, projection/arity semantics, JoinInto и dirty docs.
+2. **Shared Builders:** до D222-02 зафиксировать tree provenance; изменения siblings в двух production файлах после baseline требуют повторной совместной проверки, не overwrite.
+3. **Shared docs/register:** sequential edits с сохранением baseline hunks; нельзя заменять guide или collection status целиком.
+4. **T53:** текущий held state — доказанное предусловие. Активация analyzers/PublicAPI siblings требует включить их обязательства через PLAN; не отключать diagnostics.
+5. **Toolchain:** .NET 10, warnings-as-errors, центральные версии, OS-specific outputs, CRLF; никаких package/API-freeze изменений в данном scope.
+6. **DO reports:** blocker report провизорный, не done. Новое аддитивное предусловие сохраняет исходную D222-задачу активной, blocked на зависимости, со всеми критериями и остатком.
+7. **Возврат в PLAN:** истинный внешний blocker → рекомендация оркестратору вызвать `escalate`; недостаток evidence → сначала targeted scout, стойкая низкая уверенность → `escalate`, trigger 5. Фактическая смена действий/зависимостей требует новой `P:`-задачи и r+1; переименование или отсутствие отчёта revision не меняет.
+
+## Progress log
+
+- 2026-10-13 PLAN r=1 persisted by coder (collection `1.0.9-todo`, task T222 / issue #222). plan_state=ready. DO not started (collection task-PLAN boundary: yield at PLAN→DO).
