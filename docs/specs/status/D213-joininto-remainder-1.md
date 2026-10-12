@@ -1,10 +1,10 @@
 # D213 — JoinInto remainder (composite keys, composite junction selectors, M:N under single-query)
 
 - task: T213 / issue #213 — https://github.com/AlexeyShirshov/nextorm/issues/213
-- collection: `1.0.9-todo`; selected_variant: `pdca-dotnet`; cycle: N=1; plan_revision: r=1 (contract rv=1)
+- collection: `1.0.9-todo`; selected_variant: `pdca-dotnet`; cycle: N=1; plan_revision: r=2 (contract rv=2)
 - base ref: `58025147` (branch `1.0.9`)
-- phase: **DO — started (r=1)**
-- plan_state: **ready** — r=1 finalized (planner, medium tier); evidence contract rv=1 frozen
+- phase: **DO — in progress (r=2)**
+- plan_state: **ready** — r=2 replanned (planner, medium tier); evidence contract rv=2 (supersedes rv=1)
 
 ## Notice
 
@@ -33,13 +33,13 @@ Approach decision: (selected) extend existing JoinInto assembly + composite mach
 
 ## Ordered units (single tree) with states
 
-Execution order D00 -> D01 -> D02 -> D03 -> D04 -> D05 -> D06; preserve red evidence before implementation; measure unmodified acceptance baseline before perf-affecting changes; establish supported in-memory comparators before D02.
+Execution order D00 -> D01 -> D03 -> D02 -> D04 -> D05 -> D06; preserve red evidence before implementation; measure unmodified acceptance baseline before perf-affecting changes; establish supported in-memory comparators before D02. r=2 inserts D03 (projection-materialization prerequisite) before D02's direction-B resumption.
 
 - **P:T213-r1-close-readiness** — done — resolved reconnaissance + finalized r=1 readiness.
 - **D00** — done — write this finalized status, retain complete frozen rv=1 contract + manifest obligations, replace Notice.
 - **D01** — pending — red regressions and scalar controls in core JoinInto tests, all six provider SQL-test projects, `CommonTestSuite.JoinInto.cs`; establish comparable benchmark evidence and planned `benchmarks/nextorm.benchmark/JoinIntoBenchmarks.cs`.
-- **D02** — pending — generalize complete-key projection/identity/matching/junction assembly at `EntityBuilder.cs:864-1009`; `JoinIntoSpec.cs:189/319/436/551/745`; `JoinIntoStitcher.cs:103-215`; `JoinIntoManyToManySpec.cs:221-339`; `JunctionLinkSourceFactory.cs:99-107`.
-- **D03** — pending — integrate composite relationships/junction selectors into SingleQuery at `EntityBuilder.cs:1239-1241/1589/1630` and `JoinIntoManyToManySpec.cs:398/448`; retain unrelated guards and query-count controls.
+- **D02** — blocked on D03 — generalize complete-key projection/identity/matching/junction assembly at `EntityBuilder.cs:864-1009`; `JoinIntoSpec.cs:189/319/436/551/745`; `JoinIntoStitcher.cs:103-215`; `JoinIntoManyToManySpec.cs:221-339`; `JunctionLinkSourceFactory.cs:99-107`; then resume with the escalation-approved direction B (composite junction link source; scalar `JoinIntoLink<,>` unchanged; componentwise ON via `BuildPairedKeyEquality`) and integrate composite relationships/junction selectors into SingleQuery at `EntityBuilder.cs:1239-1241/1589/1630` and `JoinIntoManyToManySpec.cs:398/448`; retain unrelated guards and query-count controls.
+- **D03** — active (fix-now) — admixed mapped-entity + supported-scalar projection admission at `QueryCommand.QueryPreparer.cs:1448-1451` (prerequisite for D02 direction B: `Projection<TJunction,long>` expands the mapped junction item and keeps the occurrence scalar).
 - **D04** — pending — complete positive/negative coverage across all six SQL-test projects, core regressions, `CommonTestSuite.JoinInto.cs`, `ClickHouseJoinIntoOneToOneTests.cs`, focused ClickHouse/MariaDB adapters; run actual six-provider integration and final measurements.
 - **D05** — pending — update EN+RU and internal docs (list below).
 - **D06** — pending — collect/validate rv=1 evidence, coverage, logs; update status; address CHECK findings without weakening AC or evidence obligations.
@@ -50,7 +50,7 @@ Unit execution mode: sequential in the current tree. D01/D04 share tests; D02/D0
 
 - D01: existing core JoinInto test files, six provider SQL-test projects, `CommonTestSuite.JoinInto.cs`; planned `benchmarks/nextorm.benchmark/JoinIntoBenchmarks.cs`.
 - D02: `src/nextorm.core/Builders/EntityBuilder.cs:864-1009`, `Builders/Joins/JoinIntoSpec.cs:189/319/436/551/745`, `JoinIntoStitcher.cs:103-215`, `JoinIntoManyToManySpec.cs:221-339`, `JunctionLinkSourceFactory.cs:99-107`; identity/cache files only if proven necessary.
-- D03: `EntityBuilder.cs:1239-1241/1589/1630`, `JoinIntoManyToManySpec.cs:398/448`, plus projection/link/source-resolver files only where semantics require.
+- D03: `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs` (`TryBuildProjectionSelectList`); test file `tests/nextorm.core.tests/JoinIntoCompositeCarrierSpikeTests.cs`; no entity/materializer change.
 - D04: all six SQL-test projects, existing core regression files, `CommonTestSuite.JoinInto.cs`, existing `ClickHouseJoinIntoOneToOneTests.cs`; focused ClickHouse/MariaDB integration adapters (MariaDB container already exists).
 - D05: documentation files (see Docs plan).
 - D06: evidence artifacts/status only + CHECK corrections.
@@ -115,11 +115,11 @@ No additional design spike or repeated reconnaissance. Runtime tests and benchma
 - (b) Assumptions/risks: "under single-query" means dispatcher composition (not merely standalone joins); no implicit maximum composite width; null-FK handling must agree across SQL/in-memory; junction multiplicity follows existing behavior.
 - (c) Gaps: none remaining from reconnaissance. Persistent low confidence would go to `escalate` trigger 5.
 
-## Frozen evidence contract (DO→CHECK; rv=1)
+## Frozen evidence contract (DO→CHECK; rv=2, supersedes rv=1)
 
-Manifest path: `artifacts/pdca/T213/rv1/manifest.json`; validate `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/T213/rv1/manifest.json` (require exit 0, no validation failures, complete row->artifact linkage). Preserve complete existing rv=1 row records incl. frozen command/invocation bindings and artifact paths; all uncollected sources are planned, not passing evidence.
+Manifest path: `artifacts/pdca/T213/rv2/manifest.json`; validate `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/T213/rv2/manifest.json` (require exit 0, no validation failures, complete row->artifact linkage). rv=2 retains every rv=1 required row/obligation with the same IDs/slots and adds `EC-T213-D03-01`; all uncollected sources are planned, not passing evidence.
 
-Common slots for every row: requirement IDs = listed AC IDs; row ID = E ID, revision rv=1; applicability predicate = "T213 implements the accepted scope" (true for all rows, none conditionally optional); evidence kinds = recorded invocation+exit status, result/log, row-specific artifacts; sources = planned sources later bound to observed revisions/locations; owner = DO executor/coder collects, CHECK independently verifies; artifact root `artifacts/pdca/T213/rv1/`; a missing report is missing evidence, not grounds to change rv or start another iteration.
+Common slots for every row: requirement IDs = listed AC IDs; row ID = E ID, revision rv=2; applicability predicate = "T213 implements the accepted scope" (true for all rows, none conditionally optional); evidence kinds = recorded invocation+exit status, result/log, row-specific artifacts; sources = planned sources later bound to observed revisions/locations; owner = DO executor/coder collects, CHECK independently verifies; artifact root `artifacts/pdca/T213/rv2/`; a missing report is missing evidence, not grounds to change rv or start another iteration.
 
 Required rows:
 - E-BUILD (AC07): `dotnet build nextorm.slnx -c Debug`; exit 0, 0 warnings/0 errors; full build log + exit record.
@@ -141,6 +141,7 @@ Required rows:
 - E-PERF-FINAL (AC08): same acceptance command + frozen final in-memory invocation; successful measurements + >=20% regression investigation where applicable; final revision; raw output, comparison, investigation record.
 - E-COVERAGE (AC07): preserve frozen CI-derived `dotnet-coverage collect` -> `reportgenerator` invocations; tool exits 0; line >=85% and branch >=75%; `coverage.settings.xml` + CI config; raw coverage, generated summary, threshold evidence.
 - E-DOCS (AC07): preserve frozen documentation-review/hygiene invocations; successful result with no stale claims, public-to-spec links, or changed-file line-ending defects; listed EN+RU/internal docs; review findings, diff/hygiene, CRLF evidence.
+- EC-T213-D03-01 (AC03/AC05): mapped junction-entity-plus-occurrence projection used by composite SQL JoinInto; `TryBuildProjectionSelectList` admits a mixed mapped-entity + supported-scalar projection and the shared materializer rebuilds `Projection<TJunction,scalar>`; core test + red/green logs; owner coder collects, CHECK independently verifies.
 
 Integration invocation: `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor`. A shared suite run may supply multiple integration rows ONLY with separate provider-specific evidence; six row IDs remain mandatory; a zero exit with required-provider skips is not a passing result.
 
@@ -173,3 +174,4 @@ CHECK re-gather budget: at most two targeted read-only rounds, owned by CHECK, f
 - 2026-10-12T13:44:19Z | DO | r=1 | n=1/3 | D01: red composite/M:N-under-SingleQuery regressions + scalar controls authored across core, all six dialect SQL-gen projects and integration adapters; red subset captured (7 project runs, exit 2 each, all attributable to the targeted guards); unmodified acceptance baseline (7/7) + new in-memory JoinInto harness recorded; Debug build 0 warnings/0 errors | artifacts/pdca/T213/rv1/
 - 2026-10-12T13:57:03Z | DO | r=1 | n=1/3 | D02/D03: composite relationship keys (1:N/1:1: composite principal/foreign key selectors via JoinIntoKey) + composite junction in-memory edges generalized; SingleQuery M:N JoinInto dispatcher rejection lifted (link+child edge pairing); obsolete composite/A composite-junction/M:N-SingleQuery rejection tests converted to positive; Debug build 0 warnings/0 errors; filtered FullyQualifiedName~JoinInto green in core+6 dialects (230 selected, 0 failed) | artifacts/pdca/T213/rv1/D02D03-inner-loop.json
 - 2026-10-12T14:10:16Z | DO | r=1 | n=1/3 | D02-P1 bounded carrier spike FAILED → STOP (route to planner, no new carrier invented): Projection<TJunction,long> link item does NOT flow — TryExpandEntityItem has no metadata for the projection type so TryBuildProjectionSelectList falls back to the parent entity columns and RowMaterializerBuilder throws ArgumentException "'Id' is not a member of Projection<...>" at RowMaterializerBuilder.cs:468; separately a MemberInit entity-typed Item1 is rejected by RowMapperFactory ("Property 'Item1' ... type SpikeCarrierJunction which is not supported") at RowMaterializerBuilder.cs:465. No production source changed; spike harness archived and removed from the test tree | artifacts/pdca/T213/rv1/spike/RESULT.md, spike2.log
+- 2026-10-12T14:30:20Z | DO | r=2 | n=1/3 | Replanned r=2: D03 projection-materialization prerequisite (planner; failed direction-B spike) | docs/specs/status/D213-joininto-remainder-1.md
