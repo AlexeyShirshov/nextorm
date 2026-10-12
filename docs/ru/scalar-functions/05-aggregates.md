@@ -1,4 +1,4 @@
-# Строковые и массивные агрегаты
+# Агрегаты строк и массивов
 
 `SqlFunctions.Sql.string_agg` доступен в PostgreSQL, SQL Server 2017+, ClickHouse, MySQL/MariaDB и SQLite
 ([`SupportsStringAgg`](xref:NextORM.Core.ISqlDialect.SupportsStringAgg), по умолчанию берёт значение зонтичного

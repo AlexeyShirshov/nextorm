@@ -1,5 +1,21 @@
 # Query sources
 
+## Query sources at a glance
+
+A query begins with a source, and [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) has one overload per kind of source. Every overload returns an [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1), so the full operator set (`Where`/`Join`/`GroupBy`/`Having`/`OrderBy`/`Limit`/`Select`) applies no matter where the rows come from:
+
+| Source | Entry point |
+|---|---|
+| Mapped entity (its table from metadata) | [`From<TEntity>()`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) |
+| Raw table or CTE name (via [`TableAlias`](xref:NextORM.Core.TableAlias) accessors) | [`From(string)`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) |
+| Subquery / already-composed query | [`From(QueryCommand<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.QueryCommand{``0})), [`From(EntityBuilder<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.EntityBuilder{``0})) |
+| Raw SQL fragment | [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) — [Raw SQL](../guide/12-raw-sql.md#compositing-raw-sql-as-a-from-source) |
+| Typed CTE | [`From(Cte<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.Cte{``0})), [`From(CteReference<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.CteReference{``0})), declared with [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) / [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32})) — [CTEs](../guide/08-cte.md) |
+| Lazy temporary table | [`From(TempTableSource<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.TempTableSource{``0})) — [`AsTempTable`](../guide/18-create-table-as.md) |
+| Table-valued function | [`FromTableFunction<T>`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) — [Table-valued functions](../guide/11-table-valued-functions.md) |
+
+Every source also accepts a `FromOptions` callback ([`FromOptions`](xref:NextORM.Core.FromOptions)) for per-source modifiers such as `TABLESAMPLE`/`SAMPLE` and table/index hints (see [Table sampling](#table-sampling-tablesample) below). The additive `CreateQueryBuilder*` forwarders mirror these overloads one-to-one (see the [API reference](../advanced/api-reference.md)). Overrides that change the rendered source of an already-chosen entity are described in [Per-query source overrides](#per-query-source-overrides).
+
 ## Subquery as source
 
 `From(query)` also wraps a filtered query, which is the SQL `FROM` equivalent of a subquery:

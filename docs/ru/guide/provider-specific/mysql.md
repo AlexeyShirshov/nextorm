@@ -90,19 +90,14 @@ var updated = dataContext.From<IComplexEntity>()
 | `kdf(password, salt, info, kdfName)` | `kdf(...)` | MariaDB 11.3+; вывод ключа, возвращает binary |
 | `xxh3(value)` / `xxh32(value)` | то же | MariaDB 13.1+; быстрый 64/32-битный xxHash |
 | `json_detailed(json)` / `json_compact(json)` | то же | переформатирование / удаление пробелов |
-| `next_value_for(sequence)` | `next value for sequence` | синтаксис ANSI для последовательностей |
-| `nextval(sequence)` | `nextval(sequence)` | доступ к последовательности в стиле PostgreSQL |
-| `setval(sequence, value)` | `setval(sequence, value)` | задаёт следующее значение последовательности |
-| `lastval(sequence)` | `lastval(sequence)` | последнее значение последовательности в соединении |
 
-Члены последовательностей принимают имя как строку и рендерят его идентификатором (не строковым
-литералом), поэтому `SqlFunctions.MySql.next_value_for("order_seq")` даёт `next value for order_seq`.
+Доступ к последовательностям провайдерный; см. общий раздел
+[Последовательности и генераторы UUID](../../scalar-functions/10-sequences.md).
 
 ```csharp
 var rows = dataContext.From<IOrderEntity>()
     .Select(x => new
     {
-        Id = SqlFunctions.MySql.nextval("order_seq"),
         Label = SqlFunctions.MySql.nvl(x.Label, "unnamed"),
         Month = SqlFunctions.MySql.add_months(x.CreatedAt, 1),
         Pretty = SqlFunctions.MySql.json_detailed(x.Payload)

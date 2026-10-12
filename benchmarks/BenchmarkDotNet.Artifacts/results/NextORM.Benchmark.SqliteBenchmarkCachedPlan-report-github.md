@@ -12,6 +12,6 @@ Categories=acceptance
 ```
 | Method                | Mean       | Error     | StdDev   | Ratio | Gen0    | Allocated | Alloc Ratio |
 |---------------------- |-----------:|----------:|---------:|------:|--------:|----------:|------------:|
-| Cached_PlanOnly_Param |   558.5 μs |  66.97 μs |  3.67 μs |  0.63 | 61.5234 | 507.83 KB |        6.67 |
-| Prepared_ToList       |   892.2 μs | 107.87 μs |  5.91 μs |  1.00 |  8.7891 |  76.14 KB |        1.00 |
-| Cached_ToList         | 1,846.6 μs | 353.68 μs | 19.39 μs |  2.07 | 70.3125 | 583.97 KB |        7.67 |
+| Cached_PlanOnly_Param |   580.0 μs |  65.80 μs |  3.61 μs |  0.64 | 62.5000 |  513.3 KB |        6.74 |
+| Prepared_ToList       |   910.3 μs |  15.64 μs |  0.86 μs |  1.00 |  8.7891 |  76.14 KB |        1.00 |
+| Cached_ToList         | 1,850.4 μs | 226.65 μs | 12.42 μs |  2.03 | 70.3125 | 589.43 KB |        7.74 |

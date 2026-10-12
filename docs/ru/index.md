@@ -61,6 +61,8 @@
 - [Массивы](scalar-functions/06-arrays.md)
 - [JSON и XML](scalar-functions/07-json-and-xml.md)
 - [Справочник по провайдерам](scalar-functions/08-reference.md)
+- [Системные функции](scalar-functions/09-system-functions.md)
+- [Последовательности и генераторы UUID](scalar-functions/10-sequences.md)
 
 ### Провайдеры
 

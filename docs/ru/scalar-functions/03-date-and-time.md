@@ -53,6 +53,26 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 сессионного `DATEFIRST`); для нормализованного значения используйте `extract("dow", value)` или
 `extract("isodow", value)`.
 
+## DateTimeOffset
+
+`DateTimeOffset` — поддерживаемый тип колонки и скалярного значения на всех провайдерах: драйвер
+читает его обратно без конвертера значений. Объявленный/хранимый SQL-тип зависит от провайдера:
+
+| Провайдер | Тип |
+|---|---|
+| PostgreSQL | `timestamp with time zone` |
+| SQL Server | `datetimeoffset` |
+| MySQL / MariaDB | `datetime` |
+| ClickHouse | `DateTime64(6)` |
+| SQLite | динамическая типизация (выделенного типа нет) |
+
+В отличие от `DateTime`, его CLR-члены не транслируются в SQL: `DateTimeOffset.Now`/`UtcNow`
+вычисляются на клиенте и связываются параметром, а части даты (`.Year`, `.Month`, `.AddDays`, ...)
+рендерятся только для `DateTime`. `value.ToString(format)` и `string.Format` по-прежнему
+транслируются (см. [Форматирование дат и чисел в строки](#форматирование-дат-и-чисел-в-строки)).
+Колонка табличного параметра и элемент PostgreSQL-массива типа `DateTimeOffset` отображаются на
+форму timestamp with time zone.
+
 ## Расширенные дата и время PostgreSQL
 
 Эти функции входят в расширенную библиотеку скалярных функций
@@ -76,30 +96,6 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 Для построения дат и арифметики в остальном используется переносимый набор: `date_from_parts`
 (рендерит PostgreSQL `make_date`), `date_add`, `date_diff`, `date_trunc` и члены `DateTime` (см.
 [Арифметику дат](#арифметика-дат) ниже).
-
-## Runtime-настройки и последовательности (PostgreSQL)
-
-Также входят в расширенную скалярную библиотеку
-([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions),
-только PostgreSQL). Имя последовательности приводится к `regclass`:
-
-| C# | SQL |
-|---|---|
-| `SqlFunctions.Postgres.current_setting(name)` / `current_setting(name, missingOk)` | `current_setting(name[, missing_ok])` |
-| `SqlFunctions.Postgres.set_config(name, value, isLocal)` | `set_config(name, value, is_local)` |
-| `SqlFunctions.Postgres.nextval(sequence)` | `nextval(cast(sequence as regclass))` |
-| `SqlFunctions.Postgres.setval(sequence, value)` | `setval(cast(sequence as regclass), value)` |
-| `SqlFunctions.Postgres.currval(sequence)` | `currval(cast(sequence as regclass))` |
-| `SqlFunctions.Postgres.lastval()` | `lastval()` |
-
-```csharp
-var next = dataContext.From<IComplexEntity>()
-    .Select(e => SqlFunctions.Postgres.nextval("order_id_seq"))
-    .First();
-```
-
-`currval`/`lastval` в PostgreSQL привязаны к сессии и потому требуют того же соединения, которое
-последним продвинуло последовательность.
 
 ## Форматирование дат и чисел в строки
 
@@ -157,36 +153,6 @@ public static class DemoUdf
 
 На PostgreSQL ту же задачу решает `SqlFunctions.Postgres.to_char(value, 'YYYY-MM')`
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
-
-## Информация о сессии и сервере
-
-`SqlFunctions.Sql.current_user()`, `session_user()`, `current_schema()`, `current_database()` и
-`version()` — кросс-провайдерные
-([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)):
-
-| C# | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |
-|---|---|---|---|---|---|
-| `current_user()` | `current_user` | `current_user` | `current_user()` | `currentUser()` | — |
-| `session_user()` | `session_user` | `session_user` | `session_user()` | — | — |
-| `current_schema()` | `current_schema` | `schema_name()` | `schema()` | — | — |
-| `current_database()` | `current_database()` | `db_name()` | `database()` | `currentDatabase()` | — |
-| `version()` | `version()` | `@@version` | `version()` | `version()` | `sqlite_version()` |
-
-Провайдер, который не умеет функцию, выбрасывает `NotSupportedException`.
-
-## Генераторы UUID
-
-`SqlFunctions.Sql.gen_random_uuid()` (случайный v4) и `uuidv7()` — кросс-провайдерные
-([`UuidGenerators`](xref:NextORM.Core.ISqlDialect.UuidGenerators)):
-
-| C# | PostgreSQL | SQL Server | MySQL | MariaDB | ClickHouse | SQLite |
-|---|---|---|---|---|---|---|
-| `gen_random_uuid()` | `gen_random_uuid()` (13+) | `newid()` | — | `UUID_v4()` | `generateUUIDv4()` | — |
-| `uuidv7()` | `uuidv7()` (18+) | — | — | `UUID_v7()` (11.7+) | `generateUUIDv7()` | — |
-
-У MySQL есть только `UUID()` (v1), у SQLite генератора UUID нет, поэтому оба отклоняют вызов. Это
-серверные генераторы, вычисляемые на каждую строку базой; `Guid.NewGuid()` — клиентское значение и
-заменой не является.
 
 ## Усечение даты (PostgreSQL, SQL Server, ClickHouse)
 
@@ -316,8 +282,8 @@ from complex_entity
 нативной функции. `timefromparts` материализуется как `TimeSpan`, конструкторы
 `smalldatetime`/`datetime`/`datetime2` — как `DateTime`, а функции часов и смещения — как
 `DateTime` / `DateTimeOffset`, соответствующие типу результата T-SQL. Это датовая половина
-поверхности, специфичной для SQL Server; остальное описано в
-[Условные функции](04-conditionals-and-conversion.md#метаданные-checksum-и-прочие-скаляры-sql-server).
+скалярной поверхности, специфичной для SQL Server; остальные T-SQL-скаляры описаны на
+соответствующих категорийных страницах.
 
 ## Приведение и части даты (ClickHouse)
 

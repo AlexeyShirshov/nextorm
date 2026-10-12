@@ -95,8 +95,8 @@ Output:
 
 ## Columns by name
 
-A mapped entity only exposes the columns declared on it. A column that has no property — for example
-in a wide ClickHouse table — is projected with
+A mapped entity gives access to its columns through the properties declared on it. When you need an
+undeclared column — for example in a wide ClickHouse table — use
 [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)):
 
 ```csharp
@@ -114,7 +114,7 @@ The first argument must be the query lambda parameter (a source), and the name i
 database column verbatim, so quoting follows the provider (`` `region_id` `` on ClickHouse and MySQL,
 `"region_id"` on PostgreSQL and SQLite, `[region_id]` on SQL Server). The value is materialized as
 `T`, so the type must be one the row reader supports. Unlike a mapped member, the column is not
-validated against entity metadata: a misspelled name fails at the database.
+validated against entity metadata: a misspelled name raises an error on the database side.
 
 The same accessor works in a predicate and on a joined projection:
 
@@ -334,9 +334,9 @@ trailing `Alias.<Name>` argument that names the new slot, and the root source ca
 
 ```csharp
 var rows = await dataContext.From<Order>(b => b.Table("orders"))
-    .WithAlias(Alias.Root)
-    .Join<Person>(people, (o, buyer) => o.Root.BuyerId == buyer.Id, Alias.Buyer)
-    .Select(p => new { OrderId = p.Root.Id, Buyer = p.Buyer.Id })
+    .WithAlias(Alias.Order)
+    .Join<Person>(people, (p, buyer) => p.Order.BuyerId == buyer.Id, Alias.Buyer)
+    .Select(p => new { OrderId = p.Order.Id, Buyer = p.Buyer.Id })
     .ToListAsync();
 ```
 

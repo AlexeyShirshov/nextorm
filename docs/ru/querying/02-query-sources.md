@@ -1,5 +1,21 @@
 # Источники запроса
 
+## Источники запроса: краткий обзор
+
+Запрос начинается с источника, и у [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) по одной перегрузке на каждый вид источника. Все они возвращают [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1), поэтому полный набор операторов (`Where`/`Join`/`GroupBy`/`Having`/`OrderBy`/`Limit`/`Select`) доступен независимо от того, откуда приходят строки:
+
+| Источник | Точка входа |
+|---|---|
+| Отображённая сущность (её таблица из метаданных) | [`From<TEntity>()`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) |
+| Имя сырой таблицы или CTE (доступ через [`TableAlias`](xref:NextORM.Core.TableAlias)) | [`From(string)`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) |
+| Подзапрос / уже построенный запрос | [`From(QueryCommand<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.QueryCommand{``0})), [`From(EntityBuilder<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.EntityBuilder{``0})) |
+| Сырой фрагмент SQL | [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) — [Сырой SQL](../guide/12-raw-sql.md) |
+| Типизированный CTE | [`From(Cte<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.Cte{``0})), [`From(CteReference<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.CteReference{``0})), объявленный через [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) / [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32})) — [CTE](../guide/08-cte.md) |
+| Ленивая временная таблица | [`From(TempTableSource<TResult>)`](xref:NextORM.Core.DataContextExtensions.From``1(NextORM.Core.IDataContext,NextORM.Core.TempTableSource{``0})) — [`AsTempTable`](../guide/18-create-table-as.md) |
+| Табличная функция | [`FromTableFunction<T>`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) — [Табличные функции](../guide/11-table-valued-functions.md) |
+
+Каждый источник также принимает колбэк `FromOptions` ([`FromOptions`](xref:NextORM.Core.FromOptions)) для модификаторов уровня источника, таких как `TABLESAMPLE`/`SAMPLE` и хинты таблиц/индексов (см. [Сэмплирование таблицы](#сэмплирование-таблицы-tablesample) ниже). Аддитивные форвардеры `CreateQueryBuilder*` зеркалят эти перегрузки один-к-одному (см. [Справочник API](../advanced/api-reference.md)). Переопределения, меняющие рендер источника уже выбранной сущности, описаны в [Переопределении источника для запроса](#переопределение-источника-для-запроса).
+
 ## Подзапрос в качестве источника
 
 `From(query)` также оборачивает отфильтрованный запрос, что соответствует подзапросу в SQL `FROM`:

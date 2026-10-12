@@ -321,3 +321,31 @@ var rows = dataContext.From<IComplexEntity>()
     })
     .ToList();
 ```
+
+## Строковые функции, хэширование и сжатие SQL Server
+
+Остальные строковые функции и функции хэширования/сжатия, специфичные для T-SQL, живут на
+`SqlFunctions.SqlServer` и гейтятся по имени через
+[`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions); SQL Server — единственный провайдер,
+реализующий флаг, поэтому все остальные бросают `NotSupportedException`:
+
+| C# | SQL |
+|---|---|
+| `stuff(value, start, length, newValue)` | `stuff(...)` |
+| `str(value)` / `str(value, length)` / `str(value, length, decimalPlaces)` | `str(...)` |
+| `formatmessage(message, args...)` / `formatmessage(messageId, args...)` | `formatmessage(...)` |
+| `parsename(objectName, piece)` | `parsename(...)` |
+| `hashbytes(algorithm, data)` | `hashbytes(...)` |
+| `checksum(values...)` / `binary_checksum(values...)` | `checksum(...)` / `binary_checksum(...)` |
+| `compress(value)` (строка и `byte[]`) / `decompress(value)` | `compress(...)` / `decompress(...)` |
+
+* `str` фиксирует общую длину (по умолчанию 10) и число знаков после запятой (по умолчанию 0);
+  `formatmessage` принимает строку формата или id из `sys.messages` и не более 20 аргументов
+  форматирования (больше — `NotSupportedException`).
+* `parsename` разбирает четырёхчастное имя объекта и принимает константную часть в `1..4`.
+* `hashbytes` принимает константное имя алгоритма (например, `"SHA2_256"`) и значение `byte[]`;
+  `checksum`/`binary_checksum` — некриптографические контрольные суммы для обнаружения изменений, не
+  замена `hashbytes`, и требуют хотя бы одного аргумента (`checksum()`/`binary_checksum()` бросают;
+  форма с подстановочным знаком `checksum(*)` не открыта).
+* `compress`/`decompress` используют GZIP и работают с `varbinary(max)`; `decompress` возвращает
+  `null` для некорректного или обрезанного значения.

@@ -91,19 +91,14 @@ entry point. MySQL's dialect does not report them, so a MySQL query using one of
 | `kdf(password, salt, info, kdfName)` | `kdf(...)` | MariaDB 11.3+; key derivation, returns binary |
 | `xxh3(value)` / `xxh32(value)` | same | MariaDB 13.1+; fast 64/32-bit xxHash |
 | `json_detailed(json)` / `json_compact(json)` | same | re-indent / strip whitespace |
-| `next_value_for(sequence)` | `next value for sequence` | ANSI sequence syntax |
-| `nextval(sequence)` | `nextval(sequence)` | PostgreSQL-style sequence access |
-| `setval(sequence, value)` | `setval(sequence, value)` | sets the next sequence value |
-| `lastval(sequence)` | `lastval(sequence)` | the connection's last sequence value |
 
-The sequence members take the sequence name as a string and emit it as an identifier (not a quoted
-literal), so `SqlFunctions.MySql.next_value_for("order_seq")` renders `next value for order_seq`.
+Sequence access is provider-specific; see the common
+[Sequences and UUID generators](../../scalar-functions/10-sequences.md) page.
 
 ```csharp
 var rows = dataContext.From<IOrderEntity>()
     .Select(x => new
     {
-        Id = SqlFunctions.MySql.nextval("order_seq"),
         Label = SqlFunctions.MySql.nvl(x.Label, "unnamed"),
         Month = SqlFunctions.MySql.add_months(x.CreatedAt, 1),
         Pretty = SqlFunctions.MySql.json_detailed(x.Payload)

@@ -96,8 +96,8 @@ select id, ((somestring || '/') || requiredstring) as 'Display' from complex_ent
 
 ## Колонки по имени
 
-Mapped-сущность раскрывает только объявленные в ней колонки. Колонка без свойства — например, в
-широкой таблице ClickHouse — проецируется через
+Mapped-сущность предоставляет доступ к колонкам через объявленные проперти. Если нужен доступ к необъявленной колонке — например, в
+широкой таблице ClickHouse — можно использовать
 [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)):
 
 ```csharp
@@ -115,7 +115,7 @@ select region_id as 'Region' from simple_entity
 базе дословно, поэтому кавычки зависят от провайдера (`` `region_id` `` в ClickHouse и MySQL,
 `"region_id"` в PostgreSQL и SQLite, `[region_id]` в SQL Server). Значение материализуется как `T`,
 поэтому тип должен поддерживаться row reader. В отличие от mapped-члена, колонка не сверяется с
-метаданными сущности: опечатка в имени проявится на базе.
+метаданными сущности: опечатка в имени вызовет ошибку на стороне СУБД.
 
 Тот же доступ работает в предикате и на join-проекции:
 
@@ -335,9 +335,9 @@ select id, Calc from (select id, (somestring + somestring) as [Calc] from comple
 
 ```csharp
 var rows = await dataContext.From<Order>(b => b.Table("orders"))
-    .WithAlias(Alias.Root)
-    .Join<Person>(people, (o, buyer) => o.Root.BuyerId == buyer.Id, Alias.Buyer)
-    .Select(p => new { OrderId = p.Root.Id, Buyer = p.Buyer.Id })
+    .WithAlias(Alias.Order)
+    .Join<Person>(people, (p, buyer) => p.Order.BuyerId == buyer.Id, Alias.Buyer)
+    .Select(p => new { OrderId = p.Order.Id, Buyer = p.Buyer.Id })
     .ToListAsync();
 ```
 

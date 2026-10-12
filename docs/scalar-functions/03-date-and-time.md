@@ -52,6 +52,26 @@ native form, so the result is the same on every provider:
 `DateTime.DayOfWeek` is not translated as a property (its `datepart(weekday)` equivalent depends on the
 session `DATEFIRST`); use `extract("dow", value)` or `extract("isodow", value)` for a normalised value.
 
+## DateTimeOffset
+
+`DateTimeOffset` is a supported column and scalar type on every provider: the driver reads it back
+without a value converter. The declared/stored SQL type is provider-specific:
+
+| Provider | Type |
+|---|---|
+| PostgreSQL | `timestamp with time zone` |
+| SQL Server | `datetimeoffset` |
+| MySQL / MariaDB | `datetime` |
+| ClickHouse | `DateTime64(6)` |
+| SQLite | dynamic typing (no dedicated type) |
+
+Unlike `DateTime`, its CLR members are not translated to SQL: `DateTimeOffset.Now`/`UtcNow` are
+evaluated on the client and bound as a parameter, and the date-part accessors (`.Year`, `.Month`,
+`.AddDays`, ...) are rendered for `DateTime` only. `value.ToString(format)` and `string.Format` are
+still translated (see [Formatting dates and numbers to strings](#formatting-dates-and-numbers-to-strings)).
+A `DateTimeOffset` table-valued-parameter column and a PostgreSQL array element map to the
+timestamp-with-time-zone form.
+
 ## PostgreSQL extended date and time
 
 These are part of the extended scalar library ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions),
@@ -75,30 +95,6 @@ PostgreSQL only):
 Date construction and arithmetic otherwise use the portable surface: `date_from_parts` (which renders
 PostgreSQL `make_date`), `date_add`, `date_diff`, `date_trunc` and the `DateTime` members (see
 [Date arithmetic](#date-arithmetic) below).
-
-## Runtime settings and sequences (PostgreSQL)
-
-Also part of the extended scalar library
-([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions),
-PostgreSQL only). The sequence name is cast to `regclass`:
-
-| C# | SQL |
-|---|---|
-| `SqlFunctions.Postgres.current_setting(name)` / `current_setting(name, missingOk)` | `current_setting(name[, missing_ok])` |
-| `SqlFunctions.Postgres.set_config(name, value, isLocal)` | `set_config(name, value, is_local)` |
-| `SqlFunctions.Postgres.nextval(sequence)` | `nextval(cast(sequence as regclass))` |
-| `SqlFunctions.Postgres.setval(sequence, value)` | `setval(cast(sequence as regclass), value)` |
-| `SqlFunctions.Postgres.currval(sequence)` | `currval(cast(sequence as regclass))` |
-| `SqlFunctions.Postgres.lastval()` | `lastval()` |
-
-```csharp
-var next = dataContext.From<IComplexEntity>()
-    .Select(e => SqlFunctions.Postgres.nextval("order_id_seq"))
-    .First();
-```
-
-`currval`/`lastval` are session-scoped in PostgreSQL and therefore require the same connection that
-last advanced the sequence.
 
 ## Formatting dates and numbers to strings
 
@@ -156,36 +152,6 @@ public static class DemoUdf
 
 On PostgreSQL the same job is done by `SqlFunctions.Postgres.to_char(value, 'YYYY-MM')`
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
-
-## Session and server information
-
-`SqlFunctions.Sql.current_user()`, `session_user()`, `current_schema()`, `current_database()` and
-`version()` are cross-provider
-([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)):
-
-| C# | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |
-|---|---|---|---|---|---|
-| `current_user()` | `current_user` | `current_user` | `current_user()` | `currentUser()` | — |
-| `session_user()` | `session_user` | `session_user` | `session_user()` | — | — |
-| `current_schema()` | `current_schema` | `schema_name()` | `schema()` | — | — |
-| `current_database()` | `current_database()` | `db_name()` | `database()` | `currentDatabase()` | — |
-| `version()` | `version()` | `@@version` | `version()` | `version()` | `sqlite_version()` |
-
-A provider that cannot express a function throws `NotSupportedException`.
-
-## UUID generators
-
-`SqlFunctions.Sql.gen_random_uuid()` (random v4) and `uuidv7()` are cross-provider
-([`UuidGenerators`](xref:NextORM.Core.ISqlDialect.UuidGenerators)):
-
-| C# | PostgreSQL | SQL Server | MySQL | MariaDB | ClickHouse | SQLite |
-|---|---|---|---|---|---|---|
-| `gen_random_uuid()` | `gen_random_uuid()` (13+) | `newid()` | — | `UUID_v4()` | `generateUUIDv4()` | — |
-| `uuidv7()` | `uuidv7()` (18+) | — | — | `UUID_v7()` (11.7+) | `generateUUIDv7()` | — |
-
-MySQL has only `UUID()` (v1) and SQLite has no UUID generator, so both reject the calls. These are
-server-side generators, evaluated per row by the database; `Guid.NewGuid()` is a client-side value and
-is not a substitute.
 
 ## Date truncation (PostgreSQL, SQL Server, ClickHouse)
 
@@ -313,8 +279,8 @@ be a **constant integer in `0..7`**: a non-constant, `null` or out-of-range valu
 `NotSupportedException` before any SQL is emitted. A `null` in any other part yields a `null` result,
 like the native function. `timefromparts` materialises as a `TimeSpan`, the `smalldatetime`/`datetime`/
 `datetime2` builders as a `DateTime`, and the clock- and offset-returning functions as a `DateTime` /
-`DateTimeOffset` matching the T-SQL result type. This is the date half of the SQL Server-only surface
-described in [Conditional helpers](04-conditionals-and-conversion.md#sql-server-metadata-checksum-and-other-scalars).
+`DateTimeOffset` matching the T-SQL result type. This is the date half of the SQL Server-only scalar
+surface; the other T-SQL scalars are documented on the matching category pages.
 
 ## Date conversion and parts (ClickHouse)
 

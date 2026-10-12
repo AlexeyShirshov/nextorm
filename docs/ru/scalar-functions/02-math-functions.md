@@ -82,3 +82,17 @@ var rows = dataContext.From<IComplexEntity>()
 [`SupportsRandomSeed`](xref:NextORM.Core.ISqlDialect.SupportsRandomSeed) (только PostgreSQL). Функция
 PostgreSQL возвращает `void`, поэтому проецируемое значение всегда `null`, а вызов делается ради
 побочного эффекта (последующие `random()` в сессии становятся воспроизводимыми).
+
+## Случайные числа SQL Server
+
+`SqlFunctions.SqlServer.rand()` / `rand(seed)` рендерятся как `rand()` / `rand(seed)` и гейтятся по
+имени через [`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions) (только SQL Server; все
+остальные бросают `NotSupportedException`):
+
+| C# | SQL |
+|---|---|
+| `rand()` / `rand(seed)` | `rand()` / `rand(seed)` |
+
+`rand` без seed **недетерминирован** и вычисляется сервером; фиксированный целый seed делает
+последовательность воспроизводимой. Аналог `random()`/`setseed()` в PostgreSQL — в разделе про
+расширенную математику выше.

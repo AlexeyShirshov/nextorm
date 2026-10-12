@@ -18,6 +18,10 @@ The lambda is not executed - it is translated into the `SELECT` list of the gene
 [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) executes it. See [Sorting and paging](../guide/04-sorting-and-paging.md)
 for the terminals and their async forms. When the projection is a single `byte[]`/`string` column it can instead be streamed with `ToStream`/`ToTextReader` — see [Streaming large objects](../guide/26-large-objects.md).
 
+The diagram below traces the full execution path — from the fluent builder through the command, the expression tree, SQL generation and execution, to the row mapper and the buffered/streamed terminals:
+
+![Command execution path in NextORM: EntityBuilder → QueryCommand → SelectExpression → SqlBuilder → QueryExecutor → RowMapperFactory, then ToList/ToArray (buffered) or IAsyncEnumerable (streamed); QueryCache feeds QueryCommand and the database backs QueryExecutor.](../assets/diagrams/nextorm-command-execution.svg)
+
 Rules that apply to every projection:
 
 * The lambda's shape decides the select list. Columns that are not projected are not read.

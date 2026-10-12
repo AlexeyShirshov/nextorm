@@ -128,6 +128,10 @@
       href: scalar-functions/07-json-and-xml.md
     - name: Справочник по провайдерам
       href: scalar-functions/08-reference.md
+    - name: Системные функции
+      href: scalar-functions/09-system-functions.md
+    - name: Последовательности и генераторы UUID
+      href: scalar-functions/10-sequences.md
 - name: Провайдеры
   items:
     - name: Обзор провайдеров

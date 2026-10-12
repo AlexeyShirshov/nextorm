@@ -61,6 +61,8 @@
 - [Arrays](scalar-functions/06-arrays.md)
 - [JSON and XML](scalar-functions/07-json-and-xml.md)
 - [Provider reference](scalar-functions/08-reference.md)
+- [System functions](scalar-functions/09-system-functions.md)
+- [Sequences and UUID generators](scalar-functions/10-sequences.md)
 
 ### Providers
 

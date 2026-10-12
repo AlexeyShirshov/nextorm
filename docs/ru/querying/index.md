@@ -18,6 +18,10 @@ public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> 
 [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) выполняет его. См. [Сортировку и постраничную выборку](../guide/04-sorting-and-paging.md)
 для терминальных методов и их асинхронных форм. Если проекция — одна колонка `byte[]`/`string`, её вместо этого можно стримить через `ToStream`/`ToTextReader` — см. [Потоковое чтение больших объектов](../guide/26-large-objects.md).
 
+Диаграмма ниже показывает весь путь выполнения — от fluent-билдера через команду, дерево выражений, генерацию и выполнение SQL к мапперу строк и терминальным методам с буфером или потоком:
+
+![Путь выполнения команды в NextORM: EntityBuilder → QueryCommand → SelectExpression → SqlBuilder → QueryExecutor → RowMapperFactory, затем ToList/ToArray (буфер) или IAsyncEnumerable (поток); QueryCache питает QueryCommand, а база данных обслуживает QueryExecutor.](../assets/diagrams/nextorm-command-execution.svg)
+
 Правила, применимые к любой проекции:
 
 * Форма лямбды определяет список выборки. Колонки, которые не проецируются, не читаются.
