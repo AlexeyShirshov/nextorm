@@ -553,6 +553,55 @@ public abstract partial class CommonTestSuite
         parents[0].Tags.Select(t => t.Id).Should().BeEquivalentTo([many + 300, many + 301, many + 300]);
         parents[0].Notes.Select(n => n.Id).Should().BeEquivalentTo([many + 200, many + 201]);
     }
+
+    [Fact]
+    public void JoinInto_CompositeKeyOneToMany_ShouldMatchEveryComponentWithoutBlendingParents()
+    {
+        // D07 (r=5): a genuine composite relationship key (no composite junction) executed against the
+        // real provider. The principal key (tenant, link_id) is not the table key, and the three parents
+        // share one component each, so matching on a single component would assign a neighbouring
+        // parent's children.
+        var (a, b, c) = JoinIntoCompositeKeyFixtures.SeedOneToMany(_sut.DataProvider);
+
+        var parents = _sut.DataProvider.From<JiCompositeOneToManyParent>()
+            .Where(p => p.RowId == a || p.RowId == b || p.RowId == c)
+            .JoinInto(
+                _sut.DataProvider.From<JiCompositeKeyChild>(),
+                (p, ch) => p.Tenant == ch.Tenant && p.LinkId == ch.ParentId,
+                p => p.Children)
+            .OrderBy(p => p.RowId)
+            .ToList();
+
+        parents.Select(p => p.RowId).Should().Equal(a, b, c);
+        parents[0].Children.Select(ch => ch.Id).Should().BeEquivalentTo([a + 100, a + 101]);
+        parents[1].Children.Select(ch => ch.Id).Should().Equal(a + 102);
+        parents[2].Children.Select(ch => ch.Id).Should().Equal(a + 103);
+        // The orphan child (tenant t2, link l2) matches no parent and must not appear anywhere.
+        parents.SelectMany(p => p.Children).Select(ch => ch.Id).Should().NotContain(a + 104);
+    }
+
+    [Fact]
+    public void JoinInto_CompositeKeyOneToOne_ShouldAssignEachParentItsOwnChildAndLeaveChildlessNull()
+    {
+        // D07 (r=5): the composite one-to-one. All parents share the tenant and differ only in link_id,
+        // so a tenant-only match would pair each parent with both children and trip the one-to-one
+        // backstop; one parent has no child and must stay null rather than receive a default instance.
+        var (withChild, otherChild, childless) = JoinIntoCompositeKeyFixtures.SeedOneToOne(_sut.DataProvider);
+
+        var parents = _sut.DataProvider.From<JiCompositeOneToOneParent>()
+            .Where(p => p.RowId == withChild || p.RowId == otherChild || p.RowId == childless)
+            .JoinInto(
+                _sut.DataProvider.From<JiCompositeKeyChild>(),
+                (p, ch) => p.Tenant == ch.Tenant && p.LinkId == ch.ParentId,
+                p => p.Primary)
+            .OrderBy(p => p.RowId)
+            .ToList();
+
+        parents.Select(p => p.RowId).Should().Equal(withChild, otherChild, childless);
+        parents[0].Primary!.Id.Should().Be(withChild + 110);
+        parents[1].Primary!.Id.Should().Be(otherChild + 110);
+        parents[2].Primary.Should().BeNull("a LEFT one-to-one join without a matching composite key leaves the reference null");
+    }
 }
 
 [SqlTable("eager_parent")]

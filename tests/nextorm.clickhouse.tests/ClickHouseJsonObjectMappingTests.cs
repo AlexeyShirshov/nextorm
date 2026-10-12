@@ -70,7 +70,7 @@ public class ClickHouseJsonObjectMappingTests
     [Fact]
     public void BareTopLevelJsonObjectScalarProjection_ShouldFailClosedWithNamedLimitation()
     {
-        // Retained limitation (docs/providers/clickhouse.md, docs/advanced/limitations.md): a bare
+        // Retained limitation (docs/connecting-providers/clickhouse.md, docs/advanced/limitations.md): a bare
         // top-level scalar JsonObject projection is not handled by the core projection classifier —
         // project through a named shape such as Select(x => new { x.Doc }) or a DTO. Without the guard
         // the empty select list reached the row materializer, which failed with an opaque

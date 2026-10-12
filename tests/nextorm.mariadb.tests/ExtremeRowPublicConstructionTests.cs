@@ -92,7 +92,7 @@ public class ExtremeRowPublicConstructionTests
         [
             () => _ = new ExtremeRowDescription(true, null!, [], [Column()]),
             () => _ = new ExtremeRowDescription(true, [Column()], null!, [Column()]),
-            () => _ = new ExtremeRowDescription(true, [Column()], [], null!),
+            () => _ = new ExtremeRowDescription(true, [Column()], [], (IReadOnlyList<ExtremeRowRenderColumn>)null!),
         ];
         string[] names = ["keys", "groups", "payload"];
         for (var i = 0; i < acts.Length; i++)

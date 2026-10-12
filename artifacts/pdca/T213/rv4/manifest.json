@@ -47,6 +47,13 @@
           "command": "dotnet build nextorm.slnx -c Debug",
           "exit": 0,
           "value": "Build succeeded; 0 Warning(s); 0 Error(s); final rv4 revision (after the ClickHouseTestProvider eager_note fixture correction)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/build.log",
+          "command": "dotnet build nextorm.slnx -c Debug",
+          "exit": 0,
+          "value": "final r=5 boundary build after the composite/null/provider/integration edits: Build succeeded; 0 Warning(s); 0 Error(s)"
         }
       ]
     },
@@ -151,6 +158,13 @@
           "command": "DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.SqliteIntegrationTests -noColor",
           "exit": 0,
           "value": "total 693, errors 0, failed 0, skipped 40; CommonTestSuite.JoinInto scalar M:N + SingleQuery + composite-key cases executed green"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/int-joininto-sqlite.log",
+          "command": "DOCKER_HOST=... dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter FullyQualifiedName~JoinInto&FullyQualifiedName~SqliteIntegrationTests",
+          "exit": 0,
+          "value": "25 selected, 25 passed, 0 failed, 0 skipped; includes the new composite-key 1:N and 1:1 real-integration cases (no provider skips)"
         }
       ]
     },
@@ -164,6 +178,13 @@
           "command": "DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.PostgresIntegrationTests -noColor",
           "exit": 0,
           "value": "total 693, errors 0, failed 0, skipped 26"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/int-joininto-postgres.log",
+          "command": "DOCKER_HOST=... dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter FullyQualifiedName~JoinInto&FullyQualifiedName~PostgresIntegrationTests",
+          "exit": 0,
+          "value": "25 selected, 25 passed, 0 failed, 0 skipped; includes the new composite-key 1:N and 1:1 real-integration cases (no provider skips)"
         }
       ]
     },
@@ -177,6 +198,13 @@
           "command": "DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.SqlServerIntegrationTests -noColor",
           "exit": 0,
           "value": "total 693, errors 0, failed 0, skipped 48"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/int-joininto-sqlserver.log",
+          "command": "DOCKER_HOST=... dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter FullyQualifiedName~JoinInto&FullyQualifiedName~SqlServerIntegrationTests",
+          "exit": 0,
+          "value": "25 selected, 25 passed, 0 failed, 0 skipped; includes the new composite-key 1:N and 1:1 real-integration cases (no provider skips)"
         }
       ]
     },
@@ -190,6 +218,13 @@
           "command": "DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.MySqlIntegrationTests -noColor",
           "exit": 0,
           "value": "total 693, errors 0, failed 0, skipped 80"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/int-joininto-mysql.log",
+          "command": "DOCKER_HOST=... dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter FullyQualifiedName~JoinInto&FullyQualifiedName~MySqlIntegrationTests",
+          "exit": 0,
+          "value": "25 selected, 25 passed, 0 failed, 0 skipped; includes the new composite-key 1:N and 1:1 real-integration cases (no provider skips)"
         }
       ]
     },
@@ -203,18 +238,68 @@
           "command": "DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.MariaDbJoinIntoRemainderIntegrationTests -noColor",
           "exit": 0,
           "value": "1 selected, 1 passed, 0 failed, 0 skipped; MariaDB scalar M:N + SingleQuery LoadWith stitched (real mariadb:11.4 container); MySQL is not a substitute"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/int-joininto-mariadb.log",
+          "command": "DOCKER_HOST=... dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter FullyQualifiedName~MariaDbJoinIntoCompositeKeyIntegrationTests",
+          "exit": 0,
+          "value": "2 selected, 2 passed, 0 failed, 0 skipped; the new composite-key 1:N and 1:1 real-integration cases on mariadb:11.4"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/int-joininto-mariadb-mn.log",
+          "exit": 0,
+          "value": "1 selected, 1 passed, 0 failed, 0 skipped; scalar M:N + SingleQuery re-verified"
         }
       ]
     },
     {
       "id": "E-INT-clickhouse",
-      "status": "open",
-      "reason": "BLOCKED (genuine provider failure): ClickHouseJoinIntoRemainderTests.JoinInto_ManyToMany_WithSingleQueryLoadWith_ShouldStitchTagsAndNotes fails at materialization with System.InvalidCastException (UInt64 -> Int32). ClickHouse row_number() returns UInt64 while JoinIntoLink<,>.Occurrence is int; the derived-junction link source cannot be read on ClickHouse. Focused run exit 1 (1 selected, 1 failed) artifacts/pdca/T213/rv4/integration/clickhouse-remainder-focus.log; shared full suite exit 1 with this as the only failure artifacts/pdca/T213/rv4/integration/integration.log. Detail artifacts/pdca/T213/rv4/integration/CLICKHOUSE-MN-FAILURE.md. Requires a provider/dialect decision (outside the D04-S verification unit)."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/int-joininto-clickhouse.log",
+          "command": "DOCKER_HOST=... dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter FullyQualifiedName~ClickHouseJoinIntoRemainderTests",
+          "exit": 0,
+          "value": "3 selected, 3 passed, 0 failed, 0 skipped; focused adapter: scalar M:N + SingleQuery (after the UInt64->Int32 occurrence fix) plus the new composite-key 1:N and 1:1 cases"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/clickhouse-fix/09-ch-all-integration.log",
+          "exit": 0,
+          "value": "all-ClickHouse integration 263/263, 0 skipped, after the D04-S fix (WrapIntegerWindowResult + NeedsOuterJoinNullSettings)"
+        },
+        {
+          "kind": "artifact",
+          "path": "artifacts/pdca/T213/rv4/integration/CLICKHOUSE-MN-FAILURE.md",
+          "value": "historical failure record, now resolved by the D04-S provider fix"
+        }
+      ]
     },
     {
       "id": "E-RED",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01,03): the rv1 red record and rv2 direction-B red failure exist and are retained, but no rv4-revision red set was frozen at this boundary (the accepted-scope implementation predates rv4). Composite-junction SQL-gen red sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "artifact",
+          "path": "artifacts/pdca/T213/rv1/red-evidence.md",
+          "value": "D01 red register: unmodified-build filtered ~JoinInto run per project, all exit 2, failing tests attributable to the targeted composite/M:N guards; scalar controls pass"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv1/red-core.log",
+          "exit": 2,
+          "value": "core 11 selected, 5 failed: CompositeOneToMany_ShouldGroupChildrenByFullKey; CompositeOneToOne_ShouldAssignByFullKey; CompositeJunctionManyToMany_ShouldStitchByFullJunctionKey; ManyToMany_SingleQuery_ShouldStitchBothCollections; ManyToMany_SingleQuery_Async_ShouldStitchBothCollections"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv1/red-sqlite.log",
+          "exit": 2,
+          "value": "sqlite 1 selected, 1 failed: JoinIntoCompositeSqlGenerationTests.ManyToMany_WithSingleQueryLoadWith_ShouldRenderBothCollections (same on postgres/sqlserver/mysql/clickhouse; mariadb red-mariadb.log 2 selected, 1 failed)"
+        }
+      ]
     },
     {
       "id": "E-PERF-BASE",
@@ -330,6 +415,13 @@
           "path": "artifacts/pdca/T213/rv4/integration/SqliteIntegrationTests.log",
           "exit": 0,
           "value": "real integration: CommonTestSuite.JoinInto_ManyToMany_WithSingleQueryLoadWith_ShouldStitchTagsAndNotes green"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/joininto-sqlite.log",
+          "command": "dotnet test tests/nextorm.sqlite.tests -c Debug --no-build --filter FullyQualifiedName~JoinInto",
+          "exit": 0,
+          "value": "61 selected, 61 passed, 0 failed, 0 skipped; includes the new composite relationship-key 1:N/1:1 and nullable-composite componentwise SQL-generation cases"
         }
       ]
     },
@@ -353,6 +445,13 @@
           "path": "artifacts/pdca/T213/rv4/integration/PostgresIntegrationTests.log",
           "exit": 0,
           "value": "real integration: M:N + SingleQuery green"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/joininto-postgres.log",
+          "command": "dotnet test tests/nextorm.postgres.tests -c Debug --no-build --filter FullyQualifiedName~JoinInto",
+          "exit": 0,
+          "value": "12 selected, 12 passed, 0 failed, 0 skipped; includes the new composite relationship-key 1:N/1:1 and nullable-composite componentwise SQL-generation cases"
         }
       ]
     },
@@ -376,6 +475,13 @@
           "path": "artifacts/pdca/T213/rv4/integration/SqlServerIntegrationTests.log",
           "exit": 0,
           "value": "real integration: M:N + SingleQuery green"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/joininto-sqlserver.log",
+          "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build --filter FullyQualifiedName~JoinInto",
+          "exit": 0,
+          "value": "8 selected, 8 passed, 0 failed, 0 skipped; includes the new composite relationship-key 1:N/1:1 and nullable-composite componentwise SQL-generation cases"
         }
       ]
     },
@@ -399,13 +505,38 @@
           "path": "artifacts/pdca/T213/rv4/integration/MySqlIntegrationTests.log",
           "exit": 0,
           "value": "real integration: M:N + SingleQuery green"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/joininto-mysql.log",
+          "command": "dotnet test tests/nextorm.mysql.tests -c Debug --no-build --filter FullyQualifiedName~JoinInto",
+          "exit": 0,
+          "value": "8 selected, 8 passed, 0 failed, 0 skipped; includes the new composite relationship-key 1:N/1:1 and nullable-composite componentwise SQL-generation cases"
         }
       ]
     },
     {
       "id": "T213-EC-SCALAR-clickhouse",
-      "status": "open",
-      "reason": "BLOCKED (genuine provider failure): scalar M:N standalone + SingleQuery cannot be verified on ClickHouse. JoinIntoManyToManySqlGenerationTests (SQL-gen) is green (artifacts/pdca/T213/rv4/sql/clickhouse.log), but real execution fails with System.InvalidCastException UInt64 -> Int32 at ClickHouseJoinIntoRemainderTests.cs:25 (artifacts/pdca/T213/rv4/integration/clickhouse-remainder-focus.log). Root cause: ClickHouse row_number() returns UInt64 while JoinIntoLink<,>.Occurrence is int. Detail artifacts/pdca/T213/rv4/integration/CLICKHOUSE-MN-FAILURE.md. Requires a provider/dialect decision; not the #223 composite-junction work."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "tests/nextorm.core.tests/JoinIntoManyToManySingleQueryTests.cs",
+          "value": "scalar M:N standalone + SingleQuery in-memory (full core log exit 0)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/joininto-clickhouse.log",
+          "exit": 0,
+          "value": "16 selected, 16 passed, 0 failed, 0 skipped; ClickHouse SQL generation incl. the new composite/null cases"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/int-joininto-clickhouse.log",
+          "exit": 0,
+          "value": "3 selected, 3 passed, 0 failed, 0 skipped: scalar M:N + SingleQuery real execution on ClickHouse"
+        }
+      ]
     },
     {
       "id": "T213-EC-SCALAR-mariadb",
@@ -427,6 +558,13 @@
           "path": "artifacts/pdca/T213/rv4/integration/MariaDbJoinIntoRemainderIntegrationTests.log",
           "exit": 0,
           "value": "real mariadb:11.4 integration, 1/1 passed; MySQL is not a substitute"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/d07/joininto-mariadb.log",
+          "command": "dotnet test tests/nextorm.mariadb.tests -c Debug --no-build --filter FullyQualifiedName~JoinInto",
+          "exit": 0,
+          "value": "5 selected, 5 passed, 0 failed, 0 skipped; includes the new composite relationship-key 1:N/1:1 and nullable-composite componentwise SQL-generation cases"
         }
       ]
     },

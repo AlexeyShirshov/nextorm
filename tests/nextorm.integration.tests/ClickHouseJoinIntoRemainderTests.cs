@@ -32,4 +32,46 @@ public sealed class ClickHouseJoinIntoRemainderTests : ProviderTestSuite
         parents[0].Tags.Select(t => t.Id).Should().BeEquivalentTo([f + 300, f + 301, f + 300]);
         parents[0].Notes.Select(n => n.Id).Should().Contain(f + 500);
     }
+
+    [Fact]
+    public void JoinInto_CompositeKeyOneToMany_ShouldMatchEveryComponentWithoutBlendingParents()
+    {
+        // D07 (r=5): the shared composite relationship-key case against a real ClickHouse server.
+        var (a, b, c) = JoinIntoCompositeKeyFixtures.SeedOneToMany(_sut.DataProvider);
+
+        var parents = _sut.DataProvider.From<JiCompositeOneToManyParent>()
+            .Where(p => p.RowId == a || p.RowId == b || p.RowId == c)
+            .JoinInto(
+                _sut.DataProvider.From<JiCompositeKeyChild>(),
+                (p, ch) => p.Tenant == ch.Tenant && p.LinkId == ch.ParentId,
+                p => p.Children)
+            .OrderBy(p => p.RowId)
+            .ToList();
+
+        parents.Select(p => p.RowId).Should().Equal(a, b, c);
+        parents[0].Children.Select(ch => ch.Id).Should().BeEquivalentTo([a + 100, a + 101]);
+        parents[1].Children.Select(ch => ch.Id).Should().Equal(a + 102);
+        parents[2].Children.Select(ch => ch.Id).Should().Equal(a + 103);
+    }
+
+    [Fact]
+    public void JoinInto_CompositeKeyOneToOne_ShouldAssignEachParentItsOwnChildAndLeaveChildlessNull()
+    {
+        // D07 (r=5): the shared composite one-to-one case against a real ClickHouse server.
+        var (withChild, otherChild, childless) = JoinIntoCompositeKeyFixtures.SeedOneToOne(_sut.DataProvider);
+
+        var parents = _sut.DataProvider.From<JiCompositeOneToOneParent>()
+            .Where(p => p.RowId == withChild || p.RowId == otherChild || p.RowId == childless)
+            .JoinInto(
+                _sut.DataProvider.From<JiCompositeKeyChild>(),
+                (p, ch) => p.Tenant == ch.Tenant && p.LinkId == ch.ParentId,
+                p => p.Primary)
+            .OrderBy(p => p.RowId)
+            .ToList();
+
+        parents.Select(p => p.RowId).Should().Equal(withChild, otherChild, childless);
+        parents[0].Primary!.Id.Should().Be(withChild + 110);
+        parents[1].Primary!.Id.Should().Be(otherChild + 110);
+        parents[2].Primary.Should().BeNull();
+    }
 }
