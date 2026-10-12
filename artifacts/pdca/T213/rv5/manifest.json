@@ -404,24 +404,29 @@
       "evidence": [
         {
           "kind": "summary",
-          "path": "artifacts/pdca/T213/rv1/perf-base/acceptance-summary.md",
+          "path": "artifacts/pdca/T213/rv5/perf-base/acceptance-summary.md",
           "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
           "exit": 0,
           "value": "D01 baseline (source rev fc149bff): 7/7 cases executed, BDN global 44.61s, wall 52.3s; Nextorm_Count 2.160ms/380.47KB, Nextorm_GroupByCount 57.87ms/50.1MB, Nextorm_Cached 2.053ms/615.7KB, Cached_PlanOnly_Param 551.2us/513.3KB, Prepared_ToList 890.6us/76.14KB, Cached_ToList 1899.2us/589.44KB, Nextorm_Cached_ToListAsync 1.992ms/613.94KB; cached/prepared ratio 2.13x"
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/T213/rv1/perf-base/acceptance.log",
+          "path": "artifacts/pdca/T213/rv5/perf-base/acceptance.log",
           "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
           "exit": 0,
           "value": "raw acceptance stdout; executed benchmarks 7; global total time 44.61s"
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/T213/rv1/perf-base/joininto-bench.log",
+          "path": "artifacts/pdca/T213/rv5/perf-base/joininto-bench.log",
           "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter \"*JoinIntoBenchmarks*\"",
           "exit": 0,
           "value": "in-memory JoinInto baseline: 1:N 7.289ms/3.94MB, M:N 9.793ms/4.27MB (ratio 1.35); executed 2"
+        },
+        {
+          "kind": "note",
+          "path": "artifacts/pdca/T213/rv5/perf-base/",
+          "value": "rv5 copy of the frozen rv1 baseline measurement artifacts (artifacts/pdca/T213/rv1/perf-base/*); measurement unchanged."
         }
       ]
     },
@@ -431,45 +436,50 @@
       "evidence": [
         {
           "kind": "summary",
-          "path": "artifacts/pdca/T213/rv4/perf-final/acceptance-summary.md",
+          "path": "artifacts/pdca/T213/rv5/perf-final/acceptance-summary.md",
           "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
           "exit": 0,
           "value": "Final (source rev HEAD 2168692d): 7/7 cases, run1 wall 57.2s / global 48.52s, run2 wall 52.4s / global 49.44s; cost gate 57.2s <= 4min pass; cached/prepared ratio 2.13x -> 1.99x (run1) / 2.27x (run2), sub-threshold; Allocated identical for 5/7 cases, GroupByCount +0.02-0.04% and Cached_ToList +0.005% (NOT byte-identical); all 7 cases 27-61% slower than base incl. 5 path-untouched cases; classification: machine-state/measurement variance, not code-attributable; no claim"
         },
         {
           "kind": "summary",
-          "path": "artifacts/pdca/T213/rv4/perf-final/joininto-bench.md",
+          "path": "artifacts/pdca/T213/rv5/perf-final/joininto-bench.md",
           "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter \"*JoinIntoBenchmarks*\"",
           "exit": 0,
           "value": "Final in-memory JoinInto: 1:N 13.16ms/3.94MB run1, 12.27ms/3.94MB run2; M:N 14.81ms/4.26MB run1, 14.91ms/4.26MB run2. 1:N Allocated identical but Gen2 differs (140.6250 -> 125.0000); M:N Allocated 4.27 -> 4.26 MB (~0.2%, fewer) with Gen0 484.3750 -> 468.7500 and Gen1/Gen2 468.7500/234.3750 -> 437.5000/218.7500. Earlier 'byte-identical Allocated' wording retracted; allocation/GC not byte-identical; time deltas not code-attributable; no regression/improvement claim"
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/T213/rv4/perf-final/acceptance.log",
+          "path": "artifacts/pdca/T213/rv5/perf-final/acceptance.log",
           "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
           "exit": 0,
           "value": "final raw acceptance stdout run 1; executed benchmarks 7; global total time 48.52s"
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/T213/rv4/perf-final/acceptance-rerun.log",
+          "path": "artifacts/pdca/T213/rv5/perf-final/acceptance-rerun.log",
           "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
           "exit": 0,
           "value": "repeat on the same machine; executed benchmarks 7; global total time 49.44s"
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/T213/rv4/perf-final/joininto-bench.log",
+          "path": "artifacts/pdca/T213/rv5/perf-final/joininto-bench.log",
           "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter \"*JoinIntoBenchmarks*\"",
           "exit": 0,
           "value": "final in-memory raw stdout run 1; executed 2; global total time 10.37s"
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/T213/rv4/perf-final/joininto-bench-rerun.log",
+          "path": "artifacts/pdca/T213/rv5/perf-final/joininto-bench-rerun.log",
           "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter \"*JoinIntoBenchmarks*\"",
           "exit": 0,
           "value": "repeat on the same machine; executed 2"
+        },
+        {
+          "kind": "note",
+          "path": "artifacts/pdca/T213/rv5/perf-final/",
+          "value": "rv5 copy of the frozen rv4 final measurement artifacts (artifacts/pdca/T213/rv4/perf-final/*); measurement unchanged."
         }
       ]
     },
@@ -485,23 +495,23 @@
           "value": "rv4 collect (superseded): coverage produced but wrapper exit 2 from the bundled single ClickHouse integration failure; retained as failed-evidence, never renamed"
         },
         {
-          "kind": "log",
+          "kind": "failed-evidence",
           "path": "artifacts/pdca/T213/rv5/coverage/collect.log",
           "command": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml \"dotnet test --no-build --verbosity normal\"",
           "exit": 0,
-          "value": "rv5 final tree: exit 0; total 11024 / succeeded 10826 / failed 0 / skipped 198; two flaky SQL Server tests included (not filtered, timeouts unchanged); unchanged coverage.settings.xml"
+          "value": "SUPERSEDED (CHECK r=6 finding): exit 0 / 11024 tests but the report instrumented only 3 assemblies (nextorm.core/postgres/sqlite) and OMITTED nextorm.sqlserver, so 88.5%/80.8% did not cover the frozen coverage.settings.xml scope. Retained as failed-evidence, never renamed."
         },
         {
-          "kind": "log",
+          "kind": "failed-evidence",
           "path": "artifacts/pdca/T213/rv5/coverage/report.log",
           "command": "dotnet tool run reportgenerator -reports:tests/coverage/coverage.cobertura.xml -targetdir:tests/coverage/report -reporttypes:\"Html;TextSummary;Cobertura\" -riskhotspotassemblyfilters:\"+nextorm.*\"",
           "exit": 0,
-          "value": "reportgenerator exit 0"
+          "value": "SUPERSEDED: reportgenerator exit 0 on the 3-assembly cobertura; retained as failed-evidence history."
         },
         {
-          "kind": "log",
+          "kind": "failed-evidence",
           "path": "artifacts/pdca/T213/rv5/coverage/Summary.txt",
-          "value": "Line coverage 88.5% (>=85), Branch coverage 80.8% (>=75); both thresholds met"
+          "value": "SUPERSEDED: 3 assemblies (missing nextorm.sqlserver); line 88.5% branch 80.8%. Retained as failed-evidence history."
         },
         {
           "kind": "log",
@@ -513,7 +523,38 @@
           "path": "artifacts/pdca/T213/rv5/coverage/sqlserver-focused.log",
           "command": "dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o /tmp/opencode/t213-sqlserver-cov.xml \"dotnet test tests/nextorm.sqlserver.tests --no-build --verbosity quiet\"",
           "exit": 0,
-          "value": "805 tests, exit 0; the focused coverage XML includes nextorm.sqlserver, confirming that assembly's absence from the full parallel run is environmental"
+          "value": "Corrective history: focused collect of tests/nextorm.sqlserver.tests (805 tests, exit 0) proves the nextorm.sqlserver assembly IS instrumentable; its absence in the full parallel run was environmental."
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv5/coverage/collect2-attempt-parallel.log",
+          "command": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml \"dotnet test --no-build --verbosity normal\"",
+          "exit": 2,
+          "value": "Exact parallel CI attempt (CHECK-recovery): exit 2 (integration.tests 782 SQL Server connection timeouts from 12 concurrent test hosts on the swap/load-constrained host). Retained as failed-evidence showing the parallel command is unreliable here."
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv5/coverage/env-gate2.log",
+          "value": "Pre-collect2 env gate + recovery: podman machine restarted to reclaim memory; SQL Server/PostgreSQL/MySQL/MariaDB/ClickHouse reused containers started and warmed (select 1 each); swap/load recorded."
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv5/coverage/collect2.log",
+          "command": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml \"dotnet test --no-build --verbosity normal --max-parallel-test-modules 1\"",
+          "exit": 0,
+          "value": "FINAL: exit 0; total 11024 / succeeded 10826 / failed 0 / skipped 198; covers ALL FOUR frozen assemblies. DEVIATION (recorded): inner CI command + --max-parallel-test-modules 1 (serialization only; test set/modules unchanged), required because the literal parallel command drops nextorm.sqlserver / times out SQL Server under host memory pressure."
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv5/coverage/report2.log",
+          "command": "dotnet tool run reportgenerator -reports:tests/coverage/coverage.cobertura.xml -targetdir:tests/coverage/report -reporttypes:\"Html;TextSummary;Cobertura\" -riskhotspotassemblyfilters:\"+nextorm.*\"",
+          "exit": 0,
+          "value": "reportgenerator exit 0 on the 4-assembly cobertura."
+        },
+        {
+          "kind": "summary",
+          "path": "artifacts/pdca/T213/rv5/coverage/Summary2.txt",
+          "value": "FINAL 4-assembly summary: Assemblies 4 (nextorm.core 88.5%, nextorm.postgres 90.2%, nextorm.sqlite 90.5%, nextorm.sqlserver 95%); Line coverage 88.6% (>=85), Branch coverage 80.7% (>=75). Both thresholds met on the frozen scope."
         },
         {
           "kind": "source",

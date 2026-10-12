@@ -1,0 +1,30 @@
+# T213 r=6 CHECK-recovery — env gate BEFORE collect2
+utc: 2026-10-12T19:13:59Z  local: Tue Oct 13 00:13:59 +05 2026
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock (socket: srw-rw---- 1 alex alex 0 Oct  5 13:03 /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock)
+
+## Containers (via podman.exe rootless connection)
+magical_mclean | Up 13 minutes | mcr.microsoft.com/mssql/server:2025-latest
+
+## SQL Server warm query (in-container sqlcmd)
+           
+-----------
+          1
+
+(1 rows affected)
+sqlcmd_exit=0
+
+## Memory / swap / load
+               total        used        free      shared  buff/cache   available
+Mem:           11961        9011         152         403        2797        2333
+Swap:           4096        4087           8
+ 00:14:00 up 7 days, 14:36,  1 user,  load average: 2.38, 24.82, 46.51
+nproc: 8
+
+## CHECK-recovery collect2 pre-run warm (after podman machine restart + container restart)
+utc: 2026-10-12T19:33:48Z
+sqlserver/postgres/mysql/mariadb/clickhouse all returned 1; all 5 reused containers Up.
+## Memory / swap / load
+               total        used        free      shared  buff/cache   available
+Mem:           11961        9358         128         229        2474        2162
+Swap:           4096        4080          15
+ 00:33:48 up 7 days, 14:57,  1 user,  load average: 2.10, 15.09, 29.14

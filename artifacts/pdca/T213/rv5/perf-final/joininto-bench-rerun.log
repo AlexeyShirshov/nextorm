@@ -1,0 +1,225 @@
+// Validating benchmarks:
+// ***** BenchmarkRunner: Start   *****
+// ***** Found 2 benchmark(s) in total *****
+// ***** Building 1 exe(s) in Parallel: Start   *****
+// ***** Done, took 00:00:00 (0.05 sec)   *****
+// Found 2 benchmarks:
+//   JoinIntoBenchmarks.JoinInto_OneToMany_ToList: ShortRun(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)
+//   JoinIntoBenchmarks.JoinInto_ManyToMany_ToList: ShortRun(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)
+
+// **************************
+// Benchmark: JoinIntoBenchmarks.JoinInto_OneToMany_ToList: ShortRun(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)
+// *** Execute ***
+// Launch: 1 / 1
+// ! Failed to set up priority High for process System.Diagnostics.Process (nextorm.benchmark). Make sure you have the right permissions. Message: Permission denied
+
+// Benchmark Process Environment Information:
+// BenchmarkDotNet v0.15.8
+// Runtime=.NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+// GC=Concurrent Workstation
+// HardwareIntrinsics=AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT,X86Base+SSE+SSE2,AES+PCLMUL VectorSize=256
+// Job: Job-ZYJCSJ(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)
+
+OverheadJitting  1: 1 op, 287892.00 ns, 287.8920 us/op
+WorkloadJitting  1: 1 op, 12386003.00 ns, 12.3860 ms/op
+
+OverheadJitting  2: 16 op, 526673.00 ns, 32.9171 us/op
+WorkloadJitting  2: 16 op, 314582451.00 ns, 19.6614 ms/op
+
+WorkloadPilot    1: 16 op, 390344161.00 ns, 24.3965 ms/op
+WorkloadPilot    2: 32 op, 687983039.00 ns, 21.4995 ms/op
+
+OverheadWarmup   1: 32 op, 3619.00 ns, 113.0938 ns/op
+OverheadWarmup   2: 32 op, 1080.00 ns, 33.7500 ns/op
+OverheadWarmup   3: 32 op, 1090.00 ns, 34.0625 ns/op
+OverheadWarmup   4: 32 op, 1007.00 ns, 31.4688 ns/op
+OverheadWarmup   5: 32 op, 750.00 ns, 23.4375 ns/op
+OverheadWarmup   6: 32 op, 1090.00 ns, 34.0625 ns/op
+OverheadWarmup   7: 32 op, 946.00 ns, 29.5625 ns/op
+
+OverheadActual   1: 32 op, 987.00 ns, 30.8438 ns/op
+OverheadActual   2: 32 op, 1172.00 ns, 36.6250 ns/op
+OverheadActual   3: 32 op, 1830.00 ns, 57.1875 ns/op
+OverheadActual   4: 32 op, 833.00 ns, 26.0313 ns/op
+OverheadActual   5: 32 op, 1028.00 ns, 32.1250 ns/op
+OverheadActual   6: 32 op, 1460.00 ns, 45.6250 ns/op
+OverheadActual   7: 32 op, 1039.00 ns, 32.4688 ns/op
+OverheadActual   8: 32 op, 1069.00 ns, 33.4063 ns/op
+OverheadActual   9: 32 op, 874.00 ns, 27.3125 ns/op
+OverheadActual  10: 32 op, 935.00 ns, 29.2188 ns/op
+OverheadActual  11: 32 op, 853.00 ns, 26.6563 ns/op
+OverheadActual  12: 32 op, 885.00 ns, 27.6563 ns/op
+OverheadActual  13: 32 op, 1111.00 ns, 34.7188 ns/op
+OverheadActual  14: 32 op, 1480.00 ns, 46.2500 ns/op
+OverheadActual  15: 32 op, 1049.00 ns, 32.7813 ns/op
+OverheadActual  16: 32 op, 1511.00 ns, 47.2188 ns/op
+OverheadActual  17: 32 op, 1830.00 ns, 57.1875 ns/op
+OverheadActual  18: 32 op, 1347.00 ns, 42.0938 ns/op
+OverheadActual  19: 32 op, 1254.00 ns, 39.1875 ns/op
+OverheadActual  20: 32 op, 1563.00 ns, 48.8438 ns/op
+
+WorkloadWarmup   1: 32 op, 648751256.00 ns, 20.2735 ms/op
+WorkloadWarmup   2: 32 op, 643688087.00 ns, 20.1153 ms/op
+WorkloadWarmup   3: 32 op, 385741268.00 ns, 12.0544 ms/op
+
+WorkloadActual   1: 32 op, 406563424.00 ns, 12.7051 ms/op
+WorkloadActual   2: 32 op, 404853860.00 ns, 12.6517 ms/op
+WorkloadActual   3: 32 op, 366641363.00 ns, 11.4575 ms/op
+
+WorkloadResult   1: 32 op, 406562334.00 ns, 12.7051 ms/op
+WorkloadResult   2: 32 op, 404852770.00 ns, 12.6516 ms/op
+WorkloadResult   3: 32 op, 366640273.00 ns, 11.4575 ms/op
+// GC:  14 7 4 132093768 32
+// Threading:  0 0 32
+
+
+Mean = 12.271 ms, StdErr = 0.407 ms (3.32%), N = 3, StdDev = 0.705 ms
+Min = 11.458 ms, Q1 = 12.055 ms, Median = 12.652 ms, Q3 = 12.678 ms, Max = 12.705 ms
+IQR = 0.624 ms, LowerFence = 11.119 ms, UpperFence = 13.614 ms
+ConfidenceInterval = [-0.597 ms; 25.140 ms] (CI 99.9%), Margin = 12.868 ms (104.87% of Mean)
+Skewness = -0.38, Kurtosis = 0.67, MValue = 2
+
+// ** Remained 1 (50.0 %) benchmark(s) to run. Estimated finish 2026-10-12 21:56 (0h 0m from now) **
+// **************************
+// Benchmark: JoinIntoBenchmarks.JoinInto_ManyToMany_ToList: ShortRun(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)
+// *** Execute ***
+// Launch: 1 / 1
+// ! Failed to set up priority High for process System.Diagnostics.Process (nextorm.benchmark). Make sure you have the right permissions. Message: Permission denied
+
+// Benchmark Process Environment Information:
+// BenchmarkDotNet v0.15.8
+// Runtime=.NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+// GC=Concurrent Workstation
+// HardwareIntrinsics=AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT,X86Base+SSE+SSE2,AES+PCLMUL VectorSize=256
+// Job: Job-ZYJCSJ(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)
+
+OverheadJitting  1: 1 op, 456403.00 ns, 456.4030 us/op
+WorkloadJitting  1: 1 op, 15954584.00 ns, 15.9546 ms/op
+
+OverheadJitting  2: 16 op, 496244.00 ns, 31.0153 us/op
+WorkloadJitting  2: 16 op, 293446513.00 ns, 18.3404 ms/op
+
+WorkloadPilot    1: 16 op, 294792091.00 ns, 18.4245 ms/op
+WorkloadPilot    2: 32 op, 533592170.00 ns, 16.6748 ms/op
+
+OverheadWarmup   1: 32 op, 5050.00 ns, 157.8125 ns/op
+OverheadWarmup   2: 32 op, 988.00 ns, 30.8750 ns/op
+OverheadWarmup   3: 32 op, 1059.00 ns, 33.0938 ns/op
+OverheadWarmup   4: 32 op, 1008.00 ns, 31.5000 ns/op
+OverheadWarmup   5: 32 op, 712.00 ns, 22.2500 ns/op
+OverheadWarmup   6: 32 op, 570.00 ns, 17.8125 ns/op
+OverheadWarmup   7: 32 op, 610.00 ns, 19.0625 ns/op
+OverheadWarmup   8: 32 op, 560.00 ns, 17.5000 ns/op
+
+OverheadActual   1: 32 op, 641.00 ns, 20.0313 ns/op
+OverheadActual   2: 32 op, 1110.00 ns, 34.6875 ns/op
+OverheadActual   3: 32 op, 1038.00 ns, 32.4375 ns/op
+OverheadActual   4: 32 op, 906.00 ns, 28.3125 ns/op
+OverheadActual   5: 32 op, 560.00 ns, 17.5000 ns/op
+OverheadActual   6: 32 op, 1700.00 ns, 53.1250 ns/op
+OverheadActual   7: 32 op, 1191.00 ns, 37.2188 ns/op
+OverheadActual   8: 32 op, 997.00 ns, 31.1563 ns/op
+OverheadActual   9: 32 op, 1710.00 ns, 53.4375 ns/op
+OverheadActual  10: 32 op, 1802.00 ns, 56.3125 ns/op
+OverheadActual  11: 32 op, 896.00 ns, 28.0000 ns/op
+OverheadActual  12: 32 op, 1323.00 ns, 41.3438 ns/op
+OverheadActual  13: 32 op, 1161.00 ns, 36.2813 ns/op
+OverheadActual  14: 32 op, 805.00 ns, 25.1563 ns/op
+OverheadActual  15: 32 op, 1059.00 ns, 33.0938 ns/op
+OverheadActual  16: 32 op, 754.00 ns, 23.5625 ns/op
+OverheadActual  17: 32 op, 906.00 ns, 28.3125 ns/op
+OverheadActual  18: 32 op, 1059.00 ns, 33.0938 ns/op
+OverheadActual  19: 32 op, 967.00 ns, 30.2188 ns/op
+OverheadActual  20: 32 op, 1364.00 ns, 42.6250 ns/op
+
+WorkloadWarmup   1: 32 op, 507450352.00 ns, 15.8578 ms/op
+WorkloadWarmup   2: 32 op, 476805454.00 ns, 14.9002 ms/op
+WorkloadWarmup   3: 32 op, 463813496.00 ns, 14.4942 ms/op
+
+WorkloadActual   1: 32 op, 511624870.00 ns, 15.9883 ms/op
+WorkloadActual   2: 32 op, 455356504.00 ns, 14.2299 ms/op
+WorkloadActual   3: 32 op, 464819578.00 ns, 14.5256 ms/op
+
+WorkloadResult   1: 32 op, 511623821.50 ns, 15.9882 ms/op
+WorkloadResult   2: 32 op, 455355455.50 ns, 14.2299 ms/op
+WorkloadResult   3: 32 op, 464818529.50 ns, 14.5256 ms/op
+// GC:  15 14 7 142901232 32
+// Threading:  0 0 32
+
+
+Mean = 14.915 ms, StdErr = 0.544 ms (3.64%), N = 3, StdDev = 0.942 ms
+Min = 14.230 ms, Q1 = 14.378 ms, Median = 14.526 ms, Q3 = 15.257 ms, Max = 15.988 ms
+IQR = 0.879 ms, LowerFence = 13.059 ms, UpperFence = 16.576 ms
+ConfidenceInterval = [-2.262 ms; 32.091 ms] (CI 99.9%), Margin = 17.177 ms (115.17% of Mean)
+Skewness = 0.34, Kurtosis = 0.67, MValue = 2
+
+// ** Remained 0 (0.0 %) benchmark(s) to run. Estimated finish 2026-10-12 21:56 (0h 0m from now) **
+// ***** BenchmarkRunner: Finish  *****
+
+// * Export *
+  benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.JoinIntoBenchmarks-report.csv
+  benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.JoinIntoBenchmarks-report-github.md
+  benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.JoinIntoBenchmarks-report.html
+
+// * Detailed results *
+JoinIntoBenchmarks.JoinInto_OneToMany_ToList: ShortRun(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)
+Runtime = ; GC = 
+Mean = 12.271 ms, StdErr = 0.407 ms (3.32%), N = 3, StdDev = 0.705 ms
+Min = 11.458 ms, Q1 = 12.055 ms, Median = 12.652 ms, Q3 = 12.678 ms, Max = 12.705 ms
+IQR = 0.624 ms, LowerFence = 11.119 ms, UpperFence = 13.614 ms
+ConfidenceInterval = [-0.597 ms; 25.140 ms] (CI 99.9%), Margin = 12.868 ms (104.87% of Mean)
+Skewness = -0.38, Kurtosis = 0.67, MValue = 2
+-------------------- Histogram --------------------
+[11.439 ms ; 12.723 ms) | @@@
+---------------------------------------------------
+
+JoinIntoBenchmarks.JoinInto_ManyToMany_ToList: ShortRun(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)
+Runtime = ; GC = 
+Mean = 14.915 ms, StdErr = 0.544 ms (3.64%), N = 3, StdDev = 0.942 ms
+Min = 14.230 ms, Q1 = 14.378 ms, Median = 14.526 ms, Q3 = 15.257 ms, Max = 15.988 ms
+IQR = 0.879 ms, LowerFence = 13.059 ms, UpperFence = 16.576 ms
+ConfidenceInterval = [-2.262 ms; 32.091 ms] (CI 99.9%), Margin = 17.177 ms (115.17% of Mean)
+Skewness = 0.34, Kurtosis = 0.67, MValue = 2
+-------------------- Histogram --------------------
+[13.373 ms ; 15.235 ms) | @@
+[15.235 ms ; 16.845 ms) | @
+---------------------------------------------------
+
+// * Summary *
+
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+
+Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
+IterationCount=3  LaunchCount=1  WarmupCount=3  
+
+| Method                     | Mean     | Ratio | Gen0     | Gen1     | Gen2     | Allocated | Alloc Ratio |
+|--------------------------- |---------:|------:|---------:|---------:|---------:|----------:|------------:|
+| JoinInto_OneToMany_ToList  | 12.27 ms |  1.00 | 437.5000 | 218.7500 | 125.0000 |   3.94 MB |        1.00 |
+| JoinInto_ManyToMany_ToList | 14.91 ms |  1.22 | 468.7500 | 437.5000 | 218.7500 |   4.26 MB |        1.08 |
+
+// * Hints *
+HideColumnsAnalyser
+  Summary -> Hidden columns: Error, StdDev, RatioSD
+
+// * Legends *
+  Mean        : Arithmetic mean of all measurements
+  Ratio       : Mean of the ratio distribution ([Current]/[Baseline])
+  Gen0        : GC Generation 0 collects per 1000 operations
+  Gen1        : GC Generation 1 collects per 1000 operations
+  Gen2        : GC Generation 2 collects per 1000 operations
+  Allocated   : Allocated memory per single operation (managed only, inclusive, 1KB = 1024B)
+  Alloc Ratio : Allocated memory ratio distribution ([Current]/[Baseline])
+  1 ms        : 1 Millisecond (0.001 sec)
+
+// * Diagnostic Output - MemoryDiagnoser *
+
+
+// ***** BenchmarkRunner: End *****
+Run time: 00:00:10 (10.05 sec), executed benchmarks: 2
+
+Global total time: 00:00:10 (10.49 sec), executed benchmarks: 2
+// * Artifacts cleanup *
+Artifacts cleanup is finished

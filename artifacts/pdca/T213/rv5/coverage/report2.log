@@ -1,0 +1,12 @@
+# reportgenerator (CI invocation) on collect2 cobertura — Tue Oct 13 00:37:39 +05 2026
+args: -reports:tests/coverage/coverage.cobertura.xml -targetdir:tests/coverage/report -reporttypes:Html;TextSummary;Cobertura -riskhotspotassemblyfilters:+nextorm.*
+2026-10-13T00:37:40: Arguments
+2026-10-13T00:37:40:  -reports:tests/coverage/coverage.cobertura.xml
+2026-10-13T00:37:40:  -targetdir:tests/coverage/report
+2026-10-13T00:37:40:  -reporttypes:Html;TextSummary;Cobertura
+2026-10-13T00:37:40:  -riskhotspotassemblyfilters:+nextorm.*
+2026-10-13T00:37:44: Writing report file 'tests/coverage/report/Cobertura.xml'
+2026-10-13T00:37:44: Writing report file 'tests/coverage/report/index.html'
+2026-10-13T00:37:44: Writing report file 'tests/coverage/report/Summary.txt'
+2026-10-13T00:37:44: Report generation took 4.5 seconds
+REPORTGEN_EXIT=0
