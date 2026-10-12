@@ -1,0 +1,35 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.integration.tests
+  Discovered:  nextorm.integration.tests
+  Starting:    nextorm.integration.tests
+[testcontainers.org 00:00:00.52] Connected to Docker:
+  Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+  Server Version: 5.8.6
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.44
+  Operating System: fedora
+  Total Memory: 11.68 GB
+[testcontainers.org 00:00:00.53] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.65] Reusable resource found
+[testcontainers.org 00:00:00.76] Start Docker container 525af9d6a314
+[testcontainers.org 00:00:02.59] Wait for Docker container 525af9d6a314 to complete readiness checks
+[testcontainers.org 00:00:05.11] Docker container 525af9d6a314 ready
+    NextORM.Integration.Tests.ClickHouseJoinIntoRemainderTests.JoinInto_ManyToMany_WithSingleQueryLoadWith_ShouldStitchTagsAndNotes [FAIL]
+      System.InvalidCastException : Unable to cast object of type 'System.UInt64' to type 'System.Int32'.
+      Stack Trace:
+           at ClickHouse.Driver.ADO.Readers.ClickHouseDataReader.GetSlotValue[T](Int32 ordinal)
+           at ClickHouse.Driver.ADO.Readers.ClickHouseDataReader.GetTypedValue[T](Int32 ordinal)
+           at ClickHouse.Driver.ADO.Readers.ClickHouseDataReader.GetInt32(Int32 ordinal)
+           at lambda_method21(Closure, IDataRecord)
+        src/nextorm.core/DataContext/QueryExecutor.cs(767,0): at NextORM.Core.QueryExecutor.ToList[TResult](IPreparedQueryCommand`1 preparedQueryCommand, ReadOnlySpan`1 params)
+        src/nextorm.core/DataContext/DataContext.cs(1646,0): at NextORM.Core.DataContext.ToList[TResult](IPreparedQueryCommand`1 preparedQueryCommand, ReadOnlySpan`1 params)
+        src/nextorm.core/Query/QueryCommand.TResult.cs(276,0): at NextORM.Core.QueryCommand`1.ToList(ReadOnlySpan`1 params)
+        src/nextorm.core/Query/QueryCommand.TResult.cs(293,0): at NextORM.Core.QueryCommand`1.ToObjectList(ReadOnlySpan`1 params)
+        src/nextorm.core/Builders/EntityBuilderExtensions.cs(551,0): at NextORM.Core.EntityBuilderExtensions.MaterializeList[TEntity](EntityBuilder`1 builder, ReadOnlySpan`1 params)
+        tests/nextorm.integration.tests/ClickHouseJoinIntoRemainderTests.cs(25,0): at NextORM.Integration.Tests.ClickHouseJoinIntoRemainderTests.JoinInto_ManyToMany_WithSingleQueryLoadWith_ShouldStitchTagsAndNotes()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[testcontainers.org 00:00:06.40] Stop Docker container 525af9d6a314
+  Finished:    nextorm.integration.tests (ID = 'b4ece81caced377475cbe4ebc5ceca7103a9595a1230fab7f41a6fb60ce4340a')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.integration.tests  Total: 1, Errors: 0, Failed: 1, Skipped: 0, Not Run: 0, Time: 6.832s

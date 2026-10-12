@@ -1,0 +1,38 @@
+{
+  "unit": "T213-D04-S-D06",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.mysql.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.clickhouse.tests",
+      "tests/nextorm.integration.tests"
+    ],
+    "selectors": ["FullyQualifiedName~JoinInto"],
+    "files": [
+      "tests/nextorm.integration.tests/Providers/ClickHouseTestProvider.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK: solution Debug build, full core + six SQL suites (full-project logs in the rv4 manifest), and one real six-provider integration sweep with DOCKER_HOST. This report records the green boundary executions; the shared integration sweep (exit 1) and the ClickHouse focused failure are recorded as the open E-INT-clickhouse / T213-EC-SCALAR-clickhouse rows in artifacts/pdca/T213/rv4/manifest.json and CLICKHOUSE-MN-FAILURE.md.",
+    "rationale": "The r=4 accepted scope is scalar M:N + composite relationship keys; the only compiled change in this stage corrects the ClickHouse TestProvider schema so the focused M:N+SingleQuery case can execute. The ~JoinInto filter is the affected subset across core, all six SQL-gen projects and the focused adapters."
+  },
+  "executions": [
+    {"command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 1},
+    {"command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 2389},
+    {"command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 145},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 58},
+    {"command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 9},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 5},
+    {"command": ["dotnet", "test", "tests/nextorm.mysql.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 5},
+    {"command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 2},
+    {"command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 13},
+    {"command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-class", "nextorm.integration.tests.SqliteIntegrationTests", "-noColor"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 693},
+    {"command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-class", "nextorm.integration.tests.PostgresIntegrationTests", "-noColor"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 693},
+    {"command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-class", "nextorm.integration.tests.SqlServerIntegrationTests", "-noColor"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 693},
+    {"command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-class", "nextorm.integration.tests.MySqlIntegrationTests", "-noColor"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 693},
+    {"command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-class", "nextorm.integration.tests.MariaDbJoinIntoRemainderIntegrationTests", "-noColor"], "phase": "boundary", "source_revision": "0b9ff9fc+T213-rv4", "artifact_revision": "0b9ff9fc+T213-rv4", "exit_code": 0, "selected_count": 1}
+  ]
+}

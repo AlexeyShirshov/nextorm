@@ -1,0 +1,9 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll (net10.0|x64) passed (16s 178ms)
+
+Test run summary: Passed!
+  total: 249
+  failed: 0
+  succeeded: 249
+  skipped: 0
+  duration: 16s 539ms

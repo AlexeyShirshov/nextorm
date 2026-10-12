@@ -38,98 +38,217 @@
   "rows": [
     {
       "id": "E-BUILD",
-      "status": "open",
-      "reason": "Planned rv4 row (AC07): full Debug solution build collected at the DO->CHECK boundary; the D04-R inner-loop build already recorded (exit 0, 0 warnings/0 errors) under artifacts/pdca/T213/rv4/build.log but the boundary row is not yet a passing record."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/build.log",
+          "command": "dotnet build nextorm.slnx -c Debug",
+          "exit": 0,
+          "value": "Build succeeded; 0 Warning(s); 0 Error(s); final rv4 revision (after the ClickHouseTestProvider eager_note fixture correction)"
+        }
+      ]
     },
     {
       "id": "E-CORE",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01-AC04,06): full core test suite collected at the DO->CHECK boundary; the D04-R filtered inner-loop subset (~JoinInto 145/145) is recorded under T213-EC-REJECT."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/core/core-full.log",
+          "command": "dotnet test tests/nextorm.core.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "total 2389, succeeded 2389, failed 0, skipped 0; includes the scalar M:N in-memory + SingleQuery regressions and JoinIntoCompositeJunctionRejectionTests"
+        }
+      ]
     },
     {
       "id": "E-SQL-sqlite",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01,03,06): provider SQL-gen collection pending at the DO->CHECK boundary. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT; the row remains for composite keys / scalar M:N / negatives."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/sql/sqlite.log",
+          "command": "dotnet test tests/nextorm.sqlite.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "total 1639, succeeded 1638, failed 0, skipped 1 (unrelated: SqliteRowIdLobProbeTests.Sqlite_RowId_Projection_Streams_Lobs_MemoryBounded, provider capability)"
+        }
+      ]
     },
     {
       "id": "E-SQL-postgres",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01,03,06): provider SQL-gen collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/sql/postgres.log",
+          "command": "dotnet test tests/nextorm.postgres.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "total 885, succeeded 885, failed 0, skipped 0"
+        }
+      ]
     },
     {
       "id": "E-SQL-sqlserver",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01,03,06): provider SQL-gen collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/sql/sqlserver.log",
+          "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "total 802, succeeded 802, failed 0, skipped 0"
+        }
+      ]
     },
     {
       "id": "E-SQL-mysql",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01,03,06): provider SQL-gen collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/sql/mysql.log",
+          "command": "dotnet test tests/nextorm.mysql.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "total 368, succeeded 368, failed 0, skipped 0"
+        }
+      ]
     },
     {
       "id": "E-SQL-mariadb",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01,03,06): provider SQL-gen collection pending; MariaDB is separate from MySQL. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/sql/mariadb.log",
+          "command": "dotnet test tests/nextorm.mariadb.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "total 249, succeeded 249, failed 0, skipped 0; separate from MySQL (JoinIntoCompositeSqlGenerationTests scalar M:N declaration + SingleQuery not-rejected)"
+        }
+      ]
     },
     {
       "id": "E-SQL-clickhouse",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01,03,06): provider SQL-gen collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/sql/clickhouse.log",
+          "command": "dotnet test tests/nextorm.clickhouse.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "total 650, succeeded 650, failed 0, skipped 0"
+        }
+      ]
     },
     {
       "id": "E-INT-sqlite",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01-AC05): real integration collection pending for the narrowed scope (composite keys + scalar M:N). Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/integration/SqliteIntegrationTests.log",
+          "command": "DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.SqliteIntegrationTests -noColor",
+          "exit": 0,
+          "value": "total 693, errors 0, failed 0, skipped 40; CommonTestSuite.JoinInto scalar M:N + SingleQuery + composite-key cases executed green"
+        }
+      ]
     },
     {
       "id": "E-INT-postgres",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01-AC05): real integration collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/integration/PostgresIntegrationTests.log",
+          "command": "DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.PostgresIntegrationTests -noColor",
+          "exit": 0,
+          "value": "total 693, errors 0, failed 0, skipped 26"
+        }
+      ]
     },
     {
       "id": "E-INT-sqlserver",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01-AC05): real integration collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/integration/SqlServerIntegrationTests.log",
+          "command": "DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.SqlServerIntegrationTests -noColor",
+          "exit": 0,
+          "value": "total 693, errors 0, failed 0, skipped 48"
+        }
+      ]
     },
     {
       "id": "E-INT-mysql",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01-AC05): real integration collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/integration/MySqlIntegrationTests.log",
+          "command": "DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.MySqlIntegrationTests -noColor",
+          "exit": 0,
+          "value": "total 693, errors 0, failed 0, skipped 80"
+        }
+      ]
     },
     {
       "id": "E-INT-mariadb",
-      "status": "open",
-      "reason": "Planned rv4 row (AC01-AC05): separate MariaDB integration collection pending; MySQL is not a substitute. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/integration/MariaDbJoinIntoRemainderIntegrationTests.log",
+          "command": "DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.MariaDbJoinIntoRemainderIntegrationTests -noColor",
+          "exit": 0,
+          "value": "1 selected, 1 passed, 0 failed, 0 skipped; MariaDB scalar M:N + SingleQuery LoadWith stitched (real mariadb:11.4 container); MySQL is not a substitute"
+        }
+      ]
     },
     {
       "id": "E-INT-clickhouse",
       "status": "open",
-      "reason": "Planned rv4 row (AC01-AC05): common suite + focused adapter collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "reason": "BLOCKED (genuine provider failure): ClickHouseJoinIntoRemainderTests.JoinInto_ManyToMany_WithSingleQueryLoadWith_ShouldStitchTagsAndNotes fails at materialization with System.InvalidCastException (UInt64 -> Int32). ClickHouse row_number() returns UInt64 while JoinIntoLink<,>.Occurrence is int; the derived-junction link source cannot be read on ClickHouse. Focused run exit 1 (1 selected, 1 failed) artifacts/pdca/T213/rv4/integration/clickhouse-remainder-focus.log; shared full suite exit 1 with this as the only failure artifacts/pdca/T213/rv4/integration/integration.log. Detail artifacts/pdca/T213/rv4/integration/CLICKHOUSE-MN-FAILURE.md. Requires a provider/dialect decision (outside the D04-S verification unit)."
     },
     {
       "id": "E-RED",
       "status": "open",
-      "reason": "Planned rv4 row (AC01,03): the rv1 red record and rv2 direction-B red failure exist; the composite-key / scalar red set is not yet frozen at the DO->CHECK boundary. Composite-junction SQL-gen red sub-obligation superseded -> #223 + T213-EC-REJECT."
+      "reason": "Planned rv4 row (AC01,03): the rv1 red record and rv2 direction-B red failure exist and are retained, but no rv4-revision red set was frozen at this boundary (the accepted-scope implementation predates rv4). Composite-junction SQL-gen red sub-obligation superseded -> #223 + T213-EC-REJECT."
     },
     {
       "id": "E-PERF-BASE",
       "status": "open",
-      "reason": "Planned rv4 row (AC08): acceptance/in-memory baseline collection pending; rv1/rv2 baselines remain recorded."
+      "reason": "Planned rv4 row (AC08): rv1 acceptance/in-memory baseline is retained, but no rv4 baseline was collected; this stage's brief declares performance measurement NOT required (the r=4 accepted change is the preparation-only fail-closed rejection)."
     },
     {
       "id": "E-PERF-FINAL",
       "status": "open",
-      "reason": "Planned rv4 row (AC08): final measurement pending at the DO->CHECK boundary."
+      "reason": "Planned rv4 row (AC08): not required by this stage (preparation-only change); no final measurement collected."
     },
     {
       "id": "E-COVERAGE",
-      "status": "open",
-      "reason": "Planned rv4 row (AC07): filtered coverage line/branch thresholds collected at the DO->CHECK boundary."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/coverage/collect.log",
+          "command": "DOCKER_HOST=... dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml \"dotnet test --no-build --verbosity normal\"",
+          "exit": 2,
+          "value": "coverage produced; the wrapper exit 2 is solely the bundled solution test run's single ClickHouse integration failure (E-INT-clickhouse), not a coverage-tool failure; 10985 total / 1 failed"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/coverage/Summary.txt",
+          "command": "dotnet tool run reportgenerator -reports:tests/coverage/coverage.cobertura.xml -targetdir:tests/coverage/report -reporttypes:\"Html;TextSummary;Cobertura\" -riskhotspotassemblyfilters:\"+nextorm.*\"",
+          "exit": 0,
+          "value": "Line coverage 88.6% (>=85), Branch coverage 80.7% (>=75); 4 assemblies, 58426 coverable lines; thresholds warn-not-fail on branch 1.0.9"
+        }
+      ]
     },
     {
       "id": "E-DOCS",
       "status": "open",
-      "reason": "Planned rv4 row (AC07): EN+RU/internal documentation update and hygiene review pending (D05 / T213-EC-DOCS)."
+      "reason": "Planned rv4 row (AC07): EN+RU/internal documentation update and hygiene review pending (D05 / T213-EC-DOCS, external ownership; not touched by this DO stage)."
     },
     {
       "id": "EC-T213-D03-01",
@@ -192,33 +311,123 @@
     },
     {
       "id": "T213-EC-SCALAR-sqlite",
-      "status": "open",
-      "reason": "Planned rv4 row (AC03/AC05, D04-S): scalar M:N standalone + SingleQuery verified on SQLite (SQL generation + in-memory + real integration); not yet collected."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "tests/nextorm.core.tests/JoinIntoManyToManySingleQueryTests.cs",
+          "value": "scalar M:N standalone + SingleQuery in-memory (full core log exit 0)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/sql/sqlite.log",
+          "exit": 0,
+          "value": "JoinIntoManyToManySqlGenerationTests SQL-gen green"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/integration/SqliteIntegrationTests.log",
+          "exit": 0,
+          "value": "real integration: CommonTestSuite.JoinInto_ManyToMany_WithSingleQueryLoadWith_ShouldStitchTagsAndNotes green"
+        }
+      ]
     },
     {
       "id": "T213-EC-SCALAR-postgres",
-      "status": "open",
-      "reason": "Planned rv4 row (AC03/AC05, D04-S): scalar M:N verified on PostgreSQL; not yet collected."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "tests/nextorm.core.tests/JoinIntoManyToManySingleQueryTests.cs",
+          "value": "scalar M:N standalone + SingleQuery in-memory (full core log exit 0)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/sql/postgres.log",
+          "exit": 0,
+          "value": "JoinIntoManyToManySqlGenerationTests SQL-gen green"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/integration/PostgresIntegrationTests.log",
+          "exit": 0,
+          "value": "real integration: M:N + SingleQuery green"
+        }
+      ]
     },
     {
       "id": "T213-EC-SCALAR-sqlserver",
-      "status": "open",
-      "reason": "Planned rv4 row (AC03/AC05, D04-S): scalar M:N verified on SQL Server; not yet collected."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "tests/nextorm.core.tests/JoinIntoManyToManySingleQueryTests.cs",
+          "value": "scalar M:N standalone + SingleQuery in-memory (full core log exit 0)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/sql/sqlserver.log",
+          "exit": 0,
+          "value": "JoinIntoManyToManySqlGenerationTests SQL-gen green"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/integration/SqlServerIntegrationTests.log",
+          "exit": 0,
+          "value": "real integration: M:N + SingleQuery green"
+        }
+      ]
     },
     {
       "id": "T213-EC-SCALAR-mysql",
-      "status": "open",
-      "reason": "Planned rv4 row (AC03/AC05, D04-S): scalar M:N verified on MySQL; not yet collected."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "tests/nextorm.core.tests/JoinIntoManyToManySingleQueryTests.cs",
+          "value": "scalar M:N standalone + SingleQuery in-memory (full core log exit 0)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/sql/mysql.log",
+          "exit": 0,
+          "value": "JoinIntoManyToManySqlGenerationTests SQL-gen green"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/integration/MySqlIntegrationTests.log",
+          "exit": 0,
+          "value": "real integration: M:N + SingleQuery green"
+        }
+      ]
     },
     {
       "id": "T213-EC-SCALAR-clickhouse",
       "status": "open",
-      "reason": "Planned rv4 row (AC03/AC05, D04-S): scalar M:N verified on ClickHouse; not yet collected."
+      "reason": "BLOCKED (genuine provider failure): scalar M:N standalone + SingleQuery cannot be verified on ClickHouse. JoinIntoManyToManySqlGenerationTests (SQL-gen) is green (artifacts/pdca/T213/rv4/sql/clickhouse.log), but real execution fails with System.InvalidCastException UInt64 -> Int32 at ClickHouseJoinIntoRemainderTests.cs:25 (artifacts/pdca/T213/rv4/integration/clickhouse-remainder-focus.log). Root cause: ClickHouse row_number() returns UInt64 while JoinIntoLink<,>.Occurrence is int. Detail artifacts/pdca/T213/rv4/integration/CLICKHOUSE-MN-FAILURE.md. Requires a provider/dialect decision; not the #223 composite-junction work."
     },
     {
       "id": "T213-EC-SCALAR-mariadb",
-      "status": "open",
-      "reason": "Planned rv4 row (AC03/AC05, D04-S): scalar M:N verified on MariaDB; MySQL is not a substitute; not yet collected."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "tests/nextorm.core.tests/JoinIntoManyToManySingleQueryTests.cs",
+          "value": "scalar M:N standalone + SingleQuery in-memory (full core log exit 0)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/sql/mariadb.log",
+          "exit": 0,
+          "value": "full project green (total 249, failed 0); JoinIntoCompositeSqlGenerationTests ScalarManyToMany_Declaration_ShouldBuild + ManyToMany_WithSingleQuery_ShouldNotBeRejectedAtBuildTime execute green"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/integration/MariaDbJoinIntoRemainderIntegrationTests.log",
+          "exit": 0,
+          "value": "real mariadb:11.4 integration, 1/1 passed; MySQL is not a substitute"
+        }
+      ]
     },
     {
       "id": "T213-EC-HANDOFF",
@@ -244,7 +453,7 @@
     {
       "id": "T213-EC-DOCS",
       "status": "open",
-      "reason": "Planned rv4 row (AC03/AC05, D05): EN+RU/internal docs must state scalar M:N is supported and composite-junction M:N is not supported, pointing at #223; not yet collected."
+      "reason": "Planned rv4 row (AC03/AC05, D05): EN+RU/internal docs must state scalar M:N is supported and composite-junction M:N is not supported, pointing at #223; not yet collected (D05 external ownership)."
     }
   ]
 }

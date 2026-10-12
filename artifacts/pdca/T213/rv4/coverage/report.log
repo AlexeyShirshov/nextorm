@@ -1,0 +1,9 @@
+2026-10-12T20:44:04: Arguments
+2026-10-12T20:44:04:  -reports:tests/coverage/coverage.cobertura.xml
+2026-10-12T20:44:04:  -targetdir:tests/coverage/report
+2026-10-12T20:44:04:  -reporttypes:Html;TextSummary;Cobertura
+2026-10-12T20:44:04:  -riskhotspotassemblyfilters:+nextorm.*
+2026-10-12T20:44:11: Writing report file 'tests/coverage/report/Cobertura.xml'
+2026-10-12T20:44:11: Writing report file 'tests/coverage/report/index.html'
+2026-10-12T20:44:11: Writing report file 'tests/coverage/report/Summary.txt'
+2026-10-12T20:44:12: Report generation took 7.4 seconds
