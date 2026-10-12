@@ -1,0 +1,37 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+failed NextORM.Sqlite.Tests.JoinIntoCompositeJunctionProbeTests.CompositeJunction_ManyToMany_ShouldPrepareSql (258ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidOperationException : Operation is not valid due to the current state of the object.
+    at NextORM.Core.MemberTranslator.ResolveProjectionItemAliasIndex(IColumnsProvider columnsProvider, Type itemType, Nullable`1 itemOccurrence, ParameterExpression projectionParameter, Boolean includeNestedSources) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/MemberTranslator.cs:827
+    at NextORM.Core.MemberTranslator.VisitMember(BaseExpressionVisitor visitor, MemberExpression node) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/MemberTranslator.cs:487
+    at NextORM.Core.BaseExpressionVisitor.VisitMember(MemberExpression node) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BaseExpressionVisitor.cs:802
+    at NextORM.Core.BaseExpressionVisitor.VisitComparisonOperandCore(Expression operand, Nullable`1 converter) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BaseExpressionVisitor.cs:203
+    at NextORM.Core.BaseExpressionVisitor.VisitComparisonOperand(Expression operand, Nullable`1 converter) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BaseExpressionVisitor.cs:191
+    at NextORM.Core.WhereExpressionVisitor.VisitBinary(BinaryExpression node) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/WhereExpressionVisitor.cs:43
+    at NextORM.Core.PredicateTranslator.AppendCondition(BaseExpressionVisitor visitor, Expression expression) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/PredicateTranslator.cs:160
+    at NextORM.Core.PredicateTranslator.VisitCondition(BaseExpressionVisitor visitor, Expression condition) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/PredicateTranslator.cs:174
+    at NextORM.Core.BaseExpressionVisitor.VisitCondition(Expression condition) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BaseExpressionVisitor.cs:831
+    at NextORM.Core.SqlSourceRenderer.MakeWhere(SqlBuildContext& ctx, StringBuilder target, Type entityType, Expression condition, Int32 dim, Boolean dontNeedAlias) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlSourceRenderer.cs:999
+    at NextORM.Core.SqlSourceRenderer.MakeWhere(SqlBuildContext& ctx, StringBuilder target, Type entityType, Expression condition, Int32 dim) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlSourceRenderer.cs:989
+    at NextORM.Core.SqlSourceRenderer.MakeJoin(SqlBuildContext& ctx, JoinExpression join, Type entityType, IReadOnlyList`1 tablesInScopeHints) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlSourceRenderer.cs:270
+    at NextORM.Core.SqlBuilder.MakeSelect(QueryCommand cmd, String selectInto) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs:185
+    at NextORM.Core.QueryPlanner.MakeSelect(QueryCommand queryCommand, Boolean paramMode, List`1 params, IQueryRegistry queryProvider, IAliasProvider aliasProvider, Boolean sequentialAccess, Boolean suppressLobLocator) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryPlanner.cs:549
+    at NextORM.Core.QueryPlanner.<GetPreparedQueryCommand>g__MakeSelectInternal|36_0[TResult](<>c__DisplayClass36_0`1&) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryPlanner.cs:779
+    at NextORM.Core.QueryPlanner.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean sequentialAccess, Boolean streamingRowsRequested, Boolean suppressLobLocator, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryPlanner.cs:663
+    at NextORM.Core.QueryPlanner.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean sequentialAccess, Boolean streamingRowsRequested, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryPlanner.cs:559
+    at NextORM.Core.DataContext.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean streamingRows, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:341
+    at NextORM.Core.DataContext.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:320
+    at System.Dynamic.UpdateDelegates.UpdateAndExecute5[T0,T1,T2,T3,T4,TRet](CallSite site, T0 arg0, T1 arg1, T2 arg2, T3 arg3, T4 arg4)
+    at NextORM.Sqlite.Tests.JoinIntoCompositeJunctionProbeTests.CompositeJunction_ManyToMany_ShouldPrepareSql() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/JoinIntoCompositeJunctionProbeTests.cs:79
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64) failed with 1 error(s) (1s 157ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 1
+  failed: 1
+  succeeded: 0
+  skipped: 0
+  duration: 1s 470ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)
