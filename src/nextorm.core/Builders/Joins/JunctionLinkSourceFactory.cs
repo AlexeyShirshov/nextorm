@@ -123,8 +123,7 @@ internal static class JunctionLinkSourceFactory
             ?? throw new NotSupportedException(
                 $"The relationship on '{relationship.DeclaringType.Name}' has no junction metadata; a many-to-many JoinInto needs it.");
         if (junction.JunctionParentForeignKey.Count != 1 || junction.JunctionChildForeignKey.Count != 1)
-            throw new NotSupportedException(
-                $"JoinInto does not support a composite junction key on the relationship declared on '{relationship.DeclaringType.Name}'.");
+            throw new NotSupportedException("composite-junction M:N is not supported; see #223");
 
         var junctionType = junction.JunctionType;
         var parentForeignKey = junction.JunctionParentForeignKey[0].PropertyInfo;

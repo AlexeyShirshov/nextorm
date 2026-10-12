@@ -1,0 +1,250 @@
+{
+  "task": "T213",
+  "tree": "/home/alex/sources/nextorm",
+  "contract_rv": 4,
+  "status_file": "docs/specs/status/D213-joininto-remainder-1.md",
+  "required_rows": [
+    "E-BUILD",
+    "E-CORE",
+    "E-SQL-sqlite",
+    "E-SQL-postgres",
+    "E-SQL-sqlserver",
+    "E-SQL-mysql",
+    "E-SQL-mariadb",
+    "E-SQL-clickhouse",
+    "E-INT-sqlite",
+    "E-INT-postgres",
+    "E-INT-sqlserver",
+    "E-INT-mysql",
+    "E-INT-mariadb",
+    "E-INT-clickhouse",
+    "E-RED",
+    "E-PERF-BASE",
+    "E-PERF-FINAL",
+    "E-COVERAGE",
+    "E-DOCS",
+    "EC-T213-D03-01",
+    "T213-EC-NESTED-01",
+    "T213-EC-REJECT",
+    "T213-EC-SCALAR-sqlite",
+    "T213-EC-SCALAR-postgres",
+    "T213-EC-SCALAR-sqlserver",
+    "T213-EC-SCALAR-mysql",
+    "T213-EC-SCALAR-clickhouse",
+    "T213-EC-SCALAR-mariadb",
+    "T213-EC-HANDOFF",
+    "T213-EC-DOCS"
+  ],
+  "rows": [
+    {
+      "id": "E-BUILD",
+      "status": "open",
+      "reason": "Planned rv4 row (AC07): full Debug solution build collected at the DO->CHECK boundary; the D04-R inner-loop build already recorded (exit 0, 0 warnings/0 errors) under artifacts/pdca/T213/rv4/build.log but the boundary row is not yet a passing record."
+    },
+    {
+      "id": "E-CORE",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01-AC04,06): full core test suite collected at the DO->CHECK boundary; the D04-R filtered inner-loop subset (~JoinInto 145/145) is recorded under T213-EC-REJECT."
+    },
+    {
+      "id": "E-SQL-sqlite",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01,03,06): provider SQL-gen collection pending at the DO->CHECK boundary. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT; the row remains for composite keys / scalar M:N / negatives."
+    },
+    {
+      "id": "E-SQL-postgres",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01,03,06): provider SQL-gen collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+    },
+    {
+      "id": "E-SQL-sqlserver",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01,03,06): provider SQL-gen collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+    },
+    {
+      "id": "E-SQL-mysql",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01,03,06): provider SQL-gen collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+    },
+    {
+      "id": "E-SQL-mariadb",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01,03,06): provider SQL-gen collection pending; MariaDB is separate from MySQL. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+    },
+    {
+      "id": "E-SQL-clickhouse",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01,03,06): provider SQL-gen collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+    },
+    {
+      "id": "E-INT-sqlite",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01-AC05): real integration collection pending for the narrowed scope (composite keys + scalar M:N). Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+    },
+    {
+      "id": "E-INT-postgres",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01-AC05): real integration collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+    },
+    {
+      "id": "E-INT-sqlserver",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01-AC05): real integration collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+    },
+    {
+      "id": "E-INT-mysql",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01-AC05): real integration collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+    },
+    {
+      "id": "E-INT-mariadb",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01-AC05): separate MariaDB integration collection pending; MySQL is not a substitute. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+    },
+    {
+      "id": "E-INT-clickhouse",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01-AC05): common suite + focused adapter collection pending. Composite-junction M:N sub-obligation superseded -> #223 + T213-EC-REJECT."
+    },
+    {
+      "id": "E-RED",
+      "status": "open",
+      "reason": "Planned rv4 row (AC01,03): the rv1 red record and rv2 direction-B red failure exist; the composite-key / scalar red set is not yet frozen at the DO->CHECK boundary. Composite-junction SQL-gen red sub-obligation superseded -> #223 + T213-EC-REJECT."
+    },
+    {
+      "id": "E-PERF-BASE",
+      "status": "open",
+      "reason": "Planned rv4 row (AC08): acceptance/in-memory baseline collection pending; rv1/rv2 baselines remain recorded."
+    },
+    {
+      "id": "E-PERF-FINAL",
+      "status": "open",
+      "reason": "Planned rv4 row (AC08): final measurement pending at the DO->CHECK boundary."
+    },
+    {
+      "id": "E-COVERAGE",
+      "status": "open",
+      "reason": "Planned rv4 row (AC07): filtered coverage line/branch thresholds collected at the DO->CHECK boundary."
+    },
+    {
+      "id": "E-DOCS",
+      "status": "open",
+      "reason": "Planned rv4 row (AC07): EN+RU/internal documentation update and hygiene review pending (D05 / T213-EC-DOCS)."
+    },
+    {
+      "id": "EC-T213-D03-01",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "tests/nextorm.core.tests/JoinIntoCompositeCarrierSpikeTests.cs",
+          "command": "dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~JoinIntoCompositeCarrierSpikeTests",
+          "exit": 0,
+          "value": "5 selected, 5 passed, 0 failed; mixed Projection<mappedEntity,scalar> admitted and materialized (value/reference/nullable scalar; all-columns-NULL entity; unsupported-complex fail-closed)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv2/d03-red.log",
+          "exit": 2,
+          "value": "red without the fix: 4 failed / 1 passed (fail-closed negative passes)"
+        },
+        {
+          "kind": "source",
+          "path": "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+          "value": "TryBuildProjectionSelectList admits a mapped-entity + supported-scalar projection; TryExpandEntityItem/BuildProjectionItems/BuildEntityItem/BuildCore/BuildMemberInit unchanged"
+        }
+      ]
+    },
+    {
+      "id": "T213-EC-NESTED-01",
+      "status": "na",
+      "predicate": "superseded -> #223 + T213-EC-REJECT: the nested composite-junction mixed carrier is out of T213's accepted scope (direction D); the r=3 D04 gated branch FAILED (nested alias miss Visitors/MemberTranslator.cs:847; nested materialization ArgumentException DataContext/RowMaterializerBuilder.cs:468, link materialized at JoinIntoStitcher.cs:214). ID/history kept; obligation moved to #223. Evidence artifacts/pdca/T213/rv3/nested-projection/RESULT.md."
+    },
+    {
+      "id": "T213-EC-REJECT",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "tests/nextorm.core.tests/JoinIntoCompositeJunctionRejectionTests.cs",
+          "command": "dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~JoinIntoCompositeJunctionRejectionTests",
+          "exit": 0,
+          "value": "2 selected, 2 passed, 0 failed; composite-junction SQL path throws NotSupportedException('composite-junction M:N is not supported; see #223') at preparation, ConnectionsRequested == 0 (no SQL executed), scalar junction path not rejected"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/rejection/rejection-class.log",
+          "exit": 0,
+          "value": "2/2 passed (focused class run)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/rejection/core-joininto.log",
+          "exit": 0,
+          "value": "145 selected, 145 passed, 0 failed, 0 skipped"
+        },
+        {
+          "kind": "source",
+          "path": "src/nextorm.core/Builders/Joins/JunctionLinkSourceFactory.cs",
+          "value": "BuildSource rejects a composite junction FK with NotSupportedException(\"composite-junction M:N is not supported; see #223\")"
+        }
+      ]
+    },
+    {
+      "id": "T213-EC-SCALAR-sqlite",
+      "status": "open",
+      "reason": "Planned rv4 row (AC03/AC05, D04-S): scalar M:N standalone + SingleQuery verified on SQLite (SQL generation + in-memory + real integration); not yet collected."
+    },
+    {
+      "id": "T213-EC-SCALAR-postgres",
+      "status": "open",
+      "reason": "Planned rv4 row (AC03/AC05, D04-S): scalar M:N verified on PostgreSQL; not yet collected."
+    },
+    {
+      "id": "T213-EC-SCALAR-sqlserver",
+      "status": "open",
+      "reason": "Planned rv4 row (AC03/AC05, D04-S): scalar M:N verified on SQL Server; not yet collected."
+    },
+    {
+      "id": "T213-EC-SCALAR-mysql",
+      "status": "open",
+      "reason": "Planned rv4 row (AC03/AC05, D04-S): scalar M:N verified on MySQL; not yet collected."
+    },
+    {
+      "id": "T213-EC-SCALAR-clickhouse",
+      "status": "open",
+      "reason": "Planned rv4 row (AC03/AC05, D04-S): scalar M:N verified on ClickHouse; not yet collected."
+    },
+    {
+      "id": "T213-EC-SCALAR-mariadb",
+      "status": "open",
+      "reason": "Planned rv4 row (AC03/AC05, D04-S): scalar M:N verified on MariaDB; MySQL is not a substitute; not yet collected."
+    },
+    {
+      "id": "T213-EC-HANDOFF",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "issue",
+          "path": "https://github.com/AlexeyShirshov/nextorm/issues/223",
+          "value": "#223 OPEN, title 'JoinInto: composite-junction M:N SQL link carrier', milestone 1.0.9 (#4); carries the inherited composite-junction obligations (standalone + SingleQuery, six providers incl. MariaDB, boundary, preserved invariants)"
+        },
+        {
+          "kind": "artifact",
+          "path": "artifacts/pdca/T213/rv4/new-issue-body.md",
+          "value": "issue body: 3 failure summaries + file:line, boundary, inherited obligations"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/issue-view.json",
+          "value": "{\"number\":223,\"state\":\"OPEN\",\"milestone\":{\"number\":4,\"title\":\"1.0.9\"}}"
+        }
+      ]
+    },
+    {
+      "id": "T213-EC-DOCS",
+      "status": "open",
+      "reason": "Planned rv4 row (AC03/AC05, D05): EN+RU/internal docs must state scalar M:N is supported and composite-junction M:N is not supported, pointing at #223; not yet collected."
+    }
+  ]
+}
