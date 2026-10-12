@@ -475,4 +475,52 @@ public class JoinIntoCompositeRemainderTests
         parents.Single(p => p.Id == 1).Children.Select(c => c.Id).Should().Equal(10);
         parents.Single(p => p.Id == 2).Children.Select(c => c.Id).Should().Equal(11);
     }
+
+    public sealed class KeylessParentRemainder
+    {
+        // Deliberately no mapped key: the identity selector returns null and the stitcher must fall back
+        // to reference identity (#105), never to a full-key match.
+        public string Name { get; set; } = "";
+        public ICollection<KeylessParentRemainderChild> Children { get; set; } = new List<KeylessParentRemainderChild>();
+    }
+
+    public sealed class KeylessParentRemainderChild
+    {
+        public int Id { get; set; }
+        public string ParentName { get; set; } = "";
+    }
+
+    [Fact]
+    public void KeylessParent_JoinInto_ShouldKeepReferenceIdentity_NotFullKeyMatching()
+    {
+        // A keyless PARENT must behave as before: the stitcher keeps the #105 reference-identity fallback,
+        // so two distinct parent instances carrying equal payload stay two parents. Applying the composite
+        // full-key path to a keyless parent would merge them (or throw), which is the regression this
+        // guards. This test reddens if the full-key path is routed through a keyless parent.
+        using var ctx = new InMemoryDataContext();
+        ctx.From<KeylessParentRemainder>().WithData([
+            new KeylessParentRemainder { Name = "dup" },
+            new KeylessParentRemainder { Name = "dup" },
+        ]);
+        ctx.From<KeylessParentRemainderChild>().WithData([
+            new KeylessParentRemainderChild { Id = 10, ParentName = "dup" },
+            new KeylessParentRemainderChild { Id = 11, ParentName = "dup" },
+        ]);
+
+        // The explicit principal/foreign-key selectors supply the join predicate; the parent itself stays
+        // keyless, so the stitcher's identity selector is null and only reference identity remains.
+        var parents = ctx.From<KeylessParentRemainder>()
+            .JoinInto(
+                ctx.From<KeylessParentRemainderChild>(),
+                (p, c) => p.Name == c.ParentName,
+                p => p.Children,
+                p => p.Name,
+                c => c.ParentName)
+            .ToList();
+
+        parents.Should().HaveCount(2,
+            "distinct keyless parent instances keep reference identity; a full-key match would merge them");
+        parents.Should().OnlyContain(p => p.Children.Select(c => c.Id).OrderBy(id => id).SequenceEqual(new[] { 10, 11 }),
+            "each keyless parent instance still receives both matching children");
+    }
 }

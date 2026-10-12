@@ -1,0 +1,58 @@
+# T213 r=6 D:ENV-GATE — before the coverage collect
+utc: 2026-10-12T18:36:02Z  local: Mon Oct 12 23:36:02 +05 2026
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock (socket: srw-rw---- 1 alex alex 0 Oct  5 13:03 /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock)
+
+## Containers (via Docker API; reused Testcontainers instances started for the gate)
+charming_curran | running | docker.io/library/mariadb:11.4
+kind_mestorf | running | docker.io/library/mysql:8.4
+thirsty_germain | running | docker.io/library/postgres:17-alpine
+magical_mclean | running | mcr.microsoft.com/mssql/server:2025-latest
+cool_bose | running | docker.io/clickhouse/clickhouse-server:25.8-alpine
+
+## Warm queries (one per used DB/schema; SQLite is the in-process provider, no container)
+sqlserver: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -Q 'select 1' -> 1 (1 rows affected)
+postgres : PGPASSWORD=postgres psql -U postgres -h localhost -tAc 'select 1' -> 1
+mysql    : mysql -uroot -pmysql -h localhost -N -e 'select 1' -> 1
+mariadb  : mariadb -uroot -pnextorm -h localhost -N -e 'select 1' -> 1
+clickhouse: clickhouse-client --user clickhouse --password clickhouse --query 'select 1' -> 1
+
+## Idle window (30 s) — swap activity and load
+pswpin : 7899864 -> 7899884   (delta 20)
+pswpout: 18070776 -> 18070814   (delta 38)
+SwapFree kB: 20 -> 0 (delta -20)
+loadavg t0: 2.15 2.84 8.02 2/1861 2138757
+loadavg t1: 2.52 2.86 7.85 10/1858 2138935
+nproc: 8
+
+## Memory / swap snapshot
+               total        used        free      shared  buff/cache   available
+Mem:           11961        9776         140         404        2044        1557
+Swap:           4096        4096           0
+
+## Top CPU processes
+    PID %CPU %MEM COMMAND
+3972070 60.1 25.2 opencode
+2131920 35.3  3.1 VBCSCompiler
+2488007 12.0  5.3 opencode
+1237002  2.8  7.7 MainThread
+2131811  2.4  0.8 dotnet
+2131812  2.1  0.8 dotnet
+2131825  1.8  0.8 dotnet
+
+## Top swap holders
+  766072 kB pid=2310595   opencode
+  540832 kB pid=3972070   opencode
+  460572 kB pid=3975275   Microsoft.CodeA
+  248804 kB pid=2488007   opencode
+  160728 kB pid=1615061   dotnet
+  141864 kB pid=1237251   Microsoft.CodeA
+  126872 kB pid=3280241   dotnet
+  123704 kB pid=2405078   dotnet
+
+## Gate assessment
+- DOCKER_HOST set: YES.
+- SQL Server container healthy + warm `select 1`: YES (1 row).
+- Warm query per used DB/schema: SQL Server / PostgreSQL / MySQL / MariaDB / ClickHouse all returned 1; SQLite is the in-process provider (no container).
+- No competing heavy workload of ours: no test/benchmark/MSBuild run is active; the only CPU is the interactive agent + its Roslyn/MSBuild servers.
+- DEVIATION (recorded, not waived): swap is fully occupied (SwapFree 0 kB) and the 1-min load is ~2.5 on 8 vCPU. The occupied swap is held by the shared dev host's persistent processes (VS Code server, interactive opencode sessions, language servers) and cannot be released without root (`sudo` requires a password here; `swapoff` needs more free RAM than is available). This condition is outside the executor's control and is not caused by a competing build/test/benchmark.
+- Decision: the container/DB/DOCKER_HOST gate is satisfied; the collect is run with DOCKER_HOST set, and the memory/load state above is recorded verbatim for CHECK.
