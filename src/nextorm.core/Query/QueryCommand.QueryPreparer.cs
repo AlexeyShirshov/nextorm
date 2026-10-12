@@ -1426,12 +1426,6 @@ public partial class QueryCommand
             var projectionParam = Expression.Parameter(srcType);
             var output = new List<SelectExpression>(itemTypes.Length);
 
-            // A scalar item is only admitted alongside a mapped entity (a mixed projection). Precomputed
-            // once so a pure-scalar joined projection keeps the caller's existing (rejecting) branch.
-            var hasMappedEntityItem = false;
-            for (var i = 0; i < itemTypes.Length && !hasMappedEntityItem; i++)
-                hasMappedEntityItem = DataContextCache.Metadata.TryGetValue(itemTypes[i], out var itemMetadata) && itemMetadata.Properties.Count > 0;
-
             for (var i = 0; i < itemTypes.Length; i++)
             {
                 if (cancellationToken.IsCancellationRequested)
@@ -1445,31 +1439,15 @@ public partial class QueryCommand
                 // parameter (that would drop the alias). Later items re-root onto their ItemN.
                 var reRoot = !(i == 0 && cmd.ProjectionType is not null && itemTypes[i] == cmd._srcType);
 
-                // An entity item is expanded into its mapped columns. A mutation-CTE identity shape
-                // additionally accepts a metadata-less derived/read-CTE item by expanding its readable CLR
-                // surface, mirroring JoinedReturningProjection.ParseIdentity and the mutation's RETURNING
-                // list. The gate on IdentitySlotAliases keeps ordinary joined projection queries on their
-                // existing path.
-                if (TryExpandEntityItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), null, output, cancellationToken, reRoot)
-                    || (cmd.IdentitySlotAliases && TryAppendShapeItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), output)))
-                    continue;
-
-                // A non-entity item is admitted only as an ordinary scalar column of a *mixed* projection:
-                // the item must be a supported single-column scalar and at least one other item must be a
-                // mapped entity. This lets a <c>Projection&lt;TJunction, long&gt;</c>-shaped junction link
-                // item (a mapped entity plus an occurrence scalar) flow through the same expander as a
-                // pure-entity projection, while a pure-scalar projection keeps the caller's existing path
-                // and an unsupported non-mapped complex item still fails closed (return false).
-                if (!hasMappedEntityItem || !IsSupportedProjectionScalar(itemTypes[i]))
+                // Every item must be a mapped entity; a scalar item cannot be expanded from an entity
+                // source and is left to the caller's existing (rejecting) path rather than materialized
+                // as a wrong shape. A mutation-CTE identity shape additionally accepts a metadata-less
+                // derived/read-CTE item by expanding its readable CLR surface, mirroring
+                // JoinedReturningProjection.ParseIdentity and the mutation's RETURNING list. The gate on
+                // IdentitySlotAliases keeps ordinary joined projection queries on their existing path.
+                if (!TryExpandEntityItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), null, output, cancellationToken, reRoot)
+                    && !(cmd.IdentitySlotAliases && TryAppendShapeItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), output)))
                     return false;
-
-                output.Add(new SelectExpression(itemTypes[i])
-                {
-                    Index = output.Count,
-                    PropertyName = memberName,
-                    PropertyInfo = srcType.GetProperty(memberName),
-                    Expression = itemExpression,
-                });
             }
 
             var columns = output.ToArray();
@@ -1706,16 +1684,6 @@ public partial class QueryCommand
 
             return true;
         }
-
-        /// <summary>
-        /// Whether a non-entity projection item can be admitted as an ordinary single-column scalar beside
-        /// a mapped entity item. Uses the two established single-column predicates: the projection scalar
-        /// set (primitives, strings, dates, decimals, GUIDs, nullables, arrays and the native
-        /// <see cref="System.Text.Json.Nodes.JsonNode"/>) and the raw-row scalar set (which additionally
-        /// covers enums). A non-mapped complex item matches neither and stays rejected.
-        /// </summary>
-        private static bool IsSupportedProjectionScalar(Type itemType)
-            => TypeFacts.IsSingleColumnProjection(itemType) || RawMapperFactory.IsScalarType(itemType);
 
         // Resolves the declared duration storage unit of a directly projected entity property, so a
         // projection of a duration column (`Select(x => x.Dur)`) reads it back in the declared unit on

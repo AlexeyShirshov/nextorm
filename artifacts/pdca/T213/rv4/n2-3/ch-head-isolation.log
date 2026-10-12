@@ -1,0 +1,42 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+failed NextORM.Integration.Tests.ClickHouseExtremeRowNativeSpecificTests.FloatNativeParity_GroupedSingleFloat64_MinAndMax_AcrossDatasets (5s 535ms)
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: ClickHouse.Driver.ClickHouseServerException : Code: 60. DB::Exception: Unknown table expression identifier 'extreme_float_150' in scope SELECT *, rank() OVER (PARTITION BY grp ORDER BY f64 DESC) AS __nextorm_rn FROM extreme_float_150 WHERE (f64 IS NOT NULL) AND (dataset = 'finite'). (UNKNOWN_TABLE) (version 25.8.33.6 (official build))
+
+    at ClickHouse.Driver.ClickHouseClient.HandleError(HttpResponseMessage response, String query, Activity activity)
+    at ClickHouse.Driver.ClickHouseClient.PostSqlQueryAsync(String sql, ClickHouseParameterCollection parameters, QueryOptions options, Boolean rawBody, CancellationToken cancellationToken)
+    at ClickHouse.Driver.ADO.ClickHouseCommand.PostSqlQueryAsync(String sqlQuery, CancellationToken token, Boolean rawBody)
+    at ClickHouse.Driver.ADO.ClickHouseCommand.ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
+    at ClickHouse.Driver.ADO.ClickHouseCommand.ExecuteDbDataReader(CommandBehavior behavior)
+    at NextORM.Core.QueryExecutor.RunReader(DbCommand command, CommandBehavior behavior) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryExecutor.cs:181
+    at NextORM.Core.QueryExecutor.ToList[TResult](IPreparedQueryCommand`1 preparedQueryCommand, ReadOnlySpan`1 params) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryExecutor.cs:760
+    at NextORM.Core.DataContext.ToList[TResult](IPreparedQueryCommand`1 preparedQueryCommand, ReadOnlySpan`1 params) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:1646
+    at NextORM.Core.QueryCommand`1.ToList(ReadOnlySpan`1 params) in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.TResult.cs:276
+    at NextORM.Core.EntityBuilderExtensions.MaterializeList[TEntity](EntityBuilder`1 builder, ReadOnlySpan`1 params) in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilderExtensions.cs:564
+    at NextORM.Integration.Tests.ClickHouseExtremeRowNativeSpecificTests.AssertGroupedParity[TKey](String dataset, Boolean isMax, Expression`1 key) in /home/alex/sources/nextorm/tests/nextorm.integration.tests/ClickHouseExtremeRowNativeSpecificTests.cs:630
+    at NextORM.Integration.Tests.ClickHouseExtremeRowNativeSpecificTests.FloatNativeParity_GroupedSingleFloat64_MinAndMax_AcrossDatasets() in /home/alex/sources/nextorm/tests/nextorm.integration.tests/ClickHouseExtremeRowNativeSpecificTests.cs:713
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) failed with 1 error(s) (9s 033ms)
+Exit code: 2
+  Standard output: [testcontainers.org 00:00:00.33] Connected to Docker:
+    Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+    Server Version: 5.8.6
+    Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+    API Version: 1.44
+    Operating System: fedora
+    Total Memory: 11.68 GB
+  [testcontainers.org 00:00:00.33] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+  [testcontainers.org 00:00:00.40] Reusable resource found
+  [testcontainers.org 00:00:00.49] Start Docker container 6bf39546e2b9
+  [testcontainers.org 00:00:02.19] Wait for Docker container 6bf39546e2b9 to complete readiness checks
+  [testcontainers.org 00:00:05.06] Docker container 6bf39546e2b9 ready
+  [testcontainers.org 00:00:05.42] Stop Docker container 6bf39546e2b9
+
+Test run summary: Failed!
+  total: 1
+  failed: 1
+  succeeded: 0
+  skipped: 0
+  duration: 8s 415ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

@@ -167,6 +167,37 @@ public class JoinIntoExecutionTests
         finally { ctx.Dispose(); File.Delete(path); }
     }
 
+    [Fact]
+    public void RepeatedCachedExecution_ShouldReusePlan_AndIssueOneRoundTripPerRun()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            CountingInterceptor.Reset();
+
+            // AC04: declaring a JoinInto must not disable the plan cache (the sticky _dontCache flag must
+            // never be set on the shared command), and a repeated execution must reuse the cached plan
+            // while issuing exactly one denormalized round trip per run — no extra SingleQuery execution.
+            Parents(ctx)
+                .JoinInto(ctx.From<ExecChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+                .ToCommand().Cache.Should().BeTrue("declaring a JoinInto must not disable the plan cache");
+
+            for (var run = 0; run < 2; run++)
+            {
+                var parents = Parents(ctx)
+                    .JoinInto(ctx.From<ExecChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+                    .ToList();
+
+                parents.Should().HaveCount(3);
+                parents.Single(p => p.Id == 1).Children.Select(c => c.Id).Should().Equal(10, 11);
+            }
+
+            CountingInterceptor.Executions.Should().Be(2,
+                "the cached plan is reused and each repeated execution still issues exactly one denormalized round trip");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
     private sealed class CountingInterceptor : IQueryInterceptor
     {
         private static int _executions;

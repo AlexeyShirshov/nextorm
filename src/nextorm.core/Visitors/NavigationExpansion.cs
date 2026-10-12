@@ -158,7 +158,8 @@ internal static class NavigationExpansion
                 if (!string.Equals(existing.Value, requirement.Value, StringComparison.OrdinalIgnoreCase))
                     throw new QueryPreparationException(
                         $"The query sets the provider setting '{requirement.Key} = {existing.Value}', which conflicts with " +
-                        $"'{requirement.Key} = {requirement.Value}' required by an implicit reference navigation. Remove the " +
+                        $"'{requirement.Key} = {requirement.Value}' required by an outer-join query (an implicit reference " +
+                        $"navigation or a JoinInto/single-query denormalized pair). Remove the " +
                         $"explicit setting or set it to '{requirement.Value}'.");
 
                 continue;

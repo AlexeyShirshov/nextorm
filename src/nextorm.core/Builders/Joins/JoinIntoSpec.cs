@@ -150,8 +150,9 @@ internal interface IJoinIntoSpec<TEntity>
 
     /// <summary>
     /// Whether this declaration is a many-to-many declaration contributing a link item before the child.
-    /// Single-query (<c>EagerLoadMode.SingleQuery</c>) loading does not support it because it maps one join per
-    /// declaration. Defaults to <see langword="false"/>.
+    /// A scalar junction is supported standalone and through single-query (<c>EagerLoadMode.SingleQuery</c>)
+    /// loading; a composite-junction many-to-many fails closed during SQL generation with a
+    /// <see cref="NotSupportedException"/> pointing at issue #223. Defaults to <see langword="false"/>.
     /// </summary>
     bool IsManyToMany => false;
 

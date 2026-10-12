@@ -54,6 +54,18 @@
           "command": "dotnet build nextorm.slnx -c Debug",
           "exit": 0,
           "value": "final r=5 boundary build after the composite/null/provider/integration edits: Build succeeded; 0 Warning(s); 0 Error(s)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/n2-3/build.log",
+          "command": "dotnet build nextorm.slnx -c Debug",
+          "exit": 0,
+          "value": "r=5 n=2/3 corrective build: Build succeeded, 0 Warning(s), 0 Error(s)"
+        },
+        {
+          "kind": "summary",
+          "path": "artifacts/pdca/T213/rv4/evidence-ledger.md",
+          "value": "r=5 n=2/3 evidence ledger: AC01-AC06 + Direction-D + AC08 + candidate-3 removal mapped to concrete test ids, quoted assertions and producing logs"
         }
       ]
     },
@@ -67,6 +79,20 @@
           "command": "dotnet test tests/nextorm.core.tests -c Debug --no-build",
           "exit": 0,
           "value": "total 2389, succeeded 2389, failed 0, skipped 0; includes the scalar M:N in-memory + SingleQuery regressions and JoinIntoCompositeJunctionRejectionTests"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/n2-3/full-core.log",
+          "command": "dotnet test tests/nextorm.core.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "full core after the widening removal: total 2394, succeeded 2394, failed 0, skipped 0"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/n2-3/focused-core.log",
+          "command": "dotnet test tests/nextorm.core.tests -c Debug --no-build --filter <candidate-3 classes>",
+          "exit": 0,
+          "value": "focused: total 7, succeeded 7, failed 0 (JoinIntoCompositeCarrierSpikeTests 4 fail-closed + JoinIntoCompositeJunctionRejectionTests 3 incl. deterministic malformed-key mismatch)"
         }
       ]
     },
@@ -80,6 +106,13 @@
           "command": "dotnet test tests/nextorm.sqlite.tests -c Debug --no-build",
           "exit": 0,
           "value": "total 1639, succeeded 1638, failed 0, skipped 1 (unrelated: SqliteRowIdLobProbeTests.Sqlite_RowId_Projection_Streams_Lobs_MemoryBounded, provider capability)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/n2-3/full-sqlite.log",
+          "command": "dotnet test tests/nextorm.sqlite.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "full sqlite after the widening removal: 1645 total / 1644 succeeded / 1 skipped (opt-in SqliteRowIdLobProbeTests, unrelated)"
         }
       ]
     },
@@ -93,6 +126,13 @@
           "command": "dotnet test tests/nextorm.postgres.tests -c Debug --no-build",
           "exit": 0,
           "value": "total 885, succeeded 885, failed 0, skipped 0"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/n2-3/full-postgres.log",
+          "command": "dotnet test tests/nextorm.postgres.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "full postgres after the widening removal: 888/888"
         }
       ]
     },
@@ -106,6 +146,13 @@
           "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build",
           "exit": 0,
           "value": "total 802, succeeded 802, failed 0, skipped 0"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/n2-3/full-sqlserver.log",
+          "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "full sqlserver after the widening removal: 805/805"
         }
       ]
     },
@@ -119,6 +166,13 @@
           "command": "dotnet test tests/nextorm.mysql.tests -c Debug --no-build",
           "exit": 0,
           "value": "total 368, succeeded 368, failed 0, skipped 0"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/n2-3/full-mysql.log",
+          "command": "dotnet test tests/nextorm.mysql.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "full mysql after the widening removal: 371/371"
         }
       ]
     },
@@ -132,6 +186,13 @@
           "command": "dotnet test tests/nextorm.mariadb.tests -c Debug --no-build",
           "exit": 0,
           "value": "total 249, succeeded 249, failed 0, skipped 0; separate from MySQL (JoinIntoCompositeSqlGenerationTests scalar M:N declaration + SingleQuery not-rejected)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/n2-3/full-mariadb.log",
+          "command": "dotnet test tests/nextorm.mariadb.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "full mariadb after the widening removal: 252/252"
         }
       ]
     },
@@ -145,6 +206,13 @@
           "command": "dotnet test tests/nextorm.clickhouse.tests -c Debug --no-build",
           "exit": 0,
           "value": "total 650, succeeded 650, failed 0, skipped 0"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/n2-3/full-clickhouse.log",
+          "command": "dotnet test tests/nextorm.clickhouse.tests -c Debug --no-build",
+          "exit": 0,
+          "value": "full clickhouse after the widening removal: 653/653"
         }
       ]
     },
@@ -275,6 +343,20 @@
           "kind": "artifact",
           "path": "artifacts/pdca/T213/rv4/integration/CLICKHOUSE-MN-FAILURE.md",
           "value": "historical failure record, now resolved by the D04-S provider fix"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/n2-3/ch-head-class.log",
+          "command": "dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter FullyQualifiedName~ClickHouseExtremeRowNativeSpecificTests",
+          "exit": 0,
+          "value": "whole ClickHouse extreme-row class passes at HEAD: 35/35; the FloatNativeParity_GroupedSingleFloat64 method passes as part of the class"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/n2-3/ch-head-isolation.log",
+          "command": "dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter FullyQualifiedName~ClickHouseExtremeRowNativeSpecificTests.FloatNativeParity_GroupedSingleFloat64_MinAndMax_AcrossDatasets",
+          "exit": 2,
+          "value": "isolated single-method run: UNKNOWN_TABLE extreme_float_150 (pre-existing lazy-seed ordering, test files byte-identical base 20a67a1c->HEAD) - filed as issue #227 (milestone 1.0.9), NOT T213-caused"
         }
       ]
     },
@@ -337,14 +419,14 @@
           "path": "artifacts/pdca/T213/rv4/perf-final/acceptance-summary.md",
           "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
           "exit": 0,
-          "value": "Final (source rev HEAD 2168692d): 7/7 cases, run1 wall 57.2s / global 48.52s, run2 wall 52.4s / global 49.44s; cost gate 57.2s <= 4min pass; cached/prepared ratio 2.13x -> 1.99x (run1) / 2.27x (run2), sub-threshold; all 7 cases 27-61% slower than base with byte-identical Allocated incl. 5 path-untouched cases, classification: reproduced machine-state/measurement variance, not code-attributable; no regression/improvement claim"
+          "value": "Final (source rev HEAD 2168692d): 7/7 cases, run1 wall 57.2s / global 48.52s, run2 wall 52.4s / global 49.44s; cost gate 57.2s <= 4min pass; cached/prepared ratio 2.13x -> 1.99x (run1) / 2.27x (run2), sub-threshold; Allocated identical for 5/7 cases, GroupByCount +0.02-0.04% and Cached_ToList +0.005% (NOT byte-identical); all 7 cases 27-61% slower than base incl. 5 path-untouched cases; classification: machine-state/measurement variance, not code-attributable; no claim"
         },
         {
           "kind": "summary",
           "path": "artifacts/pdca/T213/rv4/perf-final/joininto-bench.md",
           "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter \"*JoinIntoBenchmarks*\"",
           "exit": 0,
-          "value": "Final in-memory JoinInto: 1:N 13.16ms/3.94MB (run1) / 12.27ms/3.94MB (run2), M:N 14.81ms/4.26MB (run1) / 14.91ms/4.26MB (run2); +80.5%/+51.2% vs base with byte-identical Allocated; same reproduced machine-state variance, not code-attributable; no claim"
+          "value": "Final in-memory JoinInto: 1:N 13.16ms/3.94MB run1, 12.27ms/3.94MB run2; M:N 14.81ms/4.26MB run1, 14.91ms/4.26MB run2. 1:N Allocated identical but Gen2 differs (140.6250 -> 125.0000); M:N Allocated 4.27 -> 4.26 MB (~0.2%, fewer) with Gen0 484.3750 -> 468.7500 and Gen1/Gen2 468.7500/234.3750 -> 437.5000/218.7500. Earlier 'byte-identical Allocated' wording retracted; allocation/GC not byte-identical; time deltas not code-attributable; no regression/improvement claim"
         },
         {
           "kind": "log",
@@ -403,25 +485,39 @@
     },
     {
       "id": "EC-T213-D03-01",
-      "status": "met",
+      "status": "na",
+      "predicate": "capability REMOVED at r=5 n=2/3 (candidate 3): the mixed Projection<mappedEntity,scalar> admission in QueryCommand.QueryPreparer.cs (mixed-branch + IsSupportedProjectionScalar) was deleted because it emitted broken SQL ('Item2.' column, unterminated join predicate) and had no working public terminal; its only consumer, the composite-junction M:N SQL link source, fails closed -> #223. Superseded by deterministic fail-closed coverage.",
       "evidence": [
         {
           "kind": "test",
           "path": "tests/nextorm.core.tests/JoinIntoCompositeCarrierSpikeTests.cs",
           "command": "dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~JoinIntoCompositeCarrierSpikeTests",
           "exit": 0,
-          "value": "5 selected, 5 passed, 0 failed; mixed Projection<mappedEntity,scalar> admitted and materialized (value/reference/nullable scalar; all-columns-NULL entity; unsupported-complex fail-closed)"
+          "value": "mixed projection now fails closed deterministically (value/reference/nullable scalar; non-mapped complex stays rejected)"
+        },
+        {
+          "kind": "test",
+          "path": "tests/nextorm.sqlite.tests/JoinIntoMixedProjectionPublicTests.cs",
+          "command": "dotnet test tests/nextorm.sqlite.tests -c Debug --no-build --filter FullyQualifiedName~JoinIntoMixedProjectionPublicTests",
+          "exit": 0,
+          "value": "public whole-projection Join(mapped, scalar) fails closed (QueryPreparationException), both scalar shapes"
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/T213/rv2/d03-red.log",
-          "exit": 2,
-          "value": "red without the fix: 4 failed / 1 passed (fail-closed negative passes)"
+          "path": "artifacts/pdca/T213/rv4/n2-3/focused-core.log",
+          "exit": 0,
+          "value": "7/7"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/n2-3/focused-sqlite.log",
+          "exit": 0,
+          "value": "10/10"
         },
         {
           "kind": "source",
           "path": "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
-          "value": "TryBuildProjectionSelectList admits a mapped-entity + supported-scalar projection; TryExpandEntityItem/BuildProjectionItems/BuildEntityItem/BuildCore/BuildMemberInit unchanged"
+          "value": "BuildProjectionItems requires every item to be a mapped entity; IsSupportedProjectionScalar deleted; IdentitySlotAliases mutation-CTE fallback retained"
         }
       ]
     },

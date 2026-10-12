@@ -717,8 +717,10 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <typeparamref name="TEntity"/> rows, so a bare <see cref="ToCommand"/> may repeat a parent once
     /// per matching child. The parent/child keys are resolved from the declared relationship metadata (or
     /// from a local <see cref="JoinOptions"/> configuration, which fully replaces the metadata for this
-    /// call); a relationship that is not declared, is many-to-many without a junction, or uses a composite
-    /// key is rejected with <see cref="NotSupportedException"/> — use the explicit-key overload instead.
+    /// call); a composite principal/foreign key is supported componentwise. A relationship that is not
+    /// declared, a many-to-many without a junction, or a composite-junction many-to-many (carried by
+    /// issue #223) is rejected with <see cref="NotSupportedException"/> — use the explicit-key overload
+    /// instead.
     /// The list terminals
     /// execute one denormalized command and stitch the children onto the deduplicated parents; the
     /// non-list terminals exclude this join and evaluate the parent only.
