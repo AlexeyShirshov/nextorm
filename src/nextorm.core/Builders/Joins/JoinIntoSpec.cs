@@ -212,8 +212,8 @@ internal sealed class JoinIntoSpec<TEntity, TChild> : IJoinIntoSpec<TEntity>
         Relationship = relationship;
         JoinType = joinType;
 
-        var principalKey = relationship.PrincipalKey[0].PropertyInfo;
-        var foreignKey = relationship.ForeignKey[0].PropertyInfo;
+        var principalKey = relationship.PrincipalKey.Select(static p => p.PropertyInfo).ToArray();
+        var foreignKey = relationship.ForeignKey.Select(static p => p.PropertyInfo).ToArray();
 
         var parentKeyExpression = JoinIntoSpecHelpers.BuildKeySelector<TEntity>(principalKey);
         var childKeyExpression = JoinIntoSpecHelpers.BuildKeySelector<TChild>(foreignKey);
@@ -461,8 +461,7 @@ internal sealed class JoinIntoReferenceSpec<TEntity, TChild> : IJoinIntoSpec<TEn
         Relationship = relationship;
         JoinType = joinType;
 
-        var principalKey = relationship.PrincipalKey[0].PropertyInfo;
-        var foreignKey = relationship.ForeignKey[0].PropertyInfo;
+        var principalKey = relationship.PrincipalKey.Select(static p => p.PropertyInfo).ToArray();
 
         _parentKey = JoinIntoSpecHelpers.BuildKeySelector<TEntity>(principalKey).Compile();
         _childIdentity = JoinIntoSpecHelpers.BuildIdentitySelector<TChild>();
@@ -639,6 +638,77 @@ internal static class JoinIntoSpecHelpers
         return Expression.Lambda<Func<T, object>>(
             Expression.Convert(Expression.Property(parameter, property), typeof(object)),
             parameter);
+    }
+
+    /// <summary>
+    /// Builds a boxing key selector over an ordered list of mapped properties: a single property selects
+    /// its boxed value, a composite selects a structurally-equal <see cref="JoinIntoKey"/>. Used by the
+    /// declared-relationship specs so a composite principal/foreign key groups and matches on <b>every</b>
+    /// component rather than only the first.
+    /// </summary>
+    /// <typeparam name="T">The entity type the key is read from.</typeparam>
+    /// <param name="properties">The key members, in component order.</param>
+    /// <returns>A selector producing the boxed key value.</returns>
+    internal static Expression<Func<T, object>> BuildKeySelector<T>(IReadOnlyList<PropertyInfo> properties)
+    {
+        if (properties.Count == 0)
+            throw new ArgumentException("A key selector needs at least one property.", nameof(properties));
+
+        var parameter = Expression.Parameter(typeof(T), "x");
+        Expression body;
+        if (properties.Count == 1)
+        {
+            body = Expression.Convert(Expression.Property(parameter, properties[0]), typeof(object));
+        }
+        else
+        {
+            var values = new Expression[properties.Count];
+            for (var i = 0; i < properties.Count; i++)
+                values[i] = Expression.Convert(Expression.Property(parameter, properties[i]), typeof(object));
+
+            var constructor = typeof(JoinIntoKey).GetConstructor([typeof(object[])])!;
+            body = Expression.Convert(
+                Expression.New(constructor, Expression.NewArrayInit(typeof(object), values)),
+                typeof(object));
+        }
+
+        return Expression.Lambda<Func<T, object>>(body, parameter);
+    }
+
+    /// <summary>
+    /// Builds a boxing getter over a runtime item for an ordered list of mapped properties: a single
+    /// property reads its boxed value, a composite reads a structurally-equal <see cref="JoinIntoKey"/>.
+    /// Used to read a junction's composite foreign key uniformly from the path-dependent link item.
+    /// </summary>
+    /// <param name="properties">The member list, in component order.</param>
+    /// <returns>A getter producing the boxed key value from an item.</returns>
+    internal static Func<object, object?> BuildKeyGetter(IReadOnlyList<PropertyInfo> properties)
+    {
+        if (properties.Count == 0)
+            throw new ArgumentException("A key getter needs at least one property.", nameof(properties));
+
+        var declaringType = properties[0].DeclaringType
+            ?? throw new InvalidOperationException($"The key member '{properties[0].Name}' has no declaring type.");
+        var parameter = Expression.Parameter(typeof(object), "item");
+        var typed = Expression.Convert(parameter, declaringType);
+        Expression body;
+        if (properties.Count == 1)
+        {
+            body = Expression.Convert(Expression.Property(typed, properties[0]), typeof(object));
+        }
+        else
+        {
+            var values = new Expression[properties.Count];
+            for (var i = 0; i < properties.Count; i++)
+                values[i] = Expression.Convert(Expression.Property(typed, properties[i]), typeof(object));
+
+            var constructor = typeof(JoinIntoKey).GetConstructor([typeof(object[])])!;
+            body = Expression.Convert(
+                Expression.New(constructor, Expression.NewArrayInit(typeof(object), values)),
+                typeof(object));
+        }
+
+        return Expression.Lambda<Func<object, object?>>(body, parameter).Compile();
     }
 
     /// <summary>

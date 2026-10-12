@@ -959,17 +959,14 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
                     throw new NotSupportedException(
                         $"The relationship declared on '{typeof(TEntity).Name}.{property.Name}' points to '{relationship.RelatedType.Name}', not '{typeof(TChild).Name}'.");
 
-                if (relationship.PrincipalKey.Count != 1 || relationship.ForeignKey.Count != 1)
-                    throw new NotSupportedException(
-                        $"JoinInto does not support a composite key on the relationship declared on '{typeof(TEntity).Name}.{property.Name}'.");
-
-                // The junction carries its own four key lists; validate them independently of the
-                // principal/child key pair so a composite junction is rejected explicitly.
+                // A junction may carry more foreign-key columns than the relationship key references
+                // (extra columns are not part of the join), but it must cover every key component or the
+                // composite join cannot be built.
                 if (relationship.Junction is { } junction &&
-                    (junction.ParentKey.Count != 1 || junction.ChildKey.Count != 1 ||
-                     junction.JunctionParentForeignKey.Count != 1 || junction.JunctionChildForeignKey.Count != 1))
+                    (junction.JunctionParentForeignKey.Count < relationship.PrincipalKey.Count ||
+                     junction.JunctionChildForeignKey.Count < relationship.ForeignKey.Count))
                     throw new NotSupportedException(
-                        $"JoinInto does not support a composite junction key on the relationship declared on '{typeof(TEntity).Name}.{property.Name}'.");
+                        $"The many-to-many relationship declared on '{typeof(TEntity).Name}.{property.Name}' has a junction whose foreign keys do not cover every composite key component.");
 
                 return relationship;
             }
@@ -984,10 +981,6 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             if (relationship.RelatedType != typeof(TChild))
                 throw new NotSupportedException(
                     $"The relationship declared on '{typeof(TEntity).Name}.{property.Name}' points to '{relationship.RelatedType.Name}', not '{typeof(TChild).Name}'.");
-
-            if (relationship.ForeignKey.Count != 1 || relationship.PrincipalKey.Count != 1)
-                throw new NotSupportedException(
-                    $"JoinInto does not support a composite key on the relationship declared on '{typeof(TEntity).Name}.{property.Name}'.");
 
             return relationship;
         }
@@ -1017,17 +1010,13 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             throw new NotSupportedException(
                 $"The local relationship configured for '{typeof(TEntity).Name}.{property.Name}' points to '{relationship.RelatedType.Name}', not '{typeof(TChild).Name}'.");
 
-        if (relationship.ForeignKey.Count != 1 || relationship.PrincipalKey.Count != 1)
-            throw new NotSupportedException(
-                $"JoinInto does not support a composite key on the local relationship configured for '{typeof(TEntity).Name}.{property.Name}'.");
-
-        // As in the declared-metadata path, validate the junction's own key lists: a local ManyToMany
-        // configuration with a composite junction selector is rejected explicitly.
+        // As in the declared-metadata path, a junction may carry extra foreign-key columns but must cover
+        // every composite key component.
         if (relationship.Junction is { } junction &&
-            (junction.ParentKey.Count != 1 || junction.ChildKey.Count != 1 ||
-             junction.JunctionParentForeignKey.Count != 1 || junction.JunctionChildForeignKey.Count != 1))
+            (junction.JunctionParentForeignKey.Count < relationship.PrincipalKey.Count ||
+             junction.JunctionChildForeignKey.Count < relationship.ForeignKey.Count))
             throw new NotSupportedException(
-                $"JoinInto does not support a composite junction key on the local relationship configured for '{typeof(TEntity).Name}.{property.Name}'.");
+                $"The local many-to-many relationship configured for '{typeof(TEntity).Name}.{property.Name}' has a junction whose foreign keys do not cover every composite key component.");
 
         return relationship;
     }
@@ -1077,10 +1066,6 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             if (relationship.RelatedType != typeof(TChild))
                 throw new NotSupportedException(
                     $"The relationship declared on '{typeof(TEntity).Name}.{property.Name}' points to '{relationship.RelatedType.Name}', not '{typeof(TChild).Name}'.");
-
-            if (relationship.ForeignKey.Count != 1 || relationship.PrincipalKey.Count != 1)
-                throw new NotSupportedException(
-                    $"JoinInto does not support a composite key on the relationship declared on '{typeof(TEntity).Name}.{property.Name}'.");
 
             if (property.SetMethod is null)
                 throw new NotSupportedException(
@@ -1351,18 +1336,6 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         if (_joinIntos is not { Count: > 0 } && _joins is { } regular && regular.Exists(j => !j.IsJoinInto))
             throw new NotSupportedException(
                 "SingleQuery eager loading cannot be combined with other joins on the same builder; declare LoadWith on a plain entity source only.");
-
-        // A many-to-many declaration contributes two joins while the single-query mapping assumes one join
-        // per declaration; reject it before any join/spec index pairing can overflow.
-        if (_joinIntos is { Count: > 0 } manyToManyIntos)
-        {
-            for (var i = 0; i < manyToManyIntos.Count; i++)
-            {
-                if (manyToManyIntos[i].IsManyToMany)
-                    throw new NotSupportedException(
-                        "SingleQuery eager loading does not support a many-to-many JoinInto declaration; materialize the many-to-many JoinInto separately, or use split-query loading.");
-            }
-        }
 
         var specs = new List<IJoinIntoSpec<TEntity>>();
         var joins = new List<JoinExpression>();
@@ -1728,11 +1701,11 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     {
         var parentParameter = Expression.Parameter(typeof(TEntity), "p");
         var junctionParameter = Expression.Parameter(spec.JunctionEntityType, "j");
-        var equality = JoinIntoSpecHelpers.BuildKeyEquality(
-            Expression.Property(parentParameter, spec.ParentPrincipalKey),
-            Expression.Property(junctionParameter, spec.JunctionParentForeignKey),
-            spec.ParentPrincipalKey.PropertyType,
-            "JoinInto");
+        var equality = BuildPairedKeyEquality(
+            parentParameter,
+            spec.ParentPrincipalKeys,
+            junctionParameter,
+            spec.JunctionParentForeignKeys);
         LambdaExpression condition = Expression.Lambda(equality, parentParameter, junctionParameter);
 
         if (precedingTypes.Count > 0)
@@ -1781,11 +1754,11 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         // dereferenced, exactly as SQL's NULL-propagating ON predicate would be (a null junction matches
         // no child, it does not throw).
         var junctionItem = Expression.Property(leftParameter, $"Item{precedingTypes.Count + 1}");
-        var equality = JoinIntoSpecHelpers.BuildKeyEquality(
-            Expression.Property(childParameter, manyToMany.ChildKey),
-            Expression.Property(junctionItem, manyToMany.JunctionChildForeignKey),
-            manyToMany.ChildKey.PropertyType,
-            "JoinInto");
+        var equality = BuildPairedKeyEquality(
+            childParameter,
+            manyToMany.ChildKeys,
+            junctionItem,
+            manyToMany.JunctionChildForeignKeys);
         var predicateBody = JoinIntoSpecHelpers.ReplaceParameter(
             predicate.Body, predicate.Parameters[0], Expression.Property(leftParameter, "Item1"));
         var body = Expression.AndAlso(equality, predicateBody);
@@ -1884,6 +1857,38 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         }
 
         return 1;
+    }
+
+    /// <summary>
+    /// Builds the conjunction that equates a left-side key's components with a right-side key's
+    /// components, so a composite junction key joins on <b>every</b> component instead of only the first.
+    /// The left (parent/child) key list drives the arity: a junction may carry additional foreign-key
+    /// columns the relationship key does not reference, and those are not part of the join. Each pair is
+    /// built with the provider-aware equality so an unsupported key type still fails closed.
+    /// </summary>
+    /// <param name="left">The left entity or projection-item expression.</param>
+    /// <param name="leftProperties">The left key members, in component order.</param>
+    /// <param name="right">The right (junction) expression.</param>
+    /// <param name="rightProperties">The right key members, in component order.</param>
+    /// <returns>The combined equality predicate.</returns>
+    private static Expression BuildPairedKeyEquality(
+        Expression left,
+        IReadOnlyList<PropertyInfo> leftProperties,
+        Expression right,
+        IReadOnlyList<PropertyInfo> rightProperties)
+    {
+        Expression? result = null;
+        for (var i = 0; i < leftProperties.Count; i++)
+        {
+            var equality = JoinIntoSpecHelpers.BuildKeyEquality(
+                Expression.Property(left, leftProperties[i]),
+                Expression.Property(right, rightProperties[i]),
+                leftProperties[i].PropertyType,
+                "JoinInto");
+            result = result is null ? equality : Expression.AndAlso(result, equality);
+        }
+
+        return result ?? throw new InvalidOperationException("A junction relationship key must have at least one component.");
     }
 
     /// <summary>

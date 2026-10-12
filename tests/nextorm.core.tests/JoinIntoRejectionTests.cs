@@ -9,8 +9,9 @@ namespace NextORM.Core.Tests;
 
 /// <summary>
 /// Boundary tests for the <c>JoinInto</c> declaration guards (#105): the explicit-key type mismatch,
-/// the undeclared relationship, the unsupported relationship kind (M2M), the composite-key
-/// reject, the derived (<c>As</c>) source reject and the projection-arity cap.
+/// the undeclared relationship, the unsupported relationship kind (M2M), the derived (<c>As</c>) source
+/// reject and the projection-arity cap. Composite relationship/junction keys are supported since #213
+/// (asserted at the end of this file) rather than rejected.
 /// </summary>
 public class JoinIntoRejectionTests
 {
@@ -132,7 +133,7 @@ public class JoinIntoRejectionTests
     }
 
     [Fact]
-    public void CompositeJunctionRelationshipKey_ShouldThrow()
+    public void CompositeJunctionRelationshipKey_ShouldResolve()
     {
         var parentProperties = new EntityMetadataBuilder<JunctionParent>().Build().Properties;
         var childProperties = new EntityMetadataBuilder<JunctionChild>().Build().Properties;
@@ -158,8 +159,8 @@ public class JoinIntoRejectionTests
                     JunctionType = typeof(JunctionLink),
                     ParentKey = [parentKey],
                     ChildKey = [childKey],
-                    // The principal/child key pair stays single-column, so the junction-specific guard fires
-                    // rather than the generic composite-relationship guard.
+                    // #213: a composite junction foreign key is now supported; the extra junction column is
+                    // not referenced by the single-column parent key and is not part of the join.
                     JunctionParentForeignKey = [junctionParentForeignKey, junctionParentForeignKey],
                     JunctionChildForeignKey = [junctionChildForeignKey],
                 }));
@@ -169,7 +170,7 @@ public class JoinIntoRejectionTests
         Action act = () => ctx.From<JunctionParent>()
             .JoinInto(ctx.From<JunctionChild>(), (p, c) => p.Id == c.Id, p => p.Children);
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*composite junction key*");
+        act.Should().NotThrow("a composite junction foreign key is supported since #213");
     }
 
     [Fact]
@@ -198,7 +199,7 @@ public class JoinIntoRejectionTests
     }
 
     [Fact]
-    public void CompositeRelationshipKey_ShouldThrow()
+    public void CompositeRelationshipKey_ShouldResolve()
     {
         var parentProperties = new EntityMetadataBuilder<RejectParent>().Build().Properties;
         var childProperties = new EntityMetadataBuilder<RejectChild>().Build().Properties;
@@ -213,7 +214,7 @@ public class JoinIntoRejectionTests
         Action act = () => ctx.From<RejectParent>()
             .JoinInto(ctx.From<RejectChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*composite key*");
+        act.Should().NotThrow("a composite declared relationship key is supported since #213");
     }
 
     [Fact]

@@ -1,0 +1,53 @@
+{
+  "unit": "T213-D02D03",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.mysql.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.clickhouse.tests"
+    ],
+    "selectors": ["FullyQualifiedName~JoinInto"],
+    "files": [
+      "src/nextorm.core/Builders/EntityBuilder.cs",
+      "src/nextorm.core/Builders/Joins/JoinIntoSpec.cs",
+      "src/nextorm.core/Builders/Joins/JoinIntoStitcher.cs",
+      "src/nextorm.core/Builders/Joins/JoinIntoManyToManySpec.cs",
+      "src/nextorm.core/Builders/Joins/JunctionLinkSourceFactory.cs",
+      "tests/nextorm.core.tests/JoinIntoCompositeRemainderTests.cs",
+      "tests/nextorm.core.tests/JoinIntoRejectionTests.cs",
+      "tests/nextorm.core.tests/JoinIntoManyToManySingleQueryTests.cs",
+      "tests/nextorm.sqlite.tests/JoinIntoCompositeSqlGenerationTests.cs",
+      "tests/nextorm.postgres.tests/JoinIntoCompositeSqlGenerationTests.cs",
+      "tests/nextorm.sqlserver.tests/JoinIntoCompositeSqlGenerationTests.cs",
+      "tests/nextorm.mysql.tests/JoinIntoCompositeSqlGenerationTests.cs",
+      "tests/nextorm.mariadb.tests/JoinIntoCompositeSqlGenerationTests.cs",
+      "tests/nextorm.clickhouse.tests/JoinIntoCompositeSqlGenerationTests.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK: full core + six SQL-gen suites + integration with DOCKER_HOST, run once",
+    "rationale": "composite/M:N JoinInto generalization touches core assembly + all dialect paths; JoinInto filter covers changed behavior"
+  },
+  "before_runs": [
+    {"project": "tests/nextorm.core.tests", "exit_code": 2, "selected_count": 138, "failed": 5, "succeeded": 133, "log": "artifacts/pdca/T213/rv1/inner/before-core.log"},
+    {"project": "tests/nextorm.sqlite.tests", "exit_code": 2, "selected_count": 58, "failed": 1, "succeeded": 57, "log": "artifacts/pdca/T213/rv1/inner/before-sqlite.log"},
+    {"project": "tests/nextorm.postgres.tests", "exit_code": 2, "selected_count": 9, "failed": 1, "succeeded": 8, "log": "artifacts/pdca/T213/rv1/inner/before-postgres.log"},
+    {"project": "tests/nextorm.sqlserver.tests", "exit_code": 2, "selected_count": 5, "failed": 1, "succeeded": 4, "log": "artifacts/pdca/T213/rv1/inner/before-sqlserver.log"},
+    {"project": "tests/nextorm.mysql.tests", "exit_code": 2, "selected_count": 5, "failed": 1, "succeeded": 4, "log": "artifacts/pdca/T213/rv1/inner/before-mysql.log"},
+    {"project": "tests/nextorm.mariadb.tests", "exit_code": 2, "selected_count": 2, "failed": 1, "succeeded": 1, "log": "artifacts/pdca/T213/rv1/inner/before-mariadb.log"},
+    {"project": "tests/nextorm.clickhouse.tests", "exit_code": 2, "selected_count": 13, "failed": 1, "succeeded": 12, "log": "artifacts/pdca/T213/rv1/inner/before-clickhouse.log"}
+  ],
+  "executions": [
+    {"command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"], "phase": "boundary", "source_revision": "6f87d776+D02D03-wt", "artifact_revision": "6f87d776+D02D03-wt", "exit_code": 0, "selected_count": 1},
+    {"command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "inner", "source_revision": "6f87d776+D02D03-wt", "artifact_revision": "6f87d776+D02D03-wt", "exit_code": 0, "selected_count": 138},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "inner", "source_revision": "6f87d776+D02D03-wt", "artifact_revision": "6f87d776+D02D03-wt", "exit_code": 0, "selected_count": 58},
+    {"command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "inner", "source_revision": "6f87d776+D02D03-wt", "artifact_revision": "6f87d776+D02D03-wt", "exit_code": 0, "selected_count": 9},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "inner", "source_revision": "6f87d776+D02D03-wt", "artifact_revision": "6f87d776+D02D03-wt", "exit_code": 0, "selected_count": 5},
+    {"command": ["dotnet", "test", "tests/nextorm.mysql.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "inner", "source_revision": "6f87d776+D02D03-wt", "artifact_revision": "6f87d776+D02D03-wt", "exit_code": 0, "selected_count": 5},
+    {"command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "inner", "source_revision": "6f87d776+D02D03-wt", "artifact_revision": "6f87d776+D02D03-wt", "exit_code": 0, "selected_count": 2},
+    {"command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinInto"], "phase": "inner", "source_revision": "6f87d776+D02D03-wt", "artifact_revision": "6f87d776+D02D03-wt", "exit_code": 0, "selected_count": 13}
+  ]
+}

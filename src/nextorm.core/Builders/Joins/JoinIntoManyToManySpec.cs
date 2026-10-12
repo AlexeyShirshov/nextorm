@@ -16,17 +16,17 @@ internal interface IJoinIntoManyToManySpec
     /// <summary>The junction entity type the in-memory path joins directly in place of the derived link.</summary>
     Type JunctionEntityType { get; }
 
-    /// <summary>The parent-side principal key the junction's parent foreign key matches.</summary>
-    PropertyInfo ParentPrincipalKey { get; }
+    /// <summary>The parent-side principal key members the junction's parent foreign key matches.</summary>
+    IReadOnlyList<PropertyInfo> ParentPrincipalKeys { get; }
 
-    /// <summary>The child-side foreign key the junction's child foreign key matches.</summary>
-    PropertyInfo ChildKey { get; }
+    /// <summary>The child-side key members the junction's child foreign key matches.</summary>
+    IReadOnlyList<PropertyInfo> ChildKeys { get; }
 
-    /// <summary>The junction member that references the parent key.</summary>
-    PropertyInfo JunctionParentForeignKey { get; }
+    /// <summary>The junction members that reference the parent key, in component order.</summary>
+    IReadOnlyList<PropertyInfo> JunctionParentForeignKeys { get; }
 
-    /// <summary>The junction member that references the child key.</summary>
-    PropertyInfo JunctionChildForeignKey { get; }
+    /// <summary>The junction members that reference the child key, in component order.</summary>
+    IReadOnlyList<PropertyInfo> JunctionChildForeignKeys { get; }
 
     /// <summary>
     /// The projection item types the declaration contributes for the given provider path: the derived
@@ -144,8 +144,8 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
         // The many-to-many assignment groups children by the relationship keys exactly like the direct
         // path; it only differs in the multiplicity rule, so it uses its own eager spec rather than the
         // deduplicating one hidden inside the direct assignment.
-        var principalKey = relationship.PrincipalKey[0].PropertyInfo;
-        var foreignKey = relationship.ForeignKey[0].PropertyInfo;
+        var principalKey = relationship.PrincipalKey.Select(static p => p.PropertyInfo).ToArray();
+        var foreignKey = relationship.ForeignKey.Select(static p => p.PropertyInfo).ToArray();
         _eager = new EagerLoadSpec<TEntity, TChild, object>(
             collection,
             static _ => throw new NotSupportedException("JoinInto does not run the split eager-load query."),
@@ -157,15 +157,15 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
                 $"The many-to-many relationship declared on '{typeof(TEntity).Name}' has no junction metadata.");
 
         JunctionEntityType = junction.JunctionType;
-        ParentPrincipalKey = relationship.PrincipalKey[0].PropertyInfo;
-        ChildKey = relationship.ForeignKey[0].PropertyInfo;
-        JunctionParentForeignKey = junction.JunctionParentForeignKey[0].PropertyInfo;
-        JunctionChildForeignKey = junction.JunctionChildForeignKey[0].PropertyInfo;
-        _parentKeyOfAny = BuildGetter(ParentPrincipalKey);
+        ParentPrincipalKeys = principalKey;
+        ChildKeys = foreignKey;
+        JunctionParentForeignKeys = junction.JunctionParentForeignKey.Select(static p => p.PropertyInfo).ToArray();
+        JunctionChildForeignKeys = junction.JunctionChildForeignKey.Select(static p => p.PropertyInfo).ToArray();
+        _parentKeyOfAny = JoinIntoSpecHelpers.BuildKeyGetter(ParentPrincipalKeys);
 
         LinkEntityType = JunctionLinkSourceFactory.GetLinkType(
-            JunctionParentForeignKey.PropertyType,
-            JunctionChildForeignKey.PropertyType);
+            JunctionParentForeignKeys[0].PropertyType,
+            JunctionChildForeignKeys[0].PropertyType);
 
         // The accessors are bound once from the path that will materialize the link item: the SQL link's
         // ParentKey/ChildKey/Occurrence properties, or the junction's parent/child foreign-key members
@@ -178,10 +178,16 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
         }
         else
         {
-            LinkParentKey = BuildGetter(JunctionParentForeignKey);
-            LinkChildKey = BuildGetter(JunctionChildForeignKey);
+            LinkParentKey = JoinIntoSpecHelpers.BuildKeyGetter(JunctionParentForeignKeys);
+            LinkChildKey = JoinIntoSpecHelpers.BuildKeyGetter(JunctionChildForeignKeys);
             LinkOccurrence = static junctionItem => junctionItem;
         }
+
+        // The occurrence token partitions by the junction's complete parent/child key. For a scalar
+        // junction this is exactly the two former single member names, so existing plan keys are stable;
+        // a composite junction lists every component.
+        var occurrenceScope = string.Join(",", JunctionParentForeignKeys.Select(static p => p.Name))
+            + "," + string.Join(",", JunctionChildForeignKeys.Select(static p => p.Name));
 
         Identity = new JoinIntoIdentity
         {
@@ -203,8 +209,7 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
                 .. junction.JunctionParentForeignKey.Select(static p => p.PropertyInfo.Name),
                 .. junction.JunctionChildForeignKey.Select(static p => p.PropertyInfo.Name),
             ],
-            OccurrenceScope =
-                $"{junction.JunctionParentForeignKey[0].PropertyInfo.Name},{junction.JunctionChildForeignKey[0].PropertyInfo.Name}",
+            OccurrenceScope = occurrenceScope,
         };
     }
 
@@ -221,16 +226,16 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
     public Type JunctionEntityType { get; }
 
     /// <inheritdoc/>
-    public PropertyInfo ParentPrincipalKey { get; }
+    public IReadOnlyList<PropertyInfo> ParentPrincipalKeys { get; }
 
     /// <inheritdoc/>
-    public PropertyInfo ChildKey { get; }
+    public IReadOnlyList<PropertyInfo> ChildKeys { get; }
 
     /// <inheritdoc/>
-    public PropertyInfo JunctionParentForeignKey { get; }
+    public IReadOnlyList<PropertyInfo> JunctionParentForeignKeys { get; }
 
     /// <inheritdoc/>
-    public PropertyInfo JunctionChildForeignKey { get; }
+    public IReadOnlyList<PropertyInfo> JunctionChildForeignKeys { get; }
 
     /// <inheritdoc/>
     public Func<object, object?> LinkParentKey { get; }
@@ -445,7 +450,12 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
 
         var linkJoin = new JoinExpression(linkCondition, joinType)
         {
-            From = JunctionLinkSourceFactory.BuildSource(dataContext, relationship),
+            // The derived row_number() link source is SQL-only; the in-memory engine joins the junction
+            // entity directly and rebuilds both edges in BuildInMemoryJoinIntos, so its stored From is a
+            // placeholder that still republishes the junction mapping the declaration depends on.
+            From = dataContext.NeedMapping
+                ? JunctionLinkSourceFactory.BuildSource(dataContext, relationship)
+                : JunctionLinkSourceFactory.GetInMemorySource(relationship),
             Strictness = options.Strictness ?? JoinStrictness.Default,
             IsGlobal = options.IsGlobal,
             JoinHint = options.JoinHint,

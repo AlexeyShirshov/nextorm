@@ -76,6 +76,24 @@ internal static class JunctionLinkSourceFactory
         return metadata;
     }
 
+    /// <summary>
+    /// Returns the <c>FROM</c> source the in-memory engine uses for a many-to-many declaration: the
+    /// junction entity itself (the derived <c>row_number()</c> link source is SQL-only; the in-memory
+    /// join builders replace both edge conditions and From). The junction mapping is still (re)published,
+    /// so declaring the declaration keeps the side effect the SQL path would have produced.
+    /// </summary>
+    /// <param name="relationship">The many-to-many relationship carrying the junction metadata.</param>
+    /// <returns>The junction <c>FROM</c> source.</returns>
+    internal static FromExpression GetInMemorySource(IRelationshipMetadata relationship)
+    {
+        ArgumentNullException.ThrowIfNull(relationship);
+        var junction = relationship.Junction
+            ?? throw new NotSupportedException(
+                $"The relationship on '{relationship.DeclaringType.Name}' has no junction metadata; a many-to-many JoinInto needs it.");
+        EnsureJunctionRegistered(junction.JunctionType);
+        return new FromExpression(junction.JunctionType);
+    }
+
     private static readonly MethodInfo RowNumberMethod =
         typeof(CommonFunctions).GetMethod(nameof(CommonFunctions.row_number), Type.EmptyTypes)!;
 

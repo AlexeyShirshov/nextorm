@@ -5,8 +5,8 @@ namespace NextORM.Core.Tests;
 
 /// <summary>
 /// Coverage for the single-query (<c>EagerLoadMode.SingleQuery</c>) interaction with a many-to-many <c>JoinInto</c>
-/// (#135): the many-to-many declaration is rejected before the join/spec pairing runs, a plain
-/// <c>JoinInto</c> combined with a single-query <c>LoadWith</c> exercises the pairing path, and an
+/// (#135, #213): the many-to-many declaration is composed into the single-query pairing (a link edge followed by a
+/// child edge), a plain <c>JoinInto</c> combined with a single-query <c>LoadWith</c> exercises the pairing path, and an
 /// explicit junction mapping drops the column names resolved against the auto-published one.
 /// </summary>
 public class JoinIntoManyToManySingleQueryTests
@@ -16,33 +16,29 @@ public class JoinIntoManyToManySingleQueryTests
         DataContextCache.Clear();
     }
 
-    private static InMemoryDataContext CreateManyToManyContext()
-    {
-        var ctx = new InMemoryDataContext();
-        ctx.From<ManyToManyJoinParent>(b => b
-                .HasManyThrough<ManyToManyJoinChild, ManyToManyJoinLink, int, int>(
-                    p => p.Children, p => p.Id, l => l.ParentId, c => c.Id, l => l.ChildId))
-            .WithData([new ManyToManyJoinParent { Id = 1, Name = "p1" }]);
-        ctx.From<ManyToManyJoinChild>().WithData([new ManyToManyJoinChild { Id = 10, Name = "c" }]);
-        ctx.From<ManyToManyJoinLink>().WithData([new ManyToManyJoinLink { ParentId = 1, ChildId = 10 }]);
-        return ctx;
-    }
-
     [Fact]
-    public void ManyToManyJoinInto_WithLoadWithAndSingleQuery_ShouldThrow()
+    public void ManyToManyJoinInto_WithLoadWithAndSingleQuery_ShouldStitchBothCollections()
     {
-        using var ctx = CreateManyToManyContext();
+        // #213: a many-to-many declaration contributes a link edge plus a child edge; the single-query
+        // pairing consumes both and stitches the many-to-many collection alongside the LoadWith one.
+        using var ctx = new InMemoryDataContext();
+        ctx.From<SingleQueryMixedParent>(b => b
+                .HasManyThrough<SingleQueryMixedChild, ManyToManyJoinLink, int, int>(
+                    p => p.Children, p => p.Id, l => l.ParentId, c => c.Id, l => l.ChildId)
+                .HasMany(p => p.Notes, n => n.ParentId))
+            .WithData([new SingleQueryMixedParent { Id = 1, Name = "p1" }]);
+        ctx.From<SingleQueryMixedChild>().WithData([new SingleQueryMixedChild { Id = 10, Name = "c" }]);
+        ctx.From<ManyToManyJoinLink>().WithData([new ManyToManyJoinLink { ParentId = 1, ChildId = 10 }]);
+        ctx.From<SingleQueryMixedNote>().WithData([new SingleQueryMixedNote { Id = 20, ParentId = 1, Text = "n" }]);
 
-        // A single-query mapping assumes one join per declaration, but a many-to-many declaration
-        // contributes a link edge plus a child edge, so it is rejected before any index pairing.
-        Action act = () => ctx.From<ManyToManyJoinParent>()
-            .JoinInto(ctx.From<ManyToManyJoinChild>(), (p, c) => true, p => p.Children)
-            .LoadWith(p => p.Children, c => c.From<ManyToManyJoinChild>(), p => p.Id, c => c.Id, EagerLoadMode.SingleQuery)
+        var parents = ctx.From<SingleQueryMixedParent>()
+            .JoinInto(ctx.From<SingleQueryMixedChild>(), (p, c) => true, p => p.Children)
+            .LoadWith(p => p.Notes, n => n.From<SingleQueryMixedNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.SingleQuery)
             .ToList();
 
-        act.Should().Throw<NotSupportedException>()
-            .WithMessage("*many-to-many*")
-            .WithMessage("*SingleQuery*");
+        parents.Should().ContainSingle();
+        parents[0].Children.Select(c => c.Id).Should().Equal(10);
+        parents[0].Notes.Select(n => n.Id).Should().Equal(20);
     }
 
     public sealed class SingleQueryMixedParent
