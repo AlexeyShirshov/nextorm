@@ -1,0 +1,321 @@
+# D216 — Row locking: FOR UPDATE (whole query) vs FOR UPDATE OF (per source)
+
+```yaml
+task: T216
+issue: "#216"
+selected_variant: pdca-dotnet
+milestone: 1.0.9
+branch: 1.0.9
+cycle_N: 1
+attempt_n: 1
+plan_revision_r: 2
+evidence_contract_revision_rv: 2
+plan_state: ready
+status_file: docs/specs/status/D216-row-locking-1.md
+frozen_manifest: artifacts/pdca/D216/rv2/manifest.json
+prior_contract: rv=1 superseded by rv=2
+```
+
+## Current state
+
+- Phase: PLAN complete, persisted; **collection task PLAN handoff at the PLAN→DO boundary** — DO not started.
+- Cycle N=1, plan revision r=2, attempt n=1, evidence contract rv=2 (rv=1 superseded).
+- Selected variant: `pdca-dotnet`. Single collection group → current worktree/branch `1.0.9`, no worktree/branches/merge.
+- Blocks DO: none. **R-03/MariaDB is an open owner constraint**, surfaced upward; it does not stop the executable plan (routed escalation decision).
+
+**Ready means authorization to DO per the escalation decision, not fulfillment of the entire original #216 requirement.**
+
+**R-03/MariaDB — provisional, pending owner.** Source-level locking on MariaDB is implemented fail-closed: capability `false`, `NotSupportedException`, with no global substitution and no ignoring of the target. The original obligation to support MariaDB `OF` is neither declared fulfilled nor removed.
+
+### Durable state
+
+- Current cycle N: 1
+- Plan revision r: 2
+- Attempt n: 1
+- Defect history: none yet (DO not started).
+
+## Goal
+
+Separate:
+1. **Whole-query lock** — query-level `ForUpdate`/`ForShare`, covering all FROM/JOIN sources of the current statement per native provider semantics.
+2. **Source-level lock** — a lock on a specific physical source, set via `FromOptions` or `JoinOptions` and addressed by the existing SQL alias.
+
+Existing query-level methods are preserved. SQL Server primary-only → all-sources is a notable behavior change for multi-table queries.
+
+## Acceptance criteria
+
+| ID | Positive check | Negative case |
+|---|---|---|
+| R-01 | On an allowed query with a primary and two physical INNER JOINs: PG/MySQL/MariaDB have a global trailing lock; SQL Server has corresponding hints on all three sources. | Primary-only SQL Server, or a global clause accidentally restricted to the primary alias, is unacceptable. |
+| R-02 | Source API symmetric in `FromOptions`/`JoinOptions`; default and explicit aliases address the chosen source. | Lock must not leak to a neighbouring JOIN, another instance of the same CLR type, or another alias. |
+| R-03 | PG/MySQL: targeted `OF <alias>`; SQL Server: hint only on the chosen source. Multiple targets preserved. **MariaDB: the original OF criterion is provisional, pending owner; NOT PASS.** | Must not substitute a targeted lock with a global one, ignore the alias, or declare the MariaDB original criterion fulfilled. |
+| R-04 | Source lock allowed on entity, physical `From(string)`, physical JOIN. | Source lock on FromSql, query/builder subquery, or CTE throws `NotSupportedException` at prepare, before SQL execution. |
+| R-05 | SQLite/ClickHouse/in-memory reject whole and source locks. | Successful preparation with an ignored lock is unacceptable, including JOIN options. |
+| R-06 | `Update/Share × Wait/NoWait/SkipLocked` preserved across transfer and rendering. MariaDB preserves its own whole-lock grammar. | No loss of wait mode, no MySQL `FOR SHARE` syntax on MariaDB, no `OF` leak via inheritance. |
+| R-07 | Options → carriers → command/definition → clones → plan key preserve locks. Different scope/target/mode/wait differ in cache identity. | No cache collision, mutable leakage, or mutation of an already-prepared query. |
+| R-08 | Old renderer overloads preserved; new overload/capability additive and fail-closed. | A legacy renderer must not accept a target and silently emit a global lock. |
+| R-09 | Child-query, extreme-row and in-memory guards cover source-only locks too. | `QueryCommand.RowLock == null` must not bypass existing lock restrictions. |
+| R-10 | EN/RU docs reflect the API, provider matrix, physical-only, aliases, the conflict rule and the SQL Server behavior change. | No claim of MariaDB OF support, no stale primary-only description, no public link to `docs/specs/**`. |
+| R-11 | Build exit 0, 0 warnings/errors; focused/boundary/live suites run with proven nonzero test selection. | Zero selected tests, missing logs and container-driven provider skips do not count as pass. |
+| R-12 | Acceptance benchmarks, T216 benchmarks and the coverage recipe are run; results compared with baseline. | No substituting measurement with the argument "SQL is built once", no invented baseline for the new API, no hidden coverage exclusion. |
+| R-13 (new) | MariaDB explicitly has `SupportsSourceLocks=false`; targeted render and source options throw `NotSupportedException`; whole locks keep working. | Inherited MySQL OF, global substitution, silent ignore, and subquery/CTE emulation are forbidden. |
+| R-14 (new) | CHECK and the final report explicitly retain `R-03/MariaDB — constraint pending owner decision`. | Must not issue a full PASS of the original task, close #216, or declare the owner decision received without evidence. |
+
+Native restrictions (e.g. PostgreSQL locking with DISTINCT/GROUP BY/window/set operations, or a nullable side of an outer JOIN) are not turned into a support promise. The required all-sources positive case uses an allowed physical INNER JOIN.
+
+## Minimal solution
+
+- **Essence:** store the global lock separately from the lock of the selected source.
+- **Constraints:** source API only via options; existing aliases; physical-only; one existing renderer contract; capabilities; fail-closed unsupported behavior.
+- **Minimal implementation:** immutable source-lock metadata in the existing carriers, the existing alias pipeline, an additive renderer overload and a per-dialect capability.
+
+Alternatives: **A. Lock in source carriers** (metadata follows the source across clone; no extra map/source-picker; natural options parity) vs **B. Immutable source-keyed map in the command** (centralized walk; extra identity/map synchronization at joins/aliases/clones; larger footprint and mismatch risk). **Choice: A** — the confirmed carriers and clone seams suffice; no spike is needed for the choice.
+
+### Shared contract (to be frozen in D-02)
+
+1. `QueryCommand.RowLock` and `QueryDefinition.RowLock` stay **whole-query**.
+2. `LockClause` stays an immutable mode/wait payload.
+3. The canonical source lock is stored on `FromExpression` as internal immutable metadata modelled on `SubQueryHint`.
+4. `JoinOptions` transfers the lock into the corresponding physical source `JoinExpression.From`; `JoinExpression` does not get a second independent lock storage.
+5. Copy/override/cache/preparation paths preserve this payload; JOIN equality/hash accounts for it via the source carrier.
+6. Aliases are not stored as a separate string in the lock metadata. The target is resolved at render time via the existing alias provider/resolver.
+7. With source locking the alias must actually be declared in FROM/JOIN. One must not emit `OF t1` if there is no `AS t1` declaration.
+8. The renderer receives an already-resolved, correctly quoted SQL alias via the new overload: `Render(LockMode, LockWaitMode, KeywordCase, string? targetAlias)`. `null` means whole-query rendering. An empty/whitespace target is an `ArgumentException`.
+9. `ILockRenderer.SupportsSourceLocks` has a safe default `false`. Whole-lock capability stays `Dialect.Lock != null`; `UsesTableHints` keeps placement.
+10. Old overloads remain. The default implementation of the new overload does not ignore an unsupported target.
+11. SQL Server global hints are added locally per source; `cmd.TableHints` and shared query commands are not mutated.
+12. MariaDB has an explicit capability/targeted-render override preventing an inherited MySQL `OF`.
+
+Config rules: whole + source simultaneously → `InvalidOperationException` at prepare. One effective `LockClause` per source; a repeated options setter replaces the source's prior lock. Different sources may have different mode/wait. One target does not appear in multiple locking clauses. Source-lock clauses are not merged into a global clause. For MariaDB, `Wait` means normal blocking without a suffix; native `WAIT n` is documented as provider grammar and no new timed-wait API is added. MySQL forbids mixing a clause without OF and a clause with OF; this backs the chosen fail-fast contract; complex mode/wait normalization is out of scope.
+
+## What the statement did not say
+
+| Gap | Closure |
+|---|---|
+| Alias API/core representation | Confirmed: generated consumer `Alias`, core `IAliasProvider`; root/join seams at `EntityBuilder.cs:3055,3409`; default `t{n}`. No new picker. |
+| When an alias becomes SQL | Rendering via resolver/source renderer and `MakeTableAlias`; the lock uses the same resolved alias. |
+| Carrier and clone/identity paths | Gather confirmed From/Join carriers, mappings, clone and comparer seams; apply shared contract. |
+| MariaDB OF feasibility | Confirmed impossible; escalation prescribes provisional fail-closed, without removing the original criterion. |
+| MariaDB inheritance | Mandatory explicit override and a negative test against MySQL rendering leakage. |
+| Whole + source | Fail-fast frozen; identical for supporting dialects. |
+| Empty OF/default/null | No public OF-list. An empty source-lock set adds nothing; `null` target = global; empty string rejected. |
+| Outer JOIN / unsupported SELECT shapes | Native restrictions documented and tested; not emulated. |
+| MariaDB wait versions | NOWAIT/native WAIT ≥10.3; SKIP LOCKED ≥10.6, InnoDB; live fixture 11.4. |
+| MariaDB live harness | Existing MariaDB container, outside the shared provider matrix; use dedicated tests. |
+| Evidence/perf/coverage rules | Fully supplied; recipes pinned below. |
+| Sealedness | Query 69/125, Dialect 3/31, carriers 5/7; baseline method = ref-type declaration enumeration. |
+| Sibling-task impact | Their changes are not assumed. Parent supplies a cumulative diff and prevents concurrent shared-file edits. |
+
+The only open external decision is R-03/MariaDB. It does not block DO per the routed escalation, but it blocks attesting full fulfillment of the original criterion.
+
+## Frozen variant / priority matrix
+
+Matrix **`T216-P1-SQL-OPERATOR-r2`** frozen before DO.
+
+P1 by construction: invariants R-01…R-09, R-13/R-14; the "new SQL function/operator" class (SQL-form parity, capability per dialect, every-provider tests, nullable/default semantics); execution-path propagation, clones, guards and plan identity. CHECK does not downgrade P1 due to environment complexity or a missing report.
+
+| ID | Variant | Closure | Priority |
+|---|---|---|---|
+| V-01 | Physical entity primary | test: whole/source | P1 |
+| V-02 | Physical `From(string)` | test: source, alias quoting | P1 |
+| V-03 | Physical JOIN, multiple targets | test: each target and multiple locks | P1 |
+| V-04 | FromSql primary/JOIN | guard + test: source lock NSException | P1 |
+| V-05 | Query and builder subqueries | guard + test both forms | P1 |
+| V-06 | CTE source | guard + test | P1 |
+| V-07 | Default/explicit alias | test, incl. actual AS declaration | P1 |
+| V-08 | Primary/first/subsequent JOIN | test: target isolation | P1 |
+| V-09 | Mode × wait | test: renderer Cartesian matrix and query placement | P1 |
+| V-10 | PG/MySQL/MariaDB whole; PG/MySQL source | test; original MariaDB source criterion retained in V-28 | P1 |
+| V-11 | SQL Server | test: all-source/global and selected-source hints | P1 |
+| V-12 | SQLite/ClickHouse/in-memory | guard + test both scopes | P1 |
+| V-13 | Builder/command/definition | test: supported public paths, prepare, clones | P1 |
+| V-14 | No lock/default options/null payload | test: prior SQL and cache behavior | P1 |
+| V-15 | Renderer target null | test: whole output | P1 |
+| V-16 | Empty source-lock set | test: no OF/clause; explicit whole preserved | P1 |
+| V-17 | Empty/whitespace target | guard + test: ArgumentException | P1 |
+| V-18 | Reference/value entity forms | test allowed existing forms; guard generic constraints for disallowed | P1 |
+| V-19 | Whole + source | guard + test: InvalidOperationException | P1 |
+| V-20 | Multiple sources, different mode/wait | test: no lost/duplicated targets | P1 |
+| V-21 | Table/index hints + lock; KeywordCase | test: correct composition and case | P1 |
+| V-22 | Outer JOIN/native unsupported shapes | test: allowed target; explicit native rejection for forbidden shape, no emulation | P1 |
+| V-23 | Extreme-row/eager child | guard + test source-only bypass | P1 |
+| V-24 | Clone/reuse/repeated cached prepare | test: equality/hash and no leakage | P1 |
+| V-25 | MariaDB source options/targeted renderer | guard + test: capability false, NSException | P1 |
+| V-26 | MariaDB inherits MySQL implementation paths | test: OF/FOR SHARE do not leak | P1 |
+| V-27 | MariaDB whole mode/wait | test SQL + live 11.4; version restrictions documented | P1 |
+| V-28 | MariaDB original OF obligation | guard against false PASS; **deferred pending owner**, trigger: recorded owner decision | P1, constraint |
+| V-29 | Legacy/custom renderer | guard + test: additive DIM, no silent broadening | P1 |
+| V-30 | Public API freeze/T53 | test/review: inventory of all new members | P1 |
+
+`V-28` does not mean an agreed removal of the requirement or an automatic milestone move. Out of scope: `NO KEY UPDATE`, `KEY SHARE`, source locks on logical sources, a timed-wait API. The support trigger is a separate agreed requirement; the current rejection guards are executed now.
+
+## DO units, mode and dependencies
+
+### Mode
+
+**Sequential in one tree.** All units overlap on `DataContext/**`, `Dialect/**`, `Builders/**`, carriers and tests, which T211/T212/T213/T201/T215/T217/T218/T53 also touch. Worktrees are unnecessary: the task is not isolated, and the shared contract matters more than parallelism. The parent prevents concurrent edits, supplies a current cumulative diff and coordinates the public API with T53. No unknown sibling outputs are assumed.
+
+### Units
+
+| Unit | Concrete actions | Fix/dependency |
+|---|---|---|
+| D-01 | Preserve the supplied gather/escalation evidence; take a benchmark baseline; add a SQL Server all-source regression and record an observable red assertion. | fix now; before implementation |
+| D-02 (shared contract) | Add the four methods to each options class, internal immutable source metadata, renderer overload/capability; freeze the conflict/target rules and the T53 inventory. | fix now; before consumers |
+| D-03 | Update all options mappings, immutable source replacement, cache/preparation clones, source equality/hash and guards. | fix now; after D-02 |
+| D-04 | SQL Server global hints on all sources; targeted hints; PG/MySQL OF; aliases/quoting; multiple clauses without duplicate targets. | fix now; after D-03 |
+| D-04M (additive) | Explicit MariaDB capability false and targeted rejection; preserve MariaDB whole grammar/waits; prevent inheritance leakage. | fix now; after D-02, before live tests |
+| D-05 | Close V-01…V-27/V-29/V-30; add tagged unit/SQL/cache/guard tests and two-transaction live cases; dedicated MariaDB tests without changing the shared matrix. | fix now |
+| D-06 | EN/RU docs; full boundary/build; acceptance/T216 benchmarks after; coverage; freeze the evidence manifest. | fix now |
+| D-07 (original remainder) | Preserve R-03/MariaDB pending-owner, pass the unresolved choice upward and do not close #216. | active, blocked on owner decision; not done |
+
+Reference sites: `FromOptions.cs:29`, `JoinOptions.cs:38`, `DialectCapabilities.cs:567`; `FromExpression.cs:161,204-226,243-251,276-289`; `JoinExpression.cs:140,196-235`; `EntityBuilder.cs:90,781-784,2668-2671,3415`; `QueryCommand.Clone.cs:98,142,178-193`; carrier comparers and the query comparer; `SqlBuilder.cs:144-148,185,441-449`; `SqlSourceRenderer.cs:524,560,651,694,897`; child guard `EntityBuilder.cs:1209,1257-1258` / `EntityBuilderEagerLoading.cs:270-275`; `Query/ExtremeRowCompatibility.cs:23,67-68`; `DataContext/InMemoryQueryBuilder.cs:98,112-113`.
+
+## Test strategy
+
+New/affected T216 cases get `[Trait("PDCA","T216")]`. Scenario labels are evidence labels, not invented existing test symbols:
+`whole/all-sources`; `source/primary`, `source/join`, `source/multiple`; `alias/default`, `alias/explicit`, `alias/same-entity`; `reject/fromsql`, `reject/subquery-query`, `reject/subquery-builder`, `reject/cte`; `renderer/mode-wait-target`, `renderer/legacy`; `cache/scope-target-mode-wait`, `clone/no-leak`; `reject/extreme`, `reject/child`, `reject/inmemory`; `mariadb/source-fail-closed`, `mariadb/no-inherited-of`, `mariadb/whole`; `live/global-coverage`, `live/target-isolation`.
+
+Unit/SQL generation: exact SQL, all-source coverage, aliases, capabilities, waits, exceptions, composition, clone/equality/hash. Integration: SQL is actually accepted by the server; bounded two-transaction probes distinguish a lock on the target from a non-target (use NOWAIT or a bounded timeout, always release transactions/connections; for Share check conflict with a writer, not a second reader).
+
+MariaDB: dedicated tests use the existing `MariaDbContainer`, image `mariadb:11.4`; source-lock rejection is checked before SQL execution; whole-lock live checks use MariaDB native grammar; do not add MariaDB to the shared provider matrix. Unsupported-capability skips in shared locking cases are allowed only with explicit negative tests. Provider-initialization skips due to a missing Docker host are not pass.
+
+Per-unit scope / boundary:
+
+| Unit | Affected projects / exact focused selector | Boundary point |
+|---|---|---|
+| D-01 | SQL Server: native trait `PDCA=T216`, red assertion; benchmarks | Baseline before D-02 |
+| D-02 | core: trait `PDCA=T216` | Full core after D-03 |
+| D-03 | core/sqlite: trait; integration child tests: same trait | Full core + sqlite before D-04 |
+| D-04 | postgres/mysql/sqlserver: trait | All provider projects after D-05 |
+| D-04M | mariadb: trait | MariaDB unit + dedicated live tests |
+| D-05 | All seven unit/provider projects and integration: trait | Full integration in D-06 |
+| D-06 | No selector: affected-project boundary sweep | Before DO→CHECK |
+
+Each focused run selects **>0** tests, and the scenario map shows coverage of the applicable V IDs. Coverage includes only core/sqlite/postgres/sqlserver; the MariaDB exclusion is not evidence of its test coverage. Thresholds **85% line / 75% branch**; on `1.0.9` the CI warning policy stands and deviations are explicitly reflected in CHECK.
+
+## Documentation
+
+Change: `docs/querying/03-provider-specifics.md`, `docs/ru/querying/03-provider-specifics.md`, `docs/advanced/api-reference.md`, `docs/ru/advanced/api-reference.md`, `docs/providers/sqlserver.md`, `docs/ru/providers/sqlserver.md`, `docs/advanced/limitations.md`, `docs/ru/advanced/limitations.md`.
+
+Required content: whole/source distinction and options methods; existing default/explicit alias forms; physical-only, conflict rule, native restrictions; provider matrix with MariaDB source-level unsupported; SQL Server primary-only → all-sources behavior warning; MariaDB whole-lock spelling/wait versions. The pending-owner marker lives in status/evidence/final report; public docs describe the actually available capability, not internal workflow.
+
+Do not change: `toc.yml`, page numbering, generated `docs/api/**`/`docs/_site/**`, public names of existing methods. Public docs must not link to `docs/specs/**`.
+
+## Performance measurement
+
+**Required, including mandatory cached-path acceptance.** The change touches source identity and plan lookup (`QueryPlanEqualityComparer.cs:121,181,192,519`; From/Join equality/hash; cache/preparation clones), so one-time SQL emission in `SqlBuilder.cs:441-449` does not exempt it from cached-path measurement. Per-row binding/TVP/materialization are unchanged; no separate per-row benchmark is needed. Lock-related per-row allocations are forbidden.
+
+- Mandatory acceptance set, before and after implementation: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance` — exactly 7 cases, no failures.
+- Additional category `T216` (separate from acceptance): `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=T216`. Add a small SQL-generation/prepare harness: no-lock cached/prepared pair; whole-lock physical JOIN cached/prepared pair; after implementation a source-lock JOIN pair. The baseline harness uses only the existing API; the new source-lock pair has no historical baseline and is recorded without a fictitious comparison.
+- Baseline is taken after adding the harness, **before D-02…D-04M**; after — same host, SDK, Release config, job configuration; record a working-tree fingerprint and environment.
+- Threshold: wall-time target **≤4 minutes per run**; record wall time, Mean, Allocated; ratio `Mean(cached)/Mean(prepared)` for comparable pairs; **>20% growth of a comparable ratio → mandatory investigation**, not an automatic hard-fail; no failures; no new lock-related per-row allocations.
+
+## Reconnaissance
+
+**No new reconnaissance is needed to choose the solution.** Alias/carrier paths, MariaDB feasibility, recipes and escalation are confirmed. Do not repeat the pre-PLAN gather. A red→green proof is needed as regression evidence, not an architecture spike: the SQL Server all-source assertion fails on baseline and passes after D-04. A build failure due to a missing future symbol does not count as that red.
+
+## Risks / known issues
+
+| Risk | Severity / status | Mitigation |
+|---|---|---|
+| R-03/MariaDB differs from the issue acceptance | High / pending owner | Explicit constraint; not a PASS and not an issue closure |
+| MySQL renderer leaks into MariaDB | High / mitigated by plan | Explicit override + tagged negative tests |
+| Alias declaration/OF mismatch | High / mitigated by plan | One resolved alias; declaration and target tests |
+| Cache collision/mutable leakage | High / mitigated by plan | Carrier clone/equality/hash tests |
+| SQL Server contention/deadlocks after all-source lock | High / known behavior change | Bounded live probes, docs warning |
+| Native SELECT/outer JOIN restrictions | Medium / known | Positive supported shapes, negative native cases |
+| Concurrent sibling edits | High / parent-controlled | Sequential ownership, cumulative-diff preflight |
+| False green from skips/zero selection | High / mitigated by contract | Counts/provider inventory/log requirements |
+| MariaDB image not pre-pulled | Medium / operational | Existing harness pull/start; do not declare skipped a pass |
+| Perf regression | Medium / measured | Baseline, acceptance + T216, ratio investigation |
+
+## Deferred + trigger
+
+- Deferred: `V-28` — the original MariaDB `OF` obligation; trigger: a recorded owner decision (approve narrowing to unsupported and update #216, or defer MariaDB source lock beyond 1.0.9). Stays in milestone 1.0.9; no milestone move without an owner decision.
+- Out of scope: `NO KEY UPDATE`, `KEY SHARE`, source locks on logical sources, a timed-wait API; trigger: a separate agreed requirement.
+
+## Planned write-footprint
+
+Production (expected edit envelope, not a requirement to edit each file; coder confirms symbol locations via Roslyn before editing; a new subsystem/package/source-generator edit requires returning to PLAN):
+`src/nextorm.core/DataContext/FromOptions.cs`, `src/nextorm.core/Builders/JoinOptions.cs`, `src/nextorm.core/Builders/EntityBuilder.cs`, `src/nextorm.core/Builders/EntityBuilderEagerLoading.cs`, `src/nextorm.core/Builders/Joins/JoinedEntityBuilder.cs`, `src/nextorm.core/Builders/Joins/JoinIntoManyToManySpec.cs`, `src/nextorm.core/Expressions/FromExpression.cs`, `src/nextorm.core/Expressions/JoinExpression.cs`, `src/nextorm.core/Query/QueryCommand.cs`, `src/nextorm.core/Query/QueryCommand.Clone.cs`, `src/nextorm.core/Query/QueryDefinition.cs`, `src/nextorm.core/Query/QueryPlanEqualityComparer.cs`, `src/nextorm.core/Query/FromExpressionPlanEqualityComparer.cs`, `src/nextorm.core/Query/JoinExpressionPlanEqualityComparer.cs`, `src/nextorm.core/Query/ExtremeRowCompatibility.cs`, `src/nextorm.core/DataContext/InMemoryQueryBuilder.cs`, `src/nextorm.core/DataContext/SqlBuilder.cs`, `src/nextorm.core/DataContext/SqlSourceRenderer.cs`, `src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs`, `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.mysql/MySqlDialect.cs`, `src/nextorm.mariadb/MariaDbDialect.cs`, `src/nextorm.sqlserver/SqlServerDialect.cs`.
+
+Tests/benchmark (planned destinations, not assertions that symbols exist): `tests/nextorm.core.tests/LockRendererDefaultTests.cs`, `tests/nextorm.core.tests/InMemoryTests.cs`, `tests/nextorm.core.tests/EagerLoadingSingleQueryP1Tests.cs`, `tests/nextorm.core.tests/T216RowLockingTests.cs`, `tests/nextorm.postgres.tests/SqlGenerationTests.cs`, `tests/nextorm.mysql.tests/SqlGenerationTests.cs`, `tests/nextorm.mariadb.tests/SqlGenerationTests.cs`, `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs`, `tests/nextorm.sqlite.tests/SqlGenerationTests.cs`, `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs`, `tests/nextorm.sqlite.tests/PlanKeyUniquenessTests.cs`, `tests/nextorm.integration.tests/DialectCapabilityContractTests.cs`, `tests/nextorm.integration.tests/CommonTestSuite.Locking.cs`, `tests/nextorm.integration.tests/MariaDbRowLockingSpecificTests.cs`, `benchmarks/nextorm.benchmark/T216LockingBenchmarks.cs`.
+
+Also: eight docs files, this status file, `artifacts/pdca/D216/rv2/**`, generated coverage output under `tests/coverage/**`. Not planned: package/CPM, CI thresholds, target frameworks, source generator, provider matrix, container implementation, generated docs edits.
+
+New PUBLIC API for T53: `FromOptions` → `ForUpdate()`, `ForUpdate(LockWaitMode)`, `ForShare()`, `ForShare(LockWaitMode)`; `JoinOptions` → the same four; `ILockRenderer.SupportsSourceLocks`; `ILockRenderer.Render(LockMode, LockWaitMode, KeywordCase, string? targetAlias)`. New carrier fields/helpers are internal; no new public constructors/accessors are needed — if implementation reveals such a need, return to PLAN/API coordination before adding.
+
+## Evidence contract rv=2
+
+**rv=1 superseded.** All planned artifacts below are expectations, not obtained results. Frozen manifest: `artifacts/pdca/D216/rv2/manifest.json`, frozen at DO→CHECK, append-only during CHECK.
+
+Command registry (run from workspace root; each invocation stores stdout/stderr, the actual exit code and duration; shell logging must not hide the exit code — `pipefail`/`PIPESTATUS`):
+- C-BUILD: `dotnet build nextorm.slnx -c Debug`
+- C-CORE: `dotnet run --project tests/nextorm.core.tests -c Debug -- -trait "PDCA=T216" -noColor`
+- C-PG: `dotnet run --project tests/nextorm.postgres.tests -c Debug -- -trait "PDCA=T216" -noColor`
+- C-MYSQL: `dotnet run --project tests/nextorm.mysql.tests -c Debug -- -trait "PDCA=T216" -noColor`
+- C-MARIA: `dotnet run --project tests/nextorm.mariadb.tests -c Debug -- -trait "PDCA=T216" -noColor`
+- C-SS: `dotnet run --project tests/nextorm.sqlserver.tests -c Debug -- -trait "PDCA=T216" -noColor`
+- C-SQLITE: `dotnet run --project tests/nextorm.sqlite.tests -c Debug -- -trait "PDCA=T216" -noColor`
+- C-CH: `dotnet run --project tests/nextorm.clickhouse.tests -c Debug -- -trait "PDCA=T216" -noColor`
+- C-INT-FOCUS: `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug -- -trait "PDCA=T216" -noColor`
+- C-INT: `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor`
+- C-ACCEPTANCE: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance`
+- C-T216: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=T216`
+- C-COV-COLLECT: `dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"`
+- C-COV-REPORT: `dotnet tool run reportgenerator -reports:tests/coverage/coverage.cobertura.xml -targetdir:tests/coverage/report -reporttypes:"Html;TextSummary;Cobertura" -riskhotspotassemblyfilters:"+nextorm.*"`
+- C-DOCFX: `dotnet docfx docs/docfx.json`
+- C-MANIFEST: `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D216/rv2/manifest.json`
+- C-BOUNDARY: `for p in core postgres mysql mariadb sqlserver sqlite clickhouse; do dotnet test tests/nextorm.$p.tests -c Debug || exit $?; done` (each inner command must exit 0).
+
+Coverage commands run with the integration host configured so the bundled `dotnet test` does not turn provider skips into pass. Before C-INT-FOCUS/C-INT load `.opencode/skills/running-integration-tests/SKILL.md`; if the socket is missing apply its start/wait/recheck recipe and retry. The MariaDB image pull is done by the existing harness.
+
+Required rows (prefix `A = artifacts/pdca/D216/rv2/`):
+
+| Row / requirement IDs | Check; expected evidence | Exact command / invocation and required result | Planned artifacts | Owner stream | Applicability | rv |
+|---|---|---|---|---|---|---|
+| EV-01 / R-02,03,07,08,12,13 | Preserve the closed gather and routed escalation; textual evidence from supplied inputs | coder Task persisting the GAP-A..E closures and escalation decision without re-gathering; success; all closures/decision present | `A/recon.md`, `A/escalation.md`, `A/environment.json` | coder-records | Always | 2 |
+| EV-02 / R-02,04,07,08,09 | Implementation contract/API review; Roslyn + diff semantic facts | scout Task reviewing implemented T216 contracts; success; all seams covered, no silent broadening | `A/contract-review.md`, `A/public-api.json`, `A/changed-paths.json` | scout-contract | Always | 2 |
+| EV-03 / R-11 | Build | C-BUILD — exit 0, 0 warnings/0 errors | `A/build.log`, `A/build.exit.json` | coder-build | Always | 2 |
+| EV-04 / R-04,05,07,08,09 | Core renderer/default/clone/guard cases | C-CORE — exit 0, selected >0, applicable tagged cases pass | `A/focused-core.log`, `A/focused-core.exit.json`, `A/cases-core.json` | coder-core | Always | 2 |
+| EV-05 / R-01,02,03,06 | PG SQL/alias/mode/wait/target | C-PG — exit 0, selected >0, no applicable failures | `A/focused-postgres.log`, `A/focused-postgres.exit.json`, `A/cases-postgres.json` | coder-postgres | Always | 2 |
+| EV-06 / R-01,02,03,06 | MySQL SQL/alias/multiple-target/conflict | C-MYSQL — exit 0, selected >0, no applicable failures | `A/focused-mysql.log`, `A/focused-mysql.exit.json`, `A/cases-mysql.json` | coder-mysql | Always | 2 |
+| EV-07 / R-01,03,06,13 | MariaDB whole-lock preservation + source fail-closed; original OF obligation explicitly pending | C-MARIA — exit 0, selected >0; whole/negative tests pass; NOT a PASS of R-03/MariaDB | `A/focused-mariadb.log`, `A/focused-mariadb.exit.json`, `A/cases-mariadb.json`, `A/mariadb-constraint.md` | coder-mariadb | Always; unsupported capability does not remove the row | 2 |
+| EV-08 / R-01,02,03,06 | SQL Server global/targeted/composed hints | C-SS — exit 0, selected >0; all-source and isolation assertions pass | `A/focused-sqlserver.log`, `A/focused-sqlserver.exit.json`, `A/cases-sqlserver.json` | coder-sqlserver | Always | 2 |
+| EV-09 / R-05,07 | Unsupported-provider/caching negatives | C-SQLITE and C-CH — both exit 0, each selected >0; explicit exception cases pass | `A/focused-sqlite.log`, `A/focused-clickhouse.log`, `A/unsupported-exits.json`, `A/cases-unsupported.json` | coder-negative | Always | 2 |
+| EV-10 / R-01,03,06,09,11,13 | Live focused transaction probes + full integration boundary; server versions | C-INT-FOCUS and C-INT — both exit 0; focused selected >0; provider execution inventory explicit; MariaDB dedicated tests executed; no host-induced provider skips | `A/integration-focused.log`, `A/integration.log`, `A/integration-exits.json`, `A/provider-execution.json`, `A/live-lock-cases.json` | coder-integration | Always | 2 |
+| EV-11 / R-11 | Seven-project unit/provider boundary | C-BOUNDARY — each command exit 0; complete per-project counts/logs | `A/boundary-*.log`, `A/boundary-summary.json` | coder-boundary | Always | 2 |
+| EV-12 / R-12 | Acceptance/T216 baseline and after; BDN exports, wall/Mean/Allocated/ratios | C-ACCEPTANCE and C-T216, baseline and after — all exit 0; acceptance exactly 7 cases/no failures; thresholds evaluated | `A/perf/baseline/**`, `A/perf/after/**`, `A/perf/runs.json`, `A/perf/comparison.json` | coder-perf | Always: plan identity touched | 2 |
+| EV-13 / R-12 | Coverage collect/report; Cobertura/TextSummary/HTML, thresholds, assembly inventory | C-COV-COLLECT then C-COV-REPORT — both exit 0; preserve produced files; line/branch values and 85/75 comparison recorded | `A/coverage/collect.log`, `A/coverage/report.log`, `A/coverage/exits.json`, `A/coverage/coverage.cobertura.xml`, `A/coverage/report/`, `A/coverage/summary.json` | coder-coverage | Always | 2 |
+| EV-14 / R-10 | Public docs build and EN/RU/provider-claim parity | C-DOCFX — exit 0; scout Task reviewing the eight EN/RU docs; success, all obligations covered | `A/docs/docfx.log`, `A/docs/docfx.exit.json`, `A/docs/parity-review.md` | coder-docs + scout-docs | Always | 2 |
+| EV-15 / R-01…14 | CHECK completeness, row-level verdict and priority application | check Task evaluating frozen rv2 rows and `T216-P1-SQL-OPERATOR-r2`; preserve R-03/MariaDB as constraint pending owner; success; every required row reported; no false overall PASS | `A/check/verdict.md`, `A/check/rows.json`, `A/manifest.json` | check-C01 | Always | 2 |
+| EV-16 (new) / R-03,14 | Preserve owner obligation/disclosure | check Task verifying R-03/MariaDB remains explicitly pending owner and the final report states the two owner choices; success; absent owner decision remains constraint, not PASS | `A/check/owner-constraint.md`, `A/owner-decision.json` | check-C01 | Always; owner-decision artifact may record "not received" | 2 |
+| EV-17 (new) / R-01,11 | Reproducible SQL Server red→green regression | C-SS before D-04: nonzero from the expected all-source assertion (not compilation/environment error); C-SS after D-04: exit 0; selected >0 both runs | `A/redgreen/sqlserver-red.log`, `A/redgreen/sqlserver-green.log`, `A/redgreen/results.json` | coder-regression | Always | 2 |
+| EV-18 (new) / R-11,14 | Frozen manifest structural validation and identity/revision proof | C-MANIFEST — exit 0; correct task/rv, complete required rows, append-only CHECK history | `A/check/manifest-validation.log`, `A/check/manifest-validation.exit.json`, `A/check/freeze.json` | check-C01 | Always | 2 |
+
+Verdict and pending owner: technical MariaDB fail-closed checks must pass; **the original R-03/MariaDB gets no PASS**; the pending obligation stays open/constraint and is disclosed in CHECK. While any required row is `open`, a full PASS is forbidden. The routed escalation authorizes implementation and reporting of the executed part with the retained constraint; it does not authorize falsely completing #216. An absent owner answer does not by itself trigger a pointless corrective DO iteration and does not reset attempts. Gates/no-fourth remain.
+
+Finite CHECK re-gather budget — owner check-C01: at most **2 targeted scout calls** to verify implementation evidence and at most **1 targeted rerun** of an already-pinned command for incomplete/lost evidence (total max 3 actions); no repeated feasibility gather and no repo-wide re-gather. After exhaustion, missing evidence is a GAP (not PASS, not automatic DO). Persistent low confidence is routed to `escalate` (trigger 5). The known MariaDB owner constraint does not consume budget to re-prove impossibility.
+
+## Final report and next step
+
+The final report must contain: **"R-03 (MariaDB, `OF <alias>`) infeasible; owner must decide: (i) approve narrowing to unsupported and update #216 text/criteria, or (ii) defer MariaDB source lock beyond 1.0.9."** This text does not itself perform either owner choice. The task and all its executable work stay in **1.0.9**; no move without an owner decision.
+
+Exact next allowed step: coder saves this plan verbatim in the status file before DO; the separately requested status-commit does not authorize implementation commits (no push/merge). Control returns to the collection parent at the PLAN→DO boundary. After gate-1 and shared-file ownership are fixed, the parent hands coder **D-01**, then **D-02**, sequentially. No further `go` is awaited inside the collection handoff; DO is not executed from the planner role. After D-06: freeze the rv=2 manifest → CHECK with the pinned budget and the retained MariaDB constraint.
+
+## Changed files
+
+- `docs/specs/status/D216-row-locking-1.md` (this file; created at the PLAN step, committed with prefix `#216`).
+
+## Pointers
+
+- Issue: https://github.com/AlexeyShirshov/nextorm/issues/216
+- Collection: `docs/specs/status/collection-1.0.9-todo.md`
+- Frozen manifest (planned): `artifacts/pdca/D216/rv2/manifest.json`
+- Superseded contract: rv=1
+
+## Progress log
+
+```text
+2026-10-12T04:39:15Z | PLAN | r=2 | n=1/3 | PLAN ready — awaiting confirmation (collection plan_handoff; DO not started) | status file docs/specs/status/D216-row-locking-1.md
+```
