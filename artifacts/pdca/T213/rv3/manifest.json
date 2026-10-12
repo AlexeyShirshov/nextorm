@@ -1,0 +1,155 @@
+{
+  "task": "T213",
+  "tree": "/home/alex/sources/nextorm",
+  "contract_rv": 3,
+  "status_file": "docs/specs/status/D213-joininto-remainder-1.md",
+  "required_rows": [
+    "E-BUILD",
+    "E-CORE",
+    "E-SQL-sqlite",
+    "E-SQL-postgres",
+    "E-SQL-sqlserver",
+    "E-SQL-mysql",
+    "E-SQL-mariadb",
+    "E-SQL-clickhouse",
+    "E-INT-sqlite",
+    "E-INT-postgres",
+    "E-INT-sqlserver",
+    "E-INT-mysql",
+    "E-INT-mariadb",
+    "E-INT-clickhouse",
+    "E-RED",
+    "E-PERF-BASE",
+    "E-PERF-FINAL",
+    "E-COVERAGE",
+    "E-DOCS",
+    "EC-T213-D03-01",
+    "T213-EC-NESTED-01"
+  ],
+  "rows": [
+    {
+      "id": "E-BUILD",
+      "status": "open",
+      "reason": "Planned rv3 row (AC07): full Debug solution build is collected at the DO->CHECK boundary; not yet a passing record."
+    },
+    {
+      "id": "E-CORE",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01-AC04,06): full core test suite is collected at the DO->CHECK boundary; the D03/D04 inner-loop subsets are recorded under EC-T213-D03-01 and T213-EC-NESTED-01."
+    },
+    {
+      "id": "E-SQL-sqlite",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01,03,06): provider SQL-gen collection pending at the DO->CHECK boundary."
+    },
+    {
+      "id": "E-SQL-postgres",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01,03,06): provider SQL-gen collection pending at the DO->CHECK boundary."
+    },
+    {
+      "id": "E-SQL-sqlserver",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01,03,06): provider SQL-gen collection pending at the DO->CHECK boundary."
+    },
+    {
+      "id": "E-SQL-mysql",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01,03,06): provider SQL-gen collection pending at the DO->CHECK boundary."
+    },
+    {
+      "id": "E-SQL-mariadb",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01,03,06): provider SQL-gen collection pending; MariaDB is separate from MySQL."
+    },
+    {
+      "id": "E-SQL-clickhouse",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01,03,06): provider SQL-gen collection pending at the DO->CHECK boundary."
+    },
+    {
+      "id": "E-INT-sqlite",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01-AC05): real integration collection pending; D02 direction B is not implemented yet (blocked on D04)."
+    },
+    {
+      "id": "E-INT-postgres",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01-AC05): real integration collection pending; D02 direction B is not implemented yet (blocked on D04)."
+    },
+    {
+      "id": "E-INT-sqlserver",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01-AC05): real integration collection pending; D02 direction B is not implemented yet (blocked on D04)."
+    },
+    {
+      "id": "E-INT-mysql",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01-AC05): real integration collection pending; D02 direction B is not implemented yet (blocked on D04)."
+    },
+    {
+      "id": "E-INT-mariadb",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01-AC05): separate MariaDB integration collection pending; MySQL is not a substitute; D02 direction B is not implemented yet."
+    },
+    {
+      "id": "E-INT-clickhouse",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01-AC05): common suite + focused adapter collection pending; D02 direction B is not implemented yet."
+    },
+    {
+      "id": "E-RED",
+      "status": "open",
+      "reason": "Planned rv3 row (AC01,03): the D03 red record exists (4 failed without the fix) and the rv2 direction-B probe records the nested-alias red failure; the composite/junction direction-B red set is not yet frozen at the DO->CHECK boundary."
+    },
+    {
+      "id": "E-PERF-BASE",
+      "status": "open",
+      "reason": "Planned rv3 row (AC08): in-memory/acceptance baseline collection pending; existing rv1/rv2 baselines remain recorded."
+    },
+    {
+      "id": "E-PERF-FINAL",
+      "status": "open",
+      "reason": "Planned rv3 row (AC08): final measurement pending after D02 direction B."
+    },
+    {
+      "id": "E-COVERAGE",
+      "status": "open",
+      "reason": "Planned rv3 row (AC07): filtered coverage line/branch thresholds collected at the DO->CHECK boundary."
+    },
+    {
+      "id": "E-DOCS",
+      "status": "open",
+      "reason": "Planned rv3 row (AC07): EN+RU/internal documentation update and hygiene review pending (D05)."
+    },
+    {
+      "id": "EC-T213-D03-01",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "tests/nextorm.core.tests/JoinIntoCompositeCarrierSpikeTests.cs",
+          "command": "dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~JoinIntoCompositeCarrierSpikeTests",
+          "exit": 0,
+          "value": "5 selected, 5 passed, 0 failed; mixed Projection<mappedEntity,scalar> admitted and materialized (value/reference/nullable scalar; all-columns-NULL entity; unsupported-complex fail-closed)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv2/d03-red.log",
+          "exit": 2,
+          "value": "red without the fix: 4 failed / 1 passed (fail-closed negative passes)"
+        },
+        {
+          "kind": "source",
+          "path": "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+          "value": "TryBuildProjectionSelectList admits a mapped-entity + supported-scalar projection; TryExpandEntityItem/BuildProjectionItems/BuildEntityItem/BuildCore/BuildMemberInit unchanged"
+        }
+      ]
+    },
+    {
+      "id": "T213-EC-NESTED-01",
+      "status": "open",
+      "reason": "Planned rv3 row (AC03/AC05): nested mixed-carrier normalization for the composite junction link. Scenario = the former failing probe (nested link.Item1.<fk> resolution with the slot-tagged junction columns) + nested/root materialization + mismatch negatives. Evidence to collect = regression assertions, generated SQL, probe log under artifacts/pdca/T213/rv3/nested-projection/. Not yet collected; the D04 spike gates it."
+    }
+  ]
+}
