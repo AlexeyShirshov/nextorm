@@ -1,0 +1,41 @@
+{
+  "unit": "T213-D02P1",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.mysql.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.clickhouse.tests"
+    ],
+    "selectors": ["FullyQualifiedName~JoinInto"],
+    "files": [
+      "src/nextorm.core/Builders/Joins/JunctionLinkSourceFactory.cs",
+      "src/nextorm.core/Builders/Joins/JoinIntoManyToManySpec.cs",
+      "src/nextorm.core/Builders/EntityBuilder.cs",
+      "tests/nextorm.sqlite.tests/JoinIntoCompositeSqlGenerationTests.cs",
+      "tests/nextorm.postgres.tests/JoinIntoCompositeSqlGenerationTests.cs",
+      "tests/nextorm.sqlserver.tests/JoinIntoCompositeSqlGenerationTests.cs",
+      "tests/nextorm.mysql.tests/JoinIntoCompositeSqlGenerationTests.cs",
+      "tests/nextorm.mariadb.tests/JoinIntoCompositeSqlGenerationTests.cs",
+      "tests/nextorm.clickhouse.tests/JoinIntoCompositeSqlGenerationTests.cs",
+      "tests/nextorm.core.tests/JoinIntoRejectionTests.cs"
+    ],
+    "rebuild": "none",
+    "boundary": "DO->CHECK: full core + six SQL-gen suites + integration with DOCKER_HOST, run once",
+    "rationale": "D02-P1 planned scope for SQL composite-junction M:N; STOPPED at the mandatory carrier spike before any production edit, so no inner-loop implementation run was executed."
+  },
+  "stop": {
+    "at": "2026-10-12T14:10:16Z",
+    "stage": "reconnaissance-carrier-spike",
+    "result": "FAILED",
+    "reason": "Projection<TJunction,long> link item does not flow through QueryPreparer.TryExpandEntityItem / RowMaterializerBuilder.BuildProjectionItems; no new carrier invented (per binding escalate decision).",
+    "evidence": [
+      "artifacts/pdca/T213/rv1/spike/RESULT.md",
+      "artifacts/pdca/T213/rv1/spike/spike2.log"
+    ],
+    "report_applicable": false
+  }
+}
