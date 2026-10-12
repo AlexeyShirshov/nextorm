@@ -5,7 +5,7 @@
 - base: branch `1.0.9` @ `58025147` (merge of #214 `1.0.9-rc2`)
 - mode: autonomous; auto-commit authorized (task/collection status files and task paths only, explicit paths, never `-A`, message prefix `#<issue>`); push **never**
 - skills: `pdca-collection` + `pdca-dotnet` + `nextorm-pdca`
-- phase: **D — lane G1 executing** (ALL-barrier passed; **T209 done** → lane advancing to **T211**; single group → current worktree/branch `1.0.9`, no worktree/branches/merge)
+- phase: **D — lane G1 STOPPED** (T209 done/verified; **T211 incomplete** → fail-stop; remaining G1 tasks T212/T213/T201/T53 never executed; single group → current worktree/branch `1.0.9`, no worktree/branches/merge)
 
 ## Input task list
 
@@ -24,7 +24,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 
 | id | tasks (order) | worktree | branch/ref | status |
 |---|---|---|---|---|
-| G1 | T209 → T211 → T212 → T213 → T201 → T53 | no (single group) | current branch `1.0.9` | in-progress |
+| G1 | T209 → T211 → T212 → T213 → T201 → T53 | no (single group) | current branch `1.0.9` | incomplete (not merged — single group, no merge) |
 
 ### G1 execution contract
 
@@ -40,14 +40,16 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 | id | issue | group | order | status | plan_state | selected_variant | cycle_id | plan_revision | PLAN commit | status file |
 |---|---|---|---|---|---|---|---|---|---|---|
 | T209 | #209 | G1 | 1 | done | done | pdca-dotnet | N=1 | r=3 | 5e9f6756 | docs/specs/status/D209-eager-strategy-1.md |
-| T211 | #211 | G1 | 2 | pending | ready | pdca-dotnet | N=1 | r=1 | e18dc143 | docs/specs/status/D211-eager-perparent-topn-1.md |
-| T212 | #212 | G1 | 3 | pending | ready | pdca-dotnet | N=1 | r=1 | 034e5b45 | docs/specs/status/D212-eager-nested-1.md |
-| T213 | #213 | G1 | 4 | pending | ready | pdca-dotnet | N=1 | r=1 | 9e7facff | docs/specs/status/D213-joininto-remainder-1.md |
-| T201 | #201 | G1 | 5 | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
-| T53  | #53  | G1 | 6 | pending | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
+| T211 | #211 | G1 | 2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | e18dc143 | docs/specs/status/D211-eager-perparent-topn-1.md |
+| T212 | #212 | G1 | 3 | incomplete | ready | pdca-dotnet | N=1 | r=1 | 034e5b45 | docs/specs/status/D212-eager-nested-1.md |
+| T213 | #213 | G1 | 4 | incomplete | ready | pdca-dotnet | N=1 | r=1 | 9e7facff | docs/specs/status/D213-joininto-remainder-1.md |
+| T201 | #201 | G1 | 5 | incomplete | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
+| T53  | #53  | G1 | 6 | incomplete | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
 
 - T201 reason: the design prerequisite is now satisfied — the separately-reviewed written design (revision 2) and the r=2 plan / sequential mode / rv1 contract are approved; `plan_state=ready (r=2)`. **Amended by user directive:** T201 belongs **in G1 before the freeze** (T53) because its outcome may change the public API. G1 order 5 retained; T201 precedes T53.
 - Evidence contract (per task, frozen at that task's DO→CHECK): `rv=1`; manifests `artifacts/pdca/<task>/rv1/manifest.json`.
+- T211 **incomplete**: r1 exhausted (3/3 CHECK fails); escalate re-gather (a): EV-14 met, EV-11 rejected (Stryker restart exit code inferred, not captured); no product/config defect demonstrated; STOP. Retained commits `e98ae60e`, `5bd3028f`, `15c6253f` (kept, none reverted). Patch `artifacts/pdca/D211-eager-perparent-topn-1/incomplete/D211-incomplete.patch`; status file `docs/specs/status/D211-eager-perparent-topn-1.md`.
+- T212 (#212), T213 (#213), T201 (#201), T53 (#53) = `incomplete` — «группа остановлена», never executed (fail-stop after T211 incomplete).
 
 ## Phase decisions
 
@@ -70,16 +72,17 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 
 - Verification state (C): not reached — lane G1 in progress.
 - Last collection `C` result: —
-- Blocker: —
+- Blocker: T211 incomplete (r1 exhausted, 3/3 CHECK fails; EV-11 exit-code evidence gap) — lane G1 fail-stop.
 - Defect id / history: —
 - Corrective-task status file: —
-- Next allowed step: drive lane **G1** (T209 done/verified; continue T211 → T212 → T213, then T201 at G1 order 5, then T53 last only after T201's accepted EXECUTION evidence); then collection-wide `C` on the integrated current branch.
+- Next allowed step: **STOP** — no further G1 execution (T211 incomplete, remaining tasks «группа остановлена»); T211 saved as patch and reverted; branch `1.0.9` unchanged (commits `e98ae60e`, `5bd3028f`, `15c6253f` retained).
 
 ## Done / Verified / Incomplete
 
 - Done: T209 (#209) — eager-load strategy (explicit strategy + auto-dispatcher); cycle N=1 r=3 n=2/3, CHECK PASS, contract rv=2; status file `docs/specs/status/D209-eager-strategy-1.md`.
 - Verified: T209 (#209) — rv=2 evidence (build 0/0; six dialect suites 0 failures; integration all 5 providers executed; coverage line 88.5% / branch 80.5%; acceptance benchmark 7/7, no ratio >20%); manifest `artifacts/pdca/D209/rv2/manifest.json` E209-01..21 all `met`, validator exit 0; CHECK report `artifacts/pdca/D209/rv3/check-report.md`.
-- Incomplete: —
+- Incomplete: T211 (#211) — r1 exhausted (3/3 CHECK fails); escalate re-gather EV-14 met / EV-11 rejected (Stryker restart exit code inferred, not captured); no product/config defect; STOP. Patch `artifacts/pdca/D211-eager-perparent-topn-1/incomplete/D211-incomplete.patch`; retained commits `e98ae60e`, `5bd3028f`, `15c6253f`; status file `docs/specs/status/D211-eager-perparent-topn-1.md`.
+- Incomplete: T212 (#212), T213 (#213), T201 (#201), T53 (#53) — «группа остановлена», never executed.
 
 ## History (superseded current-state facts)
 

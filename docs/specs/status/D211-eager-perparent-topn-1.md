@@ -9,6 +9,7 @@
 - plan_revision: r=1
 - frozen evidence-contract revision: rv=1
 - plan_state: **ready**
+- task status: **incomplete (STOP)** — r1 exhausted; no product/config defect; see “Final disposition” below
 - base: branch `1.0.9` @ `58025147`
 - mode: autonomous; collection own-PLAN only
 - status_file: `docs/specs/status/D211-eager-perparent-topn-1.md`
@@ -524,3 +525,14 @@ No content blocker remains.
 2026-10-11T22:50:40Z | DO | r1 | n2/3 | DO correction part 2c (rv1) — corrected-tree boundary re-verification: `dotnet build nextorm.slnx -c Debug` 0 Warning(s)/0 Error(s) exit 0; broad `--no-build` sweeps all exit 0 (core 2320/0, sqlite 1617/1 pre-existing skip, postgres 881/0, sqlserver 798/0, mysql 362/0, clickhouse 646/0); Feature=D211 integration sweep one provider at a time under DOCKER_HOST, all executed 0 skipped (SQLite 14/0, PostgreSQL 14/0, SQL Server 14/0, MySQL 14/0, ClickHouse 4/0, MariaDB 4/0); `dotnet docfx docs/docfx.json` exit 0 (2 pre-existing warnings, 0 errors); freeze/tree.json re-frozen to the corrected 42-file footprint (file_set_sha256 a270418af71f89aad4cf1ef5388f682bb49937fc16d54728dc41a95476ab3a81); manifest EV-08/EV-12 paths refreshed, ledger caveats updated; `validate_inner_loop.py report` exit 0 and `manifest` exit 0 | artifacts/pdca/D211-eager-perparent-topn-1/rv1/regression/{build-solution,core.tests,sqlite.tests,postgres.tests,sqlserver.tests,mysql.tests,clickhouse.tests,d211-integration-{sqlite,postgres,sqlserver,mysql,clickhouse,mariadb}}.log; artifacts/pdca/D211-eager-perparent-topn-1/rv1/perf/docfx-final.log; artifacts/pdca/D211-eager-perparent-topn-1/rv1/{regression.json,inner-loop-evidence.json,manifest.json,freeze/{tree,ledger}.json}}
 2026-10-11T23:06:33Z | DO | r1 | n3/3 | P-task applicability V9/V11/V13/V21 (r1/rv1 unchanged) — DO n3/3; V13/V21 N/A with recorded evidence; V9/V11 split-path reachability closure; EV-06/EV-09/EV-10/EV-14 + XML prose fixes | artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/applicability/{V9,V11,V13,V21}.md
 2026-10-11T23:18:26Z | DO | r1 | n3/3 | Finalize (rv1) — coverage RE-SNAPSHOT on the final tree, provider-green: total 10850 / succeeded 10652 / failed 0 / skipped 198 (exit 0); aggregate line 88.5% (threshold 85) / branch 80.6% (threshold 75); changed-path delta vs base b527be6f UNCHANGED (254/279 lines, 160/194 branch conditions) — the only intervening production edit is comment-only XML-doc prose in SqlBuilder.MakePerParentRankExpression; content tree re-frozen to 48 files incl. the r1-n3 applicability artifacts (freeze/applicability/V9,V11,V13,V21.md) and the coverage/tool configs (coverage.settings.xml, .config/dotnet-tools.json), file_set_sha256 `6efc5e311d89b9411fb9c4624221a7e70f9edf922aa9528572c48bdc091d6f61`; `validate_inner_loop.py manifest` exit 0 and `report` exit 0; ledger/manifest updated with the single snapshot hash and file count | artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/{coverage.xml,summary.txt,branch-delta.json,branch-delta.txt,branch-dispositions.md,coverage.log,reportgen.log,report/Summary.txt}; artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/{tree.json,ledger.json,manifest-validation.log}; artifacts/pdca/D211-eager-perparent-topn-1/rv1/manifest.json
+
+2026-10-12T00:32:17Z | ACT | r1 | n3/3 | STOP — task incomplete: r1 exhausted (3/3 CHECK fails); escalate re-gather (a): EV-14 met, EV-11 rejected (Stryker restart exit code inferred, not captured); no product/config defect demonstrated; remaining G1 tasks stopped; uncommitted T211 evidence saved as patch and reverted | artifacts/pdca/D211-eager-perparent-topn-1/incomplete/D211-incomplete.patch
+
+## Final disposition — STOP (ACT)
+
+- task status: **incomplete** (terminal; no r=2, no product/config defect)
+- reason: r1 exhausted (3/3 CHECK fails); escalate re-gather (a): EV-14 met, EV-11 rejected (Stryker restart exit code inferred, not captured); no product/config defect demonstrated; STOP
+- retained commits (branch `1.0.9`, all kept, none reverted): `e98ae60e`, `5bd3028f`, `15c6253f`
+- evidence root: `artifacts/pdca/D211-eager-perparent-topn-1/rv1/`
+- uncommitted T211 evidence saved as a patch and reverted to the tip `15c6253f`: `artifacts/pdca/D211-eager-perparent-topn-1/incomplete/D211-incomplete.patch`
+- group effect: lane G1 stopped; remaining tasks T212/T213/T201/T53 were never executed («группа остановлена»); single group G1 → no merge; branch `1.0.9` unchanged.
