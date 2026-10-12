@@ -534,6 +534,25 @@ public abstract partial class CommonTestSuite
         parents[0].Tags.Select(t => t.Id).Should().NotContain(many + 301, "the child predicate is ANDed into the child join");
         parents[0].Tags.Should().OnlyContain(t => t.Name != "many-t2");
     }
+
+    [Fact]
+    public void JoinInto_ManyToMany_WithSingleQueryLoadWith_ShouldStitchTagsAndNotes()
+    {
+        // D01 (#213) RED regression: a many-to-many JoinInto declaration composed with a SingleQuery
+        // LoadWith is rejected by the unmodified dispatcher; once lifted, one denormalized round trip
+        // must stitch the many-to-many tags and the LoadWith notes together.
+        var (many, _, _) = SeedJoinInto();
+
+        var parents = JoinIntoParents()
+            .Where(p => p.Id == many)
+            .JoinInto(JoinIntoTags(), (p, t) => t.Id >= many + 300, p => p.Tags)
+            .LoadWith(p => p.Notes, n => n.From<JoinIntoNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.SingleQuery)
+            .ToList();
+
+        parents.Should().ContainSingle();
+        parents[0].Tags.Select(t => t.Id).Should().BeEquivalentTo([many + 300, many + 301, many + 300]);
+        parents[0].Notes.Select(n => n.Id).Should().BeEquivalentTo([many + 200, many + 201]);
+    }
 }
 
 [SqlTable("eager_parent")]

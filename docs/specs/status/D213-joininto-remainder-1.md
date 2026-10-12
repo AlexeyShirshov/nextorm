@@ -3,7 +3,7 @@
 - task: T213 / issue #213 — https://github.com/AlexeyShirshov/nextorm/issues/213
 - collection: `1.0.9-todo`; selected_variant: `pdca-dotnet`; cycle: N=1; plan_revision: r=1 (contract rv=1)
 - base ref: `58025147` (branch `1.0.9`)
-- phase: **PLAN — durable checkpoint at the PLAN→DO boundary** (no DO started, no branches/worktrees, no product code)
+- phase: **DO — started (r=1)**
 - plan_state: **ready** — r=1 finalized (planner, medium tier); evidence contract rv=1 frozen
 
 ## Notice
@@ -36,7 +36,7 @@ Approach decision: (selected) extend existing JoinInto assembly + composite mach
 Execution order D00 -> D01 -> D02 -> D03 -> D04 -> D05 -> D06; preserve red evidence before implementation; measure unmodified acceptance baseline before perf-affecting changes; establish supported in-memory comparators before D02.
 
 - **P:T213-r1-close-readiness** — done — resolved reconnaissance + finalized r=1 readiness.
-- **D00** — active; persistence pending — write this finalized status, retain complete frozen rv=1 contract + manifest obligations, replace Notice.
+- **D00** — done — write this finalized status, retain complete frozen rv=1 contract + manifest obligations, replace Notice.
 - **D01** — pending — red regressions and scalar controls in core JoinInto tests, all six provider SQL-test projects, `CommonTestSuite.JoinInto.cs`; establish comparable benchmark evidence and planned `benchmarks/nextorm.benchmark/JoinIntoBenchmarks.cs`.
 - **D02** — pending — generalize complete-key projection/identity/matching/junction assembly at `EntityBuilder.cs:864-1009`; `JoinIntoSpec.cs:189/319/436/551/745`; `JoinIntoStitcher.cs:103-215`; `JoinIntoManyToManySpec.cs:221-339`; `JunctionLinkSourceFactory.cs:99-107`.
 - **D03** — pending — integrate composite relationships/junction selectors into SingleQuery at `EntityBuilder.cs:1239-1241/1589/1630` and `JoinIntoManyToManySpec.cs:398/448`; retain unrelated guards and query-count controls.
@@ -163,5 +163,11 @@ CHECK re-gather budget: at most two targeted read-only rounds, owned by CHECK, f
 ## Done / Verified / Incomplete
 
 - Done: reconnaissance; PLAN pass 1 (planner draft, all gate-1 sections present); PLAN r=1 finalized as ready (planner, medium tier).
+- Done: D00 — status persistence/r=1 readiness retained; DO started (r=1).
 - Verified: —
 - Incomplete: —
+
+## Progress log
+
+- DO started (r=1); plan applicability verification dispatched.
+- 2026-10-12T13:44:19Z | DO | r=1 | n=1/3 | D01: red composite/M:N-under-SingleQuery regressions + scalar controls authored across core, all six dialect SQL-gen projects and integration adapters; red subset captured (7 project runs, exit 2 each, all attributable to the targeted guards); unmodified acceptance baseline (7/7) + new in-memory JoinInto harness recorded; Debug build 0 warnings/0 errors | artifacts/pdca/T213/rv1/
