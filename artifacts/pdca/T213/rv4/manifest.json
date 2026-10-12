@@ -303,13 +303,78 @@
     },
     {
       "id": "E-PERF-BASE",
-      "status": "open",
-      "reason": "Planned rv4 row (AC08): rv1 acceptance/in-memory baseline is retained, but no rv4 baseline was collected; this stage's brief declares performance measurement NOT required (the r=4 accepted change is the preparation-only fail-closed rejection)."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "summary",
+          "path": "artifacts/pdca/T213/rv1/perf-base/acceptance-summary.md",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
+          "exit": 0,
+          "value": "D01 baseline (source rev fc149bff): 7/7 cases executed, BDN global 44.61s, wall 52.3s; Nextorm_Count 2.160ms/380.47KB, Nextorm_GroupByCount 57.87ms/50.1MB, Nextorm_Cached 2.053ms/615.7KB, Cached_PlanOnly_Param 551.2us/513.3KB, Prepared_ToList 890.6us/76.14KB, Cached_ToList 1899.2us/589.44KB, Nextorm_Cached_ToListAsync 1.992ms/613.94KB; cached/prepared ratio 2.13x"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv1/perf-base/acceptance.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
+          "exit": 0,
+          "value": "raw acceptance stdout; executed benchmarks 7; global total time 44.61s"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv1/perf-base/joininto-bench.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter \"*JoinIntoBenchmarks*\"",
+          "exit": 0,
+          "value": "in-memory JoinInto baseline: 1:N 7.289ms/3.94MB, M:N 9.793ms/4.27MB (ratio 1.35); executed 2"
+        }
+      ]
     },
     {
       "id": "E-PERF-FINAL",
-      "status": "open",
-      "reason": "Planned rv4 row (AC08): not required by this stage (preparation-only change); no final measurement collected."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "summary",
+          "path": "artifacts/pdca/T213/rv4/perf-final/acceptance-summary.md",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
+          "exit": 0,
+          "value": "Final (source rev HEAD 2168692d): 7/7 cases, run1 wall 57.2s / global 48.52s, run2 wall 52.4s / global 49.44s; cost gate 57.2s <= 4min pass; cached/prepared ratio 2.13x -> 1.99x (run1) / 2.27x (run2), sub-threshold; all 7 cases 27-61% slower than base with byte-identical Allocated incl. 5 path-untouched cases, classification: reproduced machine-state/measurement variance, not code-attributable; no regression/improvement claim"
+        },
+        {
+          "kind": "summary",
+          "path": "artifacts/pdca/T213/rv4/perf-final/joininto-bench.md",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter \"*JoinIntoBenchmarks*\"",
+          "exit": 0,
+          "value": "Final in-memory JoinInto: 1:N 13.16ms/3.94MB (run1) / 12.27ms/3.94MB (run2), M:N 14.81ms/4.26MB (run1) / 14.91ms/4.26MB (run2); +80.5%/+51.2% vs base with byte-identical Allocated; same reproduced machine-state variance, not code-attributable; no claim"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/perf-final/acceptance.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
+          "exit": 0,
+          "value": "final raw acceptance stdout run 1; executed benchmarks 7; global total time 48.52s"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/perf-final/acceptance-rerun.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
+          "exit": 0,
+          "value": "repeat on the same machine; executed benchmarks 7; global total time 49.44s"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/perf-final/joininto-bench.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter \"*JoinIntoBenchmarks*\"",
+          "exit": 0,
+          "value": "final in-memory raw stdout run 1; executed 2; global total time 10.37s"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/perf-final/joininto-bench-rerun.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter \"*JoinIntoBenchmarks*\"",
+          "exit": 0,
+          "value": "repeat on the same machine; executed 2"
+        }
+      ]
     },
     {
       "id": "E-COVERAGE",
