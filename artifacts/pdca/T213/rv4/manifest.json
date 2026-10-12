@@ -33,7 +33,8 @@
     "T213-EC-SCALAR-clickhouse",
     "T213-EC-SCALAR-mariadb",
     "T213-EC-HANDOFF",
-    "T213-EC-DOCS"
+    "T213-EC-DOCS",
+    "T213-EC-HANDOFF2"
   ],
   "rows": [
     {
@@ -247,8 +248,8 @@
     },
     {
       "id": "E-DOCS",
-      "status": "open",
-      "reason": "Planned rv4 row (AC07): EN+RU/internal documentation update and hygiene review pending (D05 / T213-EC-DOCS, external ownership; not touched by this DO stage)."
+      "status": "na",
+      "predicate": "<carried -> #225> (milestone 1.0.9): the AC07 EN+RU/internal documentation criteria are unchanged; T213 requires a verified issue and patch-artifact handoff and does not claim them satisfied. Working tree not touched (external ownership). Prepared artifacts under artifacts/pdca/T213/rv4/docs/."
     },
     {
       "id": "EC-T213-D03-01",
@@ -452,8 +453,36 @@
     },
     {
       "id": "T213-EC-DOCS",
-      "status": "open",
-      "reason": "Planned rv4 row (AC03/AC05, D05): EN+RU/internal docs must state scalar M:N is supported and composite-junction M:N is not supported, pointing at #223; not yet collected (D05 external ownership)."
+      "status": "na",
+      "predicate": "<carried -> #225> (milestone 1.0.9): proposed text (scalar M:N supported standalone and under SingleQuery; composite-junction M:N rejected in SQL generation with NotSupportedException -> #223; in-memory composite junction supported) prepared as baseline/proposed + AC07.patch artifacts, not applied to the externally-dirty working tree."
+    },
+    {
+      "id": "T213-EC-HANDOFF2",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "issue",
+          "path": "artifacts/pdca/T213/rv4/docs/issue-225.json",
+          "value": "#225 OPEN, milestone 1.0.9 (#4); AC07 carried with its original documentation criteria unchanged (planner named #224; #224 already existed)"
+        },
+        {
+          "kind": "artifact",
+          "path": "artifacts/pdca/T213/rv4/docs/AC07.patch",
+          "value": "unified diff baseline(HEAD 20a67a1c) -> proposed over 16 files (15 externally-dirty footprint + clean todo_navigation_properties.md)"
+        },
+        {
+          "kind": "artifact",
+          "path": "artifacts/pdca/T213/rv4/docs/manifest.json",
+          "value": "per-file sha256 (baseline/proposed/current work tree) + footprint git status --porcelain (15 lines)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/T213/rv4/docs/handoff-check.log",
+          "command": "GIT_INDEX_FILE=/tmp/t213-idx git read-tree 20a67a1c && GIT_INDEX_FILE=/tmp/t213-idx git apply --cached --check artifacts/pdca/T213/rv4/docs/AC07.patch",
+          "exit": 0,
+          "value": "read-tree exit 0; apply --cached --check exit 0; /tmp/t213-idx cleaned up"
+        }
+      ]
     }
   ]
 }

@@ -1,0 +1,522 @@
+# Gap-анализ: открытый backlog linq2db против nextorm
+
+> Источник: живой срез GitHub `linq2db/linq2db` на **2026-09-25** — 382 открытых issue, 8 активных
+> `epic:`-меток и milestones `7.0.0`, `6.6.0`, `6.x`, `Backlog`, `In-progress`, `6.5.1`.
+> Против среза 2026-09-23 прибавился один issue — `#5970` (Transform-mode optimization folds `IS NULL`,
+> milestone `6.5.1`, баг конкретного провайдера, **N/A**); остальные счётчики совпадают.
+> Снимок воспроизводится командой
+> `gh issue list -R linq2db/linq2db --state open --limit 1000 --json number,title,labels,milestone`.
+> База ссылок для `linq2db#N` — <https://github.com/linq2db/linq2db/issues/N>.
+>
+> Цель: понять, что linq2db **планирует добавить**, и какие из этих вещей отсутствуют в nextorm.
+> Это дополняет [`linq2db-comparison.md`](linq2db-comparison.md) (сравнение *текущего*
+> паритета) и [`sql-capabilities-gap-analysis.md`](../roadmap/sql-capabilities-gap-analysis.md) (пробелы по
+> конструкциям SQL). Здесь — **вектор развития linq2db**, а не паритет по готовому функционалу.
+
+## Как читать
+
+| Статус | Значение |
+|---|---|
+| **<span style="color:green">Done</span>** | nextorm уже это умеет (подтверждено кодом/доками/тестами) |
+| **Planned** | есть `todo_*.md`; в этом документе не является новым пробелом |
+| **Gap** | реальный недостающий функционал в scope nextorm; кандидат на `todo_*.md` |
+| **<span style="color:orange">Out-of-scope</span>** | осознанная граница nextorm (не «пробел»); см. [Limitations](../../advanced/limitations.md) |
+| **<span style="color:orange">By design</span>** | осознанное решение, не gap: поведение достижимо явными примитивами и документировано |
+| **N/A** | внутренняя механика linq2db, баг конкретного провайдера или экосистема вне scope |
+
+Обновление статусов nextorm — на `2026-09-25`: `INSERT`/`UPDATE`/`DELETE`/полный `MERGE`, returning/
+output, композируемый DML `RETURNING` (data-modifying CTE), CTAS, массовая вставка
+(`BulkInsertOptions`/`BulkInsertOptionsBuilder`) и транзакции (`ITransactionManager`) считаются сделанными по
+[`sql-capabilities-gap-analysis.md`](../roadmap/sql-capabilities-gap-analysis.md) §4/§6; строки в
+`comparison/`-документах приведены в соответствие (см. §7). Также сняты как реализованные: `[Duration]`/
+`TimeSpan`-колонки (~~G9~~), PG JSONPath (~~G15~~), логирование параметров через интерцепторы
+(~~G10~~-логирование), продвижение sub-day-операнда (`linq2db#5965`, `ISqlDialect.PromoteDateOperand`) и
+трансляция CLR `Regex` на SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`, ~~G7~~-хвост).
+
+Кроме того, закрыт майлстоун **1.0-b.1** (релизные задачи nextorm #15/#31/#63/#64/#66): сняты как
+реализованные value converters (~~G1~~, фазы 1–2), JSON-колонка ↔ CLR-объект (~~G2~~), `OUTPUT INTO` +
+upsert-with-output (~~G4~~), PostgreSQL range/`Overlaps` (~~G11~~, см. §3),
+range поверх пары скалярных колонок (`[RangeColumns]`, `SupportsRangeColumns` — провайдеры без нативного
+range-типа) и динамическая схема табличных источников (ClickHouse `values()`, PostgreSQL
+`jsonb_to_record(set)` — §5).
+Version-gates (G13,
+[#141](https://github.com/AlexeyShirshov/nextorm/issues/141)) — **<span style="color:green">реализовано</span>** (явный `Version` у контекста; см. §6). ~~Хранимые процедуры~~
+(#70), хвост ~~G4~~ «несколько result-set'ов» (фаза 4 #70: `BatchBuilder.AddQuery<TResult>` +
+`Execute`/`ExecuteAsync` → `BatchResult`), логирование параметров/управление кэшем (~~G10~~) и хвост
+~~G8~~ (TVP decimal precision/scale, issue #73) закрыты.
+
+## 1. Epic-уровень: куда линq2db вкладывается
+
+| Epic linq2db | Откр. | Что это | Статус nextorm | Решение |
+|---|---|---|---|---|
+| `epic: DDL` | 18 | `CREATE`/`ALTER`/`DROP TABLE`, constraints, индексы, sequences, enums, `Create/Drop Database` | CTAS есть (`ToTempTable`/`ToTable`), управления схемой нет | **Gap (решение нужно)**: либо осознанно <span style="color:orange">out-of-scope</span>, либо новый workstream «DDL» |
+| `epic: code-generator` | 21 | CLI/T4-скаффолдинг маппингов из живой БД | none (маппинги только в коде) | **<span style="color:orange">Out-of-scope</span>** (заявленная граница) |
+| `epic: eager-load` | 12 | `[Association]`, `LoadWith`, `Include`, ordering/strategy | O2M/M2O-метаданные (`[Relationship]`/`HasMany`/`HasOne`) + `JoinInto` (O2M, O2O, M:N через junction) + уровень-1 `LoadWith` + неявная навигация по **объявленным** связям ([связи](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md), [неявная навигация](../../guide/29-implicit-navigation.md)) | **Частичный паритет**: O2O, M:N-исполнение и неявная навигация по объявленным связям отгружены (M:N-исполнение скалярное, standalone и под `AsSingleQuery`, и составные ключи связей поддержаны; остаток: составной junction-селектор в SQL-генерации — `NotSupportedException`, [#223](https://github.com/AlexeyShirshov/nextorm/issues/223), in-memory сшивает); вывод по конвенции FK отсутствует и у linq2db; ordering/strategy: стратегия отгружена в E1 (#209 — `EagerLoadMode` SplitQuery/SingleQuery/Auto + context default `UseEagerLoadMode`), остаётся per-parent ordering/top-N — <span style="color:orange">out-of-scope</span> |
+| `epic: insert` | 16 | полнота INSERT/UPSERT, bulk, output | `INSERT VALUES/SELECT`, key-upsert, full MERGE, bulk — <span style="color:green">Done</span> | смешанно: см. §4 |
+| `epic: json_sql` | 5 | JSON-типы, авто-сериализация объектов, `jsonpath`, SQLite TVF | PG native JSON + text-JSON + ClickHouse + PG `jsonpath` — <span style="color:green">Done</span>; объект↔JSON (фаза 1: `[JsonColumn]`, нативная PG-регрессия #131: оба типа `json`/`jsonb`) — <span style="color:green">Done</span>; SQLite TVF (`json_each`/`json_tree`) — <span style="color:green">Done</span> | **<span style="color:green">Done</span>** (~~G14~~) |
+| `epic: merge` | 5 | MERGE: immutable-модели, частичные setters, TPH/EF | full MERGE (SQL Server, PG15+) — <span style="color:green">Done</span>; inheritance/EF — <span style="color:orange">out-of-scope</span> | частично **Gap** (G-merge) |
+| `epic: output` | 6 | `OUTPUT`/`OUTPUT INTO`, несколько result-set'ов, INSERT…WithOutput в CTE | returning/output одного стейтмента — <span style="color:green">Done</span>; композируемый `INSERT ... RETURNING` как data-modifying CTE (PG) — <span style="color:green">Done</span>; `OUTPUT INTO` (SQL Server) и output у key-upsert — <span style="color:green">Done</span> | много-result-set — <span style="color:green">Done</span> (фаза 4 #70, включая #25: `AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult`); ~~G3~~ закрыт |
+| `epic: new-provider` | 4 | Oracle/Redshift/Sybase/SAP | provider breadth — граница | **<span style="color:orange">Out-of-scope</span>** |
+
+Плюс сквозные `area:`-кластеры (не эпики): `area: types` (унификация типов, TimeSpan/interval),
+`area: performance` (кэш запросов, оптимизатор), `area: mapping` (fluent, converters), `area: hints`,
+`area: extensions`, `area: infrastructure`.
+
+## 2. Milestone-уровень: ближайший вектор linq2db
+
+### `7.0.0` — «Next major release» (4)
+Крупные архитектурные изменения ядра, для nextorm — **N/A** (информативно):
+`linq2db#5675` schema-aware metadata readers, `#5718` schema-bound `EntityDescriptorsCache`,
+`#5758` type mapping на SQL-выражениях вместо `ColumnDescriptor`, `#5812` `IInfrastructure<IServiceProvider>`
+на `IDataContext`. Пересечение с nextorm: наш `DataContextCache`/`IEntityMetadata` решают похожие задачи
+(см. `todo_interface_poco.md`, `todo_public_api_freeze.md`) — полезно как ориентир, не как gap.
+
+### `6.6.0` (44) и `6.x` (20) — в основном корректность/провайдеры
+Из списка вычленяются feature-пункты, релевантные nextorm (остальное — багфиксы конкретных провайдеров
+и инфраструктура):
+
+| linq2db | Тема | Статус nextorm |
+|---|---|---|
+| `#5759` | `TimeSpan`-члены и сравнения на native interval-колонках (`[Duration]`) | **<span style="color:green">Реализовано</span> (1.0.6-alpha, ~~G9~~)**: `DurationUnit`/`DurationAttribute`/fluent `Duration(...)`, native `interval`/`TIME` → [Duration-колонки](../../guide/22-duration-columns.md), [Duration columns](../../guide/22-duration-columns.md) |
+| `#5933` | диалект MariaDB 13 | **<span style="color:green">Реализовано</span>** (G13): явная `Version` ≥13.0 включает `UPDATE ... RETURNING` (`SupportsUpdateReturning`) |
+| `#5948`, `#5952` | PG 9.2/9.3: `FILTER`-агрегаты синтаксически недоступны | **<span style="color:green">Реализовано</span>** (G13): `Version` <9.4 отклоняет `FILTER` через `NotSupportedException`; незаданная версия предполагает ≥9.4 |
+| `#5961`, `#5914` | ClickHouse date/`DateTimeOffset` типы в SQL противоречат декларации | **Проверено, не gap.** `#5961`: у nextorm нет per-node `DbDataType`, а части даты уже приведены к объявленному CLR-типу (`toInt32(toISOWeek(toDateTime64(…)))`, `toInt32(toYear(…))`, `toFloat64(toUnixTimestamp(…))`); `to_unix_timestamp` объявлен `long` и обёрнут `toInt64` — «type lie» не воспроизводится. `#5914`: `DateTimeOffset` получил read-ветку (`GetFieldValue<DateTimeOffset>`; см. [Duration columns](../../guide/22-duration-columns.md)), но расхождение Date/DateTime64 не воспроизводится — **N/A**. Однотипный хвост — ширина `date_diff`, см. G20; общий план — [Duration columns](../../guide/22-duration-columns.md) |
+| `#5921` | `string.Format`/интерполяция: format-спецификаторы молча теряются | **<span style="color:green">Реализовано</span>** (G12) → [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
+| `#5927` | `string.CompareOrdinal`/ordinal `Compare` маппятся в culture-sensitive | **<span style="color:green">Реализовано</span>** (G12): ordinal `Compare`/`CompareOrdinal`/`Equals`/`Contains` переводятся в бинарную коллацию, неподдержанные формы бросают `NotSupportedException` → [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
+| `#5965` | sub-day date-функции над date-only операндами | **<span style="color:green">Реализовано</span> (1.0.6-alpha).** Ранее nextorm не продвигал date-only операнд: `date_add`/`DateTime.Add*` и `.Hour/.Minute/.Second` рендерились на колонке (SQL Server `date`-колонка → 9810, ClickHouse `Date` теряет sub-day). Теперь хук `ISqlDialect.PromoteDateOperand(field, value)` продвигает операнд перед sub-day функцией: SQL Server `cast(value as datetime2)`, ClickHouse `toDateTime` (hour..second) и `toDateTime64(value, 3 или 6)` (milliseconds/microseconds), PG/MySQL/SQLite — без изменений. Полноценные precision-метаданные колонки (§8.5) остаются открытыми. См. [Duration columns](../../guide/22-duration-columns.md)§9.4 |
+| `#5837`, `#5838`, `#5852` | inheritance/TPH write, shadowing-член | **<span style="color:orange">Out-of-scope</span>** (нет TPH) |
+| `#5904`, `#5937`, `#5941`, `#5940`, `#5865` | eager-load ordering/strategy | **<span style="color:orange">Частично</span>**: стратегии отгружены в E1 (#209: `EagerLoadMode` SplitQuery/SingleQuery/Auto + context default `UseEagerLoadMode`); per-parent ordering/top-N — <span style="color:orange">out-of-scope</span> |
+| `#5717` | DML `RETURNING`/`OUTPUT` как **композируемый** `IQueryable`-источник | **Частично <span style="color:green">Done</span>** (~~G3~~): PG `INSERT ... RETURNING` как data-modifying CTE |
+| `#4562` | PostgreSQL `Overlaps` (range `&&`) | **<span style="color:green">Реализовано</span>** (G11, 1.0-b.1); плюс range поверх пары скалярных колонок (`[RangeColumns]`) на провайдерах без нативного range → [PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types), [Range columns](../../guide/25-range-columns.md) |
+| `#4543` | декларативный `QueryFilter`-атрибут | **Planned** → `todo_query_filters.md` |
+| `#5706`, `#1879`, `#3740`, `#5425` | Oracle-специфика | **<span style="color:orange">Out-of-scope</span>** (нет провайдера) |
+| `#3023`, `#5895`–`#5897` | Sybase/DB2-специфика | **<span style="color:orange">Out-of-scope</span>** |
+| `#4745`, `#5081`, `#5911`, `#5903`, `#5861`, `#5862`, `#5730` | внутренности/SQL-gen/упаковка | **N/A** |
+
+### `Backlog` (44, «Available tasks») — фичи, не привязанные к релизу
+
+| linq2db | Тема | Статус nextorm |
+|---|---|---|
+| `#698` | `Regex` внутри запроса (трансляция `Regex.IsMatch`/…) | **<span style="color:green">реализовано</span>** (~~G7~~): [Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения) |
+| `#1645` | table-valued **parameters** для хранимых процедур (TVP) | **<span style="color:green">реализовано</span>** (G8, 2026-09-26): SQL Server нативно, PG/MySQL/MariaDB/SQLite JSON/array-эмуляция, ClickHouse `Array(T)`/`Array(Tuple(...))` + `arrayJoin(@p)`; decimal precision/scale shipped (issue #73 closed 2026-09-26) |
+| `#1994` | open-generic `TypeConverter` | **<span style="color:green">Done</span>** (G1, фазы 1–2: `IPropertyValueConverter`/`ValueConverter<,>`/`[ValueConverter]`/`.HasConversion`, константы в предикатах/`IN` и скалярных проекциях) → [Value converters](../../infrastructure/04-value-converters.md) |
+| `#3009` | ограничение размера кэша запросов | **<span style="color:green">Done</span>** (G10): `DataContextCache.Clear()`, `UseQueryCache(false)`, `UseCacheSlidingExpiration` (ленивое вытеснение по времени) → [Query reuse](../../infrastructure/01-query-reuse-and-caching.md#cache-controls) |
+| `#4039` | логирование SQL-параметров | **<span style="color:green">Реализовано</span>** (интерцепторы, 1.0.6-alpha): `IQueryInterceptor` (`CommandInitialized`/`CommandExecuting`) отдаёт привязанную команду, интерцептор читает `command.Parameters` → [гайд 27](../../infrastructure/03-interceptors.md) |
+| `#4405` | concurrency check с явными исключениями | **<span style="color:orange">By design</span>** (~~G6~~): достижимо через `Where` + число затронутых строк; гайд [Оптимистичная конкурентность и отслеживание изменений](../../guide/24-optimistic-concurrency.md) |
+| `#4199` | «Property X is not defined for interface type Y» | **Planned** (`todo_interface_poco.md`) |
+| `#5822` | рекурсивный CTE с `UNION` и вычисляемой проекцией | **<span style="color:green">Не подтвердилось — уже было реализовано</span>** (~~G16~~): union рендерится inline, self-ref не оборачивается |
+| `#5879` | `IndexExpression` (`x[i]`) в дереве запроса | **<span style="color:green">Реализовано</span>** (~~G17~~): captured `dict`/`list`/`arr`, включая интерфейсные типы → `CASE`/параметр; неподдерживаемый индексер → `NotSupportedException` → [Filtering](../../guide/01-filtering-where.md#captured-collection-lookup-dictcolumn) |
+| `#3015` | `UPDATE` через CTE (несколько провайдеров) | **<span style="color:green">Done</span>** (~~G18~~): `WITH ... UPDATE`/`DELETE` эмитится, CTE хойстится перед мутацией |
+| `#4139` | composite-объекты для associations | **<span style="color:orange">Out-of-scope</span>** |
+| `#1181`, `#1651`, `#3914`, `#4314`, `#5527`, `#5853`, `#5903` | типы/mapping/инфраструктура | **N/A** |
+| остальные (`#86`, `#1880`, `#4436`, …) | багфиксы провайдеров | **N/A** |
+
+### `6.5.1` (8) и `In-progress` (5) — корректность
+Почти всё — регрессии `PreferClientCalculation`/eager-load/провайдеров (**N/A**), включая новый `#5970`
+(Transform-mode optimization сворачивает `IS NULL` на колонке производной таблицы), кроме `#698`
+(~~G7~~ <span style="color:green">реализовано</span>) и `#4306`/`#2950` (`TimeSpan`-типы на SQL Server/PostgreSQL → ~~G9~~ <span style="color:green">реализовано</span>).
+
+### Что linq2db уже **выпустил** в 6.5.0 и чего у nextorm нет
+Не backlog, но свежий вектор (release notes wiki):
+`UpdateOptimisticWithRefresh` (оптимистичный update с write-back токена) → ~~G6~~ закрыт как **<span style="color:orange">By design</span>**
+(нет change tracking → write-back не операция фреймворка; паттерн — [гайд](../../guide/24-optimistic-concurrency.md));
+`[Duration]`/`TimeSpan`-колонки → ~~G9~~ <span style="color:green">реализовано</span>; `BulkCopyOptions.MaxSqlLengthForBatch` → <span style="color:green">реализовано</span>
+(`MaxBatchSize`/`MaxParameters`/`MaxSqlLength` у `CreateBulkInsertBuilder`); F# `option`/single-case discriminated
+unions → **<span style="color:orange">Out-of-scope</span>** (F#);
+LINQPad/gRPC-remote-context → **<span style="color:orange">Out-of-scope</span>**.
+
+## 3. Приоритезированные in-scope пробелы
+
+### P0 — усиливают уже выбранное направление (writing/JSON/bulk)
+
+**~~G1~~. Value converters / кастомный маппинг типов — <span style="color:green">Done</span> (1.0-b.1, фазы 1–2).**
+`linq2db#1994` (open generic) и общая тема `area: mapping`/`area: types`.
+**<span style="color:green">Реализовано</span>**: `IPropertyValueConverter` / `ValueConverter<TModel,TProvider>`
+(строго типизированная база с кэшированным инвокером, без боксинга value-типов на строку),
+атрибут `[ValueConverter(typeof(...))]`, fluent `.HasConversion(...)` на `EntityPropertyBuilder<T>`,
+член `IPropertyMetadata.Converter` (default member) и единый write/read-сид
+(`RowMapperFactory`, `SqlMutationBuilder`); identity конвертера входит в ключ плана/кэша.
+Без этого JSON-колонки, enum-as-string, `DateTimeOffset`-в-строках и кастомные типы требовали ручных
+проекций. См. [Value converters и JSON-колонки](../../infrastructure/04-value-converters.md); фазы 1–2
+поставлены — константы-конвертеры в предикатах/`IN` и скалярных/анонимных проекциях.
+
+**~~G2~~. JSON-колонка ↔ CLR-объект (авто-сериализация) — <span style="color:green">Done</span> (1.0-b.1).**
+`linq2db#1661`. **<span style="color:green">Реализовано</span>**: `[JsonColumn]` +
+`JsonColumnStorage`/`JsonColumnOptions` + `JsonColumnConverter<,>` поверх `System.Text.Json`; нативная
+`jsonb`-колонка (PostgreSQL) и текст (SQL Server/MySQL/MariaDB/ClickHouse/SQLite); read/write/UPDATE/
+MERGE/`Returning`. См. [Value converters и JSON-колонки](../../infrastructure/04-value-converters.md);
+фазы 1–2 поставлены (round-trip, `Returning`, проекции и сравнение с константой). Нативная PG-регрессия
+#131 (06.10.2026, PostgreSQL 17.11) покрывает **оба** физических типа `json`/`jsonb`; чтение «голого»
+`JsonNode` из нативной колонки — follow-up [#197](https://github.com/AlexeyShirshov/nextorm/issues/197).
+Остаток по [`todo_json_streaming.md`](../roadmap/todo_json_streaming.md) (общий STJ-слой для стриминга);
+AOT-фаза (`JsonTypeInfo<T>`) — вне области.
+
+**~~G3~~. DML `RETURNING`/`OUTPUT` как композируемый источник — <span style="color:green">Done</span> (PostgreSQL).** `linq2db#5717`.
+<span style="color:green">Реализовано</span>: `ctx.With("ins", ctx.CreateInsertBuilder<T>().Values(v).Returning(x => new { x.Id }))` открывает
+`MutationCteQuery<TResult>`; `INSERT ... RETURNING` рендерится как data-modifying CTE (гейт
+`ISqlDialect.SupportsDataModifyingCtes`), а его строки читаются через `.From("ins")` и дальше
+фильтруются/джойнятся/проецируются как обычный источник (вплоть до питания внешнего `INSERT ... SELECT`);
+`MutationCteQuery.With`/`FromTable` позволяют объявить рядом обычные read-CTE. Провайдеры без
+data-modifying CTE кидают `NotSupportedException`. Тесты: SQL-gen
+(`tests/nextorm.postgres.tests/InsertSqlGenerationTests.cs`) и интеграция
+(`PostgresSpecificTests.DataModifyingCte*`). См. [CTE](../../guide/08-cte.md#data-modifying-cte-postgresql)
+и [INSERT](../../guide/15-insert-statement.md#data-modifying-cte-postgresql). Непокрытый хвост `#5717`
+(composable `OUTPUT`/`UPDATE`/`DELETE`/`MERGE`-output, SQL Server composable-DML) остаётся открытым; в
+~~G4~~ он не входит — G4 закрыл `OUTPUT INTO` и output у key-upsert, но не composable-DML.
+
+**~~G4~~. `OUTPUT INTO` + несколько result-set'ов + upsert-with-output — <span style="color:green">Done</span> (1.0-b.1).**
+`linq2db#3832` (`...WithOutputIntoOutput`), `#2982` (multi-result-set),
+`#3124`/`#4824` (InsertOrUpdate/InsertOrActionWithOutput). **<span style="color:green">Реализовано</span>**:
+SQL Server `OUTPUT ... INTO <table>` (в т.ч. `INTO` + клиентский результат через `OutputIntoThenOutput`)
+и `Returning()` у key-upsert (PostgreSQL/SQLite `ON CONFLICT ... RETURNING`, SQL Server `MERGE ... OUTPUT`).
+Журнал — `todo_output_into.md`. **Несколько result-set'ов — <span style="color:green">реализовано</span> (2026-09-26)** фазой 4 `todo_stored_procedures.md` (#70, включая #25): `BatchBuilder.AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult.Read<TResult>()`; на raw-пути навигация — общий helper из `BatchRunner.AdvanceToResultSet`.
+
+**~~G5~~. Bulk-insert: возврат идентификаторов и конфликтная политика.** `linq2db#2960` (Returning IDs),
+`#5124` (Bulk Insert Ignore), `#3795` (identity insert). **<span style="color:green">Реализовано</span>**: `CreateBulkInsertBuilder<T>()` —
+нативный `COPY`/`SqlBulkCopy` для PostgreSQL/SQL Server, портируемый `INSERT ... VALUES` с чанкингом для
+остальных; возврат ключей — batch `RETURNING`/`OUTPUT` (`ReturningKey`/`Returning`), пропуск конфликтов —
+опция `BulkInsertOptions.IgnoreDuplicates` на диалектных хуках
+`SupportsInsertIgnore`/`SupportsOnConflictDoNothing`, запись identity — `BulkInsertOptions.KeepIdentity`
+(`OVERRIDING SYSTEM VALUE`/`SET IDENTITY_INSERT`) и чанкинг `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`
+(опции передаются в `CreateBulkInsertBuilder<T>(options)` или через `BulkInsertOptionsBuilder`).
+См. [Массовая вставка](../../guide/20-bulk-insert.md).
+
+**~~G6~~. Оптимистичная конкурентность — <span style="color:orange">By design</span>.** `linq2db#4405` и
+shipped `UpdateOptimisticWithRefresh` (6.5.0). При отсутствии change tracking/identity map фреймворку
+нечем «владеть»: write-back токена — не операция фреймворка, а присваивание в объекте вызывающего кода,
+поэтому 1:1-перенос `UpdateOptimisticWithRefresh` в модель без трекинга смысла не имеет. Достаточно явных
+примитивов, которые уже есть: `CreateUpdateBuilder<T>().Set(...).Where(key && token).Update()` возвращает число
+затронутых строк (`0` = конфликт), `Returning`/`OUTPUT` отдаёт новый токен, а `Merge` с условной веткой
+`WhenMatched((t, s) => t.Version == s.Version)` даёт upsert-с-проверкой (SQL Server, PG15+).
+`IfUnchanged`/`WithRefresh` были бы чистым сахаром над `Where`; вместо API — гайд
+[Оптимистичная конкурентность и отслеживание изменений](../../guide/24-optimistic-concurrency.md).
+`todo_optimistic_concurrency.md` не заводится.
+
+### P1 — расширение паритета
+
+**~~G7~~. `Regex` в запросе — <span style="color:green">Done</span>.** `linq2db#698` (`area: extensions`, `area: sql`). **<span style="color:green">Реализовано</span>**:
+`Regex.IsMatch`/`Regex.Replace` с константным шаблоном транслируются на PostgreSQL (`~`/`~*`,
+`regexp_replace` с `'g'`), MySQL (`REGEXP_LIKE`/`REGEXP_REPLACE` с match type), MariaDB (`REGEXP`/
+`REGEXP_REPLACE` с `(?i)`/`(?-i)`), ClickHouse (`match`/`replaceRegexpAll` с `(?i)`), SQLite
+(регистрируемые CLR-функции `regexp`/`regexp_replace`) и SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`;
+match требует database compatibility level 170, на 2019/2022 вызов отклоняется движком).
+См. [Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения) и
+[Limitations и out-of-scope](../../advanced/limitations.md).
+
+**~~G8~~. Table-valued parameters (TVP) — <span style="color:green">реализовано</span> (2026-09-26).** `linq2db#1645`. `ProcedureParameter.Table<T>`
+(`TableParameterValue`, capability `SupportsTableValuedParameters`) передаёт таблицу **параметром**: SQL Server
+нативно (`SqlDbType.Structured` + `TypeName`, `SqlDataRecord`-поток), PostgreSQL/MySQL/MariaDB/SQLite — JSON/array-
+эмуляция, ClickHouse — `Array(T)`/`Array(Tuple(...))` + `arrayJoin(@p)`, in-memory бросает `NotSupportedException`.
+Decimal precision/scale shipped (issue #73 closed 2026-09-26); the independent deferred tail (TVP rejects a `ValueConverter<*, TimeSpan>` column on providers without a native duration type) lives in [`sql-capabilities-gap-analysis.md`](../roadmap/sql-capabilities-gap-analysis.md) item 18.
+
+**~~G9~~. `TimeSpan`/interval-колонки (`[Duration]`) — <span style="color:green">Done</span> (1.0.6-alpha).** `linq2db#5759`, `#4306`, `#2950`.
+**<span style="color:green">Реализовано</span>:** `DurationUnit`/`DurationAttribute`/fluent `Duration(...)`,
+read/write/сравнения, native `interval` (PG) и `TIME` (MySQL/MariaDB), целочисленная форма для
+SQL Server/SQLite/ClickHouse; публичная страница — [`docs/guide/26-duration-columns.md`](../../guide/22-duration-columns.md)
+(+RU). Остаток (sub-day promotion §8.2, ширина `date_diff` §8.3) — **<span style="color:green">реализовано (1.0.6-alpha)</span>**, см.
+[Duration columns](../../guide/22-duration-columns.md)
+
+**~~G10~~. Ограничение кэша планов + логирование параметров — <span style="color:green">Done</span>.** `linq2db#3009` (cache size), `#4039`
+(parameter logging). **<span style="color:green">Реализовано</span>** логирование параметров: фаза 1 интерцепторов (1.0.6-alpha)
+отдаёт привязанную команду на `CommandInitialized`/`CommandExecuting`, интерцептор читает `command.Parameters`
+([гайд 27](../../infrastructure/03-interceptors.md)). **<span style="color:green">Реализовано</span>** управление кэшем
+([Query reuse: cache controls](../../infrastructure/01-query-reuse-and-caching.md#cache-controls)): `DataContextCache.Clear()`
+(process-wide кэши + план-кэш), `UseQueryCache(false)` / `QueryCacheEnabled` (локальный `storeInCache: false`,
+без sticky `QueryCommand.Cache`) и `UseCacheSlidingExpiration(ttl)` — ленивое вытеснение записей
+process-wide `DataContextCache` по времени, закрывающее риск неограниченного роста без LRU; жёсткий предел
+размера `MapperCache` (`MaxEntries = 4096`) сохранён. Публичная страница —
+[Query reuse: cache controls](../../infrastructure/01-query-reuse-and-caching.md#cache-controls).
+
+**~~G11~~. PostgreSQL range/`Overlaps` — <span style="color:green">Done</span> (1.0-b.1).**
+`linq2db#4562`; shipped `Sql.Row.Overlaps` (6.5.0). Добавлены provider-agnostic `NextORM.Core.Range<T>`
+и PG-only поверхность `SqlFunctions.Postgres` (`overlaps` → `&&`, `range_contains`/`range_contained_by`,
+позиционные/смежные/union/intersection/difference операторы, `lower`/`upper`/`isempty`, конструкторы),
+гейт `ISqlDialect.SupportsRanges`, round-trip `Range<T>` ↔ `NpgsqlRange<T>`. Смежно закрыт пробел для
+провайдеров без нативного range: `[RangeColumns]` (гейт `ISqlDialect.SupportsRangeColumns`) хранит
+`Range<T>` как **пару скалярных колонок** и транслирует предикаты/инспекцию (`overlaps`,
+`range_contains`/`range_contained_by`, позиционные/смежные, `lower`/`upper`/`isempty`) поверх пары; такого
+маппинга у linq2db нет. См.
+[PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types) и
+[Range columns](../../guide/25-range-columns.md).
+
+**~~G12~~. C# string-семантика — <span style="color:green">Done</span> (1.0.6-alpha).** `linq2db#5921` (format-спецификаторы в `string.Format`/`$"…"`),
+`#5927` (ordinal `Compare`/`CompareOrdinal` сворачиваются в culture-sensitive `CompareTo`). В nextorm это
+**<span style="color:green">реализовано</span>** (G12): `string.Compare`/`CompareOrdinal`/`Equals`/`Contains`/`StartsWith`/`EndsWith`/
+`IndexOf`/`LastIndexOf` с константным `StringComparison` переводятся через бинарную коллацию
+(`Ordinal`) или её свёртку (`OrdinalIgnoreCase`), а `string.Format`/интерполяция/`ToString(format)` — в
+родную функцию провайдера для culture-invariant подмножества спецификаторов. Ни одна неподдержанная
+форма не даёт молча неверный SQL: она бросает `NotSupportedException`. Колонковая коллация (nextorm
+issue `#28` «column collation») на том же примитиве `MakeCollate` тоже **сделана**: коллация
+объявляется на свойстве сущности (`CollationAttribute`/`EntityPropertyBuilder<T>.Collation`) и
+применяется в collation-чувствительных операциях запроса (ClickHouse без `COLLATE` отклоняет).
+Связанные задачи G12 — верность трансляции C#-семантики, `#28` — объявление/маппинг: обе закрыты.
+См. [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) и
+[Ограничения](../../advanced/limitations.md).
+
+**G13. Версионные диалекты и version-gates — <span style="color:green">реализовано</span>.** `linq2db#5933` (MariaDB 13), `#5948`/`#5952`
+(PG 9.2/9.3 не поддерживают `FILTER` в агрегатах). nextorm генерирует `FILTER`-агрегаты на PG и
+имеет единый MariaDB-диалект без версии. Действие выполнено: version-flag выставляется явной серверной
+`Version` у контекста (конструктор), без опроса живого сервера. PG `FILTER` гейтится 9.4+ (незаданная
+версия предполагает ≥9.4), MariaDB `UPDATE ... RETURNING` включается только при явной 13.0+
+(`SupportsUpdateReturning`); insert/delete `RETURNING` и `ANY_VALUE` (13.2) не изменены. На PostgreSQL одна
+версия фиксируется на конкретный тип контекста на время жизни процесса (иначе `InvalidOperationException`),
+потому что гейт `FILTER` влияет на кэшируемый `SELECT`; MariaDB такой защиты не накладывает — её
+гейтируемый `UPDATE ... RETURNING` не кладётся в кэш планов.
+Тикет: [#141](https://github.com/AlexeyShirshov/nextorm/issues/141) (милстоун `1.0.9-rc1`).
+
+### P2 — watchlist / проверить
+
+| # | linq2db | Что проверить в nextorm |
+|---|---|---|
+| ~~G14~~ | `#3408` SQLite `json_each`/`json_tree` | **<span style="color:green">Done</span>** — built-in TVF `SqlFunctions.Sqlite.json_each`/`json_tree` (`IJsonEachRow`/`IJsonTreeRow`, `SqliteDialect.SupportsTableFunction`), [SQLite-specific SQL](../../guide/provider-specific/sqlite.md#json_each--json_tree-table-functions) (EN+RU); закрыто issue #82 (1.0-a.6) |
+| ~~G15~~ | `#3869` PG `jsonb` jsonpath | **<span style="color:green">Done</span>** — скаляры `jsonb_path_exists`/`jsonb_path_match`/`jsonb_path_query_first`/`jsonb_path_query_array`, `jsonpath(cast)` и TVF `[SqlTableFunction("jsonb_path_query")]`; покрыто [гайдом 18](../../guide/14-json.md) и PG-тестами (SQL-gen/интеграция) |
+| ~~G16~~ | `#5822` recursive CTE `UNION` + вычисляемая проекция | **<span style="color:green">Не подтвердилось — уже было реализовано</span>** — union inline, self-ref не оборачивается; distinct-`Union` покрыт тестами (SQLite/PG/MySQL; SQL Server отвергает — требует `UNION ALL`) |
+| ~~G17~~ | `#5879` `IndexExpression` в дереве | **<span style="color:green">Done</span>** — captured `dict`/`list`/`arr`, включая интерфейсные типы (`IReadOnlyList<T>`, `IReadOnlyDictionary<K,V>`, `IList<T>`, `IDictionary<,>`): ключ-константа → параметр, ключ-колонка → `CASE`; неподдерживаемый индексер (серверный массив/JSON, кастомный) → `NotSupportedException` (см. ниже) |
+| ~~G18~~ | `#3015` `UPDATE` через CTE | **<span style="color:green">Done</span>** — `WITH ... UPDATE`/`DELETE` хойстится перед мутацией (см. ниже) |
+| G19 | `#5675`/`#5718`/`#5758` | архитектурный ориентир для метаданных/кэша, не gap |
+
+**~~G15~~. PostgreSQL `jsonb` jsonpath — <span style="color:green">Done</span> (проверено).** `linq2db#3869`.
+Проверено кодом: nextorm имеет скалярную поверхность JSONPath — `jsonb_path_exists`/`jsonb_path_match`/
+`jsonb_path_query_first`/`jsonb_path_query_array` и `jsonpath(cast)` (функциональная форма, эквивалентная
+операторам `@?`/`@@`) — плюс TVF-источник `[SqlTableFunction("jsonb_path_query")]`
+(`SqlFunctions.Postgres.cs`). Разрыв, заявленный в `#3869`, отсутствует; покрытие —
+[гайд 18](../../guide/14-json.md), SQL-gen `tests/nextorm.postgres.tests/SqlGenerationTests.cs`/
+`PostgresDialectTests.cs` и интеграция `PostgresSpecificTests`.
+
+**~~G16~~. Рекурсивный CTE с `UNION` (distinct) и вычисляемой проекцией.** `linq2db#5822`. Проверено
+генерацией на SQLite: `WithRecursive("nums", anchor.Union(step))` с внешней проекцией `n * 2` даёт
+`with recursive nums as (select … union select … from nums …) select (n * 2) as 'n' from nums` — union
+рендерится **inline** (`SqlBuilder.MakeSelect`, ветка `UnionQuery`, `SqlBuilder.cs:280`), derived-table
+обёртки, как в linq2db, нет, self-reference остаётся на разрешённом месте. **<span style="color:green">Не подтвердилось — уже было реализовано</span>**; архитектурное
+отличие: у nextorm нет оптимизатора, складывающего проекцию в ноги set-операции. Покрытие добавлено:
+SQL-gen — `tests/nextorm.sqlite.tests/SqlGenerationTests.cs` и `tests/nextorm.postgres.tests/SqlGenerationTests.cs`
+(`Cte_Recursive_WithDistinctUnion_ShouldEmitUnionNotUnionAll`), интеграция per-provider —
+`SqliteSpecificTests`/`PostgresSpecificTests`/`MySqlSpecificTests`
+(`Cte_Recursive_WithDistinctUnion_ShouldProduceNumberSeries`), т.к. **SQL Server отвергает**
+рекурсивный CTE с top-level distinct `UNION` («Recursive common table expression 'nums' does not
+contain a top-level UNION ALL operator» — проверено интеграцией), поэтому тест не в общем
+`CommonTestSuite`. На T-SQL distinct-`Union` в `WithRecursive` даёт невалидный SQL — кандидат на gate.
+
+**~~G17~~. `IndexExpression`/`x[i]` в дереве — <span style="color:green">Done</span> (1.0-b.1).** `linq2db#5879`.
+**<span style="color:green">Реализовано</span>** (движковый `DictionaryLookup`, поставлен в 1.0-b.1):
+индексация замкнутой коллекции — `dict[column]`, `list[column]`, `arr[i]`, включая коллекцию,
+объявленную **интерфейсом** (`IReadOnlyList<T>`, `IReadOnlyDictionary<K,V>`, `IList<T>`,
+`IDictionary<,>`, immutable) — транслируется в портируемый `CASE WHEN key = @k THEN @v … END`;
+ключ-константа сворачивается в скалярный параметр; число ветвей входит в ключ плана; in-memory
+вычисляет индексер нативно. Раньше интерфейсно-типизированная коллекция при ключе-колонке **молча**
+биндила весь объект (`somestring = $values0`) — теперь это исправлено. Неподдерживаемый индексер
+(поэлементный доступ к серверному массиву/JSON, кастомный индексер) явно бросает
+`NotSupportedException` вместо неверного SQL (минимальное требование пункта). См.
+[Filtering](../../guide/01-filtering-where.md#captured-collection-lookup-dictcolumn) и
+[Limitations](../../advanced/limitations.md).
+
+**~~G18~~. `WITH ... UPDATE` / `WITH ... DELETE` — <span style="color:green">Done</span>.** `linq2db#3015`. Раньше join цели к CTE-источнику
+`ctx.With("c", q).From("c")` давал `update simple_entity as 't1' set id = $p0 from c as 't2' where t1.id = t2.id`
+— **без** `with c as (…)`, т.е. невалидный SQL: `JoinedEntityBuilder` брал `Ctes` только с левой стороны,
+а мутационный рендер не хойстил `WITH` (в отличие от `RenderSource`). Исправлено: `internal static CteMerge`
+сливает декларации обеих сторон join (левые раньше правых; переданные тем же экземпляром дедуплицируются,
+два разных объявления с одним именем отклоняются `InvalidOperationException`), `JoinSourceResolver`
+резолвит имя CTE/таблицы в `FromExpression` на любой позиции join (раньше 2-й/последующий join с
+имя-источником падал `NullReferenceException`), а `QueryPlanner.RenderUpdateJoin`/`RenderDeleteJoin`
+хойстят `WITH` перед мутацией, деля параметр-провайдер с телом (и дописывая `OPTION (MAXRECURSION n)`
+для рекурсивного CTE на SQL Server). Тесты: SQL-gen (SQLite/PG/SQL Server/MySQL/MariaDB — 2-й join,
+рекурсивный CTE PG/SQL Server), негатив на коллизию имён (core), интеграция в `CommonTestSuite`
+(PG/SQL Server/MySQL/SQLite для UPDATE; PG/SQL Server/MySQL для DELETE — SQLite не имеет multi-table
+DELETE). См. [CTE](../../guide/08-cte.md), [UPDATE](../../guide/17-update-statement.md),
+[DELETE](../../guide/16-delete-statement.md).
+
+**~~G20~~. Ширина результата `date_diff` — <span style="color:green">Done</span> аддитивно (найдено при проверке `#5961`).** `CommonFunctions.date_diff`
+(`src/nextorm.core/Query/SqlFunctions.cs:525`) объявлен `int?`, но ClickHouse рендерит
+`dateDiff('unit', …)` → **Int64**, а `SelectExpression.GetDataRecordMethod()` читает его как `GetInt32`.
+Для `seconds`/`milliseconds`/`microseconds` значение легко превышает Int32 (~24,8 дня для мс, ~35,8 мин
+для мкс). SQL Server/PG base отдают `int` (PG кастит `… as integer` явно) — там расхождения нет;
+**✅ <span style="color:green">Реализовано</span> аддитивно (24.09.2026).** `date_diff` остаётся `int?`; добавлен `date_diff_big → long?`
+с хуком `ISqlDialect.MakeDateDiffBig` (SQL Server `datediff_big`, PostgreSQL `bigint`, остальные
+делегируют `MakeDateDiff`). Добавлены ClickHouse SQL-gen `date_diff`/`date_diff_big` и common
+integration-тест. Подробности — [Duration columns](../../guide/22-duration-columns.md)§9.4.
+
+## 4. Осознанно вне scope (не считать пробелами)
+
+Совпадает с [`linq2db-comparison.md`](linq2db-comparison.md) «Deliberate boundaries»:
+
+- **DDL/управление схемой** (`epic: DDL`): `CREATE`/`ALTER`/`DROP TABLE`, constraints, индексы, sequences,
+  enums, `Create/Drop Database`. nextorm мутирует схему только через CTAS. Это **единственный крупный
+  непокрытый эпик**, где нужно явное решение: осознанно оставить или завести workstream «DDL» (в
+  `sql-capabilities-gap-analysis.md` DDL сейчас в «Future workstreams (not scheduled)»).
+- **Inheritance/TPH** (и остаток `epic: eager-load`: составной junction-селектор в SQL-генерации,
+  [#223](https://github.com/AlexeyShirshov/nextorm/issues/223)) — O2M/M2O/O2O/M:N-связи, eager loading уровня 1 и неявная навигация по
+  объявленным связям в nextorm уже отгружены (см. подсекцию «Инфраструктура» ниже).
+- **Скаффолдинг/кодогенерация** (`epic: code-generator`).
+- **Новые провайдеры** (`epic: new-provider`): Oracle, Firebird, DB2, SAP HANA, Informix, Sybase,
+  Redshift, DuckDB, YDB, Access, SQL CE.
+- **Remote context / gRPC**, **LINQPad-драйвер**, **F#-специфика**.
+- **Change tracking / identity map**.
+- **Query filters** — **<span style="color:green">реализовано</span>** (PR1–PR4; [глобальные фильтры запросов](../../advanced/query-filters.md)).
+- **EF Core integration** — **<span style="color:green">реализовано</span>** (пакет
+  `nextorm.entityframeworkcore`; [EF Core integration](../../advanced/integration-efcore.md));
+  `linq2db#4044`, `#4611`, `#4666` закрываются ей.
+
+### Пропущенная ось: shipped-поверхность `LinqExtensions`
+
+Развёртка §1–§3 идёт по **открытым** issue/epic linq2db (`gh issue list`, срез 2026-09-25), поэтому
+выпущенные ядровые операторы и расширения `LinqExtensions`, которым не соответствует ни открытый issue,
+ни отдельная SQL-конструкция, в gap-анализ не попали. Их SQL-эквивалент у nextorm уже есть (или эти
+возможности сознательно не переносятся), поэтому статус — **<span style="color:orange">By design</span>**; исключения отмечены **Gap**.
+
+| Возможность linq2db (shipped) | Эквивалент в nextorm | Статус |
+|---|---|---|
+| `SelectMany` (flatten, `CROSS APPLY`) | [`CrossApply`](../../guide/02-joins.md) | **<span style="color:orange">By design</span>** — SQL-провайдеры бросают `NotSupportedException`, in-memory <span style="color:green">реализован</span> ([Limitations](../../advanced/limitations.md)) |
+| `GroupJoin` (grouped inner, `LEFT JOIN`) | [`LeftJoin`](../../guide/02-joins.md) + `GROUP BY`/агрегат | **<span style="color:orange">By design</span>** |
+| `DefaultIfEmpty` (left-join-семантика `SelectMany`) | [`LeftJoin`](../../guide/02-joins.md) / `OuterApply` | **<span style="color:orange">By design</span>** |
+| `AsSubQuery` | `From(QueryCommand)` (производная таблица); `As` — workstream 38 | **<span style="color:orange">By design</span> / Planned** |
+| `TagQuery` (комментарий-метка в SQL) | [`WithTag`](../../guide/13-query-hints.md) (`/* tag */` сразу после `SELECT`) | **<span style="color:green">Done</span>** |
+| `InlineParameters` (инлайн констант вместо параметров) | нет (всегда параметризация) | **<span style="color:orange">By design</span>** — расходится с дизайном план-кэша |
+| `RemoveOrderBy` | нет; билдер строится снизу вверх, порядок задаёт `OrderBy` | **N/A** (не нужно без `IQueryable`-композиции) |
+| `JoinHint` / `SubQueryHint` / `TablesInScopeHint` | **<span style="color:green">Реализовано</span>** (issue #96): `WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint` — SQL Server join-хинт внутри `JOIN` (`inner loop join`) и tables-in-scope как `WITH (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`, SQLite/ClickHouse/in-memory отклоняют | **<span style="color:green">Done</span>** |
+| `WithTableExpression` / runtime-переопределение `TableName`/`SchemaName`/`ServerName` | `WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression` на `EntityBuilder<TEntity>` (per-query; SQL Server 4-part, MySQL/MariaDB/ClickHouse `db.table`, PG/SQLite `schema.table`) | **<span style="color:green">Shipped</span>** (см. [Per-query source overrides](../../querying/02-query-sources.md#per-query-source-overrides)) |
+
+Источник списка — публичная поверхность `LinqExtensions` (`Source/LinqToDB/LinqExtensions.cs`); отсутствие
+в nextorm проверено по `src/**` (совпадений `TagQuery`/`InlineParameters`/`JoinHint`/`SubQueryHint`/
+`TablesInScopeHint`/`WithTableExpression` нет) и по `capability-matrix.md` (строки hints покрывают только
+statement/table/index).
+
+### Инфраструктура linq2db (Data Connection System / Mapping / Query Processing)
+
+Отдельная ось: не SQL-конструкции и не операторы, а «обвязка» linq2db. В §1–§3 не попадала по той же
+причине (issue-driven развёртка). Проверено по докам linq2db и nextorm (`src/**`, `docs/**`).
+
+| Возможность linq2db (infra) | nextorm | Статус |
+|---|---|---|
+| `DataConnection`/`DataContext`, владение соединением, повторное использование, dispose | `GetConnection`/`EnsureConnectionOpen`, owned/supplied connection ([Connections](../../infrastructure/02-connections.md)) | **Паритет** |
+| Транзакции: `BeginTransaction`, commit/rollback, enlist во внешнюю | `ITransactionManager`, `UseTransaction` ([Transactions](../../guide/21-transactions.md)) | **Паритет**; savepoints/вложенность вне поверхности (у linq2db явного API тоже нет) |
+| Интерсепторы: command/connection, `BeforeExecute`/`AfterExecute`/`Error` | `IQueryInterceptor` (`CommandInitialized/Executing/Executed(elapsed)/Failed`), `IConnectionInterceptor` ([Interceptors](../../infrastructure/03-interceptors.md)) | **Паритет**; трансляция исключений — <span style="color:orange">By design</span> (`try`/`catch`) |
+| Трассировка/лог: `OnTraceConnection`, `TraceInfo`, `TraceSwitch`, `ILogger` | `ILoggerFactory` + `LogSensitiveData` + интерсепторы ([Logging](../../infrastructure/05-logging.md)) | **Паритет** |
+| Async (транзакции, команды, bulk) | async-терминалы/`EnsureConnectionOpenAsync`/`BeginTransactionAsync` | **Паритет** |
+| Compiled queries (`CompiledQuery.Compile`) | `Prepare()` + неявный план-кэш | **<span style="color:orange">By design</span>** |
+| `MappingSchema` (несколько/именованные схемы) | один `IEntityMetadata` на тип; scope-override | **Planned** ([`todo_mapping_scope.md`](../roadmap/todo_mapping_scope.md)) |
+| Value converters (`IValueConverter`/`SetConverter`) | `ValueConverter<,>`/`[ValueConverter]`/`HasConversion` ([Value converters](../../infrastructure/04-value-converters.md)) | **Паритет** |
+| Command timeout (`UseCommandTimeout`/`WithCommandTimeout`) | `DataContextBuilder.UseCommandTimeout(int)` + per-query `WithCommandTimeout(int)` ([Connections](../../infrastructure/02-connections.md)) | **<span style="color:green">Done</span>** (issue #93) |
+| Dynamic columns (`DynamicColumnsStore`/`DynamicColumnAccessor`) | `[DynamicColumns]`/`DynamicColumnsStore()` — read side: не сопоставленные колонки строки попадают в словарь (`select <mapped>, *`); write side: ключи словаря рендерятся физическими колонками в `INSERT`/`UPDATE`/`MERGE`, значения — связанными параметрами, каждый ключ квотируется диалектом; in-memory паритет по чтению ([Dynamic columns](../../guide/27-dynamic-columns.md)) | **<span style="color:green">Done</span>** (issue [#104](https://github.com/AlexeyShirshov/nextorm/issues/104), милстоун `1.1`) — read side был отгружен ранее, write side (ключи словаря колонками) реализован; оставшиеся ограничения (пер-ключевые конвертеры/JSON, change tracking, in-memory write) — [Dynamic columns](../../guide/27-dynamic-columns.md) |
+| `BulkCopyOptions`-флаги (`CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers`/`BulkCopyType`/parallel) | `BulkInsertOptions.CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` (SQL Server native; остальные пути — явный `NotSupportedException`) | **Частичный паритет** (ClickHouse parallel/`WithoutSession` — отложены, `BulkCopyType` не опция, `UseInternalTransaction` — by design; см. [Массовая вставка](../../guide/20-bulk-insert.md)) |
+| Управление кэшем (`Query<T>.ClearCache`, `DisableQueryCache`, `CacheSlidingExpiration`) | `DataContextCache.Clear()` / `UseQueryCache(false)` / `UseCacheSlidingExpiration(ttl)` | **<span style="color:green">Done</span>** → [Query reuse: cache controls](../../infrastructure/01-query-reuse-and-caching.md#cache-controls) |
+| Оптимизатор дерева (`OptimizeJoins`, `GenerateExpressionTest`) | нет AST-оптимизатора (билдер не `IQueryable`) | **N/A** (архитектурно) |
+| DDL/схема (`ITable<T>.Create/Drop`, `CreateLocalTable`) | CTAS; DDL — out-of-scope-решение | **<span style="color:orange">Out-of-scope</span>** (см. §4) |
+| Хранимые процедуры / сырой `Execute*` / несколько result-set | `ExecuteRaw`/`ExecuteProcedure` + `ProcedureResult`; несколько result-set'ов — `BatchBuilder.AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult.Read<TResult>()` | **<span style="color:green">Done</span>** (2026-09-26, #70 включая #25) |
+| Association/eager-load, inheritance/TPH | метаданные O2M/M2O/O2O/M2M (`[Relationship]`/`HasMany`/`HasOne`/`HasOneToOne`/`HasManyThrough`) + `JoinInto` (O2O и M:N отгружены), уровень-1 `LoadWith` и неявная навигация по объявленным связям ([связи](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md), [неявная навигация](../../guide/29-implicit-navigation.md)); остаток: вывод по конвенции FK (нет и у linq2db) и составной junction-селектор в SQL-генерации ([#223](https://github.com/AlexeyShirshov/nextorm/issues/223)); составные ключи связей и скалярный M:N под `AsSingleQuery` отгружены; inheritance/TPH — <span style="color:orange">out-of-scope</span> | **Частичный паритет + <span style="color:orange">Out-of-scope</span>** |
+| Testing framework, NuGet-упаковка, multi-targeting | собственные тесты/сборка | **N/A** |
+
+## 5. Общие пробелы (нет и у nextorm, и у linq2db)
+
+- **~~Динамическая схема табличных источников~~ — <span style="color:green">Done в nextorm</span> (1.0-b.1).**
+  ClickHouse `values()`, PostgreSQL `jsonb_to_record(set)`: **<span style="color:green">реализовано</span>**
+  явной схемой результата `[SqlTableFunction(..., ResultSchema = …)]` с per-placement capability-гейтом
+  (`ISqlDialect.SupportsResultSchema`); схема входит в ключ плана. См.
+  [Динамическая схема результата](../../guide/11-table-valued-functions.md#dynamic-result-schema). linq2db это не закрыл
+  (`epic: json_sql` его не содержит), так что здесь nextorm впереди.
+- ClickHouse `AggregateFunction`-state (`-State`/`-Merge`, `runningAccumulate`) — **единственный
+  оставшийся общий пробел**, заблокирован драйвером `ClickHouse.Driver` 1.4.0 у обоих (issue nextorm #62
+  снят с майлстоуна):
+  [`todo_clickhouse_aggregate_function_state.md`](../roadmap/todo_clickhouse_aggregate_function_state.md).
+
+## 6. Сводка рекомендаций
+
+| Приоритет | Действие |
+|---|---|
+| — | ~~G1~~ — **<span style="color:green">реализовано</span>** (1.0-b.1, фазы 1–2): [Value converters](../../infrastructure/04-value-converters.md); ~~G2~~ — **<span style="color:green">реализовано</span>** (1.0-b.1, фазы 1–2): [Value converters и JSON-колонки](../../infrastructure/04-value-converters.md) |
+| — | ~~G4~~ — **<span style="color:green">реализовано</span>** (1.0-b.1 + 2026-09-26): `OUTPUT INTO`/upsert-with-output (`todo_output_into.md`); композируемый `INSERT ... RETURNING` (~~G3~~, PostgreSQL) — **<span style="color:green">реализовано</span>**: `MutationCteQuery` + [guide 09](../../guide/08-cte.md#data-modifying-cte-postgresql)/[guide 19](../../guide/15-insert-statement.md#data-modifying-cte-postgresql); хвост «несколько result-set'ов» — **<span style="color:green">реализовано</span>** (2026-09-26, `todo_stored_procedures.md` фаза 4, #70 включая #25): `BatchBuilder.AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult.Read<TResult>()` (raw-путь — общий helper из `BatchRunner.AdvanceToResultSet`) |
+| P0 | Bulk insert + ~~G5~~ (returning/ignore/identity/chunking) — **<span style="color:green">реализовано</span>**: [Массовая вставка](../../guide/20-bulk-insert.md) |
+| — | ~~G6~~ — **<span style="color:orange">By design</span>**: паттерн оптимистичной конкурентности задокументирован ([гайд](../../guide/24-optimistic-concurrency.md)); `todo_optimistic_concurrency.md` не заводится |
+| P1 | ~~G7 Regex~~ — **<span style="color:green">реализовано</span>**: [Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения); ~~G9 Duration~~ — **<span style="color:green">реализовано</span>** (1.0.6-alpha): [Duration-колонки](../../guide/22-duration-columns.md); ~~G11 PostgreSQL range/`Overlaps`~~ — **<span style="color:green">реализовано</span>** (1.0-b.1): [PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types); ~~G8 TVP~~ — **<span style="color:green">реализовано</span>** (2026-09-26; decimal precision/scale shipped, issue #73 closed 2026-09-26) |
+| P1 | ~~Хранимые процедуры/функции + `OUT`/несколько result-set~~ (снять `limitations.md`, туда же сырые параметризованные команды) — **<span style="color:green">реализовано</span>** (2026-09-26, `todo_stored_procedures.md` #70 включая #25) |
+| P1 | ~~Логирование параметров~~ (G10) — **<span style="color:green">реализовано</span>** через интерцепторы ([гайд 27](../../infrastructure/03-interceptors.md)); остаётся LRU/размер `DataContextCache` (`MapperCache` уже ограничен); ~~version-gates MariaDB13/PG9.2-9.3 (G13, [#141](https://github.com/AlexeyShirshov/nextorm/issues/141))~~ — **<span style="color:green">реализовано</span>**; ~~string-семантика (G12)~~ — **<span style="color:green">реализовано</span>**: [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
+| P1 | ~~Багфикс `date_diff` (G20)~~ — **<span style="color:green">реализовано</span>** аддитивно: `date_diff_big → long?` + `ISqlDialect.MakeDateDiffBig` (см. G20) |
+| P2 | ~~G16~~ — не подтвердилось (уже было реализовано), регресс-тесты добавлены (SQL-gen SQLite/PG; интеграция SQLite/PG/MySQL; SQL Server требует `UNION ALL`); ~~G17~~ — **<span style="color:green">реализовано</span>** (интерфейсные коллекции + явный отказ от неподдерживаемого индексера → [Filtering](../../guide/01-filtering-where.md#captured-collection-lookup-dictcolumn)); ~~G18~~ — багфикс `WITH … UPDATE`/`DELETE` закрыт (CTE хойстится перед мутацией, любой join, рекурсивный CTE); ~~G15~~ — проверено, реализовано (PG JSONPath); ~~G14~~ — <span style="color:green">реализовано</span> |
+| P2 | Слепое пятно shipped-`LinqExtensions` (§4): ~~`TagQuery`~~ — **<span style="color:green">реализовано</span>** ([`WithTag`](../../guide/13-query-hints.md), комментарий `/* tag */` сразу после `SELECT`); ~~`JoinHint`/`SubQueryHint`/`TablesInScopeHint`~~ — **<span style="color:green">реализовано</span>** (issue #96); source override — **<span style="color:green">реализовано</span>** (per-query `WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`) |
+| P2 | Инфраструктурные Gap (§4): command timeout, bulk copy options, query cache controls — **<span style="color:green">реализовано</span>**; dynamic columns — read+write **<span style="color:green">реализовано</span>** (issue [#104](https://github.com/AlexeyShirshov/nextorm/issues/104), [Dynamic columns](../../guide/27-dynamic-columns.md)) |
+| — | Принять явное решение по **DDL** (оставить out-of-scope или новый workstream) |
+
+## 7. Статус сравнения (обновлено `2026-10-04`)
+
+Устранено: [`linq2db-comparison.md`](linq2db-comparison.md),
+[`capability-matrix.md`](capability-matrix.md) и RU-зеркало больше не помечают `UPDATE`, полный `MERGE`,
+массовую вставку, CTAS и транзакции как «не реализованы» — они приведены в соответствие с
+[`sql-capabilities-gap-analysis.md`](../roadmap/sql-capabilities-gap-analysis.md) §4/§6 и кодом в дереве.
+
+Закрыты (в этом gap-анализе): **~~G3~~** — композируемый `INSERT ... RETURNING` через data-modifying CTE на
+PostgreSQL (`MutationCteQuery<TResult>`); **~~G5~~** — массовая вставка (returning/ignore/identity/chunking);
+**~~G18~~** — `WITH ... UPDATE`/`WITH ... DELETE`. **~~G16~~** — не подтвердилось: уже было <span style="color:green">реализовано</span>.
+**~~G6~~** — **<span style="color:orange">By design</span>** (не gap): при отсутствии change tracking write-back токена не является операцией
+фреймворка; явные примитивы покрывают паттерн, поведение задокументировано в
+[гайде](../../guide/24-optimistic-concurrency.md).
+
+Дополнительно закрыты/сняты (обновлено `2026-09-25`): **~~G7~~** — `Regex` в запросе (включая SQL Server
+2025+ `REGEXP_LIKE`/`REGEXP_REPLACE`)
+([Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения));
+**~~G9~~** — `[Duration]`/`TimeSpan`-колонки ([Duration-колонки](../../guide/22-duration-columns.md));
+**~~G12~~** — C# string-семантика (ordinal-трансляция + `string.Format`), вместе с колонковой коллацией
+nextorm `#28` ([Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация));
+**~~G15~~** — PG JSONPath уже <span style="color:green">реализован</span> (`jsonb_path_*`, `jsonpath(cast)`, TVF); **~~G10~~** (логирование
+параметров) — через интерцепторы (фаза 1, [гайд 27](../../infrastructure/03-interceptors.md)), управление кэшем —
+`Clear()`/`UseQueryCache(false)`/`UseCacheSlidingExpiration` ([Query reuse: cache controls](../../infrastructure/01-query-reuse-and-caching.md#cache-controls)); **~~linq2db#5965~~**
+— sub-day-операнд продвигается `ISqlDialect.PromoteDateOperand`
+([Duration columns](../../guide/22-duration-columns.md)§9.4); **~~G20~~** — ширина `date_diff` закрыта
+аддитивно (`date_diff_big → long?`, `ISqlDialect.MakeDateDiffBig`).
+
+Закрыто майлстоуном **1.0-b.1** (обновлено `2026-09-25`): **~~G1~~** — value converters, фазы 1–2
+([Value converters](../../infrastructure/04-value-converters.md)); **~~G2~~** — JSON-колонка ↔ CLR-объект
+([Value converters](../../infrastructure/04-value-converters.md)); **~~G4~~** — `OUTPUT INTO` + upsert-with-output
+(`todo_output_into.md`; multi-result — **<span style="color:green">реализовано</span>** (2026-09-26, `todo_stored_procedures.md` фаза 4, #70 включая #25: `BatchBuilder.AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult.Read<TResult>()`)); **~~G11~~** — PostgreSQL
+range/`Overlaps` ([PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types)) и
+range поверх пары скалярных колонок (`[RangeColumns]`, [Range columns](../../guide/25-range-columns.md));
+  **~~§5 Dynamic result schema~~** — ClickHouse `values()`/PostgreSQL `jsonb_to_record(set)`
+  ([Dynamic result schema](../../guide/11-table-valued-functions.md#dynamic-result-schema)). **~~G17~~** — индексатор
+captured-коллекции, включая интерфейсные типы; неподдерживаемый индексер (серверный массив/JSON)
+отвергается явно ([Filtering](../../guide/01-filtering-where.md#captured-collection-lookup-dictcolumn)).
+Единственный общий с linq2db оставшийся пробел — ClickHouse `AggregateFunction`-state (§5), заблокирован
+драйвером.
+
+**Добавлено (25.09.2026):** в §4 заведена подсекция «Пропущенная ось: shipped-поверхность
+`LinqExtensions`» — закрывает слепое пятно issue-driven развёртки, из-за которого выпущенные операторы
+linq2db (`SelectMany`/`GroupJoin`/`DefaultIfEmpty`/`AsSubQuery`) и его hint/table-расширения не попадали
+ни в §1–§3, ни в `sql-capabilities-gap-analysis.md`. `SelectMany`/`GroupJoin` классифицированы **<span style="color:orange">By design</span>**
+(эквивалент — `CrossApply`/`OuterApply`/`LeftJoin`, SQL-провайдеры бросают `NotSupportedException`);
+**Gap**-пункты — ~~`TagQuery`~~ (**<span style="color:green">реализовано</span>**: [`WithTag`](../../guide/13-query-hints.md)),
+~~`JoinHint`/`SubQueryHint`/`TablesInScopeHint`~~ (**<span style="color:green">реализовано</span>**: issue #96) и per-query переопределение источника
+(`WithTableExpression`/`TableName`) — **<span style="color:green">реализовано</span>**
+(`WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`, см. [Per-query source
+overrides](../../querying/02-query-sources.md#per-query-source-overrides)). Планы сохранены со статусом.
+
+**Добавлено (25.09.2026, инфраструктура):** в §4 заведена вторая подсекция — сравнение инфраструктуры
+linq2db (Data Connection System / Mapping / Query Processing). Паритет подтверждён по соединениям,
+транзакциям, интерсепторам, трассировке/логированию, async, value converters и `Prepare()`. Найдены и
+заведены ещё четыре Gap: command timeout, dynamic columns, bulk copy options, query cache controls
+(планы закрытых удалены после выпуска, включая `todo_dynamic_columns.md` — read+write shipped, issue #104).
+
+**Обновлено (29.09.2026):** связи O2M/M2O и eager loading уровня 1 отгружены (issue #105/#107) —
+`linq2db-comparison.md` (EN+RU) и `capability-matrix.md` больше не помечают navigation/eager как «no»;
+query filters закрыты (PR1–PR4); EF Core integration отражена как shipped. Инлайновые упоминания
+`todo_output_into.md`/`todo_stored_procedures.md`/`todo_dynamic_columns.md` в тексте — исторические:
+планы удалены после выпуска.
+
+**Обновлено (04.10.2026, синхронизация с `capability-matrix.md`).** Приведены в соответствие
+[`capability-matrix.md`](capability-matrix.md), [`linq2db-comparison.md`](linq2db-comparison.md) (EN+RU) и RU-зеркало.
+Снята устаревшая строка «неявный вывод соединений открыт» (issue #105): неявная навигация по **объявленным**
+связям поставлена ([неявная навигация](../../guide/29-implicit-navigation.md)); вывод по конвенции FK отсутствует
+и у linq2db, поэтому в остатке этой оси — лишь составной junction-селектор в SQL-генерации
+([#223](https://github.com/AlexeyShirshov/nextorm/issues/223)); составные ключи связей и скалярный M:N под `AsSingleQuery` уже отгружены. В матрицу и сравнение добавлены уже поставленные, но ранее не отражённые поверхности:
+немаппированные колонки (`SqlFunctions.Column`), именованные алиасы соединений (`Alias.<Name>`/`JoinSlotAttribute`),
+per-query переопределения источника (`WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`),
+типизированные CTE (`AsCte`/`AsRecursiveCte`), оконные percentile, конкатенация строк, `NULLIF`,
+настройки/последовательности PostgreSQL, нативный JSON ClickHouse, выбор экстремальной строки
+(`SelectWhereMax`/`SelectWhereMin`), сырые команды и хранимые процедуры, table-valued parameters, SQL-батч,
+стриминг result-set и экспорт в поток (JSON/CSV), `TRUNCATE`, кэш планов/`Prepare()`, in-memory `SelectMany`/`GroupJoin`,
+конфигурация/логирование/DI, интеграция с EF Core, оптимистичная конкурентность, а также out-of-scope-сравнения
+(unit of work, DDL, внешние источники) и жизненный цикл соединения.
+
+## See also
+
+- [`linq2db-comparison.md`](linq2db-comparison.md) — паритет по готовому функционалу.
+- [`sql-capabilities-gap-analysis.md`](../roadmap/sql-capabilities-gap-analysis.md) — пробелы по SQL-конструкциям.
+- [`capability-matrix.md`](capability-matrix.md) — построчная матрица nextorm/EF/linq2db.
+- [Limitations](../../advanced/limitations.md) — границы scope.
+- Источник среза: `gh issue list -R linq2db/linq2db --state open --limit 1000 --json number,title,labels,milestone` (2026-09-25).

@@ -1,0 +1,155 @@
+{
+  "task": "T213",
+  "artifact": "AC07 documentation handoff (D:H2b, r=5)",
+  "head_ref": "20a67a1cba7b0babbe017fe37e0809f2384f8dcd",
+  "issue": {
+    "milestone": {
+      "number": 4,
+      "title": "1.0.9",
+      "description": "",
+      "dueOn": null
+    },
+    "number": 225,
+    "state": "OPEN",
+    "title": "JoinInto: composite-junction M:N docs delta (AC07 handoff, T213)",
+    "url": "https://github.com/AlexeyShirshov/nextorm/issues/225"
+  },
+  "trigger": "external owner commits/discards the churn so `git status --porcelain` is clean on all 15 externally-dirty footprint files",
+  "authorization": "Collection 1.0.9-todo directive: EN/RU docs + benchmark artifacts are external and must not be touched/committed; auto-commit limited to task/collection status files and task paths, explicit paths, never `git add -A`.",
+  "footprint_count_dirty": 15,
+  "footprint_count_total_in_patch": 16,
+  "clean_extra": "docs/specs/roadmap/todo_navigation_properties.md",
+  "patch": "artifacts/pdca/T213/rv4/docs/AC07.patch",
+  "patch_apply_check": "GIT_INDEX_FILE=/tmp/t213-idx git read-tree 20a67a1c && GIT_INDEX_FILE=/tmp/t213-idx git apply --cached --check artifacts/pdca/T213/rv4/docs/AC07.patch -> exit 0 (artifacts/pdca/T213/rv4/docs/handoff-check.log)",
+  "files": [
+    {
+      "path": "docs/advanced/relationships.md",
+      "baseline_sha256": "65e04a55e5e61c5f83fef7fae284b97414088976e3ed7680e40359f412ef7a97",
+      "proposed_sha256": "091694fcb2ed9dcf80d3a4ec9f334045fdd5903b14d454e61af97fe08a8f325e",
+      "current_worktree_sha256": "9dbaa728f615bfe5d68b63d995021c21eb4285689e57e97c0152d4e340c377bd",
+      "in_patch": true
+    },
+    {
+      "path": "docs/advanced/limitations.md",
+      "baseline_sha256": "85e7d6676d3b025f5fdef7a40103eab86bf3e009394aea0273da685fda1c448e",
+      "proposed_sha256": "2ab266645242e13adbddc7c8c31ba541f749bfbc83f29b546610dc011d2abcdd",
+      "current_worktree_sha256": "98a500e3fa0628c6afb482a125f16461e4f535b0bd748a15c873b33aa2b0375d",
+      "in_patch": true
+    },
+    {
+      "path": "docs/advanced/eager-loading.md",
+      "baseline_sha256": "1842673c96481c243916dfe1346074591998d9889ead72d68141ce1fba4ae058",
+      "proposed_sha256": "530c28e72c66f8fcd8a446a233d41bc6f7e523704b2d59cfb237f9ba73b98436",
+      "current_worktree_sha256": "e0aeb4b19697e37a45711a49dd8366f527a8a184c1c34e08361fa36bb4d46e89",
+      "in_patch": true
+    },
+    {
+      "path": "docs/guide/02-joins.md",
+      "baseline_sha256": "45862391f3c29be675855ddf3fe0af5e735b7465a584ad9ac2cfe5c4b014a3b2",
+      "proposed_sha256": "e31d5793f68c1f763c949e0ab5fedd8fe956023a1f0ca2011fb6f200fdb9f38e",
+      "current_worktree_sha256": "d9243ca479f724ded0fced65985480b44a14dc22b2b0d26c7a00c22f6fa8c6d0",
+      "in_patch": true
+    },
+    {
+      "path": "docs/guide/29-implicit-navigation.md",
+      "baseline_sha256": "d02b81af40a4d781675e22a8039557d52783485015f3723b0275d6053f0563c5",
+      "proposed_sha256": "9cb293be92e92fc3e8d3a54f43116cfbaec2d16f77a7bae2e9c9d34204db76d9",
+      "current_worktree_sha256": "29a5488f1e921e054ad2575769099d06306a818008384580fa693775dd8cfa87",
+      "in_patch": true
+    },
+    {
+      "path": "docs/ru/advanced/relationships.md",
+      "baseline_sha256": "46c069cc8d5212dfd7a91a83bc815aedf621d2d6dfd4ba3e1c05e5bcf76f6995",
+      "proposed_sha256": "89e48c3afcf8ac88bdde6a71a8279aa9fbe39161a3e9afae25c93f9da073cc25",
+      "current_worktree_sha256": "e7c3a424ee292175d6bddecb85ce26c60264751aac07df0a67abc38a1d353e3b",
+      "in_patch": true
+    },
+    {
+      "path": "docs/ru/advanced/limitations.md",
+      "baseline_sha256": "b8e1070df5566df087285ae3c2a85f63740a87378018a9190ed057b33e7a758e",
+      "proposed_sha256": "f855126cb8469348b8a03a0c85a9a6df216da70e1c39503463b255bd082e87d6",
+      "current_worktree_sha256": "6b03df37d956f61f44117b4471530fb7d2d50a8d4db8722f2012f94f92bba23e",
+      "in_patch": true
+    },
+    {
+      "path": "docs/ru/advanced/eager-loading.md",
+      "baseline_sha256": "5996fcb0eb95dbacc3da34630423907370164fabb78780279c97fadd7a38608a",
+      "proposed_sha256": "10f10a4980915104cd2097c77bd3e3a7030dbca86f30e11ddfd9d147e5534ec2",
+      "current_worktree_sha256": "7c963c3af0bd39da6ef21fd027099d13c4abf3bd633317b0e30da563a8c98054",
+      "in_patch": true
+    },
+    {
+      "path": "docs/ru/guide/02-joins.md",
+      "baseline_sha256": "8730d2d0895468d99096bd9c1502f0ae78ec29304c2d9ba55ef2f268d2e90740",
+      "proposed_sha256": "80db3e9d1664a658c4ef50aed6dd700e4823c6503de442bc7f2a2957e7b75ffc",
+      "current_worktree_sha256": "46a177c690302b416897c2721f32b3c780bbef4ff4918737ec810d95b409fd27",
+      "in_patch": true
+    },
+    {
+      "path": "docs/ru/guide/29-implicit-navigation.md",
+      "baseline_sha256": "0e02a13fd73c04a2e1c4e37e9b1f350b2dc8fd9d872ced79ea9e029637dfdf0c",
+      "proposed_sha256": "5a5c12ac3e856495def7e646ba630359be232b527ae667f3275b9db923873b19",
+      "current_worktree_sha256": "1b9bfed5ae2d0ca130ac9a7eb3a04cd3c172ac3f3b5151c6f814a4c86ff93606",
+      "in_patch": true
+    },
+    {
+      "path": "docs/specs/roadmap/todo_eager_loading_pipeline.md",
+      "baseline_sha256": "ebceb66e47c8db81b126945cff8a835e59c819faf32415b470f0c2d12d498776",
+      "proposed_sha256": "da5b06e5342181a890aecb97caaa38acf45baa0af7b0fe69230348dbe457391d",
+      "current_worktree_sha256": "e87a33e2f7e50a7b0259ea98bca87092ffc09fd9a73feeff6fb606263da46153",
+      "in_patch": true
+    },
+    {
+      "path": "docs/specs/roadmap/todo_navigation_properties.md",
+      "baseline_sha256": "69e2cdc2d1978fbc3192177616a3404c052204bff6267a027c53220eeb82d79f",
+      "proposed_sha256": "231533193adfa343f6f7693d0fb23db1297ac819b5ee826cfe46abed8d7de17f",
+      "current_worktree_sha256": "9af210bb90a260ec1796fbfe0f1dd1323de2ca4ccb821112ca565d42515d031a",
+      "in_patch": true
+    },
+    {
+      "path": "docs/specs/comparison/capability-matrix.md",
+      "baseline_sha256": "aaa04dabdbad0fc707a240433ae2a1aec2c03fb0557a2dac35d3b6f7e3f549ef",
+      "proposed_sha256": "d1d3dfc4d97e81fff6a5a21f82182aa9239c8780db5e786510e2b99e40e8feca",
+      "current_worktree_sha256": "2ba6355c6bff3004bbba587e163994e1e3efa01512bcc1b23a3c688f8d80edb9",
+      "in_patch": true
+    },
+    {
+      "path": "docs/specs/comparison/linq2db-comparison.md",
+      "baseline_sha256": "96a04a3ff5773b7cdb9768a31564c68bfd59f014f79a3e12f471ca9b8290cf5a",
+      "proposed_sha256": "55d9102df2a832e692e656d82358e0e96ad0872fd3ada200703a0028706d4712",
+      "current_worktree_sha256": "8ff3935bbdb1b50afa2c37b9ea11692652cf4ce74c17a82c8d57ecb711b787b8",
+      "in_patch": true
+    },
+    {
+      "path": "docs/specs/comparison/linq2db-backlog-gap-analysis.md",
+      "baseline_sha256": "330b664fbb15e7395e3590e56788a4a3a079bc321a7d17a892d6800600253d8d",
+      "proposed_sha256": "6c1cfcfdd0ded22b2ff3a2dae3ed616193079045b90e073a3c33bef6300dfaa9",
+      "current_worktree_sha256": "f52b907c864cc3bbeb59743cee7fa55b09aa56b92844dffba1203b57b35fbe82",
+      "in_patch": true
+    },
+    {
+      "path": "docs/specs/roadmap/sql-capabilities-gap-analysis.md",
+      "baseline_sha256": "5ebebdd9b3203fadb66bb47d4982442ed03706c1fa4caaa4848d3bc92405f8a3",
+      "proposed_sha256": "b0b89934159313d7a3f2b244285b5109931e02515ad5d692cc9e8f68e88995f9",
+      "current_worktree_sha256": "210ffc1fecb9ac5eb8f4643f5371b4ca23e7a5c69023a1fbf04be428c9f00706",
+      "in_patch": true
+    }
+  ],
+  "git_status_porcelain": [
+    " M docs/advanced/eager-loading.md",
+    " M docs/advanced/limitations.md",
+    " M docs/advanced/relationships.md",
+    " M docs/guide/02-joins.md",
+    " M docs/guide/29-implicit-navigation.md",
+    " M docs/ru/advanced/eager-loading.md",
+    " M docs/ru/advanced/limitations.md",
+    " M docs/ru/advanced/relationships.md",
+    " M docs/ru/guide/02-joins.md",
+    " M docs/ru/guide/29-implicit-navigation.md",
+    " M docs/specs/comparison/capability-matrix.md",
+    " M docs/specs/comparison/linq2db-backlog-gap-analysis.md",
+    " M docs/specs/comparison/linq2db-comparison.md",
+    " M docs/specs/roadmap/sql-capabilities-gap-analysis.md",
+    " M docs/specs/roadmap/todo_eager_loading_pipeline.md"
+  ]
+}
