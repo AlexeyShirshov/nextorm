@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
+using System.Text.Json;
 using NextORM.Core;
 using NextORM.Sqlite;
 
@@ -580,6 +581,97 @@ public sealed class EagerLoadPerParentPagingTests
             // prepared expression; the rank window and the outer statement emit that ordinal verbatim.
             childSql.Should().Contain("over (partition by parent_id order by 1)");
             childSql.Should().Contain("order by 1");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    private static (SqliteDataContext Ctx, string Path) CreateOrdinalDb()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nextorm-perparent-ordinal-{Guid.NewGuid():N}.db");
+        using (var conn = new SqliteConnection($"Data Source={path}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                "create table per_page_parent (id integer primary key, name text);" +
+                "create table per_page_child (id integer primary key, parent_id int not null, sort_key int not null, group_key int not null, flag int not null);" +
+                "insert into per_page_parent (id, name) values (1, 'a'), (2, 'b'), (3, 'empty');" +
+                // Insertion order is deliberately NOT the id order (14,12,11,13 for parent 1), so an
+                // incidental/DB order differs from the ordinal (`ORDER BY 1` -> id) order.
+                "insert into per_page_child (id, parent_id, sort_key, group_key, flag) values" +
+                " (14, 1, 20, 2, 0), (12, 1, 10, 1, 1), (11, 1, 40, 2, 1), (13, 1, 30, 1, 1)," +
+                " (22, 2, 5, 2, 1), (21, 2, 50, 1, 1);";
+            cmd.ExecuteNonQuery();
+        }
+        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+    }
+
+    [Fact]
+    public void Split_OrdinalOrderBy_RetainsEffectivePerParentOrder()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateOrdinalDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(1).Limit(2), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            // Independent expectation: `ORDER BY 1` is the first projected column (id). The fixture's
+            // insertion order differs, so a lost ordinal would surface the incidental 14,12 order instead.
+            parents[0].Children.Select(c => c.Id).Should().Equal(11, 12);
+            parents[1].Children.Select(c => c.Id).Should().Equal(21, 22);
+
+            interceptor.Statements[1].ToLowerInvariant()
+                .Should().Contain("over (partition by parent_id order by 1)");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_OrdinalOrderBy_RetainsEffectivePerParentOrder()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateOrdinalDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(1).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents[0].Children.Select(c => c.Id).Should().Equal(11, 12);
+            parents[1].Children.Select(c => c.Id).Should().Equal(21, 22);
+
+            // Structural: the embedded/single-query window ordering must actually carry the ordinal column
+            // (`order by 1`); result equality + the expression control alone cannot exclude incidental DB
+            // order. The split path asserts the same window ordering.
+            interceptor.Statements.Should().HaveCount(1);
+            interceptor.Statements[0].ToLowerInvariant()
+                .Should().Contain("over (partition by parent_id order by 1)");
+
+            // Expression-ordering control: the same id order expressed as a lambda must agree.
+            var control = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.Id).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+            control[0].Children.Select(c => c.Id).Should().Equal(11, 12);
+            control[1].Children.Select(c => c.Id).Should().Equal(21, 22);
         }
         finally
         {
@@ -1199,8 +1291,490 @@ public sealed class EagerLoadPerParentPagingTests
             File.Delete(path);
         }
     }
+
+    // --- #211 V17 / EV-06: builder argument form vs `.ToList(@params)` parity, rebinding, re-execution ----
+
+    private static List<PerPagePageParent> LoadPagedByArgument(SqliteDataContext ctx, int minId)
+        => ctx.From<PerPagePageParent>()
+            .Where(p => p.Id >= minId)
+            .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+    private static List<PerPagePageParent> LoadPagedByParams(SqliteDataContext ctx, int minId)
+        => ctx.From<PerPagePageParent>()
+            .Where(p => p.Id >= SqlFunctions.Parameter<int>(0))
+            .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId)
+            .OrderBy(p => p.Id)
+            .ToList(minId);
+
+    [Fact]
+    public void Split_TopLevelParams_ArgumentForm_And_ParamsForm_Agree()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Argument form: the parent predicate value is a compile-time argument baked into the query.
+            var argumentForm = LoadPagedByArgument(ctx, 1);
+            // Params form: the same value travels through a positional Parameter placeholder bound by the
+            // terminal's params argument — same dataset, same per-parent paging.
+            var paramsForm = LoadPagedByParams(ctx, 1);
+
+            paramsForm.Select(p => p.Id).Should().Equal(argumentForm.Select(p => p.Id));
+            for (var i = 0; i < argumentForm.Count; i++)
+                paramsForm[i].Children.Select(c => c.Id).Should().Equal(argumentForm[i].Children.Select(c => c.Id));
+
+            // Prepared QueryCommand surface parity: the same positional value drives the parent command.
+            var commandParents = ctx.From<PerPagePageParent>()
+                .Where(p => p.Id >= SqlFunctions.Parameter<int>(0))
+                .OrderBy(p => p.Id)
+                .ToCommand()
+                .ToList(1);
+            commandParents.Select(p => p.Id).Should().Equal(argumentForm.Select(p => p.Id));
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_TopLevelParams_ChangedValue_RebindsAndReexecutes()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Same shape re-executed with a churned runtime value must rebind each time, not retain the
+            // first value or a stale plan bound to it; per-parent paging must survive the rebind.
+            var all1 = LoadPagedByParams(ctx, 1);
+            var only3 = LoadPagedByParams(ctx, 3);
+            var all1Again = LoadPagedByParams(ctx, 1);
+
+            all1.Select(p => p.Id).Should().Equal(1, 2, 3);
+            only3.Select(p => p.Id).Should().Equal(3);
+            only3[0].Children.Should().BeEmpty("parent 3 has no children");
+            all1Again.Select(p => p.Id).Should().Equal(1, 2, 3);
+            for (var i = 0; i < all1.Count; i++)
+                all1Again[i].Children.Select(c => c.Id).Should().Equal(all1[i].Children.Select(c => c.Id));
+
+            all1[0].Children.Select(c => c.SortKey).Should().Equal(10, 20);
+            all1[1].Children.Select(c => c.SortKey).Should().Equal(5, 50);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    // --- #211 A01 / EV-R4-A01: WithTies + per-parent paging is rejected during preparation ----------
+
+    [Fact]
+    public void Split_WithTiesPagedChild_IsRejectedBeforeSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var limitOnly = () => ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2).WithTies(), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+            limitOnly.Should().Throw<NotSupportedException>()
+                .WithMessage("LoadWith cannot apply Limit/Offset/Page to a child query that also uses WithTies.");
+
+            var withOffset = () => ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(1).Limit(2).WithTies(), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+            withOffset.Should().Throw<NotSupportedException>()
+                .WithMessage("*also uses WithTies.");
+
+            interceptor.Statements.Should().BeEmpty("the WithTies guard must fire before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_WithTiesPagedChild_IsRejectedBeforeSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var act = () => ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(1).WithTies(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage("LoadWith cannot apply Limit/Offset/Page to a child query that also uses WithTies.");
+            interceptor.Statements.Should().BeEmpty("the shared guard must fire before any SQL is generated");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_WithTiesPagedChild_WarmCache_StillRejectedAndDoesNotContaminate()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Positive control: the equivalent paging without WithTies executes and warms the plan cache.
+            var supported = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+            supported[0].Children.Select(c => c.SortKey).Should().Equal(10, 20);
+            var statementsAfterWarm = interceptor.Statements.Count;
+
+            // A warm cache must not let the unsupported WithTies shape through.
+            var act = () => ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2).WithTies(), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage("*also uses WithTies.");
+            interceptor.Statements.Count.Should().Be(statementsAfterWarm, "a rejected shape must not insert a plan or emit SQL");
+
+            // No cache contamination: the supported paged shape still resolves to the same per-parent result.
+            var supportedAgain = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+            supportedAgain[0].Children.Select(c => c.SortKey).Should().Equal(10, 20);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+    // --- #211 A08 / EV-R4-A08: child-factory resolution and per-context memoization ------------------
+
+    [Fact]
+    public void NonListTerminal_InvokesChildFactoryForValidationWithoutLoadingChildren()
+    {
+        var calls = 0;
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parent = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => { calls++; return c.From<PerPagePageChild>().OrderBy(x => x.SortKey); }, p => p.Id, c => c.ParentId)
+                .Where(p => p.Id == 1)
+                .FirstOrDefault();
+
+            parent.Should().NotBeNull();
+            calls.Should().Be(1, "the non-list terminal resolves the child factory during validation");
+            parent!.Children.Should().BeEmpty("a non-list terminal never runs the split loader");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SplitListTerminal_ResolvesChildFactoryOncePerExecution()
+    {
+        var calls = 0;
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var parents = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => { calls++; return c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2); }, p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents[0].Children.Select(c => c.SortKey).Should().Equal(10, 20);
+            calls.Should().Be(1, "validation and execution must share one resolved child for the same (spec, context)");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SameBuilder_RepeatedTerminal_ReusesTheResolvedChild()
+    {
+        var calls = 0;
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var query = ctx.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => { calls++; return c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2); }, p => p.Id, c => c.ParentId);
+
+            query.OrderBy(p => p.Id).ToList();
+            calls.Should().Be(1);
+            query.OrderBy(p => p.Id).ToList();
+            calls.Should().Be(1, "the per-context memo must survive a repeated resolution of the same spec");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void DifferentContext_BuildsItsOwnChild()
+    {
+        var calls = 0;
+        var (ctx1, path1) = CreateDb();
+        var (ctx2, path2) = CreateDb();
+        try
+        {
+            ctx1.PurgeQueryCache();
+            ctx2.PurgeQueryCache();
+
+            ctx1.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => { calls++; return c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2); }, p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+            calls.Should().Be(1);
+            ctx2.From<PerPagePageParent>()
+                .LoadWith(p => p.Children, c => { calls++; return c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2); }, p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+            calls.Should().Be(2, "the per-context memo must not be inherited by another context");
+        }
+        finally
+        {
+            ctx1.Dispose();
+            ctx2.Dispose();
+            File.Delete(path1);
+            File.Delete(path2);
+        }
+    }
 }
 
+
+/// <summary>
+/// #211 EV-02 / REQ-01 — independent <c>EagerPerParentPagingReference-v1</c>. The expected per-parent
+/// result is computed from the raw child rows (read back over a plain ADO connection, never through the
+/// ORM/SQL/window paging path) with an ordinary in-process filter -> order -> Skip -> Take pipeline, and
+/// compared against both eager execution modes. An adversarial case proves a naive global limit would
+/// produce a different per-parent partition. The comparison triple (inputs / expected / actual) is
+/// exported to <c>artifacts/pdca/D211-eager-perparent-topn-1/rv4/oracle/reference-v1.json</c>, which
+/// <c>probe.py oracle</c> checks.
+/// </summary>
+[Trait("Feature", "D211")]
+public sealed class EagerLoadPerParentPagingOracleTests
+{
+    private sealed record RawChild(int Id, int ParentId, int SortKey, int GroupKey, int Flag);
+
+    private static readonly int[] ParentIds = [1, 2, 3];
+
+    private static (SqliteDataContext Ctx, string Path) CreateDb()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nextorm-perparent-oracle-{Guid.NewGuid():N}.db");
+        using (var conn = new SqliteConnection($"Data Source={path}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                "create table per_page_parent (id integer primary key, name text);" +
+                "create table per_page_child (id integer primary key, parent_id int not null, sort_key int not null, group_key int not null, flag int not null);" +
+                "insert into per_page_parent (id, name) values (1, 'a'), (2, 'b'), (3, 'empty');" +
+                "insert into per_page_child (id, parent_id, sort_key, group_key, flag) values" +
+                " (11, 1, 40, 2, 1), (12, 1, 10, 1, 1), (13, 1, 30, 1, 1), (14, 1, 20, 2, 0)," +
+                " (21, 2, 50, 1, 1), (22, 2, 5, 2, 1);";
+            cmd.ExecuteNonQuery();
+        }
+        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+    }
+
+    /// <summary>Reads the child table over a plain ADO connection — no ORM, no SQL builder, no window.</summary>
+    private static List<RawChild> ReadRawChildren(string dbPath)
+    {
+        var rows = new List<RawChild>();
+        using var conn = new SqliteConnection($"Data Source={dbPath}");
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "select id, parent_id, sort_key, group_key, flag from per_page_child order by id";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            rows.Add(new RawChild(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4)));
+        return rows;
+    }
+
+    /// <summary>Independent reference: filter -> order -> Skip -> Take, computed per parent in-process.</summary>
+    private static Dictionary<int, List<int>> ReferencePage(
+        IEnumerable<RawChild> raw, Func<RawChild, bool>? filter, int? skip, int? take)
+    {
+        var rows = raw.ToList();
+        var result = new Dictionary<int, List<int>>();
+        foreach (var pid in ParentIds)
+        {
+            IEnumerable<RawChild> q = rows.Where(c => c.ParentId == pid);
+            if (filter is not null)
+                q = q.Where(filter);
+            q = q.OrderBy(c => c.SortKey).ThenBy(c => c.Id);
+            if (skip is int s)
+                q = q.Skip(s);
+            if (take is int t)
+                q = q.Take(t);
+            result[pid] = q.Select(c => c.Id).ToList();
+        }
+        return result;
+    }
+
+    /// <summary>What a naive global (non-partitioned) limit would return.</summary>
+    private static Dictionary<int, List<int>> GlobalLimit(
+        IEnumerable<RawChild> raw, Func<RawChild, bool>? filter, int? skip, int? take)
+    {
+        var rows = raw.ToList();
+        IEnumerable<RawChild> q = rows.Where(c => filter is null || filter(c));
+        q = q.OrderBy(c => c.SortKey).ThenBy(c => c.Id);
+        if (skip is int s)
+            q = q.Skip(s);
+        if (take is int t)
+            q = q.Take(t);
+        var ids = q.Select(c => c.Id).ToList();
+        return ParentIds.ToDictionary(pid => pid, pid => ids.Where(id => rows.First(r => r.Id == id).ParentId == pid).ToList());
+    }
+
+    private static Dictionary<int, List<int>> Actual(IEnumerable<PerPagePageParent> parents)
+        => parents.ToDictionary(p => p.Id, p => p.Children.Select(c => c.Id).ToList());
+
+    [Fact]
+    public void IndependentReference_MatchesBothModes_AndGlobalLimitDiffers()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+            var raw = ReadRawChildren(path);
+            var scenarios = new List<object>();
+            var allMatch = true;
+            var adversarialDiffers = false;
+
+            void Check(
+                string name, int? filterFlag, int? skip, int? take,
+                List<PerPagePageParent> split, List<PerPagePageParent> single)
+            {
+                Func<RawChild, bool>? filter = filterFlag is int f ? c => c.Flag == f : null;
+                var expected = ReferencePage(raw, filter, skip, take);
+                var splitActual = Actual(split);
+                var singleActual = Actual(single);
+                var global = GlobalLimit(raw, filter, skip, take);
+
+                var splitMatch = true;
+                var singleMatch = true;
+                var differs = false;
+                foreach (var pid in ParentIds)
+                {
+                    splitActual[pid].Should().Equal(expected[pid], $"split scenario {name} parent {pid}");
+                    singleActual[pid].Should().Equal(expected[pid], $"single scenario {name} parent {pid}");
+                    splitMatch &= splitActual[pid].SequenceEqual(expected[pid]);
+                    singleMatch &= singleActual[pid].SequenceEqual(expected[pid]);
+                    differs |= !global[pid].SequenceEqual(expected[pid]);
+                }
+                allMatch &= splitMatch && singleMatch;
+                adversarialDiffers |= differs;
+
+                scenarios.Add(new
+                {
+                    name,
+                    filter_flag = filterFlag,
+                    skip,
+                    take,
+                    expected,
+                    split_actual = splitActual,
+                    single_actual = singleActual,
+                    split_match = splitMatch,
+                    single_match = singleMatch,
+                    adversarial_global = global,
+                    adversarial_differs = differs,
+                });
+            }
+
+            // A: Take only (no filter).
+            Check("take2", null, null, 2,
+                ctx.From<PerPagePageParent>()
+                    .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId)
+                    .OrderBy(p => p.Id).ToList(),
+                ctx.From<PerPagePageParent>()
+                    .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                    .OrderBy(p => p.Id).ToList());
+
+            // B: Skip + Take.
+            Check("skip1_take1", null, 1, 1,
+                ctx.From<PerPagePageParent>()
+                    .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(1).Limit(1), p => p.Id, c => c.ParentId)
+                    .OrderBy(p => p.Id).ToList(),
+                ctx.From<PerPagePageParent>()
+                    .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().OrderBy(x => x.SortKey).Offset(1).Limit(1), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                    .OrderBy(p => p.Id).ToList());
+
+            // C: child filter precedes ranking.
+            Check("filtered_take2", 1, null, 2,
+                ctx.From<PerPagePageParent>()
+                    .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().Where(x => x.Flag == 1).OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId)
+                    .OrderBy(p => p.Id).ToList(),
+                ctx.From<PerPagePageParent>()
+                    .LoadWith(p => p.Children, c => c.From<PerPagePageChild>().Where(x => x.Flag == 1).OrderBy(x => x.SortKey).Limit(2), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+                    .OrderBy(p => p.Id).ToList());
+
+            allMatch.Should().BeTrue("the independent reference must agree with both eager modes");
+            adversarialDiffers.Should().BeTrue("a naive global limit must differ from per-parent paging on this fixture");
+
+            var export = new Dictionary<string, object?>
+            {
+                ["reference"] = "EagerPerParentPagingReference-v1",
+                ["generated_utc"] = DateTime.UtcNow.ToString("o"),
+                ["generated_from"] = "tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs",
+                ["fixture"] = "per_page_parent/per_page_child (SQLite)",
+                ["raw_children"] = raw.Select(c => new { id = c.Id, parent_id = c.ParentId, sort_key = c.SortKey, group_key = c.GroupKey, flag = c.Flag }).ToList(),
+                ["scenarios"] = scenarios,
+                ["all_match"] = allMatch,
+                ["adversarial_case_differs"] = adversarialDiffers,
+            };
+            var dir = "/home/alex/sources/nextorm/artifacts/pdca/D211-eager-perparent-topn-1/rv4/oracle";
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(
+                Path.Combine(dir, "reference-v1.json"),
+                JsonSerializer.Serialize(export, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+}
 
 [SqlTable("per_page_parent")]
 public sealed class PerPagePageParent

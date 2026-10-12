@@ -293,7 +293,7 @@ public sealed class EagerLoadPerParentPagingEdgeTests
 
             // W-2 evidence: the single pair statement orders by the parent key, then every paged child's
             // own keys in join order, so each stitched collection enumerates in its own child order.
-            var dir = "/home/alex/sources/nextorm/artifacts/pdca/D211-eager-perparent-topn-1/rv1/check";
+            var dir = "/home/alex/sources/nextorm/artifacts/pdca/D211-eager-perparent-topn-1/rv4/check";
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "W-2-two-nav-sql.txt"), interceptor.Statements.Single());
         }
@@ -600,7 +600,7 @@ public sealed class EagerLoadPerParentPagingEdgeTests
             _ = literal.LoadSpecs![0].ToJoinIntoSpec(ctx, QueryFilterScope.None, out var literalSource);
             string literalSql = ((dynamic)ctx.GetPreparedQueryCommand((dynamic)literalSource.SubQuery!, false, false, CancellationToken.None)).DbCommand.CommandText;
 
-            var dir = "/home/alex/sources/nextorm/artifacts/pdca/D211-eager-perparent-topn-1/rv1/check";
+            var dir = "/home/alex/sources/nextorm/artifacts/pdca/D211-eager-perparent-topn-1/rv4/check";
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "d211-security-captured-sql.txt"), capturedSql);
             File.WriteAllText(Path.Combine(dir, "d211-security-plain-sql.txt"), plainSql);

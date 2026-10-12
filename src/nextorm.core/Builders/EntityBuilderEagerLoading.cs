@@ -67,10 +67,11 @@ internal interface IEagerLoadSpec<TEntity>
 
     /// <summary>
     /// Whether this load's child query requests a per-parent top-N (a child <c>Limit</c>/<c>Offset</c>/
-    /// <c>Page</c>). Such a requirement has no split/single execution path in this release, so the parent
-    /// command records it and the preparation pipeline rejects the whole query before any SQL runs or a
-    /// plan is inserted. Building the child here is what makes the paging visible to preparation; the
-    /// built child is reused by execution, so the child-query factory is invoked at most once per load.
+    /// <c>Page</c>). Such a requirement is lowered by the split loader and the single-query join to a
+    /// <c>row_number() over (partition by &lt;child key&gt;)</c> source whose page bounds filter each
+    /// partition, so the child page is applied independently to every parent. Building the child here is
+    /// what makes the paging visible to preparation; the built child is reused by execution, so the
+    /// child-query factory is invoked at most once per load.
     /// </summary>
     /// <param name="context">The data context used to build the child query.</param>
     /// <returns><see langword="true"/> when the child query pages per parent.</returns>
@@ -577,6 +578,14 @@ internal static class EntityBuilderEagerLoading
         if (!HasPerParentTopN(child))
             return;
 
+        // WITH TIES has no per-parent rendering: the ranked per-parent source keeps a fixed number of
+        // rows per partition and cannot carry the tied-with-the-last-row semantics, so a child that
+        // asks for both per-parent paging and WITH TIES fails closed here rather than silently
+        // dropping the ties. Capability, not invalid input: NotSupportedException.
+        if (child.Paging.HasWithTies)
+            throw new NotSupportedException(
+                "LoadWith cannot apply Limit/Offset/Page to a child query that also uses WithTies.");
+
         var unsupported = child.UnsupportedPerParentPagingChildShapes();
         if (unsupported.Count > 0)
             throw new NotSupportedException(
@@ -596,8 +605,10 @@ internal static class EntityBuilderEagerLoading
     /// <c>JoinInto</c> path, <b>before</b> any command is built, prepared, cached or executed. An
     /// explicit <see cref="EagerLoadMode.Correlated"/> choice and a per-parent top-N child both have no
     /// implemented execution path, so they fail closed here instead of after the pair SQL ran or being
-    /// silently reinterpreted. Side-effect free: it builds no command, writes no cache and never touches
-    /// <see cref="QueryCommand.Cache"/>. A context-default <see cref="EagerLoadMode.Correlated"/> is
+    /// silently reinterpreted. It resolves each load's child query to detect a per-parent top-N, so the
+    /// child-query factory can run here (once per <c>(spec, context)</c>, memoized); it builds no command,
+    /// writes no cache and never touches <see cref="QueryCommand.Cache"/>. A context-default
+    /// <see cref="EagerLoadMode.Correlated"/> is
     /// ignored, because the <c>JoinInto</c> pair command is the fixed Single path and never resolves the
     /// context default.
     /// </summary>
