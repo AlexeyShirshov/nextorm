@@ -8,8 +8,8 @@
 - cycle_id: N=1
 - plan_revision: r=1
 - evidence contract: rv1 (frozen manifest planned at `artifacts/pdca/T212/rv1/manifest.json`)
-- phase: D (DO complete) -> C (CHECK)
-- plan_state: `ready`
+- phase: ACT complete / cycle closed
+- plan_state: `done`
 - base: branch `1.0.9` @ `58025147`
 
 ## Goal
@@ -103,6 +103,11 @@ Evidence supports execution surfaces + current test deficit, not nested runtime 
 - 2026-10-12T12:04:24Z | DO | revision r1 | iteration 1/3 | E06/R9 coverage (CI flow) PASS — line 88.6% >= 85, branch 80.6% >= 75 on covered scope (core 88.4%, sqlite 90.5%, postgres 90.2%, sqlserver 95%); full-solution `dotnet test --no-build` under dotnet-coverage collect: 10941 total, 10742 passed, 198 skipped, 1 failed — environmental SQL Server container `Execution Timeout Expired` in `SqlServerSpecificTests.XmlMethods_ShouldReturnValues` (unrelated to eager path; no T212 test touched). Evidence: artifacts/pdca/T212/rv1/A/E06.log; report tests/coverage/report/Summary.txt.
 - D6b (evidence) complete — frozen manifest artifacts/pdca/T212/rv1/manifest.json validated exit 0; perf PASS, coverage 88.6/80.6 PASS, build 0/0, core 2363/0/0, integration 78/0/0 all 5 providers. DO gate 2 satisfied; entering CHECK.
 - Corrective DO (attempt 2/3): EB:1869 same-CLR-type binding fixed (JoinExpression.EagerParentItemNumber); matrix rows A/B/C/D closed with tests; EEL:360-363 rejection covered (zero SQL/no partial graph); build 0/0, core eager 193, core full 2371, integration 78 all 5 providers; manifest refreshed. Re-CHECK pending.
+- CHECK(r1) attempt 1/3 FAIL: mandatory matrix A/B/C/D + R4/R5 deficits.
+- Corrective DO (attempt 2/3): EB:1869 same-CLR-type binding fixed (red->green); matrix rows closed; rejection branch covered.
+- CHECK(r1) attempts 2/3 and 3/3 FAIL: evidence-blocked on R8 only (R1-R7,R9 clean; variants A-D closed).
+- escalate: accept R8 as met (GroupByCount +5.50% not attributable to T212, unreachable + non-reproducible). No 4th CHECK.
+- ACT: cycle closed. R1-R9 met.
 
 ## Acknowledgement — T209 rv1 shared contract
 
@@ -111,7 +116,8 @@ Evidence supports execution surfaces + current test deficit, not nested runtime 
 - Compatibility verdict: **compatible; obligation noted** — #212 must extend `EagerLoadShape` identity and add negative tests wherever nested execution changes, must not bypass T209 precedence/resolution, and must never mutate the shared `QueryCommand.Cache`.
 
 ## Done / Verified / Incomplete
-- Done: own PLAN r1.
-- Verified: —
-- Incomplete: —
+- Done: R1–R9 met (ACT — cycle closed).
+- Verified: build 0W/0E; core 2371/2371; core eager 193/193; dialect eager sqlite 59 / postgres 7 / sqlserver 7 / mysql 9 / clickhouse 7 (0 fail/skip); integration 78/78 all 5 providers 0 skips; coverage line 88.6% / branch 80.6%; frozen manifest `artifacts/pdca/T212/rv1/manifest.json` E01–E08 all met, validator exit 0; R8 per escalate (`check2/E08-paired.md`, `E08-disposition.md`); EB:1869 fix red→green.
+- Incomplete: none.
+- Note: EN/RU docs updated but left UNCOMMITTED (entangled with the external unrelated docs reorg).
 - CHECK(r1) FAIL (attempt 1/3): mandatory matrix rows A/B/C/D open (R4/R5), uncovered rejection branch EEL:360-363; correctness candidates EB:1869 / EEL:342,558 be characterized; E06 exit labeling. Corrective DO started (attempt 2/3).

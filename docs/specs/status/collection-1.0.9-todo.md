@@ -15,7 +15,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 |---|---|---|---|---|
 | T209 | #209 | eager-load strategy — explicit strategy + auto-dispatcher | pdca-dotnet | done (r=3) |
 | T211 | #211 | eager-load per-parent Take/Skip (absorbs #210) | pdca-dotnet | done (r=4, rv=4) |
-| T212 | #212 | eager-load nested — level 2+ LoadWith | pdca-dotnet | ready (r=1) |
+| T212 | #212 | eager-load nested — level 2+ LoadWith | pdca-dotnet | done (r=1) |
 | T213 | #213 | JoinInto — composite keys / M:N single-query | pdca-dotnet | ready (r=1) |
 | T201 | #201 | Perf: M12 #3 — cached-path parity with LINQ to DB | pdca-dotnet | ready (r=2) |
 | T215 | #215 | убрать зависимость OneOf | pdca-dotnet | ready (r=1) |
@@ -38,7 +38,7 @@ Order within `{T215, T216, T217, T218}` and T53's placement are pending `planner
 |---|---|---|---|---|---|---|---|---|---|---|
 | T209 | #209 | G1 | 1 | done | done | pdca-dotnet | N=1 | r=3 | 5e9f6756 | docs/specs/status/D209-eager-strategy-1.md |
 | T211 | #211 | G1 | 2 | done | done | pdca-dotnet | N=1 | r=4 | 6da00a11 | docs/specs/status/D211-eager-perparent-topn-1.md |
-| T212 | #212 | G1 | 3 | pending | ready | pdca-dotnet | N=1 | r=1 | 034e5b45 | docs/specs/status/D212-eager-nested-1.md |
+| T212 | #212 | G1 | 3 | done | done | pdca-dotnet | N=1 | r=1 | 034e5b45 | docs/specs/status/D212-eager-nested-1.md |
 | T213 | #213 | G1 | 4 | pending | ready | pdca-dotnet | N=1 | r=1 | 9e7facff | docs/specs/status/D213-joininto-remainder-1.md |
 | T215 | #215 | G1 | 5 | pending | ready | pdca-dotnet | N=1 | r=1 | 23c83497 | docs/specs/status/D215-oneof-removal-1.md |
 | T216 | #216 | G1 | 6 | pending | ready | pdca-dotnet | N=1 | r=2 | 1b7b9d8c | docs/specs/status/D216-row-locking-1.md |
@@ -76,12 +76,14 @@ Order within `{T215, T216, T217, T218}` and T53's placement are pending `planner
 - Blocker: — (T211 `incomplete` superseded by the owner-directed r=2 re-open; patch retained)
 - Defect id / history: —
 - Corrective-task status file: —
-- Next allowed step: resume the lane from **T211 (DO, r=2)** → T212 → T213 → T215 → T216 → T217 → T218 → T201 (serialized) → T53 only when the owner unfreezes.
+- Next allowed step: resume the lane from **T213 (#213) (DO, r=1)** → T215 → T216 → T217 → T218 → T201 (serialized) → T53 only when the owner unfreezes.
 
 ## Done / Verified / Incomplete
 
 - Done: T209 (#209) — eager-load strategy (explicit strategy + auto-dispatcher); cycle N=1 r=3 n=2/3, CHECK PASS, contract rv=2.
+- Done: T212 (#212) — eager-load nested level 2+ LoadWith (graph contract + split/single orchestration + tests); cycle N=1 r=1, CHECK escalated, ACT closed, R1–R9 met.
 - Verified: T209 (#209) — build 0/0; six dialect suites 0 failures; integration all 5 providers executed; coverage line 88.5% / branch 80.5%; acceptance benchmark 7/7, no ratio >20%; manifest `artifacts/pdca/D209/rv2/manifest.json` E209-01..21 all `met`, validator exit 0.
+- Verified: T212 (#212) — build 0/0; core full 2371/2371 (core eager 193/193); dialect eager sqlite 59 / pg 7 / sqlsrv 7 / mysql 9 / ch 7 (0 fail/skip); integration 78/78 all 5 providers 0 skips; coverage line 88.6% / branch 80.6%; manifest `artifacts/pdca/T212/rv1/manifest.json` E01–E08 all `met`, validator exit 0; R8 accepted via escalate — `Nextorm_GroupByCount` +5.50% not attributable (unreachable in-memory path, allocations byte-identical, non-reproducible; `check2/E08-paired.md`, `E08-disposition.md`); EB:1869 red→green fix.
 - Incomplete (superseded): T211's earlier `incomplete`; T212/T213/T201/T53 «группа остановлена» — reinstated as `pending` (T53 `held`) by the expansion directive.
 
 ## History (superseded current-state facts)
