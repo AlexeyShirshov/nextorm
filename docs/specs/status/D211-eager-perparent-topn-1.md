@@ -6,15 +6,17 @@
 - issue: #211; absorbs closed #210
 - selected_variant: pdca-dotnet
 - cycle_id: N=1
-- plan_revision: r=1
-- frozen evidence-contract revision: rv=1
+- plan_revision: **r=2** (re-open; r1 terminal incomplete retained as history)
+- frozen evidence-contract revision: **rv=2** (supersedes the active rv1; manifest `artifacts/pdca/D211-eager-perparent-topn-1/rv2/manifest.json`)
 - plan_state: **ready**
-- task status: **incomplete (STOP)** — r1 exhausted; no product/config defect; see “Final disposition” below
+- task status: **PLAN r2 ready (re-opened; not DO-started)**
 - base: branch `1.0.9` @ `58025147`
 - mode: autonomous; collection own-PLAN only
 - status_file: `docs/specs/status/D211-eager-perparent-topn-1.md`
 - permitted auto-commit: task/collection status files only; push never
-- phase: P; DO has not started and is not authorised by this handoff
+- phase: P (PLAN); plan_state=ready; DO has not started and is not authorised by this handoff
+
+The r=1 terminal `incomplete` is preserved as history — retained commits `e98ae60e`, `5bd3028f`, `15c6253f`; patch `artifacts/pdca/D211-eager-perparent-topn-1/incomplete/D211-incomplete.patch`. Continuation is a genuinely revised plan r=2 per the escalate decision (evidence-capture gap, not a demonstrated product/config defect).
 
 The earlier planner-resource failure is resolved. This is the first issued plan, not a replan: no supersession, attempt reset or product blocker is inferred from that failure.
 
@@ -527,6 +529,7 @@ No content blocker remains.
 2026-10-11T23:18:26Z | DO | r1 | n3/3 | Finalize (rv1) — coverage RE-SNAPSHOT on the final tree, provider-green: total 10850 / succeeded 10652 / failed 0 / skipped 198 (exit 0); aggregate line 88.5% (threshold 85) / branch 80.6% (threshold 75); changed-path delta vs base b527be6f UNCHANGED (254/279 lines, 160/194 branch conditions) — the only intervening production edit is comment-only XML-doc prose in SqlBuilder.MakePerParentRankExpression; content tree re-frozen to 48 files incl. the r1-n3 applicability artifacts (freeze/applicability/V9,V11,V13,V21.md) and the coverage/tool configs (coverage.settings.xml, .config/dotnet-tools.json), file_set_sha256 `6efc5e311d89b9411fb9c4624221a7e70f9edf922aa9528572c48bdc091d6f61`; `validate_inner_loop.py manifest` exit 0 and `report` exit 0; ledger/manifest updated with the single snapshot hash and file count | artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/{coverage.xml,summary.txt,branch-delta.json,branch-delta.txt,branch-dispositions.md,coverage.log,reportgen.log,report/Summary.txt}; artifacts/pdca/D211-eager-perparent-topn-1/rv1/freeze/{tree.json,ledger.json,manifest-validation.log}; artifacts/pdca/D211-eager-perparent-topn-1/rv1/manifest.json
 
 2026-10-12T00:32:17Z | ACT | r1 | n3/3 | STOP — task incomplete: r1 exhausted (3/3 CHECK fails); escalate re-gather (a): EV-14 met, EV-11 rejected (Stryker restart exit code inferred, not captured); no product/config defect demonstrated; remaining G1 tasks stopped; uncommitted T211 evidence saved as patch and reverted | artifacts/pdca/D211-eager-perparent-topn-1/incomplete/D211-incomplete.patch
+2026-10-12T05:19:36Z | PLAN | r2 | plan_state ready; rv2 contract frozen; recon obtainability evidence (MUT_FINAL3_B exit 0, MUT_CORRECTED_B exit 0) recorded; ALL-barrier: re-opened by scope expansion — PASSED for the original set, must re-pass before the expanded lane continues (collection `1.0.9-todo` §Phase decisions); DO not started | artifacts/pdca/D211-eager-perparent-topn-1/rv2/recon/{SUMMARY.md,receipts/MUT_FINAL3_B.json,receipts/MUT_CORRECTED_B.json}
 
 ## Final disposition — STOP (ACT)
 
@@ -536,3 +539,121 @@ No content blocker remains.
 - evidence root: `artifacts/pdca/D211-eager-perparent-topn-1/rv1/`
 - uncommitted T211 evidence saved as a patch and reverted to the tip `15c6253f`: `artifacts/pdca/D211-eager-perparent-topn-1/incomplete/D211-incomplete.patch`
 - group effect: lane G1 stopped; remaining tasks T212/T213/T201/T53 were never executed («группа остановлена»); single group G1 → no merge; branch `1.0.9` unchanged.
+
+## PLAN r=2 (rv=2) — evidence-capture remediation
+
+## T211 / #211 — FINAL PLAN r=2, evidence contract rv=2
+Decision: Gate 1 is complete; r=2 is ready to persist. Recon proves the decisive probe is obtainable; it does NOT establish EV-11 acceptance. Same r=2; no new revision or artificial attempt reset.
+
+### Goal and acceptance criteria
+Preserve verified r1 product scope; remediate evidence capture, mutation reconciliation and current-tree binding. Each criterion includes its negative case:
+- REQ-01: Collections equal independent `filter→order→Skip→Take`, including Take/Skip/combined/empty; negative: global limiting must not starve later parents.
+- REQ-02: Both eager modes preserve parents, empty collections, root paging and supported nesting; navigations page independently; negative: child ranking cannot remove parents or alter root bounds.
+- REQ-03: Predicates, supported projections/keys/order survive; normalization uses `Paging`; negative: invalid/unsupported shapes fail before SQL, never silently page globally/client-side.
+- REQ-04: Builder/QueryCommand sync/async and arg/params parity, cancellation and ownership remain; no rename/remove; negative: no leaked resources, caller-owned disposal or partial reusable state.
+- REQ-05: Cache separates shapes and rebinds values without shared-command mutation; negative: alternating bounds/interleaved Any/Count cannot retain bounds or sticky `_dontCache`.
+- REQ-06: Six providers produce valid SQL/reference results on supported configurations; negative: existing window/version/derived-source restrictions reject unsupported configurations.
+- REQ-07: Unpaged eager loading and unrelated rejected shapes retain behavior; negative: removing blanket paging rejection cannot remove unrelated guards or expand public API.
+- REQ-08: Existing EN/RU docs explain semantics, ties, modes and fail-closed restrictions; negative: no global-paging example, broken bilingual link or public link into specs.
+- REQ-09: Warning-free builds, coverage/changed-P1 branches and targeted mutation satisfy r1 rules, with actual process-exit receipts; negative: warnings, empty runs, feasible uncovered P1 branches, non-equivalent P1 survivors or unresolved applicable tool incompletion cannot pass.
+- REQ-10: Exactly seven acceptance cases finish without failure within 240 seconds; retain wall/Mean/Allocated/ratios and investigate comparable growth >20%; negative: missing case/baseline, failure or timeout is unresolved.
+- REQ-11: Evidence is reproducible, row-complete and bound to frozen tree/rv, with actual exits for mandatory commands; negative: required skips, absent receipts/reports or unresolved references leave rows open.
+
+### Minimal solution and alternatives
+Goal: trustworthy evidence. Constraints: unchanged product obligations, historical bytes, stable IDs, truthful incompletion. Optimum: artifact-local capture/probe pipeline plus scoped reconciliation.
+- Infer historical exits — reject (unverifiable, contradicts ACT STOP).
+- Fresh captured runs plus validated historical reuse — CHOOSE (moderate cost; repairs capture/binding).
+- Replace mutation with ordinary tests — reject (weakens REQ-09).
+
+### What the specification did not say
+Current sibling fingerprints → record before reuse; compile-error relevance → full target-span accounting, not blanket exclusion; exact future test symbols → discover with Roslyn, never invent. Assumptions: retain r1's registered #211 URL/milestone and baseline-support classification; verify in D:R2-01. No remaining work moves to another milestone.
+
+### Genuine r=2 units and original-unit mapping
+- D:R2-01 — baseline/history, evidence-only, fix now: snapshot tree/toolchain/support/issue identity; copy historical manifest/ledger byte-identically; record effective EV-11 correction.
+- D:R2-02 — capture/probe/brief, evidence-only, fix now: productionize recon wrapper under rv2; inventory mandatory invocations; validate brief before any implementation edit.
+- D:R2-03 — recertification, evidence-only, fix now: bind reusable r1 evidence or rerun EV-02…10/12/13; requirements and product scope unchanged.
+- D:R2-04 — mutation remainder, fix now: fresh canonical and restart receipts, full-span accounting and mutant disposition; add only tests needed for original D:06 obligations. No speculative production fix.
+- D:R2-05 — report/freeze, evidence-only, fix now: validate report, complete ledger/current-tree binding and manifest; then freeze DO→CHECK.
+Dependencies: 01→02→03/04→05, sequential. A verified product defect returns through CHECK/PLAN rather than silently expanding this evidence remediation. Original D:04/D:04a remain closed; retain other historical execution-completion records. D:06's rejected EV-11 acceptance remainder and D:08's accepted-handoff remainder remain active, dependent on R2-04/R2-05; neither is superseded. D:07 receives evidence recertification, not new product scope.
+
+### Execution mode, footprint and sibling boundary
+Sequential units in the current tree; no worktree, branch, commit, merge or push. Serialize with #209/#212/#213; record incoming/outgoing tree and file-set fingerprints. A sibling change invalidates affected evidence until rechecked.
+Retained production footprint: `src/nextorm.core/Builders/EntityBuilderEagerLoading.cs`, `Builders/EntityBuilder.cs`, `DataContext/SqlBuilder.cs`; no speculative edits. `DataContext/Dialect/ISqlDialect.cs` remains read-only.
+Tests: `tests/nextorm.{core,sqlite,postgres,sqlserver,mysql,clickhouse}.tests/EagerLoadPerParentPagingTests.cs`; `tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj`.
+Integration: `tests/nextorm.integration.tests/CommonTestSuite.EagerLoadPerParentPaging.cs`, `Providers/MariaDbEagerPagingFixture.cs`, `MariaDbEagerPagingTests.cs`.
+Benchmark/docs: `benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs`; EN/RU `advanced/eager-loading-per-parent-paging.md`, `guide/02-joins.md`, `guide/29-implicit-navigation.md`.
+Evidence/status: `artifacts/pdca/D211-eager-perparent-topn-1/rv2/**` including preserved `recon/**`; `docs/specs/status/D211-eager-perparent-topn-1.md`. Read rv1; never overwrite it.
+No package/API-name/guide-numbering/provider-production/Paging/FromExpression/JunctionLinkSourceFactory changes.
+
+### Design checklist
+No new C# product types. Check metadata ownership/immutability, `Paging` reuse, equality/hash shape distinction, local cache policy, fail-closed capability gates, scalar/composite/null/default keys, projection/alias integrity, root-vs-child separation and independent navigations. Preserve async naming, cancellation/resource ownership, nullable/analyzer cleanliness and CRLF; no shared-command Cache mutation. Use Roslyn for every C# symbol/impact question.
+
+### Versioned evidence contract — rv=2
+Frozen path: `artifacts/pdca/D211-eager-perparent-topn-1/rv2/manifest.json`. Rv2 supersedes the active rv1 contract; preserve EV IDs and obligations, add RC IDs. All rows rv=2, applicability Always. Every row starts open.
+Rows (ID/req — scenario; probe+leaf invocation; evidence/owner):
+- EV-01/REQ-11 identity, fixture, support, fingerprints; `probe.py baseline`; baseline log/JSON/snapshot; DO-baseline.
+- EV-02/REQ-01 independent oracle/adversarial global limit; `probe.py oracle` + core tests; reference-v1 inputs/results in oracle/; DO-core.
+- EV-03/REQ-01,03 paging/order/filter/key/default/overflow matrix; `probe.py core` + core tests; core/; DO-core.
+- EV-04/REQ-02,06 both-mode SQL partition/bounds/aliases/projection; `probe.py sql` + six provider SQL-gen tests separately; sql/; DO-sql.
+- EV-05/REQ-01,02,06 real six-family execution/both modes; `probe.py integration` + integration trait run (DOCKER_HOST); integration/; DO-integration.
+- EV-06/REQ-04,05,07 surfaces, parity, cancellation/ownership, rebind/interleaving/API unchanged; `probe.py api-cache` + core tests + solution regression; api-cache/; DO-execution.
+- EV-07/REQ-03,06,07 shape/capability/version guards + baseline-selected in-memory behavior; `probe.py guards` + tests (core+seven); guards/; DO-guards.
+- EV-08/REQ-07,09 seven-project targeted + whole-solution regression; `probe.py regression` + tests + `dotnet test`; regression/; DO-regression.
+- EV-09/REQ-09 warning-free Debug/Release + CRLF; `probe.py build` + `dotnet build -c Debug`/`-c Release`; build/; DO-build.
+- EV-10/REQ-09 aggregate thresholds + feasible changed-P1 branches; `probe.py coverage` + coverage collect/report/delta argv; coverage/; DO-coverage.
+- EV-11/REQ-09 complete scoped mutation/dispositions; `probe.py mutation` + canonical + restart argv; mutation/; DO-mutation.
+- EV-12/REQ-08 existing bilingual content/link checks + DocFX; `probe.py docs` + `dotnet docfx docs/docfx.json`; docs/; DO-docs.
+- EV-13/REQ-10 seven acceptance cases + dedicated eager measurements; `probe.py perf` + acceptance/eager argv; perf/; DO-perf.
+- EV-14/REQ-11 current content tree, row completeness, references; `probe.py freeze` + manifest validator; freeze/; DO-evidence.
+- RC-01/REQ-09,11 fresh self-tests + complete receipt inventory; `probe.py capture-audit`; capture-audit/receipts-index.json, 0/7 self-test receipts; DO-evidence.
+- RC-02/REQ-11 historical byte preservation/effective correction; `probe.py history`; history/manifest.json, history/ledger.json, hashes/provenance, effective-rv1-index.json; DO-evidence.
+- RC-03/REQ-11 valid brief before edits/report before CHECK; inner-loop validator brief/report; brief.json, report.json, validator logs/receipts; DO-evidence.
+Manifest retains valid id/status/evidence[]; statuses only met/open/na. Open rows carry reasons; na requires a proved observable predicate. No Always row is waived wholesale. No PASS while any required row is open. Reuse r1 evidence only with matching applicability/source/tool context, valid exit evidence and documented fingerprint verification; otherwise rerun.
+History correction: preserve byte-identical rv1 files; separate effective index records EV-11 met→open, citing the rejected evidence/ACT STOP (`status:529–538`), without a fabricated defect key. Historical EV-14 stays met (`binding-reconciliation.md:10–56`).
+Recon receipts/reports are pre-validated obtainability evidence only, not frozen DO mutation evidence. Fresh receipts/configs/reports are required for EV-11.
+CHECK re-gather: owner CHECK-evidence, two dispatches total, ≤15 minutes each, one existing row/one reproducible invocation, no source edits; append-only. Exhaustion leaves CHECK unresolved; verified defects still FAIL.
+
+### Commands, capture and evidence conventions (cwd R=/home/alex/sources/nextorm; A=artifacts/pdca/D211-eager-perparent-topn-1/rv2)
+Capture wrapper `A/capture.py` records the real exit for EVERY mandatory command (direct child launch; actual exit/signal/timeout; mirrored wrapper exit; argv/cwd/environment/timestamps; source/artifact revision; retained stdout/stderr + receipt). Default expected exit 0; self-tests expect 0 and 7.
+- core: `dotnet test tests/nextorm.<p>.tests -c Debug --filter Feature=D211` (p enumerated per row; ≥1 selected).
+- integration: `dotnet run --project tests/nextorm.integration.tests -c Debug -- -trait Feature=D211 -noColor` with `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`.
+- build: `dotnet build -c Debug` and `-c Release`.
+- solution regression: `dotnet test -c Debug --no-build --verbosity normal` (same DOCKER_HOST).
+- coverage: `dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "python3 A/capture.py --id coverage-tests -- dotnet test --no-build --verbosity normal"`; report: `dotnet tool run reportgenerator -reports:tests/coverage/coverage.cobertura.xml -targetdir:tests/coverage/report -reporttypes:"Html;TextSummary;Cobertura" -riskhotspotassemblyfilters:"+nextorm.*"`; delta: `python3 A/coverage/changed_branch_delta.py`.
+- mutation canonical: `dotnet tool run dotnet-stryker -- --config-file A/mutation/stryker-config.json --output A/mutation/run-canonical --concurrency 4 --skip-version-check --verbosity info`; restart: same with `A/mutation/stryker-config.final3.json`, output `A/mutation/run-restart`, concurrency 1; DOCKER_HOST unset for both; capture BOTH actual exits, never infer restart success; documented 1800-second bound each.
+- perf: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance`; eager: same + `--filter *EagerPerParentPagingBenchmark* --job short`.
+- docs: `dotnet docfx docs/docfx.json`.
+- validators: `python3 scripts/validate_inner_loop.py brief A/brief.json`, `... report A/report.json`, `... manifest A/manifest.json`; expected exit 0.
+
+### Tests, branch evidence and mutation disposition
+xUnit `Feature=D211` across seven projects, independent `EagerPerParentPagingReference-v1`, whole-solution regression, real six-provider integration. Reject empty filtered runs and required provider skips. Load integration skill first; pin supplied images incl. MariaDB 11.4. Changed-delta rv2 derivative preserves rv1 algorithm but binds the full pinned r1 base and T211 ranges through retained commits/current tree — not merely `git diff HEAD`; record full base/hash, CRLF span map and P1 branch inventory. Aggregate comparison 85/75 (hard-fail main, warn elsewhere); feasible uncovered changed P1 branches remain failures independently. Preserve 49-span canonical scope, core+sqlite/perTest/MTP/Standard and 80/60/0; regenerate byte offsets against frozen CRLF sources with an old→new span map; exit 0/break0 is not mutation acceptance. Reconcile all scoped mutants, not only the two restart files; ordinary invalid mutants need compiler diagnostics distinct from Safe-Mode removal. Map Safe-Mode's 8546 CompileErrors/CS0165 against all applicable spans; proven outside-scope exclusions are retained caveats; unresolved applicable removal keeps EV-11 open. The canonical `QueryPlanEqualityComparer.cs:468:13` Timeout: paired concurrency-1 result establishes termination; its Survived outcome still requires equivalence/unreachability proof or a killing test. Reconcile all four historical Timeouts explicitly. No surviving/uncovered non-equivalent P1 mutant passes; defensive disposition requires guard/reachability evidence; no score-based waiver; needed tests stay inside the retained footprint.
+
+### Variant matrix — all 24 rows closed by test or guard+test; none deferred
+V01–02 unpaged eager: test; Take-only/Skip-only/combined: tests. V03–04 zero/default/negative/extreme bounds: normalization/guard tests; empty source/no matches/past-end: tests. V05–06 asc/desc/multi-key: tests; no-order/ties: documented ordering-contract tests. V07–08 scalar/composite links: supported tests/unsupported guards; nullable/reference/default keys: tests. V09–10 reference entities/supported value projections: tests; predicates/supported projections: tests. V11–12 aggregate/grouped/distinct/set-op forms: guard+negative tests; split/single: tests. V13–14 nested/two independently paged navigations: tests; root plus child paging: tests. V15–16 LoadWith factories/JoinInto overloads: tests; implicit nav without metadata: regression test (`NavigationExpansion.cs:43`). V17–18 builder/prepared commands: tests; sync/async/pre-cancel/read-cancel: tests. V19–20 cached/noncached/rebind/interleaving: tests; all six providers: SQL+real-execution tests. V21–22 unsupported window/version/derived sources: guard+rejection tests; supported in-memory nav: tests. V23–24 unsupported in-memory nav: guard test; normalization overflow/default boundary combinations: tests. V24 makes the supplied combined matrix's boundary combinations explicit; no new behavior. Record every subvariant, incl. baseline-selected in-memory support. Priority: P1 by construction for REQ invariants and their execution/translation/cache/guard lines; include applicable preparer/comparer spans despite read-only ownership; CHECK cannot downgrade P1.
+
+### Docs, performance and reconnaissance
+Docs: verify the six existing EN/RU pages, fail-closed restrictions/ties/links and DocFX; repair only demonstrated inaccuracies; preserve guide numbering; no public links into specs.
+Perf required (`acceptance-benchmarks.md:15,37–69,109–116`): Count 2.915 ms/335.17 KB; GroupByCount 60.95 ms/50 MB; Any Cached 1.772 ms/534.42 KB; CachedPlan Prepared_ToList 923.8 μs/76.14 KB; Cached_ToList 1,727.4 μs/565.22 KB; Cached_PlanOnly_Param 518.3 μs/489.08 KB; Where Cached_ToListAsync 2.137 ms/692.07 KB. Exactly those seven cases, wall ≤240 s; baseline external/BDN 53/51.88 s, cached/prepared time 1.87 and allocation 7.42. Investigate >20% comparable growth; dedicated eager short job stays outside acceptance.
+Recon satisfied: 0/7 capture self-tests and captured-exit MUT_FINAL3_B (951.61 s, exit 0) / MUT_CORRECTED_B (1117.94 s, exit 0) establish obtainability; their durations justify the new bound.
+
+### Final DO-brief test-scope JSON
+{"unit":"D:R2-evidence-remediation","scope":{"projects":["tests/nextorm.core.tests","tests/nextorm.sqlite.tests","tests/nextorm.postgres.tests","tests/nextorm.sqlserver.tests","tests/nextorm.mysql.tests","tests/nextorm.mariadb.tests","tests/nextorm.clickhouse.tests","tests/nextorm.integration.tests"],"selectors":["Feature=D211"],"files":["src/nextorm.core/Builders/EntityBuilderEagerLoading.cs","src/nextorm.core/Builders/EntityBuilder.cs","src/nextorm.core/DataContext/SqlBuilder.cs","tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.postgres.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.sqlserver.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.mysql.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj","tests/nextorm.clickhouse.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.integration.tests/CommonTestSuite.EagerLoadPerParentPaging.cs","tests/nextorm.integration.tests/Providers/MariaDbEagerPagingFixture.cs","tests/nextorm.integration.tests/MariaDbEagerPagingTests.cs","benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs","docs/advanced/eager-loading-per-parent-paging.md","docs/ru/advanced/eager-loading-per-parent-paging.md","docs/guide/02-joins.md","docs/ru/guide/02-joins.md","docs/guide/29-implicit-navigation.md","docs/ru/guide/29-implicit-navigation.md","docs/specs/status/D211-eager-perparent-topn-1.md","artifacts/pdca/D211-eager-perparent-topn-1/rv2/capture.py","artifacts/pdca/D211-eager-perparent-topn-1/rv2/probe.py","artifacts/pdca/D211-eager-perparent-topn-1/rv2/coverage/changed_branch_delta.py","artifacts/pdca/D211-eager-perparent-topn-1/rv2/mutation/stryker-config.json","artifacts/pdca/D211-eager-perparent-topn-1/rv2/mutation/stryker-config.final3.json"],"rationale":"Same verified r1 feature scope; r2 repairs capture, mutation accounting and evidence binding. Inner tests select Feature=D211; all mandatory boundary checks remain required.","rebuild":"affected","boundary":"Warning-free Debug/Release builds; whole-solution regression and coverage; real six-provider integration; scoped mutation plus restart; docs; seven-case acceptance and dedicated eager measurements; report/manifest validation."}}
+
+### Risks, handoff and CHANGE_PLAN
+Risks: sibling drift, CRLF span drift, timing-dependent mutants, hidden Safe-Mode exclusions, incomparable perf environments; mitigate via fingerprints, span accounting, paired runs and explicit caveats/open rows.
+CHANGE_PLAN: add real-exit capture for every mandatory command, byte-preserved history/effective EV-11 correction, complete scoped mutation reconciliation, validated brief/report and rv2 rebinding; unchanged product criteria, no superseded→replacement mapping.
+Gate 1: complete. Ready to persist: yes. Confidence: high in plan/obtainability; mutation acceptance remains deliberately unproven until DO closes EV-11.
+
+## PLAN handoff
+
+- task_id: T211
+- plan_state: **ready**
+- plan_revision: **r=2**
+- frozen evidence-contract revision: **rv=2** — `artifacts/pdca/D211-eager-perparent-topn-1/rv2/manifest.json`
+- PLAN commit: `<filled after commit>`
+- Evidence-capture fix: real-exit capture for every mandatory command (`A/capture.py`); byte-preserved rv1 history with a separate effective index recording EV-11 met→open; complete scoped mutation reconciliation incl. the restart receipt; validated brief/report and rv2 rebinding.
+- Planned write-footprint: production `src/nextorm.core/Builders/EntityBuilderEagerLoading.cs`, `Builders/EntityBuilder.cs`, `DataContext/SqlBuilder.cs`; tests `EagerLoadPerParentPagingTests.cs` across seven provider test projects + `nextorm.mysql.tests.csproj`; integration `CommonTestSuite.EagerLoadPerParentPaging.cs` / `MariaDbEagerPagingFixture.cs` / `MariaDbEagerPagingTests.cs`; `EagerPerParentPagingBenchmark.cs`; EN/RU eager-loading docs + guide 02/29; `artifacts/pdca/D211-eager-perparent-topn-1/rv2/**`; this status file.
+- Prerequisites/assumptions: unchanged r1 product scope and registered #211 URL/milestone; `ISqlDialect` read-only; no package/API-name/guide-numbering/Paging/FromExpression/JunctionLinkSourceFactory change; assumptions verified in D:R2-01. Recon receipts (`artifacts/pdca/D211-eager-perparent-topn-1/rv2/recon/**`) are obtainability evidence only — not frozen DO mutation evidence; fresh receipts are required for EV-11.
+- Requirements on siblings: serialisation with #209/#212/#213 in the current tree; record incoming/outgoing tree + file-set fingerprints; a sibling change invalidates affected evidence until rechecked; no worktree/branch/commit/merge/push during DO.
+- ALL-barrier: **re-opened** by the scope expansion — it PASSED for the original set, and must re-pass before the expanded lane continues (collection `1.0.9-todo` §Phase decisions).
+- Next allowed step: collection authorises DO for T211 → begin D:R2-01. DO has not started; this ready state is not passage of the ALL-barrier.
