@@ -103,6 +103,7 @@ Rejected **before any SQL is generated**:
 
 - a **bare child `OrderBy`** in `SingleQuery` mode that is not accompanied by paging — the denormalized join still cannot express an output-only child ordering (split mode does not have this restriction);
 - a child shape the ranked source cannot fold in — `Distinct`, `GroupBy`, `Having` and the other aggregate/grouped/set shapes — rejected in **both modes** (split and single-query), because the ranked lowering renders only the child's own `Where` and `OrderBy`;
+- per-parent paging combined with `WITH TIES` (`WithTies()`): the ranked source keeps a fixed number of rows per partition and cannot express the tied-with-the-last-row semantics, so the combination is rejected before any SQL (`NotSupportedException`);
 - a paged child with **no `OrderBy`** in either mode — a per-parent page needs a window ordering, and a `row_number()` window with no `ORDER BY` is invalid on providers such as SQL Server;
 - `EagerLoadMode.Correlated`, which remains reserved and rejected in this release;
 - per-parent paging through **`JoinInto`**, which keeps its own fail-closed guard;
