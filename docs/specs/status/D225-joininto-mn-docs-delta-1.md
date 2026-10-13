@@ -2,12 +2,14 @@
 
 - Task: T225 / issue [#225](https://github.com/AlexeyShirshov/nextorm/issues/225)
 - Collection: `1.0.9-todo`, group **G1** (single group — no worktree, no branch, no merge); branch `1.0.9`
-- Variant: `pdca-dotnet`; cycle **N=1**; plan_revision **r=1**; evidence-contract **rv=1 (not frozen)**
-- **Plan state: terminal `incomplete`** — PLAN r=1 = gap → escalation decision (B)
+- Variant: `pdca-dotnet`; cycle **N=1**; plan_revision **r=2**; evidence-contract **rv=1 (frozen by PLAN r=2)**
+- **Plan state: `ready`** (re-open of T225) — history: PLAN r=1 = gap → escalation decision (B) → terminal `incomplete` (record preserved below)
 
 ## Phase state
 
 `PLAN` → gap → `escalate` → **terminal incomplete**. DO was not started; no product or documentation writes were made.
+
+- **r=2 (re-open):** a fresh `planner` revision took the prior terminal cause as mandatory input (invariant 12) and issued a genuinely executable plan — the prior r=1 was a gap declaration, not a plan. Phase state is now `PLAN` → **`ready`**; DO not yet started.
 
 ## Goal
 
@@ -82,7 +84,82 @@ Record T225 as **terminal `incomplete`** now; do **not** redefine the oracle (A 
 - PLAN decide (planner, medium): r=1 = gap, classification outside-cycle blocker; routed to escalate.
 - Escalate (strong): decision (B) — terminal `incomplete`.
 - Status persisted by coder; committed (`#225`).
+- 2026-10-13 03:46 UTC | PLAN | revision r=2 | iteration 1/3 | re-open: planner issued a genuinely new executable plan (r=1 was a gap declaration); plan_state=ready, contract rv=1 frozen | docs/specs/status/D225-joininto-mn-docs-delta-1.md
 
 ## Done / Verified
 
 None. T225 is terminal `incomplete`; its contribution to the collection ALL-barrier is **not** satisfied.
+
+---
+
+## Plan r=2 (planner, medium) — READY (re-open)
+
+- `plan_state: ready`. This is a genuine replan of **cycle N=1** (revision **r=2**): the prior **r=1** was a gap declaration, not an executable plan; the new plan takes the terminal cause as mandatory input.
+- **Goal:** land the missing AC07 documentation over the now-committed external reorg, keeping the reorg, matching T213's delivered behavior; milestone stays **1.0.9**.
+- **Constraints:** footprint-limited; no #223 implementation, no API/test changes, no commits/branches/merge.
+- **Baseline B** = `aea0a9ba644a8be34f5e9bf39e4daf4a33861f17`; **artifact dir A** = `artifacts/pdca/D225/rv1`.
+- Source snapshots for the carry: `baseline/`→`proposed/` at `artifacts/pdca/T213/rv4/docs/`.
+
+### Acceptance criteria (each with a negative case), P1 by construction
+
+- **C1:** scalar M:N `JoinInto` documented working standalone AND under `EagerLoadMode.SingleQuery`; negative — one mode missing or wrongly forbidden.
+- **C2:** composite relationship keys documented for 1:N, 1:1 and scalar M:N junction; negative — conflation with composite-junction M:N.
+- **C3:** SQL-generation rejection recorded exactly as `NotSupportedException("composite-junction M:N is not supported; see #223")`; negative — promising SQL support or a different text/exception type.
+- **C4:** in-memory composite-junction stitching retained/documented; negative — extending the SQL prohibition to in-memory.
+- **C5:** EN/RU consistent, CRLF preserved, numbering/links/TOCs correct, no public→`docs/specs/**` links; negative — translation drift, LF/mixed endings, numbering hole, forbidden/broken link.
+- **C6:** Debug build exit 0 with 0 warnings / 0 errors; negative — nonzero exit or any warning.
+- **C7:** coverage line ≥85%, branch ≥75%; negative — below either threshold, incomplete report, or skipped mandatory database-provider tests.
+- **C8:** the new patch applies conflict-free to the frozen baseline B, preserves the committed reorg and is limited to the footprint; negative — conflict, out-of-footprint file, loss of committed text, or a silently changed baseline.
+
+### Footprint (16 files)
+
+`docs/advanced/{eager-loading,limitations,relationships}.md`, `docs/guide/{02-joins,29-implicit-navigation}.md`, their exact `docs/ru/**` mirrors, `docs/specs/comparison/{capability-matrix,linq2db-backlog-gap-analysis,linq2db-comparison}.md`, `docs/specs/roadmap/{sql-capabilities-gap-analysis,todo_eager_loading_pipeline,todo_navigation_properties}.md`. Additional writes allowed only in `$A/**`, this status file, and the collection status (which this task must NOT edit). Old T213 artifacts are immutable. Do not move/renumber public pages or TOC paths.
+
+### Ordered tasks
+
+- **D1** (this step, PLAN record): persist this full PLAN r=2, `plan_state=ready`, contract `rv=1` into this status file; freeze baseline B, footprint, source-artifact hashes, CHECK re-gather budget.
+- **D2** (DO, after the allowed DO start): verify B unchanged / footprint clean; load `running-integration-tests` skill; prepare toolchain/Podman; build a disposition map of the 26 original hunks and carry the semantic delta onto all 16 files (8 conflict files first, then sync mirrors), using the `baseline/`→`proposed/` snapshots at `artifacts/pdca/T213/rv4/docs/`.
+- **D3**: independent semantic audit EN/RU against C1–C4 and T213 code/tests — `src/nextorm.core/Builders/EntityBuilder.cs:736,757,815,838,883`, `src/nextorm.core/Builders/Joins/JunctionLinkSourceFactory.cs:126`, `tests/nextorm.core.tests/JoinIntoCompositeRemainderTests.cs:201`, `JoinIntoCompositeJunctionRejectionTests.cs:95,145`; symbols Roslyn-first. Structural audit covers TOCs/links without widening the write-footprint.
+- **D4**: produce the rebased patch, run temp-index apply-check, structural checks, build/coverage, fill the manifest with actual results; then CHECK.
+- **Deferred:** implementing SQL composite-junction M:N — separate #223; a delivery trigger would require a new docs delta, not a criterion here.
+
+### Variant matrix (drift class × surface)
+
+- 8 conflict files → test: EN eager-loading, limitations; RU eager-loading, limitations, 02-joins; EN specs three comparison files; guard: RU specs has none.
+- 8 clean files → test: EN relationships, 02-joins, 29-implicit-navigation; RU relationships, 29-implicit-navigation; EN specs three roadmap files; guard: RU specs has none.
+- Behavioral matrix: scalar M:N standalone/SingleQuery, composite 1:N/1:1, SQL composite-junction rejection, in-memory composite-junction — test/audit via C1–C4 and existing T213 suites across sqlite/sqlserver/mysql/mariadb/postgres/clickhouse; `null`/default/value-reference and new flags unchanged — guard (diff touches no code/API).
+
+### Test strategy
+
+No new unit/integration tests; the existing solution suite supplies regression/coverage evidence. CHECK rebuild policy = `none` (docs-only); the one mandatory Debug build is run once for C6 and its evidence is consumed by CHECK.
+
+### Docs plan
+
+All 16 footprint files audited; only missing/inaccurate statements changed; generated docs not edited.
+
+### Perf-measurement decision
+
+Not required — documentation-only change, not a per-row/runtime path (`JunctionLinkSourceFactory.cs:126`, `EntityBuilder.cs:736` unchanged); cached-path acceptance inapplicable per nextorm overlay.
+
+### Reconnaissance decision
+
+Not needed — clean HEAD, available snapshots and measured conflicts suffice; D2 is a carry-and-verify, not an architecture spike.
+
+### Unit execution mode
+
+Single tree, sequential (mirrors, semantics and one shared manifest overlap); no worktrees.
+
+### Evidence contract (frozen rv=1)
+
+Manifest `artifacts/pdca/D225/rv1/manifest.json`, materialized at DO→CHECK; CHECK re-gather budget = 2 targeted re-gathers, owner CHECK.
+
+- **E01/C1–C4:** independent check audit of every footprint file + the 26-hunk disposition vs C1–C4, T213 baseline/proposed and cited implementation/tests (Roslyn-first) → `$A/semantic-review.md`, `$A/disposition.md`.
+- **E02/C5:** `git diff --check`; `dotnet docfx docs/docfx.json`; structural check (raw CRLF, EN/RU parity, consecutive guide numbering, links/TOCs, no public→specs links) → `$A/diff-check.log`, `$A/docfx.log`, `$A/structural-review.md`.
+- **E03/C6:** `dotnet build -c Debug` → exit 0, 0 warnings, 0 errors → `$A/build.log`.
+- **E04/C7:** `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet-coverage collect ... ; dotnet reportgenerator ...` requiring line≥85/branch≥75 and PostgreSQL/SQLServer/MySQL/ClickHouse executed (not skipped) → `$A/coverage.xml`, `$A/coverage-report/**`, `$A/coverage-tests.log`.
+- **E05/C8:** `git diff --binary <B> -- <footprint> > $A/AC07-rebased.patch`; temp-index `git read-tree <B>` + `git apply --cached --check` → all exit 0, conflict-free, reorg preserved → `$A/AC07-rebased.patch`, `$A/apply-check.log`, `$A/footprint-review.md`.
+- **Decisive oracle:** E01 proves the original AC07 meaning in the landed EN/RU docs against the implementation and declared snapshots; E05 proves the new patch's portability onto committed B; E02–E04 close the remaining original obligations. All are reproducible; success of the OLD patch is not required and does not substitute.
+
+### Prerequisites / assumptions
+
+T213 delivered behavior + its artifacts are sufficient inputs; #223 is NOT a dependency; milestone unchanged (1.0.9); SDK/tools/Podman availability is an in-cycle verifiable precondition, not a promised future result.
