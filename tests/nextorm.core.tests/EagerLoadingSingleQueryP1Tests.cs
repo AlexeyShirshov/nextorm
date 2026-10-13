@@ -1061,6 +1061,20 @@ public class EagerLoadingSingleQueryP1Tests
         act.Should().Throw<NotSupportedException>().WithMessage("*child query's ForUpdate/ForShare*");
     }
 
+    // scenario label: reject/child (V-23): a child source-only lock (RowLock null) is rejected too.
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SingleQuery_ChildSourceLock_IsRejected()
+    {
+        using var context = CreateContext();
+
+        var act = () => context.From<P1Parent>()
+            .LoadWith(p => p.Children, c => c.From<P1Child>(o => o.ForUpdate()), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*child query's ForUpdate/ForShare*");
+    }
+
     [Fact]
     public void SingleQuery_ChildTableHint_IsRejected()
     {

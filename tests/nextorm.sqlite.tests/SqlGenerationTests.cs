@@ -2786,6 +2786,18 @@ public class SqlGenerationTests
         act.Should().Throw<NotSupportedException>().WithMessage("*FOR UPDATE*");
     }
 
+    // scenario label: reject/sqlite (V-12): a source-only lock is rejected too (RowLock is null).
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_ShouldThrowBecauseSqliteHasNoRowLocking()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForUpdate()).Select(x => x.Id));
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
     [Fact]
     public void WithForJson_ShouldThrowBecauseSqliteHasNoForJson()
     {

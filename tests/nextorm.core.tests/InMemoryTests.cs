@@ -234,6 +234,15 @@ public class InMemoryTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*FOR UPDATE*");
     }
+    // scenario label: reject/inmemory (V-12): a source-only lock is rejected too (RowLock is null).
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void TestSourceLock_ShouldThrow()
+    {
+        var act = () => _sut.DataProvider.From<SimpleEntity>(o => o.ForUpdate()).Select(it => new { it.Id }).ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FOR UPDATE*");
+    }
     [Fact]
     public void TestForSystemTime_ShouldThrow()
     {

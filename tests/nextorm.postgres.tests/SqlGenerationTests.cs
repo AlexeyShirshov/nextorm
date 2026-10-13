@@ -3991,6 +3991,72 @@ public class SqlGenerationTests
         act.Should().Throw<InvalidOperationException>();
     }
 
+    // scenario label: reject/subquery-query (V-05): a source lock is physical-table only.
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_OnDerivedQuery_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
+
+        var act = () => SqlOf(ctx, ctx.From(inner, o => o.ForUpdate()).Select(t => new { t.Id }));
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    // scenario label: source/primary, alias quoting on a physical From(string) (V-02).
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_OnPhysicalFromString_ShouldEmitOfAlias()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From("simple_entity", o => o.ForUpdate()).Select(t => new { Id = t.GetInt32("id") }));
+
+        sql.Should().EndWith("for update of \"t1\"");
+    }
+
+    // scenario labels: source/multiple, renderer mode-wait-target (V-20/V-09/V-03): each locked source
+    // keeps its own mode/wait and no target is lost or duplicated.
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_MultipleSources_DifferentModes_ShouldEmitEachTarget()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForUpdate(LockWaitMode.SkipLocked))
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.ForShare())
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("for update of \"t1\" skip locked");
+        sql.Should().Contain("for share of \"t2\"");
+    }
+
+    // scenario label: reject/extreme (V-23): a source-only lock must not bypass the extreme-row guard.
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_WithExtremeRow_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForUpdate())
+            .SelectWhereMax(x => x.Id).Select(x => new { x.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>();
+    }
+
+    // scenario label: renderer/empty-target (V-17): a whitespace target is an argument error.
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void LockRenderer_EmptyTarget_ShouldThrowArgumentException()
+    {
+        var renderer = PostgresTestContext.CreatePostgres().Dialect.Lock!;
+
+        var act = () => renderer.Render(LockMode.Update, LockWaitMode.Wait, KeywordCase.Lower, " ");
+
+        act.Should().Throw<ArgumentException>();
+    }
+
     [Fact]
     public void TextSearchRank_ShouldRenderTsRankOverTsvectorQuery()
     {

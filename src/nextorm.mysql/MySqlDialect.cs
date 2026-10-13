@@ -581,6 +581,7 @@ internal sealed class MySqlLockRenderer : ILockRenderer
         if (targetAlias is null)
             return Render(mode, wait, keywordCase);
 
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetAlias);
         var token = (mode == LockMode.Share ? " for share" : " for update") + " of " + targetAlias + LockWaitSuffix(wait);
         return SqlKeywords.Of(keywordCase, token);
     }

@@ -677,10 +677,14 @@ internal sealed class PostgresLockRenderer : ILockRenderer
     public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase = KeywordCase.Lower) =>
         SqlKeywords.Of(keywordCase, (mode == LockMode.Share ? " for share" : " for update") + LockWaitSuffix(wait));
 
-    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase, string? targetAlias) =>
-        targetAlias is null
-            ? Render(mode, wait, keywordCase)
-            : SqlKeywords.Of(keywordCase, (mode == LockMode.Share ? " for share" : " for update") + " of " + targetAlias + LockWaitSuffix(wait));
+    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase, string? targetAlias)
+    {
+        if (targetAlias is null)
+            return Render(mode, wait, keywordCase);
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetAlias);
+        return SqlKeywords.Of(keywordCase, (mode == LockMode.Share ? " for share" : " for update") + " of " + targetAlias + LockWaitSuffix(wait));
+    }
 
     private static string LockWaitSuffix(LockWaitMode wait) => wait switch
     {
