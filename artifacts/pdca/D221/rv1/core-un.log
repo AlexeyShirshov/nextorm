@@ -20,4 +20,4 @@ dbug: Microsoft.Extensions.Hosting.Internal.Host[4]
       Hosting stopped
   Finished:    nextorm.core.tests (ID = '04950ef84a4d320121f28d1bd5e2665e29f06b807a3e37aaa470f43620a74401')
 === TEST EXECUTION SUMMARY ===
-   nextorm.core.tests  Total: 45, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.271s
+   nextorm.core.tests  Total: 46, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.262s
