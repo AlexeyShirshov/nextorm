@@ -42,7 +42,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T213 | #213 | G1 | 4 | done | done (r=6, rv5) | pdca-dotnet | N=1 | r=6 | 9e7facff | docs/specs/status/D213-joininto-remainder-1.md |
 | T215 | #215 | G1 | 5 | done | ready | pdca-dotnet | N=1 | r=1 | 23c83497 | docs/specs/status/D215-oneof-removal-1.md |
 | T227 | #227 | G1 | 6 | done | done | pdca-dotnet | N=1 | r=1 | aea0a9ba | docs/specs/status/D227-clickhouse-flaky-grouped-float-1.md |
-| T221 | #221 | G1 | 7 | pending | ready | pdca-dotnet | N=1 | r=1 | b5715d45 | docs/specs/status/D221-interceptor-di-registration-1.md |
+| T221 | #221 | G1 | 7 | done | done (r=1, rv=1, n=2/3) | pdca-dotnet | N=1 | r=1 | f884c52b | docs/specs/status/D221-interceptor-di-registration-1.md |
 | T222 | #222 | G1 | 8 | pending | ready | pdca-dotnet | N=1 | r=1 | 5856fde2 | docs/specs/status/D222-join-overloads-by-type-1.md |
 | T223 | #223 | G1 | 9 | pending | ready | pdca-dotnet | N=1 | r=1 | e2d749db | docs/specs/status/D223-joininto-composite-junction-sql-1.md |
 | T216 | #216 | G1 | 10 | pending | ready | pdca-dotnet | N=1 | r=2 | 1b7b9d8c | docs/specs/status/D216-row-locking-1.md |
@@ -56,6 +56,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T53  | #53  | G1 | 18 (held) | held | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
 
 - Evidence contract (per task, frozen at that task's DO→CHECK): T209 rv=2 (done), T211 rv=2, T213 rv=5 (done), T216 rv=2, others rv=1. Manifests `artifacts/pdca/<task>/rv*/manifest.json`.
+- T221 (#221) done: CHECK PASS r=1/rv=1/n=2/3; DO `f884c52b`, corrective DO `4b49b063`, ACT commit recorded in the T221 status file. Evidence `artifacts/pdca/D221/rv1/manifest.json` (E221-01..09 met; build 0/0; UN 46/46, Q 10/10, QN 9/9, integration 21/21 on five providers, 0 skipped; Stryker 76/68 killed/8 survived, 0 NoCoverage), `coverage-delta.md`, `mutation-disposition.md`, `ownership-evidence.md`; status `docs/specs/status/D221-interceptor-di-registration-1.md`. Issue #221 closed. T53 freeze stays HELD.
 - T211 history: r1 exhausted (3/3 CHECK fails; EV-11 exit-code capture gap, no product defect); owner-directed re-open → r=2 with a real exit-code capture wrapper; retained commits `e98ae60e`, `5bd3028f`, `15c6253f` (not reverted). r3/r4 evidence remediation closed EV-11 (canonical+restart real exits); CHECK PASS r=4/rv=4 (21/21 met, 0 open); evidence `artifacts/pdca/D211-eager-perparent-topn-1/rv4/`.
 - T213 history: r=1 → r=6 (5 escalations). r=4 direction D narrowed scope (scalar M:N + composite keys stay; composite-junction M:N → #223); r=5 removed the broken D03 mixed-projection widening and handed off AC07 docs → #225; r=6 evidence recovery (keyless-parent proof + controlled coverage collect). CHECK PASS r=6/rv5. Closure: `T213 done partial: narrowed contract, AC03/AC05 → #223, AC07 → #225, both in milestone 1.0.9.` Evidence `artifacts/pdca/T213/rv5/manifest.json` (32/32 met/no-open, validators exit 0). Issue #213 kept OPEN (remaining slices #223/#225).
 
@@ -92,7 +93,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Blocker: — (T211 `incomplete` superseded by the owner-directed r=2 re-open; patch retained)
 - Defect id / history: —
 - Corrective-task status file: —
-- Next allowed step: resume the lane at the next pending task **T221 (DO, r=1)**. T216's open owner constraint (MariaDB `FOR UPDATE OF`) must be resolved before T216 DO (order 10).
+- Next allowed step: resume the lane at the next pending task **T222 (DO, r=1)** (order 8). T216's open owner constraint (MariaDB `FOR UPDATE OF`) must be resolved before T216 DO (order 10).
 
 ## Done / Verified / Incomplete
 
@@ -104,6 +105,8 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Verified: T213 (#213) — build 0/0; core 2395/2395; six SQL suites 0 failed; integration all six providers, 0 required skips (ClickHouse 263/263 incl. the scalar M:N fix); coverage 88.6% line / 80.7% branch (4 assemblies incl. sqlserver 95%); manifest `artifacts/pdca/T213/rv5/manifest.json` 32/32 met/no-open, validators exit 0; CHECK PASS r=6.
 - Done: T227 (#227) — ClickHouse flaky grouped-float fixture-order fix (eager `_sut` init before the portable oracle); cycle N=1 r=1 rv=1, CHECK PASS, all E01–E09 met; fix commit 4dcbc6ec, DO evidence 41c7fcaf.
 - Verified: T227 (#227) — affected+solution builds 0/0; 16/16 isolated green; class 35/35; all-ClickHouse 265/265; validators exit 0; manifest artifacts/pdca/D227-clickhouse-flaky-grouped-float/rv1/manifest.json (tree 9f11957d, 9/9 met, 0 open).
+- Done: T221 (#221) — DI-registered interceptors (`DataContextBuilder.AddInterceptor(Type)`/`AddInterceptor<T>()` resolving from the DI builder's scope + internal provider ctor + provider capture in both factories); CHECK PASS r=1/rv=1/n=2/3; DO `f884c52b`, corrective DO `4b49b063`; issue #221 closed.
+- Verified: T221 (#221) — build 0/0; UN 46/46, Q 10/10, QN 9/9, integration 21/21 on SQLite/PostgreSQL/SQLServer/MySQL/ClickHouse (0 skipped); coverage after line 11.4% / branch 7.8% (`DataContextBuilder` 91.7%, `ServiceCollectionExtensions` 100%); Stryker 76 tested / 68 killed / 8 survived (0 NoCoverage); manifest `artifacts/pdca/D221/rv1/manifest.json` E221-01..09 met, manifest+report validators exit 0.
 - Incomplete (superseded): T211's earlier `incomplete`; T212/T213/T201/T53 «группа остановлена» — reinstated as `pending` (T53 `held`) by the expansion directive. (T213 no longer applies; it closed partial at r=6 — see above.)
 
 ## History (superseded current-state facts)

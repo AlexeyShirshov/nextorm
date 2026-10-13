@@ -9,8 +9,10 @@ selected_variant: pdca-dotnet
 cycle: N=1
 plan_revision: r=1
 evidence_contract_rv: 1
-iteration: n=1/3
-plan_state: ready
+iteration: n=2/3
+plan_state: done
+phase: done
+check_verdict: PASS (r=1 / rv=1 / n=2/3)
 status_path: docs/specs/status/D221-interceptor-di-registration-1.md
 baseline_ref: 706a83d1
 manifest: artifacts/pdca/D221/rv1/manifest.json
@@ -224,7 +226,7 @@ Next step: Persist this r=1 plan and frozen manifest; execute D221-0, then D221-
   (`tests/nextorm.core.tests/InterceptorDiRegistrationTests.cs:270,294,425`); V09 connection-overload
   dual-interface (`tests/nextorm.sqlite.tests/InterceptorDiRegistrationTests.cs:251`); B12:
   `[Trait("Category","T221")]` on the six new `DependencyInjectionTests` guards.
-- **Evidence regathered (fresh, real exits).** build `nextorm.slnx` 0/0; U1 20/20, U2 11/11, UN 45/45,
+- **Evidence regathered (fresh, real exits).** build `nextorm.slnx` 0/0; U1 20/20, U2 11/11, UN 46/46,
   Q 10/10, QN 9/9, I 21/21 (SQLite/PostgreSQL/SQLServer/MySQL/ClickHouse, 0 skipped) — all exit 0.
   Coverage after: line 11.4% / branch 7.8%; `DataContextBuilder` 91.7%, `ServiceCollectionExtensions` 100%
   (existing-selector-only DCB 90.2%, added-selector-only 83.1%); every changed line covered. Stryker
@@ -237,3 +239,36 @@ Next step: Persist this r=1 plan and frozen manifest; execute D221-0, then D221-
 - **Notice.** `TestResults/D221` coverage HTML trees stay uncommitted for size (cobertura XML + Summary are
   committed); Stryker's `test-projects` still exclude `nextorm.integration.tests`, so the integration
   guards are pinned in core instead.
+
+## ACT — cycle done (CHECK verdict PASS, r=1 / rv=1 / n=2/3)
+
+- **Counters.** Authoritative state `N=1, r=1, rv=1, n=2/3`, `plan_state=done`, `phase=done`. The plan
+  front matter previously read `iteration: n=1/3`; corrected (all fields now agree).
+- **Test-count reconciliation.** CHECK read `artifacts/pdca/D221/rv1/core-un.log:23` = 45; the evidence
+  report supplied 46. A fresh `-trait "Category=T221"` re-run at ACT proves the **real** number is
+  **46/46** (refreshed `core-un.log:23`): 20 `InterceptorBuilderTests` (class trait) + 20
+  `InterceptorDiRegistrationTests` + 6 tagged `DependencyInjectionTests` guards. The corrective snapshot's
+  45 predated the last ownership test (`TypeEntry_IsNotResolvedEagerlyAtRegistration`); corrected to 46.
+- **CHECK verdict:** PASS (r=1 / rv=1 / n=2/3).
+- **Done / Verified (final).**
+  - Build `nextorm.slnx -c Debug` — 0 warnings / 0 errors.
+  - Tests: U 31/31 (U1 20 + U2 11), UN 46/46, Q 10/10, QN 9/9, integration 21/21 (SQLite/PostgreSQL/
+    SQLServer/MySQL/ClickHouse, 0 skipped) — all exit 0.
+  - Coverage `artifacts/pdca/D221/rv1/coverage-delta.md` (after line 11.4% / branch 7.8%;
+    `DataContextBuilder` 91.7%, `ServiceCollectionExtensions` 100%).
+  - Mutation `artifacts/pdca/D221/rv1/mutation-disposition.md` (76 tested / 68 killed / 8 survived,
+    0 NoCoverage; 18498 independently proven killed; 7 equivalent).
+  - Ownership map `artifacts/pdca/D221/rv1/ownership-evidence.md` (R221-03 scenario → test `file:line`).
+  - Frozen manifest `artifacts/pdca/D221/rv1/manifest.json` (E221-01..09 met): `validate_inner_loop.py
+    manifest` exit 0; evidence `validate_inner_loop.py report` exit 0.
+  - Integration log `artifacts/pdca/D221/rv1/integration.log` (21/21, five providers, 0 skipped).
+- **Defect ledger (final).** `D221-MUT-COVERAGE` — fixed-verified (Stryker run 4, 0 NoCoverage);
+  `D221-B2-DOC`, `D221-B11-EF-BOUNDARY`, `D221-B12-TRAIT` — fixed; `D221-B4-ALLOC` — deferred + trigger
+  "measured context-construction pressure" (not implemented); `D221-B1`/`D221-B3` — accepted plan
+  assumptions A1/A2 (behavior unchanged); `D221-B7` — non-defect.
+- **T53 freeze: HELD.** Both `AddInterceptor` signatures remain #221 candidates in
+  `docs/specs/status/D53-public-api-freeze-1.md`; no PublicAPI analyzer/freeze activation.
+- **Commits:** `f884c52b` (DO), `4b49b063` (corrective DO), ACT commit sha recorded in the collection list.
+- **Notice.** The ACT commit is status-only per the ACT brief; the refreshed `core-un.log` (46/46) and
+  `/tmp/nextorm-t221-evidence.json` (UN 46, report validator exit 0) are validated in the worktree but not
+  part of the status-only ACT commit.
