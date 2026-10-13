@@ -16,6 +16,13 @@
       "project": "negative/UntypedLambdaFixture.csproj",
       "expect": "failure",
       "expected_diagnostics": ["CS0411"]
+    },
+    {
+      "id": "T222-COMPAT-ALLNULL",
+      "kind": "positive",
+      "project": "allnull/AllNullFixture.csproj",
+      "expect": "success",
+      "expected_diagnostics": []
     }
   ]
 }

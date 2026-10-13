@@ -62,4 +62,40 @@ public static class Positive
         JoinedEntityBuilder<E1, E2, E3, E4, E5, E6, E7, E8> fi8 = fi7.FullJoin<E8>((p, c) => c.Id == 0);
         Touch(fi8);
     }
+/// <summary>A value-type join entity: the new overloads must keep the constraint-free contract.</summary>
+public struct SEntity
+{
+    public int Id { get; set; }
+}
+
+/// <summary>Compile-positive coverage for named/optional arguments, an explicit generic argument, a
+/// typed predicate expression, a value-type join entity and the pre-existing source/QueryCommand
+/// forms still resolving alongside the new overloads (V21, V23, V25).</summary>
+public static class PositiveExtras
+{
+    private static void Touch<T>(T value) => GC.KeepAlive(value);
+
+    public static void CompileExtras(IDataContext ctx)
+    {
+        // Named + optional arguments.
+        Touch(ctx.From<E1>().Join<E2>(joinCondition: (a, b) => a.Id == b.Id, options: null));
+        Touch(ctx.From<E1>().LeftJoin<E2>((a, b) => a.Id == b.Id, options: null));
+
+        // Explicit generic argument and a typed predicate expression variable.
+        System.Linq.Expressions.Expression<Func<E1, E2, bool>> typed = (a, b) => a.Id == b.Id;
+        Touch(ctx.From<E1>().Join<E2>(typed));
+        Touch(ctx.From<E1>().FullJoin<E2>(typed, null));
+
+        // Value-type join entity keeps the existing (constraint-free) contract.
+        Touch(ctx.From<E1>().Join<SEntity>((a, s) => a.Id == s.Id));
+
+        // Existing explicit-source and QueryCommand forms still compile.
+        Touch(ctx.From<E1>().Join(ctx.From<E2>(), (a, b) => a.Id == b.Id));
+        Touch(ctx.From<E1>().Join((QueryCommand<E2>)ctx.From<E2>().Select(e => e), (a, b) => a.Id == b.Id));
+
+        // A chained joined receiver with the new source-less overload and explicit options.
+        Touch(ctx.From<E1>().Join<E2>((a, b) => a.Id == b.Id).Join<E3>((p, c) => c.Id == 0, o => { _ = o; }));
+    }
+}
+
 }

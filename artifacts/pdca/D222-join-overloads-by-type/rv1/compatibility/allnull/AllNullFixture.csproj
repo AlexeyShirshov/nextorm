@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <AssemblyName>T222.Compat.AllNull</AssemblyName>
+    <RootNamespace>T222.Compat.NegAllNull</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../../../../src/nextorm.core/nextorm.core.csproj" />
+  </ItemGroup>
+
+</Project>

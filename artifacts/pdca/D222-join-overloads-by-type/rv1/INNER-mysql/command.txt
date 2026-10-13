@@ -1,0 +1,8 @@
+dotnet
+test
+tests/nextorm.mysql.tests
+-c
+Debug
+--no-build
+--filter
+FullyQualifiedName~TypeOnlyJoinSqlGenerationTests

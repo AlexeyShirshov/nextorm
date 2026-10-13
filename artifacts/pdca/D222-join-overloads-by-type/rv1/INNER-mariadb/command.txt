@@ -1,0 +1,8 @@
+dotnet
+test
+tests/nextorm.mariadb.tests
+-c
+Debug
+--no-build
+--filter
+FullyQualifiedName~TypeOnlyJoinSqlGenerationTests
