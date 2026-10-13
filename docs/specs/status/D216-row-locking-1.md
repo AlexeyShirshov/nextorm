@@ -45,6 +45,24 @@ prior_contract: rv=1 superseded by rv=2
 | D-04M | done | MariaDB `SupportsSourceLocks=false` + deterministic `NotSupportedException`; whole grammar preserved; red→green `/tmp/nextorm-maria-red.log` (exit 2, selected 3, failed 2) → `/tmp/nextorm-maria-green.log` (exit 0, selected 3) |
 | D-05/D-06 | pending | D-05 part 1 closed (focused matrix rows + `PlanKeyUniquenessTests`, full solution build, CRLF sweep); D-05 remainder/D-06 (integration live, EN/RU docs, boundary sweep, acceptance/T216 benchmarks, coverage, manifest) NOT started |
 
+### D-05 part 3 (perf acceptance, cached path)
+
+Acceptance command (`--anyCategories=acceptance`): exit 0, **7** executed benchmarks, **0** failures, external wall clock **51 s** (BDN `Global total time` 48.65 s) — under the 4 min budget. Logs `/tmp/nextorm-acceptance.log` (copy `artifacts/pdca/D216/rv2/perf/after/acceptance.log`, gitignored).
+
+| Case | Mean | Allocated |
+|---|---|---|
+| Nextorm_Count | 2.107 ms | 382.81 KB |
+| Nextorm_GroupByCount | 58.69 ms | 50.12 MB |
+| Nextorm_Cached | 2.039 ms | 618.05 KB |
+| Prepared_ToList | 892.0 us | 76.14 KB |
+| Cached_ToList | 1,806.8 us | 591.78 KB |
+| Cached_PlanOnly_Param | 554.2 us | 515.64 KB |
+| Nextorm_Cached_ToListAsync | 1.957 ms | 616.27 KB |
+
+Cached/prepared ratio `Cached_ToList / Prepared_ToList` = **2.03** (1806.8/892.0); documented baseline **1.87**, +8.3 %, well below the 20 % investigation trigger (1.87 x 1.20 = **2.244**). Allocated ratio **7.77** (baseline 7.42, +4.7 %). `Nextorm_Count` is the high-variance row (this run Error 0.3839 ms < Mean 2.107 ms); no row is used for regression assertions.
+
+T216 cached-path benchmark (new `benchmarks/nextorm.benchmark/T216LockingBenchmarks.cs`, category `T216`): `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=T216` — exit 0, **6** cases, 0 failures, wall 52 s (BDN 49.07 s). Logs `/tmp/nextorm-t216-bench.log` (+ gitignored copy). cached/prepared ratio: NoLock **1.04** (425.5/410.2 us), WholeLockJoin **0.79** (740.4/937.4 us), SourceLockJoin **0.79** (720.4/911.1 us); the source-lock prepare/render path is not slower than the whole-lock path (within `ShortRun` noise). Numbers only; interpretation belongs to CHECK.
+
 ### D-05 part 2 (focused integration locking)
 
 Executed serially with `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`, `-c Debug --no-build`, `--filter "FullyQualifiedName~<Provider>IntegrationTests&FullyQualifiedName~RowLock"`:
@@ -369,4 +387,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 2026-10-13T00:20:00Z | DO | r=2 | n=1/3 | D-05 part 1: PlanKeyUniqueness 13->14 selected; full slnx build 0/0; focused matrix rows closed (guards/unsupported/mode-wait/empty-target); CRLF normalized | logs /tmp/nextorm-plankey.log /tmp/nextorm-full-build2.log /tmp/nextorm-{core,sqlite,ch,pg,mysql,mariadb,ss}-*t216*.log
 2026-10-13T00:30:00Z | DO | r=2 | n=1/3 | D-05 part 2: focused integration locking run (PG/MySQL/SS 2 passed each; SQLite 2 capability-skipped; MariaDB dedicated 3 fail-closed; capability 5); fixed SQL Server hint-after-alias ordering; full slnx build 0/0 | logs /tmp/nextorm-int-*-lock*.log /tmp/nextorm-full-build3.log
 2026-10-13T00:40:00Z | DO | r=2 | n=1/3 | Docs (EN+RU): whole-query vs source-level row locking, SQL Server all-source behavior change, PG/MySQL OF, MariaDB fail-closed; docfx exit 0 (2 pre-existing source-generator warnings) | logs /tmp/nextorm-docfx.log
+2026-10-13T00:50:00Z | DO | r=2 | n=1/3 | Perf acceptance 7 cases / 0 failures (wall 51 s; cached/prepared ratio 2.03 vs baseline 1.87, below 2.244); T216 cached-path benchmark 6 cases (no slower than whole-lock); artifacts committed 04442903 | logs /tmp/nextorm-acceptance.log /tmp/nextorm-t216-bench.log
 ```
