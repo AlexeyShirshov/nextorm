@@ -5,7 +5,7 @@
 - **Milestone:** 1.0.9
 - **Cycle variant:** `pdca-dotnet` · **Collection:** `1.0.9-todo`, group **G1** (single group → current worktree, no branches/worktrees, no merge)
 - **N=1 · r=2 · n=1 · rv=2** (rv=2 supersedes rv=1; r increased at replan, n reset to 1)
-- **plan_state: ready** · **phase: DO→CHECK** (DO r=2 gates re-executed fresh on 2026-10-13; **evidence-only, no code changes**; commit `768b208e` stands as the delivered change; awaiting CHECK verdict)
+- **plan_state: ready** · **phase: done** — finalized for cycle N=1 (r=2, rv=2). CHECK verdict **`pass`** (independent re-run matched DO); ACT r=2 complete. DO r=2 gates were re-executed fresh on 2026-10-13 (**evidence-only, no code changes**); commit `768b208e` stands as the delivered change.
 - **Worktree:** `/home/alex/sources/nextorm` · **Branch:** `1.0.9` · **HEAD at PLAN freeze (r=1):** `03a79285` · **HEAD at DO (rv=1 run):** `2e1f4518` · **HEAD now / delivered commit:** `768b208e`
 - **Collection base (historical only, not task delta base):** `58025147`
 - **Frozen evidence manifest:** `artifacts/pdca/D215/rv2/manifest.json`
@@ -64,7 +64,9 @@
 - **Почему не «просто расширить footprint»:** три внешне разумных фикса — (1) редактировать `examples/**`, (2) переключить examples на `ProjectReference`, (3) поднять `NextOrmVersion` — каждый выходит за текущий scope этой задачи (footprint неизменен; examples/** и release-механика вне него). Поэтому escalate одобрил явную supersession rv=1 → rv=2.
 - **SOURCE_OF_TRUTH:** план r+1 (r=2, rv=2), manifest `artifacts/pdca/D215/rv2/manifest.json`; rv=1 superseded (не удалён, остаётся историческим свидетельством).
 
-### REL215-01 — release-time follow-up (внутри milestone 1.0.9)
+### REL215-01 — release-time follow-up (**OPEN**) — внутри milestone 1.0.9
+
+> **Статус REL215-01: OPEN release-time follow-up.** Issue #215 **не закрывается** этим ACT; REL215-01 остаётся открытым внутри milestone 1.0.9.
 
 - После публикации OneOf-free `nextorm` поднять `NextOrmVersion` в `examples/Directory.Packages.props:15` до фактически опубликованной версии (git-тег без ведущей `v`; при необходимости обновить примеры). Это **отдельный release item внутри 1.0.9**, заводится как новая задача/пункт релиза.
 - Это **не** расширение footprint текущей задачи и **не** вынос из 1.0.9. Пока published `nextorm 1.0.8-b` декларирует `OneOf`, residual в `examples/**` ожидаем и покрыт AC215-02b.
@@ -243,6 +245,8 @@ Design spike не нужен (замены нет). Readiness-разведка �
 - 2026-10-13T09:18Z | DO | r=2 | n=1/3 | residue-guard: path 0, reference-scan 1, output-guard 0 | artifacts/pdca/D215/rv2/alias-output-guard.exit
 - 2026-10-13T09:19Z | DO | r=2 | n=1/3 | docs: diff 0, oneof-scan 0 (new note only, no current-dependency claim) | artifacts/pdca/D215/rv2/docs-verdict.md
 - 2026-10-13T09:20Z | DO | r=2 | n=1/3 | manifest-validation: exit 0; report-validation: exit 0 | artifacts/pdca/D215/rv2/manifest-validation.log; artifacts/pdca/D215/rv2/report-validation.log
+- 2026-10-13T09:28Z | CHECK | r=2 | n=1/3 | pass | artifacts/pdca/D215/rv2/check/build-rerun.log; artifacts/pdca/D215/rv2/check/alias-rerun.log; artifacts/pdca/D215/rv2/check/package-rerun.json; artifacts/pdca/D215/rv2/check/residue.log; artifacts/pdca/D215/rv2/check/validators.log; artifacts/pdca/D215/rv2/manifest.json (14 rows: 13 met, 1 na, 0 open)
+- 2026-10-13T09:28Z | ACT | r=2 | done | __ACT_SHA__
 
 ## DO r=2 evidence state (D215-01…D215-04)
 
@@ -259,6 +263,20 @@ each is left at **evidence-recorded, pending CHECK**.
 
 Manifest rows: `met` for E215-00/01/02/03/03a/03b/04/05/06/07/08/09/11; `na` for E215-10 (no
 provider/runtime diff). No row is `open`.
+
+## Done / Verified (ACT — cycle N=1, r=2, rv=2)
+
+- **Done:** цель T215 достигнута — неиспользуемая зависимость **OneOf** удалена из NextORM **без замены** и без изменения публичного/runtime API: сняты package-декларации (`Directory.Packages.props`, `src/nextorm.core/nextorm.core.csproj`), удалён устаревший `OneOf`-комментарий в `src/nextorm.core/Expressions/FromExpression.cs`, сняты два `"OneOf.dll"` metadata reference в alias-тестах, исправлены EN/RU installation docs. Коммиты: product `768b208e`, DO status `50a791e2`, ACT status `__ACT_SHA__`. Cycle N=1 закрыт (r=2, rv=2; CHECK verdict `pass`).
+- **Verified:**
+  - build: `dotnet build nextorm.slnx -c Debug` exit 0 — **0 warnings / 0 errors**, 25 проектов.
+  - alias tests: `dotnet test tests/nextorm.alias.tests -c Debug` exit 0 — **105 passed / 0 failed / 0 skipped**.
+  - core tests: `dotnet test tests/nextorm.core.tests -c Debug` exit 0 — **2395 passed / 0 failed / 0 skipped**.
+  - package graph: 25 проектов → **22 repo-owned clean** + **3 examples residual transitive** только по цепочке published `nextorm 1.0.8-b → OneOf 3.0.271` (AC215-02b); direct `PackageReference OneOf` ни в одном example нет.
+  - residue guards: path guard `0` / reference scan `1` / output guard `0` (exit codes 0/1/0); stale `OneOf.dll` отсутствует в alias output.
+  - manifest `artifacts/pdca/D215/rv2/manifest.json`: все строки закрыты (**13 met, 1 N/A, 0 open**); manifest + report validators exit 0.
+  - CHECK verdict `pass` — независимый re-run совпал с DO (`artifacts/pdca/D215/rv2/check/`, `check-gather/`).
+- **Incomplete / carried (OPEN):** **REL215-01** — после публикации OneOf-free `nextorm` поднять `examples/Directory.Packages.props:15`; остаётся **OPEN** внутри milestone 1.0.9.
+- **Issue:** #215 оставлен **OPEN** (REL215-01 — открытый release-time follow-up); этим ACT не закрывается.
 
 ## Parent handoff
 

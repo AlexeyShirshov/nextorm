@@ -40,7 +40,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T211 | #211 | G1 | 2 | done | done | pdca-dotnet | N=1 | r=4 | 6da00a11 | docs/specs/status/D211-eager-perparent-topn-1.md |
 | T212 | #212 | G1 | 3 | done | done | pdca-dotnet | N=1 | r=1 | 034e5b45 | docs/specs/status/D212-eager-nested-1.md |
 | T213 | #213 | G1 | 4 | done | done (r=6, rv5) | pdca-dotnet | N=1 | r=6 | 9e7facff | docs/specs/status/D213-joininto-remainder-1.md |
-| T215 | #215 | G1 | 5 | pending | ready | pdca-dotnet | N=1 | r=1 | 23c83497 | docs/specs/status/D215-oneof-removal-1.md |
+| T215 | #215 | G1 | 5 | done | ready | pdca-dotnet | N=1 | r=1 | 23c83497 | docs/specs/status/D215-oneof-removal-1.md |
 | T227 | #227 | G1 | 6 | pending | ready | pdca-dotnet | N=1 | r=1 | aea0a9ba | docs/specs/status/D227-clickhouse-flaky-grouped-float-1.md |
 | T221 | #221 | G1 | 7 | pending | ready | pdca-dotnet | N=1 | r=1 | b5715d45 | docs/specs/status/D221-interceptor-di-registration-1.md |
 | T222 | #222 | G1 | 8 | pending | ready | pdca-dotnet | N=1 | r=1 | 5856fde2 | docs/specs/status/D222-join-overloads-by-type-1.md |
