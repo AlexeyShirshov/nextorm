@@ -18,7 +18,7 @@ prior_contract: rv=1 superseded by rv=2
 
 ## Current state
 
-- Phase: **DO correction n=2/3 — CHECK FAIL loop-back applied**, back at DO→CHECK boundary. Units D-01…D-06 are `done`; D-07 (MariaDB pending-owner) is `blocked`. The rv=2 evidence manifest is frozen at `artifacts/pdca/D216/rv2/manifest.json` (validated by `scripts/validate_inner_loop.py manifest`, exit 0). CHECK owns the row verdict.
+- Phase: **DO complete (n=2/3) — at DO→CHECK boundary** after the CHECK-FAIL loop-back fixes. Units D-01…D-06 `done`, D-07 `blocked` (MariaDB pending-owner). rv=2 evidence manifest frozen at `artifacts/pdca/D216/rv2/manifest.json` (validated, exit 0). CHECK owns the row verdict.
 - Cycle N=1, plan revision r=2, attempt n=1, evidence contract rv=2 (rv=1 superseded).
 - Selected variant: `pdca-dotnet`. Single collection group → current worktree/branch `1.0.9`, no worktree/branches/merge.
 - Blocks DO: none. **R-03/MariaDB is an open owner constraint**, surfaced upward; it does not stop the executable plan (routed escalation decision).
@@ -46,6 +46,14 @@ prior_contract: rv=1 superseded by rv=2
 | D-05 | done | matrix closure: focused unit/provider matrix rows, `PlanKeyUniquenessTests` (13), two-transaction integration locking (PG/MySQL/SQL Server 2 passed each; MariaDB dedicated 3 fail-closed), capability contract 5; commit `d6891104` + `1849164e` |
 | D-06 | done | EN/RU docs (8 files; committed `3247774b`), `dotnet docfx` exit 0, DO→CHECK boundary sweep (7x `PDCA=T216` + LockRendererDefault + PlanKeyUniqueness + integration), acceptance 7/0 + T216 6/0, coverage line 88.7% / branch 80.8%; boundary evidence `artifacts/pdca/D216/rv2/boundary/evidence.json` (validator exit 0) |
 | D-07 | **blocked** | original remainder: R-03/MariaDB source-level `OF` stays provisional fail-closed — **NOT PASS**; owner decision pending (narrow MariaDB to unsupported vs defer MariaDB source lock beyond 1.0.9). Evidence: `artifacts/pdca/D216/rv2/redgreen/mariadb-*.log`, `focused-mariadb.log`. **#216 stays OPEN.** |
+
+### DO correction n=2/3 — boundary + coverage re-run and evidence completeness
+
+Boundary sweep re-run after the R1/R2 fixes: `dotnet build nextorm.slnx -c Debug` exit 0 (0/0); `PDCA=T216` `-c Debug --no-build` per project — core 2, postgres 12, mysql 7, mariadb 3, sqlserver 5, sqlite 1, clickhouse 1 (all exit 0); `LockRendererDefaultTests` 5, `PlanKeyUniquenessTests` 13; targeted integration `PDCA=T216` (DOCKER_HOST) 9 selected / 8 passed / 0 failed / 1 SQLite capability skip. Evidence JSON `artifacts/pdca/D216/rv2/boundary/evidence.json` (with `per_project` counts); `validate_inner_loop.py report` exit 0.
+
+Coverage re-run (CI reproduction, DOCKER_HOST): 11252 tests, 0 failed, 199 skipped; **line 88.7% / branch 80.8%** (28224/34925) — above 85/75. Preserved under `artifacts/pdca/D216/rv2/coverage/`: `coverage.cobertura.xml`, `report/` (HTML + `Cobertura.xml` + `Summary.txt`), `json/Summary.json`, `summary.txt`, `collect.log`, `report.log`.
+
+Added evidence artifacts the CHECK flagged missing: EV-01 `recon.md`/`escalation.md`/`environment.json`; EV-02 `public-api.json` + `changed-paths.json` (scout review still pending → row `open`); EV-03/EV-11 `exit-records.json`; EV-04…EV-09 `cases-<provider>.json` (+ `cases-core-lockrenderer.json`, `cases-sqlite-plankey.json`); EV-10 `provider-inventory.json` (dedicated MariaDB 3/3 fail-closed; SQLite capability skip, not a DOCKER_HOST skip); EV-12 `perf/provenance.json` (baseline `docs/specs/performance/acceptance-benchmarks.md`, after ratio 2.03 < 2.244); EV-13 coverage outputs above. Manifest re-validated, exit 0; EV-16 open/pending-owner, EV-17 satisfied. R-03/MariaDB fail-closed / **not PASS**; **#216 OPEN**; D-07 `blocked`.
 
 ### DO correction n=2/3 (loop-back after CHECK FAIL)
 
@@ -429,4 +437,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 2026-10-13T01:00:00Z | DO | r=2 | n=1/3 | Boundary sweep (7x PDCA=T216 + LockRendererDefaultTests 5 + PlanKeyUniqueness 13 + integration 9 [1 SQLite skip]) all exit 0; validate_inner_loop report exit 0; coverage line 88.7% / branch 80.8% (>= 85/75) | logs /tmp/nextorm-boundary-*.log /tmp/nextorm-cov-*.log
 2026-10-13T01:10:00Z | DO | r=2 | n=1/3 | DO complete → CHECK: frozen rv=2 manifest `artifacts/pdca/D216/rv2/manifest.json` (EV-01..EV-18, validator exit 0; EV-17 satisfied, EV-16 open/pending-owner); D-01..D-06 done, D-07 blocked; #216 OPEN | manifest artifacts/pdca/D216/rv2/manifest.json
 2026-10-13T01:30:00Z | DO | r=2 | n=2/3 | CHECK FAIL loop-back: fixed D216-ALIAS-CASE (alias case-fold under KeywordCase.Upper) and D216-SS-APPLY-GLOBAL-LOCK (APPLY source hint); slnx build 0/0; PDCA=T216 core 2 / pg 12 / mysql 7 / maria 3 / ss 5 all green; MariaDB fail-closed green | logs /tmp/fix-*.log
+2026-10-13T01:45:00Z | DO | r=2 | n=2/3 | DO complete again → CHECK: boundary re-run (core 2/pg 12/mysql 7/maria 3/ss 5/sqlite 1/ch 1; integration 9 [1 SQLite skip]; report validator exit 0); coverage line 88.7% / branch 80.8% preserved; EV case maps/exit-records/provider-inventory/perf-provenance/public-api/recon added; manifest re-validated exit 0; EV-16 open, EV-17 met | manifest artifacts/pdca/D216/rv2/manifest.json
 ```
