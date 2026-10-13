@@ -74,6 +74,11 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         // if (x.TableAlias != y.TableAlias) return false;
         if (!string.Equals(x.SubQueryHint, y.SubQueryHint, StringComparison.Ordinal)) return false;
 
+        // A source-level row lock changes the rendered SQL (FOR UPDATE OF <alias> or a targeted hint)
+        // without changing the table name, so it must be part of the key before the table-name
+        // short-circuit below would treat two differently-locked sources as equal.
+        if (x.SourceLock != y.SourceLock) return false;
+
         if (!string.IsNullOrEmpty(x.Table) && x.Table == y.Table) return true;
 
         // A SelectMany/GroupJoin source is a computed node whose selectors are delegates over the
@@ -174,6 +179,16 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (obj is null) return 0;
 
         var baseHash = GetBaseHash(obj);
+
+        // The source-level lock is not part of the shape branches above, so fold it into the base hash
+        // for every source kind. Null and a non-null lock must map to different keys.
+        if (obj.SourceLock is { } sourceLock)
+        {
+            var withLock = new System.HashCode();
+            withLock.Add(baseHash);
+            withLock.Add(sourceLock);
+            baseHash = withLock.ToHashCode();
+        }
 
         if (obj.TableNameOverride is null && obj.SchemaOverride is null && obj.DatabaseOverride is null
             && obj.ServerOverride is null && obj.TableExpressionOverride is null)

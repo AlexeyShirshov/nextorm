@@ -851,6 +851,44 @@ public class SqlGenerationTests
         SqlOf(ctx, e.ForShare(LockWaitMode.NoWait).Select(x => x.Id)).Should().EndWith("for share nowait");
     }
 
+    // scenario labels: source/primary, source/join (V-01/V-03). MySQL's LOCK IN SHARE MODE has no OF
+    // form, so a source share uses FOR SHARE OF, and a source update uses FOR UPDATE OF.
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_Primary_ShouldEmitForUpdateOfAlias()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForUpdate()).Select(x => x.Id));
+
+        sql.Should().EndWith("for update of `t1`");
+    }
+
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_Primary_ShareWait_ShouldEmitForShareOfAlias()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForShare()).Select(x => x.Id));
+
+        // A source-level share cannot use LOCK IN SHARE MODE (it has no OF form).
+        sql.Should().EndWith("for share of `t1`");
+    }
+
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_OnJoin_ShouldTargetJoinAliasOnly()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.ForUpdate())
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().EndWith("for update of `t2`");
+    }
+
     [Fact]
     public void DistinctOn_ShouldThrowBecauseMySqlHasNoDistinctOn()
     {

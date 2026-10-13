@@ -819,6 +819,9 @@ internal sealed class SqlServerLockRenderer : ILockRenderer
 
     public bool UsesTableHints => true;
 
+    /// <summary>SQL Server supports a per-source lock as a table hint placed on the chosen source.</summary>
+    public bool SupportsSourceLocks => true;
+
     public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
         Render(mode, LockWaitMode.Wait, keywordCase);
 
@@ -830,6 +833,13 @@ internal sealed class SqlServerLockRenderer : ILockRenderer
             LockWaitMode.SkipLocked => ", readpast",
             _ => throw new ArgumentOutOfRangeException(nameof(wait), wait, "Unknown locking wait mode.")
         });
+
+    /// <summary>
+    /// The table-hint token is placed on the chosen source by the builder, so the resolved target alias
+    /// does not change the token; the overload is additive and never widens a targeted lock.
+    /// </summary>
+    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase, string? targetAlias)
+        => Render(mode, wait, keywordCase);
 }
 
 internal sealed class SqlServerIndexHintRenderer : IIndexHintRenderer

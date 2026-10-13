@@ -1054,6 +1054,7 @@ public static class DataContextExtensions
             TableHints = fromOptions.TableHints,
             IndexHints = fromOptions.IndexHints,
             IndexHintKind = fromOptions.IndexHintKind,
+            SourceLockClause = fromOptions.SourceLock,
         };
     }
 
@@ -1220,6 +1221,7 @@ public static class DataContextExtensions
             TableHints = fromOptions.TableHints,
             IndexHints = fromOptions.IndexHints,
             IndexHintKind = fromOptions.IndexHintKind,
+            SourceLockClause = fromOptions.SourceLock,
         };
     }
 
@@ -1330,7 +1332,7 @@ public static class DataContextExtensions
         var fromOptions = new FromOptions();
         options(fromOptions);
 
-        return new(dataContext, query) { Logger = dataContext.CommandLogger, SubQueryHint = fromOptions.SubQueryHint };
+        return new(dataContext, query) { Logger = dataContext.CommandLogger, SubQueryHint = fromOptions.SubQueryHint, SourceLockClause = fromOptions.SourceLock };
     }
 
     /// <summary>
@@ -1394,7 +1396,7 @@ public static class DataContextExtensions
         var fromOptions = new FromOptions();
         options(fromOptions);
 
-        return new(dataContext, builder) { Logger = dataContext.CommandLogger, SubQueryHint = fromOptions.SubQueryHint };
+        return new(dataContext, builder) { Logger = dataContext.CommandLogger, SubQueryHint = fromOptions.SubQueryHint, SourceLockClause = fromOptions.SourceLock };
     }
 
     /// <summary>

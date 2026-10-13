@@ -161,6 +161,13 @@ internal sealed class MariaDbLockRenderer : ILockRenderer
 
     public bool UsesTableHints => false;
 
+    /// <summary>
+    /// MariaDB's grammar has no <c>FOR UPDATE OF</c>/<c>FOR SHARE OF</c> form, so source-level locking is
+    /// rejected fail-closed. The inherited MySQL <c>OF</c> form must never leak here; whole-query locking
+    /// keeps working through <see cref="Render(LockMode, LockWaitMode, KeywordCase)"/>.
+    /// </summary>
+    public bool SupportsSourceLocks => false;
+
     public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
         Render(mode, LockWaitMode.Wait, keywordCase);
 

@@ -565,11 +565,25 @@ internal sealed class MySqlLockRenderer : ILockRenderer
 
     public bool UsesTableHints => false;
 
+    /// <summary>MySQL supports the targeted <c>FOR UPDATE OF &lt;alias&gt;</c>/<c>FOR SHARE OF &lt;alias&gt;</c> form.</summary>
+    public bool SupportsSourceLocks => true;
+
     public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
         Render(mode, LockWaitMode.Wait, keywordCase);
 
     public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase = KeywordCase.Lower) =>
         SqlKeywords.Of(keywordCase, MySqlLockRenderer.RenderToken(mode, wait));
+
+    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase, string? targetAlias)
+    {
+        // LOCK IN SHARE MODE (the whole-query shared form) has no OF variant, so a source-level share
+        // always uses the newer FOR SHARE OF spelling; the whole-query behaviour is unchanged.
+        if (targetAlias is null)
+            return Render(mode, wait, keywordCase);
+
+        var token = (mode == LockMode.Share ? " for share" : " for update") + " of " + targetAlias + LockWaitSuffix(wait);
+        return SqlKeywords.Of(keywordCase, token);
+    }
 
     private static string RenderToken(LockMode mode, LockWaitMode wait)
     {

@@ -194,6 +194,13 @@ public class PlanKeyUniquenessTests
         yield return ("temporal-between", ctx => Row(E(ctx).ForSystemTime(TemporalClause.Between(new DateTime(2020, 1, 1), new DateTime(2021, 1, 1)))));
         yield return ("rowlock-update", ctx => Row(E(ctx).ForUpdate()));
         yield return ("rowlock-share", ctx => Row(E(ctx).ForShare()));
+        // Source-level locks (T216): the scope/target/mode must be part of the plan key and must not
+        // collide with the whole-query variants above; a source lock travels on the source carrier.
+        yield return ("rowlock-source-primary-update", ctx => Row(ctx.From<IComplexEntity>(o => o.ForUpdate())));
+        yield return ("rowlock-source-primary-share", ctx => Row(ctx.From<IComplexEntity>(o => o.ForShare())));
+        yield return ("rowlock-source-primary-nowait", ctx => Row(ctx.From<IComplexEntity>(o => o.ForUpdate(LockWaitMode.NoWait))));
+        yield return ("rowlock-source-join-update", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.ForUpdate())
+            .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
         yield return ("forjson", ctx => E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }).WithForJson());
         yield return ("forjson-root", ctx => E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }).WithForJson(root: "r"));
         yield return ("forxml", ctx => E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }).WithForXml());

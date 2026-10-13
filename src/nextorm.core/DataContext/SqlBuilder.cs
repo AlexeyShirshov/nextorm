@@ -96,16 +96,32 @@ internal readonly struct SqlBuilder
             var hasDynamicStore = !cmd.IgnoreColumns && selectList is not null
                 && Array.Exists(selectList, static item => item.IsDynamicColumnsStore);
             var needAlias = hasJoins || _ctx.QueryProvider.OuterReferences?.Count > 0
-                || (hasDynamicStore && _ctx.Dialect.RequiresQualifiedSelectStar);
+                || (hasDynamicStore && _ctx.Dialect.RequiresQualifiedSelectStar)
+                || from?.SourceLock is not null;
+
+            // Source-level row locking is fail-closed: a dialect whose lock renderer does not opt in
+            // (MariaDB, SQLite, ClickHouse, in-memory) must reject it instead of silently emitting a
+            // whole-query or no lock. A table-hint dialect renders the lock on each source itself; a
+            // trailing-clause dialect collects the resolved aliases to emit FOR UPDATE OF after FROM/JOIN.
+            var hasAnySourceLock = from?.SourceLock is not null
+                || (joins is not null && Array.Exists(joins, static j => j.From.SourceLock is not null));
+            if (hasAnySourceLock && _ctx.Dialect.Lock is not { SupportsSourceLocks: true })
+                throw new NotSupportedException("Source-level row locking (FOR UPDATE OF) is not supported by this SQL dialect.");
+
+            var sourceLocks = !_ctx.ParamMode && hasAnySourceLock && _ctx.Dialect.Lock is { UsesTableHints: false }
+                ? new List<SourceLockTarget>()
+                : null;
+            var fromCtx = sourceLocks is null ? _ctx : _ctx with { SourceLocks = sourceLocks };
 
             // Whether the FROM source is rendered with an alias. A bare physical table with no joins and
             // no column shape stays unaliased; every derived/raw/shaped source is aliased even without
             // joins. Predicates and sort keys must be table-qualified whenever the source is aliased (a
             // projection item over a derived root resolves through that alias), and must stay unqualified
             // over an unaliased physical source. This mirrors the alias decision in MakeFrom; keep the
-            // two in sync.
+            // two in sync. A source lock forces an alias so the OF target can be declared.
             var dontNeedAlias = !needAlias
                 && from is not null
+                && from.SourceLock is null
                 && from.ColumnShape is null
                 && from.SubQuery is null
                 && from.TableExpressionOverride is null
@@ -141,11 +157,7 @@ internal readonly struct SqlBuilder
                         throw new NotSupportedException($"The FOR SYSTEM_TIME {temporal.Kind} clause is not supported by this SQL dialect");
                 }
 
-                var tableHints = cmd.TableHints;
-                if (cmd.RowLock is { } lockClause && _ctx.Dialect.Lock is { UsesTableHints: true } lockHint)
-                    tableHints = AppendHint(tableHints, lockHint.Render(lockClause.Mode, lockClause.Wait, _ctx.KeywordCase));
-
-                var fromStr = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(needAlias, entityType, hasJoins, tableHints, cmd.Temporal, cmd.IndexHints, cmd.IndexHintKind, scopeHints), out fromAlias);
+                var fromStr = SqlSourceRenderer.MakeFrom(in fromCtx, from, new FromRenderOptions(needAlias, entityType, hasJoins, cmd.TableHints, cmd.Temporal, cmd.IndexHints, cmd.IndexHintKind, scopeHints, GlobalLock: cmd.RowLock), out fromAlias);
                 if (!_ctx.ParamMode)
                 {
                     sqlBuilder!.Append(Kw(" from ")).Append(fromStr);
@@ -182,7 +194,7 @@ internal readonly struct SqlBuilder
                 {
                     for (var (idx, cnt) = (0, joins!.Length); idx < cnt; idx++)
                     {
-                        var joinSql = SqlSourceRenderer.MakeJoin(in _ctx, joins[idx], entityType!, scopeHints);
+                        var joinSql = SqlSourceRenderer.MakeJoin(in fromCtx, joins[idx], entityType!, scopeHints, cmd.RowLock);
                         if (!_ctx.ParamMode) sqlBuilder!.Append(joinSql);
                     }
                 }
@@ -443,9 +455,19 @@ internal readonly struct SqlBuilder
                 if (_ctx.Dialect.Lock is not { } lockRenderer)
                     throw new NotSupportedException("The FOR UPDATE/FOR SHARE clause is not supported by this SQL dialect");
 
-                // Table-hint dialects already rendered the lock on the primary source.
+                // Table-hint dialects already rendered the lock on every physical source.
                 if (!lockRenderer.UsesTableHints)
                     sqlBuilder!.AppendLine().Append(lockRenderer.Render(rowLock.Mode, rowLock.Wait, _ctx.KeywordCase));
+            }
+
+            // A source-level lock renders one targeted clause per locked source, after FROM/JOIN.
+            if (!_ctx.ParamMode && sourceLocks is { Count: > 0 })
+            {
+                if (_ctx.Dialect.Lock is not { } sourceLockRenderer)
+                    throw new NotSupportedException("Source-level row locking (FOR UPDATE OF) is not supported by this SQL dialect");
+
+                foreach (var target in sourceLocks)
+                    sqlBuilder!.AppendLine().Append(sourceLockRenderer.Render(target.Lock.Mode, target.Lock.Wait, _ctx.KeywordCase, target.Alias));
             }
 
 
@@ -2014,23 +2036,6 @@ internal readonly struct SqlBuilder
         slot = ordinal - 1;
         member = memberProperty.Name;
         return true;
-    }
-
-    /// <summary>
-    /// Returns <paramref name="hints"/> with <paramref name="hint"/> appended, or a single-element list
-    /// when <paramref name="hints"/> is <c>null</c> or empty. Used to fold a row-locking table hint into
-    /// the command's own table hints.
-    /// </summary>
-    private static IReadOnlyList<string> AppendHint(IReadOnlyList<string>? hints, string hint)
-    {
-        if (hints is not { Count: > 0 })
-            return [hint];
-
-        var combined = new string[hints.Count + 1];
-        for (var i = 0; i < hints.Count; i++)
-            combined[i] = hints[i];
-        combined[^1] = hint;
-        return combined;
     }
 
     /// <summary>

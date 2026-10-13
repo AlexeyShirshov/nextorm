@@ -35,6 +35,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     private TableSampleClause? _tablesample;
     private TemporalClause? _temporal;
     private LockClause? _rowLock;
+    private LockClause? _sourceLock;
     private LambdaExpression? _preWhere;
     private List<LambdaExpression>? _arrayJoins;
     private ArrayJoinKind _arrayJoinKind;
@@ -229,6 +230,13 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     internal TemporalClause? TemporalClause { get => _temporal; set => _temporal = value; }
     /// <summary>The trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> row-locking clause, or <c>null</c> when there is none.</summary>
     internal LockClause? RowLockClause { get => _rowLock; set => _rowLock = value; }
+    /// <summary>
+    /// The source-level row lock requested for the primary physical source through
+    /// <see cref="FromOptions.ForUpdate()"/>/<see cref="FromOptions.ForShare()"/>, or <c>null</c> when
+    /// there is none. Transferred to the command at build time and attached to the resolved source during
+    /// preparation.
+    /// </summary>
+    internal LockClause? SourceLockClause { get => _sourceLock; set => _sourceLock = value; }
     /// <summary>Whether the query carries the ClickHouse <c>FINAL</c> modifier.</summary>
     internal bool IsFinal { get; set; }
     /// <summary>The ClickHouse <c>SAMPLE</c> ratio, or <c>null</c> when the modifier is absent.</summary>
@@ -391,6 +399,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         cmd.TableSample = _tablesample;
         cmd.Temporal = _temporal;
         cmd.RowLock = _rowLock;
+        cmd.SourceLockClause = _sourceLock;
 
         // Eager-load strategy and graph identity: only commands that actually carry eager loads record
         // them, so a command with no eager loads is never touched. The requested override (or null to
@@ -1245,6 +1254,10 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         if (_rowLock is not null)
             shapes.Add("ForUpdate/ForShare");
+
+        if (_sourceLock is not null
+            || (_joins is { Count: > 0 } shapeJoins && shapeJoins.Exists(static j => j.From.SourceLock is not null)))
+            shapes.Add("ForUpdate/ForShare OF");
 
         if (_windows is { Count: > 0 })
             shapes.Add("Window");
@@ -2277,6 +2290,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         dst.TableSampleClause = TableSampleClause;
         dst.TemporalClause = TemporalClause;
         dst.RowLockClause = RowLockClause;
+        dst.SourceLockClause = SourceLockClause;
         dst.IsFinal = IsFinal;
         dst.SampleRatio = SampleRatio;
         dst.SampleOffset = SampleOffset;
@@ -2360,6 +2374,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         || _tablesample is not null
         || _temporal is not null
         || _rowLock is not null
+        || _sourceLock is not null
         || TableHints is { Count: > 0 }
         || IndexHints is { Count: > 0 }
         || SettingsList is { Count: > 0 }
@@ -3308,6 +3323,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         target.TableSampleClause = TableSampleClause;
         target.TemporalClause = TemporalClause;
         target.RowLockClause = RowLockClause;
+        target.SourceLockClause = SourceLockClause;
         target.IsFinal = IsFinal;
         target.SampleRatio = SampleRatio;
         target.SampleOffset = SampleOffset;
@@ -3638,7 +3654,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         => !IsDistinct && !IsFinal && SampleRatio is null && SampleOffset == 0
         && _group is null && _having is null && _sorting is null && _preWhere is null
         && _arrayJoins is null && _windows is null && _limitBy is null && _distinctOn is null
-        && _tablesample is null && _temporal is null && _rowLock is null && _settings is null
+        && _tablesample is null && _temporal is null && _rowLock is null && _sourceLock is null && _settings is null
         && Paging.IsEmpty;
     /// <summary>
     /// Moves a <c>Where</c> written before the join onto the joined projection: the derived source

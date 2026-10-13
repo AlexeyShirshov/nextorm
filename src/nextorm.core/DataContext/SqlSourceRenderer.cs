@@ -183,7 +183,7 @@ internal static class SqlSourceRenderer
     /// (PostgreSQL/MySQL) collect the scope hint at the statement level instead, so they pass
     /// <c>null</c> here.
     /// </summary>
-    internal static string? MakeJoin(in SqlBuildContext ctx, JoinExpression join, Type entityType, IReadOnlyList<string>? tablesInScopeHints = null)
+    internal static string? MakeJoin(in SqlBuildContext ctx, JoinExpression join, Type entityType, IReadOnlyList<string>? tablesInScopeHints = null, LockClause? globalLock = null)
     {
         if (join.JoinType is JoinType.Right && !ctx.Dialect.SupportsRightFullJoin
             || join.JoinType is JoinType.Full && (!ctx.Dialect.SupportsRightFullJoin || !ctx.Dialect.SupportsFullJoin))
@@ -237,7 +237,7 @@ internal static class SqlSourceRenderer
 
             if (joinCondition is null)
             {
-                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints, SourceParameter: join.SourceParameter));
+                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints, SourceParameter: join.SourceParameter, GlobalLock: globalLock));
                 if (!ctx.ParamMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -260,7 +260,7 @@ internal static class SqlSourceRenderer
             {
                 var dim = JoinDimension(joinCondition);
 
-                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints, SourceParameter: join.SourceParameter));
+                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints, SourceParameter: join.SourceParameter, GlobalLock: globalLock));
                 if (!ctx.ParamMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -431,7 +431,7 @@ internal static class SqlSourceRenderer
     /// </summary>
     internal static string MakeFrom(in SqlBuildContext ctx, FromExpression from, FromRenderOptions options, out string? alias)
     {
-        var (needAlias, entityType, hasJoins, tableHints, temporal, indexHints, indexHintKind, tablesInScopeHints, sourceParameter) = options;
+        var (needAlias, entityType, hasJoins, tableHints, temporal, indexHints, indexHintKind, tablesInScopeHints, sourceParameter, globalLock) = options;
         alias = null;
 
         if (from.LinqSource is not null)
@@ -457,6 +457,16 @@ internal static class SqlSourceRenderer
 
         if (!ctx.ParamMode && !string.IsNullOrEmpty(from.Table))
         {
+            // A table-hint dialect (SQL Server) renders a whole-query lock, or a per-source lock, as a
+            // hint on the physical table itself. A per-source lock wins for this source; a whole-query
+            // lock is only present when no per-source lock exists anywhere in the statement (the two are
+            // rejected together at preparation).
+            if (ctx.Dialect.Lock is { UsesTableHints: true } tableHintLock
+                && (from.SourceLock ?? globalLock) is { } hintLock)
+            {
+                tableHints = AppendHints(tableHints, [tableHintLock.Render(hintLock.Mode, hintLock.Wait, ctx.KeywordCase)]);
+            }
+
             if (tablesInScopeHints is { Count: > 0 })
             {
                 if (!ctx.Dialect.SupportsTablesInScopeHints)
@@ -511,7 +521,7 @@ internal static class SqlSourceRenderer
                 if (temporal is not null)
                     sqlBuilder.Append(ctx.Dialect.MakeTemporalTable(temporal, ctx.KeywordCase));
 
-                if (needAlias || from.ColumnShape is not null)
+                if (needAlias || from.SourceLock is not null || from.ColumnShape is not null)
                 {
                     if (from.ColumnShape is not null)
                         ctx.ColumnsProvider.Add(from.ColumnShape, false);
@@ -523,6 +533,12 @@ internal static class SqlSourceRenderer
                     alias = ctx.AliasProvider!.GetNextAlias(from);
                     sqlBuilder.Append(ctx.Dialect.MakeTableAlias(alias, ctx.KeywordCase));
                 }
+
+                // A non-table-hint dialect emits the source lock as a trailing FOR UPDATE OF <alias>; the
+                // alias resolved here is collected so SqlBuilder can render the clause after FROM/JOIN.
+                if (alias is not null && from.SourceLock is { } sourceLock
+                    && ctx.SourceLocks is not null && ctx.Dialect.Lock is { UsesTableHints: false })
+                    ctx.SourceLocks.Add(new SourceLockTarget(ctx.Dialect.Escape(alias), sourceLock));
 
                 return sqlBuilder.ToString();
             }

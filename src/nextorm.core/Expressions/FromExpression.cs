@@ -159,6 +159,14 @@ public sealed class FromExpression
      /// </summary>
      internal string? SubQueryHint { get; init; }
      /// <summary>
+     /// Optional source-level row lock attached to this physical source, or <c>null</c> when the source
+     /// carries none. Set through <see cref="FromOptions.ForUpdate()"/>/<see cref="FromOptions.ForShare()"/>
+     /// (the primary source) or <see cref="JoinOptions.ForUpdate()"/>/<see cref="JoinOptions.ForShare()"/>
+     /// (a join). Immutable and shared with any copied source; the target alias is resolved at render time
+     /// from the existing alias provider, never stored here.
+     /// </summary>
+     internal LockClause? SourceLock { get; init; }
+     /// <summary>
      /// Per-query override of the physical table name; <c>null</c> means the mapped or declared name is
      /// used. Set through <c>EntityBuilder&lt;TEntity&gt;.WithTableName</c>.
      /// </summary>
@@ -220,6 +228,7 @@ public sealed class FromExpression
           ServerOverride = server ?? source.ServerOverride;
           TableExpressionOverride = tableExpression ?? source.TableExpressionOverride;
           SubQueryHint = source.SubQueryHint;
+          SourceLock = source.SourceLock;
           SourceBinding = sourceBinding ?? source.SourceBinding;
           RecursiveOwner = source.RecursiveOwner;
      }
@@ -248,6 +257,14 @@ public sealed class FromExpression
      /// </summary>
      internal FromExpression WithEntityBinding(EntityBinding binding)
           => new(this, null, null, null, null, null, binding);
+
+     /// <summary>
+     /// Returns a copy of this source carrying the source-level row lock <paramref name="lock"/>; the
+     /// original is not mutated so a metadata-cached source stays shared. The lock is immutable and
+     /// travels with the source through every clone/override.
+     /// </summary>
+     internal FromExpression WithSourceLock(LockClause @lock)
+          => new(this, null, null, null, null, null) { SourceLock = @lock };
 
      // public override int GetHashCode()
      // {
@@ -279,11 +296,11 @@ public sealed class FromExpression
           if (Pivot is not null)
           {
                var pivot = Pivot.CloneForCache();
-               return ReferenceEquals(pivot, Pivot) ? this : new FromExpression(pivot) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding };
+               return ReferenceEquals(pivot, Pivot) ? this : new FromExpression(pivot) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock };
           }
 
           if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null || XmlNodes is not null) return this;
 
-          return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding };// { TableAlias = TableAlias };
+          return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding, SourceLock = SourceLock };// { TableAlias = TableAlias };
      }
 }

@@ -15,6 +15,13 @@ public sealed class FromOptions
     internal IReadOnlyList<string>? IndexHints { get; private set; }
     internal IndexHintKind IndexHintKind { get; private set; }
     internal string? SubQueryHint { get; private set; }
+    /// <summary>
+    /// The source-level row lock requested for this physical source (<c>FOR UPDATE OF</c>/
+    /// <c>FOR SHARE OF</c> on supporting dialects, or a per-source table hint on SQL Server), or
+    /// <c>null</c> when the source carries no lock. Set through <see cref="ForUpdate()"/>/
+    /// <see cref="ForShare()"/>; a repeated setter replaces the previous lock.
+    /// </summary>
+    internal LockClause? SourceLock { get; private set; }
 
     /// <summary>
     /// Reads only <paramref name="percent"/> percent of the primary table with a <c>TABLESAMPLE</c>
@@ -159,6 +166,54 @@ public sealed class FromOptions
             throw new ArgumentException("A subquery hint must be a non-empty string.", nameof(hint));
 
         SubQueryHint = hint;
+        return this;
+    }
+
+    /// <summary>
+    /// Locks the selected rows of this physical source exclusively until the transaction ends, blocking
+    /// while a locked row is held by another transaction. On PostgreSQL/MySQL it renders a targeted
+    /// <c>FOR UPDATE OF &lt;alias&gt;</c> clause; on SQL Server it applies the <c>updlock</c> table hint to
+    /// this source only. Requires a dialect whose lock renderer reports
+    /// <see cref="ILockRenderer.SupportsSourceLocks"/>; a dialect without it (for example MariaDB)
+    /// rejects the command with <see cref="NotSupportedException"/>. A whole-query
+    /// <see cref="EntityBuilder{TEntity}.ForUpdate()"/> cannot be combined with a source lock.
+    /// </summary>
+    /// <returns>This instance, to allow chaining.</returns>
+    public FromOptions ForUpdate() => ForUpdate(LockWaitMode.Wait);
+
+    /// <summary>
+    /// Locks the selected rows of this physical source exclusively until the transaction ends, with the
+    /// requested wait behaviour for rows already locked by another transaction. Requires a dialect whose
+    /// lock renderer reports <see cref="ILockRenderer.SupportsSourceLocks"/>.
+    /// </summary>
+    /// <param name="wait">How to react to a row already locked by another transaction.</param>
+    /// <returns>This instance, to allow chaining.</returns>
+    public FromOptions ForUpdate(LockWaitMode wait)
+    {
+        SourceLock = new LockClause(LockMode.Update, wait);
+        return this;
+    }
+
+    /// <summary>
+    /// Locks the selected rows of this physical source in shared mode until the transaction ends,
+    /// blocking while a locked row is held by another transaction. On PostgreSQL/MySQL it renders a
+    /// targeted <c>FOR SHARE OF &lt;alias&gt;</c> clause; on SQL Server it applies the <c>holdlock</c>
+    /// table hint to this source only. Requires a dialect whose lock renderer reports
+    /// <see cref="ILockRenderer.SupportsSourceLocks"/>.
+    /// </summary>
+    /// <returns>This instance, to allow chaining.</returns>
+    public FromOptions ForShare() => ForShare(LockWaitMode.Wait);
+
+    /// <summary>
+    /// Locks the selected rows of this physical source in shared mode until the transaction ends, with
+    /// the requested wait behaviour for rows already locked by another transaction. Requires a dialect
+    /// whose lock renderer reports <see cref="ILockRenderer.SupportsSourceLocks"/>.
+    /// </summary>
+    /// <param name="wait">How to react to a row already locked by another transaction.</param>
+    /// <returns>This instance, to allow chaining.</returns>
+    public FromOptions ForShare(LockWaitMode wait)
+    {
+        SourceLock = new LockClause(LockMode.Share, wait);
         return this;
     }
 }

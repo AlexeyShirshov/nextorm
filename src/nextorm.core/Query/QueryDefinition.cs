@@ -76,6 +76,12 @@ public sealed record QueryDefinition
     /// <summary>Optional trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> row-locking clause.</summary>
     internal LockClause? RowLock { get; init; }
     /// <summary>
+    /// The source-level row lock requested for the primary physical source, or <c>null</c> when none was
+    /// requested. Transferred to the resolved <c>FromExpression.SourceLock</c> during preparation;
+    /// a whole-query <see cref="RowLock"/> cannot be combined with it.
+    /// </summary>
+    internal LockClause? PrimarySourceLock { get; init; }
+    /// <summary>
     /// The joined parameters injected by a reference-navigation expansion and their display paths
     /// (#148-B D5). Carried across clones so a cloned command re-checks the projection nullability and
     /// keeps the provider outer-join null settings. Not part of the plan key.

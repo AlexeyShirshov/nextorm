@@ -2800,6 +2800,37 @@ public class SqlGenerationTests
             .Should().Be("select id from simple_entity with (rowlock, updlock)");
     }
 
+    // D-01 red regression (T216, scenario label: whole/all-sources, V-11): a whole-query
+    // ForUpdate must place the updlock hint on every physical source of the statement, not only
+    // the primary one. Fails on the pre-change renderer (primary-only).
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void ForUpdate_WithJoin_ShouldHintAllSources()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id).ForUpdate().Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("from simple_entity with (updlock) as [t1]");
+        sql.Should().Contain("join complex_entity with (updlock) as [t2]");
+    }
+
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void ForShare_WithJoin_ShouldHintAllSources()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id).ForShare().Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("from simple_entity with (holdlock) as [t1]");
+        sql.Should().Contain("join complex_entity with (holdlock) as [t2]");
+    }
+
     [Fact]
     public void ForSystemTime_AsOf_ShouldRenderAsOf()
     {

@@ -204,6 +204,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         TableSample = definition.TableSample;
         Temporal = definition.Temporal;
         RowLock = definition.RowLock;
+        SourceLockClause = definition.PrimarySourceLock;
         Final = definition.Final;
         SampleRatio = definition.SampleRatio;
         SampleOffset = definition.SampleOffset;
@@ -242,6 +243,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         TableSample = TableSample,
         Temporal = Temporal,
         RowLock = RowLock,
+        PrimarySourceLock = SourceLockClause,
         Final = Final,
         SampleRatio = SampleRatio,
         SampleOffset = SampleOffset,
@@ -488,6 +490,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// has none. A dialect that does not support it rejects the command when its SQL is built.
     /// </summary>
     internal LockClause? RowLock { get; set; }
+    /// <summary>
+    /// The source-level row lock requested for the primary physical source, or <c>null</c> when none was
+    /// requested. During preparation it is transferred to the resolved <c>FromExpression.SourceLock</c>
+    /// (and validated); a whole-query <see cref="RowLock"/> cannot be combined with it.
+    /// </summary>
+    internal LockClause? SourceLockClause { get; set; }
     /// <summary>Whether the query carries the ClickHouse <c>FINAL</c> modifier.</summary>
     public bool Final { get; internal set; }
     /// <summary>The ClickHouse <c>SAMPLE</c> ratio (a value in <c>[0, 1]</c>), or <c>null</c> when absent.</summary>

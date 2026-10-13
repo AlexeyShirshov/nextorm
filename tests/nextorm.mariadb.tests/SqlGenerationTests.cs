@@ -146,6 +146,45 @@ public class SqlGenerationTests
         SqlOf(ctx, e.ForShare(LockWaitMode.NoWait).Select(x => x.Id)).Should().EndWith("lock in share mode nowait");
     }
 
+    // scenario label: mariadb/whole (V-27): MariaDB's own whole-query grammar is preserved unchanged.
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void WholeQueryLock_OnMariaDb_ShouldPreserveNativeGrammar()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.ForUpdate().Select(x => x.Id)).Should().EndWith("for update");
+        SqlOf(ctx, e.ForShare().Select(x => x.Id)).Should().EndWith("lock in share mode");
+        SqlOf(ctx, e.ForShare(LockWaitMode.SkipLocked).Select(x => x.Id)).Should().EndWith("lock in share mode skip locked");
+    }
+
+    // scenario labels: mariadb/source-fail-closed, mariadb/no-inherited-of (V-25/V-26). MariaDB has no
+    // FOR UPDATE OF, so a source lock must throw deterministically instead of inheriting the MySQL OF.
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_OnPrimary_OnMariaDb_ShouldFailClosed()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForUpdate()).Select(x => x.Id));
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_OnJoin_OnMariaDb_ShouldFailClosed()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id, j => j.ForUpdate()).Select(p => new { p.Item1.Id }));
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
     [Fact]
     public void Pivot_ShouldThrowBecauseNotSupported()
     {

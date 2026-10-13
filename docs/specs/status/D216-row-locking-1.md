@@ -18,7 +18,7 @@ prior_contract: rv=1 superseded by rv=2
 
 ## Current state
 
-- Phase: PLAN complete, persisted; **collection task PLAN handoff at the PLAN→DO boundary** — DO not started.
+- Phase: PLAN complete, persisted; **DO started** for units D-01, D-02, D-03, D-04, D-04M (production surface + shared contract + provider renderers + focused tests + red→green regressions). D-05/D-06 (full matrix closure, integration, docs, boundary sweep, perf, coverage, manifest) are a separate later step and NOT run here.
 - Cycle N=1, plan revision r=2, attempt n=1, evidence contract rv=2 (rv=1 superseded).
 - Selected variant: `pdca-dotnet`. Single collection group → current worktree/branch `1.0.9`, no worktree/branches/merge.
 - Blocks DO: none. **R-03/MariaDB is an open owner constraint**, surfaced upward; it does not stop the executable plan (routed escalation decision).
@@ -195,7 +195,7 @@ Each focused run selects **>0** tests, and the scenario map shows coverage of th
 
 ## Documentation
 
-Change: `docs/querying/03-provider-specifics.md`, `docs/ru/querying/03-provider-specifics.md`, `docs/advanced/api-reference.md`, `docs/ru/advanced/api-reference.md`, `docs/connecting-providers/sqlserver.md`, `docs/ru/connecting-providers/sqlserver.md`, `docs/advanced/limitations.md`, `docs/ru/advanced/limitations.md`.
+Change: `docs/guide/32-provider-specific-features.md`, `docs/ru/guide/32-provider-specific-features.md`, `docs/advanced/api-reference.md`, `docs/ru/advanced/api-reference.md`, `docs/connecting-providers/sqlserver.md`, `docs/ru/connecting-providers/sqlserver.md`, `docs/advanced/limitations.md`, `docs/ru/advanced/limitations.md`.
 
 Required content: whole/source distinction and options methods; existing default/explicit alias forms; physical-only, conflict rule, native restrictions; provider matrix with MariaDB source-level unsupported; SQL Server primary-only → all-sources behavior warning; MariaDB whole-lock spelling/wait versions. The pending-owner marker lives in status/evidence/final report; public docs describe the actually available capability, not internal workflow.
 
@@ -237,7 +237,7 @@ Do not change: `toc.yml`, page numbering, generated `docs/api/**`/`docs/_site/**
 ## Planned write-footprint
 
 Production (expected edit envelope, not a requirement to edit each file; coder confirms symbol locations via Roslyn before editing; a new subsystem/package/source-generator edit requires returning to PLAN):
-`src/nextorm.core/DataContext/FromOptions.cs`, `src/nextorm.core/Builders/JoinOptions.cs`, `src/nextorm.core/Builders/EntityBuilder.cs`, `src/nextorm.core/Builders/EntityBuilderEagerLoading.cs`, `src/nextorm.core/Builders/Joins/JoinedEntityBuilder.cs`, `src/nextorm.core/Builders/Joins/JoinIntoManyToManySpec.cs`, `src/nextorm.core/Expressions/FromExpression.cs`, `src/nextorm.core/Expressions/JoinExpression.cs`, `src/nextorm.core/Query/QueryCommand.cs`, `src/nextorm.core/Query/QueryCommand.Clone.cs`, `src/nextorm.core/Query/QueryDefinition.cs`, `src/nextorm.core/Query/QueryPlanEqualityComparer.cs`, `src/nextorm.core/Query/FromExpressionPlanEqualityComparer.cs`, `src/nextorm.core/Query/JoinExpressionPlanEqualityComparer.cs`, `src/nextorm.core/Query/ExtremeRowCompatibility.cs`, `src/nextorm.core/DataContext/InMemoryQueryBuilder.cs`, `src/nextorm.core/DataContext/SqlBuilder.cs`, `src/nextorm.core/DataContext/SqlSourceRenderer.cs`, `src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs`, `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.mysql/MySqlDialect.cs`, `src/nextorm.mariadb/MariaDbDialect.cs`, `src/nextorm.sqlserver/SqlServerDialect.cs`.
+`src/nextorm.core/DataContext/FromOptions.cs`, `src/nextorm.core/Builders/JoinOptions.cs`, `src/nextorm.core/Builders/EntityBuilder.cs`, `src/nextorm.core/Builders/EntityBuilderEagerLoading.cs`, `src/nextorm.core/Builders/Joins/JoinedEntityBuilder.cs`, `src/nextorm.core/Builders/Joins/JoinIntoManyToManySpec.cs`, `src/nextorm.core/Expressions/FromExpression.cs`, `src/nextorm.core/Expressions/JoinExpression.cs`, `src/nextorm.core/Query/QueryCommand.cs`, `src/nextorm.core/Query/QueryCommand.Clone.cs`, `src/nextorm.core/Query/QueryDefinition.cs`, `src/nextorm.core/Query/QueryPlanEqualityComparer.cs`, `src/nextorm.core/Expressions/FromExpressionPlanEqualityComparer.cs`, `src/nextorm.core/Expressions/JoinExpressionPlanEqualityComparer.cs`, `src/nextorm.core/Query/ExtremeRowCompatibility.cs`, `src/nextorm.core/DataContext/InMemoryQueryBuilder.cs`, `src/nextorm.core/DataContext/SqlBuilder.cs`, `src/nextorm.core/DataContext/SqlSourceRenderer.cs`, `src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs`, `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.mysql/MySqlDialect.cs`, `src/nextorm.mariadb/MariaDbDialect.cs`, `src/nextorm.sqlserver/SqlServerDialect.cs`.
 
 Tests/benchmark (planned destinations, not assertions that symbols exist): `tests/nextorm.core.tests/LockRendererDefaultTests.cs`, `tests/nextorm.core.tests/InMemoryTests.cs`, `tests/nextorm.core.tests/EagerLoadingSingleQueryP1Tests.cs`, `tests/nextorm.core.tests/T216RowLockingTests.cs`, `tests/nextorm.postgres.tests/SqlGenerationTests.cs`, `tests/nextorm.mysql.tests/SqlGenerationTests.cs`, `tests/nextorm.mariadb.tests/SqlGenerationTests.cs`, `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs`, `tests/nextorm.sqlite.tests/SqlGenerationTests.cs`, `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs`, `tests/nextorm.sqlite.tests/PlanKeyUniquenessTests.cs`, `tests/nextorm.integration.tests/DialectCapabilityContractTests.cs`, `tests/nextorm.integration.tests/CommonTestSuite.Locking.cs`, `tests/nextorm.integration.tests/MariaDbRowLockingSpecificTests.cs`, `benchmarks/nextorm.benchmark/T216LockingBenchmarks.cs`.
 
@@ -318,4 +318,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 
 ```text
 2026-10-12T04:39:15Z | PLAN | r=2 | n=1/3 | PLAN ready — awaiting confirmation (collection plan_handoff; DO not started) | status file docs/specs/status/D216-row-locking-1.md
+2026-10-13T00:00:00Z | DO | r=2 | n=1/3 | DO started — D-01..D-04M; planner footprint corrections applied (docs guide/32, Expressions comparers) | scope /tmp/nextorm-t216-scope.json (brief exit 0)
 ```

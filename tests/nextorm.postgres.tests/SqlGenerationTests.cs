@@ -3939,6 +3939,58 @@ public class SqlGenerationTests
             .Should().EndWith("limit 5\n for update");
     }
 
+    // scenario label: source/primary, alias/default (V-01/V-07): a source lock forces an alias and
+    // renders a targeted FOR UPDATE OF <alias> (not a whole-query clause).
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_Primary_ShouldEmitForUpdateOfAlias()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForUpdate()).Select(x => x.Id));
+
+        sql.Should().EndWith("for update of \"t1\"");
+    }
+
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_Primary_ShareNoWait_ShouldEmitForShareOfAliasNowait()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForShare(LockWaitMode.NoWait)).Select(x => x.Id));
+
+        sql.Should().EndWith("for share of \"t1\" nowait");
+    }
+
+    // scenario label: source/join, alias/explicit (V-03/V-08): the lock targets the join's own alias and
+    // must not leak to the primary source.
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_OnJoin_ShouldTargetJoinAliasOnly()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.ForUpdate())
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().EndWith("for update of \"t2\"");
+        sql.Should().NotContain("for update of \"t1\"");
+    }
+
+    // scenario label: reject/whole+source (V-19): the two scopes are mutually exclusive and fail fast.
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void WholeAndSourceLock_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForUpdate()).ForUpdate().Select(x => x.Id));
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
     [Fact]
     public void TextSearchRank_ShouldRenderTsRankOverTsvectorQuery()
     {

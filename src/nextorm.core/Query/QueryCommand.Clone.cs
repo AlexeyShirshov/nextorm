@@ -96,6 +96,7 @@ public partial class QueryCommand
         dst.TableSample = TableSample;
         dst.Temporal = Temporal;
         dst.RowLock = RowLock;
+        dst.SourceLockClause = SourceLockClause;
         dst.Final = Final;
         dst.SampleRatio = SampleRatio;
         dst.SampleOffset = SampleOffset;

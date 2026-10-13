@@ -86,6 +86,7 @@ public partial class QueryCommand
 
             FromExpression? from = cmd._from ?? cmd._dataContext.GetFrom(srcType, cmd);
             PrepareFrom(from, dontCalculateHash, cancellationToken, cmd);
+            from = AttachPrimarySourceLock(cmd, from);
             var joinPlanHash = PrepareJoin(cmd, dontCalculateHash, cancellationToken);
             var (selectList, columnsPlanHash) = PrepareColumns(cmd, dontCalculateHash, srcType, cancellationToken);
             // #148-B D5/A7: reject an unlifted non-nullable value scalar read through a reference
@@ -285,6 +286,67 @@ public partial class QueryCommand
             if (from?.Pivot is not null)
                 PrepareFrom(from.Pivot.Inner, dontCalculateHash, cancellationToken, owner);
         }
+
+        /// <summary>
+        /// Validates and attaches the source-level row lock requested for the primary source. The lock is
+        /// transferred from <see cref="QueryCommand.SourceLockClause"/> onto the resolved source so it
+        /// travels through clone/equality/plan-key like any other source metadata. Fail-closed:
+        /// a whole-query lock cannot be combined with a source lock (they would be ambiguous); a
+        /// source lock is only valid on a physical table source; and a dialect whose lock renderer does
+        /// not opt into <see cref="ILockRenderer.SupportsSourceLocks"/> (MariaDB, SQLite, ClickHouse,
+        /// in-memory) rejects it before any SQL is emitted.
+        /// </summary>
+        private static FromExpression? AttachPrimarySourceLock(QueryCommand cmd, FromExpression? from)
+        {
+            var primaryLock = cmd.SourceLockClause;
+            var joins = cmd.Joins;
+            var hasJoinSourceLock = joins is not null && Array.Exists(joins, static j => j.From.SourceLock is not null);
+            if (primaryLock is null && !hasJoinSourceLock)
+                return from;
+
+            if (cmd.RowLock is not null)
+                throw new InvalidOperationException(
+                    "A whole-query ForUpdate/ForShare cannot be combined with a source-level lock; lock either the whole query or specific sources.");
+
+            if (primaryLock is not null)
+            {
+                if (from is null || !IsLockablePhysicalSource(cmd, from))
+                    throw new NotSupportedException(
+                        "A source-level lock (FOR UPDATE OF) can only target a physical table source, not a derived/subquery/CTE/FromSql source.");
+
+                from = from.WithSourceLock(primaryLock);
+            }
+
+            if (joins is not null)
+            {
+                for (var i = 0; i < joins.Length; i++)
+                {
+                    if (joins[i].From.SourceLock is not null && !IsLockablePhysicalSource(cmd, joins[i].From))
+                        throw new NotSupportedException(
+                            "A source-level lock (FOR UPDATE OF) can only target a physical table source, not an APPLY/derived/table-valued join source.");
+                }
+            }
+
+            // The dialect capability is enforced when SQL is assembled (SqlBuilder) and by the in-memory
+            // guard; it is not reachable from the engine-agnostic IDataContext here.
+            return from;
+        }
+
+        /// <summary>
+        /// Whether <paramref name="from"/> is a plain physical table source a source-level lock can target:
+        /// a named table that is not a derived subquery, raw SQL, table expression, table-valued function,
+        /// XML row-set, pivot or a declared CTE read.
+        /// </summary>
+        private static bool IsLockablePhysicalSource(QueryCommand cmd, FromExpression from)
+            => !string.IsNullOrEmpty(from.Table)
+                && from.SubQuery is null
+                && from.TableFunction is null
+                && from.Pivot is null
+                && from.XmlNodes is null
+                && from.RawSqlSource is null
+                && from.TableExpressionOverride is null
+                && from.ColumnShape is null
+                && (cmd._ctes is not { Count: > 0 } ctes || !System.Linq.Enumerable.Any(ctes, c => string.Equals(c.Name, from.Table, StringComparison.OrdinalIgnoreCase)));
 
         // Moves the raw-source filter skips collected while preparing a nested command (a derived table,
         // CTE body, set-operation branch or correlated applied source) into the owning preparation, so the

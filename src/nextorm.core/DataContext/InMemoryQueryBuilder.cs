@@ -112,6 +112,11 @@ internal static class InMemoryQueryBuilder
         if (queryCommand.RowLock is not null)
             throw new NotSupportedException("The FOR UPDATE/FOR SHARE clause is not supported by the in-memory provider.");
 
+        // A source-only lock (RowLock == null) must not bypass the restriction: the in-memory provider has
+        // no row-lock concept at all.
+        if (queryCommand.SourceLockClause is not null || HasJoinSourceLock(queryCommand))
+            throw new NotSupportedException("Source-level row locking (FOR UPDATE OF/FOR SHARE OF) is not supported by the in-memory provider.");
+
         if (queryCommand.Paging.HasWithTies)
             throw new NotSupportedException("The WITH TIES page modifier is not supported by the in-memory provider.");
 
@@ -539,6 +544,21 @@ internal static class InMemoryQueryBuilder
         for (var i = 0; i < joins.Length; i++)
         {
             if (joins[i].JoinHint is not null || joins[i].TableHints is { Count: > 0 })
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasJoinSourceLock(QueryCommand queryCommand)
+    {
+        var joins = queryCommand.Joins;
+        if (joins is null)
+            return false;
+
+        for (var i = 0; i < joins.Length; i++)
+        {
+            if (joins[i].From.SourceLock is not null)
                 return true;
         }
 

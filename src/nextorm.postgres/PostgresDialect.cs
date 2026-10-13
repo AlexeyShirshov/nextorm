@@ -668,11 +668,19 @@ internal sealed class PostgresLockRenderer : ILockRenderer
 
     public bool UsesTableHints => false;
 
+    /// <summary>PostgreSQL supports the targeted <c>FOR UPDATE OF &lt;alias&gt;</c>/<c>FOR SHARE OF &lt;alias&gt;</c> form.</summary>
+    public bool SupportsSourceLocks => true;
+
     public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
         Render(mode, LockWaitMode.Wait, keywordCase);
 
     public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase = KeywordCase.Lower) =>
         SqlKeywords.Of(keywordCase, (mode == LockMode.Share ? " for share" : " for update") + LockWaitSuffix(wait));
+
+    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase, string? targetAlias) =>
+        targetAlias is null
+            ? Render(mode, wait, keywordCase)
+            : SqlKeywords.Of(keywordCase, (mode == LockMode.Share ? " for share" : " for update") + " of " + targetAlias + LockWaitSuffix(wait));
 
     private static string LockWaitSuffix(LockWaitMode wait) => wait switch
     {

@@ -276,6 +276,8 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
             JoinHint = opts.JoinHint,
             TableHints = opts.TableHints
         });
+        if (opts.SourceLock is not null)
+            cb.Joins![^1].SetFrom(cb.Joins![^1].From.WithSourceLock(opts.SourceLock));
         cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
@@ -571,6 +573,8 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
             JoinHint = opts.JoinHint,
             TableHints = opts.TableHints
         });
+        if (opts.SourceLock is not null)
+            cb.Joins![^1].SetFrom(cb.Joins![^1].From.WithSourceLock(opts.SourceLock));
         cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
@@ -853,6 +857,8 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
             JoinHint = opts.JoinHint,
             TableHints = opts.TableHints
         });
+        if (opts.SourceLock is not null)
+            cb.Joins![^1].SetFrom(cb.Joins![^1].From.WithSourceLock(opts.SourceLock));
         cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
@@ -1135,6 +1141,8 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
             JoinHint = opts.JoinHint,
             TableHints = opts.TableHints
         });
+        if (opts.SourceLock is not null)
+            cb.Joins![^1].SetFrom(cb.Joins![^1].From.WithSourceLock(opts.SourceLock));
         cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
@@ -1417,6 +1425,8 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
             JoinHint = opts.JoinHint,
             TableHints = opts.TableHints
         });
+        if (opts.SourceLock is not null)
+            cb.Joins![^1].SetFrom(cb.Joins![^1].From.WithSourceLock(opts.SourceLock));
         cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
@@ -1699,6 +1709,8 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
             JoinHint = opts.JoinHint,
             TableHints = opts.TableHints
         });
+        if (opts.SourceLock is not null)
+            cb.Joins![^1].SetFrom(cb.Joins![^1].From.WithSourceLock(opts.SourceLock));
         cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }

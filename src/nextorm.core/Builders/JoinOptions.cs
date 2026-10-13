@@ -22,6 +22,15 @@ public sealed class JoinOptions
     internal bool CartesianWarningSuppressed { get; private set; }
 
     /// <summary>
+    /// The source-level row lock requested for this join's physical source (<c>FOR UPDATE OF</c>/
+    /// <c>FOR SHARE OF</c> on supporting dialects, or a per-source table hint on SQL Server), or
+    /// <c>null</c> when the join carries no lock. Set through <see cref="ForUpdate()"/>/
+    /// <see cref="ForShare()"/>; a repeated setter replaces the previous lock. The lock is stored on the
+    /// joined source (<see cref="JoinExpression.From"/>), not on the join node itself.
+    /// </summary>
+    internal LockClause? SourceLock { get; private set; }
+
+    /// <summary>
     /// The relationship configured locally for this join, or <see langword="null"/> to fall back to the
     /// declared relationship metadata. A local configuration fully replaces the metadata for the calling
     /// <c>JoinInto</c> and works without registration.
@@ -214,6 +223,53 @@ public sealed class JoinOptions
                 JunctionChildForeignKey = [junctionChildForeignKeyProperty],
             });
 
+        return this;
+    }
+
+    /// <summary>
+    /// Locks the selected rows of this join's physical source exclusively until the transaction ends,
+    /// blocking while a locked row is held by another transaction. On PostgreSQL/MySQL it renders a
+    /// targeted <c>FOR UPDATE OF &lt;alias&gt;</c> clause; on SQL Server it applies the <c>updlock</c>
+    /// table hint to this join's table only. Requires a dialect whose lock renderer reports
+    /// <see cref="ILockRenderer.SupportsSourceLocks"/>; a dialect without it (for example MariaDB)
+    /// rejects the command with <see cref="NotSupportedException"/>.
+    /// </summary>
+    /// <returns>This instance, to allow chaining.</returns>
+    public JoinOptions ForUpdate() => ForUpdate(LockWaitMode.Wait);
+
+    /// <summary>
+    /// Locks the selected rows of this join's physical source exclusively until the transaction ends,
+    /// with the requested wait behaviour for rows already locked by another transaction. Requires a
+    /// dialect whose lock renderer reports <see cref="ILockRenderer.SupportsSourceLocks"/>.
+    /// </summary>
+    /// <param name="wait">How to react to a row already locked by another transaction.</param>
+    /// <returns>This instance, to allow chaining.</returns>
+    public JoinOptions ForUpdate(LockWaitMode wait)
+    {
+        SourceLock = new LockClause(LockMode.Update, wait);
+        return this;
+    }
+
+    /// <summary>
+    /// Locks the selected rows of this join's physical source in shared mode until the transaction ends,
+    /// blocking while a locked row is held by another transaction. On PostgreSQL/MySQL it renders a
+    /// targeted <c>FOR SHARE OF &lt;alias&gt;</c> clause; on SQL Server it applies the <c>holdlock</c>
+    /// table hint to this join's table only. Requires a dialect whose lock renderer reports
+    /// <see cref="ILockRenderer.SupportsSourceLocks"/>.
+    /// </summary>
+    /// <returns>This instance, to allow chaining.</returns>
+    public JoinOptions ForShare() => ForShare(LockWaitMode.Wait);
+
+    /// <summary>
+    /// Locks the selected rows of this join's physical source in shared mode until the transaction ends,
+    /// with the requested wait behaviour for rows already locked by another transaction. Requires a
+    /// dialect whose lock renderer reports <see cref="ILockRenderer.SupportsSourceLocks"/>.
+    /// </summary>
+    /// <param name="wait">How to react to a row already locked by another transaction.</param>
+    /// <returns>This instance, to allow chaining.</returns>
+    public JoinOptions ForShare(LockWaitMode wait)
+    {
+        SourceLock = new LockClause(LockMode.Share, wait);
         return this;
     }
 

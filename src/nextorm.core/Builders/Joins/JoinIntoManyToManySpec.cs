@@ -642,6 +642,11 @@ internal sealed class JoinIntoManyToManySpec<TEntity, TChild> : IJoinIntoSpec<TE
             SuppressCartesianWarning = options.CartesianWarningSuppressed,
         };
 
+        // A JoinOptions source lock targets the user-visible child table (the derived junction-link join is
+        // not a physical source a lock can address).
+        if (options.SourceLock is not null)
+            childJoin.SetFrom(childJoin.From.WithSourceLock(options.SourceLock));
+
         return (spec, linkJoin, childJoin);
     }
 }

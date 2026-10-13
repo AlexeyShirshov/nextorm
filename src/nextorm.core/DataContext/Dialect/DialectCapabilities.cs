@@ -570,6 +570,15 @@ public interface ILockRenderer
     bool UsesTableHints { get; }
 
     /// <summary>
+    /// Whether the dialect can lock a single named source (<c>FOR UPDATE OF &lt;alias&gt;</c>/
+    /// <c>FOR SHARE OF &lt;alias&gt;</c>, or a per-source table hint on a table-hint dialect). The safe
+    /// default is <see langword="false"/>: a dialect that has not implemented source-level locking must
+    /// reject it fail-closed instead of silently emitting a whole-query lock. MariaDB overrides it back to
+    /// <see langword="false"/> because its grammar has no <c>OF</c> form.
+    /// </summary>
+    bool SupportsSourceLocks => false;
+
+    /// <summary>
     /// Renders the locking token for <paramref name="mode"/>: the trailing clause when
     /// <see cref="UsesTableHints"/> is <c>false</c>, otherwise the bare table-hint token.
     /// </summary>
@@ -590,6 +599,23 @@ public interface ILockRenderer
         wait == LockWaitMode.Wait
             ? Render(mode, keywordCase)
             : throw new NotSupportedException("The locking wait mode is not supported by this SQL dialect.");
+
+    /// <summary>
+    /// Renders the locking token for <paramref name="mode"/>/<paramref name="wait"/> restricted to the
+    /// source declared as <paramref name="targetAlias"/>. A <see langword="null"/> target is the
+    /// whole-query rendering and delegates to <see cref="Render(LockMode, LockWaitMode, KeywordCase)"/>.
+    /// The default implementation is fail-closed: it rejects any non-null target with
+    /// <see cref="NotSupportedException"/> rather than silently widening it to a whole-query lock. A
+    /// dialect whose grammar can express a targeted lock overrides it.
+    /// </summary>
+    /// <param name="mode">The row-locking strength.</param>
+    /// <param name="wait">How to react to a row already locked by another transaction.</param>
+    /// <param name="keywordCase">Selects the letter case of the emitted SQL keywords.</param>
+    /// <param name="targetAlias">The already-resolved, quoted alias of the locked source, or <c>null</c> for a whole-query lock.</param>
+    string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase, string? targetAlias) =>
+        targetAlias is null
+            ? Render(mode, wait, keywordCase)
+            : throw new NotSupportedException("Source-level row locking (FOR UPDATE OF) is not supported by this SQL dialect.");
 }
 
 /// <summary>
