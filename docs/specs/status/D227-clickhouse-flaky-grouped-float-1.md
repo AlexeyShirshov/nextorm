@@ -10,10 +10,10 @@
 - plan_revision: r=1
 - attempt: n=1/3
 - evidence_contract: rv=1
-- plan_state: ready (готовность плана, не завершённость реализации/evidence)
+- plan_state: done (план выполнен, evidence заморожено, цикл закрыт)
 - mode: autonomous collection own-PLAN; single group `G1` → текущий worktree/ветка `1.0.9`, без веток/worktree/merge/push
 - permitted auto-commit: только этот статус-файл, префикс `#227`; push никогда
-- phase: **PLAN complete — collection handoff** (DO не стартовал и не авторизуется этим файлом)
+- phase: **ACT complete — cycle closed** (DO complete; CHECK227 PASS; ACT closure done)
 - status_file: `docs/specs/status/D227-clickhouse-flaky-grouped-float-1.md`
 
 ## Task
@@ -26,11 +26,12 @@
 
 ## Current state
 
-- phase: DO in progress — D227-00…D227-03 executed: scope/runtime gate + inner red/green evidence + boundary (solution build and one all-ClickHouse sweep) green + provenance/manifest/report frozen (rv=1); CHECK227 pending.
-- `n=1/3`; активный `P:` = этот PLAN r=1; активные `D:` = `D227-00` … `D227-03` (все `pending`), плюс независимая верификация `CHECK227`.
-- DO начат: scope-brief/runtime gate пройдены, правка `AssertGroupedParity` применена, inner-evidence собран; исходные `D227-*` остаются активными (не `done`) до CHECK, отчёт исполнителя не переводит их в `done`.
+- phase: **ACT complete — cycle closed**. DO complete — `D227-00` … `D227-03` done; CHECK227 independent verification `done`.
+- `n=1/3`; `plan_revision r=1`; `evidence_contract rv=1`; `cycle N=1` closed.
+- CHECK227 independent verdict: **PASS** — manifest rows T227-E01…T227-E09 all `met`, 0 open rows, no loop-back, no product defect.
+- DO produced the eager `_sut`-before-oracle fix (committed `4dcbc6ec`); evidence/provenance frozen at DO commit `41c7fcaf`; CHECK recovery re-gathers recorded (red iter00 exit-code regeneration, E01 chronology).
 - Препятствий/blocker-отчётов нет; первичный PLAN, содержательных ревизий и supersession нет.
-- Code 216 (`QUERY_WITH_SAME_ID_IS_ALREADY_RUNNING`) остаётся `deferred + trigger` в milestone `1.0.9`; в T227 не исследуется и не обходится.
+- Code 216 (`QUERY_WITH_SAME_ID_IS_ALREADY_RUNNING`) остаётся `deferred + trigger` в milestone `1.0.9`; в T227 не исследовался и не обходился.
 
 ## Durable state
 
@@ -38,9 +39,9 @@
 - Plan revision r: 1
 - Attempt n: 1/3
 - Evidence contract rv: 1
-- plan_state: ready
+- plan_state: done
 - defect_key registry: (пусто)
-- Defect history: none yet — дефектов не наблюдалось; ни одна попытка/ревизия не сбрасывалась.
+- Defect history: none — дефектов не наблюдалось; ни одна попытка/ревизия не сбрасывалась; фиксов не применялось (applied fixes = 0).
 
 ## Acceptance criteria
 
@@ -290,3 +291,14 @@ Confidence high in the minimal correction; post-fix success is planned evidence 
 2026-10-13T04:44:02Z | DO | r1 | n1/3 | provenance frozen at pre-commit HEAD 9f11957d0c726196d5295de6ab8ad34860cc1efb: frozen-source.patch (non-empty), source+apphost+dll sha256, status.diff; test change still uncommitted at freeze time | A/frozen-head.txt, A/frozen-source.patch, A/source-artifact-sha256.txt, A/status.diff
 
 2026-10-13T04:44:02Z | DO | r1 | n1/3 | /tmp/evidence.json updated with phase=boundary executions (solution build + all-ClickHouse selected=265); report validator exit 0; manifest rv=1 (tree=9f11957d, rows T227-E01..T227-E09 all met) validator exit 0 | A/evidence.json, A/manifest.json, A/report-validator.log, A/manifest-validator.log
+
+2026-10-13T04:52:49Z | CHECK | r1 | n1/3 | CHECK recovery Part 1: read-only hunt found NO recorded shell exit for red iter00 (summary.tsv covers only rows 01..15; no EXIT line in any iter*.log; only run.sh:25 echoes it) | A/red-review.md
+2026-10-13T04:52:49Z | CHECK | r1 | n1/3 | CHECK recovery Part 2: deterministic pre-fix regeneration via git checkout 9f11957d -> affected build exit 0 -> isolated run real exit code 1 with :644 `{20, 10}` assertion -> restored fixed blob 4dcbc6ec (sha a461670a); apphost sha matches 7fb002e7, dll sha differs (f96f3dfc vs 44d2424d) flagged | A/red/iter00-reexec.log, A/red/iter00-exit.txt, A/red/rebuild-prefix.log, A/red/rebuild-fixed.log, A/source-artifact-sha256.txt
+2026-10-13T04:52:49Z | CHECK | r1 | n1/3 | CHECK recovery Part 3 (E01 chronology): brief-validator.log (09:33:20.223) and runtime.log (09:33:20.234) mtimes precede change.patch (09:33:42.347); running-integration-tests skill loaded before any DO edit/container run; DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock | A/e01-chronology.md
+2026-10-13T05:00:27Z | CHECK | r1 | n1/3 | CHECK recovery Part 4 (E01 machine-generated timestamp): in session run=71dc7fce the running-integration-tests skill load was evaluated at 2026-10-13T04:14:33.183Z and again at 04:29:58.408Z, both preceding the DO edit of tests/nextorm.integration.tests/ClickHouseExtremeRowNativeSpecificTests.cs at 2026-10-13T04:33:30.291Z by ~19 min / ~3.5 min; host tz UTC+05:00 (local 09:14:33 / 09:29:58 / 09:33:30); recovered verbatim (read-only) from /home/alex/.local/share/opencode/log/opencode.log lines 2078783-2078785, 2080472, 2080919, 2083853, 2083867 | A/e01-skill-load.log, A/e01-chronology.md
+
+2026-10-13T05:03:21Z | CHECK | r1 | n1/3 | CHECK227 independent verdict PASS — manifest rows T227-E01…E09 all `met` row-by-row, 0 open rows, no loop-back, no product defect | artifacts/pdca/D227-clickhouse-flaky-grouped-float/rv1/manifest.json
+
+2026-10-13T05:03:21Z | ACT | r1 | n1/3 | ACT closure — `#227` fix committed `4dcbc6ec`; DO evidence `41c7fcaf`; cycle N=1 closed; D227-00…D227-03 + CHECK227 done; status file retained | docs/specs/status/D227-clickhouse-flaky-grouped-float-1.md
+
+2026-10-13T05:03:21Z | ACT | r1 | n1/3 | next pending lane task = T221 (DO, r=1) | docs/specs/status/collection-1.0.9-todo.md
