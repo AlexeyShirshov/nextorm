@@ -1,4 +1,4 @@
-# D216 — Row locking: FOR UPDATE (whole query) vs FOR UPDATE OF (per source)
+﻿# D216 — Row locking: FOR UPDATE (whole query) vs FOR UPDATE OF (per source)
 
 ```yaml
 task: T216
@@ -43,7 +43,19 @@ prior_contract: rv=1 superseded by rv=2
 | D-03 | done | mappings/clones/equality/plan-key identity/guards (`FromExpressionPlanEqualityComparer`, `QueryCommand.SourceLockClause`, `QueryPreparer` attach+guards); commit `4d979efc` |
 | D-04 | done | SQL Server all-source hints, PG/MySQL `OF <alias>`, alias addressing; join-source-lock fix commit `3ef11a3c` |
 | D-04M | done | MariaDB `SupportsSourceLocks=false` + deterministic `NotSupportedException`; whole grammar preserved; red→green `/tmp/nextorm-maria-red.log` (exit 2, selected 3, failed 2) → `/tmp/nextorm-maria-green.log` (exit 0, selected 3) |
-| D-05/D-06 | pending | full matrix closure, `PlanKeyUniquenessTests` run, solution build, CRLF sweep, docs, integration, perf, coverage, manifest — NOT started |
+| D-05/D-06 | pending | D-05 part 1 closed (focused matrix rows + `PlanKeyUniquenessTests`, full solution build, CRLF sweep); D-05 remainder/D-06 (integration live, EN/RU docs, boundary sweep, acceptance/T216 benchmarks, coverage, manifest) NOT started |
+
+### D-05 part 1 (closed in this step)
+
+Closed (focused `PDCA=T216`, `-c Debug --no-build`): whole+source → `InvalidOperationException`; non-physical
+derived-query source → `NotSupportedException`; SQLite/ClickHouse/in-memory source-only rejection;
+Update/Share × Wait/NoWait/SkipLocked preserved incl. MariaDB own grammar; multi-source different
+mode/wait each targeted; capability fail-closed (MariaDB primary+join); empty/whitespace target →
+`ArgumentException`; child `LoadWith` source-only guard; extreme-row source-only guard; plan-key
+identity for source locks (`PlanKeyUniquenessTests`). V-04 (FromSql) and V-06 (CTE) guards exist in
+`QueryPreparer` but have no public source-lock path today (recorded, not asserted). Remaining for the
+boundary step: V-18/V-22/V-24/V-30 review rows, integration live probes, EN/RU docs, `C-BOUNDARY`,
+acceptance/T216 benchmarks, coverage, frozen rv=2 manifest.
 
 Focused inner-loop evidence (trait `PDCA=T216`, `-c Debug --no-build`, filter `PDCA=T216`):
 `/tmp/nextorm-core-focused.log` (exit 0, selected 5), `/tmp/nextorm-ss-t216b.log` (exit 0, selected 2),
@@ -340,4 +352,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 2026-10-12T04:39:15Z | PLAN | r=2 | n=1/3 | PLAN ready — awaiting confirmation (collection plan_handoff; DO not started) | status file docs/specs/status/D216-row-locking-1.md
 2026-10-13T00:00:00Z | DO | r=2 | n=1/3 | DO started — D-01..D-04M; planner footprint corrections applied (docs guide/32, Expressions comparers) | scope /tmp/nextorm-t216-scope.json (brief exit 0)
 2026-10-13T00:10:00Z | DO | r=2 | n=1/3 | D-01..D-04M implemented; contracts+renderers+guards committed 4d979efc; join-source-lock fixed 3ef11a3c | logs /tmp/nextorm-d01-*.log /tmp/nextorm-{core,postgres,mysql,mariadb,sqlserver}-t216b.log /tmp/nextorm-maria-{red,green}.log
+2026-10-13T00:20:00Z | DO | r=2 | n=1/3 | D-05 part 1: PlanKeyUniqueness 13->14 selected; full slnx build 0/0; focused matrix rows closed (guards/unsupported/mode-wait/empty-target); CRLF normalized | logs /tmp/nextorm-plankey.log /tmp/nextorm-full-build2.log /tmp/nextorm-{core,sqlite,ch,pg,mysql,mariadb,ss}-*t216*.log
 ```
