@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using NextORM.Core;
 
 namespace NextORM.SqlServer.Tests;
@@ -86,7 +86,7 @@ public class UpdateJoinSqlGenerationTests
             .Set(p => p.Item1.Name, "x")
             .ToSql();
 
-        sql.Should().Be("update [t1] set t1.name = @p0 from merge_entity with (nolock) as [t1] join merge_entity with (nolock) as [t2] on t1.id = t2.id");
+        sql.Should().Be("update [t1] set t1.name = @p0 from merge_entity as [t1] with (nolock) join merge_entity as [t2] with (nolock) on t1.id = t2.id");
         (sql.Split("with (").Length - 1).Should().Be(2);
     }
 
@@ -102,8 +102,8 @@ public class UpdateJoinSqlGenerationTests
             .Set(p => p.Item1.Name, "x")
             .ToSql();
 
-        sql.Should().Contain("from merge_entity with (updlock) as [t1]");
-        sql.Should().Contain("join merge_entity with (rowlock, updlock) as [t2]");
+        sql.Should().Contain("from merge_entity as [t1] with (updlock)");
+        sql.Should().Contain("join merge_entity as [t2] with (rowlock, updlock)");
         (sql.Split("with (").Length - 1).Should().Be(2);
     }
 
@@ -132,7 +132,7 @@ public class UpdateJoinSqlGenerationTests
         var unhinted = Render(false);
         var hintedAgain = Render(true);
 
-        hintedFirst.Should().Be("update [t1] set t1.name = @p0 from merge_entity with (nolock) as [t1] join merge_entity with (nolock) as [t2] on t1.id = t2.id");
+        hintedFirst.Should().Be("update [t1] set t1.name = @p0 from merge_entity as [t1] with (nolock) join merge_entity as [t2] with (nolock) on t1.id = t2.id");
         hintedAgain.Should().Be(hintedFirst, "repeated hinted calls on the same context must produce identical SQL");
         unhinted.Should().Be("update [t1] set t1.name = @p0 from merge_entity as [t1] join merge_entity as [t2] on t1.id = t2.id");
         unhinted.Should().NotContain("with (");

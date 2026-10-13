@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations.Schema;
+﻿using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
@@ -2030,7 +2030,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id).Select(p => new { p.Item1.Id }));
 
-        sql.Should().Contain("from simple_entity with (nolock) as [t1] join complex_entity as [t2]");
+        sql.Should().Contain("from simple_entity as [t1] with (nolock) join complex_entity as [t2]");
     }
 
     [Fact]
@@ -2079,7 +2079,7 @@ public class SqlGenerationTests
             .WithTablesInScopeHint("nolock")
             .Select(p => new { p.Item1.Id }));
 
-        sql.Should().Contain("from simple_entity with (nolock) as [t1] join complex_entity with (nolock) as [t2]");
+        sql.Should().Contain("from simple_entity as [t1] with (nolock) join complex_entity as [t2] with (nolock)");
     }
 
     [Fact]
@@ -2104,7 +2104,7 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().Contain("from simple_entity as [t1]");
-        sql.Should().Contain("join complex_entity with (nolock) as [t2]");
+        sql.Should().Contain("join complex_entity as [t2] with (nolock)");
         sql.Should().NotContain("simple_entity with (");
     }
 
@@ -2119,7 +2119,7 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().Contain("join complex_entity as [t2]");
-        sql.Should().Contain("join sales with (nolock) as [t3]");
+        sql.Should().Contain("join sales as [t3] with (nolock)");
         sql.Should().NotContain("complex_entity with (");
     }
 
@@ -2135,8 +2135,8 @@ public class SqlGenerationTests
 
         // The primary table merges its own hint with the scope hint; the joined table merges the
         // per-join hint first, then the scope hint, into one WITH clause.
-        sql.Should().Contain("from simple_entity with (rowlock, updlock) as [t1]");
-        sql.Should().Contain("join complex_entity with (nolock, updlock) as [t2]");
+        sql.Should().Contain("from simple_entity as [t1] with (rowlock, updlock)");
+        sql.Should().Contain("join complex_entity as [t2] with (nolock, updlock)");
 
         // Each physical table carries exactly one WITH clause: the per-join hint must not be emitted
         // a second time next to the scope hint.
@@ -2152,7 +2152,7 @@ public class SqlGenerationTests
             .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock").WithJoinHint("hash"))
             .Select(p => new { p.Item1.Id }));
 
-        sql.Should().Contain("inner hash join complex_entity with (nolock) as [t2]");
+        sql.Should().Contain("inner hash join complex_entity as [t2] with (nolock)");
     }
 
     [Fact]
@@ -2173,7 +2173,7 @@ public class SqlGenerationTests
             .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock").WithJoinTableHint(" ").WithJoinTableHint())
             .Select(p => new { p.Item1.Id }));
 
-        kept.Should().Contain("join complex_entity with (nolock) as [t2]");
+        kept.Should().Contain("join complex_entity as [t2] with (nolock)");
     }
 
     [Fact]
@@ -2211,7 +2211,7 @@ public class SqlGenerationTests
             .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("  ", "nolock", null!))
             .Select(p => new { p.Item1.Id }));
 
-        sql.Should().Contain("complex_entity with (nolock) as [t2]");
+        sql.Should().Contain("complex_entity as [t2] with (nolock)");
     }
 
     [Fact]
@@ -2235,7 +2235,7 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.Id })
             .Hint("recompile"));
 
-        sql.Should().Contain("from simple_entity with (nolock) as [t1] inner hash join complex_entity as [t2]");
+        sql.Should().Contain("from simple_entity as [t1] with (nolock) inner hash join complex_entity as [t2]");
         sql.Should().EndWith("option (recompile)");    }
 
     [Fact]
@@ -2813,8 +2813,8 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id).ForUpdate().Select(p => new { p.Item1.Id }));
 
-        sql.Should().Contain("from simple_entity with (updlock) as [t1]");
-        sql.Should().Contain("join complex_entity with (updlock) as [t2]");
+        sql.Should().Contain("from simple_entity as [t1] with (updlock)");
+        sql.Should().Contain("join complex_entity as [t2] with (updlock)");
     }
 
     [Fact]
@@ -2827,8 +2827,20 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id).ForShare().Select(p => new { p.Item1.Id }));
 
-        sql.Should().Contain("from simple_entity with (holdlock) as [t1]");
-        sql.Should().Contain("join complex_entity with (holdlock) as [t2]");
+        sql.Should().Contain("from simple_entity as [t1] with (holdlock)");
+        sql.Should().Contain("join complex_entity as [t2] with (holdlock)");
+    }
+
+    // scenario label: source/primary, SQL Server targeted hint (V-01/V-11).
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_Primary_ShouldEmitUpdlockHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForUpdate()).Select(x => x.Id));
+
+        sql.Should().Be("select t1.id from simple_entity as [t1] with (updlock)");
     }
 
     [Fact]

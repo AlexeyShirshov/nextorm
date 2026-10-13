@@ -288,4 +288,55 @@ public sealed class DialectCapabilityContractTests
         byName["MariaDbDialect"].SupportsReturning.Should().BeFalse();
         byName["MariaDbDialect"].SupportsUpdateReturning.Should().BeFalse();
     }
+
+    /// <summary>
+    /// The source-level row-lock capability (<c>FOR UPDATE OF</c>) must be explicit per dialect: only a
+    /// grammar that can address a named source opts in. MariaDB must stay fail-closed because its grammar
+    /// has no <c>OF</c> form; a dialect with no lock renderer at all cannot express either scope.
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SupportsSourceLocks_ShouldBeExplicitPerDialect()
+    {
+        var byName = AllDialects().ToDictionary(d => d.GetType().Name);
+
+        byName["PostgresDialect"].Lock!.SupportsSourceLocks.Should().BeTrue();
+        byName["MySqlDialect"].Lock!.SupportsSourceLocks.Should().BeTrue();
+        byName["SqlServerDialect"].Lock!.SupportsSourceLocks.Should().BeTrue();
+        byName["MariaDbDialect"].Lock!.SupportsSourceLocks.Should().BeFalse(
+            "MariaDB has no FOR UPDATE OF form; it must never inherit MySQL's OF.");
+        byName["SqliteDialect"].Lock.Should().BeNull();
+        byName["ClickHouseDialect"].Lock.Should().BeNull();
+    }
+
+    /// <summary>
+    /// The target-aware lock overload is fail-closed: a dialect that reports
+    /// <see cref="ILockRenderer.SupportsSourceLocks"/> renders a non-empty targeted token, and one that
+    /// does not rejects the target with <see cref="NotSupportedException"/> instead of emitting a
+    /// whole-query lock or an unsupported <c>OF</c>.
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLockTarget_ShouldBeTargetedOrFailClosed()
+    {
+        var dialects = AllDialects().ToList();
+        dialects.Should().NotBeEmpty();
+
+        foreach (var dialect in dialects)
+        {
+            if (dialect.Lock is not { } lockRenderer)
+                continue;
+
+            if (lockRenderer.SupportsSourceLocks)
+            {
+                lockRenderer.Render(LockMode.Update, LockWaitMode.Wait, KeywordCase.Lower, "\"t1\"")
+                    .Should().NotBeNullOrEmpty($"{dialect.GetType().Name} reports source-lock support");
+            }
+            else
+            {
+                var act = () => lockRenderer.Render(LockMode.Update, LockWaitMode.Wait, KeywordCase.Lower, "\"t1\"");
+                act.Should().Throw<NotSupportedException>($"{dialect.GetType().Name} must reject a source lock");
+            }
+        }
+    }
 }

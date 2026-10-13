@@ -504,11 +504,10 @@ internal static class SqlSourceRenderer
 
                 sqlBuilder.Append(ctx.QuoteIdentifiers ? QuoteQualifiedIdentifier(ctx.Dialect, tableName) : tableName);
 
-                // SQL Server places table hints and the index hint after the table name and before its
-                // alias; MySQL/SQLite place the standalone index clause there too.
-                if (indexHintSql is not null && indexRenderer is { MergesWithTableHints: true })
-                    sqlBuilder.Append(ctx.Dialect.MakeTableHints(TableHintsWithIndex(tableHints, indexHintSql), ctx.KeywordCase));
-                else
+                // SQL Server's grammar requires the table-hint WITH (...) clause AFTER the table alias
+                // (FROM t AS a WITH (hint)); it is emitted below, once the alias is known. MySQL/SQLite,
+                // which have no WITH table hints, keep their standalone index clause before the alias.
+                if (!ctx.Dialect.SupportsTableHints)
                 {
                     if (tableHints is { Count: > 0 })
                         sqlBuilder.Append(ctx.Dialect.MakeTableHints(tableHints, ctx.KeywordCase));
@@ -532,6 +531,16 @@ internal static class SqlSourceRenderer
 
                     alias = ctx.AliasProvider!.GetNextAlias(from);
                     sqlBuilder.Append(ctx.Dialect.MakeTableAlias(alias, ctx.KeywordCase));
+                }
+
+                // A structural table-hint dialect (SQL Server) renders the WITH (...) clause after the
+                // alias; the merged INDEX hint is folded into the same clause.
+                if (ctx.Dialect.SupportsTableHints)
+                {
+                    if (indexHintSql is not null)
+                        sqlBuilder.Append(ctx.Dialect.MakeTableHints(TableHintsWithIndex(tableHints, indexHintSql), ctx.KeywordCase));
+                    else if (tableHints is { Count: > 0 })
+                        sqlBuilder.Append(ctx.Dialect.MakeTableHints(tableHints, ctx.KeywordCase));
                 }
 
                 // A non-table-hint dialect emits the source lock as a trailing FOR UPDATE OF <alias>; the

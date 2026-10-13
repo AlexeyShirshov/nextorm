@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using NextORM.Core;
 
 namespace NextORM.SqlServer.Tests;
@@ -143,7 +143,7 @@ public class DeleteSqlGenerationTests
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
             .ToSql();
 
-        sql.Should().Be("delete [t1] from complex_entity with (nolock) as [t1] join simple_entity with (nolock) as [t2] on t1.id = cast(t2.id as bigint)");
+        sql.Should().Be("delete [t1] from complex_entity as [t1] with (nolock) join simple_entity as [t2] with (nolock) on t1.id = cast(t2.id as bigint)");
         (sql.Split("with (").Length - 1).Should().Be(2);
     }
 
@@ -159,7 +159,7 @@ public class DeleteSqlGenerationTests
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id, j => j.WithJoinTableHint("rowlock"))
             .ToSql();
 
-        sql.Should().Be("delete [t1] from complex_entity with (nolock) as [t1] join simple_entity with (rowlock, nolock) as [t2] on t1.id = cast(t2.id as bigint)");
+        sql.Should().Be("delete [t1] from complex_entity as [t1] with (nolock) join simple_entity as [t2] with (rowlock, nolock) on t1.id = cast(t2.id as bigint)");
         (sql.Split("with (").Length - 1).Should().Be(2);
     }
 }
