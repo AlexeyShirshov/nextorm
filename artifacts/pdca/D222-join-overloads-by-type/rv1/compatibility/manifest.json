@@ -1,0 +1,21 @@
+{
+  "task": "T222",
+  "issue": "#222",
+  "rv": 1,
+  "cases": [
+    {
+      "id": "T222-COMPAT-POS",
+      "kind": "positive",
+      "project": "positive/PositiveFixture.csproj",
+      "expect": "success",
+      "expected_diagnostics": []
+    },
+    {
+      "id": "T222-COMPAT-NEG-INFER",
+      "kind": "negative",
+      "project": "negative/UntypedLambdaFixture.csproj",
+      "expect": "failure",
+      "expected_diagnostics": ["CS0411"]
+    }
+  ]
+}

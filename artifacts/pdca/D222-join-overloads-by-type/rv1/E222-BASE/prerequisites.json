@@ -1,0 +1,20 @@
+{
+  "task": "T222",
+  "issue": "#222",
+  "rv": 1,
+  "cycle": 1,
+  "plan_revision": 1,
+  "branch": "1.0.9",
+  "base_head": "4fbb603b27ff811508ec477604efba2c2132066a",
+  "tree_revision": "4fbb603b27ff811508ec477604efba2c2132066a",
+  "dirty_paths": "docs/assets/diagrams/nextorm-command-execution.svg,docs/ru/assets/diagrams/nextorm-command-execution.svg",
+  "shared_dirty_preserved": [
+    "docs/assets/diagrams/nextorm-command-execution.svg",
+    "docs/ru/assets/diagrams/nextorm-command-execution.svg"
+  ],
+  "t213_handoff": "confirmed (collection status: T213 done, plan r=6 rv=5; Builders/Joins/** handed off)",
+  "parallel_writer": false,
+  "single_lane": true,
+  "t53_state": "held",
+  "write_footprint_unchanged_before_do": true
+}

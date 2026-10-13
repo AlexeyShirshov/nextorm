@@ -1,0 +1,5 @@
+dotnet
+build
+nextorm.slnx
+-c
+Debug

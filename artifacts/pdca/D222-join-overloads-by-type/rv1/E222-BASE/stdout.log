@@ -1,0 +1,3 @@
+baseline: head=4fbb603b27ff811508ec477604efba2c2132066a branch=1.0.9
+dirty: docs/assets/diagrams/nextorm-command-execution.svg,docs/ru/assets/diagrams/nextorm-command-execution.svg
+baseline.patch -> /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/baseline.patch

@@ -2544,6 +2544,50 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> FullJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Full, joinCondition, options);
+    /// <summary>Adds an <c>INNER JOIN</c> over <typeparamref name="T2"/> without an explicit source; <typeparamref name="T2"/> is resolved through this builder's context (<c>From&lt;T2&gt;()</c>) and forwarded to the source-explicit overload.</summary>
+    /// <typeparam name="T2">The entity type of the joined table.</typeparam>
+    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration; forwarded unchanged to the source-explicit overload.</param>
+    /// <returns>A builder over the projection extended with <typeparamref name="T2"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, T2> Join<T2>(Expression<Func<TEntity, T2, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return Join(_dataProvider.From<T2>(), joinCondition, options);
+    }
+    /// <summary>Adds a <c>LEFT JOIN</c> over <typeparamref name="T2"/> without an explicit source; <typeparamref name="T2"/> is resolved through this builder's context (<c>From&lt;T2&gt;()</c>) and forwarded to the source-explicit overload.</summary>
+    /// <typeparam name="T2">The entity type of the joined table.</typeparam>
+    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration; forwarded unchanged to the source-explicit overload.</param>
+    /// <returns>A builder over the projection extended with <typeparamref name="T2"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, T2> LeftJoin<T2>(Expression<Func<TEntity, T2, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return LeftJoin(_dataProvider.From<T2>(), joinCondition, options);
+    }
+    /// <summary>Adds a <c>RIGHT JOIN</c> over <typeparamref name="T2"/> without an explicit source; <typeparamref name="T2"/> is resolved through this builder's context (<c>From&lt;T2&gt;()</c>) and forwarded to the source-explicit overload.</summary>
+    /// <typeparam name="T2">The entity type of the joined table.</typeparam>
+    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration; forwarded unchanged to the source-explicit overload.</param>
+    /// <returns>A builder over the projection extended with <typeparamref name="T2"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, T2> RightJoin<T2>(Expression<Func<TEntity, T2, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return RightJoin(_dataProvider.From<T2>(), joinCondition, options);
+    }
+    /// <summary>Adds a <c>FULL JOIN</c> over <typeparamref name="T2"/> without an explicit source; <typeparamref name="T2"/> is resolved through this builder's context (<c>From&lt;T2&gt;()</c>) and forwarded to the source-explicit overload.</summary>
+    /// <typeparam name="T2">The entity type of the joined table.</typeparam>
+    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration; forwarded unchanged to the source-explicit overload.</param>
+    /// <returns>A builder over the projection extended with <typeparamref name="T2"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, T2> FullJoin<T2>(Expression<Func<TEntity, T2, bool>> joinCondition, Action<JoinOptions>? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return FullJoin(_dataProvider.From<T2>(), joinCondition, options);
+    }
     /// <summary>
     /// Adds a cross join producing the Cartesian product of the two sources; there is no <c>ON</c>
     /// condition.
