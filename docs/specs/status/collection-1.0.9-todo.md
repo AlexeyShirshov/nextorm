@@ -5,7 +5,7 @@
 - base: branch `1.0.9` @ `58025147` (merge of #214 `1.0.9-rc2`); HEAD advanced by P-phase PLAN commits (`d242778f`).
 - mode: autonomous; auto-commit authorized (task/collection status files and task paths only, explicit paths, never `-A`, message prefix `#<issue>`); push **never**
 - skills: `pdca-collection` + `pdca-dotnet` + `nextorm-pdca`
-- phase: **P re-open (2nd expansion)** — planning the 8 new tasks; lane G1 paused; single group → current worktree/branch `1.0.9`, no worktree/branches/merge
+- phase: **P re-open (2nd expansion) complete → ALL-barrier re-passed → re-cluster pending**; single group → current worktree/branch `1.0.9`, no worktree/branches/merge
 
 ## Input task list
 
@@ -44,14 +44,14 @@ Order within `{T215…T227}` is pending `planner` re-cluster; owner directive fi
 | T216 | #216 | G1 | 6 | pending | ready | pdca-dotnet | N=1 | r=2 | 1b7b9d8c | docs/specs/status/D216-row-locking-1.md |
 | T217 | #217 | G1 | 7 | pending | ready | pdca-dotnet | N=1 | r=1 | ee0cb743 | docs/specs/status/D217-datetimeoffset-1.md |
 | T218 | #218 | G1 | 8 | pending | ready | pdca-dotnet | N=1 | r=1 | 60d881b4 | docs/specs/status/D218-sqlserver-sequences-1.md |
-| T219 | #219 | G1 | TBD | pending | pending | pdca-dotnet | N=1 | — | — | docs/specs/status/D219-session-identity-functions-1.md |
-| T221 | #221 | G1 | TBD | pending | pending | pdca-dotnet | N=1 | — | — | docs/specs/status/D221-interceptor-di-registration-1.md |
-| T222 | #222 | G1 | TBD | pending | pending | pdca-dotnet | N=1 | — | — | docs/specs/status/D222-join-overloads-by-type-1.md |
-| T223 | #223 | G1 | TBD | pending | pending | pdca-dotnet | N=1 | — | — | docs/specs/status/D223-joininto-composite-junction-sql-1.md |
-| T224 | #224 | G1 | TBD | pending | pending | pdca-dotnet | N=1 | — | — | docs/specs/status/D224-sql-from-join-formatting-1.md |
-| T225 | #225 | G1 | TBD | pending | pending | pdca-dotnet | N=1 | — | — | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
-| T226 | #226 | G1 | TBD | pending | pending | pdca-dotnet | N=1 | — | — | docs/specs/status/D226-records-affected-1.md |
-| T227 | #227 | G1 | TBD | pending | pending | pdca-dotnet | N=1 | — | — | docs/specs/status/D227-clickhouse-flaky-grouped-float-1.md |
+| T219 | #219 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | 4bfa5403 | docs/specs/status/D219-session-identity-functions-1.md |
+| T221 | #221 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | b5715d45 | docs/specs/status/D221-interceptor-di-registration-1.md |
+| T222 | #222 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | 5856fde2 | docs/specs/status/D222-join-overloads-by-type-1.md |
+| T223 | #223 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | e2d749db | docs/specs/status/D223-joininto-composite-junction-sql-1.md |
+| T224 | #224 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
+| T225 | #225 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=2 | 63bdb84f | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
+| T226 | #226 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
+| T227 | #227 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | aea0a9ba | docs/specs/status/D227-clickhouse-flaky-grouped-float-1.md |
 | T201 | #201 | G1 | last active (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
 | T53  | #53  | G1 | 10 (held) | held | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
 
@@ -61,8 +61,8 @@ Order within `{T215…T227}` is pending `planner` re-cluster; owner directive fi
 
 ## Phase decisions
 
-- **Own PLANs:** original 6 re-finalized `ready` (T201 via approved design rev 2 → r=2). Expansion: T215/T216/T217/T218 planned `ready`; T211 re-opened to `ready (r=2)`.
-- **ALL-barrier: re-PASSED** — every active task now has a persisted `plan_state=ready` (except T53, deliberately `held`, and T216 whose plan is `ready` but carries an owner-only open constraint). Expanded lane allocation is not allowed until the re-cluster binding is persisted.
+- **Own PLANs:** original 6 re-finalized `ready`. Expansion 1: T215/T216/T217/T218 planned `ready`; T211 re-opened to `ready (r=2)`. Expansion 2: T219/T221/T222/T223/T224/T225/T226/T227 planned `ready` (T225 re-opened r=2 after its external-docs blocker was resolved by a committed docs change; T227 re-run after an aborted attempt).
+- **ALL-barrier: re-PASSED (2nd expansion)** — every active task has a persisted `plan_state=ready` (T53 deliberately `held`; T216 carries an owner-only open constraint but its plan is `ready`). Re-cluster on the expanded set is pending before the lane resumes.
 - **Public-API candidates flagged for the held T53 freeze:** T216 adds `FromOptions`/`JoinOptions` lock members + `ILockRenderer.SupportsSourceLocks` + a new `Render` overload; T217 adds `ISqlDialect.SupportsDateTimeOffsetTranslation` + `MakeDateTimeOffsetNow` + DTO-aware `MakeDatePart`/`MakeDateAdd` overloads; T218 adds `SqlFunctions.SqlServer.next_value_for`/`nextval`; T213 adds `ISqlDialect.WrapIntegerWindowResult` (new public default interface method) + `QueryCommand.NeedsOuterJoinNullSettings` (ClickHouse scalar M:N fix); T215 changes the package graph (no surface delta). T53 stays held until the owner declares the API final.
 - **Re-cluster (`planner`, expansion):** no genuine parallelism (eager/JoinInto/locking overlap `EntityBuilder`/SQL/query contracts; T216/T217/T218 overlap provider dialects; docs have external uncommitted edits). **One group G1** = `T211 → T212 → T213 → T215 → T216 → T217 → T218 → T201 → T53 (held last)`. Single group → no worktree/branch/merge. Addendum contract `cluster-1`; task contracts unchanged.
 - **Preconditions before the relevant writes (D-COLL-2/3):** establish ownership of the external dirty doc/benchmark intersections, and get the owner's T216 MariaDB decision, before T215/T216/T218 DO.
@@ -92,7 +92,7 @@ Order within `{T215…T227}` is pending `planner` re-cluster; owner directive fi
 - Blocker: — (T211 `incomplete` superseded by the owner-directed r=2 re-open; patch retained)
 - Defect id / history: —
 - Corrective-task status file: —
-- Next allowed step: complete own PLANs for **T219/T221/T222/T223/T224/T225/T226/T227** → re-pass ALL-barrier → re-cluster (T201 perf + T53 held last) → resume the lane from **T215 (DO, r=1)**. T216's open owner constraint (MariaDB `FOR UPDATE OF`) and the external-doc ownership precondition still stand.
+- Next allowed step: re-cluster (`planner`) on the expanded 16-task set (T201 perf + T53 held last) → persist schedule → resume the lane from **T215 (DO, r=1)**. T216's open owner constraint (MariaDB `FOR UPDATE OF`) must be resolved before T216 DO (order 6).
 
 ## Done / Verified / Incomplete
 
