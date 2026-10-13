@@ -221,7 +221,7 @@ internal static class SqlSourceRenderer
         ValidateJoinTableHintSource(join);
 
         if (join.JoinType is JoinType.CrossApply or JoinType.OuterApply)
-            return MakeApplyJoin(in ctx, join);
+            return MakeApplyJoin(in ctx, join, globalLock);
 
         var sqlBuilder = ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
 
@@ -394,12 +394,12 @@ internal static class SqlSourceRenderer
     /// still rendered through <see cref="MakeFrom(in SqlBuildContext, FromExpression, FromRenderOptions)"/> so a derived table/table-valued function is
     /// parenthesised and aliased, and in parameter mode it is walked for captured parameters.
     /// </summary>
-    private static string? MakeApplyJoin(in SqlBuildContext ctx, JoinExpression join)
+    private static string? MakeApplyJoin(in SqlBuildContext ctx, JoinExpression join, LockClause? globalLock)
     {
         if (!ctx.Dialect.SupportsApply)
             throw new NotSupportedException($"The {join.JoinType} join is not supported by this SQL dialect");
 
-        var source = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false));
+        var source = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, GlobalLock: globalLock));
 
         if (ctx.ParamMode)
             return null;
@@ -464,7 +464,7 @@ internal static class SqlSourceRenderer
             if (ctx.Dialect.Lock is { UsesTableHints: true } tableHintLock
                 && (from.SourceLock ?? globalLock) is { } hintLock)
             {
-                tableHints = AppendHints(tableHints, [tableHintLock.Render(hintLock.Mode, hintLock.Wait, ctx.KeywordCase)]);
+                tableHints = AppendHint(tableHints, tableHintLock.Render(hintLock.Mode, hintLock.Wait, ctx.KeywordCase));
             }
 
             if (tablesInScopeHints is { Count: > 0 })
@@ -593,6 +593,23 @@ internal static class SqlSourceRenderer
             }
         }
         return string.Empty;
+    }
+
+    /// <summary>
+    /// Returns <paramref name="hints"/> with the single <paramref name="hint"/> appended, or a
+    /// single-element list when <paramref name="hints"/> is <c>null</c> or empty. The single-token
+    /// counterpart of <see cref="AppendHints"/> (avoids the one-element array the list overload needs).
+    /// </summary>
+    private static IReadOnlyList<string> AppendHint(IReadOnlyList<string>? hints, string hint)
+    {
+        if (hints is not { Count: > 0 })
+            return [hint];
+
+        var combined = new string[hints.Count + 1];
+        for (var i = 0; i < hints.Count; i++)
+            combined[i] = hints[i];
+        combined[^1] = hint;
+        return combined;
     }
 
     /// <summary>

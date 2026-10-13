@@ -4057,6 +4057,47 @@ public class SqlGenerationTests
         act.Should().Throw<ArgumentException>();
     }
 
+    // D216-ALIAS-CASE regression: under KeywordCase.Upper the keyword prefix/suffix are case-folded but
+    // the resolved, quoted alias must stay verbatim, otherwise `OF "T1"` targets a non-existent alias.
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_Upper_DefaultAlias_ShouldPreserveAliasCase()
+    {
+        using var ctx = PostgresTestContext.CreateUppercase();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForUpdate()).Select(x => x.Id));
+
+        sql.Should().Contain("FOR UPDATE OF \"t1\"");
+        sql.Should().NotContain("\"T1\"");
+    }
+
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_Upper_ShareNoWait_ShouldPreserveAliasCase()
+    {
+        using var ctx = PostgresTestContext.CreateUppercase();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForShare(LockWaitMode.NoWait)).Select(x => x.Id));
+
+        sql.Should().Contain("FOR SHARE OF \"t1\" NOWAIT");
+        sql.Should().NotContain("\"T1\"");
+    }
+
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void SourceLock_Upper_OnJoin_ShouldTargetOnlyTheJoinAliasCase()
+    {
+        using var ctx = PostgresTestContext.CreateUppercase();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.ForUpdate())
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("FOR UPDATE OF \"t2\"");
+        sql.Should().NotContain("\"T2\"");
+        sql.Should().NotContain("OF \"t1\"");
+    }
+
     [Fact]
     public void TextSearchRank_ShouldRenderTsRankOverTsvectorQuery()
     {

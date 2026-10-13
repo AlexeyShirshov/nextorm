@@ -7,7 +7,7 @@ selected_variant: pdca-dotnet
 milestone: 1.0.9
 branch: 1.0.9
 cycle_N: 1
-attempt_n: 1
+attempt_n: 2
 plan_revision_r: 2
 evidence_contract_revision_rv: 2
 plan_state: ready
@@ -18,7 +18,7 @@ prior_contract: rv=1 superseded by rv=2
 
 ## Current state
 
-- Phase: **DO complete — at DO→CHECK boundary**. Units D-01…D-06 are `done`; D-07 (MariaDB pending-owner) is `blocked`. The rv=2 evidence manifest is frozen at `artifacts/pdca/D216/rv2/manifest.json` (validated by `scripts/validate_inner_loop.py manifest`, exit 0). CHECK owns the row verdict.
+- Phase: **DO correction n=2/3 — CHECK FAIL loop-back applied**, back at DO→CHECK boundary. Units D-01…D-06 are `done`; D-07 (MariaDB pending-owner) is `blocked`. The rv=2 evidence manifest is frozen at `artifacts/pdca/D216/rv2/manifest.json` (validated by `scripts/validate_inner_loop.py manifest`, exit 0). CHECK owns the row verdict.
 - Cycle N=1, plan revision r=2, attempt n=1, evidence contract rv=2 (rv=1 superseded).
 - Selected variant: `pdca-dotnet`. Single collection group → current worktree/branch `1.0.9`, no worktree/branches/merge.
 - Blocks DO: none. **R-03/MariaDB is an open owner constraint**, surfaced upward; it does not stop the executable plan (routed escalation decision).
@@ -31,8 +31,8 @@ prior_contract: rv=1 superseded by rv=2
 
 - Current cycle N: 1
 - Plan revision r: 2
-- Attempt n: 1
-- Defect history: D216-JOIN-SRCLOCK (first/alias join source lock not attached) — observed r=2/n=1, fixed in commit `3ef11a3c`, green; D216-SS-HINT-ORDER (SQL Server `WITH (hint) AS alias` invalid) — observed r=2/n=1 via live probe, fixed in commit `1849164e`, green.
+- Attempt n: 2
+- Defect history: D216-JOIN-SRCLOCK (first/alias join source lock not attached) — observed r=2/n=1, fixed in commit `3ef11a3c`, green; D216-SS-HINT-ORDER (SQL Server `WITH (hint) AS alias` invalid) — observed r=2/n=1 via live probe, fixed in commit `1849164e`, green. D216-ALIAS-CASE (R1, Critical) — `FOR UPDATE OF "T1"` under `KeywordCase.Upper` case-folded the quoted target alias; observed r=2/n=1 CHECK, fixed r=2/n=2. D216-SS-APPLY-GLOBAL-LOCK (R2, Warning) — whole-query lock hint dropped on APPLY-join sources; observed r=2/n=1 CHECK, fixed r=2/n=2.
 
 ### DO unit states (D-01..D-04M; production surface + shared contract + provider renderers)
 
@@ -46,6 +46,18 @@ prior_contract: rv=1 superseded by rv=2
 | D-05 | done | matrix closure: focused unit/provider matrix rows, `PlanKeyUniquenessTests` (13), two-transaction integration locking (PG/MySQL/SQL Server 2 passed each; MariaDB dedicated 3 fail-closed), capability contract 5; commit `d6891104` + `1849164e` |
 | D-06 | done | EN/RU docs (8 files; committed `3247774b`), `dotnet docfx` exit 0, DO→CHECK boundary sweep (7x `PDCA=T216` + LockRendererDefault + PlanKeyUniqueness + integration), acceptance 7/0 + T216 6/0, coverage line 88.7% / branch 80.8%; boundary evidence `artifacts/pdca/D216/rv2/boundary/evidence.json` (validator exit 0) |
 | D-07 | **blocked** | original remainder: R-03/MariaDB source-level `OF` stays provisional fail-closed — **NOT PASS**; owner decision pending (narrow MariaDB to unsupported vs defer MariaDB source lock beyond 1.0.9). Evidence: `artifacts/pdca/D216/rv2/redgreen/mariadb-*.log`, `focused-mariadb.log`. **#216 stays OPEN.** |
+
+### DO correction n=2/3 (loop-back after CHECK FAIL)
+
+CHECK returned **FAIL** and looped back to DO (attempts `n=2/3`, plan `r=2`, contract `rv=2`); only implementation was fixed.
+
+**D216-ALIAS-CASE (R1, Critical) — fixed.** Under `KeywordCase.Upper` the target alias was case-folded by `SqlKeywords.Of(Upper, fragment)` (`SqlKeywords.cs:18`), so `FOR UPDATE OF "t1"` became `FOR UPDATE OF "T1"` (non-existent alias). Fixed in `PostgresDialect.cs` (`PostgresLockRenderer.Render(..., string?)`) and `MySqlDialect.cs` (`MySqlLockRenderer.Render(..., string?)`): the `for update of`/`for share of` prefix and the wait suffix are case-folded, the already-escaped/quoted alias is concatenated verbatim. Permanent regressions (GREEN): `SourceLock_Upper_DefaultAlias_ShouldPreserveAliasCase`, `SourceLock_Upper_ShareNoWait_ShouldPreserveAliasCase`, `SourceLock_Upper_OnJoin_ShouldTargetOnlyTheJoinAliasCase` (PG 3/3, MySQL 3/3) plus the closed whitespace-target guard (`MySqlDialect` test added); logs `/tmp/fix-r1-pg.log`, `/tmp/fix-r1-mysql.log`.
+
+**D216-SS-APPLY-GLOBAL-LOCK (R2, Warning) — fixed.** `MakeApplyJoin` rendered the applied source without the global lock, so `outer apply <table> as [t2]` got no hint. Fixed in `SqlSourceRenderer.cs`: `MakeApplyJoin` now takes `LockClause? globalLock` and passes `GlobalLock: globalLock` into its `MakeFrom`, so every physical source is hinted. Permanent regressions (GREEN): `ForUpdate_WithOuterApply_ShouldHintApplySource`, `ForShare_WithCrossApply_ShouldHintApplySource` (SQL Server 2/2); log `/tmp/fix-r2-ss.log`.
+
+Hygiene (P2): BOM removed from `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs`; final newline added to `src/nextorm.core/Expressions/FromExpression.cs`; per-source lock hint now uses the non-allocating single-token `AppendHint` (`SqlSourceRenderer.cs`) instead of `AppendHints(hints, [token])`.
+
+Re-verification: `dotnet build nextorm.slnx -c Debug` exit 0 (0/0, `/tmp/fix-sln-build.log`); `PDCA=T216` core 2 / postgres 12 / mysql 7 / mariadb 3 / sqlserver 5, all exit 0; MariaDB `SourceLock_OnPrimary_OnMariaDb_ShouldFailClosed` exit 0 / selected 1. R-03/MariaDB remains fail-closed / not PASS; **#216 OPEN**; D-07 stays `blocked`.
 
 ### Frozen evidence manifest + DO→CHECK notes
 
@@ -416,4 +428,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 2026-10-13T00:50:00Z | DO | r=2 | n=1/3 | Perf acceptance 7 cases / 0 failures (wall 51 s; cached/prepared ratio 2.03 vs baseline 1.87, below 2.244); T216 cached-path benchmark 6 cases (no slower than whole-lock); artifacts committed 04442903 | logs /tmp/nextorm-acceptance.log /tmp/nextorm-t216-bench.log
 2026-10-13T01:00:00Z | DO | r=2 | n=1/3 | Boundary sweep (7x PDCA=T216 + LockRendererDefaultTests 5 + PlanKeyUniqueness 13 + integration 9 [1 SQLite skip]) all exit 0; validate_inner_loop report exit 0; coverage line 88.7% / branch 80.8% (>= 85/75) | logs /tmp/nextorm-boundary-*.log /tmp/nextorm-cov-*.log
 2026-10-13T01:10:00Z | DO | r=2 | n=1/3 | DO complete → CHECK: frozen rv=2 manifest `artifacts/pdca/D216/rv2/manifest.json` (EV-01..EV-18, validator exit 0; EV-17 satisfied, EV-16 open/pending-owner); D-01..D-06 done, D-07 blocked; #216 OPEN | manifest artifacts/pdca/D216/rv2/manifest.json
+2026-10-13T01:30:00Z | DO | r=2 | n=2/3 | CHECK FAIL loop-back: fixed D216-ALIAS-CASE (alias case-fold under KeywordCase.Upper) and D216-SS-APPLY-GLOBAL-LOCK (APPLY source hint); slnx build 0/0; PDCA=T216 core 2 / pg 12 / mysql 7 / maria 3 / ss 5 all green; MariaDB fail-closed green | logs /tmp/fix-*.log
 ```

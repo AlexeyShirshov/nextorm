@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
@@ -719,6 +719,36 @@ public class SqlGenerationTests
 
         sql.Should().Contain(" outer apply complex_entity as [t2]");
         sql.Should().NotContain(" on ");
+    }
+
+    // D216-SS-APPLY-GLOBAL-LOCK regression: a whole-query ForUpdate must hint the APPLY source too
+    // (R-01 "all sources"), not only the primary; the applied table is a physical source.
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void ForUpdate_WithOuterApply_ShouldHintApplySource()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.OuterApply(complex).ForUpdate().Select(p => p.Item1.Id));
+
+        sql.Should().Contain("from simple_entity as [t1] with (updlock)");
+        sql.Should().Contain("outer apply complex_entity as [t2] with (updlock)");
+    }
+
+    [Fact]
+    [Trait("PDCA", "T216")]
+    public void ForShare_WithCrossApply_ShouldHintApplySource()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.CrossApply(complex).ForShare().Select(p => p.Item1.Id));
+
+        sql.Should().Contain("from simple_entity as [t1] with (holdlock)");
+        sql.Should().Contain("cross apply complex_entity as [t2] with (holdlock)");
     }
 
     [Fact]

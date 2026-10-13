@@ -683,7 +683,12 @@ internal sealed class PostgresLockRenderer : ILockRenderer
             return Render(mode, wait, keywordCase);
 
         ArgumentException.ThrowIfNullOrWhiteSpace(targetAlias);
-        return SqlKeywords.Of(keywordCase, (mode == LockMode.Share ? " for share" : " for update") + " of " + targetAlias + LockWaitSuffix(wait));
+
+        // Case-fold only the keyword prefix and wait suffix: the target is an already-resolved,
+        // already-quoted alias and must stay verbatim (a case-folded quoted alias is a different,
+        // non-existent identifier under KeywordCase.Upper).
+        var prefix = SqlKeywords.Of(keywordCase, mode == LockMode.Share ? " for share of " : " for update of ");
+        return prefix + targetAlias + SqlKeywords.Of(keywordCase, LockWaitSuffix(wait));
     }
 
     private static string LockWaitSuffix(LockWaitMode wait) => wait switch
