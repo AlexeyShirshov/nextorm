@@ -2,10 +2,10 @@
 
 - collection-id: `1.0.9-todo`
 - input: milestone `1.0.9` (milestone #4) — **expanded twice**: origin {#213, #212, #211, #209, #201, #53}; owner added {#215, #216, #217, #218}; owner added {#219, #221, #222, #223, #224, #225, #226, #227}. Active set: T215, T216, T217, T218, T219, T221, T222, T223, T224, T225, T226, T227 (+ T209/T211/T212/T213 done). T201 (perf) and T53 (freeze) last; T53 held.
-- base: branch `1.0.9` @ `58025147` (merge of #214 `1.0.9-rc2`); HEAD advanced by P-phase PLAN commits (`d242778f`).
+- base: branch `1.0.9` @ `58025147` (merge of #214 `1.0.9-rc2`); the branch was later **renamed to `1.0.9-rc3`** by a concurrent actor (the collection's commits rode along); HEAD advanced by PLAN/DO commits.
 - mode: autonomous; auto-commit authorized (task/collection status files and task paths only, explicit paths, never `-A`, message prefix `#<issue>`); push **never**
 - skills: `pdca-collection` + `pdca-dotnet` + `nextorm-pdca`
-- phase: **P re-open (2nd expansion) complete → ALL-barrier re-passed → re-cluster pending**; single group → current worktree/branch `1.0.9`, no worktree/branches/merge
+- phase: **D — lane G1 resumed** (T217 re-opened `ready` r=4 after the evidence-binding STOP; owner authorized continuing); single group → current worktree/branch `1.0.9-rc3`, no worktree/branches/merge
 
 ## Input task list
 
@@ -20,7 +20,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 | T201 | #201 | Perf: M12 #3 — cached-path parity with LINQ to DB | pdca-dotnet | ready (r=2) |
 | T215 | #215 | убрать зависимость OneOf | pdca-dotnet | ready (r=1) |
 | T216 | #216 | row locking — FOR UPDATE vs FOR UPDATE OF | pdca-dotnet | done (r=2, rv=2, n=3/3) — done-with-constraint; #216 OPEN; owner decision pending |
-| T217 | #217 | DateTimeOffset — SQL-трансляция Now/UtcNow и частей даты | pdca-dotnet | ready (r=1) |
+| T217 | #217 | DateTimeOffset — SQL-трансляция Now/UtcNow и частей даты | pdca-dotnet | ready (r=4, rv=4 — evidence-binding re-open) |
 | T218 | #218 | SQL Server sequences (NEXT VALUE FOR), кросс-провайдерно | pdca-dotnet | ready (r=1) |
 | T53 | #53 | IF6: public API freeze (PublicApiAnalyzers + PublicAPI.*) | pdca-dotnet | ready (r=1) — **HELD by owner** |
 
@@ -28,7 +28,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 
 | id | tasks (order) | worktree | branch/ref | status |
 |---|---|---|---|---|
-| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 → T225 → T201 (perf) → T53 (freeze, held) | no (single group) | current branch `1.0.9` | in-progress |
+| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 → T225 → T201 (perf) → T53 (freeze, held) | no (single group) | current branch `1.0.9-rc3` | in-progress (T217 re-opened r=4) |
 
 Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/docs force one writer). T224 (SQL-format blast radius, ~697 exact-string asserts) sits late, after all functional changes; T225 (docs-only) after T223+T224; T201 (perf) measures the final composition; T53 held last. Addendum contract `cluster-1`/`cluster-2`; task contracts unchanged.
 
@@ -46,13 +46,13 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T222 | #222 | G1 | 8 | done | done (r=1, rv=1, n=3/3) | pdca-dotnet | N=1 | r=1 | 5856fde2 | docs/specs/status/D222-join-overloads-by-type-1.md |
 | T223 | #223 | G1 | 9 | done | done (r=1, rv=1, n=2/3) | pdca-dotnet | N=1 | r=1 | e2d749db | docs/specs/status/D223-joininto-composite-junction-sql-1.md |
 | T216 | #216 | G1 | 10 | done | done-with-constraint (r=2, rv=2, n=3/3) | pdca-dotnet | N=1 | r=2 | 1b7b9d8c | docs/specs/status/D216-row-locking-1.md |
-| T217 | #217 | G1 | 11 | pending | ready | pdca-dotnet | N=1 | r=1 | ee0cb743 | docs/specs/status/D217-datetimeoffset-1.md |
-| T218 | #218 | G1 | 12 | pending | ready | pdca-dotnet | N=1 | r=1 | 60d881b4 | docs/specs/status/D218-sqlserver-sequences-1.md |
-| T219 | #219 | G1 | 13 | pending | ready | pdca-dotnet | N=1 | r=1 | 4bfa5403 | docs/specs/status/D219-session-identity-functions-1.md |
-| T226 | #226 | G1 | 14 | pending | ready | pdca-dotnet | N=1 | r=1 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
-| T224 | #224 | G1 | 15 | pending | ready | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
-| T225 | #225 | G1 | 16 | pending | ready | pdca-dotnet | N=1 | r=2 | 63bdb84f | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
-| T201 | #201 | G1 | 17 (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
+| T217 | #217 | G1 | 11 | incomplete | incomplete (r=3, rv=3, n=1/3) — evidence-binding STOP; D217 status file + `artifacts/pdca/D217-datetimeoffset/rv2/` | pdca-dotnet | N=1 | r=3 | ee0cb743 | docs/specs/status/D217-datetimeoffset-1.md |
+| T218 | #218 | G1 | 12 | incomplete | ready («группа остановлена») | pdca-dotnet | N=1 | r=1 | 60d881b4 | docs/specs/status/D218-sqlserver-sequences-1.md |
+| T219 | #219 | G1 | 13 | incomplete | ready («группа остановлена») | pdca-dotnet | N=1 | r=1 | 4bfa5403 | docs/specs/status/D219-session-identity-functions-1.md |
+| T226 | #226 | G1 | 14 | incomplete | ready («группа остановлена») | pdca-dotnet | N=1 | r=1 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
+| T224 | #224 | G1 | 15 | incomplete | ready («группа остановлена») | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
+| T225 | #225 | G1 | 16 | incomplete | ready («группа остановлена») | pdca-dotnet | N=1 | r=2 | 63bdb84f | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
+| T201 | #201 | G1 | 17 (perf) | incomplete | ready («группа остановлена») | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
 | T53  | #53  | G1 | 18 (held) | held | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
 
 - Evidence contract (per task, frozen at that task's DO→CHECK): T209 rv=2 (done), T211 rv=2, T213 rv=5 (done), T216 rv=2, others rv=1. Manifests `artifacts/pdca/<task>/rv*/manifest.json`.
@@ -63,6 +63,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - T223 (#223) done: composite-junction M:N materializable link carrier across six providers (standalone + SingleQuery). r=1, rv=1, n=2/3; final CHECK PASS. Build 0/0; 7 project suites exit 0 (core 2456, sqlite 1672+1 opt-in skip, postgres 897, sqlserver 814, mysql 380, mariadb 265, clickhouse 662); LIVE `~JoinInto` 124/124, 0 skipped, six providers; six provider SQL-gen green; coverage line 83.4 / branch 76.0 (1.0.9 warning-only); manifest `artifacts/pdca/D223/rv1/manifest.json` 17/17 met, validator exit 0; variant matrix 29/29 test/guard, no deferred; perf scalar repeat classified noise. DO commit `d76c5ae3`; issue #223 closed. Status `docs/specs/status/D223-joininto-composite-junction-sql-1.md`. **Next pending = T216 (order 10).**
 
 - T216 (#216) done (ACT, done-with-constraint): r=2, rv=2, n=3/3; escalation decision **(A)** close in-cycle as done-with-constraint, no r+1, no product change. DO commits `4d979efc`,`3ef11a3c`,`1849164e`; corrective DO `6d22a504` (D216-ALIAS-CASE, D216-SS-APPLY-GLOBAL-LOCK); evidence `artifacts/pdca/D216/rv2/manifest.json` (EV-01..EV-18; EV-16 open). **R-03/MariaDB constraint pending owner decision** (narrow MariaDB to unsupported vs defer); **#216 kept OPEN**; **D-07 blocked**; **T53 freeze stays HELD**. Status `docs/specs/status/D216-row-locking-1.md`. **Next pending = T217 (order 11).**
+- **Group G1 STOP (superseded):** lane was stopped by T217 `incomplete` (evidence-binding STOP — same defect recurred on the r=3 CHECK, third occurrence); T218/T219/T226/T224/T225/T201 were marked `incomplete` («группа остановлена»), never executed. **Superseded** by the owner-authorized T217 re-open (r=4, `2e246a3d`); T218…T201 are reinstated `pending`; T53 stays `held`. Only the evidence pipeline was broken, not the product.
 
 ## Phase decisions
 
@@ -98,7 +99,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Blocker: — (T211 `incomplete` superseded by the owner-directed r=2 re-open; patch retained)
 - Defect id / history: —
 - Corrective-task status file: —
-- Next allowed step: resume the lane at the next pending task **T217 (#217)** (order 11) — DateTimeOffset SQL translation. T216 completed (done-with-constraint); its R-03/MariaDB owner constraint stays recorded and does not block the lane; #216 remains OPEN.
+- Next allowed step: resume lane G1 with **T217 DO (r=4, rv=4)** — the evidence-binding pipeline fix (regenerate result receipts bound to the current tree; fix `generate-bindings.sh`/`tree_binding.py`; add the negative-fixture receipt) → T218 → T219 → T226 → T224 → T225 → T201 → T53 (held). T216's R-03/MariaDB owner constraint stays recorded; #216 remains OPEN.
 
 ## Done / Verified / Incomplete
 
