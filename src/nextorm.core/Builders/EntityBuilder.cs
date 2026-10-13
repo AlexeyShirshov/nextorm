@@ -2791,7 +2791,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         // A TVF (or other explicit source) on either side is carried as a FromExpression: the right
         // side keeps the joined entity's own source, the left side keeps the one propagated below.
-        var joined = CreateJoined<TJoinEntity>(new JoinExpression(joinCondition, joinType)
+        var join = new JoinExpression(joinCondition, joinType)
         {
             From = GetJoinSource(_),
             EntityType = joinCondition is null ? typeof(TJoinEntity) : null,
@@ -2799,7 +2799,14 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             IsGlobal = opts.IsGlobal,
             JoinHint = opts.JoinHint,
             TableHints = opts.TableHints
-        }, ResolveJoinBase());
+        };
+
+        // The source-level lock travels on the joined source itself (JoinExpression has no second lock
+        // storage), so it is part of the source's plan identity.
+        if (opts.SourceLock is not null)
+            join.SetFrom(join.From.WithSourceLock(opts.SourceLock));
+
+        var joined = CreateJoined<TJoinEntity>(join, ResolveJoinBase());
         joined.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         ApplyWhereToJoined(joined);
         return joined;
@@ -3000,6 +3007,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             JoinHint = opts.JoinHint,
             TableHints = opts.TableHints
         };
+
+        if (opts.SourceLock is not null)
+            join.SetFrom(join.From.WithSourceLock(opts.SourceLock));
 
         return CreateAliasJoined<TNext, TNextEntity>(create, join, _.Ctes, ResolveAliasJoinBase());
     }
