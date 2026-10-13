@@ -26,9 +26,9 @@
 
 ## Current state
 
-- phase: PLAN complete — collection handoff.
+- phase: DO in progress — D227-00…D227-03 executed: scope/runtime gate + inner red/green evidence + boundary (solution build and one all-ClickHouse sweep) green + provenance/manifest/report frozen (rv=1); CHECK227 pending.
 - `n=1/3`; активный `P:` = этот PLAN r=1; активные `D:` = `D227-00` … `D227-03` (все `pending`), плюс независимая верификация `CHECK227`.
-- DO ещё не начат; исходные `D227-*` остаются активными до CHECK, отчёт исполнителя не переводит их в `done`.
+- DO начат: scope-brief/runtime gate пройдены, правка `AssertGroupedParity` применена, inner-evidence собран; исходные `D227-*` остаются активными (не `done`) до CHECK, отчёт исполнителя не переводит их в `done`.
 - Препятствий/blocker-отчётов нет; первичный PLAN, содержательных ревизий и supersession нет.
 - Code 216 (`QUERY_WITH_SAME_ID_IS_ALREADY_RUNNING`) остаётся `deferred + trigger` в milestone `1.0.9`; в T227 не исследуется и не обходится.
 
@@ -268,3 +268,25 @@ Confidence high in the minimal correction; post-fix success is planned evidence 
 2026-10-13T03:37:25Z | PLAN | r1 | n1/3 | PLAN r=1 persisted with plan_state=ready (approved plan transcribed; gate-1 final step) | docs/specs/status/D227-clickhouse-flaky-grouped-float-1.md
 
 2026-10-13T03:37:25Z | PLAN | r1 | n1/3 | rv=1 evidence contract + frozen manifest path artifacts/pdca/D227-clickhouse-flaky-grouped-float/rv1/manifest.json registered; D227-00…D227-03 + CHECK227 active (pending); defect history empty; no supersession | docs/specs/status/D227-clickhouse-flaky-grouped-float-1.md
+
+2026-10-13T04:39:04Z | DO | r1 | n1/3 | applicability re-check: HEAD 9f11957d0c726196d5295de6ab8ad34860cc1efb; test file byte-identical to aea0a9ba before edit (helper AssertGroupedParity :625, oracle :629, first native init :635 unchanged); scope brief /tmp/scope.json validator exit 0; Podman socket present (test -S exit 0) — DO started | A/brief-validator.log, A/runtime.log, A/scope.json
+
+2026-10-13T04:39:04Z | DO | r1 | n1/3 | red baseline preserved: /tmp/nextorm-t227/summary.tsv 15 FAIL rows + iter00..iter15 (16 failing logs, all exit 1, assertion :644); discrepancy flagged — plan expected 16/16 but summary.tsv records 15 rows (extra iter00.log present but not in summary) | A/red/, A/red-review.md, A/red-sha256.txt
+
+2026-10-13T04:39:04Z | DO | r1 | n1/3 | D227-01 applied: eager `_ = _sut.DataProvider;` inserted at ClickHouseExtremeRowNativeSpecificTests.cs:633, before `using var portable = Portable();` at :635, so lazy EnsureSeeded runs before the portable oracle; queries/datasets/group key/assertions unchanged; CRLF preserved; git diff --check exit 0 | A/change.patch, A/changed-files.txt, A/diff-check.log, A/structural-review.md
+
+2026-10-13T04:39:04Z | DO | r1 | n1/3 | affected build `dotnet build tests/nextorm.integration.tests -c Debug` exit 0, 0 Warning(s), 0 Error(s) | A/build-affected.log
+
+2026-10-13T04:39:04Z | DO | r1 | n1/3 | 16 sequential isolated runs (separate processes) each selected=1 passed=1 failed=0 skipped=0 exit 0; whole-class run selected=35 passed=35 failed=0 skipped=0 exit 0 | A/isolated/summary.tsv, A/isolated/iter00..15.log, A/class.log
+
+2026-10-13T04:39:04Z | DO | r1 | n1/3 | /tmp/evidence.json (18 inner executions) report validator exit 0; D227-02 inner evidence complete; D227-03 boundary/CHECK pending, units NOT marked done | A/report-validator.log, A/evidence.json
+
+2026-10-13T04:44:02Z | DO | r1 | n1/3 | boundary solution build `dotnet build nextorm.slnx -c Debug` exit 0, 0 Warning(s), 0 Error(s) | A/build-solution.log
+
+2026-10-13T04:44:02Z | DO | r1 | n1/3 | boundary all-ClickHouse run (single comprehensive sweep) selected=265 passed=265 failed=0 skipped=0 exit 0 | A/all-clickhouse.log
+
+2026-10-13T04:44:02Z | DO | r1 | n1/3 | red baseline reconciled: iter00 is a genuine isolated red run (same :644 assertion, Total:1 Failed:1, separate process), not appended because run.sh truncates summary.tsv and iterates 01..15; genuine isolated FAIL observations = 16 (summary.tsv records 15) | A/red-review.md
+
+2026-10-13T04:44:02Z | DO | r1 | n1/3 | provenance frozen at pre-commit HEAD 9f11957d0c726196d5295de6ab8ad34860cc1efb: frozen-source.patch (non-empty), source+apphost+dll sha256, status.diff; test change still uncommitted at freeze time | A/frozen-head.txt, A/frozen-source.patch, A/source-artifact-sha256.txt, A/status.diff
+
+2026-10-13T04:44:02Z | DO | r1 | n1/3 | /tmp/evidence.json updated with phase=boundary executions (solution build + all-ClickHouse selected=265); report validator exit 0; manifest rv=1 (tree=9f11957d, rows T227-E01..T227-E09 all met) validator exit 0 | A/evidence.json, A/manifest.json, A/report-validator.log, A/manifest-validator.log
