@@ -268,7 +268,7 @@ Next step: Persist this r=1 plan and frozen manifest; execute D221-0, then D221-
   assumptions A1/A2 (behavior unchanged); `D221-B7` — non-defect.
 - **T53 freeze: HELD.** Both `AddInterceptor` signatures remain #221 candidates in
   `docs/specs/status/D53-public-api-freeze-1.md`; no PublicAPI analyzer/freeze activation.
-- **Commits:** `f884c52b` (DO), `4b49b063` (corrective DO), ACT commit sha recorded in the collection list.
+- **Commits:** `f884c52b` (DO), `4b49b063` (corrective DO), `9cb2e14f` (ACT — status + collection).
 - **Notice.** The ACT commit is status-only per the ACT brief; the refreshed `core-un.log` (46/46) and
   `/tmp/nextorm-t221-evidence.json` (UN 46, report validator exit 0) are validated in the worktree but not
   part of the status-only ACT commit.
