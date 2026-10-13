@@ -43,7 +43,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T215 | #215 | G1 | 5 | done | ready | pdca-dotnet | N=1 | r=1 | 23c83497 | docs/specs/status/D215-oneof-removal-1.md |
 | T227 | #227 | G1 | 6 | done | done | pdca-dotnet | N=1 | r=1 | aea0a9ba | docs/specs/status/D227-clickhouse-flaky-grouped-float-1.md |
 | T221 | #221 | G1 | 7 | done | done (r=1, rv=1, n=2/3) | pdca-dotnet | N=1 | r=1 | f884c52b | docs/specs/status/D221-interceptor-di-registration-1.md |
-| T222 | #222 | G1 | 8 | pending | ready | pdca-dotnet | N=1 | r=1 | 5856fde2 | docs/specs/status/D222-join-overloads-by-type-1.md |
+| T222 | #222 | G1 | 8 | done | done (r=1, rv=1, n=3/3) | pdca-dotnet | N=1 | r=1 | 5856fde2 | docs/specs/status/D222-join-overloads-by-type-1.md |
 | T223 | #223 | G1 | 9 | pending | ready | pdca-dotnet | N=1 | r=1 | e2d749db | docs/specs/status/D223-joininto-composite-junction-sql-1.md |
 | T216 | #216 | G1 | 10 | pending | ready | pdca-dotnet | N=1 | r=2 | 1b7b9d8c | docs/specs/status/D216-row-locking-1.md |
 | T217 | #217 | G1 | 11 | pending | ready | pdca-dotnet | N=1 | r=1 | ee0cb743 | docs/specs/status/D217-datetimeoffset-1.md |
@@ -59,6 +59,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - T221 (#221) done: CHECK PASS r=1/rv=1/n=2/3; DO `f884c52b`, corrective DO `4b49b063`, ACT `9cb2e14f`. Evidence `artifacts/pdca/D221/rv1/manifest.json` (E221-01..09 met; build 0/0; UN 46/46, Q 10/10, QN 9/9, integration 21/21 on five providers, 0 skipped; Stryker 76/68 killed/8 survived, 0 NoCoverage), `coverage-delta.md`, `mutation-disposition.md`, `ownership-evidence.md`; status `docs/specs/status/D221-interceptor-di-registration-1.md`. Issue #221 closed. T53 freeze stays HELD.
 - T211 history: r1 exhausted (3/3 CHECK fails; EV-11 exit-code capture gap, no product defect); owner-directed re-open → r=2 with a real exit-code capture wrapper; retained commits `e98ae60e`, `5bd3028f`, `15c6253f` (not reverted). r3/r4 evidence remediation closed EV-11 (canonical+restart real exits); CHECK PASS r=4/rv=4 (21/21 met, 0 open); evidence `artifacts/pdca/D211-eager-perparent-topn-1/rv4/`.
 - T213 history: r=1 → r=6 (5 escalations). r=4 direction D narrowed scope (scalar M:N + composite keys stay; composite-junction M:N → #223); r=5 removed the broken D03 mixed-projection widening and handed off AC07 docs → #225; r=6 evidence recovery (keyless-parent proof + controlled coverage collect). CHECK PASS r=6/rv5. Closure: `T213 done partial: narrowed contract, AC03/AC05 → #223, AC07 → #225, both in milestone 1.0.9.` Evidence `artifacts/pdca/T213/rv5/manifest.json` (32/32 met/no-open, validators exit 0). Issue #213 kept OPEN (remaining slices #223/#225).
+- T222 (#222) done: variant pdca-dotnet, r=1, rv=1, n=3/3; final CHECK PASS (A222-01..07 all met). DO `5d9ff209`, `d5cc558f`, `535fb429`; corrective DO `b1b44438`, `670cb470`; final corrective `2ab0fddb`; ACT-evidence `d8e6317e`. Evidence `artifacts/pdca/D222-join-overloads-by-type/rv1/` (E222-CHECK/check-report.md; manifest+evidence validators exit 0; build 0/0; core InMemoryJoinTests 29/29; six provider TypeOnlyJoinSqlGenerationTests 7/7; coverage line 88.7 / branch 80.7; integration 3779 total/0 failed with 0 provider-unavailable skips; ninth-join probe compiles). Status `docs/specs/status/D222-join-overloads-by-type-1.md`. Follow-ups: (a) 05-subqueries EN:59/RU:61 terminology “cap/потолок” → “scope bound” — trigger docs terminology sweep; (b) V30 separate MariaDB DB infrastructure — trigger infrastructure/provider regression; (c) no Cross/Apply source-less, no type-only raw-table, no new terminal-arity-8 overload — trigger separate approved task. T53 freeze stays HELD (28 members registered, not activated). Issue #222 left OPEN. **Next pending = T223.**
 
 ## Phase decisions
 
@@ -93,7 +94,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Blocker: — (T211 `incomplete` superseded by the owner-directed r=2 re-open; patch retained)
 - Defect id / history: —
 - Corrective-task status file: —
-- Next allowed step: resume the lane at the next pending task **T222 (DO, r=1)** (order 8). T216's open owner constraint (MariaDB `FOR UPDATE OF`) must be resolved before T216 DO (order 10).
+- Next allowed step: resume the lane at the next pending task **T223 (DO, r=1)** (order 9). T216's open owner constraint (MariaDB `FOR UPDATE OF`) must be resolved before T216 DO (order 10).
 
 ## Done / Verified / Incomplete
 

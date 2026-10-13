@@ -3,8 +3,8 @@ task: T222
 issue: "#222"
 cycle: 1
 plan_revision: 1
-iteration: 2/3
-plan_state: ready
+iteration: 3/3
+plan_state: done
 evidence_contract_revision: 1
 variant: pdca-dotnet
 ---
@@ -323,6 +323,19 @@ Compiler compatibility probe входит в D222-03 как обязательн
 6. **DO reports:** blocker report провизорный, не done. Новое аддитивное предусловие сохраняет исходную D222-задачу активной, blocked на зависимости, со всеми критериями и остатком.
 7. **Возврат в PLAN:** истинный внешний blocker → рекомендация оркестратору вызвать `escalate`; недостаток evidence → сначала targeted scout, стойкая низкая уверенность → `escalate`, trigger 5. Фактическая смена действий/зависимостей требует новой `P:`-задачи и r+1; переименование или отсутствие отчёта revision не меняет.
 
+## Deferred + trigger
+
+- **(a) Terminology cleanup** — `docs/guide/05-subqueries.md:59` + `docs/ru/guide/05-subqueries.md:61`
+  use "cap"/"потолок" where the accurate term is "scope bound". Behaviour is correct (compose past eight
+  via `As`/derived table); registered as `accurate (terminology residuum)` in
+  `artifacts/pdca/D222-join-overloads-by-type/rv1/E222-DOCS/claim-registry.md`.
+  **Trigger:** a docs terminology sweep.
+- **(b) V30 separate MariaDB database infrastructure** — MariaDB SQL-generation is covered; a dedicated
+  real-MariaDB integration server is not. **Trigger:** a dedicated MariaDB integration infrastructure or a
+  provider-specific MariaDB regression.
+- **(c) No Cross/Apply source-less forms, no type-only raw-table form, no new terminal-arity-8 overload** —
+  deliberate scope bound (V16 guard). **Trigger:** a separate approved task.
+
 ## Progress log
 
 - 2026-10-13 PLAN r=1 persisted by coder (collection `1.0.9-todo`, task T222 / issue #222). plan_state=ready. DO not started (collection task-PLAN boundary: yield at PLAN→DO).
@@ -349,3 +362,4 @@ Compiler compatibility probe входит в D222-03 как обязательн
 - 2026-10-13T07:58Z | DO | r=1 | n=3/3 | Final corrective round: claim registry over both guides + neighbouring pages + XML caveat `E222-DOCS/claim-registry.md` — 27 mentions: 12 inaccurate (EN 02-joins :25-31/:246-248/:703-706/:722-731; RU :26-33/:251-253/:716-719/:738-743; EN/RU 08-cte; EN/RU limitations) ALL REWRITTEN to 'flat arity-chain scope bound, not a compile-time rejection'; 9 accurate + 6 generator-scoped verified unchanged. Zero remaining inaccurate 'cap/does not compile' claims. | E222-DOCS/claim-registry.md
 - 2026-10-13T07:58Z | DO | r=1 | n=3/3 | Evidence repair (separate from docs): `evidence.json` core selected_count 27->29; V24 baseline SHA pinned `4fbb603b27ff811508ec477604efba2c2132066a` (`baseline-revision.txt`) and the 'identical to AllNull.cs' overstatement corrected (receiver line differs); COMPAT fixture `file:line` added; variant-closure (V01-V26 core / V27,V29,V32 SQL / V28 integration) + V30 deferral trigger indexed; E222-CHECK left open. Re-runs: build 0/0; core 29/29; docfx 0; validators manifest/report 0. | evidence.json; E222-*/case-index.json; CHECK3-*
 - 2026-10-13T08:07Z | EVIDENCE | r=1 | n=3/3 | Evidence-repair (no code/docs semantics): linked ninth-source-less-join probe `T222-COMPAT-NINTH` (exit 0) into compatibility/manifest.json + E222-COMPAT/case-index.json; reconciled `manifest.json.tree` -> HEAD 2ab0fddb and added `evidence.json.current_tree_revision` (executions keep historical revisions); added `E222-CHECK/check-report.md` + `receipt.json` (3 CHECK rounds + A222-01..07 matrix, all MET) and closed the manifest E222-CHECK row to `met` with `final_verdict=PASS-pending-orchestrator-ACT`; appended 05-subqueries EN:59/RU:61 terminology residuum to claim-registry. Validators manifest/report exit 0. | E222-CHECK/**
+- 2026-10-13T08:10Z | ACT | r=1 | n=3/3 | D222 type-only join overloads **DONE**. Final CHECK = **PASS**; A222-01..07 all MET. Three CHECK rounds (CHECK#1 FAIL — docs null-parity + terminal-arity-8 accuracy; CHECK#2 FAIL — arity-8 residual in EN/RU guides + evidence completeness; CHECK#3 — product criteria MET, blocked only on evidence completeness) + the evidence-repair round (ninth-join probe linked, E222-CHECK row closed, provenance reconciled). E222-CHECK receipt persisted. Task commits: `5d9ff209`, `d5cc558f`, `535fb429`, `b1b44438`, `670cb470`, `2ab0fddb`, `d8e6317e`. Evidence root `artifacts/pdca/D222-join-overloads-by-type/rv1/`. T53: 28 public members registered as freeze candidates, freeze **HELD** (not activated; no PublicAPI files). T213 tree preserved; the 2 pre-existing SVGs preserved/uncommitted. Issue #222 left OPEN (not authorized to close/comment). | this status file
