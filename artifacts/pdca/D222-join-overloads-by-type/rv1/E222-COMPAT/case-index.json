@@ -43,6 +43,24 @@
           "line": 20
         }
       ]
+    },
+    {
+      "id": "T222-COMPAT-NINTH",
+      "project": "artifacts/pdca/D222-join-overloads-by-type/rv1/compatibility/ninth/NinthJoinFixture.csproj",
+      "expect": "success",
+      "expected_diagnostics": [],
+      "sources": [
+        {
+          "file": "compatibility/ninth/NinthJoin.cs",
+          "line": 27
+        },
+        {
+          "file": "compatibility/ninth/NinthJoin.cs",
+          "line": 38
+        }
+      ],
+      "exit_code": 0,
+      "log": "artifacts/pdca/D222-join-overloads-by-type/rv1/CHECK3-NINTH/stdout.log"
     }
   ]
 }

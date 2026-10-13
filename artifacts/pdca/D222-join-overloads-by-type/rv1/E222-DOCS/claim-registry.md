@@ -33,3 +33,5 @@ No remaining inaccurate 'compile-time cap / does not compile' claims (re-scan `c
 | `docs/ru/guide/02-joins.md:738-743` | As | inaccurate | rewritten | сброс читаемости, не выход из потолка компиляции |
 | `docs/ru/guide/08-cte.md:473-476` | CTE continuation | inaccurate | rewritten | плоская проекция останавливается на 8; унаследованные доступны |
 | `docs/ru/advanced/limitations.md:22` | Named join aliases (RU) | inaccurate | rewritten | граница области, а не отказ на компиляции |
+| `docs/guide/05-subqueries.md:59` | 'composing after a join, including past the eight-table cap' — terminology residuum | accurate (terminology residuum) | verified | behaviour correct (compose past eight via As/derived table); wording only, no semantic claim |
+| `docs/ru/guide/05-subqueries.md:61` | 'восьмитабличным потолком' — terminology residuum | accurate (terminology residuum) | verified | behaviour correct (compose past eight via As/derived table); wording only, no semantic claim |

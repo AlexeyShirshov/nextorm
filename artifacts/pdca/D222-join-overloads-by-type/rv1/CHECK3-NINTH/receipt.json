@@ -1,0 +1,19 @@
+{
+  "row_id": "CHECK3-NINTH",
+  "rv": 1,
+  "task": "T222",
+  "issue": "#222",
+  "cwd": "/home/alex/sources/nextorm",
+  "tree_revision": "2ab0fddbc7d107dd20b44fe69bee71c4a8fee178",
+  "branch": "1.0.9",
+  "started_utc": "2026-10-13T07:59:27Z",
+  "finished_utc": "2026-10-13T07:59:35Z",
+  "command": ["dotnet", "build", "artifacts/pdca/D222-join-overloads-by-type/rv1/compatibility/ninth/NinthJoinFixture.csproj", "-c", "Debug"],
+  "exit_code": 0,
+  "artifacts": {
+    "command": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/CHECK3-NINTH/command.txt",
+    "stdout": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/CHECK3-NINTH/stdout.log",
+    "stderr": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/CHECK3-NINTH/stderr.log",
+    "exitcode": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/CHECK3-NINTH/exitcode.txt"
+  }
+}

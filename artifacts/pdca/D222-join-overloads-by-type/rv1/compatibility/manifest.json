@@ -25,6 +25,26 @@
       "project": "allnull/AllNullFixture.csproj",
       "expect": "success",
       "expected_diagnostics": []
+    },
+    {
+      "id": "T222-COMPAT-NINTH",
+      "kind": "positive",
+      "project": "ninth/NinthJoinFixture.csproj",
+      "expect": "success",
+      "expected_diagnostics": [],
+      "sources": [
+        {
+          "file": "compatibility/ninth/NinthJoin.cs",
+          "line": 27
+        },
+        {
+          "file": "compatibility/ninth/NinthJoin.cs",
+          "line": 38
+        }
+      ],
+      "exit_code": 0,
+      "log": "artifacts/pdca/D222-join-overloads-by-type/rv1/CHECK3-NINTH/stdout.log",
+      "note": "9th source-less join on the terminal JoinedEntityBuilder<T1..T8> compiles (scope bound, not compile-time rejection)"
     }
   ],
   "baseline_comparison": {

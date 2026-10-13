@@ -1,6 +1,6 @@
 {
   "task": "T222 / #222",
-  "tree": "branch 1.0.9, base 4fbb603b, HEAD b1b44438 + CHECK#1 corrective (uncommitted)",
+  "tree": "branch 1.0.9, base 4fbb603b, HEAD 2ab0fddb (final corrective commit 2ab0fddbc7d107dd20b44fe69bee71c4a8fee178)",
   "status_file": "docs/specs/status/D222-join-overloads-by-type-1.md",
   "contract_rv": 1,
   "required_rows": [
@@ -287,8 +287,23 @@
     },
     {
       "id": "E222-CHECK",
-      "status": "open",
-      "reason": "CHECK #1 FAIL + CHECK #2 FAIL. Escalation decision (a): r=1, final DO round n=3/3, comprehensive claim-level docs fix + separate evidence repair. Open items closed this round: 12 inaccurate arity-8 claims rewritten across EN/RU guides + limitations (claim-registry.md); evidence repaired (evidence.json selected_count 27->29; V24 baseline SHA pinned 4fbb603b27ff811508ec477604efba2c2132066a; COMPAT fixture file:line; variant-closure/V30 index). E222-CHECK stays open pending the verdict; no PASS fabricated."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "report",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-CHECK/check-report.md"
+        },
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-CHECK/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "claim-registry",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-DOCS/claim-registry.md"
+        }
+      ],
+      "final_verdict": "PASS-pending-orchestrator-ACT"
     }
   ]
 }
