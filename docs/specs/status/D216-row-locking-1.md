@@ -45,6 +45,20 @@ prior_contract: rv=1 superseded by rv=2
 | D-04M | done | MariaDB `SupportsSourceLocks=false` + deterministic `NotSupportedException`; whole grammar preserved; red→green `/tmp/nextorm-maria-red.log` (exit 2, selected 3, failed 2) → `/tmp/nextorm-maria-green.log` (exit 0, selected 3) |
 | D-05/D-06 | pending | D-05 part 1 closed (focused matrix rows + `PlanKeyUniquenessTests`, full solution build, CRLF sweep); D-05 remainder/D-06 (integration live, EN/RU docs, boundary sweep, acceptance/T216 benchmarks, coverage, manifest) NOT started |
 
+### D-05 part 2 (focused integration locking)
+
+Executed serially with `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`, `-c Debug --no-build`, `--filter "FullyQualifiedName~<Provider>IntegrationTests&FullyQualifiedName~RowLock"`:
+- PostgresIntegrationTests: exit 0, passed 2, failed 0, skipped 0 (`/tmp/nextorm-int-PostgresIntegrationTests-lock.log`)
+- MySqlIntegrationTests: exit 0, passed 2, failed 0, skipped 0 (`/tmp/nextorm-int-MySqlIntegrationTests-lock.log`)
+- SqlServerIntegrationTests: exit 0, passed 2, failed 0, skipped 0 (`/tmp/nextorm-int-ss-lock2.log`)
+- SqliteIntegrationTests: exit 0, passed 0, failed 0, **skipped 2** — capability skip (SQLite has no row locking), NOT a DOCKER_HOST skip (`/tmp/nextorm-int-SqliteIntegrationTests-lock.log`)
+- MariaDbRowLockingSpecificTests (dedicated, no container; MariaDB is NOT under the MySQL provider path): exit 0, passed 3, failed 0, skipped 0 — source lock fails closed (`NotSupportedException`, no `OF`), whole grammar preserved (`/tmp/nextorm-int-maria-lock.log`)
+- DialectCapabilityContractTests (incl. `SupportsSourceLocks_ShouldBeExplicitPerDialect`, `SourceLockTarget_ShouldBeTargetedOrFailClosed`): exit 0, passed 5 (`/tmp/nextorm-int-capability.log`)
+
+Defect fixed here (surfaced by the live SQL Server probe): SQL Server rejects `WITH (hint) AS alias`; table hints are now emitted **after** the alias (`FROM t AS a WITH (hint)`), which also corrects the D-04 all-source hint output. Existing SQL Server SQL-gen assertions updated; unit focused suites re-verified green.
+
+Still open for the boundary step: V-18/V-22/V-24/V-30 review rows, EN/RU docs, `C-BOUNDARY` full sweep, acceptance/T216 benchmarks, coverage, frozen rv=2 manifest.
+
 ### D-05 part 1 (closed in this step)
 
 Closed (focused `PDCA=T216`, `-c Debug --no-build`): whole+source → `InvalidOperationException`; non-physical
@@ -353,4 +367,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 2026-10-13T00:00:00Z | DO | r=2 | n=1/3 | DO started — D-01..D-04M; planner footprint corrections applied (docs guide/32, Expressions comparers) | scope /tmp/nextorm-t216-scope.json (brief exit 0)
 2026-10-13T00:10:00Z | DO | r=2 | n=1/3 | D-01..D-04M implemented; contracts+renderers+guards committed 4d979efc; join-source-lock fixed 3ef11a3c | logs /tmp/nextorm-d01-*.log /tmp/nextorm-{core,postgres,mysql,mariadb,sqlserver}-t216b.log /tmp/nextorm-maria-{red,green}.log
 2026-10-13T00:20:00Z | DO | r=2 | n=1/3 | D-05 part 1: PlanKeyUniqueness 13->14 selected; full slnx build 0/0; focused matrix rows closed (guards/unsupported/mode-wait/empty-target); CRLF normalized | logs /tmp/nextorm-plankey.log /tmp/nextorm-full-build2.log /tmp/nextorm-{core,sqlite,ch,pg,mysql,mariadb,ss}-*t216*.log
+2026-10-13T00:30:00Z | DO | r=2 | n=1/3 | D-05 part 2: focused integration locking run (PG/MySQL/SS 2 passed each; SQLite 2 capability-skipped; MariaDB dedicated 3 fail-closed; capability 5); fixed SQL Server hint-after-alias ordering; full slnx build 0/0 | logs /tmp/nextorm-int-*-lock*.log /tmp/nextorm-full-build3.log
 ```
