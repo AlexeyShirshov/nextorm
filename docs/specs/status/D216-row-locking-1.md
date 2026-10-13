@@ -18,7 +18,7 @@ prior_contract: rv=1 superseded by rv=2
 
 ## Current state
 
-- Phase: PLAN complete, persisted; **DO started** for units D-01, D-02, D-03, D-04, D-04M (production surface + shared contract + provider renderers + focused tests + red→green regressions). D-05/D-06 (full matrix closure, integration, docs, boundary sweep, perf, coverage, manifest) are a separate later step and NOT run here.
+- Phase: **DO complete — at DO→CHECK boundary**. Units D-01…D-06 are `done`; D-07 (MariaDB pending-owner) is `blocked`. The rv=2 evidence manifest is frozen at `artifacts/pdca/D216/rv2/manifest.json` (validated by `scripts/validate_inner_loop.py manifest`, exit 0). CHECK owns the row verdict.
 - Cycle N=1, plan revision r=2, attempt n=1, evidence contract rv=2 (rv=1 superseded).
 - Selected variant: `pdca-dotnet`. Single collection group → current worktree/branch `1.0.9`, no worktree/branches/merge.
 - Blocks DO: none. **R-03/MariaDB is an open owner constraint**, surfaced upward; it does not stop the executable plan (routed escalation decision).
@@ -32,7 +32,7 @@ prior_contract: rv=1 superseded by rv=2
 - Current cycle N: 1
 - Plan revision r: 2
 - Attempt n: 1
-- Defect history: none yet (DO not started).
+- Defect history: D216-JOIN-SRCLOCK (first/alias join source lock not attached) — observed r=2/n=1, fixed in commit `3ef11a3c`, green; D216-SS-HINT-ORDER (SQL Server `WITH (hint) AS alias` invalid) — observed r=2/n=1 via live probe, fixed in commit `1849164e`, green.
 
 ### DO unit states (D-01..D-04M; production surface + shared contract + provider renderers)
 
@@ -43,7 +43,19 @@ prior_contract: rv=1 superseded by rv=2
 | D-03 | done | mappings/clones/equality/plan-key identity/guards (`FromExpressionPlanEqualityComparer`, `QueryCommand.SourceLockClause`, `QueryPreparer` attach+guards); commit `4d979efc` |
 | D-04 | done | SQL Server all-source hints, PG/MySQL `OF <alias>`, alias addressing; join-source-lock fix commit `3ef11a3c` |
 | D-04M | done | MariaDB `SupportsSourceLocks=false` + deterministic `NotSupportedException`; whole grammar preserved; red→green `/tmp/nextorm-maria-red.log` (exit 2, selected 3, failed 2) → `/tmp/nextorm-maria-green.log` (exit 0, selected 3) |
-| D-05/D-06 | pending | D-05 part 1 closed (focused matrix rows + `PlanKeyUniquenessTests`, full solution build, CRLF sweep); D-05 remainder/D-06 (integration live, EN/RU docs, boundary sweep, acceptance/T216 benchmarks, coverage, manifest) NOT started |
+| D-05 | done | matrix closure: focused unit/provider matrix rows, `PlanKeyUniquenessTests` (13), two-transaction integration locking (PG/MySQL/SQL Server 2 passed each; MariaDB dedicated 3 fail-closed), capability contract 5; commit `d6891104` + `1849164e` |
+| D-06 | done | EN/RU docs (8 files; committed `3247774b`), `dotnet docfx` exit 0, DO→CHECK boundary sweep (7x `PDCA=T216` + LockRendererDefault + PlanKeyUniqueness + integration), acceptance 7/0 + T216 6/0, coverage line 88.7% / branch 80.8%; boundary evidence `artifacts/pdca/D216/rv2/boundary/evidence.json` (validator exit 0) |
+| D-07 | **blocked** | original remainder: R-03/MariaDB source-level `OF` stays provisional fail-closed — **NOT PASS**; owner decision pending (narrow MariaDB to unsupported vs defer MariaDB source lock beyond 1.0.9). Evidence: `artifacts/pdca/D216/rv2/redgreen/mariadb-*.log`, `focused-mariadb.log`. **#216 stays OPEN.** |
+
+### Frozen evidence manifest + DO→CHECK notes
+
+Frozen manifest: `artifacts/pdca/D216/rv2/manifest.json` (rv=2, rows EV-01…EV-18; `validate_inner_loop.py manifest` exit 0). EV-17 (SQL Server red→green) **satisfied**; EV-16 (owner obligation) **open/pending-owner** — not a PASS. Open rows EV-02/EV-14/EV-15/EV-16/EV-18 are CHECK-side actions.
+
+**MariaDB (R-03/R-13/R-14):** source-level `FOR UPDATE OF`/`FOR SHARE OF` is **fail-closed / unsupported provisional** — `SupportsSourceLocks=false`, deterministic `NotSupportedException`, no `OF`, no whole-query substitution, no silent ignore; whole-query locks keep MariaDB's own grammar. R-13 implemented, R-03 not PASS, R-14 retained. Pending owner decision: (i) narrow MariaDB to unsupported and update #216 text, or (ii) defer MariaDB source lock beyond 1.0.9. **#216 stays OPEN.**
+
+**Open variant-matrix rows:** V-04 (`FromSql`) and V-06 (CTE) guards exist in `QueryPreparer.AttachPrimarySourceLock`/`IsLockablePhysicalSource` but have no public source-lock path today (recorded, not asserted). V-18 (ref/value entity forms), V-22 (outer JOIN/native unsupported shapes), V-24 (clone/reuse/repeated cached prepare) and V-30 (public API freeze/T53 inventory) remain for CHECK adjudication.
+
+**Boundary integration skip:** the single `skipped` in the `PDCA=T216` integration run is `SqliteIntegrationTests.RowLock_SourcePrimary_ShouldLockTheTargetRow` — a capability skip (`SqliteDialect.Lock is null`), **not** a missing `DOCKER_HOST`/container skip; PostgreSQL, MySQL and SQL Server executed (0 skipped).
 
 ### D-05 part 4 (DO->CHECK boundary sweep + coverage)
 
@@ -403,4 +415,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 2026-10-13T00:40:00Z | DO | r=2 | n=1/3 | Docs (EN+RU): whole-query vs source-level row locking, SQL Server all-source behavior change, PG/MySQL OF, MariaDB fail-closed; docfx exit 0 (2 pre-existing source-generator warnings) | logs /tmp/nextorm-docfx.log
 2026-10-13T00:50:00Z | DO | r=2 | n=1/3 | Perf acceptance 7 cases / 0 failures (wall 51 s; cached/prepared ratio 2.03 vs baseline 1.87, below 2.244); T216 cached-path benchmark 6 cases (no slower than whole-lock); artifacts committed 04442903 | logs /tmp/nextorm-acceptance.log /tmp/nextorm-t216-bench.log
 2026-10-13T01:00:00Z | DO | r=2 | n=1/3 | Boundary sweep (7x PDCA=T216 + LockRendererDefaultTests 5 + PlanKeyUniqueness 13 + integration 9 [1 SQLite skip]) all exit 0; validate_inner_loop report exit 0; coverage line 88.7% / branch 80.8% (>= 85/75) | logs /tmp/nextorm-boundary-*.log /tmp/nextorm-cov-*.log
+2026-10-13T01:10:00Z | DO | r=2 | n=1/3 | DO complete → CHECK: frozen rv=2 manifest `artifacts/pdca/D216/rv2/manifest.json` (EV-01..EV-18, validator exit 0; EV-17 satisfied, EV-16 open/pending-owner); D-01..D-06 done, D-07 blocked; #216 OPEN | manifest artifacts/pdca/D216/rv2/manifest.json
 ```
