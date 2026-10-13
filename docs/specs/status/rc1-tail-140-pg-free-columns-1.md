@@ -32,8 +32,8 @@ A reader who wants a schema-less result is routed to the three existing paths (a
 
 ## Acceptance criteria
 
-- **R140-01** (canonical, EN+RU): `docs/guide/provider-specific/postgresql.md` `## Dynamic record
-  schema` / `docs/ru/guide/provider-specific/postgresql.md` `## Динамическая схема записи` state
+- **R140-01** (canonical, EN+RU): `docs/guide/provider-specific-sql/postgresql.md` `## Dynamic record
+  schema` / `docs/ru/guide/provider-specific-sql/postgresql.md` `## Динамическая схема записи` state
   that the two functions render the caller's row type as the alias column-definition list
   (`AS x(a int, b text)`), that PostgreSQL requires it, and that a free/partial column list without a
   caller-declared `TRow` is **not supported** for these two functions. *Negative case:* the text must
@@ -55,13 +55,13 @@ A reader who wants a schema-less result is routed to the three existing paths (a
   `json_populate_record(set)` limitation into "PostgreSQL JSON is unsupported".
 - **R140-05** (consistency and scope): EN and RU are semantically identical; every touched link is
   public; CRLF is preserved on all six docs; `dotnet docfx docs/docfx.json` succeeds. **Allowed
-  paths** are exactly the six agreed docs — `docs/guide/provider-specific/postgresql.md`,
-  `docs/ru/guide/provider-specific/postgresql.md`, `docs/guide/11-table-valued-functions.md`,
+  paths** are exactly the six agreed docs — `docs/guide/provider-specific-sql/postgresql.md`,
+  `docs/ru/guide/provider-specific-sql/postgresql.md`, `docs/guide/11-table-valued-functions.md`,
   `docs/ru/guide/11-table-valued-functions.md`, `docs/advanced/limitations.md`,
   `docs/ru/advanced/limitations.md` — **plus** the mandatory cycle status file
   `docs/specs/status/rc1-tail-140-pg-free-columns-1.md` (bookkeeping only, excluded from DocFX).
   **Forbidden:** code, tests, config, TOC files, any other specs, `docs/guide/27-dynamic-columns.md`,
-  `docs/providers/postgres.md` (+RU). *Negative case:* any forbidden file in `git status`, or a
+  `docs/connecting-providers/postgres.md` (+RU). *Negative case:* any forbidden file in `git status`, or a
   non-public link, fails the criterion.
 
 ## Task list
@@ -77,9 +77,9 @@ A reader who wants a schema-less result is routed to the three existing paths (a
 
 | # | Variant | Decision |
 |---|---|---|
-| V1 | Extend the canonical `provider-specific/postgresql.md` section and cross-link the TVF guide + limitations | **Chosen** — one canonical home, minimal diff |
+| V1 | Extend the canonical `provider-specific-sql/postgresql.md` section and cross-link the TVF guide + limitations | **Chosen** — one canonical home, minimal diff |
 | V2 | Document only in the TVF guide `## Dynamic result schema` | Rejected — the canonical home required by the brief is the provider-specific guide |
-| V3 | Edit `docs/providers/postgres.md` (+RU) instead | Rejected — explicitly forbidden by the brief |
+| V3 | Edit `docs/connecting-providers/postgres.md` (+RU) instead | Rejected — explicitly forbidden by the brief |
 | V4 | Reopen #140 / request another author clarification | Rejected — #140 is closed; author option A fixes the scope as docs-only |
 
 ## Test strategy
@@ -133,7 +133,7 @@ Two findings (both actionable, no false positives):
   forbidden while the cycle's own **mandatory status file** (`docs/specs/status/...`) must be edited
   as bookkeeping. Scope wording corrected in r=2 (R140-05: allowed = six docs + this status file;
   forbidden = code, tests, config, TOC, any other specs, `docs/guide/27-dynamic-columns.md`,
-  `docs/providers/postgres.md`).
+  `docs/connecting-providers/postgres.md`).
 
 Candidate `stable-anchors` (line-number drift of the moved caveat) — **dismissed: no defect**; the
 row/section anchors are semantic, not line-based, and both rows remain at lines 39/40.

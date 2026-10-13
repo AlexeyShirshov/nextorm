@@ -3,7 +3,7 @@
 > Call a database scalar function from a LINQ expression by mapping a placeholder CLR method with
 > `[SqlFunction]`.
 
-**Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](../querying/index.md) · [Scalar functions](../scalar-functions/index.md)
+**Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](../engine/index.md) · [Scalar functions](../scalar-functions/index.md)
 
 ## Overview
 
@@ -176,7 +176,7 @@ database. Only the surrounding identifier (column alias) quoting differs:
 
 * [Scalar functions](../scalar-functions/index.md) - the built-in translations that take precedence.
 * [Table-valued functions](11-table-valued-functions.md) - the `FROM`-source equivalent.
-* [Provider overview](../providers/overview.md) - quoting and capability flags.
+* [Provider overview](../connecting-providers/overview.md) - quoting and capability flags.
 
 ---
 

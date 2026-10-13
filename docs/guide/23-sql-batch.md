@@ -2,7 +2,7 @@
 
 > A batch sends several statements to the database as **one round trip on one server session**. It is what makes a session-scoped temporary table usable under a connection-level pooler, keeps a mutation and the query that reads it on the same backend, and removes a round trip when a materialisation is immediately read back. Build one with [`BatchExtensions.CreateBatchBuilder`](xref:NextORM.Core.BatchExtensions).
 
-**Prerequisites:** [Materializing a query into a table](18-create-table-as.md) · [Transactions](21-transactions.md) · [Provider overview](../providers/overview.md)
+**Prerequisites:** [Materializing a query into a table](18-create-table-as.md) · [Transactions](21-transactions.md) · [Provider overview](../connecting-providers/overview.md)
 
 ## Why a batch
 
@@ -250,4 +250,4 @@ The capability is [`ISqlDialect.SupportsBatch`](xref:NextORM.Core.ISqlDialect.Su
 
 - [Materializing a query into a table](18-create-table-as.md)
 - [Transactions](21-transactions.md)
-- [Provider overview](../providers/overview.md)
+- [Provider overview](../connecting-providers/overview.md)

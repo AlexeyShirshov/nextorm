@@ -2,7 +2,7 @@
 
 > Combine rows from two or more entities, derived queries or raw tables with [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})).
 
-**Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](../querying/index.md) · [Filtering (WHERE)](01-filtering-where.md)
+**Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](../engine/index.md) · [Filtering (WHERE)](01-filtering-where.md)
 
 ## Overview
 
@@ -81,6 +81,45 @@ var rows = await dataContext.From<ISimpleEntity>()
     .Where(p => p.Item2.RequiredString == "34mfs")
     .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
     .ToListAsync();
+```
+
+```sql
+select t1.id, t2.requiredstring from (select id from simple_entity
+ where (id > 2)) as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+ where t2.requiredstring = '34mfs'
+```
+
+The pre-join filter is pushed into the left source as a derived table (`select id from simple_entity where
+(id > 2)`). That is what makes the placement observable on an outer join: before a [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) it stays on the
+left source, so every row of the joined table survives,
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .Where(it => it.Id > 2)
+    .RightJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
+    .ToListAsync();
+```
+
+```sql
+select t1.id, t2.requiredstring from (select id from simple_entity
+ where (id > 2)) as 't1' right join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+```
+
+whereas after the join the same predicate is emitted in the outer `where` and drops the rows the `right join`
+had preserved:
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .RightJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Where(p => p.Item1.Id > 2)
+    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
+    .ToListAsync();
+```
+
+```sql
+select t1.id, t2.requiredstring from simple_entity as 't1' right join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+ where (t1.id > 2)
 ```
 
 ### Addressing the projection
@@ -172,10 +211,16 @@ surface, so the single-query relationship loader never takes an `Alias.<Name>` a
 conditionless three take only the source and the marker:
 
 ```csharp
+var people = dataContext.From<Person>(b => b.Table("person"));
+
 var rows = await dataContext.From<Order>(b => b.Table("orders"))
     .CrossJoin(people, Alias.Person)
     .Select(p => p.Person.Id)
     .ToListAsync();
+```
+
+```sql
+select t2.id from orders as 't1' cross join person as 't2'
 ```
 
 Within one chain the generated projection retains the positional `ItemN` members alongside the named
@@ -705,7 +750,7 @@ select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on
 `PasteJoin` extends it by one item. They are ClickHouse-only
 ([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/[`SupportsPasteJoin`](xref:NextORM.Core.ISqlDialect.SupportsPasteJoin));
 every other provider and the in-memory context reject them with `NotSupportedException`. See
-[Provider-specific SQL](provider-specific/overview.md) for the full catalogue.
+[Provider-specific SQL](provider-specific-sql/overview.md) for the full catalogue.
 
 ## Provider differences
 
@@ -731,8 +776,8 @@ it supports [`Inner`](xref:NextORM.Core.JoinType.Inner), [`Left`](xref:NextORM.C
 - [Query hints](13-query-hints.md) - statement-level hints such as SQL Server `OPTION (RECOMPILE)`.
 - [Relationships and single-query loading (`JoinInto`)](../advanced/relationships.md) - declared relationship metadata and the single-query child-collection loader.
 - [Per-parent paging in eager loading](../advanced/eager-loading-per-parent-paging.md) - applying a child query's own `Take`/`Skip` independently to each parent.
-- [Provider-specific SQL](provider-specific/overview.md) - the full catalogue of provider-only constructs.
-- [Querying and projections](../querying/index.md)
+- [Provider-specific SQL](provider-specific-sql/overview.md) - the full catalogue of provider-only constructs.
+- [Querying and projections](../engine/index.md)
 
 ---
 

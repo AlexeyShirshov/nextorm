@@ -1,8 +1,8 @@
 # Изменение данных (INSERT)
 
-> В nextorm появилась небольшая, но явная поверхность DML: [`CreateInsertBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateInsertBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) строит параметризованный `INSERT ... VALUES` и возвращает число затронутых строк, сгенерированный ключ или вставленные строки. Тут нет ни change tracking, ни `SaveChanges`: каждый терминал выполняет ровно одну команду.
+> В nextorm появилась небольшая, но явная поверхность DML: [`CreateInsertBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateInsertBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) строит параметризованный `INSERT ... VALUES` и возвращает число затронутых строк, сгенерированный ключ или вставленные строки. Тут нет ни change tracking, ни unit of work: каждый терминал выполняет ровно одну команду.
 
-**Что нужно знать:** [Запросы и проекции](../querying/index.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Обзор провайдеров](../providers/overview.md)
+**Что нужно знать:** [Запросы и проекции](../engine/index.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Обзор провайдеров](../connecting-providers/overview.md)
 
 ## Обзор
 
@@ -19,8 +19,8 @@ var affected = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Insert();
 ```
 
-Здесь сознательно **нет** unit of work, трекера изменений и графа сущностей: это явная модель команд
-как в linq2db/`ExecuteNonQuery`, а не `SaveChanges` из EF Core. См.
+Здесь сознательно **нет** unit of work, трекера изменений и графа сущностей: команды выдаются и
+выполняются явно, по одной. См.
 [Ограничения и что вне области](../advanced/limitations.md).
 
 ## Объявление ключа, identity и computed-колонок
@@ -665,5 +665,5 @@ SQL Server дополнительно записывает изменённые 
 - [Массовая вставка (bulk)](20-bulk-insert.md)
 - [Глобальные фильтры запросов](../advanced/query-filters.md)
 - [Ограничения и что вне области](../advanced/limitations.md)
-- [Обзор провайдеров](../providers/overview.md)
+- [Обзор провайдеров](../connecting-providers/overview.md)
 - [Краткий справочник API](../advanced/api-reference.md)

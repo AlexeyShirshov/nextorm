@@ -186,5 +186,5 @@ See [Limitations and out-of-scope features](../advanced/limitations.md).
 ## See also
 
 - [Entities and metadata](../getting-started/03-entities-and-metadata.md)
-- [Value converters and JSON columns](../infrastructure/04-value-converters.md)
+- [Value converters and JSON columns](../infrastructure/03-value-converters.md)
 - [API reference](../advanced/api-reference.md)

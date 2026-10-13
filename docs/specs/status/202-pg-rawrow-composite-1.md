@@ -64,7 +64,7 @@ Unit доказывает классификацию независимо от �
 
 ## Docs plan
 
-Обновить EN + RU: `docs/guide/12-raw-sql.md`, `docs/guide/provider-specific/postgresql.md`, `docs/advanced/limitations.md` (+ зеркала RU). Уточнить, что named-composite диагностика — про **настоящие** композиты, а не любой незамапленный тип PG. Не подразумевать новую поддержку hstore/ltree/domain/enum. Публичных rename/removal нет; не линковать публичные страницы на specs.
+Обновить EN + RU: `docs/guide/12-raw-sql.md`, `docs/guide/provider-specific-sql/postgresql.md`, `docs/advanced/limitations.md` (+ зеркала RU). Уточнить, что named-composite диагностика — про **настоящие** композиты, а не любой незамапленный тип PG. Не подразумевать новую поддержку hstore/ltree/domain/enum. Публичных rename/removal нет; не линковать публичные страницы на specs.
 
 ## Perf / Recon / Unit mode
 
@@ -110,7 +110,7 @@ Unit доказывает классификацию независимо от �
   - **D-PROBE** (recon): как `CreateContext()` получает data source; проверить `NpgsqlConnection.ReloadTypes()` vs `NpgsqlDataSource.ReloadTypesAsync()` vs init-script на **фактических** контекстных соединениях. Pass: контекстные соединения дают warm (hstore → `public.hstore`/`PostgresBaseType`). Fail: доказательство относится лишь к DDL-соединению / чужому data source.
   - **D-FIXTURE**: реализовать доказанный прогрев; изолировать clean-сценарии от warm-пула/каталога; init-script fallback — только на свежем изолированном контейнере.
   - **D-TESTS**: warm R01/R02/R03 + V01–V06, clean genuine-composite, clean-limitation (без пиннинга типа/текста), R04 без изменений.
-  - **D-RECORDS/DOCS**: записать r3/rv2, supersession rv1→rv2 (E01–E09 сохранены); ограничение в `docs/guide/12-raw-sql.md`, `docs/guide/provider-specific/postgresql.md`, `docs/advanced/limitations.md` + RU-зеркала; follow-up на унификацию путей и на вводящую в заблуждение диагностику `-.-`.
+  - **D-RECORDS/DOCS**: записать r3/rv2, supersession rv1→rv2 (E01–E09 сохранены); ограничение в `docs/guide/12-raw-sql.md`, `docs/guide/provider-specific-sql/postgresql.md`, `docs/advanced/limitations.md` + RU-зеркала; follow-up на унификацию путей и на вводящую в заблуждение диагностику `-.-`.
   - **D-VERIFY**: E01–E12.
 - **Матрица:** warm R01/R02/R03; existing V01–V06 + R04; clean genuine-composite (явно); clean-limitation (фиксирует ограничение, не пиннит исключение); прочие провайдеры — полный прогон. Coverage Line ≥85 / Branch ≥75.
 - **Docs (предлагаемая строка):** «PostgreSQL composite types created after Npgsql has loaded type metadata may require a metadata reload on the connections used by the context; creating a fresh context alone does not guarantee that those types become available.» (RU-перевод в зеркалах; без ссылок на specs).
@@ -149,7 +149,7 @@ Unit доказывает классификацию независимо от �
 - **R02** warm ltree: `PostgresRawRowTests.cs:539`, guard `:548`, assert `:557-559`.
 - **R03** незарегистрированный composite → named-composite guard: `:200, :403, :431, :447, :487, :667`.
 - **R04** зарегистрированный composite материализуется: `:172, :229, :259, :314, :352, :474`.
-- **R05′** metadata-only/no-round-trip/не per-row (source-аудит): `src/nextorm.core/DataContext/RawMapperFactory.cs:272,290,339,386`; `ProcedureResult.cs:136/139,170/172,362/365,375/381`; `RowMapperFactory.cs:296`; cold hstore `:563` (assert `:603-606`), cold ltree `:617` (`:651-654`); helpers `:710/:721/:748/:763`; docs EN `docs/guide/12-raw-sql.md:404`, `docs/guide/provider-specific/postgresql.md:348`, `docs/advanced/limitations.md:47` + RU `:411/:352/:47`.
+- **R05′** metadata-only/no-round-trip/не per-row (source-аудит): `src/nextorm.core/DataContext/RawMapperFactory.cs:272,290,339,386`; `ProcedureResult.cs:136/139,170/172,362/365,375/381`; `RowMapperFactory.cs:296`; cold hstore `:563` (assert `:603-606`), cold ltree `:617` (`:651-654`); helpers `:710/:721/:748/:763`; docs EN `docs/guide/12-raw-sql.md:404`, `docs/guide/provider-specific-sql/postgresql.md:348`, `docs/advanced/limitations.md:47` + RU `:411/:352/:47`.
 - **R06** core без Npgsql: Npgsql только `src/nextorm.postgres/nextorm.postgres.csproj:14`; CPM `Directory.Packages.props:30`.
 - **R07** build/suite/coverage зелёные (таблица выше).
 - Docs-проверка: CRLF во всех шести страницах; ссылок на `docs/specs/**` не добавлено; EN/RU паритет.

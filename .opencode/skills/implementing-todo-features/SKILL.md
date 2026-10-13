@@ -260,10 +260,10 @@ A green **line** number does not prove the new branches are exercised:
   undocumented. Reference the new function/operator with its exact C# signature and a short sample.
 - After the documentation is in place, **delete** the provisional work-plan file — its conclusions must
   live in the docs/backlog, not in the plan file.
-- Provider docs EN + RU: `docs/providers/<provider>.md` and `docs/ru/providers/<provider>.md`; guide
+- Provider docs EN + RU: `docs/connecting-providers/<provider>.md` and `docs/ru/connecting-providers/<provider>.md`; guide
   pages `docs/scalar-functions/index.md`, `docs/guide/03-grouping-and-aggregates.md`,
   `docs/guide/09-window-functions.md`, `docs/guide/11-table-valued-functions.md` plus the `docs/ru/` mirror, as applicable.
-- Matrix/limitations: `docs/providers/overview.md` (+RU), `docs/advanced/limitations.md` (+RU),
+- Matrix/limitations: `docs/connecting-providers/overview.md` (+RU), `docs/advanced/limitations.md` (+RU),
   `docs/advanced/api-reference.md` (+RU).
 - Specs: `docs/specs/roadmap/sql-capabilities-gap-analysis.md`; on a public-API change
   `docs/specs/design/API-NAMING-REVIEW.md`; on auditor findings `docs/specs/design/code-smells-review.md`.

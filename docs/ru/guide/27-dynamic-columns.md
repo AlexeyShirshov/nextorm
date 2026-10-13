@@ -190,5 +190,5 @@ value-типа (`struct`), объявляющая хранилище, откло
 ## Смотрите также
 
 - [Сущности и метаданные](../getting-started/03-entities-and-metadata.md)
-- [Конвертеры значений и JSON-колонки](../infrastructure/04-value-converters.md)
+- [Конвертеры значений и JSON-колонки](../infrastructure/03-value-converters.md)
 - [Краткий справочник API](../advanced/api-reference.md)

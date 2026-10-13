@@ -49,7 +49,7 @@ ClickHouse renders `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds
 `arrayStringConcat(groupArray(x), delimiter)`, `groupBitAnd`/`groupBitOr`/`groupBitXor`,
 `covarPop`/`covarSamp`, `argMin`/`argMax`, the `-If` combinators and `multiIf`. It rejects the ANSI
 `filter (where ...)` clause and the `regr_*`/boolean aggregates with `NotSupportedException`; see the
-[ClickHouse provider](../providers/clickhouse.md).
+[ClickHouse provider](../connecting-providers/clickhouse.md).
 
 ## Explicitly unsupported
 

@@ -7,7 +7,7 @@
 > updates by the entity's declared key. There is no change tracking and no `SaveChanges`: every terminal
 > issues exactly one command.
 
-**Prerequisites:** [Data modification (INSERT)](15-insert-statement.md) · [Data modification (DELETE)](16-delete-statement.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Provider overview](../providers/overview.md)
+**Prerequisites:** [Data modification (INSERT)](15-insert-statement.md) · [Data modification (DELETE)](16-delete-statement.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Provider overview](../connecting-providers/overview.md)
 
 ## Updating rows by predicate
 
@@ -296,5 +296,5 @@ scope), and such a statement is never plan-cached. See [Common table expressions
 - [Optimistic concurrency and change tracking](24-optimistic-concurrency.md)
 - [Filtering (WHERE)](01-filtering-where.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
-- [Provider overview](../providers/overview.md)
+- [Provider overview](../connecting-providers/overview.md)
 - [API reference](../advanced/api-reference.md)

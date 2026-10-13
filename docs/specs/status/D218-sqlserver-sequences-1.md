@@ -62,7 +62,7 @@ Input is raw names, not a ready T-SQL parser. Constant capture via `Visitor/SqlL
 - **D3 — DB execution.** Add SQL Server-only integration scenarios in the SQL Server-specific suite: unique sequence names, BIGINT fixture DDL test-only, cleanup in `finally`, positive/negative R5–R6 cases.
 - **D4 — docs and registries (CORRECTED: update existing pages only).** Update:
   `docs/scalar-functions/10-sequences.md`, `docs/ru/scalar-functions/10-sequences.md`,
-  `docs/guide/provider-specific/sqlserver.md`, `docs/ru/guide/provider-specific/sqlserver.md`
+  `docs/guide/provider-specific-sql/sqlserver.md`, `docs/ru/guide/provider-specific-sql/sqlserver.md`
   (replace “SQL Server — Not supported yet”/RU equivalent with “Supported”, documenting functionality, limitations, examples; keep #218 as tracking reference only), and
   `docs/specs/roadmap/sql-function-coverage-gap.md`, `docs/specs/roadmap/sql-capabilities-gap-analysis.md`,
   `docs/specs/comparison/evidence-01-provider-specific-features.md`.

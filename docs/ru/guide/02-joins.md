@@ -2,7 +2,7 @@
 
 > Объединяйте строки из двух или более сущностей, производных запросов или необработанных таблиц с помощью [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})), [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})).
 
-**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](../querying/index.md) · [Фильтрация (WHERE)](01-filtering-where.md)
+**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](../engine/index.md) · [Фильтрация (WHERE)](01-filtering-where.md)
 
 ## Обзор
 
@@ -83,6 +83,45 @@ var rows = await dataContext.From<ISimpleEntity>()
     .Where(p => p.Item2.RequiredString == "34mfs")
     .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
     .ToListAsync();
+```
+
+```sql
+select t1.id, t2.requiredstring from (select id from simple_entity
+ where (id > 2)) as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+ where t2.requiredstring = '34mfs'
+```
+
+Фильтр до соединения вдавливается в левый источник как производная таблица (`select id from simple_entity
+where (id > 2)`). Именно поэтому расположение заметно на внешнем соединении: перед [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) он остаётся на
+левом источнике, и все строки присоединённой таблицы сохраняются,
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .Where(it => it.Id > 2)
+    .RightJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
+    .ToListAsync();
+```
+
+```sql
+select t1.id, t2.requiredstring from (select id from simple_entity
+ where (id > 2)) as 't1' right join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+```
+
+тогда как после соединения тот же предикат попадает во внешний `where` и отбрасывает строки, которые
+`right join` только что сохранил:
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .RightJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Where(p => p.Item1.Id > 2)
+    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
+    .ToListAsync();
+```
+
+```sql
+select t1.id, t2.requiredstring from simple_entity as 't1' right join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+ where (t1.id > 2)
 ```
 
 ### Адресация проекции
@@ -175,10 +214,16 @@ select t2.id as 'Buyer', t3.id as 'Approver' from orders as 't1' join person as 
 `Alias.<Name>`. Три оператора без условия принимают только источник и маркер:
 
 ```csharp
+var people = dataContext.From<Person>(b => b.Table("person"));
+
 var rows = await dataContext.From<Order>(b => b.Table("orders"))
     .CrossJoin(people, Alias.Person)
     .Select(p => p.Person.Id)
     .ToListAsync();
+```
+
+```sql
+select t2.id from orders as 't1' cross join person as 't2'
 ```
 
 Внутри одной цепочки сгенерированная проекция сохраняет позиционные члены `ItemN` наряду с
@@ -718,7 +763,7 @@ select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on
 добавляет один элемент. Они доступны только в ClickHouse
 ([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/[`SupportsPasteJoin`](xref:NextORM.Core.ISqlDialect.SupportsPasteJoin));
 остальные провайдеры и контекст in-memory отклоняют их через `NotSupportedException`. Полный каталог —
-в разделе [Специфичный для провайдеров SQL](provider-specific/overview.md).
+в разделе [Специфичный для провайдеров SQL](provider-specific-sql/overview.md).
 
 ## Различия между провайдерами
 
@@ -745,8 +790,8 @@ select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on
 - [Хинты запросов](13-query-hints.md) - хинты уровня инструкции, например SQL Server `OPTION (RECOMPILE)`.
 - [Связи и однозапросная загрузка (`JoinInto`)](../advanced/relationships.md) - объявленные метаданные связей и однозапросный загрузчик дочерней коллекции.
 - [Постраничная выборка на родителя при жадной загрузке](../advanced/eager-loading-per-parent-paging.md) - применение собственных `Take`/`Skip` дочернего запроса независимо к каждому родителю.
-- [Специфичный для провайдеров SQL](provider-specific/overview.md) - полный каталог конструкций, доступных только у отдельных провайдеров.
-- [Запросы и проекции](../querying/index.md)
+- [Специфичный для провайдеров SQL](provider-specific-sql/overview.md) - полный каталог конструкций, доступных только у отдельных провайдеров.
+- [Запросы и проекции](../engine/index.md)
 
 ---
 

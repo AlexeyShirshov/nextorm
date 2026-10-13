@@ -56,17 +56,23 @@
   href: 28-streaming-data.md
 - name: Implicit navigation queries
   href: 29-implicit-navigation.md
+- name: Projections
+  href: 30-projections.md
+- name: Query sources
+  href: 31-query-sources.md
+- name: Provider-specific features
+  href: 32-provider-specific-features.md
 - name: Provider-specific SQL
   items:
     - name: Overview
-      href: provider-specific/overview.md
+      href: provider-specific-sql/overview.md
     - name: ClickHouse
-      href: provider-specific/clickhouse.md
+      href: provider-specific-sql/clickhouse.md
     - name: PostgreSQL
-      href: provider-specific/postgresql.md
+      href: provider-specific-sql/postgresql.md
     - name: SQL Server
-      href: provider-specific/sqlserver.md
+      href: provider-specific-sql/sqlserver.md
     - name: MySQL and MariaDB
-      href: provider-specific/mysql.md
+      href: provider-specific-sql/mysql.md
     - name: SQLite
-      href: provider-specific/sqlite.md
+      href: provider-specific-sql/sqlite.md

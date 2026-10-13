@@ -195,7 +195,7 @@ Each focused run selects **>0** tests, and the scenario map shows coverage of th
 
 ## Documentation
 
-Change: `docs/querying/03-provider-specifics.md`, `docs/ru/querying/03-provider-specifics.md`, `docs/advanced/api-reference.md`, `docs/ru/advanced/api-reference.md`, `docs/providers/sqlserver.md`, `docs/ru/providers/sqlserver.md`, `docs/advanced/limitations.md`, `docs/ru/advanced/limitations.md`.
+Change: `docs/querying/03-provider-specifics.md`, `docs/ru/querying/03-provider-specifics.md`, `docs/advanced/api-reference.md`, `docs/ru/advanced/api-reference.md`, `docs/connecting-providers/sqlserver.md`, `docs/ru/connecting-providers/sqlserver.md`, `docs/advanced/limitations.md`, `docs/ru/advanced/limitations.md`.
 
 Required content: whole/source distinction and options methods; existing default/explicit alias forms; physical-only, conflict rule, native restrictions; provider matrix with MariaDB source-level unsupported; SQL Server primary-only → all-sources behavior warning; MariaDB whole-lock spelling/wait versions. The pending-owner marker lives in status/evidence/final report; public docs describe the actually available capability, not internal workflow.
 

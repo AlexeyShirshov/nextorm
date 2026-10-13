@@ -2,7 +2,7 @@
 
 > There is no single portable JSON API: PostgreSQL exposes a native `json`/`jsonb` surface, SQL Server returns a document with a trailing `FOR JSON` clause and offers JSON-as-text functions, MySQL/MariaDB offer the same JSON-as-text functions over the `JSON_EXTRACT`/`JSON_SET` family, and the remaining providers reject JSON constructs.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql) · [Table-valued functions](11-table-valued-functions.md#built-in-table-functions) · [Provider overview](../providers/overview.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql) · [Table-valued functions](11-table-valued-functions.md#built-in-table-functions) · [Provider overview](../connecting-providers/overview.md)
 
 ## Overview
 
@@ -36,7 +36,7 @@ feature:
   `json_extract`, the `->`/`->>` operators, `json_set`/`json_patch`, and the `json_each`/`json_tree` table
   functions). The *cross-provider* JSON API is not mapped to it: the native `json`/`jsonb` type and the
   text-JSON names (`json_value`/`json_query`/`json_modify`/`isjson`) throw `NotSupportedException`, so use
-  the JSON1 members directly (see the [SQLite provider](../providers/sqlite.md#sqlite-only-functions)).
+  the JSON1 members directly (see the [SQLite provider](../connecting-providers/sqlite.md#sqlite-only-functions)).
 * **Every SQL provider** shares one JSON *terminal*: [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
   [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) stream the query's projection to a caller-owned `Stream` as a JSON array or
   NDJSON, serialized client-side with `System.Text.Json` (see [Streaming data to a Stream](28-streaming-data.md#json)).
@@ -223,7 +223,7 @@ public sealed class Customer
 
 The mapping covers the property, not the schema: nextorm does not generate the column DDL, so the table
 must already have the `jsonb` column. See
-[Value converters](../infrastructure/04-value-converters.md#json-columns) for the fluent
+[Value converters](../infrastructure/03-value-converters.md#json-columns) for the fluent
 `JsonColumn(o => ...)` form and serializer options.
 
 Bare CLR JSON values are handled at the boundary, differently from a mapped column:
@@ -440,12 +440,12 @@ The construction and aggregation functions return `string?`; deserialize with
 
 ## See also
 
-- [Querying and projections](../querying/index.md) - `ForJson`/`ForXml` for SQL Server.
+- [Querying and projections](../engine/index.md) - `ForJson`/`ForXml` for SQL Server.
 - [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql) - the full PostgreSQL JSON/JSONB surface and the SQL Server / MySQL/MariaDB text-JSON functions.
 - [Table-valued functions](11-table-valued-functions.md#built-in-table-functions) - `openjson` and `string_split`.
-- [PostgreSQL provider](../providers/postgres.md) - JSON columns, parameter binding and arrays.
-- [SQL Server provider](../providers/sqlserver.md) - `FOR JSON`, `FOR XML` and text JSON.
-- [MySQL provider](../providers/mysql.md) and [MariaDB provider](../providers/mariadb.md) - text JSON over `JSON_EXTRACT`/`JSON_SET`.
+- [PostgreSQL provider](../connecting-providers/postgres.md) - JSON columns, parameter binding and arrays.
+- [SQL Server provider](../connecting-providers/sqlserver.md) - `FOR JSON`, `FOR XML` and text JSON.
+- [MySQL provider](../connecting-providers/mysql.md) and [MariaDB provider](../connecting-providers/mariadb.md) - text JSON over `JSON_EXTRACT`/`JSON_SET`.
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 
 ---

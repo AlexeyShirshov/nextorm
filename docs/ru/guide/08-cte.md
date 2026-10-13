@@ -3,7 +3,7 @@
 > Объявляйте один или несколько именованных `with`-запросов и используйте их в качестве источника `from`
 > для запроса, включая рекурсивные CTE для последовательностей и иерархий.
 
-**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](../querying/index.md) · [Операции над множествами](06-set-operations.md)
+**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](../engine/index.md) · [Операции над множествами](06-set-operations.md)
 
 ## Обзор
 
@@ -597,7 +597,7 @@ with recent as (select id from complex_entity where (id > $threshold)) select id
 * эквивалентный рекурсивный CTE, построенный снова, переиспользует кэшированный план
   (`PlanCacheTests.RecursiveCte_FreshCommand_ShouldReuseCachedPlan`).
 
-См. [Переиспользование запросов: кэш против Prepare](../infrastructure/01-query-reuse-and-caching.md) о времени жизни и правилах
+См. [Переиспользование запросов: кэш против Prepare](../engine/03-plan-cache-and-reuse.md) о времени жизни и правилах
 инвалидации кэша планов.
 
 ## Модифицирующий CTE (PostgreSQL)
@@ -708,7 +708,7 @@ Write-CTE документируется вместе с поверхность�
 * [Операции над множествами](06-set-operations.md) — [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) и другие, используются для построения рекурсивного тела.
 * [Соединения](02-joins.md) — соединение CTE с таблицей, как в `CommonTestSuite.Cte.cs`.
 * [Необработанный SQL](12-raw-sql.md) — когда вся инструкция написана вручную.
-* [Переиспользование запросов: кэш против Prepare](../infrastructure/01-query-reuse-and-caching.md) — как кэшируются планы CTE.
+* [Переиспользование запросов: кэш против Prepare](../engine/03-plan-cache-and-reuse.md) — как кэшируются планы CTE.
 
 ---
 

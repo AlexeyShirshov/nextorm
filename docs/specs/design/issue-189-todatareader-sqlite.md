@@ -75,7 +75,7 @@ LOB-проекция на SQLite (колонка `byte[]`/`string` внутри 
 
 - `docs/advanced/api-reference.md` + `docs/ru/advanced/api-reference.md` (`:91`);
 - `docs/advanced/limitations.md` + `docs/ru/advanced/limitations.md` (`:68-69`, `:89`);
-- `docs/providers/overview.md` + RU (таблица `:61`), `docs/providers/sqlite.md` + RU, `docs/providers/postgres.md` + RU (`:275`, `:302`), `docs/providers/sqlserver.md` + RU, `docs/providers/in-memory.md` + RU;
+- `docs/connecting-providers/overview.md` + RU (таблица `:61`), `docs/connecting-providers/sqlite.md` + RU, `docs/connecting-providers/postgres.md` + RU (`:275`, `:302`), `docs/connecting-providers/sqlserver.md` + RU, `docs/connecting-providers/in-memory.md` + RU;
 - `docs/guide/26-large-objects.md` + RU, `docs/guide/28-streaming-data.md` + RU;
 - `docs/comparisons/capabilities.md` + RU (`:33`);
 - internal specs: `docs/specs/comparison/linq2db-comparison.md` + `docs/specs/ru/comparison/linq2db-comparison.md` (`:117`, `:253`), `docs/specs/comparison/capability-matrix.md` (`:132`), `docs/specs/design/API-NAMING-REVIEW.md` (реестр LOB1), `docs/specs/design/code-smells-review.md:8071-8072` (закрыть перенос «SQLite locator-backed multi-column ToDataReader»).

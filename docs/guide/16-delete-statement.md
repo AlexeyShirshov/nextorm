@@ -2,7 +2,7 @@
 
 > nextorm removes rows with the same explicit-command model as `INSERT`: [`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) builds a parameterised `DELETE FROM <table> [WHERE ...]`, the context extension [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)) deletes by the entity's declared key, and a joined query can end in a multi-table delete. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
 
-**Prerequisites:** [Data modification (INSERT)](15-insert-statement.md) · [Filtering (WHERE)](01-filtering-where.md) · [Joins](02-joins.md) · [Provider overview](../providers/overview.md)
+**Prerequisites:** [Data modification (INSERT)](15-insert-statement.md) · [Filtering (WHERE)](01-filtering-where.md) · [Joins](02-joins.md) · [Provider overview](../connecting-providers/overview.md)
 
 ## Deleting rows by predicate
 
@@ -219,5 +219,5 @@ The `with …` is emitted before the mutation on every provider with a multi-tab
 - [Data merging (MERGE / upsert)](19-merge-statement.md)
 - [Joins](02-joins.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
-- [Provider overview](../providers/overview.md)
+- [Provider overview](../connecting-providers/overview.md)
 - [API reference](../advanced/api-reference.md)

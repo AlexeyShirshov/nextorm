@@ -7,7 +7,7 @@
 > обновляет по объявленному ключу сущности. Отслеживания изменений и `SaveChanges` нет: каждый терминал
 > выполняет ровно одну команду.
 
-**Что нужно знать:** [Изменение данных (INSERT)](15-insert-statement.md) · [Изменение данных (DELETE)](16-delete-statement.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Обзор провайдеров](../providers/overview.md)
+**Что нужно знать:** [Изменение данных (INSERT)](15-insert-statement.md) · [Изменение данных (DELETE)](16-delete-statement.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Обзор провайдеров](../connecting-providers/overview.md)
 
 ## Обновление строк по предикату
 
@@ -298,5 +298,5 @@ with upd as (update orders set total = @p0 where customer_id = 7 returning id, t
 - [Оптимистичная конкурентность и отслеживание изменений](24-optimistic-concurrency.md)
 - [Фильтрация (WHERE)](01-filtering-where.md)
 - [Ограничения и вне области](../advanced/limitations.md)
-- [Обзор провайдеров](../providers/overview.md)
+- [Обзор провайдеров](../connecting-providers/overview.md)
 - [Справочник API](../advanced/api-reference.md)

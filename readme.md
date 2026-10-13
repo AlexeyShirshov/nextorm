@@ -15,9 +15,9 @@ with no change tracking and no mandatory entity class.
 
 * **Query compilation and parameterization** — SQL is built once and cached; values are bound as parameters.
 * **Two ways to reuse a query** — the implicit plan cache and the explicit
-  [`Prepare()`](https://alexeyshirshov.github.io/nextorm/infrastructure/01-query-reuse-and-caching.html).
+  [`Prepare()`](https://alexeyshirshov.github.io/nextorm/engine/03-plan-cache-and-reuse.html).
 * **Entities are optional** — query tables and columns directly with
-  [`TableAlias`](https://alexeyshirshov.github.io/nextorm/querying/01-projections.html), or map with attributes / fluent API.
+  [`TableAlias`](https://alexeyshirshov.github.io/nextorm/guide/30-projections.html), or map with attributes / fluent API.
 * **Rich projection targets** — classes, interfaces, records, anonymous types, tuples, scalars and nested projections.
 * **No change tracking** — lean, allocation-conscious materialization built for read-heavy data access.
 * **Six database engines** — SQLite, SQL Server, PostgreSQL, MySQL, MariaDB, ClickHouse, plus a built-in in-memory provider.
@@ -86,7 +86,7 @@ Avoid rebuilding a query plan on every execution in two independent ways: the **
 [`Prepare`](https://alexeyshirshov.github.io/nextorm/api/NextORM.Core.EntityBuilder-1.html) returning an
 [`IPreparedQueryCommand<TResult>`](https://alexeyshirshov.github.io/nextorm/api/NextORM.Core.IPreparedQueryCommand-1.html).
 They differ in cost, lifetime and thread-safety rules — see
-[Query reuse: cache vs Prepare](https://alexeyshirshov.github.io/nextorm/infrastructure/01-query-reuse-and-caching.html).
+[Query reuse: cache vs Prepare](https://alexeyshirshov.github.io/nextorm/engine/03-plan-cache-and-reuse.html).
 
 ## Benchmarks
 

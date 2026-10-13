@@ -2,7 +2,7 @@
 
 > Use a `QueryCommand<T>` as a `FROM` source, as a scalar value in a projection, `WHERE`, `ORDER BY` or `HAVING`, or as a correlated `EXISTS` / `IN` / `ANY` / `ALL` predicate.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Filtering (WHERE)](01-filtering-where.md) · [Joins](02-joins.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Filtering (WHERE)](01-filtering-where.md) · [Joins](02-joins.md)
 
 ## Overview
 

@@ -11,7 +11,6 @@
 
 ### Руководство
 
-- [Запросы и проекции](querying/index.md)
 - [Фильтрация (WHERE)](guide/01-filtering-where.md)
 - [Соединения (JOIN)](guide/02-joins.md)
 - [Группировка и агрегаты](guide/03-grouping-and-aggregates.md)
@@ -41,14 +40,23 @@
 - [Динамические колонки](guide/27-dynamic-columns.md)
 - [Потоковое сохранение данных](guide/28-streaming-data.md)
 - [Неявные навигационные запросы](guide/29-implicit-navigation.md)
+- [Проекции](guide/30-projections.md)
+- [Источники запроса](guide/31-query-sources.md)
+- [Специфичные для провайдеров возможности](guide/32-provider-specific-features.md)
+
+### Движок
+
+- [Как работает движок](engine/index.md)
+- [Построение запроса: fluent к SQL](engine/01-query-pipeline.md)
+- [Исполнение и строки](engine/02-execution-and-rows.md)
+- [Кэш планов и переиспользование](engine/03-plan-cache-and-reuse.md)
 
 ### Инфраструктура
 
-- [Переиспользование запросов: кэш и Prepare](infrastructure/01-query-reuse-and-caching.md)
-- [Подключения](infrastructure/02-connections.md)
-- [Интерцепторы](infrastructure/03-interceptors.md)
-- [Конвертеры значений и JSON-колонки](infrastructure/04-value-converters.md)
-- [Логирование](infrastructure/05-logging.md)
+- [Подключения](infrastructure/01-connections.md)
+- [Интерцепторы](infrastructure/02-interceptors.md)
+- [Конвертеры значений и JSON-колонки](infrastructure/03-value-converters.md)
+- [Логирование](infrastructure/04-logging.md)
 
 ### Скалярные функции
 
@@ -64,13 +72,13 @@
 - [Системные функции](scalar-functions/09-system-functions.md)
 - [Последовательности и генераторы UUID](scalar-functions/10-sequences.md)
 
-### Провайдеры
+### Подключение провайдеров
 
-- [Обзор провайдеров](providers/overview.md)
-- [SQLite](providers/sqlite.md)
-- [SQL Server](providers/sqlserver.md)
-- [PostgreSQL](providers/postgres.md)
-- [In-memory](providers/in-memory.md)
+- [Обзор провайдеров](connecting-providers/overview.md)
+- [SQLite](connecting-providers/sqlite.md)
+- [SQL Server](connecting-providers/sqlserver.md)
+- [PostgreSQL](connecting-providers/postgres.md)
+- [In-memory](connecting-providers/in-memory.md)
 
 ### Сравнения
 
@@ -80,11 +88,11 @@
 
 - [Глобальные фильтры запросов](advanced/query-filters.md)
 - [Интеграция с Entity Framework Core](advanced/integration-efcore.md)
-- [Мост фильтров EF Core](advanced/ef-core-query-filters.md)
 - [Жадная загрузка дочерних коллекций](advanced/eager-loading.md)
 - [Связи и однозапросная загрузка](advanced/relationships.md)
 - [Ограничения и что вне области](advanced/limitations.md)
 - [Нативные стратегии выбора экстремальной строки](advanced/select-where-extrema-native.md)
+- [Расширяемость: пользовательские SQL-диалекты и рендереры](advanced/extensibility.md)
 - [Краткий справочник API](advanced/api-reference.md)
 
 ### Введение

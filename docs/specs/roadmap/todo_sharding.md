@@ -227,7 +227,7 @@ public EntityBuilder<T> AcrossShards(ShardSelection sel);
   `DI/DataContextBuilder.cs`, `Query/QueryCommand.QueryPreparer.cs`, `Cache/DbPreparedQueryCommand.cs`.
 - Тесты: `tests/nextorm.core.tests/ShardingTests.cs` (+ ring/extractor), SQL-gen провайдеров,
   `tests/nextorm.integration.tests/CommonTestSuite.Sharding.cs`.
-- Документация: новый гайд по шардированию (+RU), `docs/providers/overview.md` (+RU),
+- Документация: новый гайд по шардированию (+RU), `docs/connecting-providers/overview.md` (+RU),
   `docs/advanced/limitations.md` (+RU), `docs/specs/design/API-NAMING-REVIEW.md`,
   `docs/specs/design/code-smells-review.md`.
 

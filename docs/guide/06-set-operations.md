@@ -2,7 +2,7 @@
 
 > Combine two result sets with [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})), [`Except`](xref:NextORM.Core.QueryCommand`1.Except``1(NextORM.Core.QueryCommand{``0})) and [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})), and chain them left to right.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Subqueries](05-subqueries.md) · [SELECT DISTINCT](07-distinct.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Subqueries](05-subqueries.md) · [SELECT DISTINCT](07-distinct.md)
 
 ## Overview
 
@@ -171,7 +171,7 @@ to render an `*ALL` set operation for them.
 
 - [SELECT DISTINCT](07-distinct.md) - [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) and set operations interact.
 - [Subqueries](05-subqueries.md) - a set-operation command can be used as a `FROM` source.
-- [Querying and projections](../querying/index.md)
+- [Querying and projections](../engine/index.md)
 
 ---
 

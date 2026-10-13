@@ -2,7 +2,7 @@
 
 > Читайте одно большое бинарное или текстовое значение как `Stream`/`TextReader`, не загружая его целиком в managed-память.
 
-**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [Проекции](../querying/01-projections.md) · [PostgreSQL](provider-specific/postgresql.md) · [SQL Server](provider-specific/sqlserver.md) · [Ограничения](../advanced/limitations.md)
+**Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Проекции](../guide/30-projections.md) · [PostgreSQL](provider-specific-sql/postgresql.md) · [SQL Server](provider-specific-sql/sqlserver.md) · [Ограничения](../advanced/limitations.md)
 
 ## Обзор
 
@@ -211,10 +211,10 @@ while (reader.Read())
 
 ## См. также
 
-* [Проекции](../querying/01-projections.md)
+* [Проекции](../guide/30-projections.md)
 * [Потоковое сохранение данных](28-streaming-data.md)
 * [Сырой SQL](12-raw-sql.md)
-* [Провайдер PostgreSQL](../providers/postgres.md) · [Провайдер SQL Server](../providers/sqlserver.md)
+* [Провайдер PostgreSQL](../connecting-providers/postgres.md) · [Провайдер SQL Server](../connecting-providers/sqlserver.md)
 * [Ограничения и возможности вне области охвата](../advanced/limitations.md)
 
 ---

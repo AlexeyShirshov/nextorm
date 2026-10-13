@@ -262,7 +262,7 @@ CSV (`large_table` slice, 10,000 rows; Ratio relative to `Nextorm_ToList`):
 - Every participant uses the same ADO.NET provider (`Microsoft.Data.Sqlite`), so the comparison is
   apples-to-apples; the SQLite database lives on tmpfs so storage I/O does not mask the ORM.
 - Nextorm reports both of its reuse paths — the implicit plan cache and explicit `Prepare()` — and the
-  end-to-end cell is the fastest of them. See [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md).
+  end-to-end cell is the fastest of them. See [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md).
 - `ShortRun` + `InProcessEmitToolchain` is a quick mode: it is stable enough for a signal, but treat small
   differences as noise and read the full report (mean, error, standard deviation and allocations) before
   drawing conclusions.
@@ -286,4 +286,4 @@ Set `NEXTORM_BENCH_FULL=1` to run the full out-of-process job instead of `ShortR
 ## See also
 
 - [Capabilities](capabilities.md) — what each library supports.
-- [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md).
+- [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md).

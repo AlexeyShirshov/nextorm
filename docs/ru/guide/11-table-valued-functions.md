@@ -619,7 +619,7 @@ SQL без списка колонок, — а все остальные про�
 reader `ToDataReader`/`ResultSet` (см. [Сырой SQL](12-raw-sql.md#несколько-наборов-результатов)) или
 функции разворота ключ/значение `jsonb_each`/`jsonb_each_text`/`jsonb_object_keys` (выше).
 Каноническое описание — в разделе
-[Динамическая схема записи](provider-specific/postgresql.md#динамическая-схема-записи).
+[Динамическая схема записи](provider-specific-sql/postgresql.md#динамическая-схема-записи).
 
 ## Различия между провайдерами
 
@@ -643,7 +643,7 @@ reader `ToDataReader`/`ResultSet` (см. [Сырой SQL](12-raw-sql.md#неск
 * [Соединения](02-joins.md) — соединение TVF с таблицей или другим TVF и его применение через `CrossApply`/`OuterApply` ([APPLY и LATERAL](02-joins.md#apply-и-lateral)).
 * [Пользовательские функции](10-user-defined-functions.md) — скалярный эквивалент.
 * [Инструкция INSERT](15-insert-statement.md) — TVF (`unnest`, `generate_series`) как источник `INSERT ... SELECT`.
-* [Обзор провайдеров](../providers/overview.md) — требование псевдонима TVF для каждого провайдера.
+* [Обзор провайдеров](../connecting-providers/overview.md) — требование псевдонима TVF для каждого провайдера.
 
 ---
 

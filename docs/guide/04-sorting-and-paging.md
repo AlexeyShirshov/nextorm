@@ -2,7 +2,7 @@
 
 > Order rows with [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32))/[`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)), slice them with [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Offset`](xref:NextORM.Core.Paging.Offset)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)), and read one row or a boolean with the single-row terminals.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Filtering (WHERE)](01-filtering-where.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Filtering (WHERE)](01-filtering-where.md)
 
 ## Overview
 
@@ -338,10 +338,10 @@ row data, so the projection is discarded and only existence is tested.
 
 ## See also
 
-* [Querying and projections](../querying/index.md)
+* [Querying and projections](../engine/index.md)
 * [Filtering (WHERE)](01-filtering-where.md)
-* [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md)
-* [Provider overview](../providers/overview.md)
+* [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md)
+* [Provider overview](../connecting-providers/overview.md)
 
 ---
 

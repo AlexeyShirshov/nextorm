@@ -2,7 +2,7 @@
 
 > Контекст nextorm может выполнять свои запросы внутри транзакции базы данных: как начатой им самим, так и той, которой владеет EF Core, Dapper или сырой ADO.NET, — в неё контекст встраивается. Роль отделена от поверхности запросов, поэтому контекст без соединения (in-memory) её не реализует, а ClickHouse — работающий по HTTP и не имеющий транзакций — её отклоняет. Изменения не отслеживаются, `SaveChanges` нет: запись остаётся явными командами.
 
-**Предварительно:** [Подключения](../infrastructure/02-connections.md) · [Изменение данных (INSERT)](15-insert-statement.md) · [Обзор провайдеров](../providers/overview.md)
+**Предварительно:** [Подключения](../infrastructure/01-connections.md) · [Изменение данных (INSERT)](15-insert-statement.md) · [Обзор провайдеров](../connecting-providers/overview.md)
 
 ## Обзор
 
@@ -141,7 +141,7 @@ nextorm savepoints не создаёт и не отслеживает — уни
 
 ## См. также
 
-- [Подключения](../infrastructure/02-connections.md)
+- [Подключения](../infrastructure/01-connections.md)
 - [Изменение данных (INSERT)](15-insert-statement.md)
-- [Обзор провайдеров](../providers/overview.md)
+- [Обзор провайдеров](../connecting-providers/overview.md)
 - [Краткий справочник API](../advanced/api-reference.md)

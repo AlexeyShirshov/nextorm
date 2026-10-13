@@ -2,7 +2,7 @@
 
 > nextorm builds a `MERGE` (upsert) through [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})): one entry point covers both the portable **key upsert** (`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) and the general, multi-branch **full `MERGE`** with `WHEN MATCHED`/`WHEN NOT MATCHED` branches. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
 
-**Prerequisites:** [Data modification (INSERT)](15-insert-statement.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Provider overview](../providers/overview.md)
+**Prerequisites:** [Data modification (INSERT)](15-insert-statement.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Provider overview](../connecting-providers/overview.md)
 
 ## Overview
 
@@ -196,5 +196,5 @@ insert into simple_entity (id, name) values (@p0, @p1) on conflict (id) do updat
 - [Optimistic concurrency and change tracking](24-optimistic-concurrency.md)
 - [Global query filters](../advanced/query-filters.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
-- [Provider overview](../providers/overview.md)
+- [Provider overview](../connecting-providers/overview.md)
 - [API reference](../advanced/api-reference.md)

@@ -49,7 +49,7 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 `arrayStringConcat(groupArray(x), delimiter)`, `groupBitAnd`/`groupBitOr`/`groupBitXor`,
 `covarPop`/`covarSamp`, `argMin`/`argMax`, комбинаторы `-If` и `multiIf`. Он отклоняет ANSI-предложение
 `filter (where ...)`, агрегаты `regr_*` и логические агрегаты через `NotSupportedException`; см.
-[Провайдер ClickHouse](../providers/clickhouse.md).
+[Провайдер ClickHouse](../connecting-providers/clickhouse.md).
 
 ## Явно не поддерживается
 

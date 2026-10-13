@@ -2,7 +2,7 @@
 
 > A nextorm context can run its queries inside a database transaction: either one it starts itself, or one owned by EF Core, Dapper or raw ADO.NET that it enlists in. The role is separate from the query surface, so a context without a connection (the in-memory one) does not implement it, and ClickHouse — which speaks HTTP and has no transaction — rejects it. There is no change tracking and no `SaveChanges`: writes stay explicit commands.
 
-**Prerequisites:** [Connections](../infrastructure/02-connections.md) · [Data modification (INSERT)](15-insert-statement.md) · [Provider overview](../providers/overview.md)
+**Prerequisites:** [Connections](../infrastructure/01-connections.md) · [Data modification (INSERT)](15-insert-statement.md) · [Provider overview](../connecting-providers/overview.md)
 
 ## Overview
 
@@ -142,7 +142,7 @@ responsibility.
 
 ## See also
 
-- [Connections](../infrastructure/02-connections.md)
+- [Connections](../infrastructure/01-connections.md)
 - [Data modification (INSERT)](15-insert-statement.md)
-- [Provider overview](../providers/overview.md)
+- [Provider overview](../connecting-providers/overview.md)
 - [API reference](../advanced/api-reference.md)

@@ -4,14 +4,14 @@
   href: getting-started/
 - name: Guide
   href: guide/
+- name: Engine
+  href: engine/
 - name: Infrastructure
   href: infrastructure/
-- name: Querying
-  href: querying/
 - name: Scalar functions
   href: scalar-functions/
-- name: Providers
-  href: providers/
+- name: Connecting providers
+  href: connecting-providers/
 - name: Comparisons
   href: comparisons/
 - name: Advanced

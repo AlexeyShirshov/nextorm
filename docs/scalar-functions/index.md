@@ -3,7 +3,7 @@
 > Translate `string`, `Math` and `DateTime` members, `??` coalescing, boolean predicates and numeric
 > conversions into provider-specific SQL.
 
-**Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](../querying/index.md) · [Filtering (WHERE)](../guide/01-filtering-where.md)
+**Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](../engine/index.md) · [Filtering (WHERE)](../guide/01-filtering-where.md)
 
 ## Overview
 
@@ -36,7 +36,7 @@ provider that does not opt in throws `NotSupportedException`.
 * [Filtering (WHERE)](../guide/01-filtering-where.md) - `Contains`/`in`, `??` and conditional expressions in predicates.
 * [Grouping and aggregates](../guide/03-grouping-and-aggregates.md) - aggregate functions (`count`, `sum`, ...).
 * [User-defined functions](../guide/10-user-defined-functions.md) - when a scalar function is not built in.
-* [Provider overview](../providers/overview.md) - capability flags and quoting.
+* [Provider overview](../connecting-providers/overview.md) - capability flags and quoting.
 
 ---
 

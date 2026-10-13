@@ -2,7 +2,7 @@
 
 > A `TimeSpan` property is a **duration**. nextorm stores it natively where the database has a duration or time-of-day type, and in an integer column otherwise. The storage unit of the integer form is declared with [`DurationAttribute`](xref:NextORM.Core.DurationAttribute) or the fluent [`Duration(...)`](xref:NextORM.Core.EntityPropertyBuilder`1.Duration(NextORM.Core.DurationUnit,System.Int32)) mapping; the default is ticks.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Data modification (INSERT)](15-insert-statement.md) · [Provider overview](../providers/overview.md) · [Limitations](../advanced/limitations.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Data modification (INSERT)](15-insert-statement.md) · [Provider overview](../connecting-providers/overview.md) · [Limitations](../advanced/limitations.md)
 
 ## Where the value is stored
 

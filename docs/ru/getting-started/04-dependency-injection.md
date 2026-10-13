@@ -142,7 +142,7 @@ builder.UsePostgres("Host=localhost;Database=app");
 * [Установка](01-installation.md)
 * [Быстрый старт](02-quickstart.md)
 * [Сущности и метаданные](03-entities-and-metadata.md)
-* [Логирование](../infrastructure/05-logging.md)
+* [Логирование](../infrastructure/04-logging.md)
 * [Индекс документации](../index.md)
 
 ---

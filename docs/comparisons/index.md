@@ -27,7 +27,7 @@ The comparison has two parts:
 
 Marks are judgement calls against the **public documentation** of each library, as of **2026-09-26**. Where a
 competitor has an open tracking issue for a gap, it is linked. A Nextorm cell names a restriction imposed by
-the database engine when one exists; that does not lower the mark. This is a summary — the [guide](../querying/index.md)
+the database engine when one exists; that does not lower the mark. This is a summary — the [guide](../engine/index.md)
 and the [API reference](../advanced/api-reference.md) are authoritative for Nextorm, and each competitor's own
 documentation is authoritative for that competitor.
 
@@ -64,19 +64,23 @@ Across the shared surface Nextorm matches or exceeds the three libraries, and on
 The honest balance to the section above — the in-scope work still ahead, kept separate from the deliberate
 boundaries:
 
-- **Warm-path performance**: the prepared path is fastest on every measured scenario, but the implicit plan
-  cache still trails Dapper by roughly 1.15–1.6× on CTE, recursive CTE, 4-table join and captured IN-list
-  (inline IN-list is level); closing that gap is ongoing (see [Benchmarks](benchmarks.md)).
-- **EF Core integration**: an MVP is shipped as `nextorm.entityframeworkcore` — nextorm reads and writes run over an existing `DbContext` connection and transaction, reusing the EF model mapping, and participate in EF's transaction, while change tracking and `SaveChanges` stay in EF Core (see [EF Core integration](../advanced/integration-efcore.md)); a `SaveChanges`/change-tracking bridge and navigation translation remain ahead.
-- **Stored procedures, dynamic SQL and multiple result sets**: raw SQL covers a whole query; raw
-  `EXEC`/`CALL` commands via `ExecuteRaw` and the dedicated `CommandType.StoredProcedure` API
-  `ExecuteProcedure` support parameters, output parameters and sequential result sets, and a batch can
-  carry several result sets in one round trip (`AddQuery<TResult>` + `Execute`/`ExecuteAsync`). Dynamic
-  SQL assembly remains deferred.
-- **Deeper query forms**: `SelectMany`/`GroupJoin` work on the in-memory provider only, `APPLY`/`LATERAL`
+- **Warm-path performance**: the implicit plan cache still trails Dapper by roughly 1.15–1.6× on CTE,
+  recursive CTE, 4-table join and captured IN-list (inline IN-list is level), and its allocations stay
+  above the prepared path; closing that gap is ongoing (see [Benchmarks](benchmarks.md)).
+- **EF Core integration**: the `ToNextOrm` adapter translates only a bounded operator subset —
+  `Select`/`SelectMany`, `Include`/navigations, `Join`/`GroupJoin`, `GroupBy`,
+  `EF.Property`/`EF.Functions`, `AsSplitQuery`, raw-SQL roots and subqueries are not translated — and the
+  MariaDB shared-connection and ClickHouse no-EF-adapter slices remain open (see
+  [EF Core integration](../advanced/integration-efcore.md)).
+- **Eager loading and relationships**: `LoadWith` eager loading covers finite nested graphs (level 2+,
+  with a single graph-wide mode and per-level ordering/top-N) in split and expressible single-query;
+  `JoinInto` still rejects composite keys, composite many-to-many junction selectors and many-to-many
+  under a single query.
+- **Deeper query forms**: `SelectMany`/`GroupJoin` are not translated on the SQL providers, `APPLY`/`LATERAL`
   cannot take a join projection, and in-memory correlation stops at depth one.
-- **Provider-gated native types**: native range/multirange, arrays and native JSON columns are
-  PostgreSQL-centric; the other providers use the pair/text mappings or reject them.
+- **Dynamic SQL assembly**: building SQL at runtime stays outside the builder surface.
+- **Provider-gated native types**: native range/multirange, native JSON columns and arrays are not available
+  on every provider; the others fall back to the pair/text mappings or reject them.
 - **Provider breadth**: fewer providers than linq2db and EF Core (no Oracle, Firebird, DB2, SAP HANA,
   Informix, Sybase or SQL CE).
 

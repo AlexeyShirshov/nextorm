@@ -2,7 +2,7 @@
 
 > Write a `Select` result to a caller-owned `Stream` as JSON or RFC 4180 CSV, row by row, without materialising the result set: JSON is serialized client-side with `System.Text.Json`, CSV is formatted incrementally from the provider reader.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Projections](../querying/01-projections.md) · [Streaming large objects (BLOB/CLOB)](26-large-objects.md) · [JSON support across providers](14-json.md) · [Limitations](../advanced/limitations.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Projections](../guide/30-projections.md) · [Streaming large objects (BLOB/CLOB)](26-large-objects.md) · [JSON support across providers](14-json.md) · [Limitations](../advanced/limitations.md)
 
 ## Overview
 
@@ -462,7 +462,7 @@ await ctx.From<Order>().WriteCsvAsync(file);
 ## See also
 
 * [JSON support across providers](14-json.md) — the per-provider SQL JSON surfaces (`ForJson`, `jsonb`, text JSON, `openjson`).
-* [Projections](../querying/01-projections.md)
+* [Projections](../guide/30-projections.md)
 * [Streaming large objects (BLOB/CLOB)](26-large-objects.md)
 * [Raw SQL](12-raw-sql.md)
 * [API reference](../advanced/api-reference.md)

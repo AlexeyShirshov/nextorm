@@ -22,7 +22,7 @@ SQL Server scalar-function parity with linq2db (metadata / date-part / checksum 
 - Contradictions/overlaps (effective residual < 61): `DATEFROMPARTS` `SqlFunctions.cs:707`; `DateTime.Now/UtcNow`→`getdate()/getutcdate()` `MemberTranslator.cs:22-26`+`SqlServerDialect.cs:554`; `gen_random_uuid`→`newid()` `SqlServerDialect.cs:690`; `CommonFunctions.current_user/current_schema/current_database/version` `SqlFunctions.cs:422-450`.
 - Pattern: declaration `SqlFunctions.SqlServer.cs:144` (analog `patindex`); renderer `SupportedNames` `SqlServerDialect.cs:967` + `Render` `:975`; translator `src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs:21,44,51,73`; capability `DialectCapabilities.cs:592`, hook `ISqlDialect.cs:514`. Attribute-less per-name `Supports`/`Render`.
 - Tests: `tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs:7` (8 tests), `SqlServerDialectTests.cs:329`, `CrossProviderScalarSqlGenerationTests.cs:7`; rejection `SqliteFunctionsRejectionTests.cs:11`,`MySqlFunctionsRejectionTests.cs:7`; integration `CommonTestSuite.CrossProviderScalarFunctions.cs:13`.
-- Docs: `docs/scalar-functions/{04:70,07:89-157,index.md:27}` + RU; `docs/providers/sqlserver.md:108-142,279`; `docs/guide/provider-specific/sqlserver.md:14-100,231` + RU; specs `comparison/provider-feature-comparison.md:102-123`, `capability-matrix.md:83`, `evidence-01-provider-specific-features.md:120`; roadmap `sql-function-coverage-gap.md:57,171,182`, `sql-capabilities-gap-analysis.md:257,554`.
+- Docs: `docs/scalar-functions/{04:70,07:89-157,index.md:27}` + RU; `docs/connecting-providers/sqlserver.md:108-142,279`; `docs/guide/provider-specific-sql/sqlserver.md:14-100,231` + RU; specs `comparison/provider-feature-comparison.md:102-123`, `capability-matrix.md:83`, `evidence-01-provider-specific-features.md:120`; roadmap `sql-function-coverage-gap.md:57,171,182`, `sql-capabilities-gap-analysis.md:257,554`.
 - Open design questions for PLAN: exact function list/scope (all 61 vs prioritised families); per-function capability gating; which functions are already covered by non-scalar paths; docs/tests matrix; whether integration execution needs the SQL Server container.
 
 ## Plan (revision r=2, attempt n=1)
@@ -89,7 +89,7 @@ Sites: declaration `SqlFunctions.SqlServer.cs:16-144` (analog `patindex`); trans
 
 ### Docs
 
-- `docs/scalar-functions/{04:70,07:89-157,index.md:27}` + RU; `docs/providers/sqlserver.md:108-142,279`; `docs/guide/provider-specific/sqlserver.md:14-100,231` + RU; specs `comparison/provider-feature-comparison.md:102-123`, `capability-matrix.md:83`, roadmap `sql-function-coverage-gap.md`, `sql-capabilities-gap-analysis.md:257,554` — record 61 audited = 51 covered + 10 excluded (FROMPARTS 6 total/5 new; date 13 total/10 new). No public→specs links.
+- `docs/scalar-functions/{04:70,07:89-157,index.md:27}` + RU; `docs/connecting-providers/sqlserver.md:108-142,279`; `docs/guide/provider-specific-sql/sqlserver.md:14-100,231` + RU; specs `comparison/provider-feature-comparison.md:102-123`, `capability-matrix.md:83`, roadmap `sql-function-coverage-gap.md`, `sql-capabilities-gap-analysis.md:257,554` — record 61 audited = 51 covered + 10 excluded (FROMPARTS 6 total/5 new; date 13 total/10 new). No public→specs links.
 
 ### Perf / recon
 

@@ -261,7 +261,7 @@ to the ledger on 2026-09-29.
    `PIVOT`/`UNPIVOT` source construct ships via `EntityBuilder.Pivot`/`Unpivot` over a plain
    table/entity, a table-valued function or a derived query (the pivot input can carry joins and
    computed aggregate/FOR columns).
-   Shipped: [SQL Server-specific SQL](../../guide/provider-specific/sqlserver.md#xml-data-type-methods).
+   Shipped: [SQL Server-specific SQL](../../guide/provider-specific-sql/sqlserver.md#xml-data-type-methods).
 4. **ClickHouse array/Tuple row reader — <span style="color:green">shipped</span>.** `Array(T)` (including nested `Array(Array(T))`)
    and `Tuple(...)` columns and expressions materialise as a CLR `T[]`/`System.Tuple<...>` (arity
    1–7), and the array-returning aggregates `groupArray`/`groupUniqArray` are exposed as
@@ -285,8 +285,8 @@ to the ledger on 2026-09-29.
    set, not a scalar value) and binding the element of several `ARRAY JOIN` expressions at once
    (`ArrayJoinElement`/`LeftArrayJoinElement` bind a single array expression); both are documented in
    [Limitations](../../advanced/limitations.md).
-   Shipped: [ClickHouse provider](../../providers/clickhouse.md),
-   [Provider-specific SQL](../../guide/provider-specific/clickhouse.md#aggregates),
+   Shipped: [ClickHouse provider](../../connecting-providers/clickhouse.md),
+   [Provider-specific SQL](../../guide/provider-specific-sql/clickhouse.md#aggregates),
    [Grouping and aggregates](../../guide/03-grouping-and-aggregates.md),
    [Scalar functions](../../scalar-functions/06-arrays.md#arrays-clickhouse).
 5. **ClickHouse higher-order array functions — <span style="color:green">shipped</span>.** `arrayMap`/`arrayFilter`/`arrayExists`/
@@ -296,19 +296,19 @@ to the ledger on 2026-09-29.
    [`SupportsHigherOrderArrayFunctions`](xref:NextORM.Core.ISqlDialect.SupportsHigherOrderArrayFunctions);
    other providers throw `NotSupportedException`.
    Shipped: [Scalar functions](../../scalar-functions/06-arrays.md#arrays-clickhouse),
-   [Provider-specific SQL](../../guide/provider-specific/clickhouse.md).
+   [Provider-specific SQL](../../guide/provider-specific-sql/clickhouse.md).
 7. **ClickHouse native `JSON` type — <span style="color:green">shipped</span>.** The JSONPath scalars `JSON_VALUE`/`JSON_QUERY`/
    `JSON_EXISTS` and the native-JSON functions `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString` are
    mapped on `ClickHouseFunctions` under `SupportsJsonExtract` (other providers throw
    `NotSupportedException`). A native `JSON` *column* is not mapped to a CLR type yet (the driver reads it
    as `System.Text.Json.Nodes.JsonObject`); see [Limitations](../../advanced/limitations.md).
-   Shipped: [ClickHouse-specific SQL](../../guide/provider-specific/clickhouse.md#json-dictionaries-and-array-functions),
+   Shipped: [ClickHouse-specific SQL](../../guide/provider-specific-sql/clickhouse.md#json-dictionaries-and-array-functions),
    [JSON support](../../guide/14-json.md).
 8. **ClickHouse join `SEMI`/`ANTI`/`PASTE` — <span style="color:green">shipped</span>.** `SemiJoin`/`AntiJoin` return only the left-hand
    columns (SEMI once per matching left row, ANTI for rows without a match) and `PasteJoin` pairs the two
    sources by row position with no `ON`, so the result shapes are the left projection and
    `Projection<T1,T2>` respectively; the kinds are gated by `SupportsSemiAntiJoin`/`SupportsPasteJoin`.
-   Shipped: [Provider-specific SQL](../../guide/provider-specific/clickhouse.md),
+   Shipped: [Provider-specific SQL](../../guide/provider-specific-sql/clickhouse.md),
    [Joins](../../guide/02-joins.md#semi--anti--paste-joins).
 9. **ClickHouse scalar-over-array predicates — <span style="color:green">shipped</span>.** `startsWith`/`endsWith` over `Array(T)` and
     the contiguous-subsequence `hasSubstr` are exposed as
@@ -317,13 +317,13 @@ to the ledger on 2026-09-29.
     ([`ClickHouseFunctions.length`](xref:NextORM.Core.ClickHouseFunctions.length)/`index_of`). Other
     providers throw `NotSupportedException`.
     Shipped: [Scalar functions](../../scalar-functions/06-arrays.md#arrays-clickhouse),
-    [Provider-specific SQL](../../guide/provider-specific/clickhouse.md).
+    [Provider-specific SQL](../../guide/provider-specific-sql/clickhouse.md).
 10. **Typed column access by name — <span style="color:green">shipped</span>.** `SqlFunctions.Column<T>(entity, "name")` projects a
     column of a mapped entity that has no property (wide ClickHouse tables such as `hits_v1`); the
     name is matched verbatim and the value materialised as `T`. Works on every SQL provider; the
     in-memory provider rejects it. Shipped:
     [Querying and projections](../../querying/01-projections.md#columns-by-name),
-    [ClickHouse](../../providers/clickhouse.md).
+    [ClickHouse](../../connecting-providers/clickhouse.md).
 12. **Full-text ranking/score is implemented.** `contains`/`freetext` render the boolean predicates, and
     ranking is available: PostgreSQL `ts_rank`/`ts_rank_cd`/`ts_headline` and the SQL Server
     `containstable`/`freetexttable` table functions with `KEY`/`RANK`.
@@ -359,14 +359,14 @@ to the ledger on 2026-09-29.
     `CUBE`/`GROUPING SETS` and `FULL JOIN` are missing on MySQL/MariaDB, `GREATEST`/`LEAST` has
     provider-specific NULL semantics, and several features (`FOR JSON`/`FOR XML`) exist on a subset of
     providers. Each divergence now carries an explicit **unify / gate / document** decision in
-    [Provider differences: unification decisions](../../providers/overview.md#provider-differences-unification-decisions):
+    [Provider differences: unification decisions](../../connecting-providers/overview.md#provider-differences-unification-decisions):
     date fields and `FULL JOIN`/`CUBE`/`GROUPING SETS` are gated per field/feature (no polyfill: the
     rewrites change row shape/semantics and defeat the planner), `GREATEST`/`LEAST` NULL behaviour is a
     documented difference, and date/number formatting stays provider-specific `[SqlFunction]` UDFs
     because the `.NET` (`FORMAT`), PostgreSQL (`to_char`) and `%`
     (`DATE_FORMAT`/`strftime`/`formatDateTime`) template languages are incompatible — a single portable
     `template` argument cannot exist.
-    Shipped: [Provider overview](../../providers/overview.md).
+    Shipped: [Provider overview](../../connecting-providers/overview.md).
 16. **Statement-level query hints — <span style="color:green">shipped</span> cross-provider.** `Hint(...)` renders SQL Server
     `OPTION (...)` and the inline PostgreSQL/MySQL/MariaDB `/*+ ... */` (read by the optional
     `pg_hint_plan` extension on PostgreSQL and as native optimizer hints on MySQL/MariaDB); SQLite and
@@ -574,32 +574,32 @@ to the ledger on 2026-09-29.
     `PUBLISHINGSERVERNAME`/`STR`). All are exposed through `SqlServerFunctions` /
     `ISqlServerFunctions`, gated per name; `ASCII`/`CHAR`/`TRANSLATE` inherit from `CommonFunctions`
     (item 36), and `LOG10` stays on `Math.Log10`. Shipped:
-    [`guide/provider-specific/sqlserver.md`](../../guide/provider-specific/sqlserver.md#t-sql-scalar-functions) (+RU).
+    [`guide/provider-specific-sql/sqlserver.md`](../../guide/provider-specific-sql/sqlserver.md#t-sql-scalar-functions) (+RU).
 39. **MySQL built-in function gaps — <span style="color:green">done</span>.** `SqlFunctions.MySql` (`MySqlFunctions`) is new;
     `FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`,
     `FROM_UNIXTIME`, `UNIX_TIMESTAMP`, `MD5`/`SHA1`/`SHA2`, `INET_ATON`/`INET_NTOA`, the JSON mutation
     family and `UUID_TO_BIN`/`BIN_TO_UUID` render natively, gated per name by `ISqlDialect.MySqlFunctions`;
     MariaDB inherits the surface except `UUID_TO_BIN`/`BIN_TO_UUID`. See
-    [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md).
+    [MySQL and MariaDB-specific SQL](../../guide/provider-specific-sql/mysql.md).
 40. **MariaDB built-in function gaps — <span style="color:green">done</span>.** On top of the MySQL set: `REGEXP_INSTR`/`REGEXP_REPLACE`/
     `REGEXP_SUBSTR`, `NVL`/`NVL2`, `ADD_MONTHS`, `MONTHS_BETWEEN`, `TO_CHAR`/`TO_DATE`/`TO_NUMBER`, `KDF`,
     `XXH3`/`XXH32`, `JSON_DETAILED`/`JSON_COMPACT` and the sequence functions (`NEXT VALUE FOR`/`NEXTVAL`/
     `SETVAL`/`LASTVAL`) are members of `SqlFunctions.MySql`, supported per name by
     `MariaDbDialect.MySqlFunctions` and rejected by MySQL. See
-    [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md#mariadb).
+    [MySQL and MariaDB-specific SQL](../../guide/provider-specific-sql/mysql.md#mariadb).
 41. **SQLite built-in function gaps — <span style="color:green">shipped</span>.** `SqlFunctions.Sqlite` (`SqliteFunctions`) plus
     `ISqlDialect.SqliteFunctions` cover the core scalars (`printf`/`format`, `hex`/`unhex`,
     `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`,
     `if`/`ifnull`), the JSON1 family (`json_extract`, `->`/`->>`, `json_set`, `json_group_array`,
     `json_each`, `json_tree` and the rest), the date helpers (`timediff`, `unixepoch`, `julianday`) and
     the math-extension functions; other providers reject with `NotSupportedException`.
-    Docs: [SQLite-specific SQL](../../guide/provider-specific/sqlite.md) (EN+RU).
+    Docs: [SQLite-specific SQL](../../guide/provider-specific-sql/sqlite.md) (EN+RU).
 42. **ClickHouse built-in function gaps — <span style="color:green">done</span>.** `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`,
     `match`/`extract`, `splitByString`, `formatDateTime`/`parseDateTime`, `now`/`today`/`yesterday`, the
     `map*` family, `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`, the `groupBitmap`/`sumMap`
     aggregates, the hash family and `generateULID` are now on `SqlFunctions.ClickHouse` (gated by the
     ClickHouse-only capability flags). Docs:
-    [ClickHouse-specific SQL](../../guide/provider-specific/clickhouse.md) (EN+RU, #78).
+    [ClickHouse-specific SQL](../../guide/provider-specific-sql/clickhouse.md) (EN+RU, #78).
 43. **Captured-local parameter binding (repeated references) — <span style="color:green">Done</span> (`1.0-b.1`).** A captured local
     reachable from the final SQL is now registered exactly once — repeated occurrences reuse the same
     `@pN`, and a local living only inside a joined derived subquery binds too. Previously the command
@@ -655,7 +655,7 @@ to the ledger on 2026-09-29.
     the positional/adjacency/union/intersection/difference operators, `lower`/`upper`/`isempty` and the
     constructors) is gated by `ISqlDialect.SupportsRanges`; the in-memory provider evaluates the
     predicates with PostgreSQL semantics. Docs:
-    [PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types) (EN+RU).
+    [PostgreSQL-specific SQL](../../guide/provider-specific-sql/postgresql.md#range-types) (EN+RU).
 52. **SQL Server bulk-copy flags — <span style="color:green">Done</span> (`1.0-b.1`).** `BulkInsertOptions`/`BulkInsertOptionsBuilder` gained
     `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` (`bool?`, off by default), mapped to
     `SqlBulkCopyOptions` on the SQL Server native `SqlBulkCopy` path; the PostgreSQL `COPY` path and the
@@ -698,7 +698,7 @@ to the ledger on 2026-09-29.
     type** for the process lifetime — a different version for the same type throws `InvalidOperationException`,
     so several PostgreSQL versions in one process need distinct context subclasses; MariaDB imposes no such
     guard, because its gated `UPDATE ... RETURNING` is a mutation whose SQL is not plan-cached.
-    Shipped: [PostgreSQL provider](../../providers/postgres.md), [MariaDB provider](../../providers/mariadb.md),
+    Shipped: [PostgreSQL provider](../../connecting-providers/postgres.md), [MariaDB provider](../../connecting-providers/mariadb.md),
     [Limitations](../../advanced/limitations.md).
 
 ## 6. Implementation plan

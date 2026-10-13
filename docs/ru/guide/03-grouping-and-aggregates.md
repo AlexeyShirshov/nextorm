@@ -2,7 +2,7 @@
 
 > Группируйте строки с помощью [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), фильтруйте группы с помощью [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) и вычисляйте `count`, `min`, `max`, `avg`, `sum`, `stdev`, `var` и их `_distinct`-варианты через ``
 
-**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [Фильтрация (WHERE)](01-filtering-where.md) · [Сортировка и постраничный вывод](04-sorting-and-paging.md)
+**Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Фильтрация (WHERE)](01-filtering-where.md) · [Сортировка и постраничный вывод](04-sorting-and-paging.md)
 
 ## Обзор
 
@@ -544,7 +544,7 @@ from event_entity
 SQL Server отклоняют вызов через `NotSupportedException`, потому что у них нет ни того, ни другого. В
 PostgreSQL ANSI-форма требует версии сервера 9.4 или новее: диалект, настроенный на более старую
 `Version`, отклоняет вызов через `NotSupportedException`, а незаданная версия предполагает 9.4+ (см.
-[провайдер PostgreSQL](../providers/postgres.md#версия-сервера)).
+[провайдер PostgreSQL](../connecting-providers/postgres.md#версия-сервера)).
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -609,7 +609,7 @@ MySQL/MariaDB и не в провайдере in-memory. `WITH TOTALS` — то�
 - [Сортировка и постраничный вывод](04-sorting-and-paging.md) - [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) по выражению или порядковому номеру.
 - [Соединения](02-joins.md) - агрегат по соединённой проекции.
 - [SELECT DISTINCT](07-distinct.md) - `DISTINCT` и PostgreSQL `DISTINCT ON`.
-- [Запросы и проекции](../querying/index.md)
+- [Запросы и проекции](../engine/index.md)
 
 ---
 

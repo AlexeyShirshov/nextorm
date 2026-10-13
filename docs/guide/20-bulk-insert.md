@@ -248,7 +248,7 @@ var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.KeepIdentity().IgnoreDu
 and MySQL/MariaDB (`INSERT IGNORE`); it is rejected on SQL Server, and on ClickHouse it is a no-op
 (there is no uniqueness, so every row is written).
 
-> `KeepIdentity()` is ignored when the entity's mapping declares no identity column (matching linq2db):
+> `KeepIdentity()` is ignored when the entity's mapping declares no identity column:
 > explicit values are still written for non-identity keys, but the provider's identity-insert form
 > (`SET IDENTITY_INSERT`, `OVERRIDING SYSTEM VALUE`) is not emitted, so a non-identity table never
 > fails with SQL Server error 8106. The check uses the donor entity's metadata, not the actual target
@@ -349,4 +349,4 @@ On the returned builder:
 - [Data merging (MERGE / upsert)](19-merge-statement.md)
 - [Global query filters](../advanced/query-filters.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
-- [Provider overview](../providers/overview.md)
+- [Provider overview](../connecting-providers/overview.md)

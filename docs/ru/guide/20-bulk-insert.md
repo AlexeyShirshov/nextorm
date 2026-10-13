@@ -250,7 +250,7 @@ var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.KeepIdentity().IgnoreDu
 MySQL/MariaDB (`INSERT IGNORE`); на SQL Server он отклоняется, а в ClickHouse это no-op (уникальности
 нет, поэтому пишутся все строки).
 
-> `KeepIdentity()` игнорируется, если в маппинге сущности нет identity-колонки (как в linq2db):
+> `KeepIdentity()` игнорируется, если в маппинге сущности нет identity-колонки:
 > явные значения для не-identity ключей всё равно пишутся, но форма включения identity
 > (`SET IDENTITY_INSERT`, `OVERRIDING SYSTEM VALUE`) не эмитится — поэтому таблица без identity
 > никогда не падает с ошибкой SQL Server 8106. Проверка идёт по метаданным сущности-донора, а не по
@@ -351,4 +351,4 @@ ctx.CreateBulkInsertBuilder<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates(
 - [Слияние данных (MERGE / upsert)](19-merge-statement.md)
 - [Глобальные фильтры запросов](../advanced/query-filters.md)
 - [Ограничения и что вне области](../advanced/limitations.md)
-- [Обзор провайдеров](../providers/overview.md)
+- [Обзор провайдеров](../connecting-providers/overview.md)

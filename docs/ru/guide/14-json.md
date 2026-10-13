@@ -2,7 +2,7 @@
 
 > Единого переносимого API для JSON нет: PostgreSQL предоставляет нативную поверхность `json`/`jsonb`, SQL Server возвращает документ завершающим предложением `FOR JSON` и предлагает текстовые JSON-функции, MySQL/MariaDB предоставляют те же текстовые JSON-функции через семейство `JSON_EXTRACT`/`JSON_SET`, а остальные провайдеры отклоняют JSON-конструкции.
 
-**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql) · [Табличные функции](11-table-valued-functions.md#встроенные-табличные-функции) · [Обзор провайдеров](../providers/overview.md)
+**Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql) · [Табличные функции](11-table-valued-functions.md#встроенные-табличные-функции) · [Обзор провайдеров](../connecting-providers/overview.md)
 
 ## Обзор
 
@@ -36,7 +36,7 @@
   `json_extract`, операторы `->`/`->>`, `json_set`/`json_patch` и табличные функции `json_each`/`json_tree`).
   Кросс-провайдерный JSON-API на неё не отображён: нативный тип `json`/`jsonb` и текстовые имена
   (`json_value`/`json_query`/`json_modify`/`isjson`) бросают `NotSupportedException`, поэтому используйте
-  члены JSON1 напрямую (см. [Провайдер SQLite](../providers/sqlite.md#функции-специфичные-для-sqlite)).
+  члены JSON1 напрямую (см. [Провайдер SQLite](../connecting-providers/sqlite.md#функции-специфичные-для-sqlite)).
 * **Каждый SQL-провайдер** использует один общий JSON-*терминал*: [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
   [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) записывают проекцию запроса в принадлежащий вызывающему `Stream` как JSON-массив или
   NDJSON, сериализуя на клиенте через `System.Text.Json` (см. [Потоковое сохранение данных](28-streaming-data.md#json)).
@@ -225,7 +225,7 @@ public sealed class Customer
 
 Отображение покрывает свойство, а не схему: nextorm не генерирует DDL колонки, поэтому колонка `jsonb`
 уже должна существовать в таблице. Fluent-форма `JsonColumn(o => ...)` и настройки сериализатора —
-в разделе [Конвертеры значений](../infrastructure/04-value-converters.md#json-колонки).
+в разделе [Конвертеры значений](../infrastructure/03-value-converters.md#json-колонки).
 
 «Голые» CLR-типы JSON обрабатываются на границе иначе, чем отображённая колонка:
 
@@ -447,12 +447,12 @@ from complex_entity
 
 ## См. также
 
-- [Запросы и проекции](../querying/index.md) — `ForJson`/`ForXml` для SQL Server.
+- [Запросы и проекции](../engine/index.md) — `ForJson`/`ForXml` для SQL Server.
 - [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql) — полная поверхность JSON/JSONB в PostgreSQL и текстовые JSON-функции SQL Server и MySQL/MariaDB.
 - [Табличные функции](11-table-valued-functions.md#встроенные-табличные-функции) — `openjson` и `string_split`.
-- [Провайдер PostgreSQL](../providers/postgres.md) — JSON-колонки, привязка параметров и массивы.
-- [Провайдер SQL Server](../providers/sqlserver.md) — `FOR JSON`, `FOR XML` и текстовый JSON.
-- [Провайдер MySQL](../providers/mysql.md) и [провайдер MariaDB](../providers/mariadb.md) — текстовый JSON через `JSON_EXTRACT`/`JSON_SET`.
+- [Провайдер PostgreSQL](../connecting-providers/postgres.md) — JSON-колонки, привязка параметров и массивы.
+- [Провайдер SQL Server](../connecting-providers/sqlserver.md) — `FOR JSON`, `FOR XML` и текстовый JSON.
+- [Провайдер MySQL](../connecting-providers/mysql.md) и [провайдер MariaDB](../connecting-providers/mariadb.md) — текстовый JSON через `JSON_EXTRACT`/`JSON_SET`.
 - [Ограничения и что вне области](../advanced/limitations.md)
 
 ---

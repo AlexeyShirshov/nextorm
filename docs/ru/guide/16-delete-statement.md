@@ -2,7 +2,7 @@
 
 > nextorm удаляет строки в той же модели явных команд, что и `INSERT`: [`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) строит параметризованный `DELETE FROM <table> [WHERE ...]`, расширение контекста [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)) удаляет по объявленному ключу сущности, а соединённый запрос может завершаться multi-table удалением. Тут нет ни change tracking, ни `SaveChanges`: каждый терминал выполняет ровно одну команду.
 
-**Что нужно знать:** [Изменение данных (INSERT)](15-insert-statement.md) · [Фильтрация (WHERE)](01-filtering-where.md) · [Соединения (JOIN)](02-joins.md) · [Обзор провайдеров](../providers/overview.md)
+**Что нужно знать:** [Изменение данных (INSERT)](15-insert-statement.md) · [Фильтрация (WHERE)](01-filtering-where.md) · [Соединения (JOIN)](02-joins.md) · [Обзор провайдеров](../connecting-providers/overview.md)
 
 ## Удаление строк по предикату
 
@@ -214,5 +214,5 @@ with c as (select id from complex_entity where (id > 0)) delete from complex_ent
 - [Слияние данных (MERGE / upsert)](19-merge-statement.md)
 - [Соединения (JOIN)](02-joins.md)
 - [Ограничения и что вне области](../advanced/limitations.md)
-- [Обзор провайдеров](../providers/overview.md)
+- [Обзор провайдеров](../connecting-providers/overview.md)
 - [Краткий справочник API](../advanced/api-reference.md)

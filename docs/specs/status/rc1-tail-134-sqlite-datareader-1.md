@@ -96,8 +96,8 @@ Inner loop is the affected filtered subset only; one full build + affected tests
 ## Docs plan (EN + RU)
 
 - `docs/guide/26-large-objects.md` + RU; `docs/guide/28-streaming-data.md` + RU.
-- `docs/providers/overview.md` + RU; `docs/providers/sqlite.md` + RU; `docs/providers/postgres.md` + RU;
-  `docs/providers/sqlserver.md` + RU; `docs/providers/in-memory.md` + RU.
+- `docs/connecting-providers/overview.md` + RU; `docs/connecting-providers/sqlite.md` + RU; `docs/connecting-providers/postgres.md` + RU;
+  `docs/connecting-providers/sqlserver.md` + RU; `docs/connecting-providers/in-memory.md` + RU.
 - `docs/comparisons/capabilities.md` + RU.
 - `docs/advanced/api-reference.md` + RU; `docs/advanced/limitations.md` + RU.
 - Internal specs: `docs/specs/design/issue-189-todatareader-sqlite.md` (implementation notice),
@@ -264,8 +264,8 @@ CHECK re-gather budget: at most **2** targeted evidence requests per CHECK invoc
 ### D:05 docs/registers
 
 - **23 modified docs files** (EN + RU): `docs/advanced/api-reference.md`, `docs/advanced/limitations.md`,
-  `docs/comparisons/capabilities.md`, `docs/guide/26-large-objects.md`, `docs/providers/overview.md`,
-  `docs/providers/postgres.md`, `docs/providers/sqlite.md`, `docs/providers/sqlserver.md`, their `docs/ru/**`
+  `docs/comparisons/capabilities.md`, `docs/guide/26-large-objects.md`, `docs/connecting-providers/overview.md`,
+  `docs/connecting-providers/postgres.md`, `docs/connecting-providers/sqlite.md`, `docs/connecting-providers/sqlserver.md`, their `docs/ru/**`
   counterparts (8), and `docs/specs/comparison/capability-matrix.md`,
   `docs/specs/comparison/linq2db-comparison.md`, `docs/specs/ru/comparison/linq2db-comparison.md`,
   `docs/specs/design/API-NAMING-REVIEW.md`, `docs/specs/design/code-smells-review.md`,
@@ -364,8 +364,8 @@ PostgreSQL, SQL Server, MySQL, MariaDB and ClickHouse reported executed (non-zer
 
 CHECK at r=1/n=1 failed with five P2 defects; DO n=2 (same plan revision r=1) applies the five fixes.
 
-- **D134-1 — provider-docs scoping** — `docs/providers/sqlite.md:253` (EN) and
-  `docs/ru/providers/sqlite.md:255` (RU): the unqualified "no buffered fallback" is now scoped to the
+- **D134-1 — provider-docs scoping** — `docs/connecting-providers/sqlite.md:253` (EN) and
+  `docs/ru/connecting-providers/sqlite.md:255` (RU): the unqualified "no buffered fallback" is now scoped to the
   **single-column streaming** (`ToStream`/`ToTextReader`) scalar/locator path, with an explicit
   cross-reference that the multi-column `ToDataReader` uses a separate buffered, locator-free seam
   (mirrors `docs/guide/26-large-objects.md:147`). A page-wide sweep found no other unqualified
@@ -478,7 +478,7 @@ production code was touched and no existing test was rewritten.
 
 | Defect key | Title | First seen | Revision/attempt | Fix applied (r/n) | Evidence | Status |
 |---|---|---|---|---|---|---|
-| D134-1 | Provider-docs scoping (unqualified "no buffered fallback") | CHECK r=1/n=1 | r=1/n=1 | r=1/n=2 | `docs/providers/sqlite.md:253`, `docs/ru/providers/sqlite.md:255`, `docs/guide/26-large-objects.md:147` | fixed |
+| D134-1 | Provider-docs scoping (unqualified "no buffered fallback") | CHECK r=1/n=1 | r=1/n=1 | r=1/n=2 | `docs/connecting-providers/sqlite.md:253`, `docs/ru/connecting-providers/sqlite.md:255`, `docs/guide/26-large-objects.md:147` | fixed |
 | D134-2 | Guard message names SQLite as requiring sequential access | CHECK r=1/n=1 | r=1/n=1 | r=1/n=2 | `src/nextorm.core/Query/QueryCommandExtensions.cs:495` | fixed |
 | D134-3 | Status file claims 9 positive SQLite tests (actual 8) | CHECK r=1/n=1 | r=1/n=1 | r=1/n=2 | this file; `tests/nextorm.integration.tests/SqliteSpecificTests.cs:524-667` | fixed |
 | D134-4 | Design doc §1/§2 present tense contradicts implementation notice | CHECK r=1/n=1 | r=1/n=1 | r=1/n=2 | `docs/specs/design/issue-189-todatareader-sqlite.md:16-24` | fixed |

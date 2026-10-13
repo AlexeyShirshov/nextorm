@@ -11,7 +11,6 @@
 
 ### Guide
 
-- [Querying and projections](querying/index.md)
 - [Filtering (WHERE)](guide/01-filtering-where.md)
 - [Joins](guide/02-joins.md)
 - [Grouping and aggregates](guide/03-grouping-and-aggregates.md)
@@ -41,14 +40,23 @@
 - [Dynamic columns](guide/27-dynamic-columns.md)
 - [Streaming data to a Stream](guide/28-streaming-data.md)
 - [Implicit navigation queries](guide/29-implicit-navigation.md)
+- [Projections](guide/30-projections.md)
+- [Query sources](guide/31-query-sources.md)
+- [Provider-specific features](guide/32-provider-specific-features.md)
+
+### Engine
+
+- [How the engine works](engine/index.md)
+- [Query pipeline: fluent to SQL](engine/01-query-pipeline.md)
+- [Execution and rows](engine/02-execution-and-rows.md)
+- [Plan cache and reuse](engine/03-plan-cache-and-reuse.md)
 
 ### Infrastructure
 
-- [Query reuse: cache vs Prepare](infrastructure/01-query-reuse-and-caching.md)
-- [Connections](infrastructure/02-connections.md)
-- [Interceptors](infrastructure/03-interceptors.md)
-- [Value converters and JSON columns](infrastructure/04-value-converters.md)
-- [Logging](infrastructure/05-logging.md)
+- [Connections](infrastructure/01-connections.md)
+- [Interceptors](infrastructure/02-interceptors.md)
+- [Value converters and JSON columns](infrastructure/03-value-converters.md)
+- [Logging](infrastructure/04-logging.md)
 
 ### Scalar functions
 
@@ -64,13 +72,13 @@
 - [System functions](scalar-functions/09-system-functions.md)
 - [Sequences and UUID generators](scalar-functions/10-sequences.md)
 
-### Providers
+### Connecting providers
 
-- [Provider overview](providers/overview.md)
-- [SQLite](providers/sqlite.md)
-- [SQL Server](providers/sqlserver.md)
-- [PostgreSQL](providers/postgres.md)
-- [In-memory](providers/in-memory.md)
+- [Provider overview](connecting-providers/overview.md)
+- [SQLite](connecting-providers/sqlite.md)
+- [SQL Server](connecting-providers/sqlserver.md)
+- [PostgreSQL](connecting-providers/postgres.md)
+- [In-memory](connecting-providers/in-memory.md)
 
 ### Comparisons
 
@@ -80,11 +88,11 @@
 
 - [Global query filters](advanced/query-filters.md)
 - [Entity Framework Core integration](advanced/integration-efcore.md)
-- [EF Core query-filter bridge](advanced/ef-core-query-filters.md)
 - [Eager loading child collections](advanced/eager-loading.md)
 - [Relationships and single-query loading](advanced/relationships.md)
 - [Limitations and out-of-scope features](advanced/limitations.md)
 - [Native extreme-row strategies](advanced/select-where-extrema-native.md)
+- [Extensibility: custom SQL dialects and renderers](advanced/extensibility.md)
 - [API reference](advanced/api-reference.md)
 
 ### Русская документация
@@ -94,7 +102,7 @@
 - [Быстрый старт (англ.)](getting-started/02-quickstart.md)
 
 Полное руководство на английском: [Getting started](getting-started/01-installation.md) ·
-[Guide](#guide) · [Providers](#providers). Русский перевод в работе.
+[Guide](#guide) · [Connecting providers](#connecting-providers). Русский перевод в работе.
 
 ## Overview
 
@@ -133,9 +141,13 @@ cache (used automatically by [`EntityBuilder`](xref:NextORM.Core.EntityBuilder)/
 [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1).
 
 They differ in cost, lifetime and thread-safety rules. Which one to use, what each one costs per call and
-its limitations are covered in the [Query reuse guide](infrastructure/01-query-reuse-and-caching.md).
+its limitations are covered in the [plan cache and reuse guide](engine/03-plan-cache-and-reuse.md).
 
 ## Releases
+
+### 1.0.9-todo
+
+- [Eager loading: вложенные (level 2+) графы `LoadWith` — split и выразимый single-query, единый режим на весь граф, порядок/top-N на каждом уровне, ancestor-composite идентичность](https://github.com/AlexeyShirshov/nextorm/issues/212)
 
 ### 1.0.9-rc2
 

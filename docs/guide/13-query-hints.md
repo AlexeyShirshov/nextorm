@@ -2,7 +2,7 @@
 
 > Attach statement-level hints to a query with `Hint(...)`, for example SQL Server `OPTION (RECOMPILE)`.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [CTE](08-cte.md) · [Provider overview](../providers/overview.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [CTE](08-cte.md) · [Provider overview](../connecting-providers/overview.md)
 
 ## Overview
 
@@ -313,7 +313,7 @@ both.
 
 - [Joins](02-joins.md) - [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})).
 - [CTE](08-cte.md) - `maxRecursion` and the SQL Server `option (maxrecursion n)` clause.
-- [Queries and projections](../querying/index.md)
+- [Queries and projections](../engine/index.md)
 
 ---
 

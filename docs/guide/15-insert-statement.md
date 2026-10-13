@@ -1,8 +1,8 @@
 # Data modification (INSERT)
 
-> nextorm adds a small, explicit DML surface: [`CreateInsertBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateInsertBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) builds a parameterised `INSERT ... VALUES` and returns the affected-row count, the generated key or the inserted rows. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
+> nextorm adds a small, explicit DML surface: [`CreateInsertBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateInsertBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) builds a parameterised `INSERT ... VALUES` and returns the affected-row count, the generated key or the inserted rows. There is no change tracking or unit of work: every terminal issues exactly one command.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Provider overview](../providers/overview.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Provider overview](../connecting-providers/overview.md)
 
 ## Overview
 
@@ -19,8 +19,8 @@ var affected = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Insert();
 ```
 
-There is deliberately **no** unit of work, change tracker or entity graph: this is the explicit-command
-model of linq2db/`ExecuteNonQuery`, not EF Core's `SaveChanges`. See
+There is deliberately **no** unit of work, change tracker or entity graph: commands are issued and
+executed explicitly, one at a time. See
 [Limitations and out-of-scope features](../advanced/limitations.md).
 
 ## Declaring keys, identity and computed columns
@@ -663,5 +663,5 @@ SQL Server additionally writes the modified rows into an existing table with `OU
 - [Bulk insert](20-bulk-insert.md)
 - [Global query filters](../advanced/query-filters.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
-- [Provider overview](../providers/overview.md)
+- [Provider overview](../connecting-providers/overview.md)
 - [API reference](../advanced/api-reference.md)

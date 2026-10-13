@@ -2,7 +2,7 @@
 
 > Read a single large binary or text column as a `Stream`/`TextReader` without materialising the whole value in managed memory.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Projections](../querying/01-projections.md) · [PostgreSQL](provider-specific/postgresql.md) · [SQL Server](provider-specific/sqlserver.md) · [Limitations](../advanced/limitations.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Projections](../guide/30-projections.md) · [PostgreSQL](provider-specific-sql/postgresql.md) · [SQL Server](provider-specific-sql/sqlserver.md) · [Limitations](../advanced/limitations.md)
 
 ## Overview
 
@@ -214,10 +214,10 @@ On the in-memory provider the value is materialised before the terminal wraps it
 
 ## See also
 
-* [Projections](../querying/01-projections.md)
+* [Projections](../guide/30-projections.md)
 * [Streaming data to a Stream](28-streaming-data.md)
 * [Raw SQL](12-raw-sql.md)
-* [PostgreSQL provider](../providers/postgres.md) · [SQL Server provider](../providers/sqlserver.md)
+* [PostgreSQL provider](../connecting-providers/postgres.md) · [SQL Server provider](../connecting-providers/sqlserver.md)
 * [Limitations and out-of-scope features](../advanced/limitations.md)
 
 ---

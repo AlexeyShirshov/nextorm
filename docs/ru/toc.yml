@@ -72,42 +72,46 @@
       href: guide/28-streaming-data.md
     - name: Неявные навигационные запросы
       href: guide/29-implicit-navigation.md
+    - name: Проекции
+      href: guide/30-projections.md
+    - name: Источники запроса
+      href: guide/31-query-sources.md
+    - name: Специфичные для провайдеров возможности
+      href: guide/32-provider-specific-features.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор
-          href: guide/provider-specific/overview.md
+          href: guide/provider-specific-sql/overview.md
         - name: ClickHouse
-          href: guide/provider-specific/clickhouse.md
+          href: guide/provider-specific-sql/clickhouse.md
         - name: PostgreSQL
-          href: guide/provider-specific/postgresql.md
+          href: guide/provider-specific-sql/postgresql.md
         - name: SQL Server
-          href: guide/provider-specific/sqlserver.md
+          href: guide/provider-specific-sql/sqlserver.md
         - name: MySQL и MariaDB
-          href: guide/provider-specific/mysql.md
+          href: guide/provider-specific-sql/mysql.md
     - name: SQLite
-      href: guide/provider-specific/sqlite.md
-- name: Инфраструктура
-  items:
-    - name: "Переиспользование запросов: кэш и Prepare"
-      href: infrastructure/01-query-reuse-and-caching.md
-    - name: Подключения
-      href: infrastructure/02-connections.md
-    - name: Интерцепторы
-      href: infrastructure/03-interceptors.md
-    - name: Конвертеры значений и JSON-колонки
-      href: infrastructure/04-value-converters.md
-    - name: Логирование
-      href: infrastructure/05-logging.md
-- name: Запросы
+      href: guide/provider-specific-sql/sqlite.md
+- name: Движок
   items:
     - name: Обзор
-      href: querying/index.md
-    - name: Проекции
-      href: querying/01-projections.md
-    - name: Источники запроса
-      href: querying/02-query-sources.md
-    - name: Провайдер-специфика
-      href: querying/03-provider-specifics.md
+      href: engine/index.md
+    - name: "Построение запроса: fluent к SQL"
+      href: engine/01-query-pipeline.md
+    - name: Исполнение и строки
+      href: engine/02-execution-and-rows.md
+    - name: Кэш планов и переиспользование
+      href: engine/03-plan-cache-and-reuse.md
+- name: Инфраструктура
+  items:
+    - name: Подключения
+      href: infrastructure/01-connections.md
+    - name: Интерцепторы
+      href: infrastructure/02-interceptors.md
+    - name: Конвертеры значений и JSON-колонки
+      href: infrastructure/03-value-converters.md
+    - name: Логирование
+      href: infrastructure/04-logging.md
 - name: Скалярные функции
   items:
     - name: Обзор
@@ -132,24 +136,24 @@
       href: scalar-functions/09-system-functions.md
     - name: Последовательности и генераторы UUID
       href: scalar-functions/10-sequences.md
-- name: Провайдеры
+- name: Подключение провайдеров
   items:
     - name: Обзор провайдеров
-      href: providers/overview.md
+      href: connecting-providers/overview.md
     - name: SQLite
-      href: providers/sqlite.md
+      href: connecting-providers/sqlite.md
     - name: SQL Server
-      href: providers/sqlserver.md
+      href: connecting-providers/sqlserver.md
     - name: PostgreSQL
-      href: providers/postgres.md
+      href: connecting-providers/postgres.md
     - name: MySQL
-      href: providers/mysql.md
+      href: connecting-providers/mysql.md
     - name: MariaDB
-      href: providers/mariadb.md
+      href: connecting-providers/mariadb.md
     - name: ClickHouse
-      href: providers/clickhouse.md
+      href: connecting-providers/clickhouse.md
     - name: In-memory
-      href: providers/in-memory.md
+      href: connecting-providers/in-memory.md
 - name: Сравнения
   href: comparisons/
 - name: Продвинутое
@@ -158,8 +162,6 @@
       href: advanced/query-filters.md
     - name: Интеграция с Entity Framework Core
       href: advanced/integration-efcore.md
-    - name: Мост фильтров запросов EF Core
-      href: advanced/ef-core-query-filters.md
     - name: Жадная загрузка дочерних коллекций
       href: advanced/eager-loading.md
     - name: Постраничная выборка на родителя при жадной загрузке
@@ -170,5 +172,7 @@
       href: advanced/limitations.md
     - name: Нативные стратегии выбора экстремальной строки
       href: advanced/select-where-extrema-native.md
+    - name: "Расширяемость: пользовательские SQL-диалекты и рендереры"
+      href: advanced/extensibility.md
     - name: Краткий справочник API
       href: advanced/api-reference.md

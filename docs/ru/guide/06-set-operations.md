@@ -2,7 +2,7 @@
 
 > Объединяйте два набора результатов с помощью [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})), [`Except`](xref:NextORM.Core.QueryCommand`1.Except``1(NextORM.Core.QueryCommand{``0})) и [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) и выстраивайте их в цепочку слева направо.
 
-**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [Подзапросы](05-subqueries.md) · [SELECT DISTINCT](07-distinct.md)
+**Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Подзапросы](05-subqueries.md) · [SELECT DISTINCT](07-distinct.md)
 
 ## Обзор
 
@@ -174,7 +174,7 @@ var count = dataContext.From(
 
 - [SELECT DISTINCT](07-distinct.md) - [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) и операции над множествами взаимодействуют.
 - [Подзапросы](05-subqueries.md) - запрос операции над множествами можно использовать как источник `FROM`.
-- [Запросы и проекции](../querying/index.md)
+- [Запросы и проекции](../engine/index.md)
 
 ---
 

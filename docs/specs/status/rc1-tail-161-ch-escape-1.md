@@ -52,8 +52,8 @@ The fix is **ClickHouse-specific**: MySQL/MariaDB keep their current backtick-on
   `ClickHouseDialect.Instance.QuoteIdentifier`; delete the private `Quote`.
 - **D161-03** (STEP 3) — re-run new tests (green), full `nextorm.clickhouse.tests`, `nextorm.mysql.tests`,
   `nextorm.mariadb.tests`; `dotnet build nextorm.slnx -c Debug` 0 Warning / 0 Error.
-- **D161-04** (STEP 4) — docs EN + RU in `docs/providers/clickhouse.md` and
-  `docs/ru/providers/clickhouse.md`.
+- **D161-04** (STEP 4) — docs EN + RU in `docs/connecting-providers/clickhouse.md` and
+  `docs/ru/connecting-providers/clickhouse.md`.
 - **D161-05** (STEP 5) — CRLF-normalize every edited file; verify change scope with `roslyn` (sole CH
   escaping path; renderer duplicate gone); no commit (orchestrator auto-commits after CHECK/ACT).
 - **D161-06** — append evidence rows + `DO complete` to this status file.
@@ -98,7 +98,7 @@ verbatim strings.
 
 ## Docs plan
 
-`docs/providers/clickhouse.md` + `docs/ru/providers/clickhouse.md`: NextORM backtick-quotes ClickHouse
+`docs/connecting-providers/clickhouse.md` + `docs/ru/connecting-providers/clickhouse.md`: NextORM backtick-quotes ClickHouse
 identifiers; embedded backslashes and backticks are escaped (one example each); ClickHouse-specific —
 MySQL/MariaDB quoting unchanged. No other prose. No links to `docs/specs/**`.
 
@@ -150,7 +150,7 @@ current behavior** so an accidental future change is caught.
 | D161-01 | 1 RED tests | done | `artifacts/D161/red-ch.log` exit 2 (total 20 / failed 13 / succeeded 7) |
 | D161-02 | 2 implementation | done | `ClickHouseDialect.cs:483,486`; renderer 8 sites → `Instance.QuoteIdentifier`; private `Quote` deleted |
 | D161-03 | 3 test sweep | done | CH green 20 + 529; MySQL 285; MariaDB 192; solution build 0/0 |
-| D161-04 | 4 docs EN+RU | done | `docs/providers/clickhouse.md` + `docs/ru/providers/clickhouse.md` |
+| D161-04 | 4 docs EN+RU | done | `docs/connecting-providers/clickhouse.md` + `docs/ru/connecting-providers/clickhouse.md` |
 | D161-05 | 5 CRLF + `roslyn` scope | done | CRLF preserved; scope = planned files only; no commit |
 | D161-06 | — evidence rows + `DO complete` | done | this file |
 
@@ -163,7 +163,7 @@ current behavior** so an accidental future change is caught.
 | P1-3 | renderer consolidation: every former private-`Quote` site through `Instance.QuoteIdentifier`; private `Quote` removed | R161-03 | `ClickHouseExtremeRowRenderer.cs:69,72,93,96,197,199,213,236` |
 | P1-4 | null behavior preserved (`Escape(null!)` → `` `` ``, `QuoteIdentifier(null!)` throws) | R161-04 | `ClickHouseDialectTests.cs:77-81,85-87` |
 | P1-5 | MySQL/MariaDB unchanged | R161-05 | `MySqlDialectTests.cs:56`, `MariaDbDialectTests.cs:48`; 285/0/0, 192/0/0 |
-| P1-6 | EN+RU docs | R161-06 | `docs/providers/clickhouse.md:23-25,208`; `docs/ru/providers/clickhouse.md:23-26,210` |
+| P1-6 | EN+RU docs | R161-06 | `docs/connecting-providers/clickhouse.md:23-25,208`; `docs/ru/connecting-providers/clickhouse.md:23-26,210` |
 | P1-7 | build/suites/CRLF | R161-07 | build 0/0; CH 529/0/0; 12 files 100% CRLF; container evidence logs |
 | P1-8 | red→green | R161-08 | red `red-ch.log` exit 2 20/13/7; green `check-filter.log` 16/16 |
 | P1-9 | coverage-policy | R161-09 | coverage note E161-10; `coverage.settings.xml:12` (ClickHouse excluded; branch warns, not hard-fails) |
@@ -226,7 +226,7 @@ now ends at `:250`. Dialect anchors: `ClickHouseDialect.cs:483` (`Escape` → `Q
 | E161-06 | `dotnet test tests/nextorm.mysql.tests -c Debug` | exit 0, 0 failed | PASS — fresh re-run `artifacts/D161/green-mysql-full.log` `EXIT_CODE=0`; total 285 / failed 0 / succeeded 285 / skipped 0 | coder |
 | E161-07 | `dotnet test tests/nextorm.mariadb.tests -c Debug` | exit 0, 0 failed | PASS — fresh re-run `artifacts/D161/green-mariadb-full.log` `EXIT_CODE=0`; total 192 / failed 0 / succeeded 192 / skipped 0 | coder |
 | E161-08 | `dotnet build nextorm.slnx -c Debug` | `0 Warning(s) 0 Error(s)` | PASS — `artifacts/D161/green-build.log` exit 0; Build succeeded, 0 Warning(s) 0 Error(s) | coder |
-| E161-09 | docs EN+RU edited; `roslyn` confirms `QuoteIdentifier` sole CH escaping path + renderer duplicate gone; scope diff | only planned files; EN/RU parity | PASS — `docs/providers/clickhouse.md` + `docs/ru/providers/clickhouse.md` edited; `roslyn refs` confirms `ClickHouseDialect.QuoteIdentifier` (def :486) is the sole CH escaping path (all `ClickHouseExtremeRowRenderer.cs` call sites) and `roslyn members` shows no private `Quote` (duplicate gone); `git diff --stat` scope = planned files only; CRLF preserved on all edited files | coder |
+| E161-09 | docs EN+RU edited; `roslyn` confirms `QuoteIdentifier` sole CH escaping path + renderer duplicate gone; scope diff | only planned files; EN/RU parity | PASS — `docs/connecting-providers/clickhouse.md` + `docs/ru/connecting-providers/clickhouse.md` edited; `roslyn refs` confirms `ClickHouseDialect.QuoteIdentifier` (def :486) is the sole CH escaping path (all `ClickHouseExtremeRowRenderer.cs` call sites) and `roslyn members` shows no private `Quote` (duplicate gone); `git diff --stat` scope = planned files only; CRLF preserved on all edited files | coder |
 | E161-10 | coverage note: `coverage.settings.xml` excludes `nextorm.clickhouse` | honest exclusion + explicit branch predicate; no CH % claimed | PASS — `coverage.settings.xml:12` includes only `nextorm.(core|sqlite|postgres|sqlserver)` ⇒ ClickHouse is outside the coverage contract (**N/A predicate: no ClickHouse coverage % is claimed**). Branch predicate: run branch is `1.0.9-rc1`, not `refs/heads/main`; `.github/workflows/dotnet.yml:60-77` hard-fails (`exit 1`) only on `refs/heads/main`, other refs emit `::warning::` ⇒ the 85/75 thresholds **warn, not hard-fail** for this branch. | coder |
 | E161-11 | `roslyn` + `grep` renderer-routing audit | all 8 former-`Quote` sites route through `Instance.QuoteIdentifier`; private `Quote` absent | PASS — `ClickHouseExtremeRowRenderer.cs:69,72,93,96,197,199,213,236` all call `ClickHouseDialect.Instance.QuoteIdentifier`; `grep 'string Quote('` → none (former :250-251 deleted); file now ends at :250 | coder |
 | E161-12 | real-CH throwaway probe: `DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.ZzThrowawayChEscapeProbeTests -noColor` | exit 0; server accepts `\`+`` ` `` identifiers | PASS — `artifacts/D161/green-ch-probe.log` exit 0; Total 2 / Failed 0 / Skipped 0; exact SQL + server response in §Real-ClickHouse evidence. Probe file was throwaway and removed after capture (not in change set). | coder |

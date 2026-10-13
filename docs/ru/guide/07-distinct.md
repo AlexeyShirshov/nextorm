@@ -2,7 +2,7 @@
 
 > Удаляйте дубликаты строк с помощью [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) в построителе сущности или в спроецированном запросе, в том числе поверх соединений, постраничного вывода и операций над множествами.
 
-**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [Сортировка и постраничный вывод](04-sorting-and-paging.md) · [Операции над множествами](06-set-operations.md)
+**Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Сортировка и постраничный вывод](04-sorting-and-paging.md) · [Операции над множествами](06-set-operations.md)
 
 ## Обзор
 
@@ -286,7 +286,7 @@ ClickHouse) и на провайдере in-memory. На PostgreSQL и ClickHous
 
 - [Операции над множествами](06-set-operations.md) - [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})) уже удаляет дубликаты; [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) — нет.
 - [Сортировка и постраничный вывод](04-sorting-and-paging.md) - [`Limit`](xref:NextORM.Core.Paging.Limit), [`Offset`](xref:NextORM.Core.Paging.Offset) и [`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)).
-- [Запросы и проекции](../querying/index.md)
+- [Запросы и проекции](../engine/index.md)
 
 ---
 

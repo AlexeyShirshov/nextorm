@@ -2,7 +2,7 @@
 
 > Group rows with [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), filter groups with [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), and compute `count`, `min`, `max`, `avg`, `sum`, `stdev`, `var` and their `_distinct` variants through ``
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Filtering (WHERE)](01-filtering-where.md) · [Sorting and paging](04-sorting-and-paging.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Filtering (WHERE)](01-filtering-where.md) · [Sorting and paging](04-sorting-and-paging.md)
 
 ## Overview
 
@@ -542,7 +542,7 @@ render the ANSI `filter (where ...)` clause, ClickHouse renders its `-If` combin
 and SQL Server reject the call with `NotSupportedException` because they have neither. On PostgreSQL the
 ANSI form requires server version 9.4 or later: a dialect configured with an older `Version` rejects the
 call with `NotSupportedException`, while an unset version assumes 9.4+ (see
-[PostgreSQL provider](../providers/postgres.md#server-version)).
+[PostgreSQL provider](../connecting-providers/postgres.md#server-version)).
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -607,7 +607,7 @@ it as well as `ROLLUP`/`CUBE`.
 - [Sorting and paging](04-sorting-and-paging.md) - [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) by expression or ordinal.
 - [Joins](02-joins.md) - aggregate over a joined projection.
 - [SELECT DISTINCT](07-distinct.md) - `DISTINCT` and PostgreSQL `DISTINCT ON`.
-- [Querying and projections](../querying/index.md)
+- [Querying and projections](../engine/index.md)
 
 ---
 

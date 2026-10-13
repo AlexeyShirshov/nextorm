@@ -27,6 +27,11 @@ Everything is metadata-driven: on the in-memory provider the registered datasets
 metadata are authoritative, so the result matches the SQL providers even when the CLR object graph is
 empty or inconsistent.
 
+A navigation query computes a scalar/cardinality or projects one declared reference or collection — it
+never materializes a nested object graph. To fill a nested collection graph (level 2 and deeper), use
+`LoadWith` with a child query that declares its own `LoadWith` (see
+[Nested graphs](../advanced/eager-loading.md#nested-graphs-level-2-and-deeper)).
+
 ## Reference navigation
 
 ### Scalar chains
@@ -82,6 +87,8 @@ var rows = ctx.From<Child>()
 
 var present = rows[0].Parent;   // the principal entity, or
 var absent = rows[1].Parent;    // null when the foreign key dangles
+
+// select c.Id, p.Id, p.Age, p.Name from child as c left join parent as p on c.ParentId = p.Id
 ```
 
 The in-memory provider resolves the entity (or `null`) from the mapped foreign/principal keys against the
@@ -264,6 +271,7 @@ the explicit join operators; see [Limitations](../advanced/limitations.md) for t
 ## See also
 
 - [Relationships and single-query loading (`JoinInto`)](../advanced/relationships.md) — declaring the metadata this page builds on.
+- [Nested graphs in eager loading](../advanced/eager-loading.md#nested-graphs-level-2-and-deeper) — the level 2+ `LoadWith` graph, a different surface from a navigation query.
 - [Per-parent paging in eager loading](../advanced/eager-loading-per-parent-paging.md) — where a child `Take`/`Skip` is applied independently per parent.
 - [Joins](02-joins.md) — the explicit join surface.
 - [Subqueries](05-subqueries.md) — the correlated forms nextorm renders.

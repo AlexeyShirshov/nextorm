@@ -39,7 +39,7 @@ render the ANSI `filter (where ...)` clause, ClickHouse renders its `-If` combin
 (`countIf`/`sumIf`/...) and MySQL/MariaDB and SQL Server reject the call. On PostgreSQL the ANSI clause
 requires server version 9.4 or later; a dialect configured with an older `Version` rejects the call with
 `NotSupportedException`, while an unset version assumes 9.4+ (see
-[PostgreSQL provider](../providers/postgres.md#server-version)):
+[PostgreSQL provider](../connecting-providers/postgres.md#server-version)):
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

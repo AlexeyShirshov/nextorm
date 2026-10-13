@@ -91,7 +91,7 @@ $ wc -l src/nextorm.{sqlite,sqlserver,postgres,mysql,mariadb,clickhouse}/*Dialec
 | Custom aggregate family (`stdev`/`stdevp`/`var`/`varp`) | yes | registered `CreateAggregate` | SQLiteFunctions.cs:23-37 |
 | `string_agg` -> `group_concat` | yes | `SupportsStringAgg=true`; `MakeStringAgg` | SqliteDialect.cs:106-110 |
 | Full-text FTS3/FTS4/FTS5 query + FROM (FTS5 maintenance/control deferred to [#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196)) | yes | `SqlFunctions.Sqlite` FTS members; `ISqlDialect.SqliteFunctions`; FTS5 table-valued `[SqlTableFunction]` | SqlFunctions.Sqlite.cs:276-354; SqliteFunctionRenderer.cs:26-27,44-53; SqliteDialect.cs (SupportsTableFunction/WrapTableFunction); SqliteSpecificTests.cs FTS tests |
-| Arrays / range types / temporal / data-modifying CTE / OUTPUT / MERGE / query hints / bulk copy | no | not overridden (defaults) | ISqlDialect defaults; docs/providers/sqlite.md:155-171 |
+| Arrays / range types / temporal / data-modifying CTE / OUTPUT / MERGE / query hints / bulk copy | no | not overridden (defaults) | ISqlDialect defaults; docs/connecting-providers/sqlite.md:155-171 |
 
 ### F2. SQL Server (`src/nextorm.sqlserver/`)
 
@@ -110,9 +110,9 @@ $ wc -l src/nextorm.{sqlite,sqlserver,postgres,mysql,mariadb,clickhouse}/*Dialec
 | Regex (`REGEXP_LIKE`/`REGEXP_REPLACE`, 2025+) | yes | `SupportsRegex=true`; `MakeRegexMatch` | SqlServerDialect.cs:436,439,443 |
 | Range over scalar column pair | yes | `SupportsRangeColumns=true` | SqlServerDialect.cs:33 |
 | CTAS via `SELECT ... INTO`; temp via `ToTable("#name")` | yes/partial | `SupportsCreateTableAsSelect=true`; `CreateTableAsSelectUsesSelectInto=true`; `SupportsTemporaryCreateTableAsSelect=false` | SqlServerDialect.cs:82,85,91,94 |
-| Native bulk copy + flags | yes | `SupportsBulkCopy=true`; `SqlBulkCopyOptions` (`BulkInsertOptions`) | SqlServerDialect.cs:55; docs/providers/overview.md:49 |
+| Native bulk copy + flags | yes | `SupportsBulkCopy=true`; `SqlBulkCopyOptions` (`BulkInsertOptions`) | SqlServerDialect.cs:55; docs/connecting-providers/overview.md:49 |
 | Identity (`SCOPE_IDENTITY()`, `SET IDENTITY_INSERT`) | yes | `SupportsIdentityFunction=true`; `RequiresIdentityInsertToggle=true` | SqlServerDialect.cs:46,70,162 |
-| Table-valued parameters (native UDT) | yes | `SupportsTableValuedParameters=true`; `ProcedureParameter.Table(name, typeName, rows)` | SqlServerDialect.cs:64; docs/providers/sqlserver.md:193-232 |
+| Table-valued parameters (native UDT) | yes | `SupportsTableValuedParameters=true`; `ProcedureParameter.Table(name, typeName, rows)` | SqlServerDialect.cs:64; docs/connecting-providers/sqlserver.md:193-232 |
 | Stored procedures | yes | `SupportsStoredProcedures=true` | SqlServerDialect.cs:61 |
 | Window percentiles (`within group ... over`) | yes | `SupportsPercentileWindow=true` | SqlServerDialect.cs:363 |
 | Named windows / `GROUPS` / `EXCLUDE` / `NTH_VALUE` | no | not overridden (SQL Server has no `WINDOW` clause) | ISqlDialect.cs:340,346,353,325 |
@@ -194,8 +194,8 @@ $ wc -l src/nextorm.{sqlite,sqlserver,postgres,mysql,mariadb,clickhouse}/*Dialec
 
 | Feature | Support | API / symbol | Evidence |
 |---|---|---|---|
-| String JSON (`JSONExtract*`/`visitParamExtract*`) + JSONPath scalars | yes | `SupportsJsonExtract=true`; `MakeJsonExtract` | ClickHouseDialect.cs:287,294; docs/providers/clickhouse.md:225 |
-| Native-JSON functions (`JSONAllPaths`, `JSONAllPathsWithTypes`, `toJSONString`) | partial | same gate; native `JSON` *column* type not mapped | docs/providers/clickhouse.md:226,235 |
+| String JSON (`JSONExtract*`/`visitParamExtract*`) + JSONPath scalars | yes | `SupportsJsonExtract=true`; `MakeJsonExtract` | ClickHouseDialect.cs:287,294; docs/connecting-providers/clickhouse.md:225 |
+| Native-JSON functions (`JSONAllPaths`, `JSONAllPathsWithTypes`, `toJSONString`) | partial | same gate; native `JSON` *column* type not mapped | docs/connecting-providers/clickhouse.md:226,235 |
 | Arrays + higher-order (lambda) array functions | yes | `SupportsArrayFunctions=true`; `SupportsHigherOrderArrayFunctions=true`; `MakeArrayFunction` | ClickHouseDialect.cs:129,136,155; SqlFunctions.ClickHouse.cs:478-642 |
 | `ARRAY JOIN` clause + scalar `array_join` | yes | `SupportsArrayJoin=true`; `ArrayJoinClause`; `ClickHouseEntityBuilderExtensions.ArrayJoin/LeftArrayJoin/ArrayJoinElement` | ClickHouseDialect.cs:145,461,882-891; Extensions/ClickHouseEntityBuilderExtensions.cs:33,39,45,51 |
 | Range over scalar column pair | yes | `SupportsRangeColumns=true` | ClickHouseDialect.cs:41 |
@@ -220,7 +220,7 @@ $ wc -l src/nextorm.{sqlite,sqlserver,postgres,mysql,mariadb,clickhouse}/*Dialec
 | DML `UPDATE`/`DELETE` mutations (`ALTER TABLE ... SETTINGS mutations_sync=1`) | yes | `MakeUpdateHead`/`MakeDeleteHead`/`Make*Suffix`; `UpdateRequiresWhere`/`DeleteRequiresWhere` | ClickHouseDialect.cs:67-83 |
 | Upsert / `MERGE` / `RETURNING`/`OUTPUT` / `TRUNCATE` | partial | `SupportsInsertIgnore=true` (no-op); no `SupportsOnConflict`/`OnDuplicateKey`/`Merge`; `SupportsTruncate=true` | ClickHouseDialect.cs:62,65,86 |
 | Table-valued parameters (`Array(T)`/`Array(Tuple)` + `arrayJoin`) | yes | `SupportsTableValuedParameters=true` | ClickHouseDialect.cs:48 |
-| Stored procedures / bulk copy / transactions / LOB streaming | no | `SupportsStoredProcedures` default false; `SupportsBulkCopy=false`; `SupportsTransactions=false` | ClickHouseDialect.cs:56,377; docs/providers/clickhouse.md:236 |
+| Stored procedures / bulk copy / transactions / LOB streaming | no | `SupportsStoredProcedures` default false; `SupportsBulkCopy=false`; `SupportsTransactions=false` | ClickHouseDialect.cs:56,377; docs/connecting-providers/clickhouse.md:236 |
 
 ### F7. Cross-provider gates worth pinning (for the comparison)
 
@@ -232,16 +232,16 @@ $ wc -l src/nextorm.{sqlite,sqlserver,postgres,mysql,mariadb,clickhouse}/*Dialec
   Postgres (PostgresDialect.cs:31); MySQL/MariaDB/ClickHouse/in-memory reject.
 - `TABLESAMPLE`: only Postgres (both methods + seed, PostgresDialect.cs:374,599-613) and SQL Server
   (`SYSTEM` only, SqlServerDialect.cs:239,766-779).
-- TVP emulation per provider is documented in `docs/providers/overview.md:45`.
+- TVP emulation per provider is documented in `docs/connecting-providers/overview.md:45`.
 
 ## Not found
 
-- SQL Server `NEXT VALUE FOR` / sequence access API: searched `docs/providers/sqlserver.md`,
-  `docs/guide/provider-specific/sqlserver.md`, `src/nextorm.core/Query/SqlFunctions.SqlServer.cs`,
+- SQL Server `NEXT VALUE FOR` / sequence access API: searched `docs/connecting-providers/sqlserver.md`,
+  `docs/guide/provider-specific-sql/sqlserver.md`, `src/nextorm.core/Query/SqlFunctions.SqlServer.cs`,
   `src/nextorm.sqlserver/SqlServerDialect.cs` for `next value for` / `sequence` — only TVP "empty
-  sequence" prose (docs/providers/sqlserver.md:195,232) matched; no sequence function symbol.
+  sequence" prose (docs/connecting-providers/sqlserver.md:195,232) matched; no sequence function symbol.
 - `SupportsTemporalTable` on MySQL (only SQL Server and MariaDB override it).
-- ClickHouse `native JSON` column mapping: explicitly not mapped (docs/providers/clickhouse.md:235,260-263).
+- ClickHouse `native JSON` column mapping: explicitly not mapped (docs/connecting-providers/clickhouse.md:235,260-263).
 - PostgreSQL / ClickHouse index hints: `IndexHints` is `null` (not overridden).
 
 ## Open questions
@@ -250,5 +250,5 @@ $ wc -l src/nextorm.{sqlite,sqlserver,postgres,mysql,mariadb,clickhouse}/*Dialec
   the four files above.
 - The ClickHouse server/cluster/file table functions are declared and gated (F6), but their end-to-end
   execution is not exercised by unit SQL-generation tests; the guide marks distributed table functions
-  as out of scope (docs/guide/provider-specific/clickhouse.md:258-260).
+  as out of scope (docs/guide/provider-specific-sql/clickhouse.md:258-260).
 - linq2db side is out of scope for this fact pass (nextorm-only inventory).

@@ -2,9 +2,9 @@
 
 > A `Range<T>` property can be stored as a **pair of scalar columns** on a provider without a native range type. The two bounds go into two ordinary columns, SQL `NULL` means an unbounded side, and the range predicates and inspection functions are translated over the pair.
 
-**Prerequisites:** [Filtering (WHERE)](01-filtering-where.md) · [Value converters and JSON columns](../infrastructure/04-value-converters.md) · [PostgreSQL-specific SQL](provider-specific/postgresql.md) · [Limitations](../advanced/limitations.md)
+**Prerequisites:** [Filtering (WHERE)](01-filtering-where.md) · [Value converters and JSON columns](../infrastructure/03-value-converters.md) · [PostgreSQL-specific SQL](provider-specific-sql/postgresql.md) · [Limitations](../advanced/limitations.md)
 
-PostgreSQL has [native range types](provider-specific/postgresql.md#range-types) (`int4range`…`daterange`), so a `Range<T>` property maps directly to a range column there. The other providers have no range type; nextorm bridges the gap by letting you map the two bounds to two scalar columns and translating the range operators over them.
+PostgreSQL has [native range types](provider-specific-sql/postgresql.md#range-types) (`int4range`…`daterange`), so a `Range<T>` property maps directly to a range column there. The other providers have no range type; nextorm bridges the gap by letting you map the two bounds to two scalar columns and translating the range operators over them.
 
 ## Storage model
 
@@ -142,6 +142,6 @@ The `<=`/`>=` terms carry the boundary equality; with another inclusivity the eq
 
 ## See also
 
-* [PostgreSQL-specific SQL — Range types](provider-specific/postgresql.md#range-types) and [Multiranges](provider-specific/postgresql.md#multiranges) for the native surface.
+* [PostgreSQL-specific SQL — Range types](provider-specific-sql/postgresql.md#range-types) and [Multiranges](provider-specific-sql/postgresql.md#multiranges) for the native surface.
 * [Limitations](../advanced/limitations.md) for the provider capability matrix.
 * [API reference — mapping attributes](../advanced/api-reference.md).

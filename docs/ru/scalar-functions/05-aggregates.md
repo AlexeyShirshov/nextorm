@@ -40,7 +40,7 @@ select group_concat(somestring, ',') from complex_entity
 а MySQL/MariaDB и SQL Server отклоняют вызов. В PostgreSQL ANSI-предложение требует версии сервера 9.4
 или новее; диалект, настроенный на более старую `Version`, отклоняет вызов через
 `NotSupportedException`, а незаданная версия предполагает 9.4+ (см.
-[провайдер PostgreSQL](../providers/postgres.md#версия-сервера)):
+[провайдер PostgreSQL](../connecting-providers/postgres.md#версия-сервера)):
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

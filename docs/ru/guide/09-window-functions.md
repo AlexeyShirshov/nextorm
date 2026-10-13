@@ -3,7 +3,7 @@
 > Вычисляйте ранжирование, значения соседних строк и накопительные/оконные агрегаты по секции с помощью
 > SQL-предложения `OVER`.
 
-**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [Группировка и агрегаты](03-grouping-and-aggregates.md) · [Сортировка и постраничная навигация](04-sorting-and-paging.md)
+**Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Группировка и агрегаты](03-grouping-and-aggregates.md) · [Сортировка и постраничная навигация](04-sorting-and-paging.md)
 
 ## Обзор
 
@@ -278,7 +278,7 @@ MariaDB, ClickHouse и SQLite ([`SupportsNamedWindows`](xref:NextORM.Core.ISqlDi
 Оконные функции соответствуют ANSI, и каждый SQL-провайдер, поддерживаемый nextorm, поддерживает
 единицы рамки `ROWS` и `RANGE`, поэтому большая часть SQL одинакова, за исключением заключения в
 кавычки идентификаторов (одинарные кавычки, квадратные скобки или двойные кавычки для псевдонима; см.
-[Обзор провайдеров](../providers/overview.md)). Пару `percent_rank()`/`cume_dist()` поддерживают все
+[Обзор провайдеров](../connecting-providers/overview.md)). Пару `percent_rank()`/`cume_dist()` поддерживают все
 провайдеры ([`SupportsPercentRankCumeDist`](xref:NextORM.Core.ISqlDialect.SupportsPercentRankCumeDist)).
 Единственная непереносимая value-функция — `nth_value`: в SQL Server нет `NTH_VALUE`, поэтому
 [`SupportsNthValue`](xref:NextORM.Core.ISqlDialect.SupportsNthValue) заставляет его отклонять вызов
@@ -316,7 +316,7 @@ MySQL, SQLite и ClickHouse отклоняют оконную форму чер�
 
 * [Группировка и агрегаты](03-grouping-and-aggregates.md) — скалярные агрегаты, которые затеняют варианты `_over`.
 * [Сортировка и постраничная навигация](04-sorting-and-paging.md) — сортировка внешнего запроса, выбирающего столбцы окна.
-* [Обзор провайдеров](../providers/overview.md) — кавычки для псевдонимов и флаги возможностей провайдеров.
+* [Обзор провайдеров](../connecting-providers/overview.md) — кавычки для псевдонимов и флаги возможностей провайдеров.
 
 ---
 

@@ -2,7 +2,7 @@
 
 > Заменяйте генерируемый SQL запроса вручную написанным текстом, сохраняя сопоставление строк nextorm.
 
-**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Переиспользование запросов: кэш против Prepare](../infrastructure/01-query-reuse-and-caching.md)
+**Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Переиспользование запросов: кэш против Prepare](../engine/03-plan-cache-and-reuse.md)
 
 ## Обзор
 
@@ -414,27 +414,38 @@ IReadOnlyList<RawOrder> orders = result.Read<RawOrder>();
 путь уже читает как скаляр (тот же allow-list, что и у обычной скалярной колонки). Форма колонки-записи
 входит в ключ кэша маппера результатов, как и у любой другой сырой формы.
 
-Анонимному `ROW(...)` регистрация не нужна: полный `NpgsqlDataSourceBuilder` по умолчанию отображает
-колонку-запись в `object[]`, сохраняющий `null`. Именованный composite — это регистрируемый вызывающим
-тип драйвера, поэтому постройте `NpgsqlDataSource`, зарегистрируйте в нём composite и передайте
-`dataSource.CreateConnection()` в существующий конструктор контекста для внешнего соединения. nextorm не
-добавляет публичного API и глобального маппера драйвера, а путь строки подключения (собственный
-`CreateDbConnection` nextorm) не меняется:
+Анонимному `ROW(...)` регистрация не нужна — полный `NpgsqlDataSourceBuilder` по умолчанию отображает
+колонку-запись в `object[]`, сохраняющий `null`:
 
 ```csharp
-var dataSource = new NpgsqlDataSourceBuilder(connectionString)
-    .MapComposite<Point>()   // регистрируем именованный composite-тип
-    .Build();
-
-await using var dataContext = new PostgresDataContext(
-    dataSource.CreateConnection(), new DataContextBuilder());
-
 using var result = dataContext.ExecuteRaw(
     "select row(id, somestring) as r from complex_entity order by id");
 
 IReadOnlyList<System.Tuple<int, string?>> rows =
     result.Read<System.Tuple<int, string?>>();
 ```
+
+Именованный composite — это регистрируемый вызывающим тип драйвера, поэтому постройте
+`NpgsqlDataSource`, зарегистрируйте в нём composite и передайте `dataSource.CreateConnection()` в
+существующий конструктор контекста для внешнего соединения (здесь composite `entity_row` объявлен как
+`create type entity_row as (id integer, somestring text)`):
+
+```csharp
+var dataSource = new NpgsqlDataSourceBuilder(connectionString)
+    .MapComposite<EntityRow>("entity_row")   // регистрируем именованный composite-тип
+    .Build();
+
+await using var dataContext = new PostgresDataContext(
+    dataSource.CreateConnection(), new DataContextBuilder());
+
+using var result = dataContext.ExecuteRaw(
+    "select row(id, somestring)::entity_row as r from complex_entity order by id");
+
+IReadOnlyList<EntityRow> rows = result.Read<EntityRow>();
+```
+
+nextorm не добавляет публичного API и глобального маппера драйвера, а путь строки подключения
+(собственный `CreateDbConnection` nextorm) не меняется.
 
 Классификация composite авторитетна: колонка считается именованным composite только тогда, когда это подтверждает загруженный каталог типов Npgsql, — никогда по dotted-имени типа данных или форме исключения. На чистом каталоге неотображённый некомпозитный тип (например `hstore` или `ltree`) теперь даёт обычную ошибку "None of the result-set columns (...) matches a mapped property", а не диагностику named-composite; настоящий composite, чей тип отсутствует в загруженном каталоге, деградирует до той же обычной ошибки, пока нет авторитетных метаданных типа (осознанный компромисс — холодный каталог не даёт вердикт о composite вместо вводящего в заблуждение). Composite, зарегистрированный через `MapComposite<T>`, по-прежнему материализуется, а незарегистрированный composite на прогретом каталоге по-прежнему сообщает специфичный для composite guard (его нужно зарегистрировать, прежде чем читать). Контексты nextorm используют общий на уровне процесса неявный источник данных Npgsql, ключом которого служит строка подключения; перезагрузка типов должна выполняться для источника, связанного с той же строкой подключения, что используется контекстом.
 
@@ -761,9 +772,9 @@ using (var result = dataContext.ExecuteRaw(
 
 ## См. также
 
-* [Переиспользование запросов: кэш против Prepare](../infrastructure/01-query-reuse-and-caching.md) — компромиссы `nonStreamUsing` / `storeInCache`.
+* [Переиспользование запросов: кэш против Prepare](../engine/03-plan-cache-and-reuse.md) — компромиссы `nonStreamUsing` / `storeInCache`.
 * [Скалярные функции](../scalar-functions/index.md) — оставайтесь в LINQ вместо перехода к необработанному SQL.
-* [Обзор провайдеров](../providers/overview.md) — заполнитель параметра для каждого провайдера.
+* [Обзор провайдеров](../connecting-providers/overview.md) — заполнитель параметра для каждого провайдера.
 
 ---
 

@@ -2,7 +2,7 @@
 
 > Добавляйте хинты уровня инструкции к запросу через `Hint(...)`, например SQL Server `OPTION (RECOMPILE)`.
 
-**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [CTE](08-cte.md) · [Обзор провайдеров](../providers/overview.md)
+**Предварительные требования:** [Запросы и проекции](../engine/index.md) · [CTE](08-cte.md) · [Обзор провайдеров](../connecting-providers/overview.md)
 
 ## Обзор
 
@@ -320,7 +320,7 @@ settings max_threads = 2
 
 - [Соединения](02-joins.md) - [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})).
 - [CTE](08-cte.md) - `maxRecursion` и предложение SQL Server `option (maxrecursion n)`.
-- [Запросы и проекции](../querying/index.md)
+- [Запросы и проекции](../engine/index.md)
 
 ---
 

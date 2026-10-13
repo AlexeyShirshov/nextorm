@@ -2,7 +2,7 @@
 
 > Свойство `TimeSpan` — это **длительность**. nextorm хранит её нативно там, где у базы есть тип длительности или времени суток, и в целочисленной колонке во всех остальных случаях. Единица целочисленного хранения объявляется атрибутом [`DurationAttribute`](xref:NextORM.Core.DurationAttribute) или fluent-маппингом [`Duration(...)`](xref:NextORM.Core.EntityPropertyBuilder`1.Duration(NextORM.Core.DurationUnit,System.Int32)); по умолчанию — тики.
 
-**Что нужно знать заранее:** [Запросы и проекции](../querying/index.md) · [Изменение данных (INSERT)](15-insert-statement.md) · [Обзор провайдеров](../providers/overview.md) · [Ограничения](../advanced/limitations.md)
+**Что нужно знать заранее:** [Запросы и проекции](../engine/index.md) · [Изменение данных (INSERT)](15-insert-statement.md) · [Обзор провайдеров](../connecting-providers/overview.md) · [Ограничения](../advanced/limitations.md)
 
 ## Где хранится значение
 

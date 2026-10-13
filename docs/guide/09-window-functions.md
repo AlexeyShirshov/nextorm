@@ -3,7 +3,7 @@
 > Compute ranking, neighbour values and running/windowed aggregates over a partition with the SQL
 > `OVER` clause.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Grouping and aggregates](03-grouping-and-aggregates.md) · [Sorting and paging](04-sorting-and-paging.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Grouping and aggregates](03-grouping-and-aggregates.md) · [Sorting and paging](04-sorting-and-paging.md)
 
 ## Overview
 
@@ -275,7 +275,7 @@ SQL Server has no `WINDOW` clause and rejects the query with `NotSupportedExcept
 
 Window functions are ANSI and every SQL provider nextorm targets supports the `ROWS` and `RANGE` frame
 units, so most SQL is the same apart from identifier quoting (single quotes, brackets or double quotes
-for the alias; see [Provider overview](../providers/overview.md)). The `percent_rank()`/`cume_dist()`
+for the alias; see [Provider overview](../connecting-providers/overview.md)). The `percent_rank()`/`cume_dist()`
 pair is supported by every provider
 ([`SupportsPercentRankCumeDist`](xref:NextORM.Core.ISqlDialect.SupportsPercentRankCumeDist)).
 The only non-portable value function is `nth_value`: SQL Server has no `NTH_VALUE`, so
@@ -313,7 +313,7 @@ MySQL, SQLite and ClickHouse reject the window form with `NotSupportedException`
 
 * [Grouping and aggregates](03-grouping-and-aggregates.md) - the scalar aggregates that `_over` variants shadow.
 * [Sorting and paging](04-sorting-and-paging.md) - ordering the outer query that selects window columns.
-* [Provider overview](../providers/overview.md) - alias quoting and provider capability flags.
+* [Provider overview](../connecting-providers/overview.md) - alias quoting and provider capability flags.
 
 ---
 

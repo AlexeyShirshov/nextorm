@@ -3,7 +3,7 @@
 > Declare one or more named `with` queries and use them as the `from` source of a query, including
 > recursive CTEs for series and hierarchies.
 
-**Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](../querying/index.md) · [Set operations](06-set-operations.md)
+**Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](../engine/index.md) · [Set operations](06-set-operations.md)
 
 ## Overview
 
@@ -591,7 +591,7 @@ plan, including a recursive CTE whose body is a `union all` of two fresh command
 * an equivalent recursive CTE built again reuses the cached plan
   (`PlanCacheTests.RecursiveCte_FreshCommand_ShouldReuseCachedPlan`).
 
-See [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md) for the lifetime and invalidation rules of the
+See [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md) for the lifetime and invalidation rules of the
 plan cache.
 
 ## Data-modifying CTE (PostgreSQL)
@@ -702,7 +702,7 @@ For the general `UPDATE` surface see [Data modification (UPDATE)](17-update-stat
 * [Set operations](06-set-operations.md) - [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) and friends, used to build a recursive body.
 * [Joins](02-joins.md) - joining a CTE to a table, as in `CommonTestSuite.Cte.cs`.
 * [Raw SQL](12-raw-sql.md) - when the whole statement is hand-written.
-* [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md) - how CTE plans are cached.
+* [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md) - how CTE plans are cached.
 
 ---
 

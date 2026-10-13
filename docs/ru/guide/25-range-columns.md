@@ -2,9 +2,9 @@
 
 > Свойство `Range<T>` можно хранить **парой скалярных колонок** на провайдере без нативного range-типа. Обе границы кладутся в обычные колонки, SQL `NULL` означает неограниченную сторону, а предикаты и функции инспекции диапазона транслируются поверх пары.
 
-**См. также:** [Фильтрация (WHERE)](01-filtering-where.md) · [Конвертеры значений и JSON-колонки](../infrastructure/04-value-converters.md) · [Специфичный для PostgreSQL SQL](provider-specific/postgresql.md) · [Ограничения](../advanced/limitations.md)
+**См. также:** [Фильтрация (WHERE)](01-filtering-where.md) · [Конвертеры значений и JSON-колонки](../infrastructure/03-value-converters.md) · [Специфичный для PostgreSQL SQL](provider-specific-sql/postgresql.md) · [Ограничения](../advanced/limitations.md)
 
-В PostgreSQL есть [нативные range-типы](provider-specific/postgresql.md#range-типы) (`int4range`…`daterange`), поэтому там свойство `Range<T>` отображается прямо на range-колонку. У остальных провайдеров range-типа нет; nextorm закрывает разрыв, позволяя отобразить обе границы на две скалярные колонки и транслируя операторы диапазона поверх них.
+В PostgreSQL есть [нативные range-типы](provider-specific-sql/postgresql.md#range-типы) (`int4range`…`daterange`), поэтому там свойство `Range<T>` отображается прямо на range-колонку. У остальных провайдеров range-типа нет; nextorm закрывает разрыв, позволяя отобразить обе границы на две скалярные колонки и транслируя операторы диапазона поверх них.
 
 ## Модель хранения
 
@@ -142,6 +142,6 @@ select id from reservation
 
 ## См. также
 
-* [Специфичный для PostgreSQL SQL — Range-типы](provider-specific/postgresql.md#range-типы) и [Multirange](provider-specific/postgresql.md#multirange) — нативная поверхность.
+* [Специфичный для PostgreSQL SQL — Range-типы](provider-specific-sql/postgresql.md#range-типы) и [Multirange](provider-specific-sql/postgresql.md#multirange) — нативная поверхность.
 * [Ограничения](../advanced/limitations.md) — матрица возможностей провайдеров.
 * [Справочник API — атрибуты маппинга](../advanced/api-reference.md).

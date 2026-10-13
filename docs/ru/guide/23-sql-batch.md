@@ -2,7 +2,7 @@
 
 > Батч отправляет несколько утверждений в базу **одним round trip на одной серверной сессии**. Именно это делает session-scoped временную таблицу пригодной за пулером уровня соединения, держит мутацию и читающий её запрос на одном backend и убирает лишний round trip, когда материализация сразу же читается. Собрать его можно через [`BatchExtensions.CreateBatchBuilder`](xref:NextORM.Core.BatchExtensions).
 
-**Предварительно:** [Материализация запроса в таблицу](18-create-table-as.md) · [Транзакции](21-transactions.md) · [Обзор провайдеров](../providers/overview.md)
+**Предварительно:** [Материализация запроса в таблицу](18-create-table-as.md) · [Транзакции](21-transactions.md) · [Обзор провайдеров](../connecting-providers/overview.md)
 
 ## Зачем нужен батч
 
@@ -250,4 +250,4 @@ select id, status from orders
 
 - [Материализация запроса в таблицу](18-create-table-as.md)
 - [Транзакции](21-transactions.md)
-- [Обзор провайдеров](../providers/overview.md)
+- [Обзор провайдеров](../connecting-providers/overview.md)

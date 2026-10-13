@@ -2,7 +2,7 @@
 
 > nextorm can run a normal query and materialize its rows into a table in one command with [`ToTempTable(name)`](xref:NextORM.Core.TempTableExtensions) / `ToTable(name)`, or turn it into a lazy source with `AsTempTable()` that is materialised on every read. Unlike a [common table expression](08-cte.md), which is reusable only inside one statement, the materialized table is reusable by later queries on the same connection. There is no change tracking and no `SaveChanges`: each terminal issues exactly one command (or one batch).
 
-**Prerequisites:** [Common table expressions](08-cte.md) · [Data modification (INSERT)](15-insert-statement.md) · [Raw SQL](12-raw-sql.md) · [Provider overview](../providers/overview.md)
+**Prerequisites:** [Common table expressions](08-cte.md) · [Data modification (INSERT)](15-insert-statement.md) · [Raw SQL](12-raw-sql.md) · [Provider overview](../connecting-providers/overview.md)
 
 ## Creating a temporary table
 
@@ -202,4 +202,4 @@ On a provider without the requested form, and on the in-memory context, the term
 - [Data modification (INSERT)](15-insert-statement.md)
 - [Executing statements in one batch](23-sql-batch.md)
 - [Transactions](21-transactions.md)
-- [Provider overview](../providers/overview.md)
+- [Provider overview](../connecting-providers/overview.md)

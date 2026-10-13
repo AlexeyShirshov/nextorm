@@ -2,7 +2,7 @@
 
 > Replace a query's generated SQL with hand-written text while keeping nextorm's row mapping.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md)
 
 ## Overview
 
@@ -406,26 +406,38 @@ The record must be the **only** column of the result set, and every field must b
 already reads as a scalar (the same allow-list as a normal scalar column). The record column's shape is
 part of the cached result-mapper key, like any other raw shape.
 
-Anonymous `ROW(...)` needs no registration: the full `NpgsqlDataSourceBuilder` maps a record column to a
-null-preserving `object[]` by default. A named composite is a caller-registered driver type, so build the
-`NpgsqlDataSource`, register the composite there and pass `dataSource.CreateConnection()` to an existing
-external-connection context constructor. nextorm adds no public API, no global driver mapper, and the
-connection-string path (nextorm's own `CreateDbConnection`) is unchanged:
+Anonymous `ROW(...)` needs no registration — the full `NpgsqlDataSourceBuilder` maps a record column to a
+null-preserving `object[]` by default:
 
 ```csharp
-var dataSource = new NpgsqlDataSourceBuilder(connectionString)
-    .MapComposite<Point>()   // register the named composite type
-    .Build();
-
-await using var dataContext = new PostgresDataContext(
-    dataSource.CreateConnection(), new DataContextBuilder());
-
 using var result = dataContext.ExecuteRaw(
     "select row(id, somestring) as r from complex_entity order by id");
 
 IReadOnlyList<System.Tuple<int, string?>> rows =
     result.Read<System.Tuple<int, string?>>();
 ```
+
+A named composite is a caller-registered driver type, so build the `NpgsqlDataSource`, register the
+composite there and pass `dataSource.CreateConnection()` to an existing external-connection context
+constructor (here the composite `entity_row` is declared as
+`create type entity_row as (id integer, somestring text)`):
+
+```csharp
+var dataSource = new NpgsqlDataSourceBuilder(connectionString)
+    .MapComposite<EntityRow>("entity_row")   // register the named composite type
+    .Build();
+
+await using var dataContext = new PostgresDataContext(
+    dataSource.CreateConnection(), new DataContextBuilder());
+
+using var result = dataContext.ExecuteRaw(
+    "select row(id, somestring)::entity_row as r from complex_entity order by id");
+
+IReadOnlyList<EntityRow> rows = result.Read<EntityRow>();
+```
+
+nextorm adds no public API, no global driver mapper, and the connection-string path (nextorm's own
+`CreateDbConnection`) is unchanged.
 
 Composite classification is authoritative: a column is treated as a named composite only when the loaded Npgsql type catalog says so, never from a dotted data type name or an exception shape. On a clean catalog an unmapped non-composite type (for example `hstore` or `ltree`) now yields the ordinary "None of the result-set columns (...) matches a mapped property" error rather than the named-composite diagnostic; a genuine composite whose type is not in the loaded catalog degrades to the same ordinary error until authoritative type metadata is available (a deliberate trade-off — a cold catalog gives no composite verdict instead of a misleading one). A composite registered through `MapComposite<T>` still materialises, and a warm-catalog unregistered composite still reports the composite-specific guard (it must be registered before it can be read). nextorm contexts share a process-wide implicit Npgsql data source keyed by connection string; a type reload must target the source associated with the same connection string used by the context.
 
@@ -752,9 +764,9 @@ ClickHouse has no stored procedures, so a table parameter is consumed by `Execut
 
 ## See also
 
-* [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md) - the `nonStreamUsing` / `storeInCache` trade-offs.
+* [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md) - the `nonStreamUsing` / `storeInCache` trade-offs.
 * [Scalar functions](../scalar-functions/index.md) - stay in LINQ instead of dropping to raw SQL.
-* [Provider overview](../providers/overview.md) - parameter placeholder per provider.
+* [Provider overview](../connecting-providers/overview.md) - parameter placeholder per provider.
 
 ---
 

@@ -2,7 +2,7 @@
 
 > Remove duplicate rows with [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) on an entity builder or on a projected query, including over joins, paging and set operations.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Sorting and paging](04-sorting-and-paging.md) · [Set operations](06-set-operations.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Sorting and paging](04-sorting-and-paging.md) · [Set operations](06-set-operations.md)
 
 ## Overview
 
@@ -282,7 +282,7 @@ derived-table lowering cannot express: [`DistinctOn`](xref:NextORM.Postgres.Post
 
 - [Set operations](06-set-operations.md) - [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})) already removes duplicates; [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) does not.
 - [Sorting and paging](04-sorting-and-paging.md) - [`Limit`](xref:NextORM.Core.Paging.Limit), [`Offset`](xref:NextORM.Core.Paging.Offset) and [`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)).
-- [Querying and projections](../querying/index.md)
+- [Querying and projections](../engine/index.md)
 
 ---
 

@@ -2,7 +2,7 @@
 
 > Упорядочивайте строки с помощью [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32))/[`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)), разбивайте их на страницы с помощью [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Offset`](xref:NextORM.Core.Paging.Offset)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) и читайте одну строку или логическое значение терминальными методами для одной строки.
 
-**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [Фильтрация (WHERE)](01-filtering-where.md)
+**Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Фильтрация (WHERE)](01-filtering-where.md)
 
 ## Обзор
 
@@ -338,10 +338,10 @@ select exists(select * from simple_entity where id = 100)
 
 ## См. также
 
-* [Запросы и проекции](../querying/index.md)
+* [Запросы и проекции](../engine/index.md)
 * [Фильтрация (WHERE)](01-filtering-where.md)
-* [Повторное использование запросов: cache и Prepare](../infrastructure/01-query-reuse-and-caching.md)
-* [Обзор провайдеров](../providers/overview.md)
+* [Повторное использование запросов: cache и Prepare](../engine/03-plan-cache-and-reuse.md)
+* [Обзор провайдеров](../connecting-providers/overview.md)
 
 ---
 

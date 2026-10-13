@@ -11,11 +11,11 @@
 > correlation — and adding a complete explicit write surface
 > (`INSERT`/`UPDATE`/`DELETE`/full `MERGE`, PostgreSQL data-modifying CTEs), bulk insert, `CREATE TABLE AS
 > SELECT`, `TRUNCATE`, a transactions role, value converters, JSON columns, a dynamic-columns store,
-> declarative relationships with level-1 eager loading and declared-relationship implicit navigation,
+> declarative relationships with nested eager loading (level 2+) and declared-relationship implicit navigation,
 > global query filters, command interceptors, a SQL batch builder, result-set streaming and export, stored
 > procedures and table-valued parameters, and an EF Core integration package.
 
-**Prerequisites:** [Provider overview](../../providers/overview.md) · [Limitations](../../advanced/limitations.md) · [Query hints](../../guide/13-query-hints.md)
+**Prerequisites:** [Provider overview](../../connecting-providers/overview.md) · [Limitations](../../advanced/limitations.md) · [Query hints](../../guide/13-query-hints.md)
 
 ## Positioning
 
@@ -30,7 +30,7 @@
   scenarios. The mapping layer covers value converters, JSON columns and a dynamic-columns store; the
   execution layer covers raw commands and stored procedures, table-valued parameters, a SQL batch builder
   and result-set streaming and export. It also models relationships declaratively
-  (`[Relationship]`/`HasMany`/`HasOne` + `JoinInto`) with level-1 `LoadWith` eager loading and
+  (`[Relationship]`/`HasMany`/`HasOne` + `JoinInto`) with `LoadWith` eager loading (nested level 2+) and
   declared-relationship implicit navigation, ships command interceptors and global query filters, and
   integrates with EF Core (`nextorm.entityframeworkcore`).
 * **linq2db** is a broad, mature LINQ-to-SQL ORM: a wider provider matrix, full CRUD (`INSERT`/`UPDATE`/
@@ -106,7 +106,7 @@ named. Evidence for nextorm points at the source that owns the behaviour.
 | **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | yes | `InsertBuilder<TEntity>`, `InsertReturningBuilder<TEntity,TResult>`, `MergeBuilder<TEntity>`, `MergeMatchedBuilder<TEntity>`, `MergeNotMatchedBuilder<TEntity>`, `MergeNotMatchedBySourceBuilder<TEntity>`, `MergeReturningBuilder<TEntity,TResult>`, `DeleteBuilder<TEntity>`, `UpdateBuilder<TEntity>`, `CreateDeleteJoinBuilder`/`DeleteJoinBuilder<TProjection>`, `CreateUpdateJoinBuilder`/`UpdateJoinBuilder<TProjection>`, `DataContextExtensions.Update`/`Delete`, `CreateTruncateBuilder`, `MutationCteQuery<TResult>`, `ISqlDialect.SupportsReturning`/`SupportsOutput`/`SupportsLastInsertId`/`SupportsIdentityFunction`/`SupportsDataModifyingCtes`/`SupportsOnConflict`/`SupportsOnDuplicateKey`/`SupportsMerge`/`SupportsDelete`; the in-memory provider only applies the key upsert |
 | Bulk copy / merge / temporary tables | partial — key upsert (`CreateMergeBuilder`/`MergeBuilder<T>`), full `MERGE` with branches (`WhenMatched`/`WhenNotMatched`/`WhenNotMatchedBySource`, arbitrary conditions, `RETURNING`/`OUTPUT`; SQL Server, PostgreSQL 15+), bulk insert (`CreateBulkInsertBuilder<T>`: native `COPY`/`SqlBulkCopy` + chunked `INSERT ... VALUES`, configured through the `BulkInsertOptions` record or the fluent `BulkInsertOptionsBuilder` — `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`, `IgnoreDuplicates`, `KeepIdentity`, `Timeout`, `NotifyAfter` progress with a `ProgressCancellationTokenSource`; `ReturningKey`/`Returning`) and materializing a query into a (temporary) table (`ToTable` on PostgreSQL/SQLite/MySQL/MariaDB/SQL Server/ClickHouse, the `ToTempTable` temporary form on PostgreSQL/SQLite/MySQL/MariaDB) are implemented | yes | `MergeBuilder<TEntity>`, `BulkInsertBuilder<TEntity>`, `BulkInsertOptions`, `TempTableExtensions` |
 | Transactions (own + enlisted) | yes (SQLite, PostgreSQL, SQL Server, MySQL/MariaDB; ClickHouse and in-memory reject) | yes | `DataContext/Roles/ITransactionManager.cs`, `DataContext/DbConnectionManager.cs`, `ISqlDialect.SupportsTransactions` |
-| Navigation properties / associations / eager loading | partial — navigation metadata (O2M/M2O/O2O/M2M) + `JoinInto` (one-to-many collections, one-to-one references, many-to-many through an explicit junction), level-1 `LoadWith` (split / single-query), and declared-relationship implicit navigation (reference scalar chains/presence/whole-reference as `LEFT JOIN`; collection `Any`/`Count`/`LongCount`/`Count`); what remains is convention-over-FK inference (absent in linq2db too), composite keys, a composite junction selector and a many-to-many `JoinInto` under `AsSingleQuery` | yes (`[Association]`, `LoadWith`) | `Builders/EntityBuilder.cs`, `JoinIntoSpec.cs`/`JoinIntoStitcher.cs`, `Builders/EntityBuilderEagerLoading.cs`, `AsEntityBuilder<T>` |
+| Navigation properties / associations / eager loading | partial — navigation metadata (O2M/M2O/O2O/M2M) + `JoinInto` (one-to-many collections, one-to-one references, many-to-many through an explicit junction), `LoadWith` (split / single-query, nested level 2+ with a single graph-wide mode and per-level ordering/top-N), and declared-relationship implicit navigation (reference scalar chains/presence/whole-reference as `LEFT JOIN`; collection `Any`/`Count`/`LongCount`/`Count`); what remains is convention-over-FK inference (absent in linq2db too), composite keys, a composite junction selector and a many-to-many `JoinInto` under `EagerLoadMode.SingleQuery` | yes (`[Association]`, `LoadWith`) | `Builders/EntityBuilder.cs`, `JoinIntoSpec.cs`/`JoinIntoStitcher.cs`, `Builders/EntityBuilderEagerLoading.cs`, `AsEntityBuilder<T>` |
 | Change tracking / identity map | no (by design) | partial | — |
 | Extensibility (interceptors, custom SQL, query filters) | yes — dialect + `[SqlFunction]`/`[SqlTableFunction]`, command/connection interceptors, global query filters and raw SQL | extensive | `SqlDialectBase`, `IQueryInterceptor`/`IConnectionInterceptor`, `QueryFilterAttribute`/`HasQueryFilter` |
 | Providers | SQL Server, PostgreSQL, MySQL, MariaDB, SQLite, ClickHouse, in-memory | SQL Server, PostgreSQL, MySQL/MariaDB, SQLite, Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, ClickHouse, DuckDB, Ydb | `src/nextorm.*` |
@@ -158,8 +158,8 @@ Against the shared surface nextorm matches or exceeds linq2db; on top of that it
   **transactions** (`ITransactionManager`, own or enlisted from EF Core/Dapper/ADO.NET) — all explicit
   commands, with no change tracking and no `SaveChanges`.
 * Declarative relationships and eager loading: O2M/M2O via `[Relationship]`/`HasMany`/`HasOne` and
-  `JoinInto` (LEFT/INNER, `Where`, parent paging, multiple collections, in-memory parity), plus level-1
-  `LoadWith` (split-query by default, opt-in `AsSingleQuery`) with global query filters applied to children
+  `JoinInto` (LEFT/INNER, `Where`, parent paging, multiple collections, in-memory parity), plus `LoadWith`
+  (split-query by default, opt-in `EagerLoadMode.SingleQuery`, nested level 2+) with global query filters applied to children at every level
   ([relationships](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md)).
 * An EF Core integration package (`nextorm.entityframeworkcore`): `UseNextOrm`/`GetNextOrmContext`/
   `AddNextOrmFromDbContext` run nextorm over the EF connection with the EF model mapping and share the EF
@@ -227,7 +227,7 @@ surface, which nextorm matches or exceeds. linq2db covers them:
   explicit command — there is no `SaveChanges` and no automatic change tracking. linq2db flushes a tracked
   unit of work.
 * **Relationships**: nextorm models O2M/M2O/O2O/M2M relationships declaratively (`[Relationship]`/`HasMany`/
-  `HasOne`/`HasOneToOne`/`HasManyThrough` + `JoinInto`) with level-1 `LoadWith` eager loading and
+  `HasOne`/`HasOneToOne`/`HasManyThrough` + `JoinInto`) with `LoadWith` eager loading (nested level 2+) and
   declared-relationship implicit navigation ([relationships](../../advanced/relationships.md),
   [eager loading](../../advanced/eager-loading.md), [implicit navigation](../../guide/29-implicit-navigation.md));
   nextorm also ships an explicit eager-load strategy (`EagerLoadMode` with split, single-query and a
@@ -276,7 +276,7 @@ and more configurable SQL output (identifier quoting, naming conventions and key
 overridable per command, whereas linq2db quotes by default and fixes names through its mapping schema).
 linq2db remains the better fit only when the same layer must also track changes, generate the data layer from
 a live schema, or eager-load per-parent ordered/top-N children — surface nextorm deliberately leaves out (O2M/M2O/O2O
-relationships, many-to-many through a junction, declared-relationship implicit navigation and level-1 eager
+relationships, many-to-many through a junction, declared-relationship implicit navigation and nested eager
 loading with explicit split/single/auto strategies and `JoinInto` are already covered).
 
 ## See also
@@ -288,7 +288,7 @@ loading with explicit split/single/auto strategies and `JoinInto` are already co
 - [Joins](../../guide/02-joins.md) — `CrossApply`/`OuterApply`.
 - [Range columns](../../guide/25-range-columns.md) — a `Range<T>` stored as a pair of scalar columns.
 - [Query hints](../../guide/13-query-hints.md)
-- [Provider overview](../../providers/overview.md)
+- [Provider overview](../../connecting-providers/overview.md)
 
 ---
 

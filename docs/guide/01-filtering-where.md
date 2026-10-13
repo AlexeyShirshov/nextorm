@@ -2,7 +2,7 @@
 
 > Build SQL `WHERE` predicates from C# operators, null tests, conditionals and parameterised value lists.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md)
+**Prerequisites:** [Querying and projections](../engine/index.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md)
 
 ## Overview
 
@@ -248,7 +248,7 @@ select id from simple_entity where id = $norm_p0
 ```
 
 Runtime parameters are named `norm_p{index}`; the value `42` is bound to `norm_p0` by the terminal.
-See [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md) for the lifetime rules.
+See [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md) for the lifetime rules.
 
 A captured local is registered **once per statement**, no matter how many times it appears or which
 source it lives in. A local referenced twice in a `WHERE` over a join projection shares a single
@@ -359,7 +359,7 @@ select id from complex_entity where global in (@p0, @p1)
 Negate it with C# `!` to render `GLOBAL NOT IN`. The predicate requires
 [`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates) and is available
 only on ClickHouse; every other provider and the in-memory context throw `NotSupportedException`.
-See [Provider-specific SQL](provider-specific/overview.md) for the full catalogue.
+See [Provider-specific SQL](provider-specific-sql/overview.md) for the full catalogue.
 
 ## Captured collection lookup (`dict[column]`)
 
@@ -486,11 +486,11 @@ array is bound as one parameter; see [Arrays](../scalar-functions/06-arrays.md#a
 
 ## See also
 
-* [Querying and projections](../querying/index.md)
+* [Querying and projections](../engine/index.md)
 * [Sorting and paging](04-sorting-and-paging.md)
 * [Scalar functions](../scalar-functions/index.md)
 * [Subqueries](05-subqueries.md)
-* [Provider-specific SQL](provider-specific/overview.md)
+* [Provider-specific SQL](provider-specific-sql/overview.md)
 * [Limitations and out-of-scope features](../advanced/limitations.md)
 
 ---

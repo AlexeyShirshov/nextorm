@@ -2,7 +2,7 @@
 
 > Записывайте результат `Select` в предоставленный вызывающим `Stream` как JSON или CSV по RFC 4180, строка за строкой, не материализуя набор результатов: JSON сериализуется на клиенте через `System.Text.Json`, CSV формируется постепенно из reader'а.
 
-**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [Проекции](../querying/01-projections.md) · [Потоковое чтение больших объектов (BLOB/CLOB)](26-large-objects.md) · [Поддержка JSON в разных провайдерах](14-json.md) · [Ограничения](../advanced/limitations.md)
+**Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Проекции](../guide/30-projections.md) · [Потоковое чтение больших объектов (BLOB/CLOB)](26-large-objects.md) · [Поддержка JSON в разных провайдерах](14-json.md) · [Ограничения](../advanced/limitations.md)
 
 ## Обзор
 
@@ -465,7 +465,7 @@ await ctx.From<Order>().WriteCsvAsync(file);
 ## См. также
 
 * [Поддержка JSON в разных провайдерах](14-json.md) — провайдерные SQL-поверхности JSON (`ForJson`, `jsonb`, текстовый JSON, `openjson`).
-* [Проекции](../querying/01-projections.md)
+* [Проекции](../guide/30-projections.md)
 * [Потоковое чтение больших объектов (BLOB/CLOB)](26-large-objects.md)
 * [Сырой SQL](12-raw-sql.md)
 * [Краткий справочник API](../advanced/api-reference.md)

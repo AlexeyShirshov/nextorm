@@ -2,7 +2,7 @@
 
 > nextorm строит `MERGE` (upsert) через [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})): одна точка входа покрывает и переносимый **key upsert** (`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`), и общий много-веточный **полный `MERGE`** с ветками `WHEN MATCHED`/`WHEN NOT MATCHED`. Изменения не отслеживаются, `SaveChanges` нет: каждый терминал выполняет ровно одну команду.
 
-**Предварительно:** [Изменение данных (INSERT)](15-insert-statement.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Обзор провайдеров](../providers/overview.md)
+**Предварительно:** [Изменение данных (INSERT)](15-insert-statement.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Обзор провайдеров](../connecting-providers/overview.md)
 
 ## Обзор
 
@@ -196,5 +196,5 @@ insert into simple_entity (id, name) values (@p0, @p1) on conflict (id) do updat
 - [Оптимистичная конкурентность и отслеживание изменений](24-optimistic-concurrency.md)
 - [Глобальные фильтры запросов](../advanced/query-filters.md)
 - [Ограничения и что вне области](../advanced/limitations.md)
-- [Обзор провайдеров](../providers/overview.md)
+- [Обзор провайдеров](../connecting-providers/overview.md)
 - [Краткий справочник API](../advanced/api-reference.md)

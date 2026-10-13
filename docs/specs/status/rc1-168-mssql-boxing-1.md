@@ -70,7 +70,7 @@ parity.
 
 ### Docs plan
 
-- `docs/providers/sqlserver.md:9-12` (and RU mirror): the provider no longer reads numeric columns of
+- `docs/connecting-providers/sqlserver.md:9-12` (and RU mirror): the provider no longer reads numeric columns of
   the buffered path through `Convert.ChangeType`; describe the runtime field-type dispatch.
 - `docs/advanced/limitations.md:52` + `docs/guide/28-streaming-data.md:117,284` (and RU mirrors):
   remove the claim that the buffered `MapColumnExpression` path boxes on `ToList`.
@@ -97,7 +97,7 @@ parity.
 - [x] No public API surface change.
 - [x] XML docs of changed members updated.
 - [x] CRLF preserved; `TreatWarningsAsErrors` clean.
-- [x] Docs EN/RU update (D3): `docs/providers/sqlserver.md` (+RU), `docs/guide/28-streaming-data.md` (+RU), `docs/advanced/limitations.md` (+RU), `docs/specs/roadmap/todo_csv_streaming.md`, `todo_json_streaming.md` — buffered numeric path now storage-typed/no-boxing, #168 referenced.
+- [x] Docs EN/RU update (D3): `docs/connecting-providers/sqlserver.md` (+RU), `docs/guide/28-streaming-data.md` (+RU), `docs/advanced/limitations.md` (+RU), `docs/specs/roadmap/todo_csv_streaming.md`, `todo_json_streaming.md` — buffered numeric path now storage-typed/no-boxing, #168 referenced.
 - [x] BDN perf gate (D4): PASS — allocations 464→0 B/row, boxing 9→0, ABBA ratios 0.3114/0.3382/0.3495 (median 0.3382).
 - [x] Container integration (D5): exit 0, 3179 total / 0 failed / 0 errors / 193 provider-capability skips; SQL Server 2025 (RTM-CU9) 17.0.5005.3.
 
@@ -114,7 +114,7 @@ parity.
 | D168-E07 | `dotnet build nextorm.slnx -c Debug` 0/0 | `artifacts/d168/build-slnx.log` | done |
 | D168-E08 | `nextorm.sqlserver.tests` exit + counts | `artifacts/d168/test-sqlserver.log` | done |
 | D168-E09 | `nextorm.core.tests` exit + counts | `artifacts/d168/test-core.log` | done |
-| D168-E10 | Docs EN/RU diff (D3) | `docs/providers/sqlserver.md`, `docs/guide/28-streaming-data.md`, `docs/advanced/limitations.md` (+RU); `docs/specs/roadmap/todo_{csv,json}_streaming.md` | done |
+| D168-E10 | Docs EN/RU diff (D3) | `docs/connecting-providers/sqlserver.md`, `docs/guide/28-streaming-data.md`, `docs/advanced/limitations.md` (+RU); `docs/specs/roadmap/todo_{csv,json}_streaming.md` | done |
 | D168-E11 | BDN allocation/time report (D4) | `artifacts/d168/bdn-gate-report.json`, `bdn-gate-summary.md`, `bdn-r*.log` | done |
 | D168-E12 | SQL Server container integration run (D5) | `artifacts/d168/integration-run.log`, `integration-results.xml` | done |
 
@@ -145,7 +145,7 @@ Scope = **perf/boxing, not correctness** (issue label enhancement; source `docs/
 - Boxing site: `SqlServerDataContext.cs:390-392` `Convert(Convert.ChangeType(GetValue(index), type), PropertyType)`; MethodInfo `:19` `GetValueMethod`, `:21` `ChangeTypeMethod`; `IsNumeric:525`; `Nullable`/`DefaultOnNull :394-410`. SQL Server boxes because typed SqlClient getters are strict to widening (`:386-388`).
 - CSV typed hook already avoids it: base `MapTypedColumnExpression DataContext.cs:637`; SQL Server override `SqlServerDataContext.cs:426`; `SupportsTypedColumnMapping:490`; `GetNumericGetter:499`; `GetTypedConversion:511`. Common-mapper call sites: `DataContext.cs:766,775,1313`, `RawMapperFactory.cs:96`, `QueryCommandExtensions.cs:410,452`.
 - Tests: `tests/nextorm.sqlserver.tests/CsvTypedColumnMappingTests.cs:16,20,32,44,53,66,81` (CSV hook only); `SqlServerTestContext.cs:34,42` exposes the protected hook; integration `SqlServerSpecificTests.cs:1535,1556`; `CommonTestSuite.JsonStream.cs:112-138`. **No test asserts absence of boxing in the general buffered path.**
-- Docs EN/RU: `docs/providers/sqlserver.md:9-12` (describes `Convert.ChangeType`; will need update), `docs/guide/28-streaming-data.md:12,117,209`, `docs/advanced/limitations.md:52`; RU mirrors.
+- Docs EN/RU: `docs/connecting-providers/sqlserver.md:9-12` (describes `Convert.ChangeType`; will need update), `docs/guide/28-streaming-data.md:12,117,209`, `docs/advanced/limitations.md:52`; RU mirrors.
 - Specs: `docs/specs/roadmap/todo_csv_streaming.md:33-39,75-79`; `todo_json_streaming.md:108-109,286-287,317` (same SQL Server `GetValue`+`Convert.ChangeType` flagged as zero-boxing blocker).
 - Open questions for PLAN: exact mechanism to preserve widening parity without boxing (typed getters + explicit widening converters); which consumers hit the general buffered path; performance-measurement requirement (this is a hot/row path → benchmark likely mandatory); test strategy for "no boxing".
 
@@ -162,7 +162,7 @@ Scope = **perf/boxing, not correctness** (issue label enhancement; source `docs/
 - Historic: Recon persisted (run 6 start).
 
 - Notice: host has no todowrite tool; this file is the progress log.
-- 2026-10-06 05:09 UTC | DO | r2 | n=1/3 | D3 docs EN/RU updated (provider/streaming/limitations + roadmap specs; #168 referenced; no public→specs links) | docs/providers/sqlserver.md, docs/guide/28-streaming-data.md, docs/advanced/limitations.md, docs/specs/roadmap/todo_csv_streaming.md, todo_json_streaming.md (+RU)
+- 2026-10-06 05:09 UTC | DO | r2 | n=1/3 | D3 docs EN/RU updated (provider/streaming/limitations + roadmap specs; #168 referenced; no public→specs links) | docs/connecting-providers/sqlserver.md, docs/guide/28-streaming-data.md, docs/advanced/limitations.md, docs/specs/roadmap/todo_csv_streaming.md, todo_json_streaming.md (+RU)
 - 2026-10-06 05:08 UTC | DO | r2 | n=1/3 | D4 acceptance harness added ([MemoryDiagnoser], acceptance category, strict mock reader, MSBuild injection target, ABBA gate) | benchmarks/nextorm.benchmark/acceptance/, artifacts/d168/bdn-gate-report.json
 - 2026-10-06 05:08 UTC | DO | r2 | n=1/3 | D4 gate PASS: allocations 464→0 B/row, boxing 9→0, ratios 0.3114/0.3382/0.3495 (median 0.3382) | artifacts/d168/bdn-gate-summary.md, bdn-gate-report.json
 - 2026-10-06 05:10 UTC | DO | r2 | n=1/3 | D5 integration exit 0: 3179 total / 0 failed / 0 errors / 193 capability skips (SqlServer 680 pass/43 skip; PG 766/25; MySql 594/80; CH 173/0; Sqlite 656/43) | artifacts/d168/integration-run.log, integration-results.xml

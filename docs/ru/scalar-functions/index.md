@@ -3,7 +3,7 @@
 > Преобразуйте члены `string`, `Math` и `DateTime`, объединение `??`, логические предикаты и числовые
 > преобразования в SQL, специфичный для провайдера.
 
-**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](../querying/index.md) · [Фильтрация (WHERE)](../guide/01-filtering-where.md)
+**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](../engine/index.md) · [Фильтрация (WHERE)](../guide/01-filtering-where.md)
 
 ## Обзор
 
@@ -38,7 +38,7 @@ JSONPath-скаляры `json_value`/`json_query`/`json_exists` и функци�
 * [Фильтрация (WHERE)](../guide/01-filtering-where.md) — `Contains`/`in`, `??` и условные выражения в предикатах.
 * [Группировка и агрегаты](../guide/03-grouping-and-aggregates.md) — агрегатные функции (`count`, `sum`, ...).
 * [Пользовательские функции](../guide/10-user-defined-functions.md) — когда скалярная функция не встроена.
-* [Обзор провайдеров](../providers/overview.md) — флаги возможностей и кавычки.
+* [Обзор провайдеров](../connecting-providers/overview.md) — флаги возможностей и кавычки.
 
 ---
 

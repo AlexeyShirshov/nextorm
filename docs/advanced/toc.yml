@@ -2,8 +2,6 @@
   href: query-filters.md
 - name: Entity Framework Core integration
   href: integration-efcore.md
-- name: EF Core query-filter bridge
-  href: ef-core-query-filters.md
 - name: Eager loading child collections
   href: eager-loading.md
 - name: Per-parent paging in eager loading
@@ -14,5 +12,7 @@
   href: limitations.md
 - name: Native extreme-row strategies
   href: select-where-extrema-native.md
+- name: "Extensibility: custom SQL dialects and renderers"
+  href: extensibility.md
 - name: API quick reference
   href: api-reference.md

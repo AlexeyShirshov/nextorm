@@ -43,7 +43,7 @@ D198.3 Reader + parameter paths (`SelectExpression.GetDataRecordMethod` exact Js
 D198.4 Repair shared test DDL contract (test-local `ProbeJsonColumnType(dialect, storage)`: CH native→JSON, PG native→jsonb, text→ProbeTextType; reject unhandled native dialect explicitly; do NOT add production SQL-type-name capability for tests).
 D198.5 Unit + SQL-generation tests (complete matrices; assert resolved provider types, SQL shape, parameter metadata, null guards, options, delegation; retain PG accessor/node/cache invariants).
 D198.6 Real integration + regression coverage (extend CH tests at `ClickHouseIntegrationTests.cs:1114-1185,1626-1634` + fixture `Providers/ClickHouseTestProvider.cs:180-209`; independent DB-content verification; run CH-specific, PG-specific, full integration suite with DOCKER_HOST; required providers execute).
-D198.7 Documentation EN+RU + measurement + build closure (files: `docs/guide/14-json.md` + ru, `docs/guide/provider-specific/clickhouse.md` + ru, `docs/providers/clickhouse.md` + ru, `docs/providers/overview.md` + ru, `docs/advanced/limitations.md` + ru, `docs/infrastructure/04-value-converters.md` + ru; focused materialization BDN + 7-case acceptance bench before/after; coverage; final build; CRLF).
+D198.7 Documentation EN+RU + measurement + build closure (files: `docs/guide/14-json.md` + ru, `docs/guide/provider-specific-sql/clickhouse.md` + ru, `docs/connecting-providers/clickhouse.md` + ru, `docs/connecting-providers/overview.md` + ru, `docs/advanced/limitations.md` + ru, `docs/infrastructure/04-value-converters.md` + ru; focused materialization BDN + 7-case acceptance bench before/after; coverage; final build; CRLF).
 D198.8 ACT/registers after accepted CHECK (collection row D198→done is done by the orchestrator; coder updates task status file + any registers; commit only task files, message starts `#198`; never push).
 
 Perf decision: MEASUREMENT REQUIRED. `MapColumnExpression:61-85` accessors run per row; `ConvertFromProvider:101` per value; `CreateParam:96-112` per parameter. Run 7-case acceptance bench before/after; add focused BDN category `D198JsonRead`. Thresholds: acceptance median degradation >5% or existing-object focused >10% requires confirmation run + explanation; unresolved regression returns to PLAN. Restore `BenchmarkDotNet.Artifacts` with `git checkout -- BenchmarkDotNet.Artifacts`.
@@ -422,20 +422,20 @@ Benchmark (new):
 Docs EN:
 
 - `docs/guide/14-json.md`
-- `docs/guide/provider-specific/clickhouse.md`
-- `docs/providers/clickhouse.md`
-- `docs/providers/overview.md`
-- `docs/providers/postgres.md`
+- `docs/guide/provider-specific-sql/clickhouse.md`
+- `docs/connecting-providers/clickhouse.md`
+- `docs/connecting-providers/overview.md`
+- `docs/connecting-providers/postgres.md`
 - `docs/advanced/limitations.md`
 - `docs/infrastructure/04-value-converters.md`
 
 Docs RU:
 
 - `docs/ru/guide/14-json.md`
-- `docs/ru/guide/provider-specific/clickhouse.md`
-- `docs/ru/providers/clickhouse.md`
-- `docs/ru/providers/overview.md`
-- `docs/ru/providers/postgres.md`
+- `docs/ru/guide/provider-specific-sql/clickhouse.md`
+- `docs/ru/connecting-providers/clickhouse.md`
+- `docs/ru/connecting-providers/overview.md`
+- `docs/ru/connecting-providers/postgres.md`
 - `docs/ru/advanced/limitations.md`
 - `docs/ru/infrastructure/04-value-converters.md`
 
@@ -458,8 +458,8 @@ Task/status:
   `benchmarks/nextorm.benchmark/JsonColumnConverterBenchmark.cs`,
   `tests/nextorm.integration.tests/Providers/ClickHouseTestProvider.cs:180-209`,
   `tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:1114-1185,1626-1634`.
-- Docs touched (D198.7R2): `docs/guide/14-json.md`, `docs/guide/provider-specific/clickhouse.md`,
-  `docs/providers/{clickhouse,overview,postgres}.md`, `docs/advanced/limitations.md`,
+- Docs touched (D198.7R2): `docs/guide/14-json.md`, `docs/guide/provider-specific-sql/clickhouse.md`,
+  `docs/connecting-providers/{clickhouse,overview,postgres}.md`, `docs/advanced/limitations.md`,
   `docs/infrastructure/04-value-converters.md` (+ `docs/ru/**` mirrors).
 - Evidence (D198.7R2): `artifacts/pdca/D198/{docfx.log,perf-acceptance-final.log,perf-D198JsonRead.log,perf-r2.md,coverage-r2.log,build-debug-final-r2.log,scope-final-r2.txt}`.
 - Base commit: `cd1a7c6c` (`artifacts/pdca/D198/baseline-head.txt`).

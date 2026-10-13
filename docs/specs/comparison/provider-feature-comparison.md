@@ -188,7 +188,7 @@ deferred to nextorm
 
 | Feature | nextorm | linq2db | nextorm evidence | linq2db evidence |
 |---|---|---|---|---|
-| String JSON (`JSONExtract*`/`visitParamExtract*`) + `JSONAllPaths`/`toJSONString` | yes | no | `ClickHouseDialect.cs:287,294`; `docs/providers/clickhouse.md:225` | no JSON API in `ClickHouseSpecificExtensions.cs` |
+| String JSON (`JSONExtract*`/`visitParamExtract*`) + `JSONAllPaths`/`toJSONString` | yes | no | `ClickHouseDialect.cs:287,294`; `docs/connecting-providers/clickhouse.md:225` | no JSON API in `ClickHouseSpecificExtensions.cs` |
 | Arrays + higher-order (lambda) functions | yes | partial | `ClickHouseDialect.cs:129,136,155`; `SqlFunctions.ClickHouse.cs:478-642` | array functions used only internally in the member translator, no public API |
 | `ARRAY JOIN` clause | yes | no | `ClickHouseDialect.cs:145,461`; `Extensions/ClickHouseEntityBuilderExtensions.cs:33-51` | no public API found |
 | Regex (`match`/`replaceRegexpAll`, RE2) | yes | partial | `ClickHouseDialect.cs:559,562,566`; `SqlFunctions.ClickHouse.cs:816-850` | internal `replaceRegexpAll` only |
@@ -207,7 +207,7 @@ deferred to nextorm
 | CTAS `ENGINE = MergeTree ... AS SELECT` | yes | yes | `ClickHouseDialect.cs:92,98,101` | `DataExtensions.CreateTable` |
 | DML mutations (`ALTER TABLE ... UPDATE`/`DELETE`) | yes | no | `ClickHouseDialect.cs:67-83` | not exposed as dedicated API found |
 | TVP (`Array(T)`/`Array(Tuple)` + `arrayJoin`) | yes | no | `ClickHouseDialect.cs:48` | no TVP support |
-| Stored procedures / bulk copy / transactions / LOB streaming | no | no | `ClickHouseDialect.cs:56,377`; `docs/providers/clickhouse.md:236` | same engine limits |
+| Stored procedures / bulk copy / transactions / LOB streaming | no | no | `ClickHouseDialect.cs:56,377`; `docs/connecting-providers/clickhouse.md:236` | same engine limits |
 
 Net: **nextorm leads decisively** — linq2db's public ClickHouse-specific surface is essentially
 `AsClickHouse` (`ClickHouseSpecificExtensions.cs`) plus hints (`ClickHouseHints.cs`/generated), while
@@ -250,7 +250,7 @@ procedures, generic CTAS/temp tables, index/query hints, named windows.
   impossibility: any construct remains expressible via raw SQL / `Sql.Ext` / `Sql.Function`. The claim
   is about dedicated API width.
 - Some nextorm entries (distributed ClickHouse table functions) are declared and gated but not exercised
-  end-to-end by SQL-generation tests; `docs/guide/provider-specific/clickhouse.md:258-260` marks the
+  end-to-end by SQL-generation tests; `docs/guide/provider-specific-sql/clickhouse.md:258-260` marks the
   distributed ones out of scope.
 - linq2db is pinned to `master` at commit `5dfadd7eccb99fe18b6b2195897d21103f897eba`; its provider
   surfaces evolve.

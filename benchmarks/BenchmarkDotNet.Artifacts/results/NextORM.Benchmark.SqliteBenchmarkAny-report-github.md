@@ -9,6 +9,6 @@ Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3
 LaunchCount=1  WarmupCount=3  Categories=acceptance  
 
 ```
-| Method         | Mean     | Error     | StdDev    | Gen0    | Allocated |
-|--------------- |---------:|----------:|----------:|--------:|----------:|
-| Nextorm_Cached | 1.954 ms | 0.3550 ms | 0.0195 ms | 70.3125 |  615.7 KB |
+| Method         | Mean     | Error    | StdDev    | Gen0    | Allocated |
+|--------------- |---------:|---------:|----------:|--------:|----------:|
+| Nextorm_Cached | 2.791 ms | 1.021 ms | 0.0560 ms | 74.2188 | 615.68 KB |

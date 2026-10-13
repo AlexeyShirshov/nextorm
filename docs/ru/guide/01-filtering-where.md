@@ -2,7 +2,7 @@
 
 > Стройте предикаты SQL `WHERE` из операторов C#, проверок на null, условных выражений и параметризованных списков значений.
 
-**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md)
+**Предварительные требования:** [Запросы и проекции](../engine/index.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md)
 
 ## Обзор
 
@@ -253,7 +253,7 @@ select id from simple_entity where id = $norm_p0
 ```
 
 Параметры времени выполнения именуются `norm_p{index}`; значение `42` привязывается к `norm_p0`
-терминальным методом. См. [Повторное использование запросов: cache и Prepare](../infrastructure/01-query-reuse-and-caching.md)
+терминальным методом. См. [Повторное использование запросов: cache и Prepare](../engine/03-plan-cache-and-reuse.md)
 для правил времени жизни.
 
 Захваченная локальная переменная регистрируется **один раз на утверждение**, сколько бы раз она ни
@@ -364,7 +364,7 @@ select id from complex_entity where global in (@p0, @p1)
 Отрицание через `!` в C# даёт `GLOBAL NOT IN`. Предикат требует
 [`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates) и доступен только
 в ClickHouse; остальные провайдеры и контекст in-memory выбрасывают `NotSupportedException`.
-Полный каталог — в разделе [Специфичный для провайдеров SQL](provider-specific/overview.md).
+Полный каталог — в разделе [Специфичный для провайдеров SQL](provider-specific-sql/overview.md).
 
 ## Lookup по захваченной коллекции (`dict[column]`)
 
@@ -492,11 +492,11 @@ SQLite и завершаются ошибкой при выполнении оп
 
 ## См. также
 
-* [Запросы и проекции](../querying/index.md)
+* [Запросы и проекции](../engine/index.md)
 * [Сортировка и постраничная выборка](04-sorting-and-paging.md)
 * [Скалярные функции](../scalar-functions/index.md)
 * [Подзапросы](05-subqueries.md)
-* [Специфичный для провайдеров SQL](provider-specific/overview.md)
+* [Специфичный для провайдеров SQL](provider-specific-sql/overview.md)
 * [Ограничения и возможности вне области охвата](../advanced/limitations.md)
 
 ---

@@ -6,7 +6,8 @@
 > [#212](https://github.com/AlexeyShirshov/nextorm/issues/212) (E4 nested),
 > [#213](https://github.com/AlexeyShirshov/nextorm/issues/213) (E5 JoinInto-остаток).
 > Milestone **1.0.9**. Статус: дизайн согласован в штурме (Q1–Q10); E1 (стратегия, #209) **отгружен**;
-> E3/E4/E5 (#211/#212/#213) — в работе/запланированы; черновик спеки — на ревью.
+> E3 (per-parent top-N, #211) и E4 (nested level 2+, #212) **отгружены**; E5 (#213) — запланирован;
+> черновик спеки — на ревью.
 
 > **Граница (Q1).** Спека — **builder-only**. IR-путь #20 (`IQueryable → IR → QueryCommand/QueryDefinition`,
 > `docs/superpowers/specs/2026-10-04-linq-provider-roadmap-design.md:71,83`) проектируется независимо;
@@ -101,7 +102,7 @@ ctx.From<Customer>()
 - **Режим (Q6.1):** единый на весь граф; per-level override режима не входит в этот цикл.
 - **Стратегия уровня (Q8.b):** nested в `Split` и `Single`, где выразимо; иначе fail-closed.
 - **Ordering/limit (Q8.1):** применимы независимо на каждом уровне.
-- Уровень-1 поведение (`eager-loading.md:123-125`) не меняется; сегодня nested не honour'ится — станет поддержан.
+- Уровень-1 поведение не меняется; nested honour'ится (**E4, #212**): split и выразимый single-query, единый режим на граф, ancestor-composite идентичность, порядок/top-N на каждом уровне, fail-closed на невыразимые формы (неподдерживаемая форма ребёнка, вложенный per-parent пейджинг, потолок арности проекции, конфликт режима, цикл).
 
 ## 6. JoinInto-остаток (E5)
 
