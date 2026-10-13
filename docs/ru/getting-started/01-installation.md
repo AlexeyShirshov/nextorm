@@ -10,13 +10,18 @@ NextORM разделён на небольшой основной пакет, н
 
 * `nextorm` (сборка `nextorm.core`) содержит построитель и компилятор запросов, метаданные сущностей,
   вспомогательные методы внедрения зависимостей, кэш планов **и провайдер in-memory** ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext)). Он
-  ссылается на `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Logging`,
-  `Microsoft.Extensions.ObjectPool` и `OneOf`, но не на драйвер базы данных.
+  ссылается на `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Logging` и
+  `Microsoft.Extensions.ObjectPool`, но не на драйвер базы данных.
 * `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb` и
   `nextorm.clickhouse` добавляют каждый свой конкретный контекст
   ([`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext), [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext), [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext), [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext),
   [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext)) и расширение регистрации `Use…`.
   Пакеты провайдеров транзитивно зависят от `nextorm`.
+
+> **Примечание:** `nextorm` больше не ссылается на `OneOf`. Эта зависимость не использовалась
+> и была удалена, поэтому `OneOf` больше не предоставляется транзитивно. Если ваш код
+> использовал типы `OneOf`, ранее доступные через `nextorm`, добавьте прямую ссылку
+> `PackageReference` на `OneOf` в свой проект.
 
 Все текущие релизы являются пререлизами, поэтому в каждой команде установки
 нужно явно разрешить пререлизные версии.

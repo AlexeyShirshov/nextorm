@@ -93,7 +93,6 @@ public sealed class FromExpression
      {
           XmlNodes = xmlNodes;
      }
-     //public OneOf<string, QueryCommand> Table { get; }
      /// <summary>The explicit table name, or <c>null</c> when the source is not a plain named table.</summary>
      public readonly string? Table;
      /// <summary>
