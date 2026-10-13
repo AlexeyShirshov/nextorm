@@ -7,7 +7,7 @@ selected_variant: pdca-dotnet
 milestone: 1.0.9
 branch: 1.0.9
 cycle_N: 1
-attempt_n: 2
+attempt_n: 3
 plan_revision_r: 2
 evidence_contract_revision_rv: 2
 plan_state: ready
@@ -18,8 +18,8 @@ prior_contract: rv=1 superseded by rv=2
 
 ## Current state
 
-- Phase: **DO complete (n=2/3) — at DO→CHECK boundary** after the CHECK-FAIL loop-back fixes. Units D-01…D-06 `done`, D-07 `blocked` (MariaDB pending-owner). rv=2 evidence manifest frozen at `artifacts/pdca/D216/rv2/manifest.json` (validated, exit 0). CHECK owns the row verdict.
-- Cycle N=1, plan revision r=2, attempt n=1, evidence contract rv=2 (rv=1 superseded).
+- Phase: **DO completion n=3/3 — CHECK n=2 FAIL (completeness gate) routed back to DO**; implementing the three missed frozen-contract obligations (pre-change baseline, unfiltered `C-BOUNDARY`, live MariaDB whole-lock). Units D-01…D-06 `done`, D-07 `blocked`. rv=2 manifest frozen at `artifacts/pdca/D216/rv2/manifest.json`. CHECK owns the final verdict.
+- Cycle N=1, plan revision r=2, attempt n=3, evidence contract rv=2 (rv=1 superseded).
 - Selected variant: `pdca-dotnet`. Single collection group → current worktree/branch `1.0.9`, no worktree/branches/merge.
 - Blocks DO: none. **R-03/MariaDB is an open owner constraint**, surfaced upward; it does not stop the executable plan (routed escalation decision).
 
@@ -31,7 +31,7 @@ prior_contract: rv=1 superseded by rv=2
 
 - Current cycle N: 1
 - Plan revision r: 2
-- Attempt n: 2
+- Attempt n: 3
 - Defect history: D216-JOIN-SRCLOCK (first/alias join source lock not attached) — observed r=2/n=1, fixed in commit `3ef11a3c`, green; D216-SS-HINT-ORDER (SQL Server `WITH (hint) AS alias` invalid) — observed r=2/n=1 via live probe, fixed in commit `1849164e`, green. D216-ALIAS-CASE (R1, Critical) — `FOR UPDATE OF "T1"` under `KeywordCase.Upper` case-folded the quoted target alias; observed r=2/n=1 CHECK, fixed r=2/n=2. D216-SS-APPLY-GLOBAL-LOCK (R2, Warning) — whole-query lock hint dropped on APPLY-join sources; observed r=2/n=1 CHECK, fixed r=2/n=2.
 
 ### DO unit states (D-01..D-04M; production surface + shared contract + provider renderers)
@@ -438,4 +438,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 2026-10-13T01:10:00Z | DO | r=2 | n=1/3 | DO complete → CHECK: frozen rv=2 manifest `artifacts/pdca/D216/rv2/manifest.json` (EV-01..EV-18, validator exit 0; EV-17 satisfied, EV-16 open/pending-owner); D-01..D-06 done, D-07 blocked; #216 OPEN | manifest artifacts/pdca/D216/rv2/manifest.json
 2026-10-13T01:30:00Z | DO | r=2 | n=2/3 | CHECK FAIL loop-back: fixed D216-ALIAS-CASE (alias case-fold under KeywordCase.Upper) and D216-SS-APPLY-GLOBAL-LOCK (APPLY source hint); slnx build 0/0; PDCA=T216 core 2 / pg 12 / mysql 7 / maria 3 / ss 5 all green; MariaDB fail-closed green | logs /tmp/fix-*.log
 2026-10-13T01:45:00Z | DO | r=2 | n=2/3 | DO complete again → CHECK: boundary re-run (core 2/pg 12/mysql 7/maria 3/ss 5/sqlite 1/ch 1; integration 9 [1 SQLite skip]; report validator exit 0); coverage line 88.7% / branch 80.8% preserved; EV case maps/exit-records/provider-inventory/perf-provenance/public-api/recon added; manifest re-validated exit 0; EV-16 open, EV-17 met | manifest artifacts/pdca/D216/rv2/manifest.json
+2026-10-13T02:00:00Z | DO | r=2 | n=3/3 | DO started (n=3): CHECK n=2 FAIL (completeness) routed back; fix stale attempt n; fulfil pre-change baseline (EV-12), unfiltered C-BOUNDARY (EV-11), live MariaDB whole-lock (EV-10/V-27) | status docs/specs/status/D216-row-locking-1.md
 ```
