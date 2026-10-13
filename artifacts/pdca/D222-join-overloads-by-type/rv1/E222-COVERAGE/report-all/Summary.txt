@@ -1,5 +1,5 @@
 Summary
-  Generated on: 10/13/2026 - 12:08:51
+  Generated on: 10/13/2026 - 12:44:26
   Parser: DynamicCodeCoverage
   Assemblies: 4
   Classes: 505
@@ -8,7 +8,7 @@ Summary
   Covered lines: 37324
   Uncovered lines: 5109
   Coverable lines: 42433
-  Total lines: 97096
+  Total lines: 97099
   Method coverage: 76.1% (4740 of 6225)
   Full method coverage: 63.1% (3930 of 6225)
   Covered methods: 4740

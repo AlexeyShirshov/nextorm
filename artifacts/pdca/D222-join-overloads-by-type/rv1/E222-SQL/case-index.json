@@ -1,0 +1,246 @@
+{
+  "row": "E222-SQL",
+  "selector": "FullyQualifiedName~TypeOnlyJoinSqlGenerationTests",
+  "providers": {
+    "sqlite": {
+      "file": "tests/nextorm.sqlite.tests/TypeOnlyJoinSqlGenerationTests.cs",
+      "cases": [
+        {
+          "test": "Join_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.sqlite.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 105
+        },
+        {
+          "test": "LeftJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.sqlite.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 139
+        },
+        {
+          "test": "RightJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.sqlite.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 173
+        },
+        {
+          "test": "FullJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.sqlite.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 207
+        },
+        {
+          "test": "ConfiguredMapping_TypeOnly_UsesConfiguredSource",
+          "file": "tests/nextorm.sqlite.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 241
+        },
+        {
+          "test": "ConventionResolved_TypeOnly_WorksWithoutRegistration",
+          "file": "tests/nextorm.sqlite.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 255
+        },
+        {
+          "test": "UnresolvableType_TypeOnly_FailsAtSameStageAsExplicit",
+          "file": "tests/nextorm.sqlite.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 266
+        }
+      ]
+    },
+    "sqlserver": {
+      "file": "tests/nextorm.sqlserver.tests/TypeOnlyJoinSqlGenerationTests.cs",
+      "cases": [
+        {
+          "test": "Join_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.sqlserver.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 105
+        },
+        {
+          "test": "LeftJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.sqlserver.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 139
+        },
+        {
+          "test": "RightJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.sqlserver.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 173
+        },
+        {
+          "test": "FullJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.sqlserver.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 207
+        },
+        {
+          "test": "ConfiguredMapping_TypeOnly_UsesConfiguredSource",
+          "file": "tests/nextorm.sqlserver.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 241
+        },
+        {
+          "test": "ConventionResolved_TypeOnly_WorksWithoutRegistration",
+          "file": "tests/nextorm.sqlserver.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 255
+        },
+        {
+          "test": "UnresolvableType_TypeOnly_FailsAtSameStageAsExplicit",
+          "file": "tests/nextorm.sqlserver.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 266
+        }
+      ]
+    },
+    "postgres": {
+      "file": "tests/nextorm.postgres.tests/TypeOnlyJoinSqlGenerationTests.cs",
+      "cases": [
+        {
+          "test": "Join_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.postgres.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 105
+        },
+        {
+          "test": "LeftJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.postgres.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 139
+        },
+        {
+          "test": "RightJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.postgres.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 173
+        },
+        {
+          "test": "FullJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.postgres.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 207
+        },
+        {
+          "test": "ConfiguredMapping_TypeOnly_UsesConfiguredSource",
+          "file": "tests/nextorm.postgres.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 241
+        },
+        {
+          "test": "ConventionResolved_TypeOnly_WorksWithoutRegistration",
+          "file": "tests/nextorm.postgres.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 255
+        },
+        {
+          "test": "UnresolvableType_TypeOnly_FailsAtSameStageAsExplicit",
+          "file": "tests/nextorm.postgres.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 266
+        }
+      ]
+    },
+    "mysql": {
+      "file": "tests/nextorm.mysql.tests/TypeOnlyJoinSqlGenerationTests.cs",
+      "cases": [
+        {
+          "test": "Join_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.mysql.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 105
+        },
+        {
+          "test": "LeftJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.mysql.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 139
+        },
+        {
+          "test": "RightJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.mysql.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 173
+        },
+        {
+          "test": "FullJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.mysql.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 207
+        },
+        {
+          "test": "ConfiguredMapping_TypeOnly_UsesConfiguredSource",
+          "file": "tests/nextorm.mysql.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 241
+        },
+        {
+          "test": "ConventionResolved_TypeOnly_WorksWithoutRegistration",
+          "file": "tests/nextorm.mysql.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 255
+        },
+        {
+          "test": "UnresolvableType_TypeOnly_FailsAtSameStageAsExplicit",
+          "file": "tests/nextorm.mysql.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 266
+        }
+      ]
+    },
+    "mariadb": {
+      "file": "tests/nextorm.mariadb.tests/TypeOnlyJoinSqlGenerationTests.cs",
+      "cases": [
+        {
+          "test": "Join_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.mariadb.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 105
+        },
+        {
+          "test": "LeftJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.mariadb.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 139
+        },
+        {
+          "test": "RightJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.mariadb.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 173
+        },
+        {
+          "test": "FullJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.mariadb.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 207
+        },
+        {
+          "test": "ConfiguredMapping_TypeOnly_UsesConfiguredSource",
+          "file": "tests/nextorm.mariadb.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 241
+        },
+        {
+          "test": "ConventionResolved_TypeOnly_WorksWithoutRegistration",
+          "file": "tests/nextorm.mariadb.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 255
+        },
+        {
+          "test": "UnresolvableType_TypeOnly_FailsAtSameStageAsExplicit",
+          "file": "tests/nextorm.mariadb.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 266
+        }
+      ]
+    },
+    "clickhouse": {
+      "file": "tests/nextorm.clickhouse.tests/TypeOnlyJoinSqlGenerationTests.cs",
+      "cases": [
+        {
+          "test": "Join_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.clickhouse.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 105
+        },
+        {
+          "test": "LeftJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.clickhouse.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 139
+        },
+        {
+          "test": "RightJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.clickhouse.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 173
+        },
+        {
+          "test": "FullJoin_TypeOnly_EqualsExplicit_AtEveryReceiverArity",
+          "file": "tests/nextorm.clickhouse.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 207
+        },
+        {
+          "test": "ConfiguredMapping_TypeOnly_UsesConfiguredSource",
+          "file": "tests/nextorm.clickhouse.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 241
+        },
+        {
+          "test": "ConventionResolved_TypeOnly_WorksWithoutRegistration",
+          "file": "tests/nextorm.clickhouse.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 255
+        },
+        {
+          "test": "UnresolvableType_TypeOnly_FailsAtSameStageAsExplicit",
+          "file": "tests/nextorm.clickhouse.tests/TypeOnlyJoinSqlGenerationTests.cs",
+          "line": 266
+        }
+      ]
+    }
+  }
+}

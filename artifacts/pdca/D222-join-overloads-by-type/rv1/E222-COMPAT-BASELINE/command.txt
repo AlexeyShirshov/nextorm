@@ -1,0 +1,5 @@
+dotnet
+build
+/tmp/opencode/t222-base-probe/Probe.csproj
+-c
+Debug

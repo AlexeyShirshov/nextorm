@@ -369,9 +369,10 @@ var rows = dataContext.From<ISimpleEntity>()
 
 `Join<TJoinEntity>`, `LeftJoin<TJoinEntity>`, `RightJoin<TJoinEntity>` and `FullJoin<TJoinEntity>` take
 the same `predicate` and optional `options` as their source-explicit counterparts and forward them
-unchanged (the `options` callback is invoked once per call). The type-only call is equivalent to the
-explicit `dataContext.From<TJoinEntity>()` form: the joined source is resolved in the same context
-(configured mapping first, then convention/metadata) and produces the same SQL, AST and rows.
+unchanged (the `options` callback is invoked once per call). For a **non-null** predicate the
+type-only call is equivalent to the explicit `dataContext.From<TJoinEntity>()` form: the joined source is
+resolved in the same context (configured mapping first, then convention/metadata) and produces the same
+SQL, AST and rows. A `null` predicate is the one deliberate difference (see below).
 
 The source-less form is available on every receiver arity, so a chain can be built entirely by type:
 
@@ -392,19 +393,30 @@ var sql = dataContext.From<ISimpleEntity>()
 * **Untyped lambda without an inferable type is a compile error.** `Join((a, b) => …)` cannot infer
   `TJoinEntity` from its parameters and does not fall through to another overload; pass the type argument
   or type the lambda.
-* **`null` condition.** A `null` predicate is rejected with `ArgumentNullException` before any source
-  resolution, on every receiver and operator — the same fail-closed guard as the source-explicit form.
-* **Invalid all-null pair.** The untyped all-`null` pair `joined.Join<T>(null, null)` keeps compiling (one
-  overload wins the argument-pair resolution); it is invalid input anyway, and no new type-inference
-  behaviour is promised for it. Use a typed argument to state the intent.
+* **`null` condition.** A `null` predicate passed to a source-less overload is rejected with
+  `ArgumentNullException` before any source resolution, on every receiver and operator. This is a
+  deliberate difference from the source-explicit form, **not** parity:
+  `Join(dataContext.From<TJoinEntity>(), null)` is accepted (`JoinCore` takes a nullable `LambdaExpression`),
+  so a null-condition join is expressible only through the explicit-source form. The equivalence statement
+  above therefore covers non-null predicates only.
+* **Invalid all-null pair.** The untyped all-`null` pair `joined.Join<T>(null, null)` compiles: overload
+  resolution binds it to the pre-existing two-argument
+  `Join<TJoinEntity>(Cte<TJoinEntity>, Expression<…>)` overload, which then rejects the null CTE with
+  `ArgumentNullException` (`Parameter 'cte'`). This is not a new ambiguity introduced by the source-less
+  overloads; use a typed argument to state the intent.
 
 ### Scope
 
 The source-less form is limited to the four predicate-based operators. `CrossJoin`, `CrossApply` and
 `OuterApply` have no predicate and are **not** provided source-less; a source-less `EntityBuilder` over a
 raw table (`From("table")`) is likewise **not** provided. The form is available on the `EntityBuilder<T>`
-receiver (arity 2) and on `JoinedEntityBuilder<T1..Tn>` receivers with arity 2–7 (resulting arity 3–8);
-terminal arity 8 has no further join, so no source-less overload exists there.
+receiver (arity 2) and on `JoinedEntityBuilder<T1..Tn>` receivers with arity 2–7 (resulting arity 3–8).
+**No new** source-less overload is *declared* on the terminal `JoinedEntityBuilder<T1..T8>` — that is the
+flat arity-chain scope bound, which stops at arity 8. It is **not** a compile-time rejection: the terminal
+builder still inherits the generic-base `EntityBuilder<Projection<T1..T8>>` members, so a further
+source-less join (like a further source-explicit join) *does* compile, treating the accumulated eight-table
+projection as `Item1`. Use `As`/`From(query)` to name the projection when the flat chain is no longer the
+right shape.
 
 ## Cross join
 

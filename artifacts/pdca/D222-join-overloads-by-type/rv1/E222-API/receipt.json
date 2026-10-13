@@ -4,7 +4,7 @@
   "task": "T222",
   "issue": "#222",
   "cwd": "/home/alex/sources/nextorm",
-  "tree_revision": "535fb429",
+  "tree_revision": "b1b44438 + CHECK#1 corrective (current tree)",
   "command": [
     "roslynq",
     "nextorm.slnx",

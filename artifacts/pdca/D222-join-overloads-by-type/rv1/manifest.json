@@ -1,6 +1,6 @@
 {
   "task": "T222 / #222",
-  "tree": "branch 1.0.9, base 4fbb603b, HEAD 535fb429 (docs/evidence commit follows)",
+  "tree": "branch 1.0.9, base 4fbb603b, HEAD b1b44438 + CHECK#1 corrective (uncommitted)",
   "status_file": "docs/specs/status/D222-join-overloads-by-type-1.md",
   "contract_rv": 1,
   "required_rows": [
@@ -8,13 +8,15 @@
     "E222-API",
     "E222-BUILD",
     "E222-COMPAT",
+    "E222-COMPAT-BASELINE",
     "E222-CORE",
     "E222-SQL",
     "E222-INTEGRATION",
     "E222-COVERAGE",
     "E222-DOCS",
     "E222-DESIGN",
-    "E222-MUTATION"
+    "E222-MUTATION",
+    "E222-CHECK"
   ],
   "rows": [
     {
@@ -85,6 +87,29 @@
           "kind": "log",
           "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COMPAT/stdout.log",
           "exit": 0
+        },
+        {
+          "kind": "case-index",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COMPAT/case-index.json"
+        }
+      ]
+    },
+    {
+      "id": "E222-COMPAT-BASELINE",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COMPAT-BASELINE/stdout.log",
+          "exit": 0
+        },
+        {
+          "kind": "comparison",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/compatibility/allnull-baseline/baseline-comparison.md"
+        },
+        {
+          "kind": "baseline-overloads",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/compatibility/allnull-baseline/baseline-overloads.txt"
         }
       ]
     },
@@ -105,6 +130,10 @@
         {
           "kind": "coverage",
           "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/core.xml"
+        },
+        {
+          "kind": "case-index",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-CORE/case-index.json"
         }
       ]
     },
@@ -121,6 +150,10 @@
           "kind": "log",
           "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL/stdout.log",
           "exit": 0
+        },
+        {
+          "kind": "case-index",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL/case-index.json"
         },
         {
           "kind": "receipt",
@@ -171,6 +204,10 @@
         {
           "kind": "coverage",
           "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/integration.xml"
+        },
+        {
+          "kind": "container-count",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-INTEGRATION/container-count.txt"
         }
       ]
     },
@@ -189,16 +226,12 @@
           "exit": 0
         },
         {
-          "kind": "merged",
-          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/merged.xml"
+          "kind": "thresholds",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/thresholds.json"
         },
         {
           "kind": "summary",
           "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report-all-cobertura/Summary.txt"
-        },
-        {
-          "kind": "summary",
-          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report/Summary.txt"
         }
       ]
     },
@@ -251,6 +284,11 @@
           "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-MUTATION/mutation-disposition.md"
         }
       ]
+    },
+    {
+      "id": "E222-CHECK",
+      "status": "open",
+      "reason": "CHECK #1 FAIL. Open IDs: FIX1 (docs overstated null parity), FIX2 (false terminal-arity-8 compile-rejection claim; inherited reachability), FIX4/5/6 (options parity, V24 baseline, V25 value-type), FIX7 (provenance-inconsistent receipts, missing thresholds.json/case-indexes, integration count 4 vs 5). Corrective round n=2/3 applied and re-run on the current tree; re-gather ledger: the flagged rows were re-executed (BASE/API/DESIGN/COVERAGE; CORE 29/29; six SQL 7/7; COMPAT 0; build 0/0) and the evidence receipts/manifest refreshed."
     }
   ]
 }

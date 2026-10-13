@@ -12,6 +12,11 @@ public class ArrayTestEntity
     public string[] Tags { get; set; } = [];
 }
 
+public struct JoinStructEntity
+{
+    public int Id { get; set; }
+}
+
 public class InMemoryJoinTests
 {
     private readonly InMemoryRepository _sut;
@@ -524,10 +529,11 @@ public class InMemoryJoinTests
     }
 
     [Fact]
-    public async Task TestTypeOnlyJoin_Options_OmittedNullAndCallback()
+    public async Task TestTypeOnlyJoin_Options_ParityWithExplicitSource()
     {
         _sut.SimpleEntity.WithData([new SimpleEntity { Id = 1 }, new SimpleEntity { Id = 2 }]);
 
+        // omitted == explicit null == explicit-source oracle (result parity).
         var omitted = _sut.SimpleEntity.Join<SimpleEntity>((t1, t2) => t1.Id == t2.Id + 1);
         var explicitNull = _sut.SimpleEntity.Join<SimpleEntity>((t1, t2) => t1.Id == t2.Id + 1, null);
         var oracle = _sut.SimpleEntity.Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id + 1);
@@ -535,10 +541,28 @@ public class InMemoryJoinTests
         (await IdsAsync(omitted, p => p.Item1.Id)).Should().Equal(await IdsAsync(oracle, p => p.Item1.Id));
         (await IdsAsync(explicitNull, p => p.Item1.Id)).Should().Equal(await IdsAsync(oracle, p => p.Item1.Id));
 
-        var calls = 0;
-        var withOptions = _sut.SimpleEntity.Join<SimpleEntity>((t1, t2) => t1.Id == t2.Id + 1, _ => calls++);
-        calls.Should().Be(1, "the type-only overload must invoke the options callback once, like the explicit oracle");
-        (await IdsAsync(withOptions, p => p.Item1.Id)).Should().Equal(await IdsAsync(oracle, p => p.Item1.Id));
+        // V18: BOTH the type-only form and the explicit oracle invoke the options callback exactly once.
+        var typeOnlyCalls = 0;
+        var explicitCalls = 0;
+        var typeOnlyWithOptions = _sut.SimpleEntity.Join<SimpleEntity>((t1, t2) => t1.Id == t2.Id + 1, _ => typeOnlyCalls++);
+        var explicitWithOptions = _sut.SimpleEntity.Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id + 1, _ => explicitCalls++);
+        typeOnlyCalls.Should().Be(1, "the source-less overload must invoke the options callback once");
+        explicitCalls.Should().Be(1, "the explicit-source oracle must invoke the options callback once");
+        (await IdsAsync(typeOnlyWithOptions, p => p.Item1.Id)).Should().Equal(await IdsAsync(explicitWithOptions, p => p.Item1.Id));
+
+        // A222-02: the options path builds the same AST/join shape in both forms.
+        var typeOnlyAst = _sut.SimpleEntity.Join<SimpleEntity>((t1, t2) => t1.Id == t2.Id + 1, j => j.WithStrictness(JoinStrictness.Any));
+        var explicitAst = _sut.SimpleEntity.Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id + 1, j => j.WithStrictness(JoinStrictness.Any));
+        typeOnlyAst.Joins.Should().HaveCount(1);
+        explicitAst.Joins.Should().HaveCount(1);
+        var ta = typeOnlyAst.Joins![0];
+        var ea = explicitAst.Joins![0];
+        ta.JoinType.Should().Be(ea.JoinType);
+        ta.Strictness.Should().Be(ea.Strictness);
+        ta.Strictness.Should().Be(JoinStrictness.Any);
+        ta.IsGlobal.Should().Be(ea.IsGlobal);
+        ta.JoinHint.Should().Be(ea.JoinHint);
+        ta.TableHints.Should().BeEquivalentTo(ea.TableHints);
     }
 
     [Fact]
@@ -549,6 +573,39 @@ public class InMemoryJoinTests
         var act = () => _sut.SimpleEntity.Join<SimpleEntity>((t1, t2) => t1.Id == t2.Id + 1, _ => throw sentinel);
 
         act.Should().Throw<InvalidOperationException>().WithMessage("t222-sentinel-options");
+    }
+
+    [Fact]
+    public void TestTypeOnlyJoin_AllNullPair_BindsToPreExistingCteOverload()
+    {
+        // V24/CHECK#1 FIX3: the untyped all-null pair is NOT ambiguous; it binds to the pre-existing
+        // two-argument Cte<T> overload, which rejects the null CTE (Parameter 'cte').
+        var joined = _sut.SimpleEntity.Join(_sut.SimpleEntity, (a, b) => a.Id == b.Id);
+
+        var ex = Assert.Throws<ArgumentNullException>(() => joined.Join<SimpleEntity>(null!, null!));
+
+        ex.ParamName.Should().Be("cte");
+    }
+
+    [Fact]
+    public async Task TestTypeOnlyJoin_ValueTypeEntity_PairedWithExplicitSource()
+    {
+        // V25: the existing API carries no `where TJoinEntity : class` constraint
+        // (EntityBuilder<TEntity> is declared constraint-free), so a value-type join target is allowed.
+        // This is the paired runtime test branch: type-only vs explicit-source, same rows.
+        _sut.SimpleEntity.WithData([new SimpleEntity { Id = 1 }, new SimpleEntity { Id = 2 }]);
+        _sut.DataProvider.From<JoinStructEntity>().WithData([new JoinStructEntity { Id = 1 }, new JoinStructEntity { Id = 2 }]);
+
+        var typeOnly = _sut.SimpleEntity.Join<JoinStructEntity>((s, v) => s.Id == v.Id);
+        var oracle = _sut.SimpleEntity.Join(_sut.DataProvider.From<JoinStructEntity>(), (s, v) => s.Id == v.Id);
+
+        await AssertSameIds(typeOnly, oracle, p => p.Item1.Id);
+
+        var rows = new List<(int Left, int Right)>();
+        await foreach (var r in typeOnly.Select(p => new { Left = p.Item1.Id, Right = p.Item2.Id }).ToAsyncEnumerable())
+            rows.Add((r.Left, r.Right));
+        rows.Should().NotBeEmpty("a value-type join target must materialise on the matched side");
+        rows.Should().OnlyContain(r => r.Left == r.Right);
     }
 
     [Fact]

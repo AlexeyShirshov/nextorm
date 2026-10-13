@@ -15,7 +15,9 @@
       "kind": "negative",
       "project": "negative/UntypedLambdaFixture.csproj",
       "expect": "failure",
-      "expected_diagnostics": ["CS0411"]
+      "expected_diagnostics": [
+        "CS0411"
+      ]
     },
     {
       "id": "T222-COMPAT-ALLNULL",
@@ -24,5 +26,15 @@
       "expect": "success",
       "expected_diagnostics": []
     }
-  ]
+  ],
+  "baseline_comparison": {
+    "probe": "compile the untyped all-null pair against the pre-T222 surface and against HEAD",
+    "baseline_commit": "4fbb603b",
+    "baseline_case": "E222-COMPAT-BASELINE",
+    "baseline_result": "exit 0 (compiles; Cte overload was the only 2-arg candidate then too)",
+    "head_case": "T222-COMPAT-ALLNULL",
+    "head_result": "exit 0 (compiles)",
+    "bound_overload": "pre-existing Join<TJoinEntity>(Cte<TJoinEntity>, Expression<...>) (Parameter 'cte')",
+    "conclusion": "baseline parity; no new ambiguity"
+  }
 }

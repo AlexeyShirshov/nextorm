@@ -1,7 +1,10 @@
  M artifacts/pdca/D222-join-overloads-by-type/rv1/E222-BASE/git-status-short.txt
  M artifacts/pdca/D222-join-overloads-by-type/rv1/E222-BASE/stdout.log
+ M artifacts/pdca/D222-join-overloads-by-type/rv1/compatibility/manifest.json
+ M artifacts/pdca/D222-join-overloads-by-type/rv1/coverage-gate.sh
  M docs/assets/diagrams/nextorm-command-execution.svg
  M docs/guide/02-joins.md
  M docs/ru/assets/diagrams/nextorm-command-execution.svg
  M docs/ru/guide/02-joins.md
- M docs/specs/status/D53-public-api-freeze-1.md
+ M src/nextorm.core/Builders/Joins/JoinedEntityBuilder.cs
+ M tests/nextorm.core.tests/InMemoryJoinTests.cs

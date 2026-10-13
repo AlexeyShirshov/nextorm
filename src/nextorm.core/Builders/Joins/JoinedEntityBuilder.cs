@@ -1724,10 +1724,13 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
 /// <summary>
 /// Terminal join builder for the maximum supported join arity, eight tables (T1..Item8).
 /// <para>
-/// It deliberately exposes no further <c>Join</c>/<c>LeftJoin</c>/<c>RightJoin</c>/<c>FullJoin</c>/
-/// <c>CrossJoin</c> methods and its projection
+/// It declares no further <c>Join</c>/<c>LeftJoin</c>/<c>RightJoin</c>/<c>FullJoin</c>/<c>CrossJoin</c>
+/// methods and its projection
 /// (<see cref="Projection{T1, T2, T3, T4, T5, T6, T7, T8}"/>) is not <see cref="IExtendableProjection"/>,
-/// so chaining a ninth join is rejected at compile time.
+/// so the flat typed arity chain stops at eight. That is a scope bound, not a compile-time rejection:
+/// the inherited generic-base <c>EntityBuilder&lt;Projection&lt;T1..T8&gt;&gt;</c> members still compile, so a
+/// further source-less (and a further source-explicit) join is reachable, wrapping the accumulated
+/// eight-table projection as <c>Item1</c>.
 /// </para>
 /// </summary>
 /// <summary>Join builder over the maximum supported eight-table projection.</summary>

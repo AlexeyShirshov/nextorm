@@ -1,0 +1,57 @@
+{
+  "row": "E222-CORE",
+  "file": "tests/nextorm.core.tests/InMemoryJoinTests.cs",
+  "selector": "FullyQualifiedName~InMemoryJoinTests",
+  "cases": [
+    {
+      "test": "TestTypeOnlyInnerJoin_EquivalentToExplicit_AtEveryReceiverArity",
+      "file": "tests/nextorm.core.tests/InMemoryJoinTests.cs",
+      "line": 348
+    },
+    {
+      "test": "TestTypeOnlyLeftJoin_EquivalentToExplicit_AtEveryReceiverArity",
+      "file": "tests/nextorm.core.tests/InMemoryJoinTests.cs",
+      "line": 382
+    },
+    {
+      "test": "TestTypeOnlyRightJoin_EquivalentToExplicit_AtEveryReceiverArity",
+      "file": "tests/nextorm.core.tests/InMemoryJoinTests.cs",
+      "line": 416
+    },
+    {
+      "test": "TestTypeOnlyFullJoin_EquivalentToExplicit_AtEveryReceiverArity",
+      "file": "tests/nextorm.core.tests/InMemoryJoinTests.cs",
+      "line": 451
+    },
+    {
+      "test": "TestTypeOnlyJoin_NullPredicate_ThrowsBeforeSourceResolution_OnEveryReceiverAndKind",
+      "file": "tests/nextorm.core.tests/InMemoryJoinTests.cs",
+      "line": 486
+    },
+    {
+      "test": "TestTypeOnlyJoin_Options_ParityWithExplicitSource",
+      "file": "tests/nextorm.core.tests/InMemoryJoinTests.cs",
+      "line": 532
+    },
+    {
+      "test": "TestTypeOnlyJoin_Options_SentinelException_NotSwallowed",
+      "file": "tests/nextorm.core.tests/InMemoryJoinTests.cs",
+      "line": 569
+    },
+    {
+      "test": "TestTypeOnlyJoin_AllNullPair_BindsToPreExistingCteOverload",
+      "file": "tests/nextorm.core.tests/InMemoryJoinTests.cs",
+      "line": 579
+    },
+    {
+      "test": "TestTypeOnlyJoin_ValueTypeEntity_PairedWithExplicitSource",
+      "file": "tests/nextorm.core.tests/InMemoryJoinTests.cs",
+      "line": 591
+    },
+    {
+      "test": "TestTypeOnlyOuterJoins_UnmatchedSides_AreNull",
+      "file": "tests/nextorm.core.tests/InMemoryJoinTests.cs",
+      "line": 612
+    }
+  ]
+}

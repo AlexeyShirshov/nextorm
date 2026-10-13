@@ -1,0 +1,26 @@
+{
+  "row": "E222-COMPAT",
+  "runner": "bash artifacts/pdca/D222-join-overloads-by-type/rv1/compatibility/run.sh",
+  "cases": [
+    {
+      "id": "T222-COMPAT-POS",
+      "project": "artifacts/pdca/D222-join-overloads-by-type/rv1/compatibility/positive/PositiveFixture.csproj",
+      "expect": "success",
+      "expected_diagnostics": []
+    },
+    {
+      "id": "T222-COMPAT-NEG-INFER",
+      "project": "artifacts/pdca/D222-join-overloads-by-type/rv1/compatibility/negative/UntypedLambdaFixture.csproj",
+      "expect": "failure",
+      "expected_diagnostics": [
+        "CS0411"
+      ]
+    },
+    {
+      "id": "T222-COMPAT-ALLNULL",
+      "project": "artifacts/pdca/D222-join-overloads-by-type/rv1/compatibility/allnull/AllNullFixture.csproj",
+      "expect": "success",
+      "expected_diagnostics": []
+    }
+  ]
+}

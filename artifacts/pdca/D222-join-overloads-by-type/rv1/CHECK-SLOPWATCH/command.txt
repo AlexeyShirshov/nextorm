@@ -1,0 +1,9 @@
+dotnet
+tool
+run
+slopwatch
+analyze
+-d
+.
+--fail-on
+warning

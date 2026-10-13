@@ -40,8 +40,8 @@
         "Debug"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 1,
       "note": "affected core.tests build"
@@ -58,8 +58,8 @@
         "FullyQualifiedName~InMemoryJoinTests"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 27,
       "note": "inner InMemoryJoinTests (27 selected, 0 failed)"
@@ -73,8 +73,8 @@
         "Debug"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 1,
       "note": "affected nextorm.sqlite.tests build"
@@ -91,8 +91,8 @@
         "FullyQualifiedName~TypeOnlyJoinSqlGenerationTests"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 7,
       "note": "inner TypeOnlyJoinSqlGenerationTests on sqlite (7 selected, 0 failed)"
@@ -106,8 +106,8 @@
         "Debug"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 1,
       "note": "affected nextorm.sqlserver.tests build"
@@ -124,8 +124,8 @@
         "FullyQualifiedName~TypeOnlyJoinSqlGenerationTests"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 7,
       "note": "inner TypeOnlyJoinSqlGenerationTests on sqlserver (7 selected, 0 failed)"
@@ -139,8 +139,8 @@
         "Debug"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 1,
       "note": "affected nextorm.postgres.tests build"
@@ -157,8 +157,8 @@
         "FullyQualifiedName~TypeOnlyJoinSqlGenerationTests"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 7,
       "note": "inner TypeOnlyJoinSqlGenerationTests on postgres (7 selected, 0 failed)"
@@ -172,8 +172,8 @@
         "Debug"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 1,
       "note": "affected nextorm.mysql.tests build"
@@ -190,8 +190,8 @@
         "FullyQualifiedName~TypeOnlyJoinSqlGenerationTests"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 7,
       "note": "inner TypeOnlyJoinSqlGenerationTests on mysql (7 selected, 0 failed)"
@@ -205,8 +205,8 @@
         "Debug"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 1,
       "note": "affected nextorm.mariadb.tests build"
@@ -223,8 +223,8 @@
         "FullyQualifiedName~TypeOnlyJoinSqlGenerationTests"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 7,
       "note": "inner TypeOnlyJoinSqlGenerationTests on mariadb (7 selected, 0 failed)"
@@ -238,8 +238,8 @@
         "Debug"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 1,
       "note": "affected nextorm.clickhouse.tests build"
@@ -256,8 +256,8 @@
         "FullyQualifiedName~TypeOnlyJoinSqlGenerationTests"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 7,
       "note": "inner TypeOnlyJoinSqlGenerationTests on clickhouse (7 selected, 0 failed)"
@@ -271,8 +271,8 @@
         "Debug"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 1,
       "note": "integration project compile check"
@@ -286,8 +286,8 @@
         "Debug"
       ],
       "phase": "inner",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 1,
       "note": "compat positive fixture build"
@@ -301,8 +301,8 @@
         "Debug"
       ],
       "phase": "boundary",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 1,
       "note": "boundary solution build (0 Warning(s) / 0 Error(s))"
@@ -317,8 +317,8 @@
         "Debug"
       ],
       "phase": "boundary",
-      "source_revision": "535fb429+t222-part2b",
-      "artifact_revision": "535fb429+t222-part2b",
+      "source_revision": "b1b44438+t222-corr",
+      "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
       "selected_count": 11162,
       "note": "single comprehensive boundary test sweep (executed as the target of E222-COVERAGE-ALL's dotnet-coverage collect): 11162 total, 0 failed, 198 skipped"
@@ -349,14 +349,11 @@
     ]
   },
   "coverage": {
-    "contract_subset_4xml_line": "82.6%",
-    "full_sweep_8xml_line": "87.9%",
-    "ci_cobertura_all_tests_line": "88.7%",
-    "ci_cobertura_all_tests_branch": "80.7%",
+    "measured": "ci_cobertura_line=88.7 branch=80.7; full_sweep_xml_line=87.9; contract_subset_xml_line=82.6",
     "thresholds": {
       "line": 85,
       "branch": 75
     },
-    "note": "the contract's -f xml subset omits test projects that cover the in-scope assemblies and carries no branch data; the authoritative CI-comparable numbers come from the whole-solution cobertura run"
+    "gate": "cobertura path (see E222-COVERAGE/thresholds.json)"
   }
 }

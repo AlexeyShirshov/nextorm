@@ -1,0 +1,19 @@
+{
+  "row_id": "CORR-CORE",
+  "rv": 1,
+  "task": "T222",
+  "issue": "#222",
+  "cwd": "/home/alex/sources/nextorm",
+  "tree_revision": "b1b444388d5e5a17c733ccfdaa08bf3f45b63956",
+  "branch": "1.0.9",
+  "started_utc": "2026-10-13T07:42:18Z",
+  "finished_utc": "2026-10-13T07:42:20Z",
+  "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~InMemoryJoinTests"],
+  "exit_code": 0,
+  "artifacts": {
+    "command": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/CORR-CORE/command.txt",
+    "stdout": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/CORR-CORE/stdout.log",
+    "stderr": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/CORR-CORE/stderr.log",
+    "exitcode": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/CORR-CORE/exitcode.txt"
+  }
+}

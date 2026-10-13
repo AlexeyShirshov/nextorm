@@ -1,18 +1,18 @@
 Summary
-  Generated on: 10/13/2026 - 12:08:47
+  Generated on: 10/13/2026 - 12:44:22
   Parser: DynamicCodeCoverage
   Assemblies: 4
   Classes: 504
   Files: 330
   Line coverage: 82.6%
-  Covered lines: 35052
-  Uncovered lines: 7381
+  Covered lines: 35053
+  Uncovered lines: 7380
   Coverable lines: 42433
-  Total lines: 97096
+  Total lines: 97099
   Method coverage: 71.3% (4439 of 6225)
-  Full method coverage: 57.4% (3578 of 6225)
+  Full method coverage: 57.4% (3579 of 6225)
   Covered methods: 4439
-  Fully covered methods: 3578
+  Fully covered methods: 3579
   Total methods: 6225
 
 nextorm.core                                                                      82.5%
@@ -509,11 +509,11 @@ nextorm.sqlite.dll                                                              
   NextORM.Sqlite.SqliteStringFormats                                              96.8%
   NextORM.Sqlite.SqliteTupleRenderer                                               100%
 
-nextorm.sqlserver                                                                 82.7%
+nextorm.sqlserver                                                                 82.8%
   NextORM.SqlServer.SqlServerDataContext                                          67.4%
   NextORM.SqlServer.SqlServerDataContext.PeekedRecordSequence                        0%
   NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions                     0%
-  NextORM.SqlServer.SqlServerDialect                                              96.9%
+  NextORM.SqlServer.SqlServerDialect                                              97.2%
   NextORM.SqlServer.SqlServerEntityBuilderExtensions                              94.8%
   NextORM.SqlServer.SqlServerIifRenderer                                           100%
   NextORM.SqlServer.SqlServerIndexHintRenderer                                    77.7%
