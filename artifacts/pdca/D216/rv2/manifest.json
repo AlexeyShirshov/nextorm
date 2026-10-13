@@ -359,8 +359,17 @@
     },
     {
       "id": "EV-15",
-      "status": "open",
-      "reason": "CHECK completeness/row verdict (A/check/verdict.md) is the check-C01 action after freeze."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/check/verdict.md"
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/check/rows.json"
+        }
+      ]
     },
     {
       "id": "EV-16",

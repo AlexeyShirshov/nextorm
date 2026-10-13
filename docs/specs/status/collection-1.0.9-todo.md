@@ -1,4 +1,4 @@
-# Collection 1.0.9-todo
+﻿# Collection 1.0.9-todo
 
 - collection-id: `1.0.9-todo`
 - input: milestone `1.0.9` (milestone #4) — **expanded twice**: origin {#213, #212, #211, #209, #201, #53}; owner added {#215, #216, #217, #218}; owner added {#219, #221, #222, #223, #224, #225, #226, #227}. Active set: T215, T216, T217, T218, T219, T221, T222, T223, T224, T225, T226, T227 (+ T209/T211/T212/T213 done). T201 (perf) and T53 (freeze) last; T53 held.
@@ -19,7 +19,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 | T213 | #213 | JoinInto — composite keys / M:N single-query | pdca-dotnet | ready (r=1) |
 | T201 | #201 | Perf: M12 #3 — cached-path parity with LINQ to DB | pdca-dotnet | ready (r=2) |
 | T215 | #215 | убрать зависимость OneOf | pdca-dotnet | ready (r=1) |
-| T216 | #216 | row locking — FOR UPDATE vs FOR UPDATE OF | pdca-dotnet | ready (r=2, rv=2) — **owner constraint open** |
+| T216 | #216 | row locking — FOR UPDATE vs FOR UPDATE OF | pdca-dotnet | done (r=2, rv=2, n=3/3) — done-with-constraint; #216 OPEN; owner decision pending |
 | T217 | #217 | DateTimeOffset — SQL-трансляция Now/UtcNow и частей даты | pdca-dotnet | ready (r=1) |
 | T218 | #218 | SQL Server sequences (NEXT VALUE FOR), кросс-провайдерно | pdca-dotnet | ready (r=1) |
 | T53 | #53 | IF6: public API freeze (PublicApiAnalyzers + PublicAPI.*) | pdca-dotnet | ready (r=1) — **HELD by owner** |
@@ -45,7 +45,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T221 | #221 | G1 | 7 | done | done (r=1, rv=1, n=2/3) | pdca-dotnet | N=1 | r=1 | f884c52b | docs/specs/status/D221-interceptor-di-registration-1.md |
 | T222 | #222 | G1 | 8 | done | done (r=1, rv=1, n=3/3) | pdca-dotnet | N=1 | r=1 | 5856fde2 | docs/specs/status/D222-join-overloads-by-type-1.md |
 | T223 | #223 | G1 | 9 | done | done (r=1, rv=1, n=2/3) | pdca-dotnet | N=1 | r=1 | e2d749db | docs/specs/status/D223-joininto-composite-junction-sql-1.md |
-| T216 | #216 | G1 | 10 | pending | ready | pdca-dotnet | N=1 | r=2 | 1b7b9d8c | docs/specs/status/D216-row-locking-1.md |
+| T216 | #216 | G1 | 10 | done | done-with-constraint (r=2, rv=2, n=3/3) | pdca-dotnet | N=1 | r=2 | 1b7b9d8c | docs/specs/status/D216-row-locking-1.md |
 | T217 | #217 | G1 | 11 | pending | ready | pdca-dotnet | N=1 | r=1 | ee0cb743 | docs/specs/status/D217-datetimeoffset-1.md |
 | T218 | #218 | G1 | 12 | pending | ready | pdca-dotnet | N=1 | r=1 | 60d881b4 | docs/specs/status/D218-sqlserver-sequences-1.md |
 | T219 | #219 | G1 | 13 | pending | ready | pdca-dotnet | N=1 | r=1 | 4bfa5403 | docs/specs/status/D219-session-identity-functions-1.md |
@@ -62,11 +62,14 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - T222 (#222) done: variant pdca-dotnet, r=1, rv=1, n=3/3; final CHECK PASS (A222-01..07 all met). DO `5d9ff209`, `d5cc558f`, `535fb429`; corrective DO `b1b44438`, `670cb470`; final corrective `2ab0fddb`; ACT-evidence `d8e6317e`. Evidence `artifacts/pdca/D222-join-overloads-by-type/rv1/` (E222-CHECK/check-report.md; manifest+evidence validators exit 0; build 0/0; core InMemoryJoinTests 29/29; six provider TypeOnlyJoinSqlGenerationTests 7/7; coverage line 88.7 / branch 80.7; integration 3779 total/0 failed with 0 provider-unavailable skips; ninth-join probe compiles). Status `docs/specs/status/D222-join-overloads-by-type-1.md`. Follow-ups: (a) 05-subqueries EN:59/RU:61 terminology “cap/потолок” → “scope bound” — trigger docs terminology sweep; (b) V30 separate MariaDB DB infrastructure — trigger infrastructure/provider regression; (c) no Cross/Apply source-less, no type-only raw-table, no new terminal-arity-8 overload — trigger separate approved task. T53 freeze stays HELD (28 members registered, not activated). Issue #222 left OPEN. **Next pending = T223.**
 - T223 (#223) done: composite-junction M:N materializable link carrier across six providers (standalone + SingleQuery). r=1, rv=1, n=2/3; final CHECK PASS. Build 0/0; 7 project suites exit 0 (core 2456, sqlite 1672+1 opt-in skip, postgres 897, sqlserver 814, mysql 380, mariadb 265, clickhouse 662); LIVE `~JoinInto` 124/124, 0 skipped, six providers; six provider SQL-gen green; coverage line 83.4 / branch 76.0 (1.0.9 warning-only); manifest `artifacts/pdca/D223/rv1/manifest.json` 17/17 met, validator exit 0; variant matrix 29/29 test/guard, no deferred; perf scalar repeat classified noise. DO commit `d76c5ae3`; issue #223 closed. Status `docs/specs/status/D223-joininto-composite-junction-sql-1.md`. **Next pending = T216 (order 10).**
 
+- T216 (#216) done (ACT, done-with-constraint): r=2, rv=2, n=3/3; escalation decision **(A)** close in-cycle as done-with-constraint, no r+1, no product change. DO commits `4d979efc`,`3ef11a3c`,`1849164e`; corrective DO `6d22a504` (D216-ALIAS-CASE, D216-SS-APPLY-GLOBAL-LOCK); evidence `artifacts/pdca/D216/rv2/manifest.json` (EV-01..EV-18; EV-16 open). **R-03/MariaDB constraint pending owner decision** (narrow MariaDB to unsupported vs defer); **#216 kept OPEN**; **D-07 blocked**; **T53 freeze stays HELD**. Status `docs/specs/status/D216-row-locking-1.md`. **Next pending = T217 (order 11).**
+
 ## Phase decisions
 
 - **Own PLANs:** original 6 re-finalized `ready`. Expansion 1: T215/T216/T217/T218 planned `ready`; T211 re-opened to `ready (r=2)`. Expansion 2: T219/T221/T222/T223/T224/T225/T226/T227 planned `ready` (T225 re-opened r=2 after its external-docs blocker was resolved by a committed docs change; T227 re-run after an aborted attempt).
 - **ALL-barrier: re-PASSED (2nd expansion)** — every active task has a persisted `plan_state=ready` (T53 deliberately `held`; T216 carries an owner-only open constraint but its plan is `ready`). Re-cluster on the expanded set is pending before the lane resumes.
 - **Public-API candidates flagged for the held T53 freeze:** T216 adds `FromOptions`/`JoinOptions` lock members + `ILockRenderer.SupportsSourceLocks` + a new `Render` overload; T217 adds `ISqlDialect.SupportsDateTimeOffsetTranslation` + `MakeDateTimeOffsetNow` + DTO-aware `MakeDatePart`/`MakeDateAdd` overloads; T218 adds `SqlFunctions.SqlServer.next_value_for`/`nextval`; T213 adds `ISqlDialect.WrapIntegerWindowResult` (new public default interface method) + `QueryCommand.NeedsOuterJoinNullSettings` (ClickHouse scalar M:N fix); T215 changes the package graph (no surface delta); T221 adds `DataContextBuilder.AddInterceptor(Type)` + `AddInterceptor<T>()` (DI-registered interceptors; internal ctor is not a candidate). T53 stays held until the owner declares the API final.
+- **T53 freeze candidates — D216 (#216) registered (freeze stays HELD, not activated):** `FromOptions.ForUpdate()`, `FromOptions.ForUpdate(LockWaitMode)`, `FromOptions.ForShare()`, `FromOptions.ForShare(LockWaitMode)`; the same four on `JoinOptions`; `ILockRenderer.SupportsSourceLocks`; `ILockRenderer.Render(LockMode, LockWaitMode, KeywordCase, string? targetAlias)` — **10 members**, tag `#216`.
 - **Re-cluster (`planner`, expansion):** no genuine parallelism (eager/JoinInto/locking overlap `EntityBuilder`/SQL/query contracts; T216/T217/T218 overlap provider dialects; docs have external uncommitted edits). **One group G1** = `T211 → T212 → T213 → T215 → T216 → T217 → T218 → T201 → T53 (held last)`. Single group → no worktree/branch/merge. Addendum contract `cluster-1`; task contracts unchanged.
 - **Preconditions before the relevant writes (D-COLL-2/3):** establish ownership of the external dirty doc/benchmark intersections, and get the owner's T216 MariaDB decision, before T215/T216/T218 DO.
 
@@ -95,7 +98,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Blocker: — (T211 `incomplete` superseded by the owner-directed r=2 re-open; patch retained)
 - Defect id / history: —
 - Corrective-task status file: —
-- Next allowed step: resume the lane at the next pending task **T216 (#216)** (order 10). T216's open owner constraint (MariaDB `FOR UPDATE OF`) must be resolved before T216 DO.
+- Next allowed step: resume the lane at the next pending task **T217 (#217)** (order 11) — DateTimeOffset SQL translation. T216 completed (done-with-constraint); its R-03/MariaDB owner constraint stays recorded and does not block the lane; #216 remains OPEN.
 
 ## Done / Verified / Incomplete
 

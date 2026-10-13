@@ -18,7 +18,7 @@ prior_contract: rv=1 superseded by rv=2
 
 ## Current state
 
-- Phase: **DO complete (n=3/3) — ACT-prep evidence persisted** (escalation decision **(A)** close in-cycle as done-with-constraint; no r+1, no product change). Units D-01…D-06 `done`, D-07 `blocked`; **#216 stays OPEN**. rv=2 manifest `artifacts/pdca/D216/rv2/manifest.json` re-validated (exit 0).
+- Phase: **ACT complete — done-with-constraint** (escalation **(A)**: close in-cycle as done-with-constraint; no full PASS; no r+1; no product change). D-01…D-06 `done`, **D-07 `blocked`** (owner decision pending); **#216 remains OPEN**; T53 freeze HELD.
 - Cycle N=1, plan revision r=2, attempt n=3, evidence contract rv=2 (rv=1 superseded).
 - Selected variant: `pdca-dotnet`. Single collection group → current worktree/branch `1.0.9`, no worktree/branches/merge.
 - Blocks DO: none. **R-03/MariaDB is an open owner constraint**, surfaced upward; it does not stop the executable plan (routed escalation decision).
@@ -46,6 +46,14 @@ prior_contract: rv=1 superseded by rv=2
 | D-05 | done | matrix closure: focused unit/provider matrix rows, `PlanKeyUniquenessTests` (13), two-transaction integration locking (PG/MySQL/SQL Server 2 passed each; MariaDB dedicated 3 fail-closed), capability contract 5; commit `d6891104` + `1849164e` |
 | D-06 | done | EN/RU docs (8 files; committed `3247774b`), `dotnet docfx` exit 0, DO→CHECK boundary sweep (7x `PDCA=T216` + LockRendererDefault + PlanKeyUniqueness + integration), acceptance 7/0 + T216 6/0, coverage line 88.7% / branch 80.8%; boundary evidence `artifacts/pdca/D216/rv2/boundary/evidence.json` (validator exit 0) |
 | D-07 | **blocked** | original remainder: R-03/MariaDB source-level `OF` stays provisional fail-closed — **NOT PASS**; owner decision pending (narrow MariaDB to unsupported vs defer MariaDB source lock beyond 1.0.9). Evidence: `artifacts/pdca/D216/rv2/redgreen/mariadb-*.log`, `focused-mariadb.log`. **#216 stays OPEN.** |
+
+### ACT complete — done-with-constraint
+
+**Final verdict:** PASS on the executed scope; **R-03/MariaDB remains a constraint pending the owner decision; not a full PASS** (`A/check/verdict.md`, `A/check/rows.json`). Acceptance R-01…R-14: R-03 = constraint-pending-owner; R-04/R-07 conditional; R-12 provenance caveat (report Summary 88.7/80.8 vs raw Cobertura XML 88.10/80.32, both ≥ 85/75; baseline ratio 1.98 → 2.03); all others met. V-matrix: 23 clean, 6 conditional-clean (V-04/V-05/V-06/V-18/V-22/V-24), 1 deferred-constraint (V-28).
+
+**Owner options (pending, disclosed):** (i) approve narrowing MariaDB source-lock to unsupported and update #216 text/criteria, or (ii) defer MariaDB source lock beyond 1.0.9. MariaDB source lock is **fail-closed** (not a PASS).
+
+**#216 remains OPEN**; D-07 `blocked`; T53 freeze HELD. T53 candidates registered in `docs/specs/status/collection-1.0.9-todo.md` (10 members, tag `#216`): `FromOptions.ForUpdate()/ForUpdate(LockWaitMode)/ForShare()/ForShare(LockWaitMode)`, the same four on `JoinOptions`, `ILockRenderer.SupportsSourceLocks`, `ILockRenderer.Render(LockMode, LockWaitMode, KeywordCase, string? targetAlias)`.
 
 ### ACT-prep evidence persistence (n=3)
 
@@ -461,4 +469,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 2026-10-13T02:00:00Z | DO | r=2 | n=3/3 | DO started (n=3): CHECK n=2 FAIL (completeness) routed back; fix stale attempt n; fulfil pre-change baseline (EV-12), unfiltered C-BOUNDARY (EV-11), live MariaDB whole-lock (EV-10/V-27) | status docs/specs/status/D216-row-locking-1.md
 2026-10-13T02:30:00Z | DO | r=2 | n=3/3 | DO complete → CHECK: pre-change baseline at 666cf9ac (ratio 1.98 vs after 2.03, +2.6%); unfiltered C-BOUNDARY all 7 provider projects 0 failed; live MariaDB whole-lock 3/3 executed, source fail-closed; manifest re-validated exit 0; EV-16 open, EV-17 met | manifest artifacts/pdca/D216/rv2/manifest.json
 2026-10-13T03:00:00Z | DO | r=2 | n=3/3 | ACT-prep: escalation (A) done-with-constraint, no product change; EV-02/EV-14 accepted reviews, EV-16 owner constraint materialized (open), EV-18 freeze persisted, EV-12 T216 baseline N/A at 666cf9ac (acceptance 1.98->2.03, +2.5%); manifest re-validated exit 0; #216 OPEN | manifest artifacts/pdca/D216/rv2/manifest.json
+2026-10-13T03:30:00Z | ACT | r=2 | n=3/3 | ACT complete — done-with-constraint: EV-15 verdict+rows persisted, manifest EV-15 met (validator exit 0); T53 candidates registered (10, #216), freeze HELD; collection T216 row pending→done; next pending T217 (order 11); #216 OPEN, D-07 blocked | artifacts/pdca/D216/rv2/check/verdict.md
 ```
