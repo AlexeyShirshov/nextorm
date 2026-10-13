@@ -712,6 +712,50 @@ public class ClickHouseDialect : SqlDialectBase
         return $"{function}({value}, {scaled})";
     }
 
+    /// <summary>ClickHouse stores a <see cref="System.DateTimeOffset"/> as a UTC-normalized <c>DateTime64</c>, so DTO operations are supported.</summary>
+    public override bool SupportsDateTimeOffsetTranslation => true;
+
+    /// <summary>
+    /// Renders the UTC server clock at microsecond precision. ClickHouse <c>DateTime64</c> does not
+    /// preserve an offset, so a materialized <see cref="System.DateTimeOffset"/> canonicalises to +00:00.
+    /// </summary>
+    public override string MakeDateTimeOffsetNow(bool utc) => "now64(6, 'UTC')";
+
+    /// <summary>
+    /// DTO date parts are taken from an explicit UTC-normalized value so the result does not depend on
+    /// the column's declared time zone, then rendered through the native <c>toXxx</c> accessors.
+    /// </summary>
+    public override string MakeDatePart(string part, string value, bool isDateTimeOffset) =>
+        isDateTimeOffset ? MakeDatePart(part, $"toTimeZone({value}, 'UTC')") : MakeDatePart(part, value);
+
+    /// <summary>
+    /// DTO date addition runs on an explicit UTC-normalized <c>DateTime64</c> value. ClickHouse
+    /// <c>addXxx</c> truncates a fractional interval to whole units, so a coarse-unit DTO amount is
+    /// scaled to <c>addMicroseconds</c> (the finest <c>addXxx</c> matching the documented
+    /// <c>DateTime64(6)</c> precision), keeping a significant fraction instead of collapsing it to a
+    /// no-op. Integer amounts stay correct through the same scaling.
+    /// </summary>
+    public override string MakeDateAdd(string field, string amount, string value, bool isDateTimeOffset)
+    {
+        if (!isDateTimeOffset)
+            return MakeDateAdd(field, amount, value);
+
+        var normalized = $"toTimeZone({value}, 'UTC')";
+        var factor = field switch
+        {
+            "day" => 86_400_000_000L,
+            "hour" => 3_600_000_000L,
+            "minute" => 60_000_000L,
+            "second" => 1_000_000L,
+            "milliseconds" => 1_000L,
+            _ => 0L
+        };
+
+        return factor == 0
+            ? MakeDateAdd(field, amount, normalized)
+            : $"addMicroseconds({normalized}, ({amount}) * {factor})";
+    }
+
     /// <summary>ClickHouse computes date differences through <c>dateDiff(unit, start, end)</c>.</summary>
     public override string MakeDateDiff(string field, string start, string end)
     {

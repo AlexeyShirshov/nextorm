@@ -6,7 +6,7 @@ namespace NextORM.Core;
 /// Translates the date conversion/truncation surface of <see cref="ClickHouseFunctions"/>
 /// (<c>to_date</c>/<c>to_date_time</c>/<c>to_date32</c>, the <c>to_year</c>/... part accessors,
 /// <c>to_start_of_*</c>, <c>to_monday</c>, <c>to_yyyymm</c>/<c>to_yyyymmdd</c> and
-/// <c>to_unix_timestamp</c>). The part accessors reuse the existing <see cref="ISqlDialect.MakeDatePart"/>
+/// <c>to_unix_timestamp</c>). The part accessors reuse the existing <see cref="ISqlDialect.MakeDatePart(string, string)"/>
 /// hook; the rest go through <see cref="IDateConversionRenderer.Render"/>. Only a dialect that opts in
 /// with <see cref="ISqlDialect.DateConversion"/> (ClickHouse) may use these constructs;
 /// every other provider rejects them with a clear message.

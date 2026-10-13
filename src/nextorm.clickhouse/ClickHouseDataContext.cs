@@ -21,6 +21,7 @@ public class ClickHouseDataContext : DataContext
     private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
     private static readonly MethodInfo ToJsonDocumentMI = typeof(ClickHouseDataContext).GetMethod(nameof(ToJsonDocument), BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo ToJsonElementMI = typeof(ClickHouseDataContext).GetMethod(nameof(ToJsonElement), BindingFlags.NonPublic | BindingFlags.Static)!;
+    private static readonly MethodInfo ToDateTimeOffsetMI = typeof(ClickHouseDataContext).GetMethod(nameof(ToDateTimeOffset), BindingFlags.NonPublic | BindingFlags.Static)!;
 
     /// <summary>
     /// Creates a ClickHouse context that owns a connection built lazily from
@@ -58,8 +59,10 @@ public class ClickHouseDataContext : DataContext
     /// read as-is; a bare <see cref="JsonDocument"/>/<see cref="JsonElement"/> is adapted from the driver's
     /// object-root <see cref="JsonObject"/> transport. A SQL <c>NULL</c> becomes a null reference (or
     /// <see langword="default"/> for the value-type <see cref="JsonElement"/>), which stays distinct from an
-    /// empty object. Every other column is mapped by the base implementation, which also resolves a
-    /// <c>[JsonColumn]</c> converter (its provider type is <see cref="JsonObject"/> on ClickHouse).
+    /// empty object. A <see cref="DateTimeOffset"/> projection is adapted from the driver's
+    /// <see cref="DateTime"/> transport (see <see cref="MapDateTimeOffsetColumn"/>). Every other column is
+    /// mapped by the base implementation, which also resolves a <c>[JsonColumn]</c> converter (its provider
+    /// type is <see cref="JsonObject"/> on ClickHouse).
     /// </summary>
     /// <param name="column">The projected column being read.</param>
     /// <param name="param">The data-reader expression the accessor is built from.</param>
@@ -73,8 +76,50 @@ public class ClickHouseDataContext : DataContext
             && (realType == typeof(JsonObject) || realType == typeof(JsonDocument) || realType == typeof(JsonElement)))
             return MapJsonColumn(column, param, realType);
 
+        if (column.Converter is null && realType == typeof(DateTimeOffset))
+            return MapDateTimeOffsetColumn(column, param);
+
         return base.MapColumnExpression(column, param);
     }
+
+    // The ClickHouse.Driver surfaces DateTime64 as System.DateTime, so the generic typed reader's
+    // GetFieldValue<DateTimeOffset> throws InvalidCastException for a DateTimeOffset projection. The
+    // driver's value is the stored UTC instant (Kind Utc/Unspecified), so it is read as DateTime and
+    // reinterpreted as an offset-zero DateTimeOffset. No locale/session shift is applied and the stored
+    // microsecond precision is preserved.
+    private static Expression MapDateTimeOffsetColumn(SelectExpression column, Expression param)
+    {
+        var index = Expression.Constant(column.Index);
+        var getter = Expression.Call(
+            Expression.Convert(param, typeof(DbDataReader)),
+            GetFieldValueMI.MakeGenericMethod(typeof(DateTime)),
+            index);
+        Expression value = Expression.Call(ToDateTimeOffsetMI, getter);
+
+        if (value.Type != column.PropertyType)
+            value = Expression.Convert(value, column.PropertyType);
+
+        if (column.Nullable)
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Constant(null, column.PropertyType),
+                value);
+
+        if (column.DefaultOnNull)
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Default(column.PropertyType),
+                value);
+
+        return value;
+    }
+
+    private static DateTimeOffset ToDateTimeOffset(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => new DateTimeOffset(value, TimeSpan.Zero),
+        DateTimeKind.Local => new DateTimeOffset(value.ToUniversalTime(), TimeSpan.Zero),
+        _ => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero),
+    };
 
     private static Expression MapJsonColumn(SelectExpression column, Expression param, Type realType)
     {

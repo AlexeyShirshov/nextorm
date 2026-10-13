@@ -303,6 +303,16 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string MakeNow(bool utc) => "datetime('now')";
 
+    /// <summary>SQLite has no native offset type; a <see cref="System.DateTimeOffset"/> is stored and manipulated as UTC text.</summary>
+    public override bool SupportsDateTimeOffsetTranslation => true;
+
+    /// <summary>
+    /// Renders the UTC server clock with fractional seconds and an explicit <c>+00:00</c> offset. The
+    /// value is text and is materialized as an offset-zero <see cref="System.DateTimeOffset"/>.
+    /// </summary>
+    public override string MakeDateTimeOffsetNow(bool utc) =>
+        "strftime('%Y-%m-%d %H:%M:%f','now') || '+00:00'";
+
     /// <summary>
     /// SQLite extracts date parts through <c>strftime</c>; the result is cast back to an integer so
     /// that it materialises like the C# <c>DateTime.Year</c>/<c>Month</c>/... int properties.

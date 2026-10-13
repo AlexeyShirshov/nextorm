@@ -267,6 +267,42 @@ public class MySqlDialect : SqlDialectBase
         return $"date_add({value}, interval {scaled} {unit})";
     }
 
+    /// <summary>
+    /// MySQL stores a <see cref="System.DateTimeOffset"/> as a <c>datetime(6)</c> wall time and does not
+    /// preserve the original offset; the value is still produced and manipulated server-side.
+    /// </summary>
+    public override bool SupportsDateTimeOffsetTranslation => true;
+
+    /// <summary>
+    /// Renders the UTC server clock at microsecond precision. MySQL/MariaDB do not store an offset, so
+    /// a materialized <see cref="System.DateTimeOffset"/> canonicalises to +00:00.
+    /// </summary>
+    public override string MakeDateTimeOffsetNow(bool utc) => "utc_timestamp(6)";
+
+    /// <summary>
+    /// <c>date_add</c> rounds a fractional amount in the requested unit for day/hour/minute, so a
+    /// <see cref="System.DateTimeOffset"/> amount is scaled to the next finer unit; the sub-second
+    /// units already keep the fraction through the base implementation.
+    /// </summary>
+    public override string MakeDateAdd(string field, string amount, string value, bool isDateTimeOffset)
+    {
+        if (!isDateTimeOffset)
+            return MakeDateAdd(field, amount, value);
+
+        var (unit, factor) = field switch
+        {
+            "day" => ("hour", 24),
+            "hour" => ("minute", 60),
+            "minute" => ("second", 60),
+            _ => (null!, 1)
+        };
+
+        if (unit is null)
+            return MakeDateAdd(field, amount, value);
+
+        return $"date_add({value}, interval ({amount}) * {factor} {unit})";
+    }
+
     /// <inheritdoc/>
     public override string MakeDateDiff(string field, string start, string end)
     {

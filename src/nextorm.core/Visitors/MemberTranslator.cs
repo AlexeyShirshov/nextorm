@@ -16,6 +16,11 @@ internal static class MemberTranslator
     {
         var declaringType = node.Member.DeclaringType;
 
+        // A DateTimeOffset member with no server translation must fail closed before the
+        // client-evaluation fallback, including when it is the receiver of a further access
+        // ('.Offset.TotalMinutes', '.UtcDateTime.Year', '.Date.AddDays').
+        ThrowIfUnsupportedDateTimeOffsetAccess(node);
+
         // Static DateTime.Now / DateTime.UtcNow as a SQL expression instead of an evaluated parameter.
         if (node.Expression is null && declaringType == typeof(DateTime))
         {
@@ -24,6 +29,26 @@ internal static class MemberTranslator
                 visitor.NeedAliasForColumn = true;
                 if (!visitor.IsParamMode)
                     visitor.Builder!.Append(visitor.Dialect.MakeNow(node.Member.Name == nameof(DateTime.UtcNow)));
+
+                return true;
+            }
+
+            return false;
+        }
+
+        // Static DateTimeOffset.Now / DateTimeOffset.UtcNow as a server-side SQL expression. The
+        // client clock is never captured; a dialect without the capability fails closed.
+        if (node.Expression is null && declaringType == typeof(DateTimeOffset))
+        {
+            if (node.Member.Name == nameof(DateTimeOffset.Now) || node.Member.Name == nameof(DateTimeOffset.UtcNow))
+            {
+                if (!visitor.Dialect.SupportsDateTimeOffsetTranslation)
+                    throw new NotSupportedException(
+                        "DateTimeOffset.Now/UtcNow translation is not supported by this SQL dialect.");
+
+                visitor.NeedAliasForColumn = true;
+                if (!visitor.IsParamMode)
+                    visitor.Builder!.Append(visitor.Dialect.MakeDateTimeOffsetNow(node.Member.Name == nameof(DateTimeOffset.UtcNow)));
 
                 return true;
             }
@@ -84,11 +109,100 @@ internal static class MemberTranslator
             return true;
         }
 
+        // DateTimeOffset date parts. A provider whose native parts follow the session time zone
+        // normalizes via the isDateTimeOffset-aware MakeDatePart overload; the client is never used.
+        if (declaringType == typeof(DateTimeOffset))
+        {
+            var dtoPart = node.Member.Name switch
+            {
+                nameof(DateTimeOffset.Year) => "year",
+                nameof(DateTimeOffset.Month) => "month",
+                nameof(DateTimeOffset.Day) => "day",
+                nameof(DateTimeOffset.Hour) => "hour",
+                nameof(DateTimeOffset.Minute) => "minute",
+                nameof(DateTimeOffset.Second) => "second",
+                nameof(DateTimeOffset.DayOfYear) => "doy",
+                _ => null
+            };
+
+            if (dtoPart is null)
+                return false;
+
+            if (!visitor.Dialect.SupportsDateTimeOffsetTranslation)
+                throw new NotSupportedException(
+                    "DateTimeOffset member translation is not supported by this SQL dialect.");
+
+            if (visitor.IsParamMode)
+            {
+                visitor.Visit(node.Expression);
+                return true;
+            }
+
+            visitor.NeedAliasForColumn = true;
+            visitor.Builder!.Append(visitor.Dialect.MakeDatePart(dtoPart, visitor.VisitToString(node.Expression), true));
+            return true;
+        }
+
         if (TupleSqlTranslator.TryTranslateElement(visitor, node))
             return true;
 
         return false;
     }
+
+    // DateTimeOffset members that have no server translation and must never be evaluated on the client.
+    private static readonly HashSet<string> UnsupportedDateTimeOffsetMembers = new(StringComparer.Ordinal)
+    {
+        nameof(DateTimeOffset.Offset),
+        nameof(DateTimeOffset.UtcDateTime),
+        nameof(DateTimeOffset.LocalDateTime),
+        nameof(DateTimeOffset.Date),
+        nameof(DateTimeOffset.Ticks),
+        nameof(DateTimeOffset.DayOfWeek),
+    };
+
+    // DateTimeOffset methods that have no server translation (including AddTicks and Add(TimeSpan)).
+    private static readonly HashSet<string> UnsupportedDateTimeOffsetMethods = new(StringComparer.Ordinal)
+    {
+        nameof(DateTimeOffset.ToOffset),
+        nameof(DateTimeOffset.AddTicks),
+        nameof(DateTimeOffset.Add),
+    };
+
+    /// <summary>
+    /// Fails closed for a <see cref="DateTimeOffset"/> access that has no server-side translation. The
+    /// receiver chain is walked so a forbidden member is rejected even when it is only an intermediate
+    /// step (for example <c>.Offset.TotalMinutes</c>, <c>.UtcDateTime.Year</c> or <c>.Date.AddDays</c>),
+    /// before the client-evaluation fallback can turn it into a captured parameter or constant.
+    /// </summary>
+    internal static void ThrowIfUnsupportedDateTimeOffsetAccess(Expression expression)
+    {
+        var current = expression;
+        while (current is not null)
+        {
+            if (current is MemberExpression member
+                && member.Member.DeclaringType == typeof(DateTimeOffset)
+                && UnsupportedDateTimeOffsetMembers.Contains(member.Member.Name))
+                ThrowUnsupportedDateTimeOffset(member.Member.Name);
+
+            if (current is MethodCallExpression call
+                && call.Method.DeclaringType == typeof(DateTimeOffset)
+                && UnsupportedDateTimeOffsetMethods.Contains(call.Method.Name))
+                ThrowUnsupportedDateTimeOffset(call.Method.Name);
+
+            current = current switch
+            {
+                MemberExpression { Expression: { } inner } => inner,
+                MethodCallExpression { Object: { } receiver } => receiver,
+                _ => null!
+            };
+        }
+    }
+
+    private static void ThrowUnsupportedDateTimeOffset(string memberName) =>
+        throw new NotSupportedException(
+            $"DateTimeOffset.{memberName} is not supported in a server-side query: it has no SQL translation " +
+            "and evaluating it on the client would capture the client clock or time zone. " +
+            "Translate it explicitly or project a supported date part instead.");
 
     // Resolves the effective duration storage unit of a member access mapped as an entity column:
     // null for a native duration (or a non-duration member), otherwise the declared unit (ticks by

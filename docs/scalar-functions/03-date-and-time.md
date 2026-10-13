@@ -65,12 +65,54 @@ without a value converter. The declared/stored SQL type is provider-specific:
 | ClickHouse | `DateTime64(6)` |
 | SQLite | dynamic typing (no dedicated type) |
 
-Unlike `DateTime`, its CLR members are not translated to SQL: `DateTimeOffset.Now`/`UtcNow` are
-evaluated on the client and bound as a parameter, and the date-part accessors (`.Year`, `.Month`,
-`.AddDays`, ...) are rendered for `DateTime` only. `value.ToString(format)` and `string.Format` are
-still translated (see [Formatting dates and numbers to strings](#formatting-dates-and-numbers-to-strings)).
-A `DateTimeOffset` table-valued-parameter column and a PostgreSQL array element map to the
+### Server-side translation
+
+The supported `DateTimeOffset` operations are rendered as SQL and evaluated **on the server** — the
+client clock and the client's local time zone are never captured, and no operation is silently computed
+as a client parameter:
+
+| C# | SQL |
+|---|---|
+| `DateTimeOffset.Now` | SQL Server `sysdatetimeoffset()`; PostgreSQL `now()`; MySQL/MariaDB `utc_timestamp(6)`; ClickHouse `now64(6, 'UTC')`; SQLite `strftime('%Y-%m-%d %H:%M:%f','now') \|\| '+00:00'` |
+| `DateTimeOffset.UtcNow` | SQL Server `todatetimeoffset(sysutcdatetime(), '+00:00')`; on the other providers the same as `Now` |
+| `.Year` `.Month` `.Day` `.Hour` `.Minute` `.Second` `.DayOfYear` | the provider's date-part extraction, with an explicit UTC normalization on PostgreSQL (`... at time zone 'UTC'`) and ClickHouse (`toTimeZone(value, 'UTC')`) |
+| `.AddYears` `.AddMonths` `.AddDays` `.AddHours` `.AddMinutes` `.AddSeconds` `.AddMilliseconds` | the provider's date-add (see [Date arithmetic](#date-arithmetic)); a significant fractional interval is kept instead of being truncated to whole units |
+
+Nullable values and a `DateTimeOffset?` in `Where`/`Select`/`OrderBy` follow the ordinary rules: SQL
+`NULL` stays `null`, and `HasValue`/`Value` are transparent.
+
+Members with **no** SQL translation **fail closed** with `NotSupportedException` while the query is
+built, before any client evaluation or constant folding:
+
+* `.Offset`, `.UtcDateTime`, `.LocalDateTime`, `.Date`, `.Ticks` and `.DayOfWeek` — including as the
+  receiver of a further access (`e.Value.Offset.TotalMinutes`, `e.Value.UtcDateTime.Year`,
+  `e.Value.Date.AddDays(1)`);
+* `.ToOffset(...)`, whether the argument is a constant or dynamic;
+* `.AddTicks(...)` and `.Add(TimeSpan)` — guarded now; their server translation is deferred to a later
+  release;
+* a fractional `.AddYears`/`.AddMonths` — the CLR amount is an `int`.
+
+`value.ToString(format)` and `string.Format` are still translated (see
+[Formatting dates and numbers to strings](#formatting-dates-and-numbers-to-strings)). A
+`DateTimeOffset` table-valued-parameter column and a PostgreSQL array element map to the
 timestamp-with-time-zone form.
+
+### Per-provider zone and precision limits
+
+Only SQL Server keeps the offset as part of the value; every other provider stores an instant (or a
+wall time) and materialises an offset-zero `DateTimeOffset` (a canonical `+00:00`):
+
+| Provider | Clock and offset | Parts and arithmetic |
+|---|---|---|
+| SQL Server | `datetimeoffset` preserves the value's offset; `Now` is `sysdatetimeoffset()`, `UtcNow` is `todatetimeoffset(sysutcdatetime(), '+00:00')`. | Native `datepart` (per the value's offset) and native `dateadd`, which preserves the offset; a fractional day/hour/minute/second/millisecond amount is scaled to a finer `dateadd` unit so it is not truncated. |
+| PostgreSQL | `now()` returns an instant independent of the session time zone; `timestamp with time zone` stores an instant, so the materialised value is offset-zero. | Parts and `Add*` run on the UTC wall time (`at time zone 'UTC'`) and `Add*` is re-typed to `timestamptz`, so the result does not depend on the session `TimeZone` or DST. |
+| MySQL / MariaDB | `utc_timestamp(6)`; a `datetime` column stores a wall time and **does not** keep the offset, so the original offset is not restored. | Native date parts of the stored wall time and native `date_add`; a fractional day/hour/minute amount is scaled to a finer unit. |
+| ClickHouse | `now64(6, 'UTC')`; `DateTime64(6)` does **not** store the offset. Microsecond precision is preserved on materialisation. | Parts and `Add*` normalise to UTC (`toTimeZone(value, 'UTC')`); a coarse-unit fractional amount is scaled to `addMicroseconds` so the fraction survives. |
+| SQLite | `strftime('%Y-%m-%d %H:%M:%f','now') \|\| '+00:00'`; dynamic typing stores a UTC instant as text, at millisecond precision. | The `strftime`/date-modifier parts and arithmetic of the UTC text; an offset-bearing text is treated as an instant. |
+
+On ClickHouse the value is materialised through a reader adaptation that reads the driver's `DateTime`
+(the driver surfaces `DateTime64` as `System.DateTime`) and reinterprets it as an offset-zero
+`DateTimeOffset`, retaining microseconds.
 
 ## PostgreSQL extended date and time
 

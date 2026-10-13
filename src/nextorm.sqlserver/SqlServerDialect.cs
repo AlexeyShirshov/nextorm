@@ -520,6 +520,52 @@ public sealed class SqlServerDialect : SqlDialectBase
         return $"dateadd({part}, {scaled}, {value})";
     }
 
+    /// <summary>SQL Server has a native <c>datetimeoffset</c>, so DTO operations are supported and preserve the value's offset.</summary>
+    public override bool SupportsDateTimeOffsetTranslation => true;
+
+    /// <summary>Renders the native offset-bearing <c>sysdatetimeoffset()</c>, or a zero-offset value built from the UTC clock.</summary>
+    public override string MakeDateTimeOffsetNow(bool utc) =>
+        utc ? "todatetimeoffset(sysutcdatetime(), '+00:00')" : "sysdatetimeoffset()";
+
+    /// <summary>
+    /// <c>dateadd</c> truncates a fractional amount in the requested unit, so a
+    /// <see cref="System.DateTimeOffset"/> amount is scaled to the next finer unit that keeps the
+    /// fraction. A ×1000 scale (seconds→milliseconds, milliseconds→microseconds) is an <c>int</c>
+    /// product that overflows <c>dateadd</c>'s 32-bit amount for a large whole value (for example
+    /// <c>AddSeconds(2_200_000)</c>), so the whole part is added in the requested unit and only the
+    /// fractional remainder is scaled into the finer unit. Year/month amounts are CLR <c>int</c> and
+    /// unchanged; the <c>datetimeoffset</c> operand is used directly so its offset is preserved.
+    /// </summary>
+    public override string MakeDateAdd(string field, string amount, string value, bool isDateTimeOffset)
+    {
+        if (!isDateTimeOffset)
+            return MakeDateAdd(field, amount, value);
+
+        // The ×1000 scaling is split so the emitted amount always fits the int parameter of dateadd:
+        // the whole part stays in the coarse unit and only the fraction (< 1) is scaled, so even a
+        // large literal amount such as AddSeconds(2_200_000) compiles to dateadd(second, 2200000, ...).
+        if (field is "second" or "milliseconds")
+        {
+            var (coarse, fine) = field == "second" ? ("second", "millisecond") : ("millisecond", "microsecond");
+            var whole = $"cast(floor({amount}) as int)";
+            var remainder = $"cast(({amount} - floor({amount})) * 1000 as int)";
+
+            return $"dateadd({coarse}, {whole}, dateadd({fine}, {remainder}, {value}))";
+        }
+
+        var (part, factor) = field switch
+        {
+            "day" => ("hour", 24),
+            "hour" => ("minute", 60),
+            "minute" => ("second", 60),
+            _ => (field, 1)
+        };
+
+        var scaled = factor == 1 ? amount : $"({amount}) * {factor}";
+
+        return $"dateadd({part}, {scaled}, {value})";
+    }
+
     /// <summary>Renders <c>datediff(part, start, end)</c> with the singular T-SQL part names.</summary>
     public override string MakeDateDiff(string field, string start, string end) =>
         $"datediff({TSqlDatePart(field)}, {start}, {end})";

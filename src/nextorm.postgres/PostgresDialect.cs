@@ -388,6 +388,33 @@ public class PostgresDialect : SqlDialectBase
     public override string MakeDatePart(string part, string value) =>
         part == "epoch" ? $"cast(extract(epoch from {value}) as double precision)" : base.MakeDatePart(part, value);
 
+    /// <summary>PostgreSQL stores a <see cref="System.DateTimeOffset"/> as <c>timestamptz</c>, so DTO operations are supported.</summary>
+    public override bool SupportsDateTimeOffsetTranslation => true;
+
+    /// <summary>
+    /// PostgreSQL's <c>now()</c> is a session-time-zone-independent instant; materialized as a
+    /// <c>timestamptz</c> it canonicalises to an offset-zero <see cref="System.DateTimeOffset"/>.
+    /// </summary>
+    public override string MakeDateTimeOffsetNow(bool utc) => "now()";
+
+    /// <summary>
+    /// DTO date parts are extracted from the UTC wall time (<c>at time zone 'UTC'</c>) so the result
+    /// does not depend on the session time zone or DST.
+    /// </summary>
+    public override string MakeDatePart(string part, string value, bool isDateTimeOffset) =>
+        isDateTimeOffset ? MakeDatePart(part, $"({value} at time zone 'UTC')") : MakeDatePart(part, value);
+
+    /// <summary>
+    /// DTO date addition runs on the UTC wall time and is re-typed to <c>timestamptz</c> (a naive
+    /// <c>timestamp without time zone</c> result cannot be read as a
+    /// <see cref="System.DateTimeOffset"/>), so the emitted value is the original instant plus the
+    /// interval, independent of the session time zone/DST.
+    /// </summary>
+    public override string MakeDateAdd(string field, string amount, string value, bool isDateTimeOffset) =>
+        isDateTimeOffset
+            ? $"(({value} at time zone 'UTC') + ({amount} * interval '1 {field}')) at time zone 'UTC'"
+            : MakeDateAdd(field, amount, value);
+
     /// <summary>
     /// The ANSI <c>date_diff</c> casts a sub-day span to <c>integer</c>; the 64-bit variant widens that
     /// cast to <c>bigint</c> so milliseconds/microseconds over a long range do not overflow.

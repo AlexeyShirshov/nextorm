@@ -1059,11 +1059,33 @@ public interface ISqlDialect
     /// True when the provider accepts <paramref name="part"/> as an <c>extract</c>/<c>date_part</c>
     /// date part. The ANSI parts are accepted by default; a dialect adds the parts it can express
     /// natively (<c>quarter</c>, <c>week</c>, <c>dow</c>, <c>isodow</c>, <c>epoch</c>) by overriding
-    /// this together with <see cref="MakeDatePart"/>.
+    /// this together with <see cref="MakeDatePart(string, string)"/>.
     /// </summary>
     bool SupportsDatePart(string part);
     /// <summary>Renders the current local or UTC date/time.</summary>
     string MakeNow(bool utc);
+    /// <summary>
+    /// True when the dialect renders supported <see cref="DateTimeOffset"/> operations
+    /// (<c>Now</c>/<c>UtcNow</c>, date parts and date arithmetic) as server-side SQL. When false (the
+    /// default), those operations fail closed with <see cref="NotSupportedException"/> instead of being
+    /// evaluated on the client, and <see cref="MakeDateTimeOffsetNow(bool)"/> also throws.
+    /// </summary>
+    bool SupportsDateTimeOffsetTranslation => false;
+    /// <summary>
+    /// Renders the server-side current <see cref="DateTimeOffset"/>: the value is produced by the
+    /// database (never the client clock), either with a preserved offset or as the provider's canonical
+    /// offset-zero instant. A dialect that declares <see cref="SupportsDateTimeOffsetTranslation"/>
+    /// overrides this; the default fails closed.
+    /// </summary>
+    string MakeDateTimeOffsetNow(bool utc) =>
+        throw new NotSupportedException("DateTimeOffset.Now/UtcNow translation is not supported by this SQL dialect.");
+    /// <summary>
+    /// Renders a date/time part extraction for a <see cref="DateTimeOffset"/> value. A provider whose
+    /// native date parts follow the session time zone overrides this to normalize to UTC first; the
+    /// default delegates to <see cref="MakeDatePart(string, string)"/>. <paramref name="part"/> is a
+    /// validated date-part name.
+    /// </summary>
+    string MakeDatePart(string part, string value, bool isDateTimeOffset) => MakeDatePart(part, value);
     /// <summary>Renders a math function call with the given already-rendered arguments.</summary>
     string MakeMathFunction(string name, IReadOnlyList<string> args);
     /// <summary>
@@ -1093,6 +1115,14 @@ public interface ISqlDialect
     /// arguments; <paramref name="field"/> is a validated date-part name.
     /// </summary>
     string MakeDateAdd(string field, string amount, string value);
+    /// <summary>
+    /// Renders <see cref="DateTimeOffset"/> date addition. A provider whose native date-add needs
+    /// DateTimeOffset-specific adaptation (timezone normalization, fractional scaling, preserving the
+    /// offset) overrides this; the default delegates to <see cref="MakeDateAdd(string, string, string)"/>.
+    /// <paramref name="field"/> is a validated date-part name.
+    /// </summary>
+    string MakeDateAdd(string field, string amount, string value, bool isDateTimeOffset) =>
+        MakeDateAdd(field, amount, value);
     /// <summary>
     /// Renders the difference between two already-rendered timestamps in <paramref name="field"/> units;
     /// <paramref name="field"/> is a validated date-part name.

@@ -636,6 +636,13 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual string MakeNow(bool utc) => utc ? "now() at time zone 'utc'" : "now()";
     /// <inheritdoc/>
+    public virtual bool SupportsDateTimeOffsetTranslation => false;
+    /// <inheritdoc/>
+    public virtual string MakeDateTimeOffsetNow(bool utc) =>
+        throw new NotSupportedException("DateTimeOffset.Now/UtcNow translation is not supported by this SQL dialect.");
+    /// <inheritdoc/>
+    public virtual string MakeDatePart(string part, string value, bool isDateTimeOffset) => MakeDatePart(part, value);
+    /// <inheritdoc/>
     public virtual string MakeMathFunction(string name, IReadOnlyList<string> args) =>
         $"{name}({string.Join(", ", args)})";
     /// <summary>
@@ -673,6 +680,9 @@ public abstract class SqlDialectBase : ISqlDialect
 
         return $"{value} + ({amount} * interval '{unit}')";
     }
+    /// <inheritdoc/>
+    public virtual string MakeDateAdd(string field, string amount, string value, bool isDateTimeOffset) =>
+        MakeDateAdd(field, amount, value);
     /// <inheritdoc/>
     public virtual string MakeDateDiff(string field, string start, string end) =>
         MakeDateDiffCore(field, start, end, big: false);

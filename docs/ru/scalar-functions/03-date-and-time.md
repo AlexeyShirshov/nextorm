@@ -66,12 +66,54 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 | ClickHouse | `DateTime64(6)` |
 | SQLite | динамическая типизация (выделенного типа нет) |
 
-В отличие от `DateTime`, его CLR-члены не транслируются в SQL: `DateTimeOffset.Now`/`UtcNow`
-вычисляются на клиенте и связываются параметром, а части даты (`.Year`, `.Month`, `.AddDays`, ...)
-рендерятся только для `DateTime`. `value.ToString(format)` и `string.Format` по-прежнему
-транслируются (см. [Форматирование дат и чисел в строки](#форматирование-дат-и-чисел-в-строки)).
-Колонка табличного параметра и элемент PostgreSQL-массива типа `DateTimeOffset` отображаются на
-форму timestamp with time zone.
+### Серверная трансляция
+
+Поддерживаемые операции `DateTimeOffset` рендерятся как SQL и вычисляются **на сервере** — клиентские
+часы и локальная зона клиента никогда не захватываются, и никакая операция не вычисляется молча как
+клиентский параметр:
+
+| C# | SQL |
+|---|---|
+| `DateTimeOffset.Now` | SQL Server `sysdatetimeoffset()`; PostgreSQL `now()`; MySQL/MariaDB `utc_timestamp(6)`; ClickHouse `now64(6, 'UTC')`; SQLite `strftime('%Y-%m-%d %H:%M:%f','now') \|\| '+00:00'` |
+| `DateTimeOffset.UtcNow` | SQL Server `todatetimeoffset(sysutcdatetime(), '+00:00')`; у остальных провайдеров то же, что `Now` |
+| `.Year` `.Month` `.Day` `.Hour` `.Minute` `.Second` `.DayOfYear` | извлечение части даты, специфичное для провайдера, с явной нормализацией в UTC в PostgreSQL (`... at time zone 'UTC'`) и ClickHouse (`toTimeZone(value, 'UTC')`) |
+| `.AddYears` `.AddMonths` `.AddDays` `.AddHours` `.AddMinutes` `.AddSeconds` `.AddMilliseconds` | прибавление даты средствами провайдера (см. [Арифметику дат](#арифметика-дат)); значимая дробная часть интервала сохраняется, а не усекается до целых единиц |
+
+Nullable-значения и `DateTimeOffset?` в `Where`/`Select`/`OrderBy` подчиняются обычным правилам: SQL
+`NULL` остаётся `null`, а `HasValue`/`Value` прозрачны.
+
+Члены, у которых **нет** SQL-трансляции, **падают fail-closed** с `NotSupportedException` во время
+построения запроса — до любого клиентского вычисления или постоянного свёртывания:
+
+* `.Offset`, `.UtcDateTime`, `.LocalDateTime`, `.Date`, `.Ticks` и `.DayOfWeek` — в том числе как
+  получатель дальнейшего доступа (`e.Value.Offset.TotalMinutes`, `e.Value.UtcDateTime.Year`,
+  `e.Value.Date.AddDays(1)`);
+* `.ToOffset(...)` — независимо от того, константный аргумент или динамический;
+* `.AddTicks(...)` и `.Add(TimeSpan)` — сейчас под guard'ом; их серверная трансляция отложена до
+  следующего релиза;
+* дробные `.AddYears`/`.AddMonths` — параметр CLR имеет тип `int`.
+
+`value.ToString(format)` и `string.Format` по-прежнему транслируются (см.
+[Форматирование дат и чисел в строки](#форматирование-дат-и-чисел-в-строки)). Колонка табличного
+параметра и элемент PostgreSQL-массива типа `DateTimeOffset` отображаются на форму timestamp with
+time zone.
+
+### Ограничения зоны и точности по провайдерам
+
+Только SQL Server хранит offset как часть значения; остальные провайдеры хранят instant (или wall
+time) и материализуют `DateTimeOffset` с нулевым offset'ом (канонический `+00:00`):
+
+| Провайдер | Часы и offset | Части и арифметика |
+|---|---|---|
+| SQL Server | `datetimeoffset` сохраняет offset значения; `Now` — `sysdatetimeoffset()`, `UtcNow` — `todatetimeoffset(sysutcdatetime(), '+00:00')`. | Нативный `datepart` (по offset значения) и нативный `dateadd`, сохраняющий offset; дробное значение в day/hour/minute/second/millisecond масштабируется в более мелкую единицу `dateadd`, чтобы не усечься. |
+| PostgreSQL | `now()` возвращает instant, не зависящий от сессионной зоны; `timestamp with time zone` хранит instant, поэтому материализованное значение имеет нулевой offset. | Части и `Add*` работают по UTC wall time (`at time zone 'UTC'`), а `Add*` перетипизируется в `timestamptz`, поэтому результат не зависит от сессионного `TimeZone` и DST. |
+| MySQL / MariaDB | `utc_timestamp(6)`; колонка `datetime` хранит wall time и **не** сохраняет offset, поэтому исходный offset не восстанавливается. | Нативные части даты сохранённого wall time и нативный `date_add`; дробное значение в day/hour/minute масштабируется в более мелкую единицу. |
+| ClickHouse | `now64(6, 'UTC')`; `DateTime64(6)` **не** хранит offset. Микросекундная точность сохраняется при материализации. | Части и `Add*` явно нормализуются в UTC (`toTimeZone(value, 'UTC')`); дробное значение в крупной единице масштабируется в `addMicroseconds`, чтобы дробь не потерялась. |
+| SQLite | `strftime('%Y-%m-%d %H:%M:%f','now') \|\| '+00:00'`; динамическая типизация хранит UTC instant как текст, с миллисекундной точностью. | Части и арифметика UTC-текста через `strftime`/модификаторы даты; текст с offset'ом трактуется как instant. |
+
+В ClickHouse значение материализуется через адаптацию читателя: драйвер отдаёт `DateTime64` как
+`System.DateTime`, которое переинтерпретируется как `DateTimeOffset` с нулевым offset'ом, с
+сохранением микросекунд.
 
 ## Расширенные дата и время PostgreSQL
 

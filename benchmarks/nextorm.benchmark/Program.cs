@@ -22,6 +22,11 @@ using NextORM.Benchmark;
 if (args.Length > 0 && args[0] == "--stage-a")
     return StageADiagnostics.Run(args.Length > 1 ? args[1] : "all");
 
+// T217 (#217) E217-14: bounded real-ClickHouse perf probe (DTO vs DateTime reading over identical
+// rows). Benchmark-project-only entry point; it never touches nextorm.core.
+if (args.Length > 0 && args[0] == "--t217-perf-probe")
+    return await T217DtoPerfProbe.RunAsync(args.Length > 1 ? args[1] : ".");
+
 BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
 return 0;
 
