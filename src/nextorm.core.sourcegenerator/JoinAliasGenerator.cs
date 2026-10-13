@@ -69,6 +69,33 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         "CrossJoin", "CrossApply", "OuterApply"
     };
 
+    /// <summary>
+    /// Query-root operators that start a fresh chain from a source argument or an explicit type
+    /// argument (<c>From</c>/<c>CreateQueryBuilder</c>/<c>FromSql</c>/<c>FromTableFunction</c>). Used by
+    /// the syntax recovery path (#230) when the source's semantic type is unavailable.
+    /// </summary>
+    private static readonly HashSet<string> QueryRootOperators = new(StringComparer.Ordinal)
+    {
+        "From", "CreateQueryBuilder", "FromSql", "FromTableFunction"
+    };
+
+    /// <summary>
+    /// Operators that preserve the current query element type; used to walk back to the operator that
+    /// establishes it (<c>Select</c> or the query root) when resolving an element type from syntax.
+    /// </summary>
+    private static readonly HashSet<string> ElementPreservingOperators = new(StringComparer.Ordinal)
+    {
+        "Where", "GroupBy", "Having", "OrderBy", "OrderByDescending", "ThenBy", "ThenByDescending",
+        "Limit", "Offset", "Skip", "Take", "Distinct", "DistinctOn", "AsCte", "AsRecursiveCte",
+        "ToCommand", "Prepare", "ForUpdate", "ForShare", "WithKeywordCase", "As"
+    };
+
+    /// <summary>Result-type wrappers around a query element type; unwrapped when recovering a root.</summary>
+    private static readonly HashSet<string> ElementWrappers = new(StringComparer.Ordinal)
+    {
+        "Cte", "QueryCommand", "EntityBuilder", "TempTableSource", "MutationCteQuery"
+    };
+
     private static readonly DiagnosticDescriptor DuplicateAlias = new(
         DiagnosticIdPrefix + "001",
         "Duplicate join alias",
@@ -140,6 +167,15 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "WithAlias is root-only: it must be the first alias step on a plain root source (From<T>, From(string), FromSql, From(Cte<T>), temp table, table function, From(QueryCommand<T>) or a builder), never after a join or a second WithAlias.");
+
+    private static readonly DiagnosticDescriptor AnonymousChainType = new(
+        DiagnosticIdPrefix + "009",
+        "Join alias over an anonymous projection type",
+        "The join alias '{0}' is applied to a chain whose projected type is an anonymous type; project a named type (a DTO/record) instead",
+        DiagnosticCategory,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The alias surface emits the chain's concrete projected type in its generated extension signatures, which cannot name an anonymous type. Fail closed with this diagnostic instead of emitting uncompilable source (issue #229).");
 
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -318,11 +354,120 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
                 return ResolveIdentifier(identifier, semanticModel, ct);
         }
 
-        if (semanticModel.GetTypeInfo(expression, ct).Type is INamedTypeSymbol builder)
+        if (semanticModel.GetTypeInfo(expression, ct).Type is INamedTypeSymbol builder && builder.TypeKind != TypeKind.Error)
             return ResolveBuilderSymbol(builder);
+
+        // #230: the expression's type is unavailable because it depends on a generated builder type that
+        // does not exist on the generator's input pass (e.g. `ctx.From(cte)` where the CTE was built from
+        // an aliased chain). Recover the query root from syntax so a downstream alias chain is still
+        // discovered instead of being silently dropped.
+        if (expression is InvocationExpressionSyntax rootInvocation)
+            return ResolveRootFromSyntax(rootInvocation, semanticModel, ct);
 
         return null;
     }
+
+    /// <summary>
+    /// Recovers a fresh chain root from a query-root invocation (<c>From</c>/<c>CreateQueryBuilder</c>/
+    /// <c>FromSql</c>/<c>FromTableFunction</c>) when its semantic type is unavailable because it depends on
+    /// a generated builder type. The root's element type is read from the explicit type argument or the
+    /// source argument, entirely from syntax; the new chain carries no join aliases.
+    /// </summary>
+    private static ChainModel? ResolveRootFromSyntax(InvocationExpressionSyntax invocation, SemanticModel semanticModel, CancellationToken ct)
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess) return null;
+        if (memberAccess.Name is not SimpleNameSyntax name) return null;
+        if (!QueryRootOperators.Contains(name.Identifier.ValueText)) return null;
+
+        var elementType = ResolveQueryElementType(invocation, semanticModel, ct);
+        if (elementType is null) return null;
+
+        return new ChainModel(Display(elementType), null, EquatableArray<ChainStep>.Empty);
+    }
+
+    /// <summary>
+    /// Best-effort recovery of a query's element type from syntax, used only when the semantic type is
+    /// unavailable (error type). Walks back through element-preserving operators to the <c>Select</c> that
+    /// establishes the projection (its lambda body type), or to the query root's explicit type argument /
+    /// source element type. Returns <c>null</c> when the shape cannot be recovered.
+    /// </summary>
+    private static ITypeSymbol? ResolveQueryElementType(ExpressionSyntax expression, SemanticModel semanticModel, CancellationToken ct)
+    {
+        while (expression is ParenthesizedExpressionSyntax parenthesized) expression = parenthesized.Expression;
+
+        if (expression is IdentifierNameSyntax identifier)
+            return ResolveIdentifierElementType(identifier, semanticModel, ct);
+
+        if (expression is InvocationExpressionSyntax invocation
+            && invocation.Expression is MemberAccessExpressionSyntax memberAccess
+            && memberAccess.Name is SimpleNameSyntax name)
+        {
+            var operation = name.Identifier.ValueText;
+
+            if (operation == "Select")
+            {
+                var arguments = invocation.ArgumentList.Arguments;
+                if (arguments.Count > 0 && GetLambdaBody(arguments[arguments.Count - 1].Expression) is { } body
+                    && semanticModel.GetTypeInfo(body, ct).Type is { } projected)
+                {
+                    return projected;
+                }
+
+                return UnwrapElement(semanticModel.GetTypeInfo(invocation, ct).Type);
+            }
+
+            if (ElementPreservingOperators.Contains(operation))
+                return ResolveQueryElementType(memberAccess.Expression, semanticModel, ct);
+
+            if (QueryRootOperators.Contains(operation))
+            {
+                if (name is GenericNameSyntax generic && generic.TypeArgumentList.Arguments.Count == 1
+                    && semanticModel.GetTypeInfo(generic.TypeArgumentList.Arguments[0], ct).Type is { } explicitType)
+                {
+                    return explicitType;
+                }
+
+                var arguments = invocation.ArgumentList.Arguments;
+                if (arguments.Count > 0)
+                    return ResolveQueryElementType(arguments[0].Expression, semanticModel, ct);
+
+                return null;
+            }
+
+            return UnwrapElement(semanticModel.GetTypeInfo(invocation, ct).Type);
+        }
+
+        return UnwrapElement(semanticModel.GetTypeInfo(expression, ct).Type);
+    }
+
+    /// <summary>Resolves a local variable initializer or a parameter's declared type to its element type.</summary>
+    private static ITypeSymbol? ResolveIdentifierElementType(IdentifierNameSyntax identifier, SemanticModel semanticModel, CancellationToken ct)
+    {
+        var symbol = semanticModel.GetSymbolInfo(identifier, ct).Symbol;
+        var reference = symbol?.DeclaringSyntaxReferences.FirstOrDefault();
+        if (reference is null) return null;
+
+        if (symbol is ILocalSymbol && reference.GetSyntax(ct) is VariableDeclaratorSyntax declarator && declarator.Initializer is not null)
+            return ResolveQueryElementType(declarator.Initializer.Value, semanticModel, ct);
+
+        if (symbol is IParameterSymbol && reference.GetSyntax(ct) is ParameterSyntax parameter && parameter.Type is not null)
+            return UnwrapElement(semanticModel.GetTypeInfo(parameter.Type, ct).Type);
+
+        return null;
+    }
+
+    private static ExpressionSyntax? GetLambdaBody(ExpressionSyntax expression) => expression switch
+    {
+        SimpleLambdaExpressionSyntax simple => simple.Body as ExpressionSyntax,
+        ParenthesizedLambdaExpressionSyntax parenthesized => parenthesized.Body as ExpressionSyntax,
+        _ => null
+    };
+
+    /// <summary>Unwraps a result wrapper (<c>Cte&lt;T&gt;</c>/<c>QueryCommand&lt;T&gt;</c>/…) to its element type.</summary>
+    private static ITypeSymbol? UnwrapElement(ITypeSymbol? type)
+        => type is INamedTypeSymbol { TypeArguments.Length: 1 } named && ElementWrappers.Contains(named.Name)
+            ? named.TypeArguments[0]
+            : null;
 
     /// <summary>
     /// Recovers the chain root the generator understands from a builder type: a plain
@@ -679,6 +824,18 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
                 continue;
             }
 
+            // #229: the generated extension signatures name the chain's concrete projected type; an
+            // anonymous type has no name, so fail closed instead of emitting uncompilable source.
+            if (HasAnonymousChainType(chain))
+            {
+                var alias = chain.RootAlias ?? FirstAlias(chain) ?? "?";
+                var anonymousLocation = chain.RootAlias is not null && aliasLocations.TryGetValue(chain.RootAlias, out var rootLocation)
+                    ? rootLocation
+                    : FirstAliasLocation(chain);
+                diagnostics.Add(Diagnostic.Create(AnonymousChainType, ToLocationOrNone(anonymousLocation), alias));
+                continue;
+            }
+
             if (ValidateChain(chain, diagnostics)) validChains.Add(chain);
         }
 
@@ -917,6 +1074,49 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         return int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var position)
             && position >= 1 && position <= arity;
     }
+
+    /// <summary>
+    /// True when the chain renders an anonymous projected type concretely (#229): the root, or any joined
+    /// step except the last. The last step's joined type is emitted as the method's own <c>TJoin</c>, so an
+    /// anonymous tail is safe (and intentionally supported).
+    /// </summary>
+    private static bool HasAnonymousChainType(ChainModel chain)
+    {
+        if (IsAnonymousDisplay(chain.BaseType)) return true;
+
+        for (var i = 0; i < chain.Steps.Count - 1; i++)
+        {
+            if (IsAnonymousDisplay(chain.Steps[i].JoinedType)) return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsAnonymousDisplay(string type)
+        => type.Contains("<anonymous type:", StringComparison.Ordinal);
+
+    private static string? FirstAlias(ChainModel chain)
+    {
+        for (var i = 0; i < chain.Steps.Count; i++)
+        {
+            if (chain.Steps[i].Kind == StepKind.Alias) return chain.Steps[i].Alias;
+        }
+
+        return null;
+    }
+
+    private static AliasLocation FirstAliasLocation(ChainModel chain)
+    {
+        for (var i = 0; i < chain.Steps.Count; i++)
+        {
+            if (chain.Steps[i].Kind == StepKind.Alias) return chain.Steps[i].Location;
+        }
+
+        return default;
+    }
+
+    private static Location ToLocationOrNone(AliasLocation location)
+        => location.FilePath is null ? Location.None : ToLocation(location);
 
     private static void AppendAliasMarker(StringBuilder emitter, string generatedNamespace, List<string> aliases)
     {

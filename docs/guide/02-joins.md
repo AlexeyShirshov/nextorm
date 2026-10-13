@@ -278,11 +278,11 @@ private static AliasJoin_P1_A2_Buyer_A3_Approver<Order, Person, Person> AddAppro
     => builder.Join<Person>(people, (o, a) => o.Item1.ApproverId == a.Id, Alias.Approver);
 ```
 
-The generator reports `NORMGEN001`–`NORMGEN008` (a duplicate alias; an alias colliding with a generated
+The generator reports `NORMGEN001`–`NORMGEN009` (a duplicate alias; an alias colliding with a generated
 member; an invalid identifier; an arity over eight; an argument that is not in the `Alias.<Name>` form;
 an assembly name that cannot be normalised to a namespace; a join-alias extension signature collision;
-and `.WithAlias` applied to a non-root source). See
-[Limitations](../advanced/limitations.md).
+`.WithAlias` applied to a non-root source; and an alias applied to a chain whose projected type is
+anonymous). See [Limitations](../advanced/limitations.md).
 
 `NORMGEN007` guards against alias-join overloads that would share a signature but have different bodies.
 On the current generator that situation is **structurally unreachable**, so the diagnostic is
