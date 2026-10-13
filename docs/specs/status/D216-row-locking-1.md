@@ -18,7 +18,7 @@ prior_contract: rv=1 superseded by rv=2
 
 ## Current state
 
-- Phase: **DO completion n=3/3 — CHECK n=2 FAIL (completeness gate) routed back to DO**; implementing the three missed frozen-contract obligations (pre-change baseline, unfiltered `C-BOUNDARY`, live MariaDB whole-lock). Units D-01…D-06 `done`, D-07 `blocked`. rv=2 manifest frozen at `artifacts/pdca/D216/rv2/manifest.json`. CHECK owns the final verdict.
+- Phase: **DO complete (n=3/3) — at DO→CHECK boundary**. CHECK n=2 FAIL (completeness gate) is resolved by the three previously-missed frozen-contract obligations (pre-change baseline at `666cf9ac`, unfiltered `C-BOUNDARY`, live MariaDB whole-lock). Units D-01…D-06 `done`, D-07 `blocked` (MariaDB pending-owner). rv=2 manifest `artifacts/pdca/D216/rv2/manifest.json` re-validated (exit 0). CHECK owns the final verdict.
 - Cycle N=1, plan revision r=2, attempt n=3, evidence contract rv=2 (rv=1 superseded).
 - Selected variant: `pdca-dotnet`. Single collection group → current worktree/branch `1.0.9`, no worktree/branches/merge.
 - Blocks DO: none. **R-03/MariaDB is an open owner constraint**, surfaced upward; it does not stop the executable plan (routed escalation decision).
@@ -46,6 +46,16 @@ prior_contract: rv=1 superseded by rv=2
 | D-05 | done | matrix closure: focused unit/provider matrix rows, `PlanKeyUniquenessTests` (13), two-transaction integration locking (PG/MySQL/SQL Server 2 passed each; MariaDB dedicated 3 fail-closed), capability contract 5; commit `d6891104` + `1849164e` |
 | D-06 | done | EN/RU docs (8 files; committed `3247774b`), `dotnet docfx` exit 0, DO→CHECK boundary sweep (7x `PDCA=T216` + LockRendererDefault + PlanKeyUniqueness + integration), acceptance 7/0 + T216 6/0, coverage line 88.7% / branch 80.8%; boundary evidence `artifacts/pdca/D216/rv2/boundary/evidence.json` (validator exit 0) |
 | D-07 | **blocked** | original remainder: R-03/MariaDB source-level `OF` stays provisional fail-closed — **NOT PASS**; owner decision pending (narrow MariaDB to unsupported vs defer MariaDB source lock beyond 1.0.9). Evidence: `artifacts/pdca/D216/rv2/redgreen/mariadb-*.log`, `focused-mariadb.log`. **#216 stays OPEN.** |
+
+### DO completion n=3/3 (CHECK n=2 completeness gate)
+
+**EV-12 pre-change baseline** (mandated before D-02..D-04M): detached measurement worktree `git worktree add --detach /tmp/nextorm-base 666cf9ac` (= `4d979efc~1`), `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance` exit 0, 7 cases / 0 failures; worktree removed (`git worktree remove --force`). Baseline `Prepared_ToList` 891.7 us / 76.14 KB, `Cached_ToList` 1,763.6 us / 589.44 KB → ratio **1.98**, alloc ratio 7.74; after **2.03** (+2.6%), alloc 7.77 — below the 1.98×1.20 = 2.376 trigger. Logs `artifacts/pdca/D216/rv2/perf/baseline/acceptance.log`, comparison `perf/provenance.json`.
+
+**EV-11 unfiltered `C-BOUNDARY`**: `dotnet build nextorm.slnx -c Debug` exit 0 (0/0); serialized unfiltered `dotnet test tests/nextorm.<p>.tests -c Debug --no-build` — core 2461/0f, sqlite 1673/0f/1 skip (`SqliteRowIdLobProbeTests...`, unrelated LOB probe), postgres 909/0f, sqlserver 819/0f, mysql 387/0f, mariadb 268/0f, clickhouse 663/0f. Summary `artifacts/pdca/D216/rv2/boundary/boundary-summary.json` + per-project logs.
+
+**EV-10/V-27 live MariaDB whole-lock**: new `tests/nextorm.integration.tests/MariaDbRowLockingLiveTests.cs` against MariaDB 11.4: live whole-query `ForUpdate` SkipLocked probe (row held by another transaction is skipped), live whole-query `ForShare` execution (native `lock in share mode`), and source-lock fail-closed. Run `dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter 'FullyQualifiedName~MariaDbRowLockingLiveTests'` with `DOCKER_HOST` → exit 0, selected 3, passed 3, skipped 0 (container executed). Log `artifacts/pdca/D216/rv2/integration-mariadb-live.log`; inventory `provider-inventory.json`.
+
+Manifest updated: EV-02/EV-10/EV-11/EV-12/EV-14 `met` (scout accepted public-API and EN/RU parity; EV-10/EV-11/EV-12 now point at real artifacts), EV-15/EV-18 remain CHECK-side `open`, **EV-16 open/pending-owner**, EV-17 `met`; `validate_inner_loop.py manifest` exit 0. R-03/MariaDB fail-closed / **not PASS**; **#216 OPEN**; D-07 `blocked`.
 
 ### DO correction n=2/3 — boundary + coverage re-run and evidence completeness
 
@@ -439,4 +449,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 2026-10-13T01:30:00Z | DO | r=2 | n=2/3 | CHECK FAIL loop-back: fixed D216-ALIAS-CASE (alias case-fold under KeywordCase.Upper) and D216-SS-APPLY-GLOBAL-LOCK (APPLY source hint); slnx build 0/0; PDCA=T216 core 2 / pg 12 / mysql 7 / maria 3 / ss 5 all green; MariaDB fail-closed green | logs /tmp/fix-*.log
 2026-10-13T01:45:00Z | DO | r=2 | n=2/3 | DO complete again → CHECK: boundary re-run (core 2/pg 12/mysql 7/maria 3/ss 5/sqlite 1/ch 1; integration 9 [1 SQLite skip]; report validator exit 0); coverage line 88.7% / branch 80.8% preserved; EV case maps/exit-records/provider-inventory/perf-provenance/public-api/recon added; manifest re-validated exit 0; EV-16 open, EV-17 met | manifest artifacts/pdca/D216/rv2/manifest.json
 2026-10-13T02:00:00Z | DO | r=2 | n=3/3 | DO started (n=3): CHECK n=2 FAIL (completeness) routed back; fix stale attempt n; fulfil pre-change baseline (EV-12), unfiltered C-BOUNDARY (EV-11), live MariaDB whole-lock (EV-10/V-27) | status docs/specs/status/D216-row-locking-1.md
+2026-10-13T02:30:00Z | DO | r=2 | n=3/3 | DO complete → CHECK: pre-change baseline at 666cf9ac (ratio 1.98 vs after 2.03, +2.6%); unfiltered C-BOUNDARY all 7 provider projects 0 failed; live MariaDB whole-lock 3/3 executed, source fail-closed; manifest re-validated exit 0; EV-16 open, EV-17 met | manifest artifacts/pdca/D216/rv2/manifest.json
 ```

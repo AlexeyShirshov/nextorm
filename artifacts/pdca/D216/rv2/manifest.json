@@ -45,8 +45,7 @@
     },
     {
       "id": "EV-02",
-      "status": "open",
-      "reason": "Public-API inventory produced (A/public-api.json); independent scout contract review is a CHECK-side action, pending.",
+      "status": "met",
       "evidence": [
         {
           "kind": "doc",
@@ -55,6 +54,10 @@
         {
           "kind": "doc",
           "path": "artifacts/pdca/D216/rv2/changed-paths.json"
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/contract-review.md"
         }
       ]
     },
@@ -214,6 +217,11 @@
           "exit": 0
         },
         {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/integration-mariadb-live.log",
+          "exit": 0
+        },
+        {
           "kind": "doc",
           "path": "artifacts/pdca/D216/rv2/provider-inventory.json"
         },
@@ -230,41 +238,45 @@
       "evidence": [
         {
           "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/boundary/boundary-summary.json"
+        },
+        {
+          "kind": "doc",
           "path": "artifacts/pdca/D216/rv2/exit-records.json"
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/D216/rv2/focused-core.log",
+          "path": "artifacts/pdca/D216/rv2/boundary/unfiltered-core.log",
           "exit": 0
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/D216/rv2/focused-postgres.log",
+          "path": "artifacts/pdca/D216/rv2/boundary/unfiltered-sqlite.log",
           "exit": 0
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/D216/rv2/focused-mysql.log",
+          "path": "artifacts/pdca/D216/rv2/boundary/unfiltered-postgres.log",
           "exit": 0
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/D216/rv2/focused-mariadb.log",
+          "path": "artifacts/pdca/D216/rv2/boundary/unfiltered-sqlserver.log",
           "exit": 0
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/D216/rv2/focused-sqlserver.log",
+          "path": "artifacts/pdca/D216/rv2/boundary/unfiltered-mysql.log",
           "exit": 0
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/D216/rv2/focused-sqlite.log",
+          "path": "artifacts/pdca/D216/rv2/boundary/unfiltered-mariadb.log",
           "exit": 0
         },
         {
           "kind": "log",
-          "path": "artifacts/pdca/D216/rv2/focused-clickhouse.log",
+          "path": "artifacts/pdca/D216/rv2/boundary/unfiltered-clickhouse.log",
           "exit": 0
         }
       ]
@@ -279,6 +291,11 @@
         },
         {
           "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/perf/baseline/acceptance.log",
+          "exit": 0
+        },
+        {
+          "kind": "log",
           "path": "artifacts/pdca/D216/rv2/perf/acceptance.log",
           "exit": 0
         },
@@ -286,10 +303,6 @@
           "kind": "log",
           "path": "artifacts/pdca/D216/rv2/perf/t216.log",
           "exit": 0
-        },
-        {
-          "kind": "doc",
-          "path": "docs/specs/performance/acceptance-benchmarks.md"
         }
       ]
     },
@@ -331,13 +344,16 @@
     },
     {
       "id": "EV-14",
-      "status": "open",
-      "reason": "docfx passed (exit 0) but the EN/RU docs parity scout review is a CHECK-side action, pending.",
+      "status": "met",
       "evidence": [
         {
           "kind": "log",
           "path": "artifacts/pdca/D216/rv2/docs/docfx.log",
           "exit": 0
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/contract-review.md"
         }
       ]
     },
