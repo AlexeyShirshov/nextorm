@@ -1,0 +1,5 @@
+dotnet
+tool
+run
+docfx
+docs/docfx.json

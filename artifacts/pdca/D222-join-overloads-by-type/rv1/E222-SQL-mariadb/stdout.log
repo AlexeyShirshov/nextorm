@@ -1,0 +1,13 @@
+dotnet-coverage v18.11.2.0 [linux-x64 - .NET 10.0.12]
+
+SessionId: 5973c9e3-1745-4e31-99de-3343726683ab
+Running tests from /home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll (net10.0|x64) passed (2s 269ms)
+
+Test run summary: Passed!
+  total: 259
+  failed: 0
+  succeeded: 259
+  skipped: 0
+  duration: 2s 555ms
+Code coverage results: /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/mariadb.xml.

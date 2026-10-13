@@ -4,10 +4,10 @@
   "task": "T222",
   "issue": "#222",
   "cwd": "/home/alex/sources/nextorm",
-  "tree_revision": "4fbb603b27ff811508ec477604efba2c2132066a",
+  "tree_revision": "535fb42901b2a4736fbf113c236bb1a57bdecc27",
   "branch": "1.0.9",
-  "started_utc": "2026-10-13T06:42:54Z",
-  "finished_utc": "2026-10-13T06:42:54Z",
+  "started_utc": "2026-10-13T07:00:52Z",
+  "finished_utc": "2026-10-13T07:00:52Z",
   "command": ["bash", "artifacts/pdca/D222-join-overloads-by-type/rv1/baseline.sh"],
   "exit_code": 0,
   "artifacts": {

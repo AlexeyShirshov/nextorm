@@ -19,6 +19,7 @@
 * `QueryCommand<TJoinEntity>` — подзапрос, который отображается как производная таблица;
 * необработанной таблицей, [`EntityBuilder`](xref:NextORM.Core.EntityBuilder), созданной через [`From`](xref:NextORM.Core.DataContext.From(System.String)), столбцы которой
   читаются через индексатор [`TableAlias`](xref:NextORM.Core.TableAlias) (`t["id"]`).
+* сопоставленную сущность, названную типом, без передачи построителя источника — см. [Соединения без явного источника (по типу)](#соединения-без-явного-источника-по-типу);
 
 Прежде чем перейти к примерам, важно понять две вещи:
 
@@ -360,6 +361,63 @@ var full = dataContext.From<ISimpleEntity>()
 
 [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) и [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) отклоняются с `NotSupportedException` только тогда, когда диалект сообщает
 `SupportsRightFullJoin == false`; все поставляемые с nextorm провайдеры заявляют о поддержке.
+
+## Соединения без явного источника (по типу)
+
+Четыре условных оператора имеют форму без явного источника, которая разрешает присоединяемую
+сущность через тот же контекст данных. Вместо передачи `dataContext.From<TJoinEntity>()` укажите
+присоединяемый тип как generic-аргумент и передайте только условие:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Join<IComplexEntity>((s, c) => s.Id == c.Id)
+    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
+    .ToList();
+```
+
+`Join<TJoinEntity>`, `LeftJoin<TJoinEntity>`, `RightJoin<TJoinEntity>` и `FullJoin<TJoinEntity>`
+принимают те же `predicate` и необязательные `options`, что и их явные по источнику аналоги, и
+передают их без изменений (callback `options` вызывается один раз за вызов). Вызов по типу
+эквивалентен явной форме `dataContext.From<TJoinEntity>()`: источник разрешается в том же контексте
+(сначала сконфигурированное сопоставление, затем соглашение/метаданные) и даёт те же SQL, AST и
+строки.
+
+Форма без источника доступна на каждой арности приёмника, поэтому цепочку можно построить
+целиком по типу:
+
+```csharp
+var sql = dataContext.From<ISimpleEntity>()
+    .Join<IComplexEntity>((s, c) => s.Id == c.Id)
+    .Join<ISimpleEntity>((p, s) => p.Item2.Id == s.Id)
+    .Join<IComplexEntity>((p, c) => p.Item3.Id == c.Id)
+    // … вплоть до JoinedEntityBuilder<T1..T8> (восемь таблиц)
+    .Select(p => new { p.Item1.Id, p.Item4.RequiredString });
+```
+
+### Вывод типов и оговорка о недопустимом `null`
+
+* **Типизированный predicate, явный generic-аргумент.** `Join<TJoinEntity>((left, right) => …)` —
+  документированный вызов: generic-аргумент фиксирует присоединяемый тип, поэтому явный аргумент —
+  надёжная форма. Если predicate типизирован (оба параметра лямбды имеют типы), тип также может
+  быть выведен.
+* **Нетипизированная лямбда без выводимого типа — ошибка компиляции.** `Join((a, b) => …)` не может
+  вывести `TJoinEntity` из своих параметров и не переходит к другой перегрузке; укажите generic-аргумент
+  или типизируйте лямбду.
+* **Условие `null`.** `null`-predicate отклоняется `ArgumentNullException` до разрешения источника, на
+  каждом приёмнике и операторе — тот же fail-closed guard, что и у формы с явным источником.
+* **Недопустимая пара «всё null».** Нетипизированная пара `joined.Join<T>(null, null)` продолжает
+  компилироваться (в разрешении пары аргументов побеждает одна перегрузка); это в любом случае
+  недопустимый ввод, и новый вывод типов для него не обещается. Используйте типизированный
+  аргумент, чтобы выразить намерение.
+
+### Границы
+
+Форма без источника ограничена четырьмя операторами с predicate. `CrossJoin`, `CrossApply` и
+`OuterApply` не имеют predicate и **не** предоставляются без источника; форма без источника над
+необработанной таблицей (`From("table")`) также **не** предоставляется. Форма доступна на приёмнике
+`EntityBuilder<T>` (арность 2) и на приёмниках `JoinedEntityBuilder<T1..Tn>` арности 2–7
+(результирующая арность 3–8); терминальная арность 8 не имеет дальнейшего соединения, поэтому
+перегрузки без источника там нет.
 
 ## Перекрёстное соединение
 

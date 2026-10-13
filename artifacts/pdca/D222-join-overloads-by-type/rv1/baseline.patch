@@ -1,0 +1,147 @@
+diff --git a/docs/guide/02-joins.md b/docs/guide/02-joins.md
+index 6da3b4ea..d591e23c 100644
+--- a/docs/guide/02-joins.md
++++ b/docs/guide/02-joins.md
+@@ -18,6 +18,7 @@ The right-hand side can be:
+ * a `QueryCommand<TJoinEntity>` — a subquery that is rendered as a derived table;
+ * a raw table, [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) created through [`From`](xref:NextORM.Core.DataContext.From(System.String)), whose columns are read through
+   the [`TableAlias`](xref:NextORM.Core.TableAlias) indexer (`t["id"]`).
++* a mapped entity named by its type, without passing a source builder — see [Source-less (type-only) joins](#source-less-type-only-joins);
+ 
+ Two things are important before looking at the examples:
+ 
+@@ -353,6 +354,58 @@ var full = dataContext.From<ISimpleEntity>()
+ [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) and [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) are rejected with `NotSupportedException` only when a dialect reports
+ `SupportsRightFullJoin == false`; all providers nextorm ships declare support.
+ 
++## Source-less (type-only) joins
++
++The four conditional operators also have a source-less form that resolves the joined entity through the
++same data context. Instead of passing `dataContext.From<TJoinEntity>()`, name the joined type as the
++generic argument and pass only the condition:
++
++```csharp
++var rows = dataContext.From<ISimpleEntity>()
++    .Join<IComplexEntity>((s, c) => s.Id == c.Id)
++    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
++    .ToList();
++```
++
++`Join<TJoinEntity>`, `LeftJoin<TJoinEntity>`, `RightJoin<TJoinEntity>` and `FullJoin<TJoinEntity>` take
++the same `predicate` and optional `options` as their source-explicit counterparts and forward them
++unchanged (the `options` callback is invoked once per call). The type-only call is equivalent to the
++explicit `dataContext.From<TJoinEntity>()` form: the joined source is resolved in the same context
++(configured mapping first, then convention/metadata) and produces the same SQL, AST and rows.
++
++The source-less form is available on every receiver arity, so a chain can be built entirely by type:
++
++```csharp
++var sql = dataContext.From<ISimpleEntity>()
++    .Join<IComplexEntity>((s, c) => s.Id == c.Id)
++    .Join<ISimpleEntity>((p, s) => p.Item2.Id == s.Id)
++    .Join<IComplexEntity>((p, c) => p.Item3.Id == c.Id)
++    // … up to JoinedEntityBuilder<T1..T8> (eight tables)
++    .Select(p => new { p.Item1.Id, p.Item4.RequiredString });
++```
++
++### Inference and the invalid-null caveat
++
++* **Typed predicate, explicit type argument.** `Join<TJoinEntity>((left, right) => …)` is the documented
++  call: the generic argument fixes the joined type, so an explicit generic argument is the reliable form.
++  When the predicate is typed (both lambda parameters carry types), the joined type can also be inferred.
++* **Untyped lambda without an inferable type is a compile error.** `Join((a, b) => …)` cannot infer
++  `TJoinEntity` from its parameters and does not fall through to another overload; pass the type argument
++  or type the lambda.
++* **`null` condition.** A `null` predicate is rejected with `ArgumentNullException` before any source
++  resolution, on every receiver and operator — the same fail-closed guard as the source-explicit form.
++* **Invalid all-null pair.** The untyped all-`null` pair `joined.Join<T>(null, null)` keeps compiling (one
++  overload wins the argument-pair resolution); it is invalid input anyway, and no new type-inference
++  behaviour is promised for it. Use a typed argument to state the intent.
++
++### Scope
++
++The source-less form is limited to the four predicate-based operators. `CrossJoin`, `CrossApply` and
++`OuterApply` have no predicate and are **not** provided source-less; a source-less `EntityBuilder` over a
++raw table (`From("table")`) is likewise **not** provided. The form is available on the `EntityBuilder<T>`
++receiver (arity 2) and on `JoinedEntityBuilder<T1..Tn>` receivers with arity 2–7 (resulting arity 3–8);
++terminal arity 8 has no further join, so no source-less overload exists there.
++
+ ## Cross join
+ 
+ [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) takes no condition and produces the Cartesian product:
+diff --git a/docs/ru/guide/02-joins.md b/docs/ru/guide/02-joins.md
+index d815581d..5e11db58 100644
+--- a/docs/ru/guide/02-joins.md
++++ b/docs/ru/guide/02-joins.md
+@@ -19,6 +19,7 @@
+ * `QueryCommand<TJoinEntity>` — подзапрос, который отображается как производная таблица;
+ * необработанной таблицей, [`EntityBuilder`](xref:NextORM.Core.EntityBuilder), созданной через [`From`](xref:NextORM.Core.DataContext.From(System.String)), столбцы которой
+   читаются через индексатор [`TableAlias`](xref:NextORM.Core.TableAlias) (`t["id"]`).
++* сопоставленную сущность, названную типом, без передачи построителя источника — см. [Соединения без явного источника (по типу)](#соединения-без-явного-источника-по-типу);
+ 
+ Прежде чем перейти к примерам, важно понять две вещи:
+ 
+@@ -361,6 +362,63 @@ var full = dataContext.From<ISimpleEntity>()
+ [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) и [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) отклоняются с `NotSupportedException` только тогда, когда диалект сообщает
+ `SupportsRightFullJoin == false`; все поставляемые с nextorm провайдеры заявляют о поддержке.
+ 
++## Соединения без явного источника (по типу)
++
++Четыре условных оператора имеют форму без явного источника, которая разрешает присоединяемую
++сущность через тот же контекст данных. Вместо передачи `dataContext.From<TJoinEntity>()` укажите
++присоединяемый тип как generic-аргумент и передайте только условие:
++
++```csharp
++var rows = dataContext.From<ISimpleEntity>()
++    .Join<IComplexEntity>((s, c) => s.Id == c.Id)
++    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
++    .ToList();
++```
++
++`Join<TJoinEntity>`, `LeftJoin<TJoinEntity>`, `RightJoin<TJoinEntity>` и `FullJoin<TJoinEntity>`
++принимают те же `predicate` и необязательные `options`, что и их явные по источнику аналоги, и
++передают их без изменений (callback `options` вызывается один раз за вызов). Вызов по типу
++эквивалентен явной форме `dataContext.From<TJoinEntity>()`: источник разрешается в том же контексте
++(сначала сконфигурированное сопоставление, затем соглашение/метаданные) и даёт те же SQL, AST и
++строки.
++
++Форма без источника доступна на каждой арности приёмника, поэтому цепочку можно построить
++целиком по типу:
++
++```csharp
++var sql = dataContext.From<ISimpleEntity>()
++    .Join<IComplexEntity>((s, c) => s.Id == c.Id)
++    .Join<ISimpleEntity>((p, s) => p.Item2.Id == s.Id)
++    .Join<IComplexEntity>((p, c) => p.Item3.Id == c.Id)
++    // … вплоть до JoinedEntityBuilder<T1..T8> (восемь таблиц)
++    .Select(p => new { p.Item1.Id, p.Item4.RequiredString });
++```
++
++### Вывод типов и оговорка о недопустимом `null`
++
++* **Типизированный predicate, явный generic-аргумент.** `Join<TJoinEntity>((left, right) => …)` —
++  документированный вызов: generic-аргумент фиксирует присоединяемый тип, поэтому явный аргумент —
++  надёжная форма. Если predicate типизирован (оба параметра лямбды имеют типы), тип также может
++  быть выведен.
++* **Нетипизированная лямбда без выводимого типа — ошибка компиляции.** `Join((a, b) => …)` не может
++  вывести `TJoinEntity` из своих параметров и не переходит к другой перегрузке; укажите generic-аргумент
++  или типизируйте лямбду.
++* **Условие `null`.** `null`-predicate отклоняется `ArgumentNullException` до разрешения источника, на
++  каждом приёмнике и операторе — тот же fail-closed guard, что и у формы с явным источником.
++* **Недопустимая пара «всё null».** Нетипизированная пара `joined.Join<T>(null, null)` продолжает
++  компилироваться (в разрешении пары аргументов побеждает одна перегрузка); это в любом случае
++  недопустимый ввод, и новый вывод типов для него не обещается. Используйте типизированный
++  аргумент, чтобы выразить намерение.
++
++### Границы
++
++Форма без источника ограничена четырьмя операторами с predicate. `CrossJoin`, `CrossApply` и
++`OuterApply` не имеют predicate и **не** предоставляются без источника; форма без источника над
++необработанной таблицей (`From("table")`) также **не** предоставляется. Форма доступна на приёмнике
++`EntityBuilder<T>` (арность 2) и на приёмниках `JoinedEntityBuilder<T1..Tn>` арности 2–7
++(результирующая арность 3–8); терминальная арность 8 не имеет дальнейшего соединения, поэтому
++перегрузки без источника там нет.
++
+ ## Перекрёстное соединение
+ 
+ [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) не принимает условие и порождает декартово произведение:

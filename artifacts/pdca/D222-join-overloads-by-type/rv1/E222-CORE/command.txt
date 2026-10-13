@@ -1,0 +1,12 @@
+dotnet
+tool
+run
+dotnet-coverage
+collect
+dotnet test tests/nextorm.core.tests -c Debug
+-s
+coverage.settings.xml
+-f
+xml
+-o
+artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/core.xml

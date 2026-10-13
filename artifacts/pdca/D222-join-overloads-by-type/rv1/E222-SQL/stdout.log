@@ -1,0 +1,18 @@
+=== E222-SQL-sqlite ===
+capture[E222-SQL-sqlite] exit=0 -> /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL-sqlite
+E222-SQL-sqlite exit=0
+=== E222-SQL-sqlserver ===
+capture[E222-SQL-sqlserver] exit=0 -> /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL-sqlserver
+E222-SQL-sqlserver exit=0
+=== E222-SQL-postgres ===
+capture[E222-SQL-postgres] exit=0 -> /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL-postgres
+E222-SQL-postgres exit=0
+=== E222-SQL-mysql ===
+capture[E222-SQL-mysql] exit=0 -> /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL-mysql
+E222-SQL-mysql exit=0
+=== E222-SQL-mariadb ===
+capture[E222-SQL-mariadb] exit=0 -> /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL-mariadb
+E222-SQL-mariadb exit=0
+=== E222-SQL-clickhouse ===
+capture[E222-SQL-clickhouse] exit=0 -> /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL-clickhouse
+E222-SQL-clickhouse exit=0

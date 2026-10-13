@@ -1,0 +1,14 @@
+env
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+dotnet
+tool
+run
+dotnet-coverage
+collect
+dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor
+-s
+coverage.settings.xml
+-f
+xml
+-o
+artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/integration.xml

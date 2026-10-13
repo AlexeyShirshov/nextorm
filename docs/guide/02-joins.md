@@ -18,6 +18,7 @@ The right-hand side can be:
 * a `QueryCommand<TJoinEntity>` — a subquery that is rendered as a derived table;
 * a raw table, [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) created through [`From`](xref:NextORM.Core.DataContext.From(System.String)), whose columns are read through
   the [`TableAlias`](xref:NextORM.Core.TableAlias) indexer (`t["id"]`).
+* a mapped entity named by its type, without passing a source builder — see [Source-less (type-only) joins](#source-less-type-only-joins);
 
 Two things are important before looking at the examples:
 
@@ -352,6 +353,58 @@ var full = dataContext.From<ISimpleEntity>()
 
 [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) and [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) are rejected with `NotSupportedException` only when a dialect reports
 `SupportsRightFullJoin == false`; all providers nextorm ships declare support.
+
+## Source-less (type-only) joins
+
+The four conditional operators also have a source-less form that resolves the joined entity through the
+same data context. Instead of passing `dataContext.From<TJoinEntity>()`, name the joined type as the
+generic argument and pass only the condition:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Join<IComplexEntity>((s, c) => s.Id == c.Id)
+    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
+    .ToList();
+```
+
+`Join<TJoinEntity>`, `LeftJoin<TJoinEntity>`, `RightJoin<TJoinEntity>` and `FullJoin<TJoinEntity>` take
+the same `predicate` and optional `options` as their source-explicit counterparts and forward them
+unchanged (the `options` callback is invoked once per call). The type-only call is equivalent to the
+explicit `dataContext.From<TJoinEntity>()` form: the joined source is resolved in the same context
+(configured mapping first, then convention/metadata) and produces the same SQL, AST and rows.
+
+The source-less form is available on every receiver arity, so a chain can be built entirely by type:
+
+```csharp
+var sql = dataContext.From<ISimpleEntity>()
+    .Join<IComplexEntity>((s, c) => s.Id == c.Id)
+    .Join<ISimpleEntity>((p, s) => p.Item2.Id == s.Id)
+    .Join<IComplexEntity>((p, c) => p.Item3.Id == c.Id)
+    // … up to JoinedEntityBuilder<T1..T8> (eight tables)
+    .Select(p => new { p.Item1.Id, p.Item4.RequiredString });
+```
+
+### Inference and the invalid-null caveat
+
+* **Typed predicate, explicit type argument.** `Join<TJoinEntity>((left, right) => …)` is the documented
+  call: the generic argument fixes the joined type, so an explicit generic argument is the reliable form.
+  When the predicate is typed (both lambda parameters carry types), the joined type can also be inferred.
+* **Untyped lambda without an inferable type is a compile error.** `Join((a, b) => …)` cannot infer
+  `TJoinEntity` from its parameters and does not fall through to another overload; pass the type argument
+  or type the lambda.
+* **`null` condition.** A `null` predicate is rejected with `ArgumentNullException` before any source
+  resolution, on every receiver and operator — the same fail-closed guard as the source-explicit form.
+* **Invalid all-null pair.** The untyped all-`null` pair `joined.Join<T>(null, null)` keeps compiling (one
+  overload wins the argument-pair resolution); it is invalid input anyway, and no new type-inference
+  behaviour is promised for it. Use a typed argument to state the intent.
+
+### Scope
+
+The source-less form is limited to the four predicate-based operators. `CrossJoin`, `CrossApply` and
+`OuterApply` have no predicate and are **not** provided source-less; a source-less `EntityBuilder` over a
+raw table (`From("table")`) is likewise **not** provided. The form is available on the `EntityBuilder<T>`
+receiver (arity 2) and on `JoinedEntityBuilder<T1..Tn>` receivers with arity 2–7 (resulting arity 3–8);
+terminal arity 8 has no further join, so no source-less overload exists there.
 
 ## Cross join
 

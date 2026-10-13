@@ -1,0 +1,21 @@
+{
+  "row_id": "E222-API",
+  "rv": 1,
+  "task": "T222",
+  "issue": "#222",
+  "cwd": "/home/alex/sources/nextorm",
+  "tree_revision": "535fb429",
+  "command": [
+    "roslynq",
+    "nextorm.slnx",
+    "members",
+    "<type>"
+  ],
+  "exit_code": 0,
+  "result": "28 source-less members confirmed (4 on EntityBuilder<TEntity>, 24 on JoinedEntityBuilder arities 2..7); exclusions hold",
+  "artifacts": {
+    "members": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-API/members.json",
+    "report": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-API/semantic-report.md",
+    "raw": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-API/raw/"
+  }
+}

@@ -1,0 +1,12 @@
+dotnet
+tool
+run
+dotnet-coverage
+collect
+dotnet test tests/nextorm.sqlite.tests -c Debug
+-s
+coverage.settings.xml
+-f
+xml
+-o
+/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/sqlite.xml

@@ -1,0 +1,256 @@
+{
+  "task": "T222 / #222",
+  "tree": "branch 1.0.9, base 4fbb603b, HEAD 535fb429 (docs/evidence commit follows)",
+  "status_file": "docs/specs/status/D222-join-overloads-by-type-1.md",
+  "contract_rv": 1,
+  "required_rows": [
+    "E222-BASE",
+    "E222-API",
+    "E222-BUILD",
+    "E222-COMPAT",
+    "E222-CORE",
+    "E222-SQL",
+    "E222-INTEGRATION",
+    "E222-COVERAGE",
+    "E222-DOCS",
+    "E222-DESIGN",
+    "E222-MUTATION"
+  ],
+  "rows": [
+    {
+      "id": "E222-BASE",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-BASE/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-BASE/stdout.log",
+          "exit": 0
+        },
+        {
+          "kind": "patch",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/baseline.patch"
+        }
+      ]
+    },
+    {
+      "id": "E222-API",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "inventory",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-API/members.json"
+        },
+        {
+          "kind": "report",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-API/semantic-report.md"
+        },
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-API/receipt.json",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "E222-BUILD",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-BUILD/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-BUILD/stdout.log",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "E222-COMPAT",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COMPAT/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COMPAT/stdout.log",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "E222-CORE",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-CORE/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-CORE/stdout.log",
+          "exit": 0
+        },
+        {
+          "kind": "coverage",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/core.xml"
+        }
+      ]
+    },
+    {
+      "id": "E222-SQL",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL/stdout.log",
+          "exit": 0
+        },
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL-sqlite/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL-sqlserver/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL-postgres/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL-mysql/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL-mariadb/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-SQL-clickhouse/receipt.json",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "E222-INTEGRATION",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-INTEGRATION/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-INTEGRATION/stdout.log",
+          "exit": 0
+        },
+        {
+          "kind": "coverage",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/integration.xml"
+        }
+      ]
+    },
+    {
+      "id": "E222-COVERAGE",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/stdout.log",
+          "exit": 0
+        },
+        {
+          "kind": "merged",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/merged.xml"
+        },
+        {
+          "kind": "summary",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report-all-cobertura/Summary.txt"
+        },
+        {
+          "kind": "summary",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report/Summary.txt"
+        }
+      ]
+    },
+    {
+      "id": "E222-DOCS",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-DOCS/receipt.json",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-DOCS/stdout.log",
+          "exit": 0
+        },
+        {
+          "kind": "review",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-DOCS/docs-review.md"
+        }
+      ]
+    },
+    {
+      "id": "E222-DESIGN",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "audit",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-DESIGN/audit.md"
+        },
+        {
+          "kind": "receipt",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-DESIGN/receipt.json",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "E222-MUTATION",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-MUTATION/stdout.log",
+          "exit": 0
+        },
+        {
+          "kind": "disposition",
+          "path": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-MUTATION/mutation-disposition.md"
+        }
+      ]
+    }
+  ]
+}

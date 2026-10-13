@@ -1,0 +1,13 @@
+dotnet-coverage v18.11.2.0 [linux-x64 - .NET 10.0.12]
+
+SessionId: 4dfa8031-c312-4843-a89d-58f39ced172e
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) passed (3s 225ms)
+
+Test run summary: Passed!
+  total: 812
+  failed: 0
+  succeeded: 812
+  skipped: 0
+  duration: 3s 514ms
+Code coverage results: /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/sqlserver.xml.

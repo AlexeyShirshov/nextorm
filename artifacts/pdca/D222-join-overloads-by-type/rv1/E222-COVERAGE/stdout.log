@@ -1,0 +1,42 @@
+dotnet-coverage v18.11.2.0 [linux-x64 - .NET 10.0.12]
+
+Including file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/postgres.xml.
+Including file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/sqlite.xml.
+Including file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/sqlserver.xml.
+Including file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/core.xml.
+Merged into file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/merged.xml.
+2026-10-13T12:08:45: Arguments
+2026-10-13T12:08:46:  -reports:/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/merged.xml
+2026-10-13T12:08:46:  -targetdir:/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report
+2026-10-13T12:08:46:  -reporttypes:Cobertura;TextSummary
+2026-10-13T12:08:47: Writing report file '/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report/Cobertura.xml'
+2026-10-13T12:08:47: Writing report file '/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report/Summary.txt'
+2026-10-13T12:08:47: Report generation took 1.7 seconds
+dotnet-coverage v18.11.2.0 [linux-x64 - .NET 10.0.12]
+
+Including file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/clickhouse.xml.
+Including file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/mariadb.xml.
+Including file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/integration.xml.
+Including file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/mysql.xml.
+Including file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/core.xml.
+Including file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/postgres.xml.
+Including file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/sqlite.xml.
+Including file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/sqlserver.xml.
+Merged into file /home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/merged-all.xml.
+2026-10-13T12:08:50: Arguments
+2026-10-13T12:08:50:  -reports:/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/merged-all.xml
+2026-10-13T12:08:50:  -targetdir:/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report-all
+2026-10-13T12:08:50:  -reporttypes:Cobertura;TextSummary
+2026-10-13T12:08:51: Writing report file '/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report-all/Cobertura.xml'
+2026-10-13T12:08:51: Writing report file '/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report-all/Summary.txt'
+2026-10-13T12:08:52: Report generation took 1.6 seconds
+2026-10-13T12:08:52: Arguments
+2026-10-13T12:08:52:  -reports:/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/all.cobertura.xml
+2026-10-13T12:08:52:  -targetdir:/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report-all-cobertura
+2026-10-13T12:08:52:  -reporttypes:Cobertura;TextSummary
+2026-10-13T12:08:53: Writing report file '/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report-all-cobertura/Cobertura.xml'
+2026-10-13T12:08:53: Writing report file '/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-COVERAGE/report-all-cobertura/Summary.txt'
+2026-10-13T12:08:54: Report generation took 2.0 seconds
+contract-subset(4 xml) line=82.6% (below-threshold note: subset omits test projects that cover the in-scope assemblies)
+full-sweep(8 xml)      line=87.9%
+ci-cobertura(all tests) line=88.7% branch=80.7%

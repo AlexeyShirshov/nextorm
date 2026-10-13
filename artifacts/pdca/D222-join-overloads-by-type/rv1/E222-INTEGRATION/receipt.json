@@ -1,0 +1,19 @@
+{
+  "row_id": "E222-INTEGRATION",
+  "rv": 1,
+  "task": "T222",
+  "issue": "#222",
+  "cwd": "/home/alex/sources/nextorm",
+  "tree_revision": "535fb42901b2a4736fbf113c236bb1a57bdecc27",
+  "branch": "1.0.9",
+  "started_utc": "2026-10-13T07:03:46Z",
+  "finished_utc": "2026-10-13T07:05:06Z",
+  "command": ["env", "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock", "dotnet", "tool", "run", "dotnet-coverage", "collect", "dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor", "-s", "coverage.settings.xml", "-f", "xml", "-o", "artifacts/pdca/D222-join-overloads-by-type/rv1/coverage/integration.xml"],
+  "exit_code": 0,
+  "artifacts": {
+    "command": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-INTEGRATION/command.txt",
+    "stdout": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-INTEGRATION/stdout.log",
+    "stderr": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-INTEGRATION/stderr.log",
+    "exitcode": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/E222-INTEGRATION/exitcode.txt"
+  }
+}

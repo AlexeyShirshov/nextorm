@@ -122,6 +122,19 @@ constructors are **not** candidates.
   `DataContextBuilder(IServiceProvider)` constructor and the preserved public parameterless constructor are
   **not** candidates.
 
+- **T222 (#222, `docs/specs/status/D222-join-overloads-by-type-1.md`):** the source-less (type-only) join
+  overloads add **28 public members**. Result arity 2, on `EntityBuilder<TEntity>` (4 members, one per
+  operator):
+  `public JoinedEntityBuilder<TEntity, TJoinEntity> <Op><TJoinEntity>(Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)`
+  for `<Op>` ∈ { `Join`, `LeftJoin`, `RightJoin`, `FullJoin` }.
+  Result arity n+1, on `JoinedEntityBuilder<T1..Tn>` for n = 2..7 (4 members each, 24 total, declared
+  `new`):
+  `public new JoinedEntityBuilder<T1..Tn, TJoinEntity> <Op><TJoinEntity>(Expression<Func<Projection<T1..Tn>, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)`
+  for `<Op>` ∈ { `Join`, `LeftJoin`, `RightJoin`, `FullJoin` }.
+  All 28 delegate to the existing context-local `From<TJoinEntity>()` source resolution and to the
+  existing join core; the source-explicit overloads are unchanged. Freeze remains **HELD**: no
+  `PublicAPI.Shipped/Unshipped` file is created and the analyzer is not activated by this task.
+
 ## Overlap / footprint
 
 - Последовательность: API-результаты #209/#211/#212/#213 → T53 D1–D6; их Unshipped-правки (если уже

@@ -5,9 +5,9 @@
   "cycle": 1,
   "plan_revision": 1,
   "branch": "1.0.9",
-  "base_head": "4fbb603b27ff811508ec477604efba2c2132066a",
-  "tree_revision": "4fbb603b27ff811508ec477604efba2c2132066a",
-  "dirty_paths": "docs/assets/diagrams/nextorm-command-execution.svg,docs/ru/assets/diagrams/nextorm-command-execution.svg",
+  "base_head": "535fb42901b2a4736fbf113c236bb1a57bdecc27",
+  "tree_revision": "535fb42901b2a4736fbf113c236bb1a57bdecc27",
+  "dirty_paths": "artifacts/pdca/D222-join-overloads-by-type/rv1/E222-BASE/git-status-porcelain.txt,artifacts/pdca/D222-join-overloads-by-type/rv1/E222-BASE/git-status-short.txt,artifacts/pdca/D222-join-overloads-by-type/rv1/E222-BASE/stdout.log,artifacts/pdca/D222-join-overloads-by-type/rv1/baseline.patch,docs/assets/diagrams/nextorm-command-execution.svg,docs/guide/02-joins.md,docs/ru/assets/diagrams/nextorm-command-execution.svg,docs/ru/guide/02-joins.md,docs/specs/status/D53-public-api-freeze-1.md",
   "shared_dirty_preserved": [
     "docs/assets/diagrams/nextorm-command-execution.svg",
     "docs/ru/assets/diagrams/nextorm-command-execution.svg"
