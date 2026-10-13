@@ -288,7 +288,7 @@
     {
       "id": "E222-CHECK",
       "status": "open",
-      "reason": "CHECK #1 FAIL. Open IDs: FIX1 (docs overstated null parity), FIX2 (false terminal-arity-8 compile-rejection claim; inherited reachability), FIX4/5/6 (options parity, V24 baseline, V25 value-type), FIX7 (provenance-inconsistent receipts, missing thresholds.json/case-indexes, integration count 4 vs 5). Corrective round n=2/3 applied and re-run on the current tree; re-gather ledger: the flagged rows were re-executed (BASE/API/DESIGN/COVERAGE; CORE 29/29; six SQL 7/7; COMPAT 0; build 0/0) and the evidence receipts/manifest refreshed."
+      "reason": "CHECK #1 FAIL + CHECK #2 FAIL. Escalation decision (a): r=1, final DO round n=3/3, comprehensive claim-level docs fix + separate evidence repair. Open items closed this round: 12 inaccurate arity-8 claims rewritten across EN/RU guides + limitations (claim-registry.md); evidence repaired (evidence.json selected_count 27->29; V24 baseline SHA pinned 4fbb603b27ff811508ec477604efba2c2132066a; COMPAT fixture file:line; variant-closure/V30 index). E222-CHECK stays open pending the verdict; no PASS fabricated."
     }
   ]
 }

@@ -61,8 +61,8 @@
       "source_revision": "b1b44438+t222-corr",
       "artifact_revision": "b1b44438+t222-corr",
       "exit_code": 0,
-      "selected_count": 27,
-      "note": "inner InMemoryJoinTests (27 selected, 0 failed)"
+      "selected_count": 29,
+      "note": "inner InMemoryJoinTests (29 selected, 0 failed)"
     },
     {
       "command": [

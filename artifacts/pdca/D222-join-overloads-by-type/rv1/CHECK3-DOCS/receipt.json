@@ -1,0 +1,19 @@
+{
+  "row_id": "CHECK3-DOCS",
+  "rv": 1,
+  "task": "T222",
+  "issue": "#222",
+  "cwd": "/home/alex/sources/nextorm",
+  "tree_revision": "670cb4706d58462ebfc8885bedaf22dc71f23439",
+  "branch": "1.0.9",
+  "started_utc": "2026-10-13T07:57:36Z",
+  "finished_utc": "2026-10-13T07:58:23Z",
+  "command": ["dotnet", "tool", "run", "docfx", "docs/docfx.json"],
+  "exit_code": 0,
+  "artifacts": {
+    "command": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/CHECK3-DOCS/command.txt",
+    "stdout": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/CHECK3-DOCS/stdout.log",
+    "stderr": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/CHECK3-DOCS/stderr.log",
+    "exitcode": "/home/alex/sources/nextorm/artifacts/pdca/D222-join-overloads-by-type/rv1/CHECK3-DOCS/exitcode.txt"
+  }
+}

@@ -19,3 +19,4 @@ Bounded parity/accuracy checks (coder):
 
 DocFX build: exit 0 (only 2 pre-existing sourcegenerator duplicate-file warnings).
 toc / guide numbering / readme: unchanged.
+Claim registry (n=3/3): `E222-DOCS/claim-registry.md` — 27 mentions (12 inaccurate all rewritten, 9 accurate, 6 generator-scoped); zero remaining inaccurate arity-8 'compile-time cap' claims.

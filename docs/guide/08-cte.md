@@ -464,8 +464,9 @@ A direct descriptor behaves exactly like the converted one everywhere: dependenc
 dependency-before-consumer order, the same instance used twice is declared once, a distinct descriptor
 with a duplicate name is still rejected, entity filters stay inside the defining body, and repeated
 calls do not mutate the shared command or its cache flag. On a [`JoinedEntityBuilder<T1..Tn>`](xref:NextORM.Core.JoinedEntityBuilder`2) the same
-overloads exist for receiver arities 2–7, so a CTE can be joined at any continuation; the projection
-still stops at eight slots.
+overloads exist for receiver arities 2–7, so a CTE can be joined at any continuation; the flat typed
+projection still stops at eight slots (no further join case is declared at arity eight), while the
+inherited generic-base joins remain reachable.
 
 A CTE scope also drives a multi-table `UPDATE`/`DELETE`. Put the CTE on the **joined** side and keep the
 physical table as the target; the declaration is hoisted before the mutation:

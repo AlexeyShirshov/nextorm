@@ -6,7 +6,17 @@
       "id": "T222-COMPAT-POS",
       "project": "artifacts/pdca/D222-join-overloads-by-type/rv1/compatibility/positive/PositiveFixture.csproj",
       "expect": "success",
-      "expected_diagnostics": []
+      "expected_diagnostics": [],
+      "sources": [
+        {
+          "file": "compatibility/positive/Positive.cs",
+          "line": 36
+        },
+        {
+          "file": "compatibility/positive/Positive.cs",
+          "line": 76
+        }
+      ]
     },
     {
       "id": "T222-COMPAT-NEG-INFER",
@@ -14,13 +24,25 @@
       "expect": "failure",
       "expected_diagnostics": [
         "CS0411"
+      ],
+      "sources": [
+        {
+          "file": "compatibility/negative/Untyped.cs",
+          "line": 14
+        }
       ]
     },
     {
       "id": "T222-COMPAT-ALLNULL",
       "project": "artifacts/pdca/D222-join-overloads-by-type/rv1/compatibility/allnull/AllNullFixture.csproj",
       "expect": "success",
-      "expected_diagnostics": []
+      "expected_diagnostics": [],
+      "sources": [
+        {
+          "file": "compatibility/allnull/AllNull.cs",
+          "line": 20
+        }
+      ]
     }
   ]
 }

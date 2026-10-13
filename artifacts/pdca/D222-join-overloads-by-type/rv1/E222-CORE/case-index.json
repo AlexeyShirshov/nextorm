@@ -53,5 +53,23 @@
       "file": "tests/nextorm.core.tests/InMemoryJoinTests.cs",
       "line": 612
     }
-  ]
+  ],
+  "variant_closure": {
+    "V01": "V01/V02/V03 in E222-SQL (configured/convention equivalence); V01 core result parity",
+    "V02": "E222-SQL ConventionResolved_TypeOnly_WorksWithoutRegistration",
+    "V03": "E222-SQL ConfiguredMapping_TypeOnly_UsesConfiguredSource",
+    "V04": "E222-SQL UnresolvableType_TypeOnly_FailsAtSameStageAsExplicit",
+    "V05-V15": "TestTypeOnly*Join_EquivalentToExplicit_AtEveryReceiverArity (Join/Left/Right/Full) x core; E222-SQL per-provider arity chains",
+    "V16": "E222-API members.json (no Cross/Apply/raw-table/arity-8 additions)",
+    "V17": "TestTypeOnlyJoin_Options_ParityWithExplicitSource (omitted == explicit null)",
+    "V18": "TestTypeOnlyJoin_Options_ParityWithExplicitSource (both callback counts ==1 + AST parity)",
+    "V19": "TestTypeOnlyJoin_Options_SentinelException_NotSwallowed",
+    "V20": "TestTypeOnlyJoin_NullPredicate_ThrowsBeforeSourceResolution_OnEveryReceiverAndKind",
+    "V21": "E222-COMPAT positive fixture (typed/typed-expression/explicit-generic)",
+    "V22": "E222-COMPAT negative fixture CS0411",
+    "V23": "E222-COMPAT positive fixture (named/optional args, source/QueryCommand forms)",
+    "V24": "E222-COMPAT-ALLNULL + E222-COMPAT-BASELINE (baseline parity; no new ambiguity)",
+    "V25": "TestTypeOnlyJoin_ValueTypeEntity_PairedWithExplicitSource (allowed; constraint-free)",
+    "V26": "TestTypeOnlyOuterJoins_UnmatchedSides_AreNull"
+  }
 }

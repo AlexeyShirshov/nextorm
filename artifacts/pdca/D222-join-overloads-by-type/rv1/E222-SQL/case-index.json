@@ -242,5 +242,15 @@
         }
       ]
     }
+  },
+  "variant_closure": {
+    "V27": "all six TypeOnlyJoinSqlGenerationTests suites",
+    "V29": "per-provider capability rejection equivalence in AssertSameSql",
+    "V32": "explicit source/CTE/QueryCommand forms unchanged (positive fixture)",
+    "V30": {
+      "status": "deferred",
+      "detail": "separate real MariaDB server/integration infrastructure",
+      "trigger": "a dedicated MariaDB integration infrastructure or a provider-specific MariaDB regression appears"
+    }
   }
 }

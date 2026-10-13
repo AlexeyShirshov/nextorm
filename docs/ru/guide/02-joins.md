@@ -23,13 +23,16 @@
 
 Прежде чем перейти к примерам, важно понять две вещи:
 
-1. **Арность соединений ограничена восемью таблицами на этапе компиляции.** Первое соединение
+1. **У арности соединений есть граница плоской цепочки в восемь таблиц.** Первое соединение
    возвращает [`JoinedEntityBuilder<T1, T2>`](xref:NextORM.Core.JoinedEntityBuilder`2), следующее — [`JoinedEntityBuilder<T1, T2, T3>`](xref:NextORM.Core.JoinedEntityBuilder`3) и так далее вплоть до
-   `JoinedEntityBuilder<T1..T8>`. `JoinedEntityBuilder` намеренно не предоставляет дальнейших методов
+   `JoinedEntityBuilder<T1..T8>`. За этой точкой `JoinedEntityBuilder` не *объявляет* дальнейших методов
    [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})), а `Projection<T1..T8>` не реализует
-   [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection), поэтому девятое соединение не компилируется.
-   Потолок можно снять, назвав накопленную проекцию через
-   [`As`](xref:NextORM.Core.EntityBuilder`1.As``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) (см. [Именование промежуточной проекции](#именование-промежуточной-проекции-as)).
+   [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection), поэтому плоская типизированная цепочка там останавливается.
+   Это граница области, **не** отказ на компиляции: `JoinedEntityBuilder<T1..T8>` всё равно наследует
+   члены generic-базы `EntityBuilder<Projection<T1..T8>>`, поэтому дальнейший join без источника
+   (и с явным источником) компилируется, рассматривая накопленную восьмитабличную проекцию как `Item1`.
+   Назовите проекцию через
+   [`As`](xref:NextORM.Core.EntityBuilder`1.As``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) (см. [Именование промежуточной проекции](#именование-промежуточной-проекции-as)), чтобы сохранить форму чистой.
 2. **Накопленная проекция адресуется как `p.Item1`, `p.Item2`, … `p.Item8`.** После первого соединения
    условие получает эту проекцию вместо обычной сущности, поэтому цепочка соединений ссылается на
    уже соединённые таблицы через `p.tN`.
@@ -245,7 +248,9 @@ var chained = dataContext.From<Order>(b => b.Table("orders"))
 Псевдоним должен быть корректным идентификатором C# без `_` (зарезервирован для сборки имён
 сгенерированных типов); зарезервированное ключевое слово генерируется экранированным (`@class`).
 Класс-маркер — единственная допустимая форма аргумента псевдонима: `Alias.Buyer<int>` или
-`Alias.Buyer.Approver` отклоняются. Арность ограничена восемью слотами через `Projection<T1..T8>`.
+`Alias.Buyer.Approver` отклоняются. Плоская типизированная цепочка, которую продолжает поверхность
+псевдонимов, останавливается на восьми слотах (`Projection<T1..T8>`); как и позиционная цепочка, это
+граница области, а не отказ на компиляции.
 
 Сгенерированные перегрузки с псевдонимами принимают и типизированный дескриптор CTE — [`Cte<T>`](xref:NextORM.Core.Cte`1)
 вместо источника [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1). Присоединяемый тип выводится из дескриптора, поэтому явный
@@ -710,8 +715,9 @@ var sql = e[0]
 Прямые перегрузки [`Cte<T>`](xref:NextORM.Core.Cte`1) доступны и на каждом продолжении: каждый
 [`JoinedEntityBuilder<T1..Tn>`](xref:NextORM.Core.JoinedEntityBuilder`2) (арности приёмника 2–7) принимает типизированный CTE вместо
 источника `EntityBuilder<T>` для всех семи операторов, поэтому CTE можно присоединить на любом шаге.
-Проекция при этом по-прежнему ограничена восемью слотами — восьмая арность не предоставляет
-дальнейшего соединения, и `Cte<T>` не поднимает этот потолок.
+Плоская типизированная цепочка при этом по-прежнему останавливается на восьми слотах — на арности
+восемь не *объявлено* дальнейшего случая соединения — и `Cte<T>` не меняет эту границу области;
+унаследованные соединения generic-базы остаются доступными (см. [Обзор](#обзор)).
 
 ## Именование промежуточной проекции: `As`
 
@@ -733,9 +739,9 @@ select t3.OrderId, t3.CustomerName, t4.id as 'Third' from (select t1.id as 'Orde
 ```
 
 `As` объявлен один раз на `EntityBuilder<T>` и наследуется каждым `JoinedEntityBuilder<T1..Tn>`,
-поэтому per-arity перегрузки нет. Поскольку результат — производная таблица, это также снимает
-восьмитабличный потолок времени компиляции: `.As(...)` сбрасывает счётчик арности, и следующий
-`Join` возвращает новый `JoinedEntityBuilder<TResult, …>`.
+поэтому per-arity перегрузки нет. Поскольку результат — производная таблица, `.As(...)` сбрасывает
+счётчик арности, поэтому следующий `Join` возвращает новый `JoinedEntityBuilder<TResult, …>`, а плоская
+цепочка остаётся читаемой — это сброс читаемости, а не выход из потолка времени компиляции.
 
 После `As` видны только спроецированные члены, а проекция становится границей материализации,
 поэтому столбцы более ранних источников недоступны в последующих соединениях. In-memory-провайдер

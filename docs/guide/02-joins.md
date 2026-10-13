@@ -22,12 +22,15 @@ The right-hand side can be:
 
 Two things are important before looking at the examples:
 
-1. **Join arity is capped at eight tables, at compile time.** The first join returns
+1. **Join arity has a flat arity-chain scope bound of eight tables.** The first join returns
    [`JoinedEntityBuilder<T1, T2>`](xref:NextORM.Core.JoinedEntityBuilder`2), the next [`JoinedEntityBuilder<T1, T2, T3>`](xref:NextORM.Core.JoinedEntityBuilder`3), and so on up to `JoinedEntityBuilder<T1..T8>`.
-   `JoinedEntityBuilder` deliberately exposes no further [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))
-   methods, and `Projection<T1..T8>` does not implement [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection), so a ninth join
-   does not compile. The cap can be lifted by naming the accumulated projection with
-   [`As`](xref:NextORM.Core.EntityBuilder`1.As``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) (see [Naming an intermediate projection](#naming-an-intermediate-projection-as)).
+   Beyond this point no further [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))
+   methods, and `Projection<T1..T8>` does not implement [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection), so the flat typed chain
+   stops there. That is a scope bound, **not** a compile-time rejection: `JoinedEntityBuilder<T1..T8>` still
+   inherits the generic-base `EntityBuilder<Projection<T1..T8>>` members, so a further source-less (and
+   source-explicit) join does compile, wrapping the accumulated eight-table projection as `Item1`. Name the
+   projection with
+   [`As`](xref:NextORM.Core.EntityBuilder`1.As``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) (see [Naming an intermediate projection](#naming-an-intermediate-projection-as)) to keep the shape clean.
 2. **The accumulated projection is addressed as `p.Item1`, `p.Item2`, … `p.Item8`.** After the first join the
    condition receives that projection instead of the plain entity, so a chained join references the
    tables already joined through `p.tN`.
@@ -240,8 +243,9 @@ var chained = dataContext.From<Order>(b => b.Table("orders"))
 
 An alias must be a valid C# identifier without `_` (reserved for composing the generated type names);
 a reserved keyword is emitted escaped (`@class`). The marker class is the only approved alias argument
-form — `Alias.Buyer<int>` or `Alias.Buyer.Approver` is rejected. The arity is capped at eight slots by
-`Projection<T1..T8>`.
+form — `Alias.Buyer<int>` or `Alias.Buyer.Approver` is rejected. The flat typed chain the alias surface
+extends stops at eight slots (`Projection<T1..T8>`); like the positional chain, that is a scope bound,
+not a compile-time rejection.
 
 The generated alias overloads also accept a typed CTE descriptor directly — a [`Cte<T>`](xref:NextORM.Core.Cte`1) in place of
 the [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1) source. The joined type is inferred from the descriptor, so the explicit
@@ -698,8 +702,9 @@ var sql = e[0]
 The direct [`Cte<T>`](xref:NextORM.Core.Cte`1) overloads are also available at every continuation: each
 [`JoinedEntityBuilder<T1..Tn>`](xref:NextORM.Core.JoinedEntityBuilder`2) (receiver arities 2–7) takes a typed CTE in place of
 the `EntityBuilder<T>` source for all seven operators, so a CTE can be joined at any step. The
-projection still stops at eight slots — arity eight exposes no further join, and a `Cte<T>` does not
-lift that cap.
+flat typed chain still stops at eight slots — no further join case is *declared* at arity eight — and a
+`Cte<T>` does not change that scope bound; the inherited generic-base joins remain reachable (see
+[Overview](#overview)).
 
 ## Naming an intermediate projection: `As`
 
@@ -720,9 +725,9 @@ select t3.OrderId, t3.CustomerName, t4.id as 'Third' from (select t1.id as 'Orde
 ```
 
 `As` is declared once on `EntityBuilder<T>` and inherited by every `JoinedEntityBuilder<T1..Tn>`, so
-there is no per-arity overload. Because the result is a derived table, it also lifts the eight-table
-compile-time cap: `.As(...)` resets the arity counter, and a further `Join` returns a fresh
-`JoinedEntityBuilder<TResult, …>`.
+there is no per-arity overload. Because the result is a derived table, `.As(...)` resets the arity
+counter, so a further `Join` returns a fresh `JoinedEntityBuilder<TResult, …>` and the flat chain stays
+readable — a readability reset, not an escape from a compile-time cap.
 
 Only the projected members remain visible after `As`, and the projection becomes a materialization
 boundary, so the columns of earlier sources cannot be referenced by later joins. The in-memory
