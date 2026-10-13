@@ -34,6 +34,26 @@ prior_contract: rv=1 superseded by rv=2
 - Attempt n: 1
 - Defect history: none yet (DO not started).
 
+### DO unit states (D-01..D-04M; production surface + shared contract + provider renderers)
+
+| Unit | State | Evidence |
+|---|---|---|
+| D-01 | done | SQL Server all-source red→green regression: `A/redgreen` analog `/tmp/nextorm-d01-red.log` (exit 2, selected 2, failed 2) → `/tmp/nextorm-d01-green.log` (exit 0, selected 2) |
+| D-02 | done | shared contract: options carriers, `ILockRenderer.SupportsSourceLocks`, target-aware `Render(..., string?)`, fail-closed default; commit `4d979efc` |
+| D-03 | done | mappings/clones/equality/plan-key identity/guards (`FromExpressionPlanEqualityComparer`, `QueryCommand.SourceLockClause`, `QueryPreparer` attach+guards); commit `4d979efc` |
+| D-04 | done | SQL Server all-source hints, PG/MySQL `OF <alias>`, alias addressing; join-source-lock fix commit `3ef11a3c` |
+| D-04M | done | MariaDB `SupportsSourceLocks=false` + deterministic `NotSupportedException`; whole grammar preserved; red→green `/tmp/nextorm-maria-red.log` (exit 2, selected 3, failed 2) → `/tmp/nextorm-maria-green.log` (exit 0, selected 3) |
+| D-05/D-06 | pending | full matrix closure, `PlanKeyUniquenessTests` run, solution build, CRLF sweep, docs, integration, perf, coverage, manifest — NOT started |
+
+Focused inner-loop evidence (trait `PDCA=T216`, `-c Debug --no-build`, filter `PDCA=T216`):
+`/tmp/nextorm-core-focused.log` (exit 0, selected 5), `/tmp/nextorm-ss-t216b.log` (exit 0, selected 2),
+`/tmp/nextorm-postgres-t216b.log` (exit 0, selected 4), `/tmp/nextorm-mysql-t216b.log` (exit 0, selected 3),
+`/tmp/nextorm-mariadb-t216b.log` (exit 0, selected 3). Scope brief validated: `/tmp/nextorm-t216-scope.json` exit 0.
+Build: `src/nextorm.core` + all six provider projects exit 0 / 0 warnings / 0 errors (`/tmp/nextorm-d02-build2.log`, `/tmp/nextorm-d04-*.log`).
+
+**R-03/MariaDB remains a constraint pending owner decision; not a PASS and #216 stays open.**
+
+
 ## Goal
 
 Separate:
@@ -319,4 +339,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 ```text
 2026-10-12T04:39:15Z | PLAN | r=2 | n=1/3 | PLAN ready — awaiting confirmation (collection plan_handoff; DO not started) | status file docs/specs/status/D216-row-locking-1.md
 2026-10-13T00:00:00Z | DO | r=2 | n=1/3 | DO started — D-01..D-04M; planner footprint corrections applied (docs guide/32, Expressions comparers) | scope /tmp/nextorm-t216-scope.json (brief exit 0)
+2026-10-13T00:10:00Z | DO | r=2 | n=1/3 | D-01..D-04M implemented; contracts+renderers+guards committed 4d979efc; join-source-lock fixed 3ef11a3c | logs /tmp/nextorm-d01-*.log /tmp/nextorm-{core,postgres,mysql,mariadb,sqlserver}-t216b.log /tmp/nextorm-maria-{red,green}.log
 ```
