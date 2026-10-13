@@ -4,10 +4,10 @@
   "task": "T222",
   "issue": "#222",
   "cwd": "/home/alex/sources/nextorm",
-  "tree_revision": "4fbb603b27ff811508ec477604efba2c2132066a",
+  "tree_revision": "5d9ff209b457a57e0f4ea4b21b216f38064f968c",
   "branch": "1.0.9",
-  "started_utc": "2026-10-13T06:44:49Z",
-  "finished_utc": "2026-10-13T06:45:46Z",
+  "started_utc": "2026-10-13T06:46:37Z",
+  "finished_utc": "2026-10-13T06:47:25Z",
   "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
   "exit_code": 0,
   "artifacts": {

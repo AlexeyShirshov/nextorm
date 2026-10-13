@@ -4,10 +4,10 @@
   "task": "T222",
   "issue": "#222",
   "cwd": "/home/alex/sources/nextorm",
-  "tree_revision": "4fbb603b27ff811508ec477604efba2c2132066a",
+  "tree_revision": "5d9ff209b457a57e0f4ea4b21b216f38064f968c",
   "branch": "1.0.9",
-  "started_utc": "2026-10-13T06:45:55Z",
-  "finished_utc": "2026-10-13T06:45:57Z",
+  "started_utc": "2026-10-13T06:47:28Z",
+  "finished_utc": "2026-10-13T06:47:30Z",
   "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~InMemoryJoinTests"],
   "exit_code": 0,
   "artifacts": {
