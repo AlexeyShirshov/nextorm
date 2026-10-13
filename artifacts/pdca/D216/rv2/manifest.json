@@ -1,0 +1,376 @@
+{
+  "task": "D216",
+  "tree": "1.0.9",
+  "status_file": "docs/specs/status/D216-row-locking-1.md",
+  "contract_rv": 2,
+  "path": "artifacts/pdca/D216/rv2/manifest.json",
+  "required_rows": [
+    "EV-01",
+    "EV-02",
+    "EV-03",
+    "EV-04",
+    "EV-05",
+    "EV-06",
+    "EV-07",
+    "EV-08",
+    "EV-09",
+    "EV-10",
+    "EV-11",
+    "EV-12",
+    "EV-13",
+    "EV-14",
+    "EV-15",
+    "EV-16",
+    "EV-17",
+    "EV-18"
+  ],
+  "rows": [
+    {
+      "id": "EV-01",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/recon.md"
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/escalation.md"
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/environment.json"
+        }
+      ]
+    },
+    {
+      "id": "EV-02",
+      "status": "open",
+      "reason": "Public-API inventory produced (A/public-api.json); independent scout contract review is a CHECK-side action, pending.",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/public-api.json"
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/changed-paths.json"
+        }
+      ]
+    },
+    {
+      "id": "EV-03",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/build.log",
+          "exit": 0
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/exit-records.json"
+        }
+      ]
+    },
+    {
+      "id": "EV-04",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/cases-core.json"
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/cases-core-lockrenderer.json"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-core.log",
+          "exit": 0
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/exit-records.json"
+        }
+      ]
+    },
+    {
+      "id": "EV-05",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/cases-postgres.json"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-postgres.log",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-06",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/cases-mysql.json"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-mysql.log",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-07",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/cases-mariadb.json"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-mariadb.log",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/redgreen/mariadb-red.log",
+          "exit": 2
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/redgreen/mariadb-green.log",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-08",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/cases-sqlserver.json"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-sqlserver.log",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/redgreen/sqlserver-red.log",
+          "exit": 2
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/redgreen/sqlserver-green.log",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-09",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/cases-sqlite.json"
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/cases-clickhouse.json"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-sqlite.log",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-clickhouse.log",
+          "exit": 0
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/cases-sqlite-plankey.json"
+        }
+      ]
+    },
+    {
+      "id": "EV-10",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/integration-focused.log",
+          "exit": 0
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/provider-inventory.json"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/coverage/collect.log",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-11",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/exit-records.json"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-core.log",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-postgres.log",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-mysql.log",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-mariadb.log",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-sqlserver.log",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-sqlite.log",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/focused-clickhouse.log",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-12",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/perf/provenance.json"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/perf/acceptance.log",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/perf/t216.log",
+          "exit": 0
+        },
+        {
+          "kind": "doc",
+          "path": "docs/specs/performance/acceptance-benchmarks.md"
+        }
+      ]
+    },
+    {
+      "id": "EV-13",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/coverage/collect.log",
+          "exit": 0
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/coverage/report.log",
+          "exit": 0
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/coverage/summary.txt"
+        },
+        {
+          "kind": "coverage",
+          "path": "artifacts/pdca/D216/rv2/coverage/coverage.cobertura.xml"
+        },
+        {
+          "kind": "coverage",
+          "path": "artifacts/pdca/D216/rv2/coverage/report/Cobertura.xml"
+        },
+        {
+          "kind": "coverage-html",
+          "path": "artifacts/pdca/D216/rv2/coverage/report/index.html"
+        },
+        {
+          "kind": "coverage-json",
+          "path": "artifacts/pdca/D216/rv2/coverage/json/Summary.json"
+        }
+      ]
+    },
+    {
+      "id": "EV-14",
+      "status": "open",
+      "reason": "docfx passed (exit 0) but the EN/RU docs parity scout review is a CHECK-side action, pending.",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/docs/docfx.log",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-15",
+      "status": "open",
+      "reason": "CHECK completeness/row verdict (A/check/verdict.md) is the check-C01 action after freeze."
+    },
+    {
+      "id": "EV-16",
+      "status": "open",
+      "reason": "R-03/MariaDB owner obligation retained: owner must decide (i) narrow MariaDB to unsupported and update #216, or (ii) defer MariaDB source lock beyond 1.0.9. No owner decision received; not a PASS. #216 stays OPEN."
+    },
+    {
+      "id": "EV-17",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/redgreen/sqlserver-red.log",
+          "exit": 2
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/redgreen/sqlserver-green.log",
+          "exit": 0
+        }
+      ]
+    },
+    {
+      "id": "EV-18",
+      "status": "open",
+      "reason": "Frozen-manifest structural validation (C-MANIFEST / A/check/manifest-validation.*) is the check-C01 action; DO freeze validates via validate_inner_loop.py manifest (exit 0)."
+    }
+  ]
+}
