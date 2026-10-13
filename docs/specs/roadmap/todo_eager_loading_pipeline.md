@@ -107,8 +107,9 @@ ctx.From<Customer>()
 ## 6. JoinInto-остаток (E5)
 
 Снять `NotSupportedException` для форм, отложенных после слайсов A+B (`todo_navigation_properties.md:259-268,323`):
-составной principal-key / составной FK; составной junction-селектор; M:N-`JoinInto` под single-query.
-Связь по-прежнему **только из метаданных** (FK-convention нет).
+составной principal-key / составной FK; составной junction-селектор; M:N-`JoinInto` под single-query —
+**решено** (#213 — составные ключи связи и junction; #223 — composite-junction M:N под single-query).
+Связь по-прежнему **только из метаданных** (FK-convention нет); fluent-помощники объявления одноколоночные.
 
 ## 7. Сквозной семантический контракт (по уровням и фронтендам)
 

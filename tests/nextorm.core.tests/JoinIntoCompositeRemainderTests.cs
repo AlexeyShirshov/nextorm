@@ -323,6 +323,335 @@ public class JoinIntoCompositeRemainderTests
     }
 
     // ---------------------------------------------------------------------------------------------
+    // D223 TASK 1: plan §4 execution-path variant matrix closure. Every plan-mandated arity/key
+    // representation row is asserted here (in-memory) or in the SQLite carrier probe (SQL execution):
+    // junction FK arity 1/2, 2/2, 1/3 and 3/3 with last-component collision data (no silent two-column
+    // limit) and a mapped reference-type (string) junction key. Nullable junction components are closed
+    // in <see cref="JoinIntoCompositeNullSemanticsTests"/>.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Declares a many-to-many relationship with an arbitrary parent/child key arity and junction
+    /// foreign-key arity, so the composite-junction carrier can be exercised at shapes the (single-column
+    /// only) fluent surface cannot express. Mirrors the SQLite probe registration.
+    /// </summary>
+    private static void RegisterManyToManyJunction<TEntity, TChild, TJunction>(
+        string navigationName,
+        IReadOnlyList<string> parentKeyNames,
+        IReadOnlyList<string> childKeyNames,
+        IReadOnlyList<string> junctionParentForeignKeyNames,
+        IReadOnlyList<string> junctionChildForeignKeyNames)
+    {
+        var parentProps = new EntityMetadataBuilder<TEntity>().Build().Properties;
+        var childProps = new EntityMetadataBuilder<TChild>().Build().Properties;
+        var linkProps = new EntityMetadataBuilder<TJunction>().Build().Properties;
+        var navigation = typeof(TEntity).GetProperty(navigationName);
+        var parentKeys = parentKeyNames.Select(name => Prop(parentProps, name).PropertyInfo).ToArray();
+        var childKeys = childKeyNames.Select(name => Prop(childProps, name).PropertyInfo).ToArray();
+        var junctionParentForeignKeys = junctionParentForeignKeyNames.Select(name => Prop(linkProps, name).PropertyInfo).ToArray();
+        var junctionChildForeignKeys = junctionChildForeignKeyNames.Select(name => Prop(linkProps, name).PropertyInfo).ToArray();
+
+        DataContextCache.Metadata[typeof(TEntity)] = new EntityMetadata(
+            typeof(TEntity).Name,
+            parentProps.Where(p => p.PropertyInfo != navigation).ToList(),
+            relationships:
+            [
+                new RelationshipMetadata(
+                    RelationshipKind.ManyToMany,
+                    typeof(TEntity),
+                    typeof(TChild),
+                    navigation,
+                    isCollection: true,
+                    childKeys[0],
+                    parentKeys[0],
+                    typeof(TChild),
+                    typeof(TEntity),
+                    new RelationshipJunctionDeclaration
+                    {
+                        JunctionType = typeof(TJunction),
+                        ParentKey = parentKeys,
+                        ChildKey = childKeys,
+                        JunctionParentForeignKey = junctionParentForeignKeys,
+                        JunctionChildForeignKey = junctionChildForeignKeys,
+                    }),
+            ]);
+    }
+
+    // --- arity 1/2: one parent component, two child components --------------------------------
+
+    public sealed class Arity12Parent
+    {
+        public int Id { get; set; }
+        public ICollection<Arity12Child> Children { get; set; } = new List<Arity12Child>();
+    }
+
+    public sealed class Arity12Child
+    {
+        public int Pod { get; set; }
+        public int Id { get; set; }
+    }
+
+    public sealed class Arity12Link
+    {
+        public int ParentId { get; set; }
+        public int ChildPod { get; set; }
+        public int ChildId { get; set; }
+    }
+
+    [Fact]
+    public void CompositeJunction_ArityOneTwo_ShouldMatchEveryChildComponent()
+    {
+        DataContextCache.Clear();
+        RegisterManyToManyJunction<Arity12Parent, Arity12Child, Arity12Link>(
+            nameof(Arity12Parent.Children),
+            [nameof(Arity12Parent.Id)],
+            [nameof(Arity12Child.Pod), nameof(Arity12Child.Id)],
+            [nameof(Arity12Link.ParentId)],
+            [nameof(Arity12Link.ChildPod), nameof(Arity12Link.ChildId)]);
+
+        using var ctx = new InMemoryDataContext();
+        ctx.From<Arity12Parent>().WithData([new Arity12Parent { Id = 1 }]);
+        ctx.From<Arity12Child>().WithData([
+            new Arity12Child { Pod = 1, Id = 10 },
+            // Shares only the first child component: dropping the last component would attach this too.
+            new Arity12Child { Pod = 1, Id = 20 },
+        ]);
+        ctx.From<Arity12Link>().WithData([new Arity12Link { ParentId = 1, ChildPod = 1, ChildId = 10 }]);
+
+        var parents = ctx.From<Arity12Parent>()
+            .JoinInto(ctx.From<Arity12Child>(), (p, c) => true, p => p.Children)
+            .ToList();
+
+        parents.Should().ContainSingle();
+        parents[0].Children.Select(c => c.Id).Should().Equal(new[] { 10 },
+            "the junction's last child component is part of the match; child 20 shares only the first");
+    }
+
+    // --- arity 2/2: two parent components, two child components --------------------------------
+
+    public sealed class Arity22Parent
+    {
+        public int TenantId { get; set; }
+        public int Id { get; set; }
+        public ICollection<Arity22Child> Children { get; set; } = new List<Arity22Child>();
+    }
+
+    public sealed class Arity22Child
+    {
+        public int Pod { get; set; }
+        public int Id { get; set; }
+    }
+
+    public sealed class Arity22Link
+    {
+        public int ParentTenant { get; set; }
+        public int ParentId { get; set; }
+        public int ChildPod { get; set; }
+        public int ChildId { get; set; }
+    }
+
+    [Fact]
+    public void CompositeJunction_ArityTwoTwo_ShouldMatchEveryParentAndChildComponent()
+    {
+        DataContextCache.Clear();
+        RegisterManyToManyJunction<Arity22Parent, Arity22Child, Arity22Link>(
+            nameof(Arity22Parent.Children),
+            [nameof(Arity22Parent.TenantId), nameof(Arity22Parent.Id)],
+            [nameof(Arity22Child.Pod), nameof(Arity22Child.Id)],
+            [nameof(Arity22Link.ParentTenant), nameof(Arity22Link.ParentId)],
+            [nameof(Arity22Link.ChildPod), nameof(Arity22Link.ChildId)]);
+
+        using var ctx = new InMemoryDataContext();
+        ctx.From<Arity22Parent>().WithData([
+            new Arity22Parent { TenantId = 1, Id = 1 },
+            new Arity22Parent { TenantId = 1, Id = 2 },
+        ]);
+        ctx.From<Arity22Child>().WithData([
+            new Arity22Child { Pod = 1, Id = 10 },
+            new Arity22Child { Pod = 1, Id = 20 },
+        ]);
+        // Both links share the parent's first component (1); only the last parent component routes them.
+        ctx.From<Arity22Link>().WithData([
+            new Arity22Link { ParentTenant = 1, ParentId = 1, ChildPod = 1, ChildId = 10 },
+            new Arity22Link { ParentTenant = 1, ParentId = 2, ChildPod = 1, ChildId = 20 },
+        ]);
+
+        var parents = ctx.From<Arity22Parent>()
+            .JoinInto(ctx.From<Arity22Child>(), (p, c) => true, p => p.Children)
+            .ToList();
+
+        parents.Should().HaveCount(2, "the two composite-key parents are distinct");
+        parents.Single(p => p.Id == 1).Children.Select(c => c.Id).Should().Equal(new[] { 10 },
+            "the junction's last parent component routes child 10 to parent (1,1) only");
+        parents.Single(p => p.Id == 2).Children.Select(c => c.Id).Should().Equal(new[] { 20 },
+            "the junction's last parent component routes child 20 to parent (1,2) only");
+    }
+
+    // --- arity 1/3: one parent component, three child components --------------------------------
+
+    public sealed class Arity13Parent
+    {
+        public int Id { get; set; }
+        public ICollection<Arity13Child> Children { get; set; } = new List<Arity13Child>();
+    }
+
+    public sealed class Arity13Child
+    {
+        public int A { get; set; }
+        public int B { get; set; }
+        public int C { get; set; }
+    }
+
+    public sealed class Arity13Link
+    {
+        public int ParentId { get; set; }
+        public int ChildA { get; set; }
+        public int ChildB { get; set; }
+        public int ChildC { get; set; }
+    }
+
+    [Fact]
+    public void CompositeJunction_ArityOneThree_ShouldMatchEveryChildComponent()
+    {
+        DataContextCache.Clear();
+        RegisterManyToManyJunction<Arity13Parent, Arity13Child, Arity13Link>(
+            nameof(Arity13Parent.Children),
+            [nameof(Arity13Parent.Id)],
+            [nameof(Arity13Child.A), nameof(Arity13Child.B), nameof(Arity13Child.C)],
+            [nameof(Arity13Link.ParentId)],
+            [nameof(Arity13Link.ChildA), nameof(Arity13Link.ChildB), nameof(Arity13Link.ChildC)]);
+
+        using var ctx = new InMemoryDataContext();
+        ctx.From<Arity13Parent>().WithData([new Arity13Parent { Id = 1 }]);
+        ctx.From<Arity13Child>().WithData([
+            new Arity13Child { A = 1, B = 1, C = 10 },
+            // Same first two child components; only the third tells them apart (no two-column limit).
+            new Arity13Child { A = 1, B = 1, C = 20 },
+        ]);
+        ctx.From<Arity13Link>().WithData([new Arity13Link { ParentId = 1, ChildA = 1, ChildB = 1, ChildC = 10 }]);
+
+        var parents = ctx.From<Arity13Parent>()
+            .JoinInto(ctx.From<Arity13Child>(), (p, c) => true, p => p.Children)
+            .ToList();
+
+        parents.Should().ContainSingle();
+        parents[0].Children.Select(c => c.C).Should().Equal(new[] { 10 },
+            "the third child component is part of the match; child 20 shares only the first two");
+    }
+
+    // --- arity 3/3: three parent and three child components -------------------------------------
+
+    public sealed class Arity33Parent
+    {
+        public int A { get; set; }
+        public int B { get; set; }
+        public int C { get; set; }
+        public ICollection<Arity33Child> Children { get; set; } = new List<Arity33Child>();
+    }
+
+    public sealed class Arity33Child
+    {
+        public int D { get; set; }
+        public int E { get; set; }
+        public int F { get; set; }
+    }
+
+    public sealed class Arity33Link
+    {
+        public int ParentA { get; set; }
+        public int ParentB { get; set; }
+        public int ParentC { get; set; }
+        public int ChildD { get; set; }
+        public int ChildE { get; set; }
+        public int ChildF { get; set; }
+    }
+
+    [Fact]
+    public void CompositeJunction_ArityThreeThree_ShouldMatchEveryParentAndChildComponent()
+    {
+        DataContextCache.Clear();
+        RegisterManyToManyJunction<Arity33Parent, Arity33Child, Arity33Link>(
+            nameof(Arity33Parent.Children),
+            [nameof(Arity33Parent.A), nameof(Arity33Parent.B), nameof(Arity33Parent.C)],
+            [nameof(Arity33Child.D), nameof(Arity33Child.E), nameof(Arity33Child.F)],
+            [nameof(Arity33Link.ParentA), nameof(Arity33Link.ParentB), nameof(Arity33Link.ParentC)],
+            [nameof(Arity33Link.ChildD), nameof(Arity33Link.ChildE), nameof(Arity33Link.ChildF)]);
+
+        using var ctx = new InMemoryDataContext();
+        ctx.From<Arity33Parent>().WithData([
+            new Arity33Parent { A = 1, B = 1, C = 1 },
+            new Arity33Parent { A = 1, B = 1, C = 2 },
+        ]);
+        ctx.From<Arity33Child>().WithData([
+            new Arity33Child { D = 1, E = 1, F = 10 },
+            new Arity33Child { D = 1, E = 1, F = 20 },
+        ]);
+        // The parents share their first two components; the third (and the child's third) disambiguates.
+        ctx.From<Arity33Link>().WithData([
+            new Arity33Link { ParentA = 1, ParentB = 1, ParentC = 1, ChildD = 1, ChildE = 1, ChildF = 10 },
+            new Arity33Link { ParentA = 1, ParentB = 1, ParentC = 2, ChildD = 1, ChildE = 1, ChildF = 20 },
+        ]);
+
+        var parents = ctx.From<Arity33Parent>()
+            .JoinInto(ctx.From<Arity33Child>(), (p, c) => true, p => p.Children)
+            .ToList();
+
+        parents.Should().HaveCount(2, "the arity-general carrier must not impose a two-component maximum");
+        parents.Single(p => p.C == 1).Children.Select(c => c.F).Should().Equal(new[] { 10 },
+            "the third parent and child components route child 10 to parent (1,1,1) only");
+        parents.Single(p => p.C == 2).Children.Select(c => c.F).Should().Equal(new[] { 20 },
+            "the third parent and child components route child 20 to parent (1,1,2) only");
+    }
+
+    // --- key representation: mapped reference type (string) -------------------------------------
+
+    public sealed class StringKeyParent
+    {
+        public string Code { get; set; } = string.Empty;
+        public ICollection<StringKeyChild> Children { get; set; } = new List<StringKeyChild>();
+    }
+
+    public sealed class StringKeyChild
+    {
+        public int Id { get; set; }
+    }
+
+    public sealed class StringKeyLink
+    {
+        public string ParentCode { get; set; } = string.Empty;
+        public int ChildId { get; set; }
+    }
+
+    [Fact]
+    public void CompositeJunction_StringParentKey_ShouldStitchByReferenceKeyValue()
+    {
+        DataContextCache.Clear();
+        RegisterManyToManyJunction<StringKeyParent, StringKeyChild, StringKeyLink>(
+            nameof(StringKeyParent.Children),
+            [nameof(StringKeyParent.Code)],
+            [nameof(StringKeyChild.Id)],
+            [nameof(StringKeyLink.ParentCode)],
+            [nameof(StringKeyLink.ChildId)]);
+
+        using var ctx = new InMemoryDataContext();
+        ctx.From<StringKeyParent>().WithData([
+            new StringKeyParent { Code = "P1" },
+            new StringKeyParent { Code = "P2" },
+        ]);
+        ctx.From<StringKeyChild>().WithData([new StringKeyChild { Id = 10 }]);
+        ctx.From<StringKeyLink>().WithData([new StringKeyLink { ParentCode = "P1", ChildId = 10 }]);
+
+        var parents = ctx.From<StringKeyParent>()
+            .JoinInto(ctx.From<StringKeyChild>(), (p, c) => true, p => p.Children)
+            .ToList();
+
+        parents.Should().HaveCount(2);
+        parents.Single(p => p.Code == "P1").Children.Select(c => c.Id).Should().Equal(new[] { 10 },
+            "the string junction key matches by value, not by reference");
+        parents.Single(p => p.Code == "P2").Children.Should().BeEmpty("only the declared string key matches");
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Scalar controls: already supported, must stay green (guard against a behaviour-drift fix).
     // ---------------------------------------------------------------------------------------------
 

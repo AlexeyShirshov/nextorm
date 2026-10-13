@@ -9,10 +9,12 @@ using NextORM.Core;
 namespace NextORM.Core.Tests;
 
 /// <summary>
-/// T213 D04-R (r=4, direction D): the composite-junction many-to-many <c>JoinInto</c> SQL link source
-/// is rejected explicitly at preparation. The rejection is fail-closed (a <see cref="NotSupportedException"/>
-/// from <c>JunctionLinkSourceFactory.BuildSource</c>), carries the follow-up issue number in its message,
-/// and must not execute any SQL. The scalar junction path is a control: it is not rejected.
+/// D03 (#223) update of the T213 D04-R rejection oracle: the composite-junction many-to-many
+/// <c>JoinInto</c> SQL link source is now <b>supported</b> on the entity-item path, so the formerly
+/// rejected shape must prepare without failing closed and without opening a connection. Only the
+/// genuinely malformed shapes remain rejected at preparation: a junction whose foreign keys do not cover
+/// every composite key component still fails closed deterministically. The scalar junction path is a
+/// control: it is not rejected.
 /// <para>
 /// Runs in the "Query cache controls" collection because it writes the process-wide
 /// <see cref="DataContextCache"/> and must not race other metadata tests.
@@ -21,8 +23,6 @@ namespace NextORM.Core.Tests;
 [Collection("Query cache controls")]
 public class JoinIntoCompositeJunctionRejectionTests
 {
-    private const string CompositeRejectionMessage = "composite-junction M:N is not supported; see #223";
-
     public JoinIntoCompositeJunctionRejectionTests()
     {
         DataContextCache.Clear();
@@ -92,20 +92,140 @@ public class JoinIntoCompositeJunctionRejectionTests
     }
 
     [Fact]
-    public void CompositeJunctionManyToMany_SqlPath_ShouldThrowAtPreparationWithIssueMessage_AndExecuteNoSql()
+    public void CompositeJunctionManyToMany_SqlPath_ShouldPrepareWithoutOpeningConnectionOrExecutingSql()
     {
         RegisterCompositeJunctionParent();
         using var ctx = new TrackingContext();
 
-        // The composite-junction SQL link source cannot be materialized on the entity-item path yet
-        // (carried by #223). Building the declaration must fail closed with the explicit message rather
-        // than degrade into a broken column mapping or a raw materialization error.
-        Action act = () => ctx.From<CompositeJunctionParent>()
-            .JoinInto(ctx.From<CompositeJunctionChild>(), (p, c) => true, p => p.Children)
-            .ToList();
+        // D03 (#223): the composite-junction link source is now supported on the entity-item path, so
+        // building the declaration must no longer fail closed. The extra junction parent component is
+        // occurrence-only (the key covers one component). Preparation must render the composite link SQL
+        // without opening a connection or executing anything: it allocates the command's connection holder
+        // but never opens it, so the assertion is zero opened connections and zero executed commands.
+        var builder = ctx.From<CompositeJunctionParent>()
+            .JoinInto(ctx.From<CompositeJunctionChild>(), (p, c) => true, p => p.Children);
 
-        act.Should().Throw<NotSupportedException>().WithMessage(CompositeRejectionMessage);
-        ctx.ConnectionsRequested.Should().Be(0, "the rejection happens at preparation; no SQL is executed");
+        ctx.ConnectionsRequested.Should().Be(0, "declaring the composite-junction relationship must not allocate a connection");
+
+        Action act = () => ctx.GetPreparedQueryCommand(
+            builder.ToCommand(), createEnumerator: false, storeInCache: false, TestContext.Current.CancellationToken);
+
+        act.Should().NotThrow("the composite-junction M:N link source is supported again (#223)");
+        ctx.ConnectionsOpened.Should().Be(0, "preparation renders the SQL without opening the connection");
+        ctx.CommandsExecuted.Should().Be(0, "preparation must not execute any SQL");
+    }
+
+    public sealed class OrderedJunctionParent
+    {
+        public int TenantId { get; set; }
+        public int Id { get; set; }
+        public ICollection<OrderedJunctionChild> Children { get; set; } = new List<OrderedJunctionChild>();
+    }
+
+    public sealed class OrderedJunctionChild
+    {
+        public int Id { get; set; }
+    }
+
+    public sealed class OrderedJunctionLink
+    {
+        public int ParentTenant { get; set; }
+        public int ParentId { get; set; }
+        public int ChildId { get; set; }
+    }
+
+    /// <summary>
+    /// A several-times-injected relationship whose <see cref="PrincipalKey"/> order is supplied
+    /// independently of the junction's declared key order, so the test can present a same-typed
+    /// colliding/reversed declaration the concrete <c>RelationshipMetadata</c> cannot express.
+    /// </summary>
+    private sealed class SwappedKeyManyToMany : IRelationshipMetadata
+    {
+        private readonly RelationshipJunctionMetadata _junction;
+
+        public SwappedKeyManyToMany(
+            PropertyInfo? navigation,
+            Type relatedType,
+            IReadOnlyList<IPropertyMetadata> principalKey,
+            IReadOnlyList<IPropertyMetadata> foreignKey,
+            RelationshipJunctionMetadata junction)
+        {
+            Navigation = navigation;
+            RelatedType = relatedType;
+            PrincipalKey = principalKey;
+            ForeignKey = foreignKey;
+            _junction = junction;
+        }
+
+        public RelationshipKind Kind => RelationshipKind.ManyToMany;
+
+        public Type DeclaringType => typeof(OrderedJunctionParent);
+
+        public Type RelatedType { get; }
+
+        public PropertyInfo? Navigation { get; }
+
+        public bool IsCollection => true;
+
+        public IReadOnlyList<IPropertyMetadata> ForeignKey { get; }
+
+        public IReadOnlyList<IPropertyMetadata> PrincipalKey { get; }
+
+        public IRelationshipMetadata? Inverse => null;
+
+        public RelationshipJunctionMetadata? Junction => _junction;
+    }
+
+    [Fact]
+    public void CompositeJunctionReversedPrincipalKeyOrder_ContradictingJunctionDeclaration_ShouldFailClosedBeforeConnection()
+    {
+        // AC01 negative rule: reversing the declared component order must not silently produce a
+        // valid-looking wrong result. Two same-typed (int) parent key components are declared with the
+        // relationship's PrincipalKey in the reversed order [Id, TenantId] while the junction's declared
+        // correspondence pairs [TenantId, Id]. Under a blind positional pairing this renders a
+        // self-consistent but cross-joining predicate (Id = ParentTenant, TenantId = ParentId) and
+        // silently links the wrong parents; the declared correspondence cannot be established, so it must
+        // fail closed during preparation, before any connection.
+        var parentProps = Props<OrderedJunctionParent>();
+        var childProps = Props<OrderedJunctionChild>();
+        var linkProps = Props<OrderedJunctionLink>();
+        var tenant = Prop(parentProps, nameof(OrderedJunctionParent.TenantId));
+        var id = Prop(parentProps, nameof(OrderedJunctionParent.Id));
+        var childKey = Prop(childProps, nameof(OrderedJunctionChild.Id));
+        var navigation = typeof(OrderedJunctionParent).GetProperty(nameof(OrderedJunctionParent.Children));
+
+        var junction = new RelationshipJunctionMetadata(
+            typeof(OrderedJunctionLink),
+            parentKey: [tenant, id],
+            childKey: [childKey],
+            junctionParentForeignKey:
+            [
+                Prop(linkProps, nameof(OrderedJunctionLink.ParentTenant)),
+                Prop(linkProps, nameof(OrderedJunctionLink.ParentId)),
+            ],
+            junctionChildForeignKey: [Prop(linkProps, nameof(OrderedJunctionLink.ChildId))]);
+
+        DataContextCache.Metadata[typeof(OrderedJunctionParent)] = new EntityMetadata(
+            typeof(OrderedJunctionParent).Name,
+            parentProps.Where(p => p.PropertyInfo != navigation).ToList(),
+            relationships:
+            [
+                new SwappedKeyManyToMany(
+                    navigation,
+                    typeof(OrderedJunctionChild),
+                    principalKey: [id, tenant],
+                    foreignKey: [childKey],
+                    junction),
+            ]);
+
+        using var ctx = new TrackingContext();
+
+        Action act = () => ctx.From<OrderedJunctionParent>()
+            .JoinInto(ctx.From<OrderedJunctionChild>(), (p, c) => true, p => p.Children);
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*component correspondence cannot be established*");
+        ctx.ConnectionsRequested.Should().Be(0, "the component-correspondence check runs at declaration, before any connection");
     }
 
     public sealed class ScalarJunctionParent
@@ -191,7 +311,9 @@ public class JoinIntoCompositeJunctionRejectionTests
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Provider-free SQL context: a connection request is the observable proof that SQL would execute.
+    // Provider-free SQL context: it records connection allocation/open and command execution so a test
+    // can prove a declaration/guard path touches no connection and a supported preparation opens none
+    // and executes no SQL.
     // ---------------------------------------------------------------------------------------------
 
     private sealed class TrackingContext : DataContext
@@ -200,7 +322,14 @@ public class JoinIntoCompositeJunctionRejectionTests
         {
         }
 
+        /// <summary>Connections allocated for command holders (a command needs one but need not open it).</summary>
         public int ConnectionsRequested { get; private set; }
+
+        /// <summary>Connections actually opened; neither a fail-closed guard nor a supported preparation opens one.</summary>
+        public int ConnectionsOpened { get; private set; }
+
+        /// <summary>Commands executed; no assertion path must execute SQL.</summary>
+        public int CommandsExecuted { get; private set; }
 
         public override ISqlDialect Dialect => TestDialect.Instance;
 
@@ -209,7 +338,143 @@ public class JoinIntoCompositeJunctionRejectionTests
         protected override DbConnection CreateDbConnection(string? connectionString)
         {
             ConnectionsRequested++;
-            throw new NotSupportedException("no SQL must be executed for a rejected composite-junction M:N JoinInto");
+            return new TrackingConnection(this);
+        }
+
+        private sealed class TrackingConnection(TrackingContext owner) : DbConnection
+        {
+            [AllowNull]
+            public override string ConnectionString { get; set; } = string.Empty;
+
+            public override string Database => string.Empty;
+
+            public override string DataSource => string.Empty;
+
+            public override string ServerVersion => string.Empty;
+
+            public override ConnectionState State => ConnectionState.Closed;
+
+            public override void ChangeDatabase(string databaseName) => throw new NotSupportedException();
+
+            public override void Close()
+            {
+            }
+
+            public override void Open() => owner.ConnectionsOpened++;
+
+            protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) => throw new NotSupportedException();
+
+            protected override DbCommand CreateDbCommand() => new TrackingCommand(owner);
+        }
+
+        private sealed class TrackingCommand(TrackingContext owner) : DbCommand
+        {
+            private readonly TrackingParameterCollection _parameters = new();
+
+            [AllowNull]
+            protected override DbConnection DbConnection { get; set; } = null!;
+
+            protected override DbParameterCollection DbParameterCollection => _parameters;
+
+            [AllowNull]
+            protected override DbTransaction DbTransaction { get; set; } = null!;
+
+            [AllowNull]
+            public override string CommandText { get; set; } = string.Empty;
+
+            public override int CommandTimeout { get; set; }
+
+            public override CommandType CommandType { get; set; }
+
+            public override bool DesignTimeVisible { get; set; }
+
+            public override UpdateRowSource UpdatedRowSource { get; set; }
+
+            protected override DbParameter CreateDbParameter() => new TrackingParameter(string.Empty);
+
+            public override void Cancel()
+            {
+            }
+
+            public override int ExecuteNonQuery() => Fail();
+
+            public override object ExecuteScalar() => Fail();
+
+            protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior) => FailReader();
+
+            public override void Prepare()
+            {
+            }
+
+            private int Fail()
+            {
+                owner.CommandsExecuted++;
+                throw new NotSupportedException("no SQL must be executed for a composite-junction M:N JoinInto assertion");
+            }
+
+            private DbDataReader FailReader()
+            {
+                owner.CommandsExecuted++;
+                throw new NotSupportedException("no SQL must be executed for a composite-junction M:N JoinInto assertion");
+            }
+        }
+
+        private sealed class TrackingParameterCollection : DbParameterCollection
+        {
+            private readonly List<DbParameter> _items = [];
+
+            public override int Count => _items.Count;
+
+            public override object SyncRoot => this;
+
+            public override int Add(object value)
+            {
+                _items.Add((DbParameter)value);
+                return _items.Count - 1;
+            }
+
+            public override void AddRange(Array values)
+            {
+                foreach (var value in values)
+                    Add(value!);
+            }
+
+            public override void Clear() => _items.Clear();
+
+            public override bool Contains(object value) => _items.Contains((DbParameter)value);
+
+            public override bool Contains(string? value) => _items.Any(p => p.ParameterName == value);
+
+            public override void CopyTo(Array array, int index) => ((System.Collections.ICollection)_items).CopyTo(array, index);
+
+            public override System.Collections.IEnumerator GetEnumerator() => _items.GetEnumerator();
+
+            public override int IndexOf(object value) => _items.IndexOf((DbParameter)value);
+
+            public override int IndexOf(string? parameterName) => _items.FindIndex(p => p.ParameterName == parameterName);
+
+            public override void Insert(int index, object value) => _items.Insert(index, (DbParameter)value);
+
+            public override void Remove(object value) => _items.Remove((DbParameter)value);
+
+            public override void RemoveAt(int index) => _items.RemoveAt(index);
+
+            public override void RemoveAt(string? parameterName) => _items.RemoveAll(p => p.ParameterName == parameterName);
+
+            protected override DbParameter GetParameter(int index) => _items[index];
+
+            protected override DbParameter GetParameter(string? parameterName) => _items[IndexOf(parameterName)];
+
+            protected override void SetParameter(int index, DbParameter value) => _items[index] = value;
+
+            protected override void SetParameter(string? parameterName, DbParameter value)
+            {
+                var index = IndexOf(parameterName);
+                if (index < 0)
+                    Add(value);
+                else
+                    _items[index] = value;
+            }
         }
     }
 

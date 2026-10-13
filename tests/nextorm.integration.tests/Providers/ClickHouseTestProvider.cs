@@ -481,6 +481,13 @@ internal sealed class ClickHouseTestProvider : ITestProvider
         "create table eager_composite_parent (row_id Int32, tenant Int32, link_id Int32) engine = Memory",
         "create table eager_composite_child (id Int32, tenant Int32, parent_id Int32, sort_key Int32) engine = Memory",
         "create table eager_tag (id Int32, name Nullable(String)) engine = Memory",
-        "create table eager_link (id Int32, parent_id Int32, child_id Int32) engine = Memory"
+        "create table eager_link (id Int32, parent_id Int32, child_id Int32) engine = Memory",
+        // Composite-junction M:N fixtures (#223): two parent foreign-key components plus one child.
+        "drop table if exists eager_cj_link",
+        "drop table if exists eager_cj_child",
+        "drop table if exists eager_cj_parent",
+        "create table eager_cj_parent (row_id Int32, tenant Int32, link_id Int32, name Nullable(String)) engine = Memory",
+        "create table eager_cj_child (id Int32, name Nullable(String)) engine = Memory",
+        "create table eager_cj_link (parent_tenant Int32, parent_link_id Int32, child_id Int32) engine = Memory"
     ];
 }

@@ -33,7 +33,7 @@ public class JoinIntoCompositeSqlGenerationTests
         return System.Text.RegularExpressions.Regex.Replace(s, @"\s+", " ").Trim().ToLowerInvariant();
     }
 
-    private static string SingleQuerySql(IDataContext ctx, EntityBuilder<JnCompositeParent> builder)
+    private static string SingleQuerySql<T>(IDataContext ctx, EntityBuilder<T> builder)
     {
         var (specs, joins) = builder.BuildSingleQueryJoins();
         return SqlOf(ctx, (dynamic)builder.CreatePairCommand(specs, joins));
@@ -199,6 +199,138 @@ public class JoinIntoCompositeSqlGenerationTests
             .And.NotContain("is not distinct");
         command.Cache.Should().BeTrue("a nullable composite JoinInto must not disable the plan cache");
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Composite junction M:N (#223): the junction carries two parent foreign-key components, so the
+    // derived row_number() link source projects the flat arity-general carrier (ParentKey1, ParentKey2,
+    // ChildKey1, Occurrence). BOTH dispatchers — the standalone JoinInto pair command and the SingleQuery
+    // pairing — must render every component (dropping the last would cross-link the collision fixture).
+    // ---------------------------------------------------------------------------------------------
+
+    private static void RegisterCompositeJunction()
+    {
+        var parentProps = Props<CjParent>();
+        var childProps = Props<CjChild>();
+        var linkProps = Props<CjLink>();
+        var tenant = Prop<CjParent>(nameof(CjParent.TenantId)).PropertyInfo;
+        var id = Prop<CjParent>(nameof(CjParent.Id)).PropertyInfo;
+        var childKey = Prop<CjChild>(nameof(CjChild.Id)).PropertyInfo;
+        var navigation = typeof(CjParent).GetProperty(nameof(CjParent.Children))!;
+        var built = new EntityMetadataBuilder<CjParent>().Build();
+
+        DataContextCache.Metadata[typeof(CjParent)] = new EntityMetadata(
+            built.TableName,
+            parentProps.Where(p => p.PropertyInfo != navigation).ToList(),
+            built.IsTableNameAuto,
+            relationships:
+            [
+                new RelationshipMetadata(
+                    RelationshipKind.ManyToMany,
+                    typeof(CjParent),
+                    typeof(CjChild),
+                    navigation,
+                    isCollection: true,
+                    childKey,
+                    id,
+                    typeof(CjChild),
+                    typeof(CjParent),
+                    new RelationshipJunctionDeclaration
+                    {
+                        JunctionType = typeof(CjLink),
+                        ParentKey = [tenant, id],
+                        ChildKey = [childKey],
+                        JunctionParentForeignKey =
+                        [
+                            Prop<CjLink>(nameof(CjLink.ParentId)).PropertyInfo,
+                            Prop<CjLink>(nameof(CjLink.ParentId2)).PropertyInfo,
+                        ],
+                        JunctionChildForeignKey = [Prop<CjLink>(nameof(CjLink.ChildId)).PropertyInfo],
+                    }),
+            ]);
+    }
+
+    [Fact]
+    public void CompositeJunction_Standalone_ShouldRenderEveryComponentAndBothDispatcherEdges()
+    {
+        RegisterCompositeJunction();
+        using var ctx = SqlServerTestContext.Create();
+
+        var command = (dynamic)ctx.From<CjParent>()
+            .JoinInto(ctx.From<CjChild>(), (p, c) => true, p => p.Children)
+            .CreateJoinIntoPairCommand();
+        var sql = Canon((string)SqlOf(ctx, command));
+
+        sql.Should().Contain("from cj_parent as t1");
+        sql.Should().Contain("from cj_link) as t2", "the derived composite link source is rendered");
+        sql.Should().Contain("parent_id as parentkey1")
+            .And.Contain("parent_id2 as parentkey2")
+            .And.Contain("child_id as childkey1");
+        sql.Should().Contain("partition by parent_id, parent_id2, child_id order by child_id");
+        sql.Should().Contain("on (t1.tenant_id = t2.parentkey1 and t1.id = t2.parentkey2)",
+            "the parent edge must use every declared parent component");
+        sql.Should().Contain("on (t3.id = t2.childkey1 and ");
+        ((bool)((dynamic)command).Cache).Should().BeTrue("a composite-junction JoinInto must not disable the plan cache");
+    }
+
+    [Fact]
+    public void CompositeJunction_SingleQuery_ShouldRenderEveryComponentAndBothDispatcherEdges()
+    {
+        RegisterCompositeJunction();
+        using var ctx = SqlServerTestContext.Create();
+
+        var builder = ctx.From<CjParent>()
+            .JoinInto(ctx.From<CjChild>(), (p, c) => true, p => p.Children);
+        var sql = Canon(SingleQuerySql(ctx, builder));
+
+        sql.Should().Contain("from cj_parent as t1");
+        sql.Should().Contain("from cj_link) as t2");
+        sql.Should().Contain("parent_id as parentkey1")
+            .And.Contain("parent_id2 as parentkey2")
+            .And.Contain("child_id as childkey1");
+        sql.Should().Contain("on (t1.tenant_id = t2.parentkey1 and t1.id = t2.parentkey2)");
+        sql.Should().Contain("on (t3.id = t2.childkey1 and ");
+    }
+}
+
+[SqlTable("cj_parent")]
+public sealed class CjParent
+{
+    [Key]
+    [Column("tenant_id")]
+    public int TenantId { get; set; }
+
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<CjChild> Children { get; set; } = new List<CjChild>();
+}
+
+[SqlTable("cj_child")]
+public sealed class CjChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+}
+
+[SqlTable("cj_link")]
+public sealed class CjLink
+{
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("parent_id2")]
+    public int ParentId2 { get; set; }
+
+    [Column("child_id")]
+    public int ChildId { get; set; }
 }
 
 [SqlTable("jn_comp_parent")]

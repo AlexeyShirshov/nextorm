@@ -141,6 +141,12 @@ internal sealed class SqliteTestProvider : ITestProvider
         create table eager_tag (id integer primary key, name text);
         create table eager_link (id integer primary key, parent_id int not null, child_id int not null);
 
+        -- Composite-junction M:N fixtures (#223): the junction carries two parent foreign-key components,
+        -- so the join must match the full (tenant, link_id) principal key rather than one component.
+        create table eager_cj_parent (row_id integer primary key, tenant int not null, link_id int not null, name text);
+        create table eager_cj_child (id integer primary key, name text);
+        create table eager_cj_link (parent_tenant int not null, parent_link_id int not null, child_id int not null);
+
         -- Global query filter fixtures (#108 D6): the filtered source table and the INSERT ... SELECT
         -- target table. Both carry the tenant/soft-delete columns the shared suite filters on.
         create table query_filter_entity (id integer primary key, tenant_id int not null, is_deleted integer not null, name text);

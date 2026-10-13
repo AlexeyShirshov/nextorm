@@ -191,7 +191,7 @@ The LEFT/INNER semantics are the same as for a one-to-many collection: with `Lef
 
 When a query carries two or more collection navigations (one-to-one is excluded) the preparation emits the `JoinInto.MultipleCollections` warning once per plan, because the intermediate row count multiplies into a cartesian product. Pass `JoinOptions.SuppressCartesianWarning()` through a `JoinInto` options lambda (`j => j.SuppressCartesianWarning()`) to silence it; the warning is informational and does not change the result.
 
-A **composite** junction selector and a many-to-many `JoinInto` under [`EagerLoadMode.SingleQuery`](eager-loading.md) are rejected with [`NotSupportedException`](xref:System.NotSupportedException). A many-to-many `JoinInto` takes **two** projection slots, so it counts double against the arity cap.
+A junction whose parent and/or child foreign key spans several **components** is fully supported: the join and the occurrence partition use every declared component, so changing any component (not only the first) changes the linked child, and repeated junction occurrences stay distinct. The single-query dispatcher ([`EagerLoadMode.SingleQuery`](eager-loading.md)) handles such a junction too. The component lists must come from relationship metadata — the fluent declaration helpers below take a single key column. A many-to-many `JoinInto` takes **two** projection slots, so it counts double against the arity cap.
 
 ## One round trip
 
@@ -279,8 +279,6 @@ The join is part of the command and is stitched **only** by the stitching termin
 
 The following are rejected with [`NotSupportedException`](xref:System.NotSupportedException):
 
-- a **many-to-many** relationship under `EagerLoadMode.SingleQuery` — `EagerLoadMode.SingleQuery` is the [`LoadWith`](eager-loading.md) style single-query mode; the explicit `JoinInto` path does support M:N through a junction (see above);
-- a **composite** principal, foreign or junction key on the relationship (single-column keys only);
 - an **undeclared** relationship, when the collection overload is used without relationship metadata — declare it with `HasMany`/`HasOne`/`HasManyThrough`/`[Relationship]` or use the explicit-key overload; the reference overload likewise requires a declared one-to-one (`HasOneToOne`) or a local `JoinOptions.OneToOne` configuration;
 - `JoinInto` applied to a derived (`As`) or joined projection source;
 - a `Select` projection or an `As` derived source applied to a builder carrying a `JoinInto` — both drop the stitching contract (repeated parents or lost metadata), so materialize with `ToList`/`ToListAsync` instead;
@@ -289,6 +287,8 @@ The following are rejected with [`NotSupportedException`](xref:System.NotSupport
 - explicit-key selectors that select **different property types**, or that are not a simple property/field access (a computed key has no stable plan identity);
 - a read-only collection member that is `null` at runtime;
 - more than seven child collections on one query (the projection arity cap).
+
+Key **arity** is not one of these boundaries: a many-to-many relationship under [`EagerLoadMode.SingleQuery`](eager-loading.md) and a composite principal, foreign or junction key on the relationship are supported on the explicit `JoinInto` path, which joins and groups on every declared component (see [Many-to-many through a junction](#many-to-many-through-a-junction)). The component lists must come from relationship metadata, because the fluent declaration helpers take a single key column.
 
 The relationship metadata itself fails closed too: an FK property that is not mapped on the dependent type, a principal type with no key, or an FK/principal-key type mismatch throws `NotSupportedException` when the keys are resolved.
 

@@ -102,6 +102,82 @@ internal static class JunctionLinkSourceFactory
             nameof(WindowFunction<int>.Over),
             [typeof(Expression<Func<object?>>), typeof(Expression<Func<object?>>), typeof(WindowFrame)])!;
 
+    private static readonly MethodInfo ArrayOverMethod =
+        typeof(WindowFunction<int>).GetMethod(
+            nameof(WindowFunction<int>.Over),
+            [typeof(Expression<Func<object?>>[]), typeof(WindowOrder[]), typeof(WindowFrame)])!;
+
+    private static readonly MethodInfo AscMethod =
+        typeof(CommonFunctions).GetMethod(nameof(CommonFunctions.asc), [typeof(Expression<Func<object?>>)])!;
+
+    /// <summary>
+    /// Builds the derived <c>row_number() over (partition by all junction foreign keys order by child
+    /// foreign keys)</c> link source for a composite junction, projected onto the flat arity-general
+    /// carrier (one scalar member per component plus occurrence).
+    /// </summary>
+    private static FromExpression BuildCompositeSource(IDataContext dataContext, RelationshipJunctionMetadata junction)
+    {
+        var parentForeignKeys = junction.JunctionParentForeignKey.Select(static p => p.PropertyInfo).ToArray();
+        var childForeignKeys = junction.JunctionChildForeignKey.Select(static p => p.PropertyInfo).ToArray();
+        var carrier = CompositeJunctionLinkFactory.Ensure(parentForeignKeys, childForeignKeys);
+
+        var junctionType = junction.JunctionType;
+        var junctionParameter = Expression.Parameter(junctionType, "j");
+
+        var rowNumber = Expression.Call(Expression.Default(typeof(CommonFunctions)), RowNumberMethod);
+
+        var partitionElements = new Expression[parentForeignKeys.Length + childForeignKeys.Length];
+        var partitionIndex = 0;
+        foreach (var foreignKey in parentForeignKeys)
+            partitionElements[partitionIndex++] = Expression.Quote(BuildKeyLambda(junctionParameter, foreignKey));
+        foreach (var foreignKey in childForeignKeys)
+            partitionElements[partitionIndex++] = Expression.Quote(BuildKeyLambda(junctionParameter, foreignKey));
+
+        var partition = Expression.NewArrayInit(typeof(Expression<Func<object?>>), partitionElements);
+
+        var orderElements = new Expression[childForeignKeys.Length];
+        for (var i = 0; i < childForeignKeys.Length; i++)
+        {
+            orderElements[i] = Expression.Call(
+                Expression.Default(typeof(CommonFunctions)),
+                AscMethod,
+                Expression.Quote(BuildKeyLambda(junctionParameter, childForeignKeys[i])));
+        }
+
+        var order = Expression.NewArrayInit(typeof(WindowOrder), orderElements);
+
+        var occurrence = Expression.Call(
+            rowNumber,
+            ArrayOverMethod,
+            partition,
+            order,
+            Expression.Constant(null, typeof(WindowFrame)));
+
+        var bindings = new List<MemberBinding>(parentForeignKeys.Length + childForeignKeys.Length + 1);
+        for (var i = 0; i < parentForeignKeys.Length; i++)
+            bindings.Add(Expression.Bind(carrier.ParentKeys[i], Expression.Property(junctionParameter, parentForeignKeys[i])));
+        for (var i = 0; i < childForeignKeys.Length; i++)
+            bindings.Add(Expression.Bind(carrier.ChildKeys[i], Expression.Property(junctionParameter, childForeignKeys[i])));
+        bindings.Add(Expression.Bind(carrier.Occurrence, occurrence));
+
+        var body = Expression.MemberInit(Expression.New(carrier.LinkType), bindings);
+
+        var selector = Expression.Lambda(
+            typeof(Func<,>).MakeGenericType(junctionType, carrier.LinkType),
+            body,
+            junctionParameter);
+
+        var command = dataContext.CreateCommand(carrier.LinkType, new QueryDefinition
+        {
+            Exp = selector,
+            SrcType = junctionType,
+            ProjectionType = carrier.LinkType,
+        });
+        command.From = ResolveJunctionSource(junctionType);
+
+        return new FromExpression(command);
+    }
+
     /// <summary>
     /// Builds the derived junction source a many-to-many <c>JoinInto</c> joins the parent to:
     /// <c>(SELECT fkP AS ParentKey, fkC AS ChildKey, row_number() over (partition by fkP, fkC order by fkC)
@@ -113,7 +189,7 @@ internal static class JunctionLinkSourceFactory
     /// <param name="dataContext">The context that executes the outer command (and the derived one).</param>
     /// <param name="relationship">The many-to-many relationship carrying the junction metadata.</param>
     /// <returns>The derived-table source of the link join.</returns>
-    /// <exception cref="NotSupportedException">The relationship carries no junction or a composite junction key.</exception>
+    /// <exception cref="NotSupportedException">The relationship carries no junction metadata.</exception>
     internal static FromExpression BuildSource(IDataContext dataContext, IRelationshipMetadata relationship)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
@@ -122,8 +198,12 @@ internal static class JunctionLinkSourceFactory
         var junction = relationship.Junction
             ?? throw new NotSupportedException(
                 $"The relationship on '{relationship.DeclaringType.Name}' has no junction metadata; a many-to-many JoinInto needs it.");
+
+        // A junction whose parent and/or child foreign key declares more than one component builds the
+        // same derived row_number() link source over the flat, arity-general composite carrier (one scalar
+        // member per component plus occurrence); a scalar junction keeps the two-member JoinIntoLink shape.
         if (junction.JunctionParentForeignKey.Count != 1 || junction.JunctionChildForeignKey.Count != 1)
-            throw new NotSupportedException("composite-junction M:N is not supported; see #223");
+            return BuildCompositeSource(dataContext, junction);
 
         var junctionType = junction.JunctionType;
         var parentForeignKey = junction.JunctionParentForeignKey[0].PropertyInfo;
@@ -235,6 +315,12 @@ internal static class JunctionLinkSourceFactory
     /// <param name="itemType">A projection item type of the pair command.</param>
     internal static void EnsureRegistered(Type itemType)
     {
+        if (CompositeJunctionLinkFactory.TryGet(itemType, out var carrier))
+        {
+            CompositeJunctionLinkFactory.Publish(carrier);
+            return;
+        }
+
         if (!itemType.IsGenericType || itemType.GetGenericTypeDefinition() != typeof(JoinIntoLink<,>))
             return;
 
