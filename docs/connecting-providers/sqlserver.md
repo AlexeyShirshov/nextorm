@@ -118,11 +118,13 @@ full-text index on the column. `SqlFunctions.Sql.iif(condition, whenTrue, whenFa
 ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), spelled through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))) and
 `SqlFunctions.SqlServer.choose(index, ...)` renders `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)); the
 specialized `SqlFunctions.SqlServer.iif` spelling still works by inheritance. Locking table hints ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) render as `WITH (hint, ...)` after the
-primary table name: `ctx.From<IComplexEntity>(o => o.WithTableHint("nolock"))` emits
-`from complex_entity with (nolock)`. Row locking reuses the same mechanism:
+source (after its alias when one is present): `ctx.From<IComplexEntity>(o => o.WithTableHint("nolock"))` emits
+`from complex_entity with (nolock)`, and an aliased source emits `... as [t1] with (nolock)`. Row locking reuses the same mechanism:
 `ForUpdate`/`ForShare` ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock),
 [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) attach `with (updlock)`/
-`with (holdlock)` to the primary table instead of a trailing `FOR UPDATE`/`FOR SHARE` clause. A
+`with (holdlock)` to every physical `FROM`/`JOIN` source instead of a trailing `FOR UPDATE`/`FOR SHARE`
+clause ([`FromOptions.ForUpdate`](xref:NextORM.Core.FromOptions.ForUpdate)/[`JoinOptions.ForUpdate`](xref:NextORM.Core.JoinOptions.ForUpdate)
+target a single source). A
 [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) adds `nowait` or `readpast` to the same hint
 (`with (updlock, nowait)` / `with (updlock, readpast)`); `readpast` approximates `SKIP LOCKED`.
 `QueryCommand.ForJson(...)` ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) is a terminal that executes
@@ -306,8 +308,8 @@ SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` ter
 | Full-text predicates | `contains(...)` / `freetext(...)` (column must be full-text indexed) |
 | Full-text ranking | `containstable(table, column, search)` / `freetexttable(...)` table functions return `KEY`/`RANK` ([`SqlFunctions.SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer), [`IKeyRankRow<TKey>`](xref:NextORM.Core.SqlFunctions.IKeyRankRow`1)) |
 | Regular expressions | `regexp_like(value, pattern, 'c'/'i')` / `regexp_replace(value, pattern, replacement, 1, 0, 'c'/'i')` (SQL Server 2025+; `regexp_like` additionally needs database compatibility level 170) |
-| Locking table hints | `with (hint, ...)` after the primary table ([`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[]))) |
-| Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on the primary table ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); a [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) adds `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
+| Locking table hints | `with (hint, ...)` after the source, after its alias when aliased ([`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[]))) |
+| Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on **every** physical `FROM`/`JOIN` source (behavior change: previously the primary source only); [`FromOptions.ForUpdate`](xref:NextORM.Core.FromOptions.ForUpdate)/[`JoinOptions.ForUpdate`](xref:NextORM.Core.JoinOptions.ForUpdate) target one source ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); a [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) adds `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
 | Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions` (see [Bulk insert](../guide/20-bulk-insert.md#sql-server-bulk-copy-options)) |
 | Session/info functions | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
 | T-SQL clock/offset/`*FROMPARTS` | `sysdatetime` / `sysdatetimeoffset` / `sysutcdatetime` / `switchoffset` / `todatetimeoffset` / `timefromparts` / `smalldatetimefromparts` / `datetimefromparts` / `datetime2fromparts` / `datetimeoffsetfromparts` (per-name gated) |

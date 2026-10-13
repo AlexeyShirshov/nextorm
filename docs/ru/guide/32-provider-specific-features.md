@@ -50,7 +50,8 @@ select id from complex_entity for xml raw('row'), root('items'), elements
 [`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare) блокируют выбранные строки до конца
 окружающей транзакции. PostgreSQL, MySQL и MariaDB генерируют завершающее предложение, которое
 ставится последним — после `WHERE`, `ORDER BY` и запроса страницы; SQL Server вместо этого
-привязывает табличный хинт `WITH (updlock)`/`WITH (holdlock)` к основной таблице:
+привязывает табличный хинт `WITH (updlock)`/`WITH (holdlock)` к каждому физическому источнику
+инструкции:
 
 ```csharp
 var rows = await dataContext.From<SimpleEntity>()
@@ -70,10 +71,64 @@ select id from simple_entity with (updlock) where (id > 5)
 `ForUpdate()` блокирует строки монопольно; [`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare)
 берёт разделяемую блокировку — PostgreSQL генерирует `for share`, MySQL/MariaDB генерируют
 `lock in share mode`, а SQL Server — `holdlock` (разделяемая) против `updlock` для `ForUpdate`.
-Предложение реализовано в PostgreSQL, MySQL, MariaDB и SQL Server
+Предложение для всей инструкции реализовано в PostgreSQL, MySQL, MariaDB и SQL Server
 ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock); в SQL Server — через
 [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints));
 все остальные провайдеры выбрасывают `NotSupportedException` при построении SQL.
+
+### Блокировка всей инструкции и блокировка источника
+
+`ForUpdate()`/`ForShare()` для всей инструкции блокируют инструкцию целиком; **блокировка
+источника** нацелена на один физический источник и настраивается через его опции:
+
+- основной источник — через [`FromOptions.ForUpdate`](xref:NextORM.Core.FromOptions.ForUpdate)/[`FromOptions.ForShare`](xref:NextORM.Core.FromOptions.ForShare),
+  передаваемые в `From<T>(o => ...)` или `From("table", o => ...)`;
+- join — через [`JoinOptions.ForUpdate`](xref:NextORM.Core.JoinOptions.ForUpdate)/[`JoinOptions.ForShare`](xref:NextORM.Core.JoinOptions.ForShare),
+  передаваемые завершающим аргументом-опциями в `Join`/`LeftJoin`/`RightJoin`/`FullJoin`.
+
+Источник адресуется по его SQL-псевдониму, поэтому блокировка не утекает на соседний join, на другой
+экземпляр того же CLR-типа или на другой псевдоним:
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>(o => o.ForUpdate())
+    .Join(dataContext.From<ComplexEntity>(), (s, c) => s.Id == c.Id, j => j.ForShare())
+    .Select(p => new { p.Item1.Id })
+    .ToListAsync();
+```
+
+```sql
+-- PostgreSQL
+select t1.id from simple_entity as "t1"
+join complex_entity as "t2" on cast(t1.id as bigint) = t2.id
+for update of "t1"
+for share of "t2"
+
+-- MySQL
+select t1.id from simple_entity as `t1`
+join complex_entity as `t2` on cast(t1.id as signed) = t2.id
+for update of `t1`
+for share of `t2`
+```
+
+PostgreSQL и MySQL генерируют по одному адресному предложению `FOR UPDATE OF <alias>`/
+`FOR SHARE OF <alias>` на каждый заблокированный источник. Поскольку у `LOCK IN SHARE MODE` нет формы
+с `OF`, разделяемая блокировка источника в MySQL всегда использует более новый синтаксис
+`FOR SHARE OF`. Блокировка всей инструкции и блокировка источника взаимно исключены — их сочетание
+выбрасывает `InvalidOperationException`; блокировка источника допустима только для физического
+табличного источника: `FromSql`, подзапрос (`From(query)`/`From(builder)`) и CTE-источник выбрасывают
+`NotSupportedException`.
+
+> **Изменение поведения SQL Server.** Блокировка `ForUpdate()`/`ForShare()` для всей инструкции теперь
+> ставит хинт на **каждый** физический источник `FROM`/`JOIN`; раньше хинт получал только основной
+> источник. Поэтому многотабличные запросы берут хинт на большем числе таблиц. Блокировка источника
+> ставит хинт только на выбранный источник.
+
+> **MariaDB** не имеет грамматики `FOR UPDATE OF`/`FOR SHARE OF`, поэтому блокировка источника **не
+> поддерживается**: она детерминированно отклоняется через `NotSupportedException` (fail-closed) вместо
+> генерации неподдерживаемого `OF`, подмены блокировкой всей инструкции или молчаливого игнорирования
+> цели. Блокировки всей инструкции `ForUpdate()`/`ForShare()` сохраняют собственную грамматику MariaDB
+> (`for update`, `lock in share mode`).
+
 
 Режим ожидания задаётся [`LockWaitMode`](xref:NextORM.Core.LockWaitMode): если строку уже удерживает
 другая транзакция, [`NoWait`](xref:NextORM.Core.LockWaitMode.NoWait) падает немедленно вместо

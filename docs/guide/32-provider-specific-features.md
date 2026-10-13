@@ -50,7 +50,7 @@ exclusive; combining them throws `NotSupportedException`.
 [`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare) lock the selected rows until the surrounding
 transaction ends. PostgreSQL, MySQL and MariaDB emit a trailing clause placed last, after `WHERE`,
 `ORDER BY` and a page request; SQL Server attaches a `WITH (updlock)`/`WITH (holdlock)` table hint to
-the primary source instead:
+every physical source of the statement:
 
 ```csharp
 var rows = await dataContext.From<SimpleEntity>()
@@ -69,10 +69,61 @@ select id from simple_entity with (updlock) where (id > 5)
 
 `ForUpdate()` locks rows exclusively; [`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare) takes a
 shared lock — PostgreSQL renders `for share`, MySQL/MariaDB render `lock in share mode`, and SQL Server
-renders `holdlock` (shared) versus `updlock` for `ForUpdate`. The clause is implemented by PostgreSQL,
-MySQL, MariaDB and SQL Server ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock); SQL Server uses
+renders `holdlock` (shared) versus `updlock` for `ForUpdate`. The whole-query clause is implemented by
+PostgreSQL, MySQL, MariaDB and SQL Server ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock); SQL Server uses
 [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints));
 every other provider throws `NotSupportedException` when the SQL is built.
+
+### Whole-query vs source-level lock
+
+A whole-query `ForUpdate()`/`ForShare()` locks the statement; a **source-level** lock targets one
+physical source and is configured through that source's options:
+
+- the primary source through [`FromOptions.ForUpdate`](xref:NextORM.Core.FromOptions.ForUpdate)/[`FromOptions.ForShare`](xref:NextORM.Core.FromOptions.ForShare)
+  passed to `From<T>(o => ...)` or `From("table", o => ...)`;
+- a join through [`JoinOptions.ForUpdate`](xref:NextORM.Core.JoinOptions.ForUpdate)/[`JoinOptions.ForShare`](xref:NextORM.Core.JoinOptions.ForShare)
+  passed to the trailing options argument of `Join`/`LeftJoin`/`RightJoin`/`FullJoin`.
+
+The source is addressed by its SQL alias, so the lock never leaks to a neighbouring join, to another
+instance of the same CLR type or to another alias:
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>(o => o.ForUpdate())
+    .Join(dataContext.From<ComplexEntity>(), (s, c) => s.Id == c.Id, j => j.ForShare())
+    .Select(p => new { p.Item1.Id })
+    .ToListAsync();
+```
+
+```sql
+-- PostgreSQL
+select t1.id from simple_entity as "t1"
+join complex_entity as "t2" on cast(t1.id as bigint) = t2.id
+for update of "t1"
+for share of "t2"
+
+-- MySQL
+select t1.id from simple_entity as `t1`
+join complex_entity as `t2` on cast(t1.id as signed) = t2.id
+for update of `t1`
+for share of `t2`
+```
+
+PostgreSQL and MySQL render one targeted `FOR UPDATE OF <alias>`/`FOR SHARE OF <alias>` clause per
+locked source. Because `LOCK IN SHARE MODE` has no `OF` form, a MySQL source-level share always uses the
+newer `FOR SHARE OF` spelling. A whole-query and a source-level lock are mutually exclusive — combining
+them throws `InvalidOperationException` — and a source-level lock is only valid on a physical table
+source: `FromSql`, a query/builder subquery and a CTE source throw `NotSupportedException`.
+
+> **SQL Server behavior change.** A whole-query `ForUpdate()`/`ForShare()` now places the lock hint on
+> **every** `FROM`/`JOIN` physical source of the statement; previously only the primary source was
+> hinted. Multi-table queries therefore take the hint on more tables than before. A source-level lock
+> places the hint on the chosen source only.
+
+> **MariaDB** has no `FOR UPDATE OF`/`FOR SHARE OF` grammar, so a source-level lock is **not supported**:
+> it is rejected deterministically with `NotSupportedException` (fail-closed) instead of emitting an
+> unsupported `OF`, substituting a whole-query lock or silently ignoring the target. Whole-query
+> `ForUpdate()`/`ForShare()` keep MariaDB's own grammar (`for update`, `lock in share mode`).
+
 
 Pass a [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) to control what happens when another transaction
 already holds the row: [`NoWait`](xref:NextORM.Core.LockWaitMode.NoWait) fails immediately instead of
