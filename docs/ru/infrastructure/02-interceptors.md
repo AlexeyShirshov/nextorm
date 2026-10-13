@@ -59,6 +59,8 @@ services.AddNextOrmContext(builder => builder
 
 Type-регистрация требует builder с DI. На отдельном `new DataContextBuilder()` ошибка проявляется при `CreateDataContext()` как `InvalidOperationException`, а незарегистрированный сервис — ошибкой `GetRequiredService` самого контейнера. В обоих случаях сбой происходит **до** вызова фабрики контекста, поэтому частично созданный контекст не появляется.
 
+Мост EF Core (`CreateNextOrmContext`) строит контекст из отдельного builder без захваченного провайдера: регистрация интерцептора по типу там падает при создании контекста тем же `InvalidOperationException`. Регистрируйте экземпляр (`configure: builder => builder.AddInterceptor(new TimingInterceptor())`).
+
 Контекст, созданный из builder, может добавить интерцепторы на время своей жизни:
 
 ```csharp

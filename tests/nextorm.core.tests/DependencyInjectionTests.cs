@@ -83,6 +83,7 @@ public class DependencyInjectionTests
     // for.
 
     [Fact]
+    [Trait("Category", "T221")]
     public void AddNextOrmContext_ProviderOverload_NullArguments_ShouldFailFast()
     {
         var services = new ServiceCollection();
@@ -95,6 +96,7 @@ public class DependencyInjectionTests
     }
 
     [Fact]
+    [Trait("Category", "T221")]
     public void AddKeyedNextOrmContext_ProviderOverload_NullArguments_ShouldFailFast()
     {
         var services = new ServiceCollection();
@@ -107,6 +109,7 @@ public class DependencyInjectionTests
     }
 
     [Fact]
+    [Trait("Category", "T221")]
     public void AddNextOrmContext_ActionOverload_NullServices_ShouldFailFast()
     {
         var nullServices = () => ((IServiceCollection)null!).AddNextOrmContext((Action<DataContextBuilder>)(_ => { }));
@@ -115,6 +118,7 @@ public class DependencyInjectionTests
     }
 
     [Fact]
+    [Trait("Category", "T221")]
     public void AddKeyedNextOrmContext_ActionOverload_NullArguments_ShouldFailFast()
     {
         var services = new ServiceCollection();
@@ -127,6 +131,7 @@ public class DependencyInjectionTests
     }
 
     [Fact]
+    [Trait("Category", "T221")]
     public void AddNextOrmContext_Generic_NullServices_ShouldFailFast()
     {
         var nullServices = () => ((IServiceCollection)null!).AddNextOrmContext<InMemoryDataContext>();
@@ -135,6 +140,7 @@ public class DependencyInjectionTests
     }
 
     [Fact]
+    [Trait("Category", "T221")]
     public void AddKeyedNextOrmContext_Generic_NullServices_ShouldFailFast()
     {
         var nullServices = () => ((IServiceCollection)null!).AddKeyedNextOrmContext<InMemoryDataContext>("key");

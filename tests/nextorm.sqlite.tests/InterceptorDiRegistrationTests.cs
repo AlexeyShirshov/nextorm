@@ -248,6 +248,34 @@ public class InterceptorDiRegistrationTests
     }
 
     [Fact]
+    public void DualInterfaceInstanceRegisteredAsConnection_ServesBothPipelines()
+    {
+        var path = CreateDb();
+        try
+        {
+            var log = new Log();
+            var dual = new DualInterceptor(log);
+            using var provider = CreateProvider(
+                path,
+                _ => { },
+                builder => builder.UseSqlite(path).AddInterceptor((IConnectionInterceptor)dual));
+            using var scope = provider.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<IDataContext>();
+
+            ((DataContext)context).EnsureConnectionOpen();
+            context.PurgeQueryCache();
+            context.From<ISimpleEntity>().Select(x => x.Id).ToList();
+
+            log.Entries.Should().Contain("opening");
+            log.Entries.Should().Contain("executing");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void TransientInterceptor_IsResolvedPerCreation()
     {
         var path = CreateDb();

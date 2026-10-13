@@ -209,3 +209,31 @@ Next step: Persist this r=1 plan and frozen manifest; execute D221-0, then D221-
   coverage non-regressing; Stryker 68 killed / 8 survived, 0 NoCoverage; manifest + report validators exit 0.
 - Incomplete: CHECK not run — the verdict is the `check` role's; `D:`-units remain pending/blocked until
   CHECK accepts (DoD not met by a DO report).
+
+## Corrective DO (CHECK FAIL → DO) — iteration n=2/3, task `D:221-CLOSURE`
+
+- **B2 fixed.** `src/nextorm.core/DI/DataContextBuilder.cs` `AddInterceptor(Type)` `<remarks>` reworded to
+  the actual exact-key dedup semantics ("entries share one key — instance runtime type or supplied `Type`;
+  first registration wins, including mixed entries"). B7: `AddInterceptor<T>()` remark now notes the
+  runtime check beyond the compile-time `class` constraint.
+- **B11 closed (no provider change).** The EF Core bridge (`EntityFrameworkCoreExtensions.cs:81`) builds a
+  standalone builder, so `AddInterceptor(Type)`/`<T>()` there is rejected at creation per standalone
+  semantics; documented EN+RU in `docs/infrastructure/02-interceptors.md` (+RU).
+- **Missing tests added** (all `Category=T221`): V07 reverse mixed dedupe (Type→instance first-wins),
+  V05 abstract service key, and a no-eager-resolve ownership test
+  (`tests/nextorm.core.tests/InterceptorDiRegistrationTests.cs:270,294,425`); V09 connection-overload
+  dual-interface (`tests/nextorm.sqlite.tests/InterceptorDiRegistrationTests.cs:251`); B12:
+  `[Trait("Category","T221")]` on the six new `DependencyInjectionTests` guards.
+- **Evidence regathered (fresh, real exits).** build `nextorm.slnx` 0/0; U1 20/20, U2 11/11, UN 45/45,
+  Q 10/10, QN 9/9, I 21/21 (SQLite/PostgreSQL/SQLServer/MySQL/ClickHouse, 0 skipped) — all exit 0.
+  Coverage after: line 11.4% / branch 7.8%; `DataContextBuilder` 91.7%, `ServiceCollectionExtensions` 100%
+  (existing-selector-only DCB 90.2%, added-selector-only 83.1%); every changed line covered. Stryker
+  run 4: 76 tested / 68 killed / 8 survived (89.47%, 0 NoCoverage); 18498 stays independently proven killed.
+  Ownership map: `artifacts/pdca/D221/rv1/ownership-evidence.md` (R221-03 scenario → test `file:line`).
+  `validate_inner_loop.py manifest` exit 0; `validate_inner_loop.py report` exit 0.
+- **Defect ledger.** `D221-B2-DOC` (fixed), `D221-B11-EF-BOUNDARY` (fixed: doc note), `D221-B12-TRAIT`
+  (fixed: traits). **Deferred:** `D221-B4-ALLOC` (P2, `ResolveInterceptors` zero-entry allocations;
+  trigger: measured context-construction pressure; not optimized). No product defect.
+- **Notice.** `TestResults/D221` coverage HTML trees stay uncommitted for size (cobertura XML + Summary are
+  committed); Stryker's `test-projects` still exclude `nextorm.integration.tests`, so the integration
+  guards are pinned in core instead.

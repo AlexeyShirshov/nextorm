@@ -1,16 +1,16 @@
 dotnet-coverage v18.11.2.0 [linux-x64 - .NET 10.0.12]
 
-SessionId: 02de416c-5ae4-4ae2-98a9-4126fd593e1c
+SessionId: 8c6ebb84-153b-49c5-a28a-5a0e86bc8e70
 ## [coverage-driver:after] dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~NextORM.Core.Tests.InterceptorBuilderTests|FullyQualifiedName~NextORM.Core.Tests.DependencyInjectionTests
 Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
-/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) passed (1s 809ms)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) passed (1s 843ms)
 
 Test run summary: Passed!
-  total: 16
+  total: 31
   failed: 0
-  succeeded: 16
+  succeeded: 31
   skipped: 0
-  duration: 2s 127ms
+  duration: 2s 161ms
 ## [coverage-driver:after] dotnet run --project tests/nextorm.sqlite.tests -c Debug --no-build -- -class NextORM.Sqlite.Tests.InterceptorTests -noColor
 xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
   Discovering: nextorm.sqlite.tests
@@ -18,10 +18,10 @@ xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
   Starting:    nextorm.sqlite.tests
   Finished:    nextorm.sqlite.tests (ID = 'a5abfb47315c331d69873aec368d5caeca8b1b317eae0481172250d5022c1251')
 === TEST EXECUTION SUMMARY ===
-   nextorm.sqlite.tests  Total: 10, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.848s
+   nextorm.sqlite.tests  Total: 10, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.885s
 ## [coverage-driver:after] dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter FullyQualifiedName~CoreApiContractTests
 Running tests from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) passed (1s 095ms)
+/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) passed (1s 118ms)
 
 Test run summary: Passed!
   total: 8
@@ -52,7 +52,7 @@ dbug: Microsoft.Extensions.Hosting.Internal.Host[4]
       Hosting stopped
   Finished:    nextorm.core.tests (ID = '04950ef84a4d320121f28d1bd5e2665e29f06b807a3e37aaa470f43620a74401')
 === TEST EXECUTION SUMMARY ===
-   nextorm.core.tests  Total: 28, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.308s
+   nextorm.core.tests  Total: 45, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.335s
 ## [coverage-driver:after] dotnet run --project tests/nextorm.sqlite.tests -c Debug --no-build -- -trait Category=T221 -noColor
 xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
   Discovering: nextorm.sqlite.tests
@@ -60,16 +60,16 @@ xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
   Starting:    nextorm.sqlite.tests
   Finished:    nextorm.sqlite.tests (ID = 'a5abfb47315c331d69873aec368d5caeca8b1b317eae0481172250d5022c1251')
 === TEST EXECUTION SUMMARY ===
-   nextorm.sqlite.tests  Total: 8, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.775s
+   nextorm.sqlite.tests  Total: 9, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.863s
 ## [coverage-driver:after] dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter Category=T221
 Running tests from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) passed (32s 062ms)
+/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) passed (31s 555ms)
 
 Test run summary: Passed!
   total: 13
   failed: 0
   succeeded: 13
   skipped: 0
-  duration: 31s 618ms
+  duration: 30s 876ms
 ## [coverage-driver:after] done
 Code coverage results: TestResults/D221/rv1/coverage-after.cobertura.xml.

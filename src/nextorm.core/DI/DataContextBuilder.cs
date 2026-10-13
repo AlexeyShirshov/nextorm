@@ -355,9 +355,9 @@ public class DataContextBuilder
     /// A context is created on a builder without a captured provider (a standalone builder).
     /// </exception>
     /// <remarks>
-    /// Registration is deduplicated by the supplied type: a later registration of the same type is
-    /// ignored (first registration wins), and a type entry is not merged with an instance of the same
-    /// runtime type.
+    /// Every registration - an instance or a type - shares one key: the instance's runtime type for an
+    /// instance, the supplied <see cref="Type"/> for a type entry. The first registration of a key wins,
+    /// including mixed instance/type entries, so a later registration of the same key is ignored.
     /// </remarks>
     public DataContextBuilder AddInterceptor(Type interceptorType)
     {
@@ -382,6 +382,15 @@ public class DataContextBuilder
     /// <returns>This builder, to allow chaining.</returns>
     /// <exception cref="ArgumentException"><typeparamref name="T"/> is not a valid interceptor type.</exception>
     /// <exception cref="InvalidOperationException">A context is created on a builder without a captured provider.</exception>
+    /// <remarks>
+    /// Every registration - an instance or a type - shares one key: the instance's runtime type for an
+    /// instance, the supplied <see cref="Type"/> for a type entry. The first registration of a key wins,
+    /// including mixed instance/type entries, so a later registration of the same key is ignored.
+    /// <para>
+    /// <typeparamref name="T"/> is constrained to <see langword="class"/> at compile time; the runtime
+    /// check additionally rejects open-generic and non-assignable types immediately.
+    /// </para>
+    /// </remarks>
     public DataContextBuilder AddInterceptor<T>() where T : class
         => AddInterceptor(typeof(T));
 

@@ -1,21 +1,21 @@
 Summary
-  Generated on: 10/13/2026 - 10:31:55
+  Generated on: 10/13/2026 - 11:15:14
   Parser: Cobertura
   Assemblies: 4
   Classes: 578
   Files: 330
-  Line coverage: 11.3%
-  Covered lines: 6653
-  Uncovered lines: 51797
+  Line coverage: 11.4%
+  Covered lines: 6669
+  Uncovered lines: 51781
   Coverable lines: 58450
-  Total lines: 96779
-  Branch coverage: 7.8% (2701 of 34507)
-  Covered branches: 2701
+  Total lines: 96788
+  Branch coverage: 7.8% (2706 of 34507)
+  Covered branches: 2706
   Total branches: 34507
-  Method coverage: 11.7% (917 of 7819)
-  Full method coverage: 7.4% (581 of 7819)
-  Covered methods: 917
-  Fully covered methods: 581
+  Method coverage: 11.7% (920 of 7819)
+  Full method coverage: 7.4% (583 of 7819)
+  Covered methods: 920
+  Fully covered methods: 583
   Total methods: 7819
 
 nextorm.core                                                                      11.4%
@@ -96,7 +96,7 @@ nextorm.core                                                                    
   NextORM.Core.CteReference<TResult>                                                 0%
   NextORM.Core.DataContext                                                        18.4%
   NextORM.Core.DataContext<TResult>                                               18.4%
-  NextORM.Core.DataContextBuilder                                                 79.3%
+  NextORM.Core.DataContextBuilder                                                 91.6%
   NextORM.Core.DataContextCache                                                   25.5%
   NextORM.Core.DataContextException                                                100%
   NextORM.Core.DataContextExtensions                                                 7%

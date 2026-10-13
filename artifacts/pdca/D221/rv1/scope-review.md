@@ -76,3 +76,16 @@ All 16 edited/added in-scope files carry CRLF line terminators (checked with `fi
 
 - `scope-baseline/git-status-before.txt`, `git-status-after.txt`, `stash-list.txt`, `head.txt`,
   `owned-file-hashes-before.txt`, `git-diff-check.log`, `scope.json`.
+
+## Corrective n=2/3 addendum (CHECK FAIL → DO)
+
+- `src/nextorm.core/DI/DataContextBuilder.cs`: XML `<remarks>` reworded to the actual dedup semantics
+  (B2); `AddInterceptor<T>()` remark notes the runtime check (B7). No behavior change.
+- Tests added (all `Category=T221`): V07 reverse mixed dedupe
+  (`InterceptorDiRegistrationTests.cs:270`), V05 abstract service key (`:294`), no-eager-resolve ownership
+  (`:425`); V09 connection-overload dual-interface (`tests/nextorm.sqlite.tests/InterceptorDiRegistrationTests.cs:251`);
+  `[Trait("Category","T221")]` on the six new `DependencyInjectionTests` guards (B12).
+- `docs/infrastructure/02-interceptors.md` (+RU): EF Core bridge boundary note (B11).
+- New evidence `coverage-driver-added.sh`, `ownership-evidence.md`; separated existing/added coverage.
+- A re-run: `git status` exit 0, `git diff --check` exit 0; only the 2 pre-existing SVGs remain dirty
+  (not touched, not staged).

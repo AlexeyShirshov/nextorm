@@ -36,6 +36,15 @@ public class InterceptorDiRegistrationTests
         public DiDualInterceptor(Resolutions resolutions) => resolutions.Dual.Add(this);
     }
 
+    public abstract class AbstractQueryInterceptor : IQueryInterceptor
+    {
+    }
+
+    public sealed class ConcreteAbstractInterceptor : AbstractQueryInterceptor
+    {
+        public ConcreteAbstractInterceptor(Resolutions resolutions) => resolutions.Query.Add(this);
+    }
+
     public sealed class DisposableQueryInterceptor : IQueryInterceptor, IDisposable
     {
         public bool Disposed { get; private set; }
@@ -258,6 +267,48 @@ public class InterceptorDiRegistrationTests
     }
 
     [Fact]
+    public void MixedDuplicate_InstanceAfterTypeOfTheSameRuntimeType_IsIgnored()
+    {
+        var resolutions = new Resolutions();
+        var instance = new DiQueryInterceptor(resolutions);
+        var probe = new FactoryProbe();
+        using var provider = BuildProvider(
+            services => services.AddScoped<DiQueryInterceptor>(),
+            builder =>
+            {
+                builder
+                    .AddInterceptor<DiQueryInterceptor>()
+                    .AddInterceptor(instance);
+                builder.Factory = probe.Create;
+            });
+        using var scope = provider.CreateScope();
+
+        scope.ServiceProvider.GetRequiredService<IDataContext>();
+
+        probe.Creations[0].Query.Should().ContainSingle("the type entry registered first wins over the instance")
+            .Which.Should().NotBeSameAs(instance);
+        probe.Creations[0].Query[0].Should().BeOfType<DiQueryInterceptor>();
+    }
+
+    [Fact]
+    public void AbstractServiceKey_IsResolvedFromProvider()
+    {
+        var probe = new FactoryProbe();
+        using var provider = BuildProvider(
+            services => services.AddScoped<AbstractQueryInterceptor, ConcreteAbstractInterceptor>(),
+            builder =>
+            {
+                builder.AddInterceptor(typeof(AbstractQueryInterceptor));
+                builder.Factory = probe.Create;
+            });
+        using var scope = provider.CreateScope();
+
+        scope.ServiceProvider.GetRequiredService<IDataContext>();
+
+        probe.Creations[0].Query.Should().ContainSingle().Which.Should().BeOfType<ConcreteAbstractInterceptor>();
+    }
+
+    [Fact]
     public void DistinctAliases_AreNotMergedByTheirRuntimeImplementation()
     {
         var probe = new FactoryProbe();
@@ -368,6 +419,31 @@ public class InterceptorDiRegistrationTests
 
         probe.Creations.Should().HaveCount(2);
         probe.Creations[0].Query[0].Should().NotBeSameAs(probe.Creations[1].Query[0]);
+    }
+
+    [Fact]
+    public void TypeEntry_IsNotResolvedEagerlyAtRegistration()
+    {
+        var probe = new FactoryProbe();
+        using var provider = BuildProvider(
+            services => services.AddTransient<DiQueryInterceptor>(),
+            builder =>
+            {
+                builder.AddInterceptor<DiQueryInterceptor>();
+                builder.Factory = probe.Create;
+            });
+        using var scope = provider.CreateScope();
+        var resolutions = scope.ServiceProvider.GetRequiredService<Resolutions>();
+
+        // Resolving the scoped builder runs the options delegate (registration) but must not resolve
+        // the interceptor yet; resolution happens at CreateDataContext().
+        var builder = scope.ServiceProvider.GetRequiredService<DataContextBuilder>();
+        resolutions.Query.Should().BeEmpty("registration must not resolve the service");
+        probe.Invocations.Should().Be(0);
+
+        builder.CreateDataContext();
+
+        resolutions.Query.Should().HaveCount(1);
     }
 
     [Fact]

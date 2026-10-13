@@ -59,6 +59,8 @@ Registration is deduplicated by exact key - `instance.GetType()` for an instance
 
 A type registration needs a DI-backed builder. On a standalone `new DataContextBuilder()` the failure surfaces at `CreateDataContext()` as `InvalidOperationException`, and a service that is not registered fails with the container's own `GetRequiredService` error. In both cases the failure happens **before** the context factory runs, so no context is partially constructed.
 
+The EF Core bridge (`CreateNextOrmContext`) builds its context from a standalone builder, so it has no captured provider: registering an interceptor by type there fails at context creation with the same `InvalidOperationException`. Register an instance instead (`configure: builder => builder.AddInterceptor(new TimingInterceptor())`).
+
 A context created from the builder can add more interceptors for its own lifetime:
 
 ```csharp

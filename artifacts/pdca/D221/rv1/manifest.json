@@ -18,11 +18,13 @@
     {
       "id": "E221-02",
       "status": "met",
-      "requirement": "R221-01..04 / V01-V13 (core registration/DI)",
+      "requirement": "R221-01..04 / V01-V13 (core registration/DI + R221-03 ownership map)",
       "evidence": [
         { "kind": "test", "path": "artifacts/pdca/D221/rv1/core-u1.log", "exit": 0 },
         { "kind": "test", "path": "artifacts/pdca/D221/rv1/core-u2.log", "exit": 0 },
-        { "kind": "test", "path": "artifacts/pdca/D221/rv1/core-un.log", "exit": 0 }
+        { "kind": "test", "path": "artifacts/pdca/D221/rv1/core-un.log", "exit": 0 },
+        { "kind": "test", "path": "artifacts/pdca/D221/rv1/core-di.log", "exit": 0 },
+        { "kind": "ownership-map", "path": "artifacts/pdca/D221/rv1/ownership-evidence.md" }
       ]
     },
     {
@@ -58,10 +60,14 @@
     {
       "id": "E221-06",
       "status": "met",
-      "requirement": "R221-06 / coverage delta",
+      "requirement": "R221-06 / coverage delta (separated existing vs added)",
       "evidence": [
         { "kind": "coverage", "path": "TestResults/D221/rv1/coverage-after.cobertura.xml" },
         { "kind": "coverage-report", "path": "TestResults/D221/rv1/coverage-after/Summary.txt" },
+        { "kind": "coverage", "path": "TestResults/D221/rv1/coverage-existing-after.cobertura.xml" },
+        { "kind": "coverage-report", "path": "TestResults/D221/rv1/coverage-existing-after/Summary.txt" },
+        { "kind": "coverage", "path": "TestResults/D221/rv1/coverage-added.cobertura.xml" },
+        { "kind": "coverage-report", "path": "TestResults/D221/rv1/coverage-added/Summary.txt" },
         { "kind": "delta", "path": "artifacts/pdca/D221/rv1/coverage-delta.md" },
         { "kind": "log", "path": "artifacts/pdca/D221/rv1/coverage-after-collect.log", "exit": 0 }
       ]
@@ -73,7 +79,7 @@
       "evidence": [
         { "kind": "mutation", "path": "artifacts/pdca/D221/rv1/mutation/reports/mutation-report.json", "exit": 0 },
         { "kind": "mutation", "path": "artifacts/pdca/D221/rv1/mutation-disposition.md" },
-        { "kind": "log", "path": "artifacts/pdca/D221/rv1/mutation-rerun2.log", "exit": 0 }
+        { "kind": "log", "path": "artifacts/pdca/D221/rv1/mutation-rerun3.log", "exit": 0 }
       ]
     },
     {

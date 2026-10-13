@@ -53,3 +53,12 @@ Raw review material only; the verdict belongs to the `check` role.
 
 - `artifacts/pdca/D221/rv1/docfx.log`
 - `artifacts/pdca/D221/rv1/core-u.log`, `core-un.log`, `sqlite-q.log`, `sqlite-qn.log`, `integration.log`
+
+## Corrective n=2/3 addendum
+
+- B2: the `AddInterceptor(Type)` XML remark now states the exact-key dedup semantics ("entries share one
+  key; first registration wins"), matching `AddEntry`/`MixedDuplicate…IsIgnored`.
+- B7: the `AddInterceptor<T>()` remark notes the runtime check beyond the compile-time `class` constraint.
+- B11: EN/RU `02-interceptors.md` now state that the EF Core bridge builder is standalone, so type-key
+  registration there is rejected at creation (instance registration required). No public API change.
+- DocFX unchanged (exit 0; 2 pre-existing sourcegenerator warnings).
