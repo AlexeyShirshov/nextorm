@@ -45,6 +45,20 @@ prior_contract: rv=1 superseded by rv=2
 | D-04M | done | MariaDB `SupportsSourceLocks=false` + deterministic `NotSupportedException`; whole grammar preserved; red→green `/tmp/nextorm-maria-red.log` (exit 2, selected 3, failed 2) → `/tmp/nextorm-maria-green.log` (exit 0, selected 3) |
 | D-05/D-06 | pending | D-05 part 1 closed (focused matrix rows + `PlanKeyUniquenessTests`, full solution build, CRLF sweep); D-05 remainder/D-06 (integration live, EN/RU docs, boundary sweep, acceptance/T216 benchmarks, coverage, manifest) NOT started |
 
+### D-05 part 4 (DO->CHECK boundary sweep + coverage)
+
+One `dotnet build nextorm.slnx -c Debug` (exit 0, 0/0, `/tmp/nextorm-boundary-build.log`), then all runs `-c Debug --no-build`, `phase=boundary`:
+- `PDCA=T216`: core 2, postgres 9, mysql 3, mariadb 3, sqlserver 3, sqlite 1, clickhouse 1 — all exit 0
+- `FullyQualifiedName~LockRendererDefaultTests` (core): 5, exit 0
+- `FullyQualifiedName~PlanKeyUniquenessTests` (sqlite): 13, exit 0
+- integration `PDCA=T216` (`DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`): total 9, passed 8, failed 0, **skipped 1** (SQLite `RowLock_SourcePrimary` capability skip — no row locking), exit 0
+- Evidence JSON `/tmp/nextorm-t216-evidence.json` (+ gitignored `artifacts/pdca/D216/rv2/boundary/evidence.json`); `python3 scripts/validate_inner_loop.py report` exit **0**
+
+Coverage (`--no-build` full suite under `dotnet-coverage`, DOCKER_HOST set; 11243 tests, 0 failed, 199 skipped):
+- `dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"` — exit 0 (`/tmp/nextorm-cov-collect.log`)
+- `dotnet tool run reportgenerator -reports:tests/coverage/coverage.cobertura.xml -targetdir:tests/coverage/report -reporttypes:"Html;TextSummary;Cobertura" -riskhotspotassemblyfilters:"+nextorm.*"` — exit 0 (`/tmp/nextorm-cov-report.log`)
+- Result: **Line coverage 88.7%** (52481/59120) and **Branch coverage 80.8%** (28219/34919), 4 assemblies — both **above** the 85% line / 75% branch thresholds. Summary `artifacts/pdca/D216/rv2/perf/coverage-summary.txt`.
+
 ### D-05 part 3 (perf acceptance, cached path)
 
 Acceptance command (`--anyCategories=acceptance`): exit 0, **7** executed benchmarks, **0** failures, external wall clock **51 s** (BDN `Global total time` 48.65 s) — under the 4 min budget. Logs `/tmp/nextorm-acceptance.log` (copy `artifacts/pdca/D216/rv2/perf/after/acceptance.log`, gitignored).
@@ -388,4 +402,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 2026-10-13T00:30:00Z | DO | r=2 | n=1/3 | D-05 part 2: focused integration locking run (PG/MySQL/SS 2 passed each; SQLite 2 capability-skipped; MariaDB dedicated 3 fail-closed; capability 5); fixed SQL Server hint-after-alias ordering; full slnx build 0/0 | logs /tmp/nextorm-int-*-lock*.log /tmp/nextorm-full-build3.log
 2026-10-13T00:40:00Z | DO | r=2 | n=1/3 | Docs (EN+RU): whole-query vs source-level row locking, SQL Server all-source behavior change, PG/MySQL OF, MariaDB fail-closed; docfx exit 0 (2 pre-existing source-generator warnings) | logs /tmp/nextorm-docfx.log
 2026-10-13T00:50:00Z | DO | r=2 | n=1/3 | Perf acceptance 7 cases / 0 failures (wall 51 s; cached/prepared ratio 2.03 vs baseline 1.87, below 2.244); T216 cached-path benchmark 6 cases (no slower than whole-lock); artifacts committed 04442903 | logs /tmp/nextorm-acceptance.log /tmp/nextorm-t216-bench.log
+2026-10-13T01:00:00Z | DO | r=2 | n=1/3 | Boundary sweep (7x PDCA=T216 + LockRendererDefaultTests 5 + PlanKeyUniqueness 13 + integration 9 [1 SQLite skip]) all exit 0; validate_inner_loop report exit 0; coverage line 88.7% / branch 80.8% (>= 85/75) | logs /tmp/nextorm-boundary-*.log /tmp/nextorm-cov-*.log
 ```
