@@ -28,9 +28,9 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 
 | id | tasks (order) | worktree | branch/ref | status |
 |---|---|---|---|---|
-| G1 | T209–T213 (done) → T215 → T216 → T217 → T218 → T219 → T221 → T222 → T223 → T224 → T225 → T226 → T227 → T201 (perf, last active) → T53 (freeze, held) | no (single group) | current branch `1.0.9` | pending re-cluster |
+| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 → T225 → T201 (perf) → T53 (freeze, held) | no (single group) | current branch `1.0.9` | in-progress |
 
-Order within `{T215…T227}` is pending `planner` re-cluster; owner directive fixes T201 (performance) and T53 (freeze, held) **last**. Shared-file serialization is expected to keep this a single lane.
+Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/docs force one writer). T224 (SQL-format blast radius, ~697 exact-string asserts) sits late, after all functional changes; T225 (docs-only) after T223+T224; T201 (perf) measures the final composition; T53 held last. Addendum contract `cluster-1`/`cluster-2`; task contracts unchanged.
 
 ## Tasks
 
@@ -41,19 +41,19 @@ Order within `{T215…T227}` is pending `planner` re-cluster; owner directive fi
 | T212 | #212 | G1 | 3 | done | done | pdca-dotnet | N=1 | r=1 | 034e5b45 | docs/specs/status/D212-eager-nested-1.md |
 | T213 | #213 | G1 | 4 | done | done (r=6, rv5) | pdca-dotnet | N=1 | r=6 | 9e7facff | docs/specs/status/D213-joininto-remainder-1.md |
 | T215 | #215 | G1 | 5 | pending | ready | pdca-dotnet | N=1 | r=1 | 23c83497 | docs/specs/status/D215-oneof-removal-1.md |
-| T216 | #216 | G1 | 6 | pending | ready | pdca-dotnet | N=1 | r=2 | 1b7b9d8c | docs/specs/status/D216-row-locking-1.md |
-| T217 | #217 | G1 | 7 | pending | ready | pdca-dotnet | N=1 | r=1 | ee0cb743 | docs/specs/status/D217-datetimeoffset-1.md |
-| T218 | #218 | G1 | 8 | pending | ready | pdca-dotnet | N=1 | r=1 | 60d881b4 | docs/specs/status/D218-sqlserver-sequences-1.md |
-| T219 | #219 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | 4bfa5403 | docs/specs/status/D219-session-identity-functions-1.md |
-| T221 | #221 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | b5715d45 | docs/specs/status/D221-interceptor-di-registration-1.md |
-| T222 | #222 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | 5856fde2 | docs/specs/status/D222-join-overloads-by-type-1.md |
-| T223 | #223 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | e2d749db | docs/specs/status/D223-joininto-composite-junction-sql-1.md |
-| T224 | #224 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
-| T225 | #225 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=2 | 63bdb84f | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
-| T226 | #226 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
-| T227 | #227 | G1 | TBD | pending | ready | pdca-dotnet | N=1 | r=1 | aea0a9ba | docs/specs/status/D227-clickhouse-flaky-grouped-float-1.md |
-| T201 | #201 | G1 | last active (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
-| T53  | #53  | G1 | 10 (held) | held | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
+| T227 | #227 | G1 | 6 | pending | ready | pdca-dotnet | N=1 | r=1 | aea0a9ba | docs/specs/status/D227-clickhouse-flaky-grouped-float-1.md |
+| T221 | #221 | G1 | 7 | pending | ready | pdca-dotnet | N=1 | r=1 | b5715d45 | docs/specs/status/D221-interceptor-di-registration-1.md |
+| T222 | #222 | G1 | 8 | pending | ready | pdca-dotnet | N=1 | r=1 | 5856fde2 | docs/specs/status/D222-join-overloads-by-type-1.md |
+| T223 | #223 | G1 | 9 | pending | ready | pdca-dotnet | N=1 | r=1 | e2d749db | docs/specs/status/D223-joininto-composite-junction-sql-1.md |
+| T216 | #216 | G1 | 10 | pending | ready | pdca-dotnet | N=1 | r=2 | 1b7b9d8c | docs/specs/status/D216-row-locking-1.md |
+| T217 | #217 | G1 | 11 | pending | ready | pdca-dotnet | N=1 | r=1 | ee0cb743 | docs/specs/status/D217-datetimeoffset-1.md |
+| T218 | #218 | G1 | 12 | pending | ready | pdca-dotnet | N=1 | r=1 | 60d881b4 | docs/specs/status/D218-sqlserver-sequences-1.md |
+| T219 | #219 | G1 | 13 | pending | ready | pdca-dotnet | N=1 | r=1 | 4bfa5403 | docs/specs/status/D219-session-identity-functions-1.md |
+| T226 | #226 | G1 | 14 | pending | ready | pdca-dotnet | N=1 | r=1 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
+| T224 | #224 | G1 | 15 | pending | ready | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
+| T225 | #225 | G1 | 16 | pending | ready | pdca-dotnet | N=1 | r=2 | 63bdb84f | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
+| T201 | #201 | G1 | 17 (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
+| T53  | #53  | G1 | 18 (held) | held | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
 
 - Evidence contract (per task, frozen at that task's DO→CHECK): T209 rv=2 (done), T211 rv=2, T213 rv=5 (done), T216 rv=2, others rv=1. Manifests `artifacts/pdca/<task>/rv*/manifest.json`.
 - T211 history: r1 exhausted (3/3 CHECK fails; EV-11 exit-code capture gap, no product defect); owner-directed re-open → r=2 with a real exit-code capture wrapper; retained commits `e98ae60e`, `5bd3028f`, `15c6253f` (not reverted). r3/r4 evidence remediation closed EV-11 (canonical+restart real exits); CHECK PASS r=4/rv=4 (21/21 met, 0 open); evidence `artifacts/pdca/D211-eager-perparent-topn-1/rv4/`.
