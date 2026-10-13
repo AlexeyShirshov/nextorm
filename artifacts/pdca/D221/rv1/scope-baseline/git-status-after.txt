@@ -1,0 +1,18 @@
+ M docs/assets/diagrams/nextorm-command-execution.svg
+ M docs/getting-started/04-dependency-injection.md
+ M docs/infrastructure/02-interceptors.md
+ M docs/ru/assets/diagrams/nextorm-command-execution.svg
+ M docs/ru/getting-started/04-dependency-injection.md
+ M docs/ru/infrastructure/02-interceptors.md
+ M docs/specs/design/API-NAMING-REVIEW.md
+ M docs/specs/design/code-smells-review.md
+ M docs/specs/status/D53-public-api-freeze-1.md
+ M docs/specs/status/collection-1.0.9-todo.md
+ M src/nextorm.core/DI/DataContextBuilder.cs
+ M src/nextorm.core/DI/ServiceCollectionExtensions.cs
+ M tests/nextorm.core.tests/DependencyInjectionTests.cs
+ M tests/nextorm.core.tests/InterceptorBuilderTests.cs
+ M tests/nextorm.sqlite.tests/InterceptorTests.cs
+?? tests/nextorm.core.tests/InterceptorDiRegistrationTests.cs
+?? tests/nextorm.integration.tests/CommonTestSuite.InterceptorDiTests.cs
+?? tests/nextorm.sqlite.tests/InterceptorDiRegistrationTests.cs

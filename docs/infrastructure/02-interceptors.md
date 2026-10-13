@@ -39,6 +39,26 @@ services.AddNextOrmContext(o => o
     .AddInterceptor(new TimingInterceptor()));
 ```
 
+### Registering an interceptor from dependency injection
+
+When the container builds the [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) (the options path), a **type** or **generic** registration makes the builder resolve the interceptor from its own scope:
+
+```csharp
+services.AddScoped<TimingInterceptor>();
+
+services.AddNextOrmContext(builder => builder
+    .UseSqlite(connectionString)
+    .AddInterceptor<TimingInterceptor>()); // or .AddInterceptor(typeof(TimingInterceptor))
+```
+
+`AddInterceptor<T>()` and `AddInterceptor(Type)` resolve the service with `GetRequiredService` **once per context creation**, from the scope that created the builder. Container lifetimes therefore apply unchanged: a scoped interceptor is reused within the scope and differs across scopes, a singleton is shared, and a transient is resolved per context. The container owns the interceptor and disposes it; the builder never disposes a resolved instance.
+
+The resolved object is attached to every interceptor interface it implements, so a class implementing both [`IQueryInterceptor`](xref:NextORM.Core.IQueryInterceptor) and [`IConnectionInterceptor`](xref:NextORM.Core.IConnectionInterceptor) is observed by both pipelines. The type must be a closed reference type assignable to one of the two interfaces: an open generic or a value-type `Type` is rejected immediately with `ArgumentException`, and a `null` argument with `ArgumentNullException`.
+
+Registration is deduplicated by exact key - `instance.GetType()` for an instance, the supplied `Type` for a type entry - and the first registration wins, including when instance and type entries are mixed. Registering the same type twice therefore resolves and invokes it once.
+
+A type registration needs a DI-backed builder. On a standalone `new DataContextBuilder()` the failure surfaces at `CreateDataContext()` as `InvalidOperationException`, and a service that is not registered fails with the container's own `GetRequiredService` error. In both cases the failure happens **before** the context factory runs, so no context is partially constructed.
+
 A context created from the builder can add more interceptors for its own lifetime:
 
 ```csharp

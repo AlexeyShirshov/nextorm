@@ -6606,6 +6606,13 @@ private Task<int> RunNonQueryAsync(DbCommand command, CancellationToken ct)
 
 **Итог.** 🔴 — **0**; 🟡 **Находки 171–173** (все P2: DRY-дублирование, аллокация async-обёрток, мёртвый shared-статик; маршрут `nextorm-design-engineer`; замер Находки 172 — `nextorm-db-perf-analyst`); остальное — наблюдения. Публичная сторона — `API-NAMING-REVIEW.md`, INT1–INT4.
 
+**Аудит 13.10.2026 (#221, D221 DO r=1).** `DataContextBuilder` переведён на один упорядоченный `List<object>`
+(инстанс или `Type`) и резолв type-записей из захваченного `IServiceProvider` перед вызовом фабрики
+(`DI/DataContextBuilder.cs`); `ServiceCollectionExtensions.RegisterContextFactory` передаёт scope-провайдер в новый
+internal-ctor. Находки 171–173 не затрагиваются. Поведенческие изменения A1/A2 (дедупликация по `GetType()` и
+автоподключение dual-interface) **документированы EN+RU и покрыты тестами** (`InterceptorBuilderTests`,
+`InterceptorDiRegistrationTests`, sqlite- и integration-наборы). Публичная сторона — `API-NAMING-REVIEW.md` (#221).
+
 ---
 
 ## 🔎 Точечный аудит 24.09.2026 — follow-up колонок-длительностей: DIM `ISqlDialect.MakeNullableDurationType` (коммит `18ed028`) и фикс `make_interval` (`EmitMakeInterval`, uncommitted working tree); 🔴 — 0, 🟡 — 1 (Находка 174, ✅ исправлено этим изменением), ℹ️ — наблюдения A–F

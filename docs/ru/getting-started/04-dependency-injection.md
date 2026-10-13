@@ -78,6 +78,20 @@ var reporting = scope.ServiceProvider.GetRequiredKeyedService<IDataContext>("rep
 > [`IDataContext`](xref:NextORM.Core.IDataContext) при использовании пути параметров. Именно путь типа обеспечивает то, что конкретный тип и
 > интерфейс разрешаются в один и тот же экземпляр.
 
+## Интерцепторы через DI
+
+Интерцептор можно зарегистрировать по типу сервиса, а не готовым экземпляром; builder разрешает его из области, создавшей builder:
+
+```csharp
+services.AddScoped<TimingInterceptor>();
+
+services.AddNextOrmContext(builder => builder
+    .UseSqlite("app.db")
+    .AddInterceptor<TimingInterceptor>()); // или .AddInterceptor(typeof(TimingInterceptor))
+```
+
+Разрешение происходит один раз на создание контекста, поэтому scoped-, singleton- и transient-времена жизни соблюдаются, а владение освобождением остаётся за контейнером. Type-регистрация требует builder с DI — на отдельном builder она падает при `CreateDataContext()`, а незарегистрированный сервис — ошибкой `GetRequiredService` самого контейнера до вызова фабрики контекста. Порядок, дедупликацию и контракт ошибок см. в [«Интерцепторы»](../infrastructure/02-interceptors.md).
+
 ## Настройка построителя напрямую
 
 [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) можно также использовать без контейнера - именно это и вызывает DI-фабрика:

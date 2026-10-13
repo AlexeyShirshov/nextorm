@@ -1,0 +1,100 @@
+{
+  "task": "T221",
+  "tree": "1.0.9",
+  "status_file": "docs/specs/status/D221-interceptor-di-registration-1.md",
+  "contract_rv": 1,
+  "required_rows": ["E221-01", "E221-02", "E221-03", "E221-04", "E221-05", "E221-06", "E221-07", "E221-08", "E221-09"],
+  "rows": [
+    {
+      "id": "E221-01",
+      "status": "met",
+      "requirement": "R221-01,06 / compilation",
+      "evidence": [
+        { "kind": "build", "path": "artifacts/pdca/D221/rv1/build.log", "exit": 0 },
+        { "kind": "build", "path": "artifacts/pdca/D221/rv1/core-u1.log", "exit": 0 },
+        { "kind": "build", "path": "artifacts/pdca/D221/rv1/sqlite-q.log", "exit": 0 }
+      ]
+    },
+    {
+      "id": "E221-02",
+      "status": "met",
+      "requirement": "R221-01..04 / V01-V13 (core registration/DI)",
+      "evidence": [
+        { "kind": "test", "path": "artifacts/pdca/D221/rv1/core-u1.log", "exit": 0 },
+        { "kind": "test", "path": "artifacts/pdca/D221/rv1/core-u2.log", "exit": 0 },
+        { "kind": "test", "path": "artifacts/pdca/D221/rv1/core-un.log", "exit": 0 }
+      ]
+    },
+    {
+      "id": "E221-03",
+      "status": "met",
+      "requirement": "R221-02,04,05 / V01,V07-V09,V12,V14 (SQLite callbacks + JSON)",
+      "evidence": [
+        { "kind": "test", "path": "artifacts/pdca/D221/rv1/sqlite-q.log", "exit": 0 },
+        { "kind": "test", "path": "artifacts/pdca/D221/rv1/sqlite-qn.log", "exit": 0 }
+      ]
+    },
+    {
+      "id": "E221-04",
+      "status": "met",
+      "requirement": "R221-03,05 / V11,V15 (all five providers execute)",
+      "evidence": [
+        { "kind": "test", "path": "artifacts/pdca/D221/rv1/integration.log", "exit": 0 },
+        { "kind": "test", "path": "artifacts/pdca/D221/rv1/integration-contract.log", "exit": 0 },
+        { "kind": "test", "path": "artifacts/pdca/D221/rv1/integration-t221.log", "exit": 0 },
+        { "kind": "test-list", "path": "artifacts/pdca/D221/rv1/integration-list.log" }
+      ]
+    },
+    {
+      "id": "E221-05",
+      "status": "met",
+      "requirement": "R221-06 / coverage baseline",
+      "evidence": [
+        { "kind": "coverage", "path": "TestResults/D221/rv1/coverage-baseline.cobertura.xml" },
+        { "kind": "coverage-report", "path": "TestResults/D221/rv1/coverage-baseline/Summary.txt" },
+        { "kind": "log", "path": "artifacts/pdca/D221/rv1/coverage-baseline-collect.log", "exit": 0 }
+      ]
+    },
+    {
+      "id": "E221-06",
+      "status": "met",
+      "requirement": "R221-06 / coverage delta",
+      "evidence": [
+        { "kind": "coverage", "path": "TestResults/D221/rv1/coverage-after.cobertura.xml" },
+        { "kind": "coverage-report", "path": "TestResults/D221/rv1/coverage-after/Summary.txt" },
+        { "kind": "delta", "path": "artifacts/pdca/D221/rv1/coverage-delta.md" },
+        { "kind": "log", "path": "artifacts/pdca/D221/rv1/coverage-after-collect.log", "exit": 0 }
+      ]
+    },
+    {
+      "id": "E221-07",
+      "status": "met",
+      "requirement": "R221-06 / fault sensitivity (mutation)",
+      "evidence": [
+        { "kind": "mutation", "path": "artifacts/pdca/D221/rv1/mutation/reports/mutation-report.json", "exit": 0 },
+        { "kind": "mutation", "path": "artifacts/pdca/D221/rv1/mutation-disposition.md" },
+        { "kind": "log", "path": "artifacts/pdca/D221/rv1/mutation-rerun2.log", "exit": 0 }
+      ]
+    },
+    {
+      "id": "E221-08",
+      "status": "met",
+      "requirement": "R221-06 / docs and API",
+      "evidence": [
+        { "kind": "docfx", "path": "artifacts/pdca/D221/rv1/docfx.log", "exit": 0 },
+        { "kind": "review", "path": "artifacts/pdca/D221/rv1/docs-api-review.md" }
+      ]
+    },
+    {
+      "id": "E221-09",
+      "status": "met",
+      "requirement": "R221-01..06 / completeness and scope",
+      "evidence": [
+        { "kind": "scope", "path": "artifacts/pdca/D221/rv1/scope-review.md" },
+        { "kind": "scope", "path": "artifacts/pdca/D221/rv1/scope-baseline/git-status-before.txt" },
+        { "kind": "scope", "path": "artifacts/pdca/D221/rv1/scope-baseline/git-status-after.txt" },
+        { "kind": "scope", "path": "artifacts/pdca/D221/rv1/scope-baseline/git-diff-check.log", "exit": 0 }
+      ]
+    }
+  ]
+}

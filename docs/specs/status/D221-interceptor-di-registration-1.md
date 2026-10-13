@@ -171,9 +171,41 @@ Next step: Persist this r=1 plan and frozen manifest; execute D221-0, then D221-
 
 - PLAN (r=1) issued by `planner`, persisted by `coder`. Phase stopped at PLAN→DO boundary; handoff to
   collection parent (no DO started, no branches/worktrees, no code).
+- DO started (r=1, rv=1, n=1/3, N=1), current tree, collection lane G1 (single group, no worktree/branch/merge).
+- D221-0 done: dirty-worktree/owned-file snapshots, coverage baseline, Roslyn creation-site impact, Podman
+  socket and tool compatibility. Mandatory scope validated (`validate_inner_loop.py brief` exit 0).
+- D221-1 done: `DataContextBuilder` unified ordered entry list + `AddInterceptor(Type)`/`AddInterceptor<T>()`
+  + internal provider ctor (public parameterless ctor preserved); both DI builder factories capture `sp`.
+  Build 0 warnings / 0 errors.
+- D221-2 done: expanded `InterceptorBuilderTests`; new core/sqlite `InterceptorDiRegistrationTests` and
+  `CommonTestSuite.InterceptorDiTests` (+ ClickHouse class). U 31/31, UN 37/37, Q 10/10, QN 8/8, I 21/21
+  (SQLite/PostgreSQL/SQLServer/MySQL/ClickHouse, 0 skipped), all exit 0.
+- D221-3 done: EN/RU interceptor and DI pages; `API-NAMING-REVIEW`, `code-smells-review`, T53 candidate
+  records (freeze HELD), collection candidate list. Issue #221 verified via `gh`.
+- D221-4 done (stopped at DO→CHECK): build exit 0; DocFX exit 0 (2 pre-existing sourcegenerator warnings);
+  coverage baseline 9.4%/6.5% → after 11.3%/7.8% (`DataContextBuilder` 63.5%→79.3%,
+  `ServiceCollectionExtensions` 83.3%→100%); Stryker final 68 killed / 8 survived (89.47%), 0 NoCoverage;
+  manifest `validate_inner_loop.py manifest` exit 0; evidence `validate_inner_loop.py report` exit 0.
+- Durable state: N=1, r=1, rv=1, n=1/3. DO does not declare CHECK; candidate implementation complete is
+  provisional.
+- Defect ledger: `D221-MUT-COVERAGE` — Stryker's `test-projects` (core + sqlite) exclude
+  `nextorm.integration.tests`, so the `ServiceCollectionExtensions` argument guards had no killer under
+  mutation (run-1 survivors 18523/18527/18531/18535/18539/18542; 18524/18528/18536 were killed by the same
+  additions); fixed once by adding core-project null-guard assertions (runs 2–3). No product defect was
+  found in DO.
+- Notices: (1) local tool shims for `dotnet-coverage`/`reportgenerator` are not on PATH, so the frozen
+  commands ran as `dotnet dotnet-coverage` / `dotnet reportgenerator` (equivalent). (2) The evidence report
+  records the combined-filter runs as split `-class`/single-filter invocations because
+  `validate_inner_loop.py` rejects a `|` inside a command token (hygiene rule); the same tests ran.
+  (3) Stryker run-3 mislabels mutant 18498 `Survived` although the temporary-mutation check shows
+  `AddInterceptor_WithOpenGenericType_Throws` fails under it (empirically killed; see
+  `mutation-disposition.md`).
 
 ## Done / Verified / Incomplete
 
-- Done: own PLAN r1 persisted (plan_state=ready).
-- Verified: —
-- Incomplete: —
+- Done: own PLAN r1 persisted; D221-0…D221-4 executed (implementation, tests, bilingual docs, evidence,
+  manifest, mutation disposition).
+- Verified: build 0/0; U 31/31, UN 37/37, Q 10/10, QN 8/8, I 21/21 (five providers, 0 skipped); DocFX exit 0;
+  coverage non-regressing; Stryker 68 killed / 8 survived, 0 NoCoverage; manifest + report validators exit 0.
+- Incomplete: CHECK not run — the verdict is the `check` role's; `D:`-units remain pending/blocked until
+  CHECK accepts (DoD not met by a DO report).

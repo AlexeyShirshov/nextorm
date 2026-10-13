@@ -111,6 +111,17 @@
   milestone/issue URL и разрешение commit — предпосылки до доказательства, не `ready`.
 - **GAP (none blocking):** если SDK `dotnet format` недоступен — fallback Roslyn inventory, A2/A3 не ослабляются.
 
+## Candidate records (freeze HELD)
+
+New public members awaiting the freeze, recorded by their owning tasks. Internal members and preserved
+constructors are **not** candidates.
+
+- **T221 (#221, `docs/specs/status/D221-interceptor-di-registration-1.md`):** DI-registered interceptors add
+  `public DataContextBuilder AddInterceptor(System.Type interceptorType)` and
+  `public DataContextBuilder AddInterceptor<T>() where T : class`. The new internal
+  `DataContextBuilder(IServiceProvider)` constructor and the preserved public parameterless constructor are
+  **not** candidates.
+
 ## Overlap / footprint
 
 - Последовательность: API-результаты #209/#211/#212/#213 → T53 D1–D6; их Unshipped-правки (если уже

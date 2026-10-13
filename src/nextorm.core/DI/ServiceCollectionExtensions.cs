@@ -121,7 +121,7 @@ public static class ServiceCollectionExtensions
         {
             services.AddScoped(sp =>
             {
-                var builder = new DataContextBuilder();
+                var builder = new DataContextBuilder(sp);
                 optionsBuilder(sp, builder);
                 return builder;
             });
@@ -132,7 +132,7 @@ public static class ServiceCollectionExtensions
         {
             services.AddKeyedScoped(serviceKey, (sp, _) =>
             {
-                var builder = new DataContextBuilder();
+                var builder = new DataContextBuilder(sp);
                 optionsBuilder(sp, builder);
                 return builder;
             });

@@ -84,6 +84,22 @@ public class InterceptorTests
         public void CommandExecuting(CommandEventData eventData, DbCommand command) => _log.Add(_name);
     }
 
+    // A second, distinct interceptor type: registration is deduplicated by runtime type (#221 A1), so
+    // two instances of the same type would collapse to the first one.
+    private sealed class OrderProbe2 : IQueryInterceptor
+    {
+        private readonly string _name;
+        private readonly List<string> _log;
+
+        public OrderProbe2(string name, List<string> log)
+        {
+            _name = name;
+            _log = log;
+        }
+
+        public void CommandExecuting(CommandEventData eventData, DbCommand command) => _log.Add(_name);
+    }
+
     private static (SqliteDataContext Ctx, string Path) CreateDb(DataContextBuilder? builder = null)
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-interceptors-{Guid.NewGuid():N}.db");
@@ -154,7 +170,7 @@ public class InterceptorTests
         var log = new List<string>();
         var builder = new DataContextBuilder()
             .AddInterceptor(new OrderProbe("first", log))
-            .AddInterceptor(new OrderProbe("second", log));
+            .AddInterceptor(new OrderProbe2("second", log));
         var (ctx, path) = CreateDb(builder);
         try
         {

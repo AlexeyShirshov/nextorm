@@ -4648,6 +4648,21 @@ P2-трекинг: `ITupleRenderer` / `ISqlDialect.Tuple` внести в `Publi
 
 **Проверка (24.09.2026).** `dotnet build nextorm.slnx -c Release` — **0 warnings / 0 errors**; `roslyn members NextORM.Core.IQueryInterceptor` — 4 DIM (`:32,37,43,49`), `NextORM.Core.IConnectionInterceptor` — 2 DIM (`:26,30`), `NextORM.Core.CommandEventData`/`ConnectionEventData` — ctor + позиционные свойства (`:11`); `roslyn refs NextORM.Core.InterceptorHooks.Empty` — 0; `find -name 'PublicAPI*.txt'` — **0** (INT4); `rg -l "Interceptor|интерцеп" docs -g '!docs/specs/**'` — **0** (INT3); подавления `src/` — **11/11**, новых 0; тесты core **3/3**, sqlite **9/9**. XML-doc гейтится build `0/0`.
 
+**Аудит 13.10.2026 (#221, D221 DO r=1) — DI-регистрация интерцепторов.** Добавлены публичные перегрузки
+`DataContextBuilder.AddInterceptor(Type interceptorType)` и `DataContextBuilder.AddInterceptor<T>() where T : class`
+(`src/nextorm.core/DI/DataContextBuilder.cs`); internal-ctor `DataContextBuilder(IServiceProvider)` в публичную
+поверхность **не входит**, parameterless-ctor сохранён (не новое членство). Публичная проза EN+RU обновлена:
+`docs/infrastructure/02-interceptors.md` (+RU) — раздел «Registering an interceptor from dependency injection»/«Регистрация
+интерцептора через dependency injection»; `docs/getting-started/04-dependency-injection.md` (+RU) — раздел
+«DI-registered interceptors». Нейминг: `AddInterceptor` сохраняет `Add*`-конвенцию builder'ов; типы параметров
+(`Type` / generic) не создают `CS0121`; BCL-конфликтов нет. XML-doc на новых публичных членах 100 % (build `0/0`).
+
+- **T53-кандидаты (freeze HELD, не активируется).** Точные подписи для будущей заморозки:
+  `public DataContextBuilder AddInterceptor(System.Type interceptorType)` и
+  `public DataContextBuilder AddInterceptor<T>() where T : class`. Internal-ctor кандидатом **не** является.
+  `PublicAPI.*.txt` не вводится, анализаторы/заморозка не включаются.
+- Issue: #221 — https://github.com/AlexeyShirshov/nextorm/issues/221 (verified).
+
 ---
 
 ### Аудит 24.09.2026 — follow-up колонок-длительностей: DIM `ISqlDialect.MakeNullableDurationType` (коммит `18ed028`) и фикс `make_interval`, uncommitted working tree (P0 — нет; P1 — 1 поведенческий/доковый: MI1; P2 — 3: ND1, ND2, MI2)

@@ -39,6 +39,26 @@ services.AddNextOrmContext(o => o
     .AddInterceptor(new TimingInterceptor()));
 ```
 
+### Регистрация интерцептора через dependency injection
+
+Когда [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) создаёт контейнер (options-путь), **type**- и **generic**-регистрации заставляют builder разрешать интерцептор из своей области видимости:
+
+```csharp
+services.AddScoped<TimingInterceptor>();
+
+services.AddNextOrmContext(builder => builder
+    .UseSqlite(connectionString)
+    .AddInterceptor<TimingInterceptor>()); // или .AddInterceptor(typeof(TimingInterceptor))
+```
+
+`AddInterceptor<T>()` и `AddInterceptor(Type)` разрешают сервис через `GetRequiredService` **один раз на создание контекста**, из той области, которая создала builder. Поэтому времени жизни контейнера применяются без изменений: scoped-интерцептор переиспользуется внутри области и отличается между областями, singleton — общий, transient разрешается на каждый контекст. Владение интерцептором и его освобождение остаются за контейнером; builder никогда не освобождает разрешённый экземпляр.
+
+Разрешённый объект подключается к каждому интерфейсу интерцептора, который он реализует, поэтому класс, реализующий и [`IQueryInterceptor`](xref:NextORM.Core.IQueryInterceptor), и [`IConnectionInterceptor`](xref:NextORM.Core.IConnectionInterceptor), наблюдается обоими конвейерами. Тип обязан быть закрытым ссылочным типом, приводимым к одному из двух интерфейсов: открытый generic или value-type `Type` отклоняется сразу с `ArgumentException`, а `null` — с `ArgumentNullException`.
+
+Регистрация дедуплицируется по точному ключу — `instance.GetType()` для экземпляра, переданный `Type` для type-записи — и первая регистрация побеждает, в том числе для смешанных записей. Поэтому повторная регистрация того же типа разрешается и вызывается один раз.
+
+Type-регистрация требует builder с DI. На отдельном `new DataContextBuilder()` ошибка проявляется при `CreateDataContext()` как `InvalidOperationException`, а незарегистрированный сервис — ошибкой `GetRequiredService` самого контейнера. В обоих случаях сбой происходит **до** вызова фабрики контекста, поэтому частично созданный контекст не появляется.
+
 Контекст, созданный из builder, может добавить интерцепторы на время своей жизни:
 
 ```csharp

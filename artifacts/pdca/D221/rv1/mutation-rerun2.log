@@ -1,0 +1,335 @@
+
+   _____ _              _               _   _ ______ _______  
+  / ____| |            | |             | \ | |  ____|__   __| 
+ | (___ | |_ _ __ _   _| | _____ _ __  |  \| | |__     | |    
+  \___ \| __| '__| | | | |/ / _ \ '__| | . ` |  __|    | |    
+  ____) | |_| |  | |_| |   <  __/ |    | |\  | |____   | |    
+ |_____/ \__|_|   \__, |_|\_\___|_| (_)|_| \_|______|  |_|    
+                   __/ |                                      
+                  |___/                                       
+
+
+Version: 5.0.0
+
+[10:53:55 INF] Analysis starting.
+[10:53:55 INF] Analyzing 2 test project(s).
+[10:53:57 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.core.tests/nextorm.core.tests.csproj. Using analysis results: net10.0
+[10:53:57 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj. Using analysis results: net10.0
+[10:53:59 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.sqlite/nextorm.sqlite.csproj. Using analysis results: net10.0
+[10:53:59 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.postgres/nextorm.postgres.csproj. Using analysis results: net10.0
+[10:53:59 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.clickhouse/nextorm.clickhouse.csproj. Using analysis results: net10.0
+[10:53:59 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.core/nextorm.core.csproj. Using analysis results: net10.0
+[10:53:59 WRN] Project ../../src/nextorm.sqlite/nextorm.sqlite.csproj simulated build failed. Trying again with a nuget restore.
+[10:53:59 WRN] Project ../../src/nextorm.postgres/nextorm.postgres.csproj simulated build failed. Trying again with a nuget restore.
+[10:53:59 WRN] Project ../../src/nextorm.clickhouse/nextorm.clickhouse.csproj simulated build failed. Trying again with a nuget restore.
+[10:54:01 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.clickhouse/nextorm.clickhouse.csproj. Using analysis results: net10.0
+[10:54:01 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.sqlserver/nextorm.sqlserver.csproj. Using analysis results: net10.0
+[10:54:01 WRN] Project ../../src/nextorm.clickhouse/nextorm.clickhouse.csproj simulated build failed. Use '--diag' option to have the build log.
+[10:54:01 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.sqlite/nextorm.sqlite.csproj. Using analysis results: net10.0
+[10:54:01 WRN] Analysis of project ../../src/nextorm.clickhouse/nextorm.clickhouse.csproj succeeded but simulated build failed; Stryker may fail later.
+[10:54:01 WRN] Project ../../src/nextorm.sqlite/nextorm.sqlite.csproj simulated build failed. Use '--diag' option to have the build log.
+[10:54:01 WRN] Project ../../src/nextorm.sqlserver/nextorm.sqlserver.csproj simulated build failed. Trying again with a nuget restore.
+[10:54:01 WRN] Analysis of project ../../src/nextorm.sqlite/nextorm.sqlite.csproj succeeded but simulated build failed; Stryker may fail later.
+[10:54:01 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.postgres/nextorm.postgres.csproj. Using analysis results: net10.0
+[10:54:01 WRN] Project ../../src/nextorm.postgres/nextorm.postgres.csproj simulated build failed. Use '--diag' option to have the build log.
+[10:54:01 WRN] Analysis of project ../../src/nextorm.postgres/nextorm.postgres.csproj succeeded but simulated build failed; Stryker may fail later.
+[10:54:02 WRN] Failed to identify target frameworks for project /home/alex/sources/nextorm/src/nextorm.sqlserver/nextorm.sqlserver.csproj. Using analysis results: net10.0
+[10:54:02 WRN] Project ../../src/nextorm.sqlserver/nextorm.sqlserver.csproj simulated build failed. Use '--diag' option to have the build log.
+[10:54:02 WRN] Analysis of project ../../src/nextorm.sqlserver/nextorm.sqlserver.csproj succeeded but simulated build failed; Stryker may fail later.
+[10:54:02 INF] Picking net10.0 for project /home/alex/sources/nextorm/src/nextorm.core/nextorm.core.csproj. 
+[10:54:03 INF] Found project /home/alex/sources/nextorm/src/nextorm.core/nextorm.core.csproj to mutate.
+[10:54:03 INF] Analysis complete.
+[10:54:03 INF] Building test project /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj (1/2)
+[10:54:03 INF] Building project nextorm.sqlite.tests.csproj using dotnet build nextorm.sqlite.tests.csproj -c Debug --property:Platform=AnyCPU (directory /home/alex/sources/nextorm/tests/nextorm.sqlite.tests.)
+[10:54:11 INF] Building test project /home/alex/sources/nextorm/tests/nextorm.core.tests/nextorm.core.tests.csproj (2/2)
+[10:54:11 INF] Building project nextorm.core.tests.csproj using dotnet build nextorm.core.tests.csproj -c Debug --property:Platform=AnyCPU (directory /home/alex/sources/nextorm/tests/nextorm.core.tests.)
+[10:54:16 WRN] The Microsoft Test Platform testrunner is currently in preview. Results should be verified since this feature is still being tested.
+[10:54:18 INF] Number of tests found: 4088 for project /home/alex/sources/nextorm/src/nextorm.core/nextorm.core.csproj. Initial test run started.
+[10:56:10 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/SqliteFts5CommandBuilder.cs resulted in a compile error (at 133:49) with id: CS0165, message: Use of unassigned local variable 'operation' (Source code: operation)
+[10:56:10 INF] Safe Mode! Stryker will remove all mutations in BuildCommand and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/BatchBuilder.cs resulted in a compile error (at 45:41) with id: CS0165, message: Use of unassigned local variable 'executor' (Source code: executor)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in CreateBatchBuilder and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/InsertBuilder.cs resulted in a compile error (at 629:28) with id: CS0165, message: Use of unassigned local variable 'property' (Source code: property)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in ResolveProperty and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/TempTableExtensions.cs resulted in a compile error (at 413:15) with id: CS0165, message: Use of unassigned local variable 'executor' (Source code: executor)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in ToBatchSql and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/UpdateBuilder.cs resulted in a compile error (at 407:34) with id: CS0165, message: Use of unassigned local variable 'property' (Source code: property)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in ResolveWritableProperty and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContextExtensions.cs resulted in a compile error (at 1845:78) with id: CS0165, message: Use of unassigned local variable 'methodCall' (Source code: methodCall)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in FromTableFunction and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/InMemoryEnumeratorAdapter.cs resulted in a compile error (at 126:13) with id: CS0165, message: Use of unassigned local variable 'sync' (Source code: sync)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in MoveNext and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs resulted in a compile error (at 320:27) with id: CS0165, message: Use of unassigned local variable 'func' (Source code: func)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in ResolveFilterFunc and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Expressions/FromExpressionPlanEqualityComparer.cs resulted in a compile error (at 285:13) with id: CS0411, message: The type arguments for method 'HashCode.Add<T>(T)' cannot be inferred from the usage. Try specifying the type arguments explicitly. (Source code: Add)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in AddBindingHash and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/InValues.cs resulted in a compile error (at 422:21) with id: CS0165, message: Use of unassigned local variable 'tuple' (Source code: tuple)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in ExtractTupleRow and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs resulted in a compile error (at 283:41) with id: CS0165, message: Use of unassigned local variable 'binding' (Source code: binding)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in BuildScalarValue and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs resulted in a compile error (at 300:77) with id: CS0165, message: Use of unassigned local variable 'binding' (Source code: binding)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in BuildRootArrayValue and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs resulted in a compile error (at 372:41) with id: CS0165, message: Use of unassigned local variable 'binding' (Source code: binding)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in BuildScalarMember and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs resulted in a compile error (at 405:77) with id: CS0165, message: Use of unassigned local variable 'binding' (Source code: binding)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in BuildArrayMember and mark them as 'compile error'.
+[10:56:13 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BaseExpressionVisitor.cs resulted in a compile error (at 228:27) with id: CS0165, message: Use of unassigned local variable 'scope' (Source code: scope)
+[10:56:13 INF] Safe Mode! Stryker will remove all mutations in VisitComparisonOperandCore and mark them as 'compile error'.
+[10:56:14 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/NormSqlTranslator.cs resulted in a compile error (at 119:42) with id: CS0165, message: Use of unassigned local variable 'entity' (Source code: entity)
+[10:56:14 INF] Safe Mode! Stryker will remove all mutations in TranslateColumn and mark them as 'compile error'.
+[10:56:14 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/NormSqlTranslator.cs resulted in a compile error (at 119:50) with id: CS0165, message: Use of unassigned local variable 'columnName' (Source code: columnName)
+[10:56:14 INF] Safe Mode! Stryker will remove all mutations in TranslateColumn and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/BulkInsertBuilder.cs resulted in a compile error (at 256:15) with id: CS0165, message: Use of unassigned local variable 'executor' (Source code: executor)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in ToSql and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilderExtensions.cs resulted in a compile error (at 541:28) with id: CS0165, message: Use of unassigned local variable 'specs' (Source code: specs)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in MarkPerParentTopN and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/InsertBuilder.cs resulted in a compile error (at 545:29) with id: CS0165, message: Use of unassigned local variable 'assignment' (Source code: assignment)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in ExtractMappingMembers and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/Joins/JoinIntoManyToManySpec.cs resulted in a compile error (at 336:25) with id: CS0165, message: Use of unassigned local variable 'child' (Source code: child)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in AssignChildrenFromLinks and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/ReturningProjection.cs resulted in a compile error (at 52:36) with id: CS0165, message: Use of unassigned local variable 'argumentMember' (Source code: argumentMember)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in Parse and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/ReturningProjection.cs resulted in a compile error (at 62:36) with id: CS0165, message: Use of unassigned local variable 'bindingMember' (Source code: bindingMember)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in Parse and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/ReturningProjection.cs resulted in a compile error (at 63:28) with id: CS0165, message: Use of unassigned local variable 'targetMember' (Source code: targetMember)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in Parse and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/UpdateJoinBuilder.cs resulted in a compile error (at 273:48) with id: CS0165, message: Use of unassigned local variable 'property' (Source code: property)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in ValidateTargets and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs resulted in a compile error (at 1614:43) with id: CS0165, message: Use of unassigned local variable 'query' (Source code: query)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in BuildBatchMapper and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/InMemoryGrouping.cs resulted in a compile error (at 120:47) with id: CS0165, message: Use of unassigned local variable 'projection' (Source code: projection)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in CreateGroupedEnumerator and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/InMemoryOrdering.cs resulted in a compile error (at 122:55) with id: CS0165, message: Use of unassigned local variable 'columnIndex' (Source code: columnIndex)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in ApplyProjectedOrdering and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/InMemorySetOperations.cs resulted in a compile error (at 26:49) with id: CS0165, message: Use of unassigned local variable 'rightQuery' (Source code: rightQuery)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in CreateSetOperationEnumerator and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/Meta/QueryFilterFunc.cs resulted in a compile error (at 71:15) with id: CS0165, message: Use of unassigned local variable 'builderType' (Source code: builderType)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in ResolveEntityType and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/Meta/QueryFilterFunc.cs resulted in a compile error (at 87:21) with id: CS0165, message: Use of unassigned local variable 'typed' (Source code: typed)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in ApplyTyped and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/Meta/QueryFilterValidator.cs resulted in a compile error (at 233:41) with id: CS0165, message: Use of unassigned local variable 'lambda' (Source code: lambda)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in BuildEntityPredicates and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/Meta/QueryFilterValidator.cs resulted in a compile error (at 275:30) with id: CS0165, message: Use of unassigned local variable 'lambda' (Source code: lambda)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in BuildColumnPredicates and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/Meta/QueryFilterValidator.cs resulted in a compile error (at 406:30) with id: CS0165, message: Use of unassigned local variable 'lambda' (Source code: lambda)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in BuildSourceViolation and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/InValues.cs resulted in a compile error (at 402:29) with id: CS0165, message: Use of unassigned local variable 'enumerable' (Source code: enumerable)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in PartitionTuple and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/NavigationExpansion.cs resulted in a compile error (at 552:48) with id: CS0165, message: Use of unassigned local variable 'lambda' (Source code: lambda)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in RewriteSorting and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/NormSqlTranslator.cs resulted in a compile error (at 203:65) with id: CS0165, message: Use of unassigned local variable 'body' (Source code: body)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in TranslateNormSql and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/NormSqlTranslator.cs resulted in a compile error (at 203:71) with id: CS0165, message: Use of unassigned local variable 'pExp' (Source code: pExp)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in TranslateNormSql and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/NormSqlTranslator.cs resulted in a compile error (at 205:45) with id: CS0165, message: Use of unassigned local variable 'paramValue' (Source code: paramValue)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in TranslateNormSql and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/NormSqlTranslator.cs resulted in a compile error (at 225:73) with id: CS0165, message: Use of unassigned local variable 'paramValue' (Source code: paramValue)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in TranslateNormSql and mark them as 'compile error'.
+[10:56:16 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/NormSqlTranslator.cs resulted in a compile error (at 298:44) with id: CS0165, message: Use of unassigned local variable 'innerQuery' (Source code: innerQuery)
+[10:56:16 INF] Safe Mode! Stryker will remove all mutations in TranslateNormSql and mark them as 'compile error'.
+[10:56:17 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/SessionInfoFunctionTranslator.cs resulted in a compile error (at 35:13) with id: CS0165, message: Use of unassigned local variable 'sessionInfo' (Source code: sessionInfo)
+[10:56:17 INF] Safe Mode! Stryker will remove all mutations in TryTranslate and mark them as 'compile error'.
+[10:56:17 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/UuidFunctionTranslator.cs resulted in a compile error (at 33:13) with id: CS0165, message: Use of unassigned local variable 'uuidGenerators' (Source code: uuidGenerators)
+[10:56:17 INF] Safe Mode! Stryker will remove all mutations in TryTranslate and mark them as 'compile error'.
+[10:56:17 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/XmlSqlTranslator.cs resulted in a compile error (at 42:13) with id: CS0165, message: Use of unassigned local variable 'xmlFunctions' (Source code: xmlFunctions)
+[10:56:17 INF] Safe Mode! Stryker will remove all mutations in TryTranslate and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilderEagerLoading.cs resulted in a compile error (at 472:137) with id: CS0165, message: Use of unassigned local variable 'child' (Source code: child)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in AssignChildrenFromRows and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilderEagerLoading.cs resulted in a compile error (at 517:12) with id: CS0165, message: Use of unassigned local variable 'descendant' (Source code: descendant)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in StitchSingleQueryCore and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilderEagerLoading.cs resulted in a compile error (at 545:23) with id: CS0165, message: Use of unassigned local variable 'parent' (Source code: parent)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in AssignFromProjectionCollecting and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs resulted in a compile error (at 1355:64) with id: CS0165, message: Use of unassigned local variable 'condition' (Source code: condition)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in BuildMergeSql and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/InMemoryCorrelatedSubqueryRewriter.cs resulted in a compile error (at 152:48) with id: CS0165, message: Use of unassigned local variable 'index' (Source code: index)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in RewriteTerminal and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/InMemoryCorrelatedSubqueryRewriter.cs resulted in a compile error (at 157:38) with id: CS0165, message: Use of unassigned local variable 'terminal' (Source code: terminal)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in RewriteTerminal and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/InMemorySetOperations.cs resulted in a compile error (at 54:16) with id: CS0165, message: Use of unassigned local variable 'sync' (Source code: sync)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in MaterializeBuffered and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 1551:25) with id: CS0165, message: Use of unassigned local variable 'property' (Source code: property)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in MakeExtremeRowKeyAliases and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs resulted in a compile error (at 275:36) with id: CS0165, message: Use of unassigned local variable 'levels' (Source code: levels)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in EmitQuantiles and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs resulted in a compile error (at 287:32) with id: CS0165, message: Use of unassigned local variable 'quantileAggregates' (Source code: quantileAggregates)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in EmitQuantiles and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BuiltinFunctionTranslator.cs resulted in a compile error (at 155:32) with id: CS0165, message: Use of unassigned local variable 'iif' (Source code: iif)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in EmitIif and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BuiltinFunctionTranslator.cs resulted in a compile error (at 220:32) with id: CS0165, message: Use of unassigned local variable 'multiIf' (Source code: multiIf)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in EmitMultiIf and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BuiltinFunctionTranslator.cs resulted in a compile error (at 236:59) with id: CS0165, message: Use of unassigned local variable 'items' (Source code: items)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in FlattenMultiIfBranches and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BuiltinFunctionTranslator.cs resulted in a compile error (at 253:16) with id: CS0165, message: Use of unassigned local variable 'call' (Source code: call)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in FlattenMultiIfBranches and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/CrossProviderScalarTranslator.cs resulted in a compile error (at 67:32) with id: CS0165, message: Use of unassigned local variable 'scalars' (Source code: scalars)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in EmitScalarFunction and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/InValuesTranslator.cs resulted in a compile error (at 189:20) with id: CS0170, message: Use of possibly unassigned field 'Arity' (Source code: tuplePartition.Arity)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in TranslateTupleInValues and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/InValuesTranslator.cs resulted in a compile error (at 209:40) with id: CS0165, message: Use of unassigned local variable 'tuplePartition' (Source code: tuplePartition)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in TranslateTupleInValues and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/InValuesTranslator.cs resulted in a compile error (at 224:28) with id: CS0170, message: Use of possibly unassigned field 'Rows' (Source code: tuplePartition.Rows)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in TranslateTupleInValues and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/InValuesTranslator.cs resulted in a compile error (at 235:24) with id: CS0165, message: Use of unassigned local variable 'tupleRenderer' (Source code: tupleRenderer)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in TranslateTupleInValues and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/TupleSqlTranslator.cs resulted in a compile error (at 86:51) with id: CS0165, message: Use of unassigned local variable 'tuple' (Source code: tuple)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in TryTranslateElement and mark them as 'compile error'.
+[10:56:19 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/TupleSqlTranslator.cs resulted in a compile error (at 180:33) with id: CS0165, message: Use of unassigned local variable 'tuple' (Source code: tuple)
+[10:56:19 INF] Safe Mode! Stryker will remove all mutations in RenderConstructor and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilderEagerLoading.cs resulted in a compile error (at 1153:28) with id: CS0165, message: Use of unassigned local variable 'specs' (Source code: specs)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in ValidateLoadWithForJoinInto and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/Joins/JoinIntoSpec.cs resulted in a compile error (at 437:150) with id: CS0165, message: Use of unassigned local variable 'child' (Source code: child)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in AssignChildren and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/Joins/JoinIntoSpec.cs resulted in a compile error (at 320:150) with id: CS0165, message: Use of unassigned local variable 'child' (Source code: child)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in AssignChildren and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/InMemoryQueryBuilder.cs resulted in a compile error (at 313:24) with id: CS0165, message: Use of unassigned local variable 'av' (Source code: av)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in CreateEnumerator and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/InMemoryQueryBuilder.cs resulted in a compile error (at 619:20) with id: CS0165, message: Use of unassigned local variable 'sync' (Source code: sync)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in CreateEnumeratorAdapter and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 230:29) with id: CS0165, message: Use of unassigned local variable 'tableSample' (Source code: tableSample)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in MakeSelect and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 302:56) with id: CS0165, message: Use of unassigned local variable 'arrayJoinClause' (Source code: arrayJoinClause)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in MakeSelect and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 576:42) with id: CS0165, message: Use of unassigned local variable 'limitByRenderer' (Source code: limitByRenderer)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in MakeSelect and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 608:21) with id: CS0165, message: Use of unassigned local variable 'lockRenderer' (Source code: lockRenderer)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in MakeSelect and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 643:41) with id: CS0165, message: Use of unassigned local variable 'distinctOn' (Source code: distinctOn)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in MakeSelect and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 1794:28) with id: CS0165, message: Use of unassigned local variable 'sorting' (Source code: sorting)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in AppendOrderBy and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 2145:68) with id: CS0165, message: Use of unassigned local variable 'targetFrom' (Source code: targetFrom)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in MakeDeleteJoin and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 2145:169) with id: CS0165, message: Use of unassigned local variable 'entityType' (Source code: entityType)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in MakeDeleteJoin and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 2157:37) with id: CS0165, message: Use of unassigned local variable 'joins' (Source code: joins)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in MakeDeleteJoin and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 2270:68) with id: CS0165, message: Use of unassigned local variable 'targetFrom' (Source code: targetFrom)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in MakeUpdateJoin and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 2270:169) with id: CS0165, message: Use of unassigned local variable 'entityType' (Source code: entityType)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in MakeUpdateJoin and mark them as 'compile error'.
+[10:56:22 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs resulted in a compile error (at 2282:37) with id: CS0165, message: Use of unassigned local variable 'joins' (Source code: joins)
+[10:56:22 INF] Safe Mode! Stryker will remove all mutations in MakeUpdateJoin and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlSourceRenderer.cs resulted in a compile error (at 139:19) with id: CS0165, message: Use of unassigned local variable 'renderMutationBody' (Source code: renderMutationBody)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in RenderMutation and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlSourceRenderer.cs resulted in a compile error (at 985:29) with id: CS0165, message: Use of unassigned local variable 'metadata' (Source code: metadata)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in RenderResultSchema and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlSourceRenderer.cs resulted in a compile error (at 1027:23) with id: CS0165, message: Use of unassigned local variable 'xmlFunctions' (Source code: xmlFunctions)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in MakeXmlNodes and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlSourceRenderer.cs resulted in a compile error (at 1125:14) with id: CS0165, message: Use of unassigned local variable 'pivotRenderer' (Source code: pivotRenderer)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in MakePivot and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs resulted in a compile error (at 326:64) with id: CS0165, message: Use of unassigned local variable 'childSkips' (Source code: childSkips)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in TransferNestedFilterSkips and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs resulted in a compile error (at 433:40) with id: CS0165, message: Use of unassigned local variable 'hints' (Source code: hints)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in PrepareHints and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs resulted in a compile error (at 2688:35) with id: CS0165, message: Use of unassigned local variable 'assignment' (Source code: assignment)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in BuildJsonObjectNode and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs resulted in a compile error (at 4781:44) with id: CS0165, message: Use of unassigned local variable 'property' (Source code: property)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in TryResolvePhysicalColumn and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs resulted in a compile error (at 5664:42) with id: CS0165, message: Use of unassigned local variable 'arrayJoins' (Source code: arrayJoins)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in PrepareArrayJoin and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs resulted in a compile error (at 211:32) with id: CS0165, message: Use of unassigned local variable 'uniqAggregates' (Source code: uniqAggregates)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in EmitUniq and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs resulted in a compile error (at 231:32) with id: CS0165, message: Use of unassigned local variable 'quantileAggregates' (Source code: quantileAggregates)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in EmitQuantile and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs resulted in a compile error (at 253:32) with id: CS0165, message: Use of unassigned local variable 'quantileAggregates' (Source code: quantileAggregates)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in EmitMedian and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs resulted in a compile error (at 316:14) with id: CS0165, message: Use of unassigned local variable 'topKAggregates' (Source code: topKAggregates)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in EmitTopK and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs resulted in a compile error (at 374:36) with id: CS0165, message: Use of unassigned local variable 'conditionArray' (Source code: conditionArray)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in EmitSequenceAggregate and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs resulted in a compile error (at 399:32) with id: CS0165, message: Use of unassigned local variable 'sequenceAggregates' (Source code: sequenceAggregates)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in EmitSequenceAggregate and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/ClickHouseNativeFunctionTranslator.cs resulted in a compile error (at 294:45) with id: CS0161, message: 'ClickHouseNativeFunctionTranslator.FlattenParams(IReadOnlyList<Expression>)': not all code paths return a value (Source code: private static IReadOnlyList<Expression> FlattenParams(IReadOnlyList<Expression> args)
+{    {
+        if (args.Count == 1 && args[0] is NewArrayExpression { Expressions: var expressions })
+            return expressions;
+
+        if(StrykerdOsZfVlOP7BitqF.MutantControl.IsActive(28015)){;}else{throw new NotSupportedException((StrykerdOsZfVlOP7BitqF.MutantControl.IsActive(28016)?"":"The array arguments must be inline expressions, not a captured array."));}
+    }
+})
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in FlattenParams and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/MySqlFunctionTranslator.cs resulted in a compile error (at 52:32) with id: CS0165, message: Use of unassigned local variable 'mySql' (Source code: mySql)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in TryTranslate and mark them as 'compile error'.
+[10:56:24 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/StringFunctionTranslator.cs resulted in a compile error (at 293:15) with id: CS0165, message: Use of unassigned local variable 'value' (Source code: value)
+[10:56:24 INF] Safe Mode! Stryker will remove all mutations in ResolveOrdinal and mark them as 'compile error'.
+[10:56:26 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/Joins/JoinIntoSpec.cs resulted in a compile error (at 616:12) with id: CS0165, message: Use of unassigned local variable 'equality' (Source code: equality)
+[10:56:26 INF] Safe Mode! Stryker will remove all mutations in BuildKeyEquality and mark them as 'compile error'.
+[10:56:26 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/Joins/JoinIntoSpec.cs resulted in a compile error (at 551:50) with id: CS0165, message: Use of unassigned local variable 'child' (Source code: child)
+[10:56:26 INF] Safe Mode! Stryker will remove all mutations in AssignChildren and mark them as 'compile error'.
+[10:56:26 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs resulted in a compile error (at 2953:39) with id: CS0165, message: Use of unassigned local variable 'item' (Source code: item)
+[10:56:26 INF] Safe Mode! Stryker will remove all mutations in BuildJsonProjectionShape and mark them as 'compile error'.
+[10:56:26 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs resulted in a compile error (at 4374:33) with id: CS0165, message: Use of unassigned local variable 'joinCondition' (Source code: joinCondition)
+[10:56:26 INF] Safe Mode! Stryker will remove all mutations in InjectJoinFilters and mark them as 'compile error'.
+[10:56:26 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs resulted in a compile error (at 5752:36) with id: CS0165, message: Use of unassigned local variable 'windows' (Source code: windows)
+[10:56:26 INF] Safe Mode! Stryker will remove all mutations in PrepareWindows and mark them as 'compile error'.
+[10:56:27 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryFilterContext.cs resulted in a compile error (at 416:28) with id: CS0165, message: Use of unassigned local variable 'expected' (Source code: expected)
+[10:56:27 INF] Safe Mode! Stryker will remove all mutations in EnsureFiltersPresent and mark them as 'compile error'.
+[10:56:27 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryFilterContext.cs resulted in a compile error (at 95:55) with id: CS0165, message: Use of unassigned local variable 'value' (Source code: value)
+[10:56:27 INF] Safe Mode! Stryker will remove all mutations in TryTranslate and mark them as 'compile error'.
+[10:56:27 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/ClickHouseNativeFunctionTranslator.cs resulted in a compile error (at 82:43) with id: CS0165, message: Use of unassigned local variable 'scalars' (Source code: scalars)
+[10:56:27 INF] Safe Mode! Stryker will remove all mutations in TryTranslate and mark them as 'compile error'.
+[10:56:27 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/ClickHouseNativeFunctionTranslator.cs resulted in a compile error (at 307:57) with id: CS0165, message: Use of unassigned local variable 'pairs' (Source code: pairs)
+[10:56:27 INF] Safe Mode! Stryker will remove all mutations in FlattenTuplePairs and mark them as 'compile error'.
+[10:56:27 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/SqliteFunctionTranslator.cs resulted in a compile error (at 162:36) with id: CS0165, message: Use of unassigned local variable 'functions' (Source code: functions)
+[10:56:27 INF] Safe Mode! Stryker will remove all mutations in TryTranslate and mark them as 'compile error'.
+[10:56:27 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/StringFunctionTranslator.cs resulted in a compile error (at 656:32) with id: CS0165, message: Use of unassigned local variable 'stringSplit' (Source code: stringSplit)
+[10:56:27 INF] Safe Mode! Stryker will remove all mutations in TryTranslateSplit and mark them as 'compile error'.
+[10:56:29 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilder.cs resulted in a compile error (at 1587:65) with id: CS0165, message: Use of unassigned local variable 'sort' (Source code: sort)
+[10:56:29 INF] Safe Mode! Stryker will remove all mutations in CreatePairCommand and mark them as 'compile error'.
+[10:56:29 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilder.cs resulted in a compile error (at 1736:32) with id: CS0165, message: Use of unassigned local variable 'childOrdering' (Source code: childOrdering)
+[10:56:29 INF] Safe Mode! Stryker will remove all mutations in AppendEmbeddedChildOrdering and mark them as 'compile error'.
+[10:56:29 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/RawMapperFactory.cs resulted in a compile error (at 1174:12) with id: CS0165, message: Use of unassigned local variable 'values' (Source code: values)
+[10:56:29 INF] Safe Mode! Stryker will remove all mutations in ValidateRecord and mark them as 'compile error'.
+[10:56:29 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/DataContext/RawMapperFactory.cs resulted in a compile error (at 534:31) with id: CS0165, message: Use of unassigned local variable 'name' (Source code: name)
+[10:56:29 INF] Safe Mode! Stryker will remove all mutations in TryGetUnresolvableCompositeColumn and mark them as 'compile error'.
+[10:56:29 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/CorrelatedQueryExpressionVisitor.cs resulted in a compile error (at 1224:40) with id: CS0165, message: Use of unassigned local variable 'outerParam' (Source code: outerParam)
+[10:56:29 INF] Safe Mode! Stryker will remove all mutations in BuildCollectionCorrelation and mark them as 'compile error'.
+[10:56:29 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/CorrelatedQueryExpressionVisitor.cs resulted in a compile error (at 1234:54) with id: CS0165, message: Use of unassigned local variable 'outerKey' (Source code: outerKey)
+[10:56:29 INF] Safe Mode! Stryker will remove all mutations in BuildCollectionCorrelation and mark them as 'compile error'.
+[10:56:29 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/CorrelatedQueryExpressionVisitor.cs resulted in a compile error (at 1759:88) with id: CS0165, message: Use of unassigned local variable 'outerParam' (Source code: outerParam)
+[10:56:29 INF] Safe Mode! Stryker will remove all mutations in BuildNavigationChainCommand and mark them as 'compile error'.
+[10:56:29 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/CorrelatedQueryExpressionVisitor.cs resulted in a compile error (at 1871:43) with id: CS0165, message: Use of unassigned local variable 'outerParam' (Source code: outerParam)
+[10:56:29 INF] Safe Mode! Stryker will remove all mutations in BuildReferenceCorrelation and mark them as 'compile error'.
+[10:56:29 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/CorrelatedQueryExpressionVisitor.cs resulted in a compile error (at 1883:54) with id: CS0165, message: Use of unassigned local variable 'outerKey' (Source code: outerKey)
+[10:56:29 INF] Safe Mode! Stryker will remove all mutations in BuildReferenceCorrelation and mark them as 'compile error'.
+[10:56:29 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/CorrelatedQueryExpressionVisitor.cs resulted in a compile error (at 1889:48) with id: CS0165, message: Use of unassigned local variable 'innerKey' (Source code: innerKey)
+[10:56:29 INF] Safe Mode! Stryker will remove all mutations in BuildReferenceCorrelation and mark them as 'compile error'.
+[10:56:29 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs resulted in a compile error (at 169:12) with id: CS0165, message: Use of unassigned local variable 'precision' (Source code: precision)
+[10:56:29 INF] Safe Mode! Stryker will remove all mutations in NormalizePrecision and mark them as 'compile error'.
+[10:56:31 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Builders/Joins/JoinIntoStitcher.cs resulted in a compile error (at 230:149) with id: CS0165, message: Use of unassigned local variable 'parent' (Source code: parent)
+[10:56:31 INF] Safe Mode! Stryker will remove all mutations in Stitch and mark them as 'compile error'.
+[10:56:31 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/MemberTranslator.cs resulted in a compile error (at 335:47) with id: CS8081, message: Expression does not have a name. (Source code: (StrykerdOsZfVlOP7BitqF.MutantControl.IsActive(30397)?"Stryker was here!":string.Empty))
+[10:56:31 INF] Safe Mode! Stryker will remove all mutations in VisitMember and mark them as 'compile error'.
+[10:56:31 WRN] An unidentified mutation in /home/alex/sources/nextorm/src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs resulted in a compile error (at 144:25) with id: CS0165, message: Use of unassigned local variable 'functions' (Source code: functions)
+[10:56:31 INF] Safe Mode! Stryker will remove all mutations in TryTranslate and mark them as 'compile error'.
+[10:56:34 INF] 34875 mutants created
+[10:56:34 INF] Capture mutant coverage using 'CoverageBasedTest' mode.
+[10:56:34 INF] Starting per-test coverage capture for MTP runner
+[10:56:34 INF] Capturing per-test coverage for 4088 tests across 2 assemblies
+[11:00:34 INF] Per-test coverage capture complete: 4088 tests captured
+Hint: by passing "--open-report or -o" the report will open automatically and 
+update the report in real-time.
+[11:00:37 INF] 8648  mutants got status CompileError. Reason: Mutant caused compile errors
+[11:00:37 INF] 28    mutants got status Ignored.      Reason: Removed by block already covered filter
+[11:00:37 INF] 26123 mutants got status Ignored.      Reason: Removed by mutate filter
+[11:00:37 INF] 34799 total mutants are skipped for the above mentioned reasons
+[11:00:37 INF] 76    total mutants will be tested
+
+Killed:   68
+Survived:  8
+Timeout:   0
+Errors:   0
+
+
+All mutants have been tested, and your mutation score has been calculated
+…
+Your json report has been generated at:
+file:///home/alex/sources/nextorm/artifacts/pdca/D221/rv1/mutation/reports/mutat
+ion-report.json
+
+Your html report has been generated at:
+file:///home/alex/sources/nextorm/artifacts/pdca/D221/rv1/mutation/reports/mutat
+ion-report.html
+You can open it in your browser of choice.
+[11:02:13 INF] Time Elapsed 00:08:30.7172604
+[11:02:13 INF] The final mutation score is 89.47 %

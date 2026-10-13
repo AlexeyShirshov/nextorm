@@ -1,0 +1,2 @@
+ M docs/assets/diagrams/nextorm-command-execution.svg
+ M docs/ru/assets/diagrams/nextorm-command-execution.svg

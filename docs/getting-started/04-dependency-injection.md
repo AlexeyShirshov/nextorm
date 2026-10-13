@@ -81,6 +81,20 @@ var reporting = scope.ServiceProvider.GetRequiredKeyedService<IDataContext>("rep
 > [`IDataContext`](xref:NextORM.Core.IDataContext) from the options path. The type path is the one that makes the concrete type and the
 > interface resolve to the same instance.
 
+## DI-registered interceptors
+
+An interceptor can be registered by its service type instead of a pre-built instance; the builder resolves it from the scope that created the builder:
+
+```csharp
+services.AddScoped<TimingInterceptor>();
+
+services.AddNextOrmContext(builder => builder
+    .UseSqlite("app.db")
+    .AddInterceptor<TimingInterceptor>()); // or .AddInterceptor(typeof(TimingInterceptor))
+```
+
+Resolution happens once per context creation, so scoped, singleton and transient lifetimes are honoured and the container keeps ownership of disposal. A type registration requires a DI-backed builder - it fails at `CreateDataContext()` on a standalone builder, and a service that is not registered fails with the container's own `GetRequiredService` error before the context factory runs. See [Interceptors](../infrastructure/02-interceptors.md) for ordering, deduplication and the error contract.
+
 ## Configuring the builder directly
 
 [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) can also be used without a container - this is exactly what the DI factory calls:
