@@ -353,7 +353,7 @@
         },
         {
           "kind": "doc",
-          "path": "artifacts/pdca/D216/rv2/contract-review.md"
+          "path": "artifacts/pdca/D216/rv2/docs/parity-review.md"
         }
       ]
     },
@@ -365,7 +365,17 @@
     {
       "id": "EV-16",
       "status": "open",
-      "reason": "R-03/MariaDB owner obligation retained: owner must decide (i) narrow MariaDB to unsupported and update #216, or (ii) defer MariaDB source lock beyond 1.0.9. No owner decision received; not a PASS. #216 stays OPEN."
+      "reason": "R-03/MariaDB owner constraint disclosed (not received, not a PASS): owner must decide (i) narrow MariaDB source lock to unsupported and update #216 criteria, or (ii) defer MariaDB source locking beyond 1.0.9. #216 stays OPEN; D-07 blocked. See A/check/owner-constraint.md + A/check/owner-decision.json.",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/check/owner-constraint.md"
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/check/owner-decision.json"
+        }
+      ]
     },
     {
       "id": "EV-17",
@@ -385,8 +395,22 @@
     },
     {
       "id": "EV-18",
-      "status": "open",
-      "reason": "Frozen-manifest structural validation (C-MANIFEST / A/check/manifest-validation.*) is the check-C01 action; DO freeze validates via validate_inner_loop.py manifest (exit 0)."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/check/freeze.json"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D216/rv2/manifest-validation.log",
+          "exit": 0
+        },
+        {
+          "kind": "doc",
+          "path": "artifacts/pdca/D216/rv2/check/manifest-validation.exit.json"
+        }
+      ]
     }
   ]
 }
