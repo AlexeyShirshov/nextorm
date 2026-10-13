@@ -246,7 +246,7 @@ Design spike не нужен (замены нет). Readiness-разведка �
 - 2026-10-13T09:19Z | DO | r=2 | n=1/3 | docs: diff 0, oneof-scan 0 (new note only, no current-dependency claim) | artifacts/pdca/D215/rv2/docs-verdict.md
 - 2026-10-13T09:20Z | DO | r=2 | n=1/3 | manifest-validation: exit 0; report-validation: exit 0 | artifacts/pdca/D215/rv2/manifest-validation.log; artifacts/pdca/D215/rv2/report-validation.log
 - 2026-10-13T09:28Z | CHECK | r=2 | n=1/3 | pass | artifacts/pdca/D215/rv2/check/build-rerun.log; artifacts/pdca/D215/rv2/check/alias-rerun.log; artifacts/pdca/D215/rv2/check/package-rerun.json; artifacts/pdca/D215/rv2/check/residue.log; artifacts/pdca/D215/rv2/check/validators.log; artifacts/pdca/D215/rv2/manifest.json (14 rows: 13 met, 1 na, 0 open)
-- 2026-10-13T09:28Z | ACT | r=2 | done | __ACT_SHA__
+- 2026-10-13T09:28Z | ACT | r=2 | done | e7e58ff51e3f8217c9f28869c467aafddec08a0f
 
 ## DO r=2 evidence state (D215-01…D215-04)
 
@@ -266,7 +266,7 @@ provider/runtime diff). No row is `open`.
 
 ## Done / Verified (ACT — cycle N=1, r=2, rv=2)
 
-- **Done:** цель T215 достигнута — неиспользуемая зависимость **OneOf** удалена из NextORM **без замены** и без изменения публичного/runtime API: сняты package-декларации (`Directory.Packages.props`, `src/nextorm.core/nextorm.core.csproj`), удалён устаревший `OneOf`-комментарий в `src/nextorm.core/Expressions/FromExpression.cs`, сняты два `"OneOf.dll"` metadata reference в alias-тестах, исправлены EN/RU installation docs. Коммиты: product `768b208e`, DO status `50a791e2`, ACT status `__ACT_SHA__`. Cycle N=1 закрыт (r=2, rv=2; CHECK verdict `pass`).
+- **Done:** цель T215 достигнута — неиспользуемая зависимость **OneOf** удалена из NextORM **без замены** и без изменения публичного/runtime API: сняты package-декларации (`Directory.Packages.props`, `src/nextorm.core/nextorm.core.csproj`), удалён устаревший `OneOf`-комментарий в `src/nextorm.core/Expressions/FromExpression.cs`, сняты два `"OneOf.dll"` metadata reference в alias-тестах, исправлены EN/RU installation docs. Коммиты: product `768b208e`, DO status `50a791e2`, ACT status `e7e58ff51e3f8217c9f28869c467aafddec08a0f`. Cycle N=1 закрыт (r=2, rv=2; CHECK verdict `pass`).
 - **Verified:**
   - build: `dotnet build nextorm.slnx -c Debug` exit 0 — **0 warnings / 0 errors**, 25 проектов.
   - alias tests: `dotnet test tests/nextorm.alias.tests -c Debug` exit 0 — **105 passed / 0 failed / 0 skipped**.
