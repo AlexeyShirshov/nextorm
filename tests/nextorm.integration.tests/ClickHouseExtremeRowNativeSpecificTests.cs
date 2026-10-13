@@ -626,6 +626,12 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
     {
         Expression<Func<ExtremeRowFloatEntity, object?>> group = e => new { e.Grp };
 
+        // Eagerly initialize the provider repository (its lazy _sut access runs EnsureSeeded()) before
+        // the portable oracle executes, so both the oracle and the native query observe the same
+        // seeded Memory table instead of the reused server's pre-seed state. Initialization only:
+        // no query, dataset, group key or assertion is changed.
+        _ = _sut.DataProvider;
+
         using var portable = Portable();
         var oracle = (isMax
                 ? FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMax(key, ExtremeRowTies.All, group)
