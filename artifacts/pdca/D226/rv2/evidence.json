@@ -1,0 +1,243 @@
+{
+  "unit": "T226-r2-records-affected",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.integration.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~RecordsAffected",
+      "FullyQualifiedName~Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount",
+      "FullyQualifiedName~Batch_SideEffect_ShouldExposeOneDriverRecordsAffected_NotTheResultSetCount",
+      "FullyQualifiedName~ClickHouseRecordsAffected",
+      "FullyQualifiedName~RawCommand",
+      "FullyQualifiedName~RawResultSetTraversal",
+      "FullyQualifiedName~BatchMultipleResult"
+    ],
+    "files": [
+      "src/nextorm.core/DataContext/BatchRunner.cs",
+      "tests/nextorm.sqlite.tests/BatchMultipleResultTests.cs",
+      "docs/specs/status/D226-records-affected-1.md"
+    ],
+    "rebuild": "affected",
+    "boundary": "single comprehensive filtered sweep at the DO→CHECK boundary (core + sqlite projects, plus serialized integration runs with DOCKER_HOST for RecordsAffected/ClickHouseRecordsAffected/the batch oracle)",
+    "rationale": "r=2 touches only the mutation/oracle machinery (a temporary two-site BatchRunner substitution plus a strengthened SQLite oracle) and the status/evidence files; the filtered selectors are exactly the suites that carry the affected-total contract."
+  },
+  "executions": [
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "nextorm.slnx",
+        "-c",
+        "Debug"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv2",
+      "artifact_revision": "d226-rv2",
+      "exit_code": 0,
+      "selected_count": 1,
+      "note": "build: no tests are selected by a build — the selected_count value only satisfies the evidence contract's integer requirement and is NOT a test-count claim; 0 Warning(s) 0 Error(s)",
+      "log": "artifacts/pdca/D226/rv2/build.log",
+      "exit_file": "artifacts/pdca/D226/rv2/build.exit"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~RecordsAffected"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv2",
+      "artifact_revision": "d226-rv2",
+      "exit_code": 0,
+      "selected_count": 16,
+      "project": "tests/nextorm.core.tests",
+      "filter": "FullyQualifiedName~RecordsAffected",
+      "log": "artifacts/pdca/D226/rv2/core-tests.log",
+      "note": "16 passed / 0 failed",
+      "exit_file": "artifacts/pdca/D226/rv2/core-tests.exit"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~RecordsAffected"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv2",
+      "artifact_revision": "d226-rv2",
+      "exit_code": 0,
+      "selected_count": 6,
+      "project": "tests/nextorm.sqlite.tests",
+      "filter": "FullyQualifiedName~RecordsAffected",
+      "log": "artifacts/pdca/D226/rv2/sqlite-tests.log",
+      "note": "6 passed / 0 failed",
+      "exit_file": "artifacts/pdca/D226/rv2/sqlite-tests.exit"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv2",
+      "artifact_revision": "d226-rv2",
+      "exit_code": 0,
+      "selected_count": 1,
+      "project": "tests/nextorm.sqlite.tests",
+      "filter": "FullyQualifiedName~Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount",
+      "log": "artifacts/pdca/D226/rv2/row-count-control.log",
+      "note": "row-count clean control",
+      "exit_file": "artifacts/pdca/D226/rv2/row-count-control.exit"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~RecordsAffected"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv2",
+      "artifact_revision": "d226-rv2",
+      "exit_code": 0,
+      "selected_count": 27,
+      "project": "tests/nextorm.integration.tests",
+      "filter": "FullyQualifiedName~RecordsAffected",
+      "log": "artifacts/pdca/D226/rv2/integration-tests.log",
+      "env": {
+        "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+      },
+      "exit_file": "artifacts/pdca/D226/rv2/integration-tests.exit"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~ClickHouseRecordsAffected"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv2",
+      "artifact_revision": "d226-rv2",
+      "exit_code": 0,
+      "selected_count": 5,
+      "project": "tests/nextorm.integration.tests",
+      "filter": "FullyQualifiedName~ClickHouseRecordsAffected",
+      "log": "artifacts/pdca/D226/rv2/clickhouse-tests.log",
+      "env": {
+        "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+      },
+      "exit_file": "artifacts/pdca/D226/rv2/clickhouse-tests.exit"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~Batch_SideEffect_ShouldExposeOneDriverRecordsAffected_NotTheResultSetCount"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv2",
+      "artifact_revision": "d226-rv2",
+      "exit_code": 0,
+      "selected_count": 4,
+      "project": "tests/nextorm.integration.tests",
+      "filter": "FullyQualifiedName~Batch_SideEffect_ShouldExposeOneDriverRecordsAffected_NotTheResultSetCount",
+      "log": "artifacts/pdca/D226/rv2/batch-integration-control.log",
+      "env": {
+        "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+      },
+      "note": "integration batch oracle",
+      "exit_file": "artifacts/pdca/D226/rv2/batch-integration-control.exit"
+    }
+  ],
+  "non_validated_runs": [
+    {
+      "command": [
+        "bash",
+        "artifacts/pdca/D226/rv2/verify-mutations.sh"
+      ],
+      "exit_code": 0,
+      "artifact": "artifacts/pdca/D226/rv2/mutation.exit",
+      "note": "not part of the validated execution list: the wrapper token would be rejected by the validator's shell hygiene rule"
+    },
+    {
+      "command": [
+        "bash",
+        "artifacts/pdca/D226/rv2/verify-mutations-negative.sh"
+      ],
+      "exit_code": 0,
+      "note": "six controls, all exit 1 for the intended reason"
+    },
+    {
+      "command": [
+        "python3",
+        "artifacts/pdca/D226/rv2/verify-accepted-evidence.py",
+        "--all"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python3",
+        "artifacts/pdca/D226/rv2/verify-provenance.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python3",
+        "artifacts/pdca/D226/rv2/verify-r2-delta.py",
+        "check"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "bash",
+        "artifacts/pdca/D226/rv2/verify-plan-evidence.sh"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "bash",
+        "artifacts/pdca/D226/rv2/validate-manifest.sh"
+      ],
+      "exit_code": 0,
+      "artifact": "artifacts/pdca/D226/rv2/validation.log"
+    }
+  ],
+  "note": "executions use the frozen rv2 selectors only; container runs serialised with DOCKER_HOST and no `-- -noColor` tail."
+}

@@ -1,0 +1,35 @@
+dotnet-coverage v18.11.2.0 [linux-x64 - .NET 10.0.12]
+
+SessionId: d4339ff0-cf05-4c64-8804-104d248d1976
+Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) passed (13s 025ms)
+
+Test run summary: Passed!
+  total: 2528
+  failed: 0
+  succeeded: 2528
+  skipped: 0
+  duration: 12s 866ms
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+skipped NextORM.Sqlite.Tests.SqliteRowIdLobProbeTests.Sqlite_RowId_Projection_Streams_Lobs_MemoryBounded
+  Set NEXTORM_LOB_SQLITE_PROBE=1 to run the SQLite rowid LOB capability probe.
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64) passed (25s 596ms)
+
+Test run summary: Passed!
+  total: 1747
+  failed: 0
+  succeeded: 1746
+  skipped: 1
+  duration: 25s 362ms
+Running tests from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) passed (26s 805ms)
+
+Test run summary: Passed!
+  total: 22
+  failed: 0
+  succeeded: 22
+  skipped: 0
+  duration: 27s 077ms
+Code coverage results: artifacts/pdca/D226/rv1/check/coverage/coverage.cobertura.xml.
+COLLECT_EXIT=0

@@ -1,0 +1,5 @@
+{"control": "N1-no-match-patch", "intended_reason": "a patch whose needle does not exist must be refused (PATCH_NO_MATCH), never counted as a kill", "exit_code": 1,
+ "guard_token": "PATCH_NO_MATCH", "outcome": "intended",
+ "artifact_log": "artifacts/pdca/D226/rv2/negative-controls/N1-no-match-patch.log",
+ "artifact_log_status": "produced",
+ "artifact_exit": "artifacts/pdca/D226/rv2/negative-controls/N1-no-match-patch.exit"}

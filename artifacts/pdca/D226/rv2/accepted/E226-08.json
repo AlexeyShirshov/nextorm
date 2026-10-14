@@ -1,0 +1,42 @@
+{
+  "row": "E226-08",
+  "inherited_from": "rv1",
+  "rv1_status": "met",
+  "rv1_requirement": "R226-COVERAGE — >=85/>=75, comparable baseline, a test per changed branch",
+  "acceptance": {
+    "accepted": true,
+    "reason": "inherited rv1 row retained unchanged"
+  },
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "artifacts/pdca/D226/rv1/verify-coverage-final.log",
+      "exists": true,
+      "exit": 0,
+      "note": "final line 88.7% / branch 80.8% (>=85/75)"
+    },
+    {
+      "kind": "log",
+      "path": "artifacts/pdca/D226/rv1/baseline/verify.log",
+      "exists": true,
+      "exit": 0,
+      "note": "reconstructed pre-T226 baseline: line 88.7% / branch 80.8%"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/pdca/D226/rv1/branch-delta.json",
+      "exists": true,
+      "exit": null,
+      "note": "PRE-EXISTING vs CHANGED branches with positive/negative cases incl. :76→77, :85→86, :101→102"
+    },
+    {
+      "kind": "xml",
+      "path": "artifacts/pdca/D226/rv1/coverage.xml",
+      "exists": true,
+      "exit": null,
+      "note": "cobertura from the CI dotnet-coverage step (11888 tests)"
+    }
+  ],
+  "rv1_frozen_verified": true,
+  "verifier": "artifacts/pdca/D226/rv2/verify-accepted-evidence.py"
+}

@@ -1,0 +1,31 @@
+work=/tmp/opencode/d226-r2-myneg.Wwfuta
+N-i-surviving-mutant: verify_exit=1
+  guard_lines:
+    GUARD-FAIL: total-to-row-count: kill condition failed: mutated_exit_nonzero
+    GUARD-FAIL: total-to-row-count: kill condition failed: failed_tests_executed
+    GUARD-FAIL: total-to-row-count: kill condition failed: designated_test_failed
+    GUARD-FAIL: total-to-row-count: kill condition failed: stack_bound
+    GUARD-FAIL: total-to-row-count: kill condition failed: assertion_evidence
+    mutation_exit=1
+  product_restored_after_case=yes
+N-ii-failed-restore: verify_exit=1
+  guard_lines:
+    GUARD-FAIL: total-to-row-count: restore did not compare byte-identically
+    GUARD-FAIL: final restoration did not compare byte-identically
+    GUARD-FAIL: the working-tree diff for the mutated files changed
+    mutation_exit=1
+  product_restored_after_case=yes
+N-iii-infra-alongside-assertion: verify_exit=1
+  guard_lines:
+    GUARD-FAIL: total-to-row-count: infrastructure diagnostic present ('error CS') — cannot count as a kill
+    GUARD-FAIL: total-to-row-count: kill condition failed: no_infrastructure_diagnostic
+    mutation_exit=1
+  product_restored_after_case=yes
+== final product byte-identity ==
+/home/alex/sources/nextorm/src/nextorm.core/DataContext/CommandReaderOwner.cs: OK
+/home/alex/sources/nextorm/src/nextorm.core/DataContext/BatchRunner.cs: OK
+PRODUCT_IDENTICAL=yes
+ M src/nextorm.core/DataContext/BatchRunner.cs
+ M src/nextorm.core/DataContext/CommandReaderOwner.cs
+induced_rc=0
+induce_negatives_exit=0

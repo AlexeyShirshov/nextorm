@@ -1,0 +1,19 @@
+== D226 rv2 mutation verification ==
+repo=/home/alex/sources/nextorm
+work=/tmp/opencode/d226-r2-mut-1e1222ma
+before src/nextorm.core/DataContext/CommandReaderOwner.cs sha256=cf030526b1eed51361f51747ba34265eb27c916ae59bf8d6b629fe9d181b1b98
+before src/nextorm.core/DataContext/BatchRunner.cs sha256=9bf200945db90eb60188c270d5d65061980d6160c600dcef0cad05fdf2cc3683
+base build exit=0 ok=true
+control core-recordsaffected: exit=0 total=16 failed=0 ok=true
+control sqlite-rowcount: exit=0 total=1 failed=0 ok=true
+
+== total-to-row-count — replace the total with row-count ==
+GUARD-FAIL: total-to-row-count: PATCH_NO_MATCH src/nextorm.core/DataContext/BatchRunner.cs found=0 expected=2
+restore[total-to-row-count-after-patch-failure] src/nextorm.core/DataContext/CommandReaderOwner.cs byte_identical=true sha256=cf030526b1eed51361f51747ba34265eb27c916ae59bf8d6b629fe9d181b1b98 hash_match=true
+restore[total-to-row-count-after-patch-failure] src/nextorm.core/DataContext/BatchRunner.cs byte_identical=true sha256=9bf200945db90eb60188c270d5d65061980d6160c600dcef0cad05fdf2cc3683 hash_match=true
+restore[final-cleanup] src/nextorm.core/DataContext/CommandReaderOwner.cs byte_identical=true sha256=cf030526b1eed51361f51747ba34265eb27c916ae59bf8d6b629fe9d181b1b98 hash_match=true
+restore[final-cleanup] src/nextorm.core/DataContext/BatchRunner.cs byte_identical=true sha256=9bf200945db90eb60188c270d5d65061980d6160c600dcef0cad05fdf2cc3683 hash_match=true
+
+final_restore_ok=true
+tree_unchanged=true (diff hash 8fd721efe4c5 -> 8fd721efe4c5)
+== summary ==

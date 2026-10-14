@@ -1,0 +1,600 @@
+[testcontainers.org 00:00:00.28] Connected to Docker:
+  Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+  Server Version: 5.8.6
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.44
+  Operating System: fedora
+  Total Memory: 11.68 GB
+[testcontainers.org 00:00:00.52] Docker container 278515cff588 created
+[testcontainers.org 00:00:00.57] Start Docker container 278515cff588
+[testcontainers.org 00:00:01.90] Wait for Docker container 278515cff588 to complete readiness checks
+[testcontainers.org 00:00:02.11] Docker container 278515cff588 ready
+[testcontainers.org 00:00:02.19] Docker container 7313a059238c created
+[testcontainers.org 00:00:02.19] Start Docker container 7313a059238c
+[testcontainers.org 00:00:03.54] Wait for Docker container 7313a059238c to complete readiness checks
+[testcontainers.org 00:00:03.55] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container 7313a059238c
+[testcontainers.org 00:00:04.72] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container 7313a059238c
+[testcontainers.org 00:00:05.80] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container 7313a059238c
+[testcontainers.org 00:00:05.94] Docker container 7313a059238c ready
+[testcontainers.org 00:00:06.12] Delete Docker container 7313a059238c
+[testcontainers.org 00:00:06.68] Docker container e60c44a9f1ea created
+[testcontainers.org 00:00:06.68] Start Docker container e60c44a9f1ea
+[testcontainers.org 00:00:08.01] Wait for Docker container e60c44a9f1ea to complete readiness checks
+[testcontainers.org 00:00:08.02] Execute "/bin/sh -c find /opt/mssql-tools*/bin/sqlcmd -type f -print -quit" at Docker container e60c44a9f1ea
+[testcontainers.org 00:00:08.14] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container e60c44a9f1ea
+[testcontainers.org 00:00:13.83] Docker container e60c44a9f1ea ready
+[testcontainers.org 00:00:14.31] Delete Docker container e60c44a9f1ea
+[testcontainers.org 00:00:25.03] Docker container 0563e08340cd created
+[testcontainers.org 00:00:25.04] Start Docker container 0563e08340cd
+[testcontainers.org 00:00:26.37] Execute "mkdir /var/lib/mysql-files" at Docker container 0563e08340cd
+[testcontainers.org 00:00:26.37] Add file to tar archive: Content length: 48 byte(s), Target file: "/etc/mysql/my.cnf", UID: 0, GID: 0, Mode: 0600
+[testcontainers.org 00:00:26.38] Copy tar archive to container: Content length: 48 byte(s), Docker container: 0563e08340cd
+[testcontainers.org 00:00:26.44] Wait for Docker container 0563e08340cd to complete readiness checks
+[testcontainers.org 00:00:26.44] Execute "mysql test --wait --silent --execute=SELECT 1;" at Docker container 0563e08340cd
+[testcontainers.org 00:00:32.55] Execute "mysql test --wait --silent --execute=SELECT 1;" at Docker container 0563e08340cd
+[testcontainers.org 00:00:37.62] Docker container 0563e08340cd ready
+[testcontainers.org 00:00:38.32] Delete Docker container 0563e08340cd
+[testcontainers.org 00:00:42.04] Docker container 20596a8013bf created
+[testcontainers.org 00:00:42.05] Start Docker container 20596a8013bf
+[testcontainers.org 00:00:43.64] Wait for Docker container 20596a8013bf to complete readiness checks
+[testcontainers.org 00:00:54.60] Docker container 20596a8013bf ready
+[testcontainers.org 00:00:54.81] Delete Docker container 20596a8013bf
+{
+  "probe": "D226-D1-records-affected-metadata",
+  "known_total": 3,
+  "generated_at_utc": "2026-10-14T12:12:39Z",
+  "providers": [
+    "sqlite",
+    "postgres",
+    "sqlserver",
+    "mysql",
+    "clickhouse"
+  ],
+  "notes": [
+    {
+      "Provider": "sqlite",
+      "Topic": "native-batch",
+      "Note": "CanCreateBatch=false; only the joined-command path exists"
+    },
+    {
+      "Provider": "clickhouse",
+      "Topic": "lightweight-delete-async-dispose",
+      "Note": "ClickHouseServerException: Code: 36. DB::Exception: DELETE query is not supported for table default.probe_94f8d24d. (BAD_ARGUMENTS) (version 25.8.33.6 (official build))\n"
+    },
+    {
+      "Provider": "clickhouse",
+      "Topic": "oracle",
+      "Note": "ClickHouse has no DML affected-row oracle; values are recorded as observations only"
+    }
+  ],
+  "results": [
+    {
+      "Provider": "sqlite",
+      "Scenario": "dml-sync-dispose-no-read",
+      "Shape": "dml",
+      "Sql": "update probe_9859bc98 set id = id \u002B 100 where id \u003C= 3",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlite",
+      "Scenario": "dml-sync-close-no-read",
+      "Shape": "dml",
+      "Sql": "update probe_99bf30d5 set id = id \u002B 100 where id \u003C= 3",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlite",
+      "Scenario": "dml-async-dispose-no-read",
+      "Shape": "dml",
+      "Sql": "update probe_386e7e05 set id = id \u002B 100 where id \u003C= 3",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlite",
+      "Scenario": "dml-then-select-sync-dispose",
+      "Shape": "dml\u002Bselect",
+      "Sql": "update probe_c64c6572 set id = id \u002B 100 where id \u003C= 3; select count(*) as c from probe_c64c6572",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlite",
+      "Scenario": "dml-then-select-async-dispose",
+      "Shape": "dml\u002Bselect",
+      "Sql": "update probe_a5d20232 set id = id \u002B 100 where id \u003C= 3; select count(*) as c from probe_a5d20232",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlite",
+      "Scenario": "dml-then-select-partial-sync-dispose",
+      "Shape": "dml\u002Bselect",
+      "Sql": "update probe_f69e860e set id = id \u002B 100 where id \u003C= 3; select count(*) as c from probe_f69e860e",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlite",
+      "Scenario": "select-sync-dispose",
+      "Shape": "select",
+      "Sql": "select id from probe_6379ca5b",
+      "Expected": -1,
+      "Before": -1,
+      "BeforeError": null,
+      "After": -1,
+      "AfterError": null,
+      "Chosen": -1,
+      "IsDml": false,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "postgres",
+      "Scenario": "dml-sync-dispose-no-read",
+      "Shape": "dml",
+      "Sql": "update probe_5f412ee0 set id = id \u002B 100 where id \u003C= 3",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "postgres",
+      "Scenario": "dml-sync-close-no-read",
+      "Shape": "dml",
+      "Sql": "update probe_b4e7b958 set id = id \u002B 100 where id \u003C= 3",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "postgres",
+      "Scenario": "dml-async-dispose-no-read",
+      "Shape": "dml",
+      "Sql": "update probe_e52a2f24 set id = id \u002B 100 where id \u003C= 3",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "postgres",
+      "Scenario": "dml-then-select-sync-dispose",
+      "Shape": "dml\u002Bselect",
+      "Sql": "update probe_afbb99ed set id = id \u002B 100 where id \u003C= 3; select count(*) as c from probe_afbb99ed",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "postgres",
+      "Scenario": "dml-then-select-async-dispose",
+      "Shape": "dml\u002Bselect",
+      "Sql": "update probe_89c3b45f set id = id \u002B 100 where id \u003C= 3; select count(*) as c from probe_89c3b45f",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "postgres",
+      "Scenario": "dml-then-select-partial-sync-dispose",
+      "Shape": "dml\u002Bselect",
+      "Sql": "update probe_bc9c4085 set id = id \u002B 100 where id \u003C= 3; select count(*) as c from probe_bc9c4085",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "postgres",
+      "Scenario": "select-sync-dispose",
+      "Shape": "select",
+      "Sql": "select id from probe_d33cea38",
+      "Expected": -1,
+      "Before": -1,
+      "BeforeError": null,
+      "After": -1,
+      "AfterError": null,
+      "Chosen": -1,
+      "IsDml": false,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "postgres",
+      "Scenario": "native-batch-async-dispose",
+      "Shape": "batch",
+      "Sql": "update; select",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlserver",
+      "Scenario": "dml-sync-dispose-no-read",
+      "Shape": "dml",
+      "Sql": "update probe_2122f9fc set id = id \u002B 100 where id \u003C= 3",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlserver",
+      "Scenario": "dml-sync-close-no-read",
+      "Shape": "dml",
+      "Sql": "update probe_d3337e99 set id = id \u002B 100 where id \u003C= 3",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlserver",
+      "Scenario": "dml-async-dispose-no-read",
+      "Shape": "dml",
+      "Sql": "update probe_a664385e set id = id \u002B 100 where id \u003C= 3",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlserver",
+      "Scenario": "dml-then-select-sync-dispose",
+      "Shape": "dml\u002Bselect",
+      "Sql": "update probe_5efa87e8 set id = id \u002B 100 where id \u003C= 3; select count(*) as c from probe_5efa87e8",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlserver",
+      "Scenario": "dml-then-select-async-dispose",
+      "Shape": "dml\u002Bselect",
+      "Sql": "update probe_0e8e76d2 set id = id \u002B 100 where id \u003C= 3; select count(*) as c from probe_0e8e76d2",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlserver",
+      "Scenario": "dml-then-select-partial-sync-dispose",
+      "Shape": "dml\u002Bselect",
+      "Sql": "update probe_5e3714fd set id = id \u002B 100 where id \u003C= 3; select count(*) as c from probe_5e3714fd",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlserver",
+      "Scenario": "select-sync-dispose",
+      "Shape": "select",
+      "Sql": "select id from probe_a3fbdd1f",
+      "Expected": -1,
+      "Before": -1,
+      "BeforeError": null,
+      "After": -1,
+      "AfterError": null,
+      "Chosen": -1,
+      "IsDml": false,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "sqlserver",
+      "Scenario": "native-batch-async-dispose",
+      "Shape": "batch",
+      "Sql": "update; select",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "mysql",
+      "Scenario": "dml-sync-dispose-no-read",
+      "Shape": "dml",
+      "Sql": "update probe_82b5cc2e set id = id \u002B 100 where id \u003C= 3",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "mysql",
+      "Scenario": "dml-sync-close-no-read",
+      "Shape": "dml",
+      "Sql": "update probe_b7f3914a set id = id \u002B 100 where id \u003C= 3",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "mysql",
+      "Scenario": "dml-async-dispose-no-read",
+      "Shape": "dml",
+      "Sql": "update probe_dd822777 set id = id \u002B 100 where id \u003C= 3",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "mysql",
+      "Scenario": "dml-then-select-sync-dispose",
+      "Shape": "dml\u002Bselect",
+      "Sql": "update probe_f67b412b set id = id \u002B 100 where id \u003C= 3; select count(*) as c from probe_f67b412b",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "mysql",
+      "Scenario": "dml-then-select-async-dispose",
+      "Shape": "dml\u002Bselect",
+      "Sql": "update probe_71df25da set id = id \u002B 100 where id \u003C= 3; select count(*) as c from probe_71df25da",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "mysql",
+      "Scenario": "dml-then-select-partial-sync-dispose",
+      "Shape": "dml\u002Bselect",
+      "Sql": "update probe_72907b43 set id = id \u002B 100 where id \u003C= 3; select count(*) as c from probe_72907b43",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": false,
+      "FullRead": false,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "mysql",
+      "Scenario": "select-sync-dispose",
+      "Shape": "select",
+      "Sql": "select id from probe_261e4008",
+      "Expected": -1,
+      "Before": -1,
+      "BeforeError": null,
+      "After": -1,
+      "AfterError": null,
+      "Chosen": -1,
+      "IsDml": false,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "mysql",
+      "Scenario": "native-batch-async-dispose",
+      "Shape": "batch",
+      "Sql": "update; select",
+      "Expected": 3,
+      "Before": 3,
+      "BeforeError": null,
+      "After": 3,
+      "AfterError": null,
+      "Chosen": 3,
+      "IsDml": true,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "clickhouse",
+      "Scenario": "insert-async-dispose",
+      "Shape": "dml",
+      "Sql": "insert into probe_94f8d24d (id) values (99)",
+      "Expected": 0,
+      "Before": 0,
+      "BeforeError": null,
+      "After": 0,
+      "AfterError": null,
+      "Chosen": 0,
+      "IsDml": true,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": true
+    },
+    {
+      "Provider": "clickhouse",
+      "Scenario": "select-async-dispose",
+      "Shape": "select",
+      "Sql": "select count(*) as c from probe_94f8d24d",
+      "Expected": -1,
+      "Before": 0,
+      "BeforeError": null,
+      "After": 0,
+      "AfterError": null,
+      "Chosen": 0,
+      "IsDml": false,
+      "ReadRows": true,
+      "FullRead": true,
+      "ChosenMatchesExpected": false
+    }
+  ]
+}

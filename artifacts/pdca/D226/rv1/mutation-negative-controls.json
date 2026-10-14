@@ -1,0 +1,44 @@
+{
+  "task": "T226 (#226) — negative controls for verify-mutations.sh",
+  "contract_rv": 1,
+  "verifier": "artifacts/pdca/D226/rv1/verify-mutations.sh",
+  "controls": [
+    {
+      "control": "N1-no-match-patch",
+      "perturbation": "the remove-capture patch needle replaced by a line that does not exist in the source",
+      "exit_code": 1,
+      "nonzero": "yes",
+      "guard_hit": "PATCH_NO_MATCH remove-capture/owner found=0 expected=1"
+    },
+    {
+      "control": "N2-noop-surviving-mutant",
+      "perturbation": "the single-hunk reset-on-repeated-release patch turned into a comment-only change, so no assertion can fail (a surviving mutant)",
+      "exit_code": 1,
+      "nonzero": "yes",
+      "guard_hit": "  SURVIVED: reset-on-repeated-release survived this run"
+    },
+    {
+      "control": "N3-hash-mismatch-detection",
+      "perturbation": "the expected owner hash replaced by a wrong constant, so the post-restore hash guard must fire (the real source is not corrupted)",
+      "exit_code": 1,
+      "nonzero": "yes",
+      "guard_hit": "GUARD-FAIL: remove-capture restore mismatch"
+    },
+    {
+      "control": "N4-failing-control",
+      "perturbation": "the core control expectation changed from 16 to 99, so the control guard must fire",
+      "exit_code": 1,
+      "nonzero": "yes",
+      "guard_hit": "GUARD-FAIL: core control is not 99/99 at exit 0"
+    },
+    {
+      "control": "N5-invalid-artifact-path",
+      "perturbation": "the log path pointed at a non-existent directory, so the artifact/schema guard must fire at startup",
+      "exit_code": 1,
+      "nonzero": "yes",
+      "guard_hit": "/tmp/nextorm-d226-negctl.RUvH33/N5-invalid-artifact-path.sh: line 47: /tmp/nextorm-d226-negctl.RUvH33/ctl-artifacts-N5-invalid-artifact-path/no-such-directory/mutation.log: No such file or directory"
+    }
+  ],
+  "all_controls_nonzero": true,
+  "note": "Each control is a temporary copy of the verifier with exactly one perturbation, run for real with its artifact root redirected to a temp directory; all controls must exit nonzero for the verifier to count as fail-closed."
+}

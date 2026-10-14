@@ -1,0 +1,5 @@
+argv: python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D226/rv2/manifest.json
+cwd: /home/alex/sources/nextorm/artifacts/pdca/D226/rv2/../../../..
+result_exit_code: 0
+validated_at_utc: 2026-10-14T15:10:47Z
+validator_script: scripts/validate_inner_loop.py (installed pdca-dotnet validator, unmodified)

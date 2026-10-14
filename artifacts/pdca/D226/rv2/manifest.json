@@ -1,0 +1,323 @@
+{
+  "task": "T226 (#226) — ProcedureResult/BatchResult RecordsAffected (rv2)",
+  "tree": "1.0.9-rc3@ad686d80 + 46 pre-existing dirty entries (r2 snapshot; production bytes unchanged)",
+  "status_file": "docs/specs/status/D226-records-affected-1.md",
+  "contract_rv": 2,
+  "owner": "DO-G1",
+  "plan_revision": "r=2",
+  "required_rows": [
+    "E226-01",
+    "E226-02",
+    "E226-03",
+    "E226-04",
+    "E226-05",
+    "E226-06",
+    "E226-07",
+    "E226-08",
+    "E226-09",
+    "E226-09-BATCH-ROWS",
+    "E226-09-N6"
+  ],
+  "rows": [
+    {
+      "id": "E226-01",
+      "row": "R226-API — exact get-only int on both types + build gate",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "tests/nextorm.core.tests/RecordsAffectedTests.cs",
+          "exit": 0,
+          "note": "RecordsAffected_OnBothResultTypes_IsAGetOnlyInt (refl.: int, no setter)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/build.log",
+          "exit": 0,
+          "note": "dotnet build nextorm.slnx -c Debug: 0 Warning(s) 0 Error(s)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/core-tests.log",
+          "exit": 0,
+          "note": "16 selected / 16 passed / 0 failed / 0 skipped"
+        }
+      ]
+    },
+    {
+      "id": "E226-02",
+      "row": "R226-CAPTURE — sentinel, zero/count, pre/post-close selection, unavailable metadata",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/accepted/E226-02.json",
+          "exit": 0,
+          "note": "inherited rv1 row retained unchanged (accepted-evidence verifier)"
+        },
+        {
+          "kind": "probe",
+          "path": "artifacts/pdca/D226/rv1/release-probe.json",
+          "exit": 0,
+          "note": "D1 real-driver metadata, 31/31 oracle rows"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/core-tests.log",
+          "exit": 0,
+          "note": "sentinel/lifetime assertions re-run in rv2"
+        }
+      ]
+    },
+    {
+      "id": "E226-03",
+      "row": "R226-LIFETIME — sync/async, early/late/repeated release, non-throwing getter, unmasked cleanup errors",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/core-tests.log",
+          "exit": 0,
+          "note": "16/16"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/integration-tests.log",
+          "exit": 0,
+          "note": "27 selected / 27 passed / 0 failed / 0 skipped (postgres+mysql+sqlserver+sqlite)"
+        }
+      ]
+    },
+    {
+      "id": "E226-04",
+      "row": "R226-BATCH — ctor propagation, single/multiple statements, native/fallback, no row/set-count substitution",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/sqlite-tests.log",
+          "exit": 0,
+          "note": "6 selected / 6 passed / 0 failed (incl. the strengthened batch oracle)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/row-count-control.log",
+          "exit": 0,
+          "note": "clean control 1/1 passed"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/batch-integration-control.log",
+          "exit": 0,
+          "note": "4 selected / 4 passed / 0 failed (integration batch side-effect)"
+        }
+      ]
+    },
+    {
+      "id": "E226-05",
+      "row": "R226-PROVIDERS — five-provider matrix incl. ClickHouse product surface",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/integration-tests.log",
+          "exit": 0,
+          "note": "27/27, 0 skipped"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/clickhouse-tests.log",
+          "exit": 0,
+          "note": "5 selected / 5 passed / 0 failed / 0 skipped on the real ClickHouse container"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv1/provider-matrix.json",
+          "note": "five-provider matrix (rv1, byte-identical)"
+        }
+      ]
+    },
+    {
+      "id": "E226-06",
+      "row": "R226-UNSUPPORTED/delta — guards unchanged; production unchanged by r2",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/branch-delta.json",
+          "exit": 0,
+          "note": "production_unchanged=true, branch_delta_empty=true, no file outside the snapshot baseline + allowlist"
+        },
+        {
+          "kind": "file",
+          "path": "artifacts/pdca/D226/rv2/production-before.sha256"
+        },
+        {
+          "kind": "file",
+          "path": "artifacts/pdca/D226/rv2/production-after.sha256"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/accepted/E226-06.json",
+          "exit": 0,
+          "note": "inherited unsupported/in-memory guard row retained"
+        }
+      ]
+    },
+    {
+      "id": "E226-07",
+      "row": "R226-DOC-INVARIANTS — XML docs/guides/CRLF/T53/12 invariants",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/inherited-contract.json",
+          "note": "complete inherited contract, 9 original rows + 2 new variant rows"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv1/invariants.json",
+          "note": "12 invariants with file:line (rv1)"
+        },
+        {
+          "kind": "md",
+          "path": "artifacts/pdca/D226/rv1/doc-review.md",
+          "note": "EN/RU guide parity + CRLF verified (guides owned by the docs stream)"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/accepted/E226-07.json",
+          "exit": 0,
+          "note": "inherited row retained"
+        }
+      ]
+    },
+    {
+      "id": "E226-08",
+      "row": "R226-COVERAGE — >=85/>=75 comparable baseline",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/verify-coverage-final.log",
+          "exit": 0,
+          "note": "final line 88.7% / branch 80.8%"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/baseline/verify.log",
+          "exit": 0,
+          "note": "reconstructed pre-T226 baseline line 88.7% / branch 80.8%"
+        },
+        {
+          "kind": "xml",
+          "path": "artifacts/pdca/D226/rv1/coverage.xml",
+          "note": "cobertura from the CI dotnet-coverage step"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/accepted/E226-08.json",
+          "exit": 0,
+          "note": "inherited row retained"
+        }
+      ]
+    },
+    {
+      "id": "E226-09",
+      "row": "R226-MUTATION — five frozen mutants assertion-killed, clean restore (rv2 evidence; rv1 evidence invalid)",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/mutation-report.json",
+          "exit": 0,
+          "note": "5 frozen mutants killed via the verified classifier; every restore compared byte-identically; guards=[]"
+        },
+        {
+          "kind": "file",
+          "path": "artifacts/pdca/D226/rv2/mutation.exit",
+          "exit": 0,
+          "note": "verifier exit 0"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/mutation.log",
+          "exit": 0,
+          "note": "per-mutant patch hash, before/after sha256, build/test exit codes, killing test, assertion"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/mutation-negative-controls.json",
+          "exit": 0,
+          "note": "N1..N6 all exit 1 for the intended reason; aggregate 0"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/mutation-traceability.json",
+          "note": "obligation → mutant → patch → killing test"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/accepted/E226-09.json",
+          "exit": 1,
+          "note": "rv1 E226-09 recorded as NOT accepted (invalid row-count patch); no blanket reuse"
+        }
+      ]
+    },
+    {
+      "id": "E226-09-BATCH-ROWS",
+      "row": "V226-BATCH-ROWS — the frozen row-count obligation executed literally (two-site returned-row substitution)",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "file",
+          "path": "artifacts/pdca/D226/rv2/mutations/total-to-row-count.patch",
+          "exit": 0,
+          "note": "generated from CURRENT bytes; git apply --check exit 0"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/mutation-report.json",
+          "exit": 0,
+          "note": "mutant total-to-row-count: clean control 1/1 exit 0; mutated exit 2; assertion 'Expected result.RecordsAffected to be 1, but found 3' (expected 1 / actual 3); kill_status=killed; restore_ok=true"
+        },
+        {
+          "kind": "md",
+          "path": "artifacts/pdca/D226/rv2/row-count-scope.md",
+          "note": "scope + explicit limitation (no fabricated procedure counter)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/row-count-control.log",
+          "exit": 0,
+          "note": "clean control 1 selected / 1 passed / 0 failed"
+        }
+      ]
+    },
+    {
+      "id": "E226-09-N6",
+      "row": "V226-INFRA-REJECTION — an infrastructure diagnostic cannot become a kill",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/mutation-negative-controls.json",
+          "exit": 0,
+          "note": "six controls, all_controls_exit_1_intended=true"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv2/negative-controls/N6-infrastructure-failure.evidence.json",
+          "exit": 1,
+          "note": "exit 1, guard_token='infrastructure diagnostic present', outcome=intended"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv2/negative-controls/N6-infrastructure-failure.log",
+          "exit": 1,
+          "note": "assertion failure present AND infrastructure token → rejected, no passing aggregate"
+        }
+      ]
+    }
+  ]
+}

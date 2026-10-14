@@ -1,0 +1,8 @@
+N1_control=no-match-patch exit=1
+N2_control=noop-mutant exit=1
+N3_control=corrupted-restore exit=1
+EXITS: N1=1 N2=1 N3=1
+--- guards seen in N1 ---
+--- guards seen in N2 ---
+--- guards seen in N3 ---
+ALL_NONZERO=yes

@@ -1,0 +1,31 @@
+--- /tmp/nextorm-d226-mut.wUyqf9/owner.orig	2026-10-14 18:53:13.801516166 +0500
++++ /home/alex/sources/nextorm/src/nextorm.core/DataContext/CommandReaderOwner.cs	2026-10-14 18:53:26.606492781 +0500
+@@ -77,7 +77,7 @@
+             return;
+ 
+         _recordsAffectedCaptured = true;
+-        _recordsAffected = ReadRecordsAffected(reader);
++        _recordsAffected = reader.FieldCount;
+     }
+ 
+     private void PublishAfterRelease(DbDataReader reader)
+--- /tmp/nextorm-d226-mut.wUyqf9/runner.orig	2026-10-14 18:53:13.803320389 +0500
++++ /home/alex/sources/nextorm/src/nextorm.core/DataContext/BatchRunner.cs	2026-10-14 18:53:26.621314179 +0500
+@@ -317,7 +317,7 @@
+ 
+         // The driver reports one affected-row total for the whole batch; the reader is still owned by
+         // the caller's using, so this only reads metadata (no release, no ownership change).
+-        return new BatchResult(sets, resultTypes, columnNames, CommandReaderOwner.ReadRecordsAffected(reader));
++        return new BatchResult(sets, resultTypes, columnNames, sets.Count);
+     }
+ 
+     private static async Task<BatchResult> ReadMultipleAsync(DbDataReader reader, BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers, CancellationToken cancellationToken)
+@@ -346,7 +346,7 @@
+         }
+ 
+         // See ReadMultiple: one driver total for the whole batch, read as metadata only.
+-        return new BatchResult(sets, resultTypes, columnNames, CommandReaderOwner.ReadRecordsAffected(reader));
++        return new BatchResult(sets, resultTypes, columnNames, sets.Count);
+     }
+ 
+     private static string[] SnapshotColumns(DbDataReader reader)

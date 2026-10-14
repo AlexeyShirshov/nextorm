@@ -1,0 +1,5 @@
+{"control": "N2-surviving-mutant", "intended_reason": "a behaviour-neutral (comment-only) patch changes bytes without changing behaviour, so nothing fails: the mutant must NOT be counted as killed", "exit_code": 1,
+ "guard_token": "kill condition failed: mutated_exit_nonzero", "outcome": "intended",
+ "artifact_log": "artifacts/pdca/D226/rv2/negative-controls/N2-surviving-mutant.log",
+ "artifact_log_status": "produced",
+ "artifact_exit": "artifacts/pdca/D226/rv2/negative-controls/N2-surviving-mutant.exit"}

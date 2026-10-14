@@ -1,0 +1,21 @@
+== D226 rv2 authoritative seal ledger (r=2, n=2/3) ==
+root_cause: validate-manifest.sh line 20 truncates artifacts/pdca/D226/rv2/validation.log (sole writer, single `>`); the CHECK re-run of that adapter destroyed the appended ledger
+original_ledger_recoverable: False (no file under artifacts/pdca/D226 contains the lost markers, incl. check/** and check2/**)
+ordered steps (argv | exit | started/finished UTC):
+  1. bash artifacts/pdca/D226/rv2/verify-mutations.sh | exit 0 | 2026-10-14T15:07:21Z -> 2026-10-14T15:08:33Z
+  2. bash artifacts/pdca/D226/rv2/verify-mutations-negative.sh | exit 0 | 2026-10-14T15:08:33Z -> 2026-10-14T15:10:46Z
+  3. python3 artifacts/pdca/D226/rv2/verify-provenance.py | exit 0 | 2026-10-14T15:10:46Z -> 2026-10-14T15:10:46Z
+  4. bash artifacts/pdca/D226/rv2/run-evidence.sh audit -- bash artifacts/pdca/D226/rv2/verify-plan-evidence.sh | exit 0 | 2026-10-14T15:10:46Z -> 2026-10-14T15:10:47Z
+  5. bash artifacts/pdca/D226/rv2/validate-manifest.sh | exit 0 | 2026-10-14T15:10:47Z -> 2026-10-14T15:10:47Z
+  6. python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D226/rv2/manifest.json | exit 0 | 2026-10-14T15:10:47Z -> 2026-10-14T15:10:48Z
+  7. python3 scripts/validate_inner_loop.py report artifacts/pdca/D226/rv2/evidence.json | exit 0 | 2026-10-14T15:10:48Z -> 2026-10-14T15:10:48Z
+bound_report: artifacts/pdca/D226/rv2/mutation-report.json
+bound_report_sha256: bc0d0a38103a2f51ad99c6a99da0546f8ec87415a0818c8956c5099d77b720b5
+final-report.sha256 file value: bc0d0a38103a2f51ad99c6a99da0546f8ec87415a0818c8956c5099d77b720b5
+adapter (validate-manifest.sh) own record as present after step 5:
+  argv: python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D226/rv2/manifest.json
+  cwd: /home/alex/sources/nextorm/artifacts/pdca/D226/rv2/../../../..
+  result_exit_code: 0
+  validated_at_utc: 2026-10-14T15:10:47Z
+  validator_script: scripts/validate_inner_loop.py (installed pdca-dotnet validator, unmodified)
+attempt: n=2/3 unchanged (evidence reconciliation only; no new DO revision)

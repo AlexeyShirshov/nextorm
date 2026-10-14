@@ -1,0 +1,51 @@
+{
+  "task": "T226 (#226) rv2 — negative controls for verify-mutations.sh (N1..N6)",
+  "contract_rv": 2,
+  "verifier": "artifacts/pdca/D226/rv2/verify-mutations.sh",
+  "controls": [
+    {
+      "control": "N1-no-match-patch",
+      "intended_reason": "a patch whose needle does not exist must be refused (PATCH_NO_MATCH), never counted as a kill",
+      "exit_code": 1,
+      "guard_token": "PATCH_NO_MATCH",
+      "outcome": "intended"
+    },
+    {
+      "control": "N2-surviving-mutant",
+      "intended_reason": "a behaviour-neutral (comment-only) patch changes bytes without changing behaviour, so nothing fails: the mutant must NOT be counted as killed",
+      "exit_code": 1,
+      "guard_token": "kill condition failed: mutated_exit_nonzero",
+      "outcome": "intended"
+    },
+    {
+      "control": "N3-restore-comparison-failure",
+      "intended_reason": "the restore comparison outcome forced to failure: the guard must fire and the exit must be nonzero",
+      "exit_code": 1,
+      "guard_token": "restore did not compare byte-identically",
+      "outcome": "intended"
+    },
+    {
+      "control": "N4-failing-control",
+      "intended_reason": "the clean control expectation changed from 16 to 99: the control guard must fire",
+      "exit_code": 1,
+      "guard_token": "clean control core-recordsaffected did not pass",
+      "outcome": "intended"
+    },
+    {
+      "control": "N5-invalid-artifact-path",
+      "intended_reason": "the log artifact path pointed at a non-existent directory: the artifact guard must fire",
+      "exit_code": 1,
+      "guard_token": "unexpected exception",
+      "outcome": "intended"
+    },
+    {
+      "control": "N6-infrastructure-failure",
+      "intended_reason": "a genuine assertion-failure record tainted with an infrastructure diagnostic must be classified as infrastructure failure, not as a kill",
+      "exit_code": 1,
+      "guard_token": "infrastructure diagnostic present",
+      "outcome": "intended"
+    }
+  ],
+  "all_controls_exit_1_intended": true,
+  "note": "Each control is an isolated copy of the verifier with REPO pinned, the artifact root redirected to the copy, the mutant list reduced to the first mutant and exactly one perturbation; the aggregate exits 0 only when all six controls exit 1 for the intended reason."
+}

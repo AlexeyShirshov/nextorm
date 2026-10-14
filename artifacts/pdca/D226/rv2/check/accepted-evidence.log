@@ -1,0 +1,10 @@
+E226-01: accepted=True evidence=3 frozen_ok=True
+E226-02: accepted=True evidence=3 frozen_ok=True
+E226-03: accepted=True evidence=2 frozen_ok=True
+E226-04: accepted=True evidence=3 frozen_ok=True
+E226-05: accepted=True evidence=4 frozen_ok=True
+E226-06: accepted=True evidence=3 frozen_ok=True
+E226-07: accepted=True evidence=5 frozen_ok=True
+E226-08: accepted=True evidence=4 frozen_ok=True
+E226-09: accepted=False evidence=6 frozen_ok=True
+accepted_evidence_exit=0

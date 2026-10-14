@@ -1,0 +1,29 @@
+== D226 rv2 mutation verification ==
+repo=/home/alex/sources/nextorm
+work=/tmp/opencode/d226-r2-mut-354g27mf
+before src/nextorm.core/DataContext/CommandReaderOwner.cs sha256=cf030526b1eed51361f51747ba34265eb27c916ae59bf8d6b629fe9d181b1b98
+before src/nextorm.core/DataContext/BatchRunner.cs sha256=9bf200945db90eb60188c270d5d65061980d6160c600dcef0cad05fdf2cc3683
+base build exit=0 ok=true
+control core-recordsaffected: exit=0 total=16 failed=0 ok=true
+control sqlite-rowcount: exit=0 total=1 failed=0 ok=true
+
+== total-to-row-count — replace the total with row-count ==
+mutated sha256={'src/nextorm.core/DataContext/BatchRunner.cs': '65241e38c86c10a228a084e58ddcea2af93aeb021b939bae54c5454156c745c7'} changed=true
+build exit=0
+test exit=2 total=1 failed=1
+  failing_test=NextORM.Sqlite.Tests.BatchMultipleResultTests.Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount
+  assertion=Expected result.RecordsAffected to be 1, but found 3.
+  designated_test_bound=true infra_tokens=['error CS']
+GUARD-FAIL: total-to-row-count: infrastructure diagnostic present ('error CS') — cannot count as a kill
+GUARD-FAIL: total-to-row-count: kill condition failed: no_infrastructure_diagnostic
+  conditions={'control_ok': True, 'mutated_exit_nonzero': True, 'failed_tests_executed': True, 'designated_test_failed': True, 'stack_bound': True, 'assertion_evidence': True, 'no_infrastructure_diagnostic': False}
+  kill_status=unverified
+restore[total-to-row-count] src/nextorm.core/DataContext/CommandReaderOwner.cs byte_identical=true sha256=cf030526b1eed51361f51747ba34265eb27c916ae59bf8d6b629fe9d181b1b98 hash_match=true
+restore[total-to-row-count] src/nextorm.core/DataContext/BatchRunner.cs byte_identical=true sha256=9bf200945db90eb60188c270d5d65061980d6160c600dcef0cad05fdf2cc3683 hash_match=true
+restore[final-cleanup] src/nextorm.core/DataContext/CommandReaderOwner.cs byte_identical=true sha256=cf030526b1eed51361f51747ba34265eb27c916ae59bf8d6b629fe9d181b1b98 hash_match=true
+restore[final-cleanup] src/nextorm.core/DataContext/BatchRunner.cs byte_identical=true sha256=9bf200945db90eb60188c270d5d65061980d6160c600dcef0cad05fdf2cc3683 hash_match=true
+
+final_restore_ok=true
+tree_unchanged=true (diff hash 8fd721efe4c5 -> 8fd721efe4c5)
+== summary ==
+total-to-row-count                           kill=unverified restore_ok=true  test=NextORM.Sqlite.Tests.BatchMultipleResultTests.Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount

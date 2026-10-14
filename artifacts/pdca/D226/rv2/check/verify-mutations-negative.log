@@ -1,0 +1,30 @@
+== D226 rv2 negative controls N1..N6 ==
+date_utc: 2026-10-14T14:33:03Z
+work: /tmp/opencode/d226-r2-negctl.9FRjWO
+
+== control N1-no-match-patch ==
+intended_reason: a patch whose needle does not exist must be refused (PATCH_NO_MATCH), never counted as a kill
+exit=1 token=PATCH_NO_MATCH outcome=intended
+
+== control N2-surviving-mutant ==
+intended_reason: a behaviour-neutral (comment-only) patch changes bytes without changing behaviour, so nothing fails: the mutant must NOT be counted as killed
+exit=1 token=kill condition failed: mutated_exit_nonzero outcome=intended
+
+== control N3-restore-comparison-failure ==
+intended_reason: the restore comparison outcome forced to failure: the guard must fire and the exit must be nonzero
+exit=1 token=restore did not compare byte-identically outcome=intended
+
+== control N4-failing-control ==
+intended_reason: the clean control expectation changed from 16 to 99: the control guard must fire
+exit=1 token=clean control core-recordsaffected did not pass outcome=intended
+
+== control N5-invalid-artifact-path ==
+intended_reason: the log artifact path pointed at a non-existent directory: the artifact guard must fire
+exit=1 token=unexpected exception outcome=intended
+
+== control N6-infrastructure-failure ==
+intended_reason: a genuine assertion-failure record tainted with an infrastructure diagnostic must be classified as infrastructure failure, not as a kill
+exit=1 token=infrastructure diagnostic present outcome=intended
+negative-controls written: /home/alex/sources/nextorm/artifacts/pdca/D226/rv2/mutation-negative-controls.json
+
+controls_fail=0

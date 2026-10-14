@@ -1,0 +1,42 @@
+== in-tree negative controls result ==
+exit=0
+== control N1-no-match-patch ==
+exit=1 token=PATCH_NO_MATCH outcome=intended
+== control N2-surviving-mutant ==
+exit=1 token=kill condition failed: mutated_exit_nonzero outcome=intended
+== control N3-restore-comparison-failure ==
+exit=1 token=restore did not compare byte-identically outcome=intended
+== control N4-failing-control ==
+exit=1 token=clean control core-recordsaffected did not pass outcome=intended
+== control N5-invalid-artifact-path ==
+exit=1 token=unexpected exception outcome=intended
+== control N6-infrastructure-failure ==
+exit=1 token=infrastructure diagnostic present outcome=intended
+controls_fail=0
+== product gate before independent negatives ==
+src/nextorm.core/DataContext/CommandReaderOwner.cs: OK
+src/nextorm.core/DataContext/ProcedureResult.cs: OK
+src/nextorm.core/DataContext/BatchRunner.cs: OK
+src/nextorm.core/Builders/BatchBuilder.cs: OK
+== independent induced negatives ==
+induce_negatives_exit=9
+== product gate before isolated mutant ==
+src/nextorm.core/DataContext/CommandReaderOwner.cs: OK
+src/nextorm.core/DataContext/ProcedureResult.cs: OK
+src/nextorm.core/DataContext/BatchRunner.cs: OK
+src/nextorm.core/Builders/BatchBuilder.cs: OK
+== isolated row-count mutant oracle ==
+isolated_exit=1
+== final product identity + tree diff ==
+src/nextorm.core/DataContext/CommandReaderOwner.cs: OK
+src/nextorm.core/DataContext/ProcedureResult.cs: OK
+src/nextorm.core/DataContext/BatchRunner.cs: OK
+src/nextorm.core/Builders/BatchBuilder.cs: OK
+FINAL_PRODUCT_IDENTICAL=yes
+cf030526b1eed51361f51747ba34265eb27c916ae59bf8d6b629fe9d181b1b98  src/nextorm.core/DataContext/CommandReaderOwner.cs
+a166586f29354b10da216e64eb803d48ff8e2afb4be7eaef6b085fee0b030e8d  src/nextorm.core/DataContext/ProcedureResult.cs
+9bf200945db90eb60188c270d5d65061980d6160c600dcef0cad05fdf2cc3683  src/nextorm.core/DataContext/BatchRunner.cs
+9e5a15b1c715d7a031b53ffbac7ef905f20f96e82f6179535342ea64392aec93  src/nextorm.core/Builders/BatchBuilder.cs
+GIT_STATUS_IDENTICAL=yes
+GIT_DIFFSTAT_IDENTICAL=no
+CHAIN_DONE

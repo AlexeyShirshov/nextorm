@@ -1,0 +1,5 @@
+{"control": "N3-restore-comparison-failure", "intended_reason": "the restore comparison outcome forced to failure: the guard must fire and the exit must be nonzero", "exit_code": 1,
+ "guard_token": "restore did not compare byte-identically", "outcome": "intended",
+ "artifact_log": "artifacts/pdca/D226/rv2/negative-controls/N3-restore-comparison-failure.log",
+ "artifact_log_status": "produced",
+ "artifact_exit": "artifacts/pdca/D226/rv2/negative-controls/N3-restore-comparison-failure.exit"}

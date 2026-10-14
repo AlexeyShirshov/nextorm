@@ -1,0 +1,64 @@
+{
+  "task": "T226 (#226) — traceability: frozen mutation obligation → mutant → patch → killing test",
+  "contract_rv": 1,
+  "frozen_obligation_source": "docs/specs/status/D226-records-affected-1.md:132-135",
+  "verifier": "artifacts/pdca/D226/rv1/verify-mutations.sh",
+  "exit_file": "artifacts/pdca/D226/rv1/mutation.exit",
+  "run_log": "artifacts/pdca/D226/rv1/mutation.log",
+  "rows": [
+    {
+      "frozen_text": "remove capture",
+      "mutant_id": "remove-capture",
+      "patch": "artifacts/pdca/D226/rv1/mutations/remove-capture.patch",
+      "patch_sites": "CommandReaderOwner.cs — the `_recordsAffected` assignment in PublishBeforeRelease and the post-release upgrade in PublishAfterRelease (2 hunks, each matched exactly once)",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal",
+      "assertion": "Expected result.RecordsAffected to be 3, but found -1",
+      "result": "killed"
+    },
+    {
+      "frozen_text": "replace the total with row-count",
+      "mutant_id": "total-to-row-count",
+      "patch": "artifacts/pdca/D226/rv1/mutations/total-to-row-count.patch",
+      "patch_sites": "CommandReaderOwner.cs: the total replaced by `reader.FieldCount` (single-command path); BatchRunner.cs: both `CommandReaderOwner.ReadRecordsAffected(reader)` sites replaced by `sets.Count` (batch path, 2 occurrences)",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.UnavailableMetadata_IsTheSentinel_AndNeverThrows; NextORM.Sqlite.Tests.BatchMultipleResultTests.Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount",
+      "assertion": "Expected result.RecordsAffected to be -1, but found 0 (owner path); the batch path fails the 2-sets-vs-1-affected-row assertion",
+      "result": "killed"
+    },
+    {
+      "frozen_text": "replace the sentinel with 0",
+      "mutant_id": "sentinel-to-0",
+      "patch": "artifacts/pdca/D226/rv1/mutations/sentinel-to-0.patch",
+      "patch_sites": "CommandReaderOwner.cs: the field initializer `= -1`, the `return -1;` of the unavailable-metadata helper and the `afterRelease != -1` comparison (3 hunks)",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.UnavailableMetadata_IsTheSentinel_AndNeverThrows",
+      "assertion": "Expected result.RecordsAffected to be -1, but found 0",
+      "result": "killed"
+    },
+    {
+      "frozen_text": "reset the cache on repeated release",
+      "mutant_id": "reset-on-repeated-release",
+      "patch": "artifacts/pdca/D226/rv1/mutations/reset-on-repeated-release.patch",
+      "patch_sites": "CommandReaderOwner.cs: `_recordsAffected = -1;` injected at the head of Dispose (a repeated release then returns the sentinel because the capture flag is already set)",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.RepeatedReleaseAndGetter_AreIdempotent_AndDoNotThrow",
+      "assertion": "Expected result.RecordsAffected to be 8, but found -1",
+      "result": "killed"
+    },
+    {
+      "frozen_text": "read a disposed reader from the getter",
+      "mutant_id": "disposed-reader-from-getter",
+      "patch": "artifacts/pdca/D226/rv1/mutations/disposed-reader-from-getter.patch",
+      "patch_sites": "CommandReaderOwner.cs: `RecordsAffected` reads the live/disposed reader instead of the cached field",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.UnavailableMetadata_IsTheSentinel_AndNeverThrows",
+      "assertion": "Did not expect any exception, but found System.NullReferenceException",
+      "result": "killed"
+    }
+  ],
+  "extra_mutants": [
+    {"mutant_id": "remove-publish-after-release-closereader", "killing_test": "RecordsAffectedTests.CloseReader_PublishesTheTotal_PreferringThePostReleaseValue", "stryker_survivor_covered": "stryker-remove-publishafterrelease-closereader"},
+    {"mutant_id": "remove-publish-after-release-disposeasync", "killing_test": "RecordsAffectedTests.AsyncRelease_PrefersThePostReleaseValue", "stryker_survivor_covered": "stryker-remove-publishafterrelease-disposeasync"},
+    {"mutant_id": "remove-command-disposeasync", "killing_test": "RecordsAffectedTests.AsyncRelease_DisposesTheCommand", "stryker_survivor_covered": "stryker-remove-command-disposeasync"},
+    {"mutant_id": "wrong-total", "killing_test": "RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal", "stryker_survivor_covered": null},
+    {"mutant_id": "publish-pre-release", "killing_test": "RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal", "stryker_survivor_covered": null}
+  ],
+  "negative_controls": "artifacts/pdca/D226/rv1/mutation-negative-controls.json — all five controls exit nonzero",
+  "restore": "every mutant restores CommandReaderOwner.cs and BatchRunner.cs byte-identically (sha256 before/after in mutation.log); 'Patches applied sequentially backward' is satisfied by applying each hunk through the shared applier and restoring the originals before the next mutant."
+}

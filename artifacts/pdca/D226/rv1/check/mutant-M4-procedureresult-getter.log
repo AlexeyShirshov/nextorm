@@ -1,0 +1,324 @@
+### MUTANT: M4-procedureresult-getter
+### mutator: ProcedureResult: => _owner.RecordsAffected  ->  => -1
+### BUILD: dotnet build tests/nextorm.core.tests -c Debug
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  nextorm.core.sourcegenerator -> /home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/bin/linux/Debug/netstandard2.0/nextorm.core.sourcegenerator.dll
+  nextorm.core -> /home/alex/sources/nextorm/src/nextorm.core/bin/linux/Debug/net10.0/nextorm.core.dll
+  nextorm.postgres -> /home/alex/sources/nextorm/src/nextorm.postgres/bin/linux/Debug/net10.0/nextorm.postgres.dll
+  nextorm.clickhouse -> /home/alex/sources/nextorm/src/nextorm.clickhouse/bin/linux/Debug/net10.0/nextorm.clickhouse.dll
+  nextorm.sqlserver -> /home/alex/sources/nextorm/src/nextorm.sqlserver/bin/linux/Debug/net10.0/nextorm.sqlserver.dll
+  nextorm.core.tests -> /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:03.94
+BUILD_EXIT=0
+### TEST ARGS: -c Debug --no-build --filter FullyQualifiedName~RecordsAffected
+Running tests from /home/alex/sources/nextorm/tests/nextorm.mysql.tests/bin/linux/Debug/net10.0/nextorm.mysql.tests.dll (net10.0|x64)
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+Running tests from /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64)
+Running tests from /home/alex/sources/nextorm/tests/nextorm.entityframeworkcore.tests/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.tests.dll (net10.0|x64)
+Running tests from /home/alex/sources/nextorm/tests/nextorm.publicextensibility.tests/bin/linux/Debug/net10.0/nextorm.publicextensibility.tests.dll (net10.0|x64)
+Running tests from /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll (net10.0|x64)
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+Running tests from /home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64) Zero tests ran (221ms)
+Exit code: 134
+  Error output: Unhandled exception. System.TypeLoadException: Could not load type 'NextORM.Core.Projection`1' from assembly 'nextorm.core, Version=1.0.9.0, Culture=neutral, PublicKeyToken=null'.
+     at System.Reflection.RuntimeAssembly.GetExportedTypes()
+     at Xunit.v3.XunitTestFrameworkDiscoverer.GetExportedTypes() in /_/src/xunit.v3.core/Framework/Reflection/XunitTestFrameworkDiscoverer_reflection.cs:line 159
+     at Xunit.v3.TestFrameworkDiscoverer`1.<>c__DisplayClass10_0.<<Find>b__0>d.MoveNext() in /_/src/xunit.v3.core/Framework/TestFrameworkDiscoverer.cs:line 67
+  --- End of stack trace from previous location ---
+     at System.Threading.Tasks.Task.<>c.<ThrowAsync>b__124_1(Object state)
+     at System.Threading.QueueUserWorkItemCallback.Execute()
+     at System.Threading.ThreadPoolWorkQueue.Dispatch()
+     at System.Threading.PortableThreadPool.WorkerThread.WorkerThreadStart()
+     at System.Threading.Thread.StartCallback()
+/home/alex/sources/nextorm/tests/nextorm.mysql.tests/bin/linux/Debug/net10.0/nextorm.mysql.tests.dll (net10.0|x64) Zero tests ran (254ms)
+Exit code: 134
+  Error output: Unhandled exception. System.TypeLoadException: Could not load type 'NextORM.Core.Projection`1' from assembly 'nextorm.core, Version=1.0.9.0, Culture=neutral, PublicKeyToken=null'.
+     at System.Reflection.RuntimeAssembly.GetExportedTypes()
+     at Xunit.v3.XunitTestFrameworkDiscoverer.GetExportedTypes() in /_/src/xunit.v3.core/Framework/Reflection/XunitTestFrameworkDiscoverer_reflection.cs:line 159
+     at Xunit.v3.TestFrameworkDiscoverer`1.<>c__DisplayClass10_0.<<Find>b__0>d.MoveNext() in /_/src/xunit.v3.core/Framework/TestFrameworkDiscoverer.cs:line 67
+  --- End of stack trace from previous location ---
+     at System.Threading.Tasks.Task.<>c.<ThrowAsync>b__124_1(Object state)
+     at System.Threading.QueueUserWorkItemCallback.Execute()
+     at System.Threading.ThreadPoolWorkQueue.Dispatch()
+     at System.Threading.PortableThreadPool.WorkerThread.WorkerThreadStart()
+     at System.Threading.Thread.StartCallback()
+/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) Zero tests ran (260ms)
+Exit code: 134
+  Error output: Unhandled exception. System.TypeLoadException: Could not load type 'NextORM.Core.Projection`1' from assembly 'nextorm.core, Version=1.0.9.0, Culture=neutral, PublicKeyToken=null'.
+     at System.Reflection.RuntimeAssembly.GetExportedTypes()
+     at Xunit.v3.XunitTestFrameworkDiscoverer.GetExportedTypes() in /_/src/xunit.v3.core/Framework/Reflection/XunitTestFrameworkDiscoverer_reflection.cs:line 159
+     at Xunit.v3.TestFrameworkDiscoverer`1.<>c__DisplayClass10_0.<<Find>b__0>d.MoveNext() in /_/src/xunit.v3.core/Framework/TestFrameworkDiscoverer.cs:line 67
+  --- End of stack trace from previous location ---
+     at System.Threading.Tasks.Task.<>c.<ThrowAsync>b__124_1(Object state)
+     at System.Threading.QueueUserWorkItemCallback.Execute()
+     at System.Threading.ThreadPoolWorkQueue.Dispatch()
+     at System.Threading.PortableThreadPool.WorkerThread.WorkerThreadStart()
+     at System.Threading.Thread.StartCallback()
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) Zero tests ran (195ms)
+Exit code: 134
+  Error output: Unhandled exception. System.TypeLoadException: Could not load type 'NextORM.Core.Projection`1' from assembly 'nextorm.core, Version=1.0.9.0, Culture=neutral, PublicKeyToken=null'.
+     at System.Reflection.RuntimeAssembly.GetExportedTypes()
+     at Xunit.v3.XunitTestFrameworkDiscoverer.GetExportedTypes() in /_/src/xunit.v3.core/Framework/Reflection/XunitTestFrameworkDiscoverer_reflection.cs:line 159
+     at Xunit.v3.TestFrameworkDiscoverer`1.<>c__DisplayClass10_0.<<Find>b__0>d.MoveNext() in /_/src/xunit.v3.core/Framework/TestFrameworkDiscoverer.cs:line 67
+  --- End of stack trace from previous location ---
+     at System.Threading.Tasks.Task.<>c.<ThrowAsync>b__124_1(Object state)
+     at System.Threading.QueueUserWorkItemCallback.Execute()
+     at System.Threading.ThreadPoolWorkQueue.Dispatch()
+     at System.Threading.PortableThreadPool.WorkerThread.WorkerThreadStart()
+     at System.Threading.Thread.StartCallback()
+/home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll (net10.0|x64) Zero tests ran (235ms)
+Exit code: 134
+  Error output: Unhandled exception. System.TypeLoadException: Could not load type 'NextORM.Core.Projection`1' from assembly 'nextorm.core, Version=1.0.9.0, Culture=neutral, PublicKeyToken=null'.
+     at System.Reflection.RuntimeAssembly.GetExportedTypes()
+     at Xunit.v3.XunitTestFrameworkDiscoverer.GetExportedTypes() in /_/src/xunit.v3.core/Framework/Reflection/XunitTestFrameworkDiscoverer_reflection.cs:line 159
+     at Xunit.v3.TestFrameworkDiscoverer`1.<>c__DisplayClass10_0.<<Find>b__0>d.MoveNext() in /_/src/xunit.v3.core/Framework/TestFrameworkDiscoverer.cs:line 67
+  --- End of stack trace from previous location ---
+     at System.Threading.Tasks.Task.<>c.<ThrowAsync>b__124_1(Object state)
+     at System.Threading.QueueUserWorkItemCallback.Execute()
+     at System.Threading.ThreadPoolWorkQueue.Dispatch()
+     at System.Threading.PortableThreadPool.WorkerThread.WorkerThreadStart()
+     at System.Threading.Thread.StartCallback()
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll (net10.0|x64) Zero tests ran (217ms)
+Exit code: 134
+  Error output: Unhandled exception. System.TypeLoadException: Could not load type 'NextORM.Core.Projection`1' from assembly 'nextorm.core, Version=1.0.9.0, Culture=neutral, PublicKeyToken=null'.
+     at System.Reflection.RuntimeAssembly.GetExportedTypes()
+     at Xunit.v3.XunitTestFrameworkDiscoverer.GetExportedTypes() in /_/src/xunit.v3.core/Framework/Reflection/XunitTestFrameworkDiscoverer_reflection.cs:line 159
+     at Xunit.v3.TestFrameworkDiscoverer`1.<>c__DisplayClass10_0.<<Find>b__0>d.MoveNext() in /_/src/xunit.v3.core/Framework/TestFrameworkDiscoverer.cs:line 67
+  --- End of stack trace from previous location ---
+     at System.Threading.Tasks.Task.<>c.<ThrowAsync>b__124_1(Object state)
+     at System.Threading.QueueUserWorkItemCallback.Execute()
+     at System.Threading.ThreadPoolWorkQueue.Dispatch()
+     at System.Threading.PortableThreadPool.WorkerThread.WorkerThreadStart()
+     at System.Threading.Thread.StartCallback()
+/home/alex/sources/nextorm/tests/nextorm.publicextensibility.tests/bin/linux/Debug/net10.0/nextorm.publicextensibility.tests.dll (net10.0|x64) Zero tests ran (359ms)
+Exit code: 8
+/home/alex/sources/nextorm/tests/nextorm.entityframeworkcore.tests/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.tests.dll (net10.0|x64) Zero tests ran (403ms)
+Exit code: 8
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+Running tests from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+Running tests from /home/alex/sources/nextorm/tests/nextorm.clickhouse.extensions.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.extensions.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) Zero tests ran (183ms)
+Exit code: 134
+  Error output: Unhandled exception. System.TypeLoadException: Could not load type 'NextORM.Core.Projection`1' from assembly 'nextorm.core, Version=1.0.9.0, Culture=neutral, PublicKeyToken=null'.
+     at System.Reflection.RuntimeAssembly.GetExportedTypes()
+     at Xunit.v3.XunitTestFrameworkDiscoverer.GetExportedTypes() in /_/src/xunit.v3.core/Framework/Reflection/XunitTestFrameworkDiscoverer_reflection.cs:line 159
+     at Xunit.v3.TestFrameworkDiscoverer`1.<>c__DisplayClass10_0.<<Find>b__0>d.MoveNext() in /_/src/xunit.v3.core/Framework/TestFrameworkDiscoverer.cs:line 67
+  --- End of stack trace from previous location ---
+     at System.Threading.Tasks.Task.<>c.<ThrowAsync>b__124_1(Object state)
+     at System.Threading.QueueUserWorkItemCallback.Execute()
+     at System.Threading.ThreadPoolWorkQueue.Dispatch()
+     at System.Threading.PortableThreadPool.WorkerThread.WorkerThreadStart()
+     at System.Threading.Thread.StartCallback()
+/home/alex/sources/nextorm/tests/nextorm.clickhouse.extensions.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.extensions.tests.dll (net10.0|x64) Zero tests ran (290ms)
+Exit code: 8
+failed NextORM.Core.Tests.RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal (53ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected result.RecordsAffected to be 3, but found -1 (difference of -4).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal() in /home/alex/sources/nextorm/tests/nextorm.core.tests/RecordsAffectedTests.cs:189
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.RecordsAffectedTests.DisposeError_IsNotMasked_AndTheSnapshotSurvives (2ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected result.RecordsAffected to be 3, but found -1 (difference of -4).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.RecordsAffectedTests.DisposeError_IsNotMasked_AndTheSnapshotSurvives() in /home/alex/sources/nextorm/tests/nextorm.core.tests/RecordsAffectedTests.cs:290
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.RecordsAffectedTests.EarlyDisposeWithoutAnyRead_CapturesTheTotal (1ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected result.RecordsAffected to be 9, but found -1 (difference of -10).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.RecordsAffectedTests.EarlyDisposeWithoutAnyRead_CapturesTheTotal() in /home/alex/sources/nextorm/tests/nextorm.core.tests/RecordsAffectedTests.cs:260
+    at lambda_method3(Closure, Object)
+    at Microsoft.Extensions.Internal.ObjectMethodExecutorAwaitable.Awaiter.GetResult() in E:\Source\GitHub\Xunit.DependencyInjection\src\Xunit.DependencyInjection\ObjectMethodExecutor\ObjectMethodExecutorAwaitable.cs:50
+    --- End of stack trace from previous location ---
+failed NextORM.Core.Tests.RecordsAffectedTests.RepeatedReleaseAndGetter_AreIdempotent_AndDoNotThrow (1ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected result.RecordsAffected to be 8, but found -1 (difference of -9).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.RecordsAffectedTests.RepeatedReleaseAndGetter_AreIdempotent_AndDoNotThrow() in /home/alex/sources/nextorm/tests/nextorm.core.tests/RecordsAffectedTests.cs:273
+    at lambda_method3(Closure, Object)
+    at Microsoft.Extensions.Internal.ObjectMethodExecutorAwaitable.Awaiter.GetResult() in E:\Source\GitHub\Xunit.DependencyInjection\src\Xunit.DependencyInjection\ObjectMethodExecutor\ObjectMethodExecutorAwaitable.cs:50
+    --- End of stack trace from previous location ---
+failed NextORM.Core.Tests.RecordsAffectedTests.AsyncRelease_CapturesTheSameTotal (0ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected result.RecordsAffected to be 6, but found -1 (difference of -7).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.RecordsAffectedTests.AsyncRelease_CapturesTheSameTotal() in /home/alex/sources/nextorm/tests/nextorm.core.tests/RecordsAffectedTests.cs:248
+    at lambda_method3(Closure, Object)
+    at Microsoft.Extensions.Internal.ObjectMethodExecutorAwaitable.Awaiter.GetResult() in E:\Source\GitHub\Xunit.DependencyInjection\src\Xunit.DependencyInjection\ObjectMethodExecutor\ObjectMethodExecutorAwaitable.cs:50
+    --- End of stack trace from previous location ---
+failed NextORM.Core.Tests.RecordsAffectedTests.DifferingPreAndPostClose_PrefersThePostReleaseValue (0ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected result.RecordsAffected to be 5, but found -1 (difference of -6).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.RecordsAffectedTests.DifferingPreAndPostClose_PrefersThePostReleaseValue() in /home/alex/sources/nextorm/tests/nextorm.core.tests/RecordsAffectedTests.cs:199
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.RecordsAffectedTests.InvalidOperationOnRead_IsTheSentinel_AndThePostValueStillWins (0ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected result.RecordsAffected to be 7, but found -1 (difference of -8).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.RecordsAffectedTests.InvalidOperationOnRead_IsTheSentinel_AndThePostValueStillWins() in /home/alex/sources/nextorm/tests/nextorm.core.tests/RecordsAffectedTests.cs:329
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Sqlite.Tests.BatchMultipleResultTests.ExecuteAsync_SideEffectBatch_ExposesOneDriverRecordsAffected (310ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected result.RecordsAffected to be 1, but found -1 (difference of -2).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.BatchMultipleResultTests.ExecuteAsync_SideEffectBatch_ExposesOneDriverRecordsAffected() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/BatchMultipleResultTests.cs:554
+    --- End of stack trace from previous location ---
+failed NextORM.Core.Tests.RecordsAffectedTests.CloseReader_PublishesTheTotal_WithoutReleasingTheReaderTwice (1ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected result.RecordsAffected to be 4, but found -1 (difference of -5).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.RecordsAffectedTests.CloseReader_PublishesTheTotal_WithoutReleasingTheReaderTwice() in /home/alex/sources/nextorm/tests/nextorm.core.tests/RecordsAffectedTests.cs:230
+    at lambda_method3(Closure, Object)
+    at Microsoft.Extensions.Internal.ObjectMethodExecutorAwaitable.Awaiter.GetResult() in E:\Source\GitHub\Xunit.DependencyInjection\src\Xunit.DependencyInjection\ObjectMethodExecutor\ObjectMethodExecutorAwaitable.cs:50
+    --- End of stack trace from previous location ---
+failed NextORM.Core.Tests.RecordsAffectedTests.ZeroTotal_IsAPublishedValue_NotTheSentinel (1ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected result.RecordsAffected to be 0, but found -1 (difference of -1).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.RecordsAffectedTests.ZeroTotal_IsAPublishedValue_NotTheSentinel() in /home/alex/sources/nextorm/tests/nextorm.core.tests/RecordsAffectedTests.cs:219
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.RecordsAffectedTests.PostReleaseValueUnavailable_KeepsThePreReleaseValue (0ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected result.RecordsAffected to be 7, but found -1 (difference of -8).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.RecordsAffectedTests.PostReleaseValueUnavailable_KeepsThePreReleaseValue() in /home/alex/sources/nextorm/tests/nextorm.core.tests/RecordsAffectedTests.cs:209
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Sqlite.Tests.BatchMultipleResultTests.Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount (45ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected result.RecordsAffected to be 1, but found -1 (difference of -2).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.BatchMultipleResultTests.Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/BatchMultipleResultTests.cs:531
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) failed with 10 error(s) (987ms)
+Exit code: 2
+  Standard output: dbug: Microsoft.Extensions.Hosting.Internal.Host[1]
+        Hosting starting
+  info: Microsoft.Hosting.Lifetime[0]
+        Application started. Press Ctrl+C to shut down.
+  info: Microsoft.Hosting.Lifetime[0]
+        Hosting environment: Production
+  info: Microsoft.Hosting.Lifetime[0]
+        Content root path: /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[2]
+        Hosting started
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[3]
+        Hosting stopping
+  info: Microsoft.Hosting.Lifetime[0]
+        Application is shutting down...
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[4]
+        Hosting stopped
+/home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64) failed with 2 error(s) (1s 291ms)
+Exit code: 2
+
+Test run summary: Failed!
+  /home/alex/sources/nextorm/tests/nextorm.entityframeworkcore.tests/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.tests.dll (net10.0|x64) Zero tests ran (403ms)
+  /home/alex/sources/nextorm/tests/nextorm.mysql.tests/bin/linux/Debug/net10.0/nextorm.mysql.tests.dll (net10.0|x64) Zero tests ran (254ms)
+  /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) Zero tests ran (183ms)
+  /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll (net10.0|x64) Zero tests ran (235ms)
+  /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64) Zero tests ran (221ms)
+  /home/alex/sources/nextorm/tests/nextorm.publicextensibility.tests/bin/linux/Debug/net10.0/nextorm.publicextensibility.tests.dll (net10.0|x64) Zero tests ran (359ms)
+  /home/alex/sources/nextorm/tests/nextorm.mariadb.tests/bin/linux/Debug/net10.0/nextorm.mariadb.tests.dll (net10.0|x64) Zero tests ran (217ms)
+  /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) Zero tests ran (260ms)
+  /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) failed with 10 error(s) (987ms)
+  /home/alex/sources/nextorm/tests/nextorm.clickhouse.extensions.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.extensions.tests.dll (net10.0|x64) Zero tests ran (290ms)
+  /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64) failed with 2 error(s) (1s 291ms)
+  /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) Zero tests ran (195ms)
+
+  error: 10
+
+  total: 21
+  failed: 12
+  succeeded: 9
+  skipped: 0
+  duration: 2s 097ms
+Test run completed with non-success exit code: 1 (see: https://aka.ms/testingplatform/exitcodes)
+TEST_EXIT=1

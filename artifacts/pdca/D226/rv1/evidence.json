@@ -1,0 +1,396 @@
+{
+  "unit": "T226-records-affected",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.integration.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~RecordsAffected",
+      "FullyQualifiedName~RawCommand",
+      "FullyQualifiedName~RawResultSetTraversal",
+      "FullyQualifiedName~BatchMultipleResult",
+      "FullyQualifiedName~BatchTests",
+      "FullyQualifiedName~StoredProcedure",
+      "FullyQualifiedName~ClickHouseRecordsAffected"
+    ],
+    "files": [
+      "src/nextorm.core/DataContext/CommandReaderOwner.cs",
+      "src/nextorm.core/DataContext/ProcedureResult.cs",
+      "src/nextorm.core/Builders/BatchBuilder.cs",
+      "src/nextorm.core/DataContext/BatchRunner.cs",
+      "tests/nextorm.core.tests/RecordsAffectedTests.cs",
+      "tests/nextorm.integration.tests/ClickHouseRecordsAffectedTests.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "single comprehensive filtered sweep at the DO→CHECK boundary: filtered core+sqlite projects plus filtered nextorm.integration.tests with DOCKER_HOST over the RecordsAffected/Raw/Batch/StoredProcedure/ClickHouseRecordsAffected selectors",
+    "rationale": "closes the CHECK-identified gaps: ClickHouse product surface (E226-05), the changed-branch/mutation obligations (E226-09/branch delta), the coverage-baseline recovery (E226-08) and the invariant/docs evidence seal (E226-07)."
+  },
+  "executions": [
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "nextorm.slnx",
+        "-c",
+        "Debug"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv1",
+      "artifact_revision": "d226-rv1",
+      "exit_code": 0,
+      "selected_count": 1,
+      "note": "boundary build of the final tree; 0 Warning(s) 0 Error(s); artifacts/pdca/D226/rv1/build.log",
+      "log": "artifacts/pdca/D226/rv1/build.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~RawCommand"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv1",
+      "artifact_revision": "d226-rv1",
+      "exit_code": 0,
+      "selected_count": 8,
+      "project": "tests/nextorm.core.tests",
+      "filter": "FullyQualifiedName~RawCommand",
+      "log": "artifacts/pdca/D226/rv1/logs/boundary-core-rawcommand.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~BatchTests"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv1",
+      "artifact_revision": "d226-rv1",
+      "exit_code": 0,
+      "selected_count": 1,
+      "project": "tests/nextorm.core.tests",
+      "filter": "FullyQualifiedName~BatchTests",
+      "log": "artifacts/pdca/D226/rv1/logs/boundary-core-batchtests.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~RecordsAffected"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv1",
+      "artifact_revision": "d226-rv1",
+      "exit_code": 0,
+      "selected_count": 16,
+      "project": "tests/nextorm.core.tests",
+      "filter": "FullyQualifiedName~RecordsAffected",
+      "log": "artifacts/pdca/D226/rv1/logs/boundary-core-recordsaffected.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~RawCommand"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv1",
+      "artifact_revision": "d226-rv1",
+      "exit_code": 0,
+      "selected_count": 48,
+      "project": "tests/nextorm.sqlite.tests",
+      "filter": "FullyQualifiedName~RawCommand",
+      "log": "artifacts/pdca/D226/rv1/logs/boundary-sqlite-rawcommand.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~RawResultSetTraversal"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv1",
+      "artifact_revision": "d226-rv1",
+      "exit_code": 0,
+      "selected_count": 25,
+      "project": "tests/nextorm.sqlite.tests",
+      "filter": "FullyQualifiedName~RawResultSetTraversal",
+      "log": "artifacts/pdca/D226/rv1/logs/boundary-sqlite-rawresultsettraversal.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~BatchMultipleResult"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv1",
+      "artifact_revision": "d226-rv1",
+      "exit_code": 0,
+      "selected_count": 21,
+      "project": "tests/nextorm.sqlite.tests",
+      "filter": "FullyQualifiedName~BatchMultipleResult",
+      "log": "artifacts/pdca/D226/rv1/logs/boundary-sqlite-batchmultipleresult.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~RecordsAffected"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv1",
+      "artifact_revision": "d226-rv1",
+      "exit_code": 0,
+      "selected_count": 27,
+      "project": "tests/nextorm.integration.tests",
+      "filter": "FullyQualifiedName~RecordsAffected",
+      "log": "artifacts/pdca/D226/rv1/logs/boundary-integration-recordsaffected.log",
+      "env": {
+        "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+      },
+      "providers_run": [
+        "postgres",
+        "mysql",
+        "sqlserver",
+        "sqlite"
+      ],
+      "providers_skipped": [],
+      "note": "27 = the 5 shared cases x 4 provider suites + 2 provider-specific procedure cases + the 5 ClickHouseRecordsAffectedTests cases (the class name matches the RecordsAffected selector)"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~StoredProcedure"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv1",
+      "artifact_revision": "d226-rv1",
+      "exit_code": 0,
+      "selected_count": 1,
+      "project": "tests/nextorm.integration.tests",
+      "filter": "FullyQualifiedName~StoredProcedure",
+      "log": "artifacts/pdca/D226/rv1/logs/boundary-integration-storedprocedure.log",
+      "env": {
+        "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+      },
+      "providers_run": [
+        "sqlite"
+      ],
+      "providers_skipped": []
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~ClickHouseRecordsAffected"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv1",
+      "artifact_revision": "d226-rv1",
+      "exit_code": 0,
+      "selected_count": 5,
+      "project": "tests/nextorm.integration.tests",
+      "filter": "FullyQualifiedName~ClickHouseRecordsAffected",
+      "log": "artifacts/pdca/D226/rv1/logs/boundary-integration-clickhouserecordsaffected.log",
+      "env": {
+        "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+      },
+      "providers_run": [
+        "clickhouse"
+      ],
+      "providers_skipped": [],
+      "note": "corrective DO n=2/3 — the ClickHouse product-surface cases are executed against the real container, 0 skipped"
+    },
+    {
+      "command": [
+        "dotnet",
+        "tool",
+        "run",
+        "dotnet-coverage",
+        "collect",
+        "-s",
+        "coverage.settings.xml",
+        "-f",
+        "cobertura",
+        "-o",
+        "artifacts/pdca/D226/rv1/coverage.xml",
+        "dotnet test --no-build --verbosity normal"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv1",
+      "artifact_revision": "d226-rv1",
+      "exit_code": 0,
+      "selected_count": 11888,
+      "env": {
+        "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+      },
+      "note": "CI coverage step (.github/workflows/dotnet.yml:45); 11888 total / 2 failed (ClickHouseExtremeRowNativeSpecificTests HttpClient timeouts under full parallel load; re-run of that class alone: 35/35 green) / 11687 succeeded / 199 capability skips; verify-coverage.sh exit 0 → line 88.7% branch 80.8%",
+      "log": "artifacts/pdca/D226/rv1/logs/coverage.log",
+      "report": "artifacts/pdca/D226/rv1/coverage-report/Summary.txt"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor"
+      ],
+      "phase": "boundary",
+      "source_revision": "d226-rv1",
+      "artifact_revision": "d226-rv1",
+      "exit_code": 0,
+      "selected_count": 3904,
+      "env": {
+        "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+      },
+      "note": "full container integration suite: Total 3904, Errors 0, Failed 0, Skipped 198 (all capability-reason), Not Run 0; PostgreSQL/MySQL/SQL Server/ClickHouse/SQLite containers started and stopped in-run",
+      "log": "artifacts/pdca/D226/rv1/integration.log"
+    }
+  ],
+  "inner_loop_runs": [
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "nextorm.slnx",
+        "-c",
+        "Debug"
+      ],
+      "exit_code": 0,
+      "note": "affected build; 0 Warning(s) 0 Error(s)"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~RecordsAffected"
+      ],
+      "exit_code": 0,
+      "selected_count": 15,
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0,
+      "log": "artifacts/pdca/D226/rv1/logs/inner-core-recordsaffected.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~RawCommandTests|FullyQualifiedName~RawResultSetTraversalTests|FullyQualifiedName~BatchMultipleResultTests"
+      ],
+      "exit_code": 0,
+      "selected_count": 94,
+      "passed": 94,
+      "failed": 0,
+      "skipped": 0,
+      "note": "compound filter, deliberately outside the frozen single-selector list; superseded at the boundary by the three single-selector sqlite runs"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~ClickHouseExtremeRowNativeSpecificTests"
+      ],
+      "exit_code": 0,
+      "selected_count": 35,
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0,
+      "note": "environmental re-check of the two ClickHouse timeout failures seen in the parallel coverage run",
+      "log": "artifacts/pdca/D226/rv1/logs/recheck-clickhouse-extreme.log"
+    }
+  ],
+  "note_inner_excluded": "inner-loop executions were removed from `executions` because validate_inner_loop.py rejects `dotnet build <solution>` in the inner phase; the boundary build below is the build every --no-build boundary run used.",
+  "coverage_baseline": {
+    "missed_pre_edit_capture": true,
+    "reconstruction": "T226-touched files restored from HEAD (git show HEAD:<path>) into /tmp/nextorm-d226-baseline, preserving the unrelated dirty state; the two files absent at HEAD were removed; the same CI coverage command ran in the snapshot",
+    "baseline_log": "artifacts/pdca/D226/rv1/baseline/baseline-coverage.log",
+    "baseline_xml": "artifacts/pdca/D226/rv1/baseline/coverage.cobertura.xml",
+    "baseline_verify_log": "artifacts/pdca/D226/rv1/baseline/verify.log",
+    "baseline_line_percent": 88.7,
+    "baseline_branch_percent": 80.8,
+    "baseline_exit_code": 0,
+    "final_line_percent": 88.7,
+    "final_branch_percent": 80.8,
+    "final_verify_exit_code": 0,
+    "note": "the baseline run had one pre-existing order-dependent core.tests failure (ParamRefreshRecipeTests.HasSupportedShape_ShouldRejectArrayJoin) unrelated to RecordsAffected"
+  },
+  "amendments": [
+    {
+      "reason": "CHECK-mandated scope amendment for the corrective DO n=2/3: the ClickHouse product-surface test file and its selector were added to close E226-05; validated with `python3 scripts/validate_inner_loop.py brief /tmp/nextorm-d226-scope2.json` (exit 0) BEFORE the ClickHouse run.",
+      "added_selectors": [
+        "FullyQualifiedName~ClickHouseRecordsAffected"
+      ],
+      "validated_before_run": true
+    }
+  ]
+}

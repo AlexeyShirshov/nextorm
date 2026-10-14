@@ -1,0 +1,49 @@
+{
+  "row": "E226-07",
+  "inherited_from": "rv1",
+  "rv1_status": "met",
+  "rv1_requirement": "R226-DOC-INVARIANTS — four docs pages/XML, CRLF, T53 registration, scope, all 12 invariants",
+  "acceptance": {
+    "accepted": true,
+    "reason": "inherited rv1 row retained unchanged"
+  },
+  "evidence": [
+    {
+      "kind": "json",
+      "path": "artifacts/pdca/D226/rv1/invariants.json",
+      "exists": true,
+      "exit": null,
+      "note": "12 invariants individually evidenced with file:line"
+    },
+    {
+      "kind": "md",
+      "path": "artifacts/pdca/D226/rv1/doc-review.md",
+      "exists": true,
+      "exit": null,
+      "note": "XML docs present; EN/RU guide parity (3/3, 2/2) and CRLF verified; no docs/specs links; guides owned by the docs stream and not edited here"
+    },
+    {
+      "kind": "json",
+      "path": "artifacts/pdca/D226/rv1/test-map.json",
+      "exists": true,
+      "exit": null,
+      "note": "16 variant-matrix rows → test → file:line, 0 unresolved"
+    },
+    {
+      "kind": "script",
+      "path": "artifacts/pdca/D226/rv1/verify-plan-evidence.sh",
+      "exists": true,
+      "exit": null,
+      "note": "audit: named slots, parity, scoped CRLF, T53 registration"
+    },
+    {
+      "kind": "status",
+      "path": "docs/specs/status/D226-records-affected-1.md",
+      "exists": true,
+      "exit": null,
+      "note": "T53 freeze candidates registered (2 members, tag #226)"
+    }
+  ],
+  "rv1_frozen_verified": true,
+  "verifier": "artifacts/pdca/D226/rv2/verify-accepted-evidence.py"
+}

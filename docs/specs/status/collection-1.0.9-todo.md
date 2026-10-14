@@ -49,13 +49,13 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T217 | #217 | G1 | 11 | done-with-caveat | done (r=5, rv=5) — R217-01..07 met, R217-08 → follow-up #234; product `94782852` | pdca-dotnet | N=1 | r=5 | 4108dc6e | docs/specs/status/D217-datetimeoffset-1.md |
 | T218 | #218 | G1 | 12 | done-with-caveat | done (r=1) — E07/E08/E10 → #235; product `22b96233` | pdca-dotnet | N=1 | r=1 | 60d881b4 | docs/specs/status/D218-sqlserver-sequences-1.md |
 | T219 | #219 | G1 | 13 | done | done (r=1, rv=1, n=1/3) — CHECK PASS r=1/rv=1; E219-01..09 all met; product `b5f8b360` | pdca-dotnet | N=1 | r=1 | 4bfa5403 | docs/specs/status/D219-session-identity-functions-1.md |
-| T226 | #226 | G1 | 14 | pending | ready | pdca-dotnet | N=1 | r=1 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
+| T226 | #226 | G1 | 14 | done | done (r=2, rv=2, n=2/3) — CHECK PASS; 11/11 rows met | pdca-dotnet | N=1 | r=2 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
 | T224 | #224 | G1 | 15 | pending | ready | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
 | T225 | #225 | G1 | 16 | pending | ready | pdca-dotnet | N=1 | r=2 | 63bdb84f | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
 | T201 | #201 | G1 | 17 (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
 | T53  | #53  | G1 | 18 (held) | held | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
 
-- Evidence contract (per task, frozen at that task's DO→CHECK): T209 rv=2 (done), T211 rv=2, T213 rv=5 (done), T216 rv=2, others rv=1. Manifests `artifacts/pdca/<task>/rv*/manifest.json`.
+- Evidence contract (per task, frozen at that task's DO→CHECK): T209 rv=2 (done), T211 rv=2, T213 rv=5 (done), T216 rv=2, T226 rv=2 (done, 11/11 rows met), others rv=1. Manifests `artifacts/pdca/<task>/rv*/manifest.json`.
 - T221 (#221) done: CHECK PASS r=1/rv=1/n=2/3; DO `f884c52b`, corrective DO `4b49b063`, ACT `9cb2e14f`. Evidence `artifacts/pdca/D221/rv1/manifest.json` (E221-01..09 met; build 0/0; UN 46/46, Q 10/10, QN 9/9, integration 21/21 on five providers, 0 skipped; Stryker 76/68 killed/8 survived, 0 NoCoverage), `coverage-delta.md`, `mutation-disposition.md`, `ownership-evidence.md`; status `docs/specs/status/D221-interceptor-di-registration-1.md`. Issue #221 closed. T53 freeze stays HELD.
 - T211 history: r1 exhausted (3/3 CHECK fails; EV-11 exit-code capture gap, no product defect); owner-directed re-open → r=2 with a real exit-code capture wrapper; retained commits `e98ae60e`, `5bd3028f`, `15c6253f` (not reverted). r3/r4 evidence remediation closed EV-11 (canonical+restart real exits); CHECK PASS r=4/rv=4 (21/21 met, 0 open); evidence `artifacts/pdca/D211-eager-perparent-topn-1/rv4/`.
 - T213 history: r=1 → r=6 (5 escalations). r=4 direction D narrowed scope (scalar M:N + composite keys stay; composite-junction M:N → #223); r=5 removed the broken D03 mixed-projection widening and handed off AC07 docs → #225; r=6 evidence recovery (keyless-parent proof + controlled coverage collect). CHECK PASS r=6/rv5. Closure: `T213 done partial: narrowed contract, AC03/AC05 → #223, AC07 → #225, both in milestone 1.0.9.` Evidence `artifacts/pdca/T213/rv5/manifest.json` (32/32 met/no-open, validators exit 0). Issue #213 kept OPEN (remaining slices #223/#225).
@@ -101,7 +101,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Blocker: **none** — lane G1 moved on; **T219 (#219) done** (CHECK PASS r=1/rv=1/n=1/3; no fail-stop, no escalation). (Prior history: T218 CHECK/escalate in-cycle STOP → owner accepted `done-with-caveat`, E07/E08/E10 → #235; earlier T217 terminal `incomplete` `D217-EVIDENCE-BINDING` → owner accepted `done-with-caveat` → #234.)
 - Defect id / history: `D217-EVIDENCE-BINDING` — r=2/n=3 → r=3/n=1 → r=4/n=1 → r=5/n=1, each a CHECK FAIL at the evidence gate (evidence-only regeneration / hash replacement); terminal `incomplete`.
 - Corrective-task status file: — (none created; the remedy is an **outside-T217** proposal, a human decision)
-- Next allowed step: resume lane G1 with **T226 (#226) DO (r=1)** → T224 → T225 → T201 → T53 (held). **T219 done** (CHECK PASS r=1/rv=1/n=1/3; no fail-stop, issue left OPEN with deferred triggers). Owner accepted T218 as `done-with-caveat` (E07/E08/E10 → **#235**); fail-stop G1 lifted. T217 accepted done-with-caveat (evidence-provenance → **#234**). T216's R-03/MariaDB constraint stays recorded (#216 OPEN).
+- Next allowed step: resume lane G1 with **T224 (#224) DO** → T225 → T201 → T53 (held). **T226 (#226) done** (r=2, rv=2, n=2/3, CHECK PASS, 11/11 rows met; issue #226 left OPEN — closure owned by the collection owner). **T219 done** (CHECK PASS r=1/rv=1/n=1/3; no fail-stop, issue left OPEN with deferred triggers). Owner accepted T218 as `done-with-caveat` (E07/E08/E10 → **#235**); fail-stop G1 lifted. T217 accepted done-with-caveat (evidence-provenance → **#234**). T216's R-03/MariaDB constraint stays recorded (#216 OPEN).
 
 ## Done / Verified / Incomplete
 
@@ -127,3 +127,10 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Original input 6 tasks, G1 order `T209 → T211 → T212 → T213 → T53`; superseded by the amended order + expansion.
 - T201 was `gap → excluded-gap` (`9bf13403`); superseded by the approved design rev 2 and r=2 plan (`bd4af157`).
 - ALL-barrier previously passed on the original 6-task set; re-opened by the expansion, now re-passed.
+
+
+## T226 (#226) — Done / Verified (appended)
+
+- Lane update: **T226 done** (revision r=2, evidence contract rv=2, iteration n=2/3, CHECK PASS, 11/11 required rows met incl. E226-09-BATCH-ROWS and E226-09-N6); the G1 lane row is annotated accordingly and **G1 itself stays `in-progress`** (next task **T224**). The collection is NOT done and G1 is NOT done.
+- Done: T226 (#226) — `ProcedureResult.RecordsAffected` / `BatchResult.RecordsAffected` captured at reader release and exposed get-only; literal returned-row mutation obligation satisfied; fail-closed mutation verifier with six negative controls; provenance erratum; T53 freeze stays HELD with both members registered (tag `#226`).
+- Verified: T226 (#226) — manifest 11/11 `met` (validator exit 0), evidence report validator exit 0, audit `audit_miss=0`, seven-step seal ledger exit 0 each (`artifacts/pdca/D226/rv2/validation-ledger.{log,json}`), bound report sha256 `bc0d0a38103a2f51ad99c6a99da0546f8ec87415a0818c8956c5099d77b720b5`, coverage line 88.7 % / branch 80.8 %, five providers executed with 0 skips (ClickHouse 5/5), rv1 `sha256sum -c rv1-frozen.sha256` exit 0 (48/48), production bytes unchanged (`cf030526…`, `a166586f…`, `9e5a15b1…`, `9bf20094…`).

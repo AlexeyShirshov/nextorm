@@ -1,0 +1,11 @@
+--- /tmp/nextorm-d226-mut.wUyqf9/owner.orig	2026-10-14 18:53:13.801516166 +0500
++++ /home/alex/sources/nextorm/src/nextorm.core/DataContext/CommandReaderOwner.cs	2026-10-14 18:54:12.212099093 +0500
+@@ -59,7 +59,7 @@
+     {
+         try
+         {
+-            return reader.RecordsAffected;
++            var reported = reader.RecordsAffected; return reported == -1 ? -1 : reported + 1;
+         }
+         catch (Exception exception) when (exception is NotSupportedException or InvalidOperationException or ObjectDisposedException)
+         {

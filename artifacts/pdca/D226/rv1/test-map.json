@@ -1,0 +1,227 @@
+{
+  "task": "T226 (#226) \u2014 variant matrix \u2192 test \u2192 location",
+  "contract_rv": 1,
+  "rows": [
+    {
+      "variant": "P=ProcedureResult raw \u2014 parameterless/single statement, sync",
+      "cases": [
+        {
+          "test": "ExecuteRaw_Dml_ShouldExposeTheDriverRecordsAffectedAfterRelease",
+          "location": "tests/nextorm.integration.tests/CommonTestSuite.Raw.cs:365"
+        },
+        {
+          "test": "Dml_RecordsAffected_IsSentinelUntilRelease_ThenTheDriverTotal",
+          "location": "tests/nextorm.sqlite.tests/RawCommandTests.cs:1097"
+        }
+      ]
+    },
+    {
+      "variant": "P raw \u2014 async release",
+      "cases": [
+        {
+          "test": "ExecuteRawAsync_Dml_ShouldExposeTheDriverRecordsAffectedAfterAsyncRelease",
+          "location": "tests/nextorm.integration.tests/CommonTestSuite.Raw.cs:393"
+        },
+        {
+          "test": "DmlAsync_RecordsAffected_IsCapturedByAsyncRelease",
+          "location": "tests/nextorm.sqlite.tests/RawCommandTests.cs:1121"
+        }
+      ]
+    },
+    {
+      "variant": "P raw \u2014 query (inapplicable metadata, sentinel)",
+      "cases": [
+        {
+          "test": "ExecuteRaw_Query_ShouldKeepTheRecordsAffectedSentinel",
+          "location": "tests/nextorm.integration.tests/CommonTestSuite.Raw.cs:426"
+        },
+        {
+          "test": "Query_RecordsAffected_KeepsTheSentinelAfterRelease",
+          "location": "tests/nextorm.sqlite.tests/RawCommandTests.cs:1165"
+        }
+      ]
+    },
+    {
+      "variant": "P raw \u2014 OutputParameters/CloseReader release path",
+      "cases": [
+        {
+          "test": "Dml_RecordsAffected_IsCapturedWhenOutputParametersCloseTheReader",
+          "location": "tests/nextorm.sqlite.tests/RawCommandTests.cs:1145"
+        }
+      ]
+    },
+    {
+      "variant": "P procedure \u2014 DML procedure (SQL Server)",
+      "cases": [
+        {
+          "test": "ExecuteProcedure_Dml_ShouldExposeTheDriverRecordsAffectedAfterRelease",
+          "location": "tests/nextorm.integration.tests/SqlServerSpecificTests.cs:759"
+        }
+      ]
+    },
+    {
+      "variant": "P procedure \u2014 DML procedure (PostgreSQL: driver exposes no CALL total)",
+      "cases": [
+        {
+          "test": "ExecuteProcedure_Dml_ShouldKeepTheRecordsAffectedSentinel",
+          "location": "tests/nextorm.integration.tests/PostgresSpecificTests.cs:2137"
+        }
+      ]
+    },
+    {
+      "variant": "B=BatchResult \u2014 single side-effect + multiple result sets, sync",
+      "cases": [
+        {
+          "test": "Batch_SideEffect_ShouldExposeOneDriverRecordsAffected_NotTheResultSetCount",
+          "location": "tests/nextorm.integration.tests/CommonTestSuite.BatchMultipleResults.cs:83"
+        },
+        {
+          "test": "Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount",
+          "location": "tests/nextorm.sqlite.tests/BatchMultipleResultTests.cs:518"
+        }
+      ]
+    },
+    {
+      "variant": "B \u2014 async",
+      "cases": [
+        {
+          "test": "Batch_SideEffectAsync_ShouldExposeOneDriverRecordsAffected",
+          "location": "tests/nextorm.integration.tests/CommonTestSuite.BatchMultipleResults.cs:111"
+        },
+        {
+          "test": "ExecuteAsync_SideEffectBatch_ExposesOneDriverRecordsAffected",
+          "location": "tests/nextorm.sqlite.tests/BatchMultipleResultTests.cs:544"
+        }
+      ]
+    },
+    {
+      "variant": "L=full read / partial read / early Dispose / repeated release",
+      "cases": [
+        {
+          "test": "EarlyDisposeWithoutAnyRead_CapturesTheTotal",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:304"
+        },
+        {
+          "test": "RepeatedReleaseAndGetter_AreIdempotent_AndDoNotThrow",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:316"
+        },
+        {
+          "test": "BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:227"
+        }
+      ]
+    },
+    {
+      "variant": "Metadata -1 / 0 / N and unavailable getter",
+      "cases": [
+        {
+          "test": "PostReleaseValueUnavailable_KeepsThePreReleaseValue",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:249"
+        },
+        {
+          "test": "ZeroTotal_IsAPublishedValue_NotTheSentinel",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:259"
+        },
+        {
+          "test": "UnavailableMetadata_IsTheSentinel_AndNeverThrows",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:374"
+        },
+        {
+          "test": "InvalidOperationOnRead_IsTheSentinel_AndThePostValueStillWins",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:388"
+        }
+      ]
+    },
+    {
+      "variant": "Differing pre-/post-release total",
+      "cases": [
+        {
+          "test": "DifferingPreAndPostClose_PrefersThePostReleaseValue",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:239"
+        },
+        {
+          "test": "CloseReader_PublishesTheTotal_PreferringThePostReleaseValue",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:269"
+        },
+        {
+          "test": "AsyncRelease_PrefersThePostReleaseValue",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:294"
+        }
+      ]
+    },
+    {
+      "variant": "Unreachable/sentinel-negative: no setter, no row/set count substitution, value survives projections",
+      "cases": [
+        {
+          "test": "RecordsAffected_OnBothResultTypes_IsAGetOnlyInt",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:193"
+        },
+        {
+          "test": "BatchResult_ExposesTheConstructorTotal_NotTheResultSetCount",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:207"
+        },
+        {
+          "test": "BatchResult_SentinelIsPreserved",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:217"
+        }
+      ]
+    },
+    {
+      "variant": "Batch ownership/cleanup: removal of the command disposal and of the post-release upgrade",
+      "cases": [
+        {
+          "test": "AsyncRelease_DisposesTheCommand",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:357"
+        },
+        {
+          "test": "DisposeError_IsNotMasked_AndTheSnapshotSurvives",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:334"
+        },
+        {
+          "test": "AsyncDisposeError_IsNotMasked",
+          "location": "tests/nextorm.core.tests/RecordsAffectedTests.cs:346"
+        }
+      ]
+    },
+    {
+      "variant": "ClickHouse supported surface: insert sync/async, query",
+      "cases": [
+        {
+          "test": "ExecuteRaw_Insert_ShouldKeepTheSentinelUntilRelease_ThenTheDriverValue",
+          "location": "tests/nextorm.integration.tests/ClickHouseRecordsAffectedTests.cs:49"
+        },
+        {
+          "test": "ExecuteRawAsync_Insert_ShouldKeepTheSentinelUntilRelease_ThenTheDriverValue",
+          "location": "tests/nextorm.integration.tests/ClickHouseRecordsAffectedTests.cs:66"
+        },
+        {
+          "test": "ExecuteRaw_Query_ShouldKeepTheSentinelUntilRelease_ThenTheDriverValue",
+          "location": "tests/nextorm.integration.tests/ClickHouseRecordsAffectedTests.cs:84"
+        }
+      ]
+    },
+    {
+      "variant": "Unavailable states / unsupported guards: ClickHouse batch + procedure, in-memory raw/batch/procedure, SQLite procedure",
+      "cases": [
+        {
+          "test": "Batch_ShouldFailClosedWhenTheBatchRenders",
+          "location": "tests/nextorm.integration.tests/ClickHouseRecordsAffectedTests.cs:104"
+        },
+        {
+          "test": "ExecuteProcedure_ShouldThrowNotSupported",
+          "location": "tests/nextorm.integration.tests/ClickHouseRecordsAffectedTests.cs:122"
+        }
+      ]
+    },
+    {
+      "variant": "SQLite traversal + command-level DML total",
+      "cases": [
+        {
+          "test": "ReadSets_DmlAmongSets_ExposesOneDriverTotalAfterDispose",
+          "location": "tests/nextorm.sqlite.tests/RawResultSetTraversalTests.cs:673"
+        }
+      ]
+    }
+  ],
+  "unresolved": []
+}

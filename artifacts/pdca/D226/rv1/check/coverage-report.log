@@ -1,0 +1,10 @@
+2026-10-14T17:34:55: Arguments
+2026-10-14T17:34:55:  -reports:artifacts/pdca/D226/rv1/check/coverage/coverage.cobertura.xml
+2026-10-14T17:34:55:  -targetdir:artifacts/pdca/D226/rv1/check/coverage-report
+2026-10-14T17:34:55:  -reporttypes:Html;TextSummary;Cobertura
+2026-10-14T17:34:55:  -riskhotspotassemblyfilters:+nextorm.*
+2026-10-14T17:34:58: Writing report file 'artifacts/pdca/D226/rv1/check/coverage-report/Cobertura.xml'
+2026-10-14T17:34:58: Writing report file 'artifacts/pdca/D226/rv1/check/coverage-report/index.html'
+2026-10-14T17:34:58: Writing report file 'artifacts/pdca/D226/rv1/check/coverage-report/Summary.txt'
+2026-10-14T17:34:58: Report generation took 3.8 seconds
+REPORT_EXIT=0

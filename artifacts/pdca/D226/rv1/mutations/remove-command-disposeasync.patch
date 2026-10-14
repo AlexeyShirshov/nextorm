@@ -1,0 +1,11 @@
+--- /tmp/nextorm-d226-mut.wUyqf9/owner.orig	2026-10-14 18:53:13.801516166 +0500
++++ /home/alex/sources/nextorm/src/nextorm.core/DataContext/CommandReaderOwner.cs	2026-10-14 18:54:06.336553013 +0500
+@@ -138,7 +138,6 @@
+ 
+         var command = _command;
+         _command = null;
+-        if (command is not null)
+-            await command.DisposeAsync().ConfigureAwait(false);
++        _ = command;
+     }
+ }

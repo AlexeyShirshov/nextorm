@@ -1,0 +1,19 @@
+{
+  "task": "T226 (#226) rv2 — provenance-block determinism",
+  "contract_rv": 2,
+  "generator": "artifacts/pdca/D226/rv2/mutation-runner.py (build_provenance)",
+  "run1": {
+    "provenance_sha256": "9ef7a2061d023309ae73c67fed707d5f634f4277f341dca7dab9dab02baba822",
+    "report_sha256": "bc0d0a38103a2f51ad99c6a99da0546f8ec87415a0818c8956c5099d77b720b5",
+    "exit": 0
+  },
+  "run2": {
+    "provenance_sha256": "9ef7a2061d023309ae73c67fed707d5f634f4277f341dca7dab9dab02baba822",
+    "report_sha256": "bc0d0a38103a2f51ad99c6a99da0546f8ec87415a0818c8956c5099d77b720b5",
+    "exit": 0
+  },
+  "provenance_byte_identical": true,
+  "report_byte_identical": true,
+  "checked_at_utc": "2026-10-14T14:54:38Z",
+  "note": "the provenance block is emitted by the generator itself (not appended), so a regenerated report always carries it; both runs produced identical bytes."
+}

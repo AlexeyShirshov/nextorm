@@ -1,0 +1,116 @@
+== D226 mutation evidence (final attempt n=3/3) ==
+date_utc: 2026-10-14T13:53:13Z
+repo: /home/alex/sources/nextorm
+expect: owner=cf030526b1eed51361f51747ba34265eb27c916ae59bf8d6b629fe9d181b1b98 runner=9bf200945db90eb60188c270d5d65061980d6160c600dcef0cad05fdf2cc3683 tree=8822d0ad091178db3517328f1af3aa818ebe8046647fbc22e7d900eb129052ce
+pre_run_dirty_entries_for_mutant_files: 2 (expected 2)
+
+== base build ==
+    0 Warning(s)
+    0 Error(s)
+
+== controls (unmutated tree) ==
+control_core: exit=0 total:16failed:0succeeded:16skipped:0
+control_sqlite: exit=0 total:21failed:0succeeded:21skipped:0
+
+== remove-capture — remove the capture at the release points ==
+frozen_phrase: remove capture
+replacements=2
+run: tests/nextorm.core.tests filter=FullyQualifiedName~RecordsAffected exit=2 counts=total:16failed:11succeeded:5skipped:0
+  killing_test=NextORM.Core.Tests.RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal
+  assertion=Expected result.RecordsAffected to be 3, but found -1 (difference of -4).
+  killed=yes restored=yes
+
+== total-to-row-count — the total substituted by a count (owner FieldCount + batch result-set count) ==
+frozen_phrase: replace the total with row-count
+replacements=1
+replacements=2
+run: tests/nextorm.core.tests filter=FullyQualifiedName~RecordsAffected exit=2 counts=total:16failed:3succeeded:13skipped:0
+  killing_test=NextORM.Core.Tests.RecordsAffectedTests.UnavailableMetadata_IsTheSentinel_AndNeverThrows
+  assertion=Expected result.RecordsAffected to be -1, but found 0 (difference of 1).
+run: tests/nextorm.sqlite.tests filter=FullyQualifiedName~BatchMultipleResult exit=2 counts=total:21failed:1succeeded:20skipped:0
+  killing_test=NextORM.Sqlite.Tests.BatchMultipleResultTests.Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount
+  assertion=Expected result.RecordsAffected to be 1, but found 2.
+  killed=yes restored=yes
+
+== sentinel-to-0 — the sentinel -1 replaced by 0 everywhere it is initialized, compared or returned ==
+frozen_phrase: replace the sentinel with 0
+replacements=3
+run: tests/nextorm.core.tests filter=FullyQualifiedName~RecordsAffected exit=2 counts=total:16failed:3succeeded:13skipped:0
+  killing_test=NextORM.Core.Tests.RecordsAffectedTests.UnavailableMetadata_IsTheSentinel_AndNeverThrows
+  assertion=Expected result.RecordsAffected to be -1, but found 0 (difference of 1).
+  killed=yes restored=yes
+
+== reset-on-repeated-release — the published cache reset by a repeated release ==
+frozen_phrase: reset the cache on repeated release
+replacements=1
+run: tests/nextorm.core.tests filter=FullyQualifiedName~RecordsAffected exit=2 counts=total:16failed:1succeeded:15skipped:0
+  killing_test=NextORM.Core.Tests.RecordsAffectedTests.RepeatedReleaseAndGetter_AreIdempotent_AndDoNotThrow
+  assertion=Expected result.RecordsAffected to be 8, but found -1 (difference of -9).
+  killed=yes restored=yes
+
+== disposed-reader-from-getter — the getter reads the live/disposed reader instead of the cache ==
+frozen_phrase: read a disposed reader from the getter
+replacements=1
+run: tests/nextorm.core.tests filter=FullyQualifiedName~RecordsAffected exit=2 counts=total:16failed:12succeeded:4skipped:0
+  killing_test=NextORM.Core.Tests.RecordsAffectedTests.UnavailableMetadata_IsTheSentinel_AndNeverThrows
+  assertion=Did not expect any exception, but found System.NullReferenceException: Object reference not set to an instance of an object.
+  killed=yes restored=yes
+
+== remove-publish-after-release-closereader — EXTRA: post-release upgrade removed in CloseReader ==
+frozen_phrase: extra beyond the frozen five
+replacements=1
+run: tests/nextorm.core.tests filter=FullyQualifiedName~RecordsAffected exit=2 counts=total:16failed:1succeeded:15skipped:0
+  killing_test=NextORM.Core.Tests.RecordsAffectedTests.CloseReader_PublishesTheTotal_PreferringThePostReleaseValue
+  assertion=Expected result.RecordsAffected to be 5, but found 2.
+  killed=yes restored=yes
+
+== remove-publish-after-release-disposeasync — EXTRA: post-release upgrade removed in DisposeAsync ==
+frozen_phrase: extra beyond the frozen five
+replacements=1
+run: tests/nextorm.core.tests filter=FullyQualifiedName~RecordsAffected exit=2 counts=total:16failed:1succeeded:15skipped:0
+  killing_test=NextORM.Core.Tests.RecordsAffectedTests.AsyncRelease_PrefersThePostReleaseValue
+  assertion=Expected result.RecordsAffected to be 6, but found 2.
+  killed=yes restored=yes
+
+== remove-command-disposeasync — EXTRA: the async command disposal removed ==
+frozen_phrase: extra beyond the frozen five
+replacements=1
+run: tests/nextorm.core.tests filter=FullyQualifiedName~RecordsAffected exit=2 counts=total:16failed:1succeeded:15skipped:0
+  killing_test=NextORM.Core.Tests.RecordsAffectedTests.AsyncRelease_DisposesTheCommand
+  assertion=Expected command.DisposeAsyncCount to be 1, but found 0 (difference of -1).
+  killed=yes restored=yes
+
+== wrong-total — EXTRA: the reported total offset by one ==
+frozen_phrase: extra beyond the frozen five
+replacements=1
+run: tests/nextorm.core.tests filter=FullyQualifiedName~RecordsAffected exit=2 counts=total:16failed:11succeeded:5skipped:0
+  killing_test=NextORM.Core.Tests.RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal
+  assertion=Expected result.RecordsAffected to be 3, but found 4.
+  killed=yes restored=yes
+
+== publish-pre-release — EXTRA: a value published before release (sentinel destroyed via the getter) ==
+frozen_phrase: extra beyond the frozen five
+replacements=1
+run: tests/nextorm.core.tests filter=FullyQualifiedName~RecordsAffected exit=2 counts=total:16failed:1succeeded:15skipped:0
+  killing_test=NextORM.Core.Tests.RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal
+  assertion=Expected result.RecordsAffected to be -1, but found 3 (difference of 4).
+  killed=yes restored=yes
+
+== required-ID check ==
+required: remove-capture total-to-row-count sentinel-to-0 reset-on-repeated-release disposed-reader-from-getter
+seen:     remove-capture total-to-row-count sentinel-to-0 reset-on-repeated-release disposed-reader-from-getter remove-publish-after-release-closereader remove-publish-after-release-disposeasync remove-command-disposeasync wrong-total publish-pre-release
+report written: /home/alex/sources/nextorm/artifacts/pdca/D226/rv1/mutation-report.json
+
+== summary ==
+FROZEN remove-capture               remove capture                         kill=killed    test=NextORM.Core.Tests.RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal
+FROZEN total-to-row-count           replace the total with row-count       kill=killed    test=NextORM.Core.Tests.RecordsAffectedTests.UnavailableMetadata_IsTheSentinel_AndNeverThrows; NextORM.Sqlite.Tests.BatchMultipleResultTests.Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount
+FROZEN sentinel-to-0                replace the sentinel with 0            kill=killed    test=NextORM.Core.Tests.RecordsAffectedTests.UnavailableMetadata_IsTheSentinel_AndNeverThrows
+FROZEN reset-on-repeated-release    reset the cache on repeated release    kill=killed    test=NextORM.Core.Tests.RecordsAffectedTests.RepeatedReleaseAndGetter_AreIdempotent_AndDoNotThrow
+FROZEN disposed-reader-from-getter  read a disposed reader from the getter kill=killed    test=NextORM.Core.Tests.RecordsAffectedTests.UnavailableMetadata_IsTheSentinel_AndNeverThrows
+extra  remove-publish-after-release-closereader exit=2 test=NextORM.Core.Tests.RecordsAffectedTests.CloseReader_PublishesTheTotal_PreferringThePostReleaseValue
+extra  remove-publish-after-release-disposeasync exit=2 test=NextORM.Core.Tests.RecordsAffectedTests.AsyncRelease_PrefersThePostReleaseValue
+extra  remove-command-disposeasync              exit=2 test=NextORM.Core.Tests.RecordsAffectedTests.AsyncRelease_DisposesTheCommand
+extra  wrong-total                              exit=2 test=NextORM.Core.Tests.RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal
+extra  publish-pre-release                      exit=2 test=NextORM.Core.Tests.RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal
+FAIL=0
+restored: owner=cf030526b1eed51361f51747ba34265eb27c916ae59bf8d6b629fe9d181b1b98 runner=9bf200945db90eb60188c270d5d65061980d6160c600dcef0cad05fdf2cc3683 tree=8822d0ad091178db3517328f1af3aa818ebe8046647fbc22e7d900eb129052ce

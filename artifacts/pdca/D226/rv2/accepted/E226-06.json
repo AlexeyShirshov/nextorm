@@ -1,0 +1,35 @@
+{
+  "row": "E226-06",
+  "inherited_from": "rv1",
+  "rv1_status": "met",
+  "rv1_requirement": "R226-UNSUPPORTED — C5 unchanged in-memory/unsupported guards",
+  "acceptance": {
+    "accepted": true,
+    "reason": "inherited rv1 row retained unchanged"
+  },
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "artifacts/pdca/D226/rv1/logs/boundary-core-rawcommand.log",
+      "exists": true,
+      "exit": 0,
+      "note": "RawCommandInMemoryTests 8/8 NotSupported"
+    },
+    {
+      "kind": "log",
+      "path": "artifacts/pdca/D226/rv1/logs/boundary-core-batchtests.log",
+      "exists": true,
+      "exit": 0,
+      "note": "BatchTests 1/1 NotSupported"
+    },
+    {
+      "kind": "test",
+      "path": "tests/nextorm.integration.tests/ClickHouseRecordsAffectedTests.cs",
+      "exists": true,
+      "exit": 0,
+      "note": "ClickHouse batch fail-closed + procedure guard executed"
+    }
+  ],
+  "rv1_frozen_verified": true,
+  "verifier": "artifacts/pdca/D226/rv2/verify-accepted-evidence.py"
+}

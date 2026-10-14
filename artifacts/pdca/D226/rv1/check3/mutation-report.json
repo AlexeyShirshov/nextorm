@@ -1,0 +1,194 @@
+{
+  "task": "T226 (#226) — mutation evidence (E226-09), final attempt n=3/3",
+  "contract_rv": 1,
+  "verifier": "artifacts/pdca/D226/rv1/verify-mutations.sh",
+  "exit_file": "artifacts/pdca/D226/rv1/mutation.exit",
+  "hashes": {
+    "CommandReaderOwner.cs_before_after": "cf030526b1eed51361f51747ba34265eb27c916ae59bf8d6b629fe9d181b1b98",
+    "BatchRunner.cs_before_after": "9bf200945db90eb60188c270d5d65061980d6160c600dcef0cad05fdf2cc3683",
+    "restored_byte_identical": true
+  },
+  "controls": [
+    {
+      "project": "tests/nextorm.core.tests",
+      "filter": "FullyQualifiedName~RecordsAffected",
+      "expected_total": 16,
+      "exit_code": 0
+    },
+    {
+      "project": "tests/nextorm.sqlite.tests",
+      "filter": "FullyQualifiedName~BatchMultipleResult",
+      "expected_total": 21,
+      "exit_code": 0
+    }
+  ],
+  "required_regressions": [
+    {
+      "regression": "i. row-count substitution",
+      "mutant_id": "total-to-row-count"
+    },
+    {
+      "regression": "ii. cache reset on repeated release",
+      "mutant_id": "reset-on-repeated-release"
+    },
+    {
+      "regression": "iii. disposed-reader access from the getter",
+      "mutant_id": "disposed-reader-from-getter"
+    },
+    {
+      "regression": "iv. pre-release sentinel destroyed (sentinel→0)",
+      "mutant_id": "sentinel-to-0"
+    },
+    {
+      "regression": "v. remove capture",
+      "mutant_id": "remove-capture"
+    }
+  ],
+  "frozen_obligations": [
+    {
+      "id": "remove-capture",
+      "frozen_phrase": "remove capture",
+      "patch": "artifacts/pdca/D226/rv1/mutations/remove-capture.patch",
+      "patch_sha256": "66dbf10166552cd3e2a9dc16a11f544e449ff151939e386c9b254210a3942af2",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal",
+      "assertion_message": "Expected result.RecordsAffected to be 3, but found -1 (difference of -4).",
+      "kill_status": "killed"
+    },
+    {
+      "id": "total-to-row-count",
+      "frozen_phrase": "replace the total with row-count",
+      "patch": "artifacts/pdca/D226/rv1/mutations/total-to-row-count.patch",
+      "patch_sha256": "1e91d5d66230e505529c329fb98be879028f8421f1afaf39448f6a0e55c3806e",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.UnavailableMetadata_IsTheSentinel_AndNeverThrows; NextORM.Sqlite.Tests.BatchMultipleResultTests.Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount",
+      "assertion_message": "Expected result.RecordsAffected to be -1, but found 0 (difference of 1). | Expected result.RecordsAffected to be 1, but found 2.",
+      "kill_status": "killed"
+    },
+    {
+      "id": "sentinel-to-0",
+      "frozen_phrase": "replace the sentinel with 0",
+      "patch": "artifacts/pdca/D226/rv1/mutations/sentinel-to-0.patch",
+      "patch_sha256": "3dbc6764f4074d8b8842f0d64341f5790b5d969773cd729b98ce9811a55fe840",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.UnavailableMetadata_IsTheSentinel_AndNeverThrows",
+      "assertion_message": "Expected result.RecordsAffected to be -1, but found 0 (difference of 1).",
+      "kill_status": "killed"
+    },
+    {
+      "id": "reset-on-repeated-release",
+      "frozen_phrase": "reset the cache on repeated release",
+      "patch": "artifacts/pdca/D226/rv1/mutations/reset-on-repeated-release.patch",
+      "patch_sha256": "4dca024dbf4b4b3e347d7f65b3b7bbfe6a83743d9b031813ddcfc49570d56bc6",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.RepeatedReleaseAndGetter_AreIdempotent_AndDoNotThrow",
+      "assertion_message": "Expected result.RecordsAffected to be 8, but found -1 (difference of -9).",
+      "kill_status": "killed"
+    },
+    {
+      "id": "disposed-reader-from-getter",
+      "frozen_phrase": "read a disposed reader from the getter",
+      "patch": "artifacts/pdca/D226/rv1/mutations/disposed-reader-from-getter.patch",
+      "patch_sha256": "048b740be6b79886f14e55e1d96ca053137b2136a70ba3dd1e4367703d3a140f",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.UnavailableMetadata_IsTheSentinel_AndNeverThrows",
+      "assertion_message": "Did not expect any exception, but found System.NullReferenceException: Object reference not set to an instance of an object.",
+      "kill_status": "killed"
+    }
+  ],
+  "extra_mutants": [
+    {
+      "id": "remove-publish-after-release-closereader",
+      "label": "EXTRA: post-release upgrade removed in CloseReader",
+      "frozen_phrase": "extra beyond the frozen five",
+      "patch_sha256": "c4ae1ca78cb49944adb9acc8c5fbb03da8f88d3aa05ec62cd24c556386b5742d",
+      "build_exit_code": 0,
+      "test_exit_code": 2,
+      "counts": "total:16failed:1succeeded:15skipped:0",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.CloseReader_PublishesTheTotal_PreferringThePostReleaseValue",
+      "assertion_message": "Expected result.RecordsAffected to be 5, but found 2."
+    },
+    {
+      "id": "remove-publish-after-release-disposeasync",
+      "label": "EXTRA: post-release upgrade removed in DisposeAsync",
+      "frozen_phrase": "extra beyond the frozen five",
+      "patch_sha256": "26845f2597d7653db21e6f1e8667056f85c08e9016f3939d1feba1280fb367ac",
+      "build_exit_code": 0,
+      "test_exit_code": 2,
+      "counts": "total:16failed:1succeeded:15skipped:0",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.AsyncRelease_PrefersThePostReleaseValue",
+      "assertion_message": "Expected result.RecordsAffected to be 6, but found 2."
+    },
+    {
+      "id": "remove-command-disposeasync",
+      "label": "EXTRA: the async command disposal removed",
+      "frozen_phrase": "extra beyond the frozen five",
+      "patch_sha256": "5dddb85a3a385ed8bd82af04c01853b834459eb3d10e1c1fa0c6e45d114567ff",
+      "build_exit_code": 0,
+      "test_exit_code": 2,
+      "counts": "total:16failed:1succeeded:15skipped:0",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.AsyncRelease_DisposesTheCommand",
+      "assertion_message": "Expected command.DisposeAsyncCount to be 1, but found 0 (difference of -1)."
+    },
+    {
+      "id": "wrong-total",
+      "label": "EXTRA: the reported total offset by one",
+      "frozen_phrase": "extra beyond the frozen five",
+      "patch_sha256": "a6cee85f3190ddd1bd06fe39a0071c02936f4b3fb63438ff1841d594c9dcb87b",
+      "build_exit_code": 0,
+      "test_exit_code": 2,
+      "counts": "total:16failed:11succeeded:5skipped:0",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal",
+      "assertion_message": "Expected result.RecordsAffected to be 3, but found 4."
+    },
+    {
+      "id": "publish-pre-release",
+      "label": "EXTRA: a value published before release (sentinel destroyed via the getter)",
+      "frozen_phrase": "extra beyond the frozen five",
+      "patch_sha256": "fc85afcc68e6e59b4ca0a0534416ae7b7b57f79827956b9f33eec609d4c36110",
+      "build_exit_code": 0,
+      "test_exit_code": 2,
+      "counts": "total:16failed:1succeeded:15skipped:0",
+      "killing_test": "NextORM.Core.Tests.RecordsAffectedTests.BeforeRelease_ReturnsSentinel_AfterDispose_ReturnsCapturedTotal",
+      "assertion_message": "Expected result.RecordsAffected to be -1, but found 3 (difference of 4)."
+    }
+  ],
+  "stryker_survivors": [
+    {
+      "mutant_id": "stryker-configureawait-reader-disposeasync",
+      "location": "src/nextorm.core/DataContext/CommandReaderOwner.cs:135 (ConfigureAwait removal on reader.DisposeAsync)",
+      "decision": "justified",
+      "basis": "reasoning, not a kill",
+      "reason": "Removing ConfigureAwait(false) changes only the continuation context; the library captures no SynchronizationContext and the test host has none, so no assertion can observe it and no RecordsAffected behaviour depends on it.",
+      "evidence": "artifacts/pdca/D226/rv1/mutation-report.json (this entry)"
+    },
+    {
+      "mutant_id": "stryker-configureawait-command-disposeasync",
+      "location": "src/nextorm.core/DataContext/CommandReaderOwner.cs:142 (ConfigureAwait removal on command.DisposeAsync)",
+      "decision": "justified",
+      "basis": "reasoning, not a kill",
+      "reason": "Same structural equivalence as the reader ConfigureAwait removal; the disposal itself is covered by AsyncRelease_DisposesTheCommand.",
+      "evidence": "tests/nextorm.core.tests/RecordsAffectedTests.cs:AsyncRelease_DisposesTheCommand"
+    },
+    {
+      "mutant_id": "stryker-remove-publishafterrelease-closereader",
+      "location": "src/nextorm.core/DataContext/CommandReaderOwner.cs:106 (PublishAfterRelease call in CloseReader)",
+      "decision": "killed",
+      "basis": "hand-mutant X1 (remove-publish-after-release-closereader) in this run",
+      "reason": "Removing the call keeps the pre-release value; the CloseReader case now uses differing pre/post values, so the missing upgrade is asserted.",
+      "evidence": "artifacts/pdca/D226/rv1/mutations/remove-publish-after-release-closereader.patch"
+    },
+    {
+      "mutant_id": "stryker-remove-publishafterrelease-disposeasync",
+      "location": "src/nextorm.core/DataContext/CommandReaderOwner.cs:136 (PublishAfterRelease call in DisposeAsync)",
+      "decision": "killed",
+      "basis": "hand-mutant X2 (remove-publish-after-release-disposeasync) in this run",
+      "reason": "The async path now uses differing pre/post values, so dropping the upgrade is asserted.",
+      "evidence": "artifacts/pdca/D226/rv1/mutations/remove-publish-after-release-disposeasync.patch"
+    },
+    {
+      "mutant_id": "stryker-remove-command-disposeasync",
+      "location": "src/nextorm.core/DataContext/CommandReaderOwner.cs:142 (the await command.DisposeAsync() statement)",
+      "decision": "killed",
+      "basis": "hand-mutant X3 (remove-command-disposeasync) in this run",
+      "reason": "A tracking DbCommand counts the async disposal, so removing the statement fails the assertion.",
+      "evidence": "artifacts/pdca/D226/rv1/mutations/remove-command-disposeasync.patch"
+    }
+  ],
+  "stryker_note": "Verdicts are derived from this run's hand-mutant artifacts; the Stryker.NET re-run is recorded separately under stryker_re_run."
+}

@@ -1,0 +1,28 @@
+{
+  "row": "E226-03",
+  "inherited_from": "rv1",
+  "rv1_status": "met",
+  "rv1_requirement": "R226-LIFETIME — sync/async, partial/full read, early/late/repeated Dispose, non-throwing cached getter, cleanup errors preserved",
+  "acceptance": {
+    "accepted": true,
+    "reason": "inherited rv1 row retained unchanged"
+  },
+  "evidence": [
+    {
+      "kind": "test",
+      "path": "tests/nextorm.core.tests/RecordsAffectedTests.cs",
+      "exists": true,
+      "exit": 0,
+      "note": "EarlyDispose/RepeatedRelease/AsyncRelease_Prefers/DisposeError/AsyncDisposeError/AsyncRelease_DisposesTheCommand"
+    },
+    {
+      "kind": "log",
+      "path": "artifacts/pdca/D226/rv1/logs/boundary-integration-recordsaffected.log",
+      "exists": true,
+      "exit": 0,
+      "note": "22/22 on postgres/mysql/sqlserver/sqlite, 0 skipped"
+    }
+  ],
+  "rv1_frozen_verified": true,
+  "verifier": "artifacts/pdca/D226/rv2/verify-accepted-evidence.py"
+}

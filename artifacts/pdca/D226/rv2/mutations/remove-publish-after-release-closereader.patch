@@ -1,0 +1,10 @@
+--- /tmp/nextorm-d226-mut.wUyqf9/owner.orig	2026-10-14 18:53:13.801516166 +0500
++++ /home/alex/sources/nextorm/src/nextorm.core/DataContext/CommandReaderOwner.cs	2026-10-14 18:53:54.502997745 +0500
+@@ -103,7 +103,6 @@
+ 
+         PublishBeforeRelease(reader);
+         reader.Dispose();
+-        PublishAfterRelease(reader);
+     }
+ 
+     /// <summary>Disposes the reader (when still open) and then the command. Safe to call more than once.</summary>

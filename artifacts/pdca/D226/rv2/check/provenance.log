@@ -1,0 +1,24 @@
+OK   provenance.md exists
+OK   provenance.md states: 'X1–X3 substantiate the three former survivors'
+OK   provenance.md states: 'NOT evidence of a'
+OK   provenance.md states: 'reasoning, never a kill'
+OK   mutation-report.json has a provenance block
+OK   provenance.stryker_post_fix_rerun == not-substantiated
+OK   mutation-report.json has no unsupported stryker_re_run key
+OK   provenance block has no unsupported stryker_re_run key
+OK   remove-publish-after-release-closereader is killed in the rv2 report
+OK   remove-publish-after-release-closereader carries a killing test and an assertion message
+OK   remove-publish-after-release-closereader patch artifact exists: artifacts/pdca/D226/rv2/mutations/remove-publish-after-release-closereader.patch
+OK   remove-publish-after-release-disposeasync is killed in the rv2 report
+OK   remove-publish-after-release-disposeasync carries a killing test and an assertion message
+OK   remove-publish-after-release-disposeasync patch artifact exists: artifacts/pdca/D226/rv2/mutations/remove-publish-after-release-disposeasync.patch
+OK   remove-command-disposeasync is killed in the rv2 report
+OK   remove-command-disposeasync carries a killing test and an assertion message
+OK   remove-command-disposeasync patch artifact exists: artifacts/pdca/D226/rv2/mutations/remove-command-disposeasync.patch
+OK   provenance records exactly two ConfigureAwait entries
+OK   both ConfigureAwait entries are justified reasoning (not kills)
+OK   pre-fix rv1 Stryker history present=True: check/stryker-output/reports/mutation-report.json
+OK   pre-fix rv1 Stryker history present=True: check/stryker.log
+OK   pre-fix rv1 Stryker history present=True: check/stryker-config.json
+OK   rv1 byte-identical (0 changed)
+provenance_exit=0

@@ -1,0 +1,269 @@
+{
+  "task": "T226 (#226) — ProcedureResult/BatchResult RecordsAffected",
+  "tree": "1.0.9-rc3@ad686d80+dirty(50 entries; see the collection working-tree note)",
+  "status_file": "docs/specs/status/D226-records-affected-1.md",
+  "contract_rv": 1,
+  "required_rows": [
+    "E226-01",
+    "E226-02",
+    "E226-03",
+    "E226-04",
+    "E226-05",
+    "E226-06",
+    "E226-07",
+    "E226-08",
+    "E226-09"
+  ],
+  "rows": [
+    {
+      "id": "E226-01",
+      "row": "R226-API — C1 exact signatures/getter-only on both types + build gate",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "tests/nextorm.core.tests/RecordsAffectedTests.cs",
+          "exit": 0,
+          "note": "RecordsAffected_OnBothResultTypes_IsAGetOnlyInt (reflection: int, CanWrite false, SetMethod null)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/build.log",
+          "exit": 0,
+          "note": "0 Warning(s) 0 Error(s)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/logs/boundary-core-recordsaffected.log",
+          "exit": 0,
+          "note": "16 selected / 16 passed / 0 failed / 0 skipped"
+        }
+      ]
+    },
+    {
+      "id": "E226-02",
+      "row": "R226-CAPTURE — sentinel, zero/count, pre/post-Close selection, unavailable metadata, snapshot-before-disposal",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "tests/nextorm.core.tests/RecordsAffectedTests.cs",
+          "exit": 0,
+          "note": "12 capture/lifetime facts"
+        },
+        {
+          "kind": "probe",
+          "path": "artifacts/pdca/D226/rv1/release-probe.json",
+          "exit": 0,
+          "note": "D1 real-driver metadata, 31/31 oracle rows"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/logs/boundary-sqlite-rawcommand.log",
+          "exit": 0,
+          "note": "sqlite DML sentinel→total, async, CloseReader path, query sentinel"
+        }
+      ]
+    },
+    {
+      "id": "E226-03",
+      "row": "R226-LIFETIME — sync/async, partial/full read, early/late/repeated Dispose, non-throwing cached getter, cleanup errors preserved",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "tests/nextorm.core.tests/RecordsAffectedTests.cs",
+          "exit": 0,
+          "note": "EarlyDispose/RepeatedRelease/AsyncRelease_Prefers/DisposeError/AsyncDisposeError/AsyncRelease_DisposesTheCommand"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/logs/boundary-integration-recordsaffected.log",
+          "exit": 0,
+          "note": "22/22 on postgres/mysql/sqlserver/sqlite, 0 skipped"
+        }
+      ]
+    },
+    {
+      "id": "E226-04",
+      "row": "R226-BATCH — ctor propagation, single/multiple statements, native/fallback, no row-count/per-statement substitution",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "tests/nextorm.sqlite.tests/BatchMultipleResultTests.cs",
+          "exit": 0,
+          "note": "2 sets vs 1 affected row, sync + async"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/logs/boundary-sqlite-batchmultipleresult.log",
+          "exit": 0,
+          "note": "21/21"
+        },
+        {
+          "kind": "probe",
+          "path": "artifacts/pdca/D226/rv1/release-probe.json",
+          "exit": 0,
+          "note": "native DbBatch + joined fallback measured"
+        }
+      ]
+    },
+    {
+      "id": "E226-05",
+      "row": "R226-PROVIDERS — five-provider matrix for both results + known DML oracle",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/logs/boundary-integration-clickhouserecordsaffected.log",
+          "exit": 0,
+          "note": "ClickHouse product surface: 5 selected / 5 passed / 0 failed / 0 skipped — sentinel→0 on insert sync+async and query, executed batch + procedure guards"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/logs/boundary-integration-recordsaffected.log",
+          "exit": 0,
+          "note": "postgres/mysql/sqlserver/sqlite, 22/22"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv1/provider-matrix.json",
+          "note": "five-provider matrix incl. ClickHouse (raw/procedure/batch per surface)"
+        },
+        {
+          "kind": "probe",
+          "path": "artifacts/pdca/D226/rv1/release-probe.json",
+          "exit": 0,
+          "note": "known-total DML oracle on four drivers"
+        }
+      ]
+    },
+    {
+      "id": "E226-06",
+      "row": "R226-UNSUPPORTED — C5 unchanged in-memory/unsupported guards",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/logs/boundary-core-rawcommand.log",
+          "exit": 0,
+          "note": "RawCommandInMemoryTests 8/8 NotSupported"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/logs/boundary-core-batchtests.log",
+          "exit": 0,
+          "note": "BatchTests 1/1 NotSupported"
+        },
+        {
+          "kind": "test",
+          "path": "tests/nextorm.integration.tests/ClickHouseRecordsAffectedTests.cs",
+          "exit": 0,
+          "note": "ClickHouse batch fail-closed + procedure guard executed"
+        }
+      ]
+    },
+    {
+      "id": "E226-07",
+      "row": "R226-DOC-INVARIANTS — four docs pages/XML, CRLF, T53 registration, scope, all 12 invariants",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv1/invariants.json",
+          "note": "12 invariants individually evidenced with file:line"
+        },
+        {
+          "kind": "md",
+          "path": "artifacts/pdca/D226/rv1/doc-review.md",
+          "note": "XML docs present; EN/RU guide parity (3/3, 2/2) and CRLF verified; no docs/specs links; guides owned by the docs stream and not edited here"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv1/test-map.json",
+          "note": "16 variant-matrix rows → test → file:line, 0 unresolved"
+        },
+        {
+          "kind": "script",
+          "path": "artifacts/pdca/D226/rv1/verify-plan-evidence.sh",
+          "note": "audit: named slots, parity, scoped CRLF, T53 registration"
+        },
+        {
+          "kind": "status",
+          "path": "docs/specs/status/D226-records-affected-1.md",
+          "note": "T53 freeze candidates registered (2 members, tag #226)"
+        }
+      ]
+    },
+    {
+      "id": "E226-08",
+      "row": "R226-COVERAGE — >=85/>=75, comparable baseline, a test per changed branch",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/verify-coverage-final.log",
+          "exit": 0,
+          "note": "final line 88.7% / branch 80.8% (>=85/75)"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/baseline/verify.log",
+          "exit": 0,
+          "note": "reconstructed pre-T226 baseline: line 88.7% / branch 80.8%"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv1/branch-delta.json",
+          "note": "PRE-EXISTING vs CHANGED branches with positive/negative cases incl. :76→77, :85→86, :101→102"
+        },
+        {
+          "kind": "xml",
+          "path": "artifacts/pdca/D226/rv1/coverage.xml",
+          "note": "cobertura from the CI dotnet-coverage step (11888 tests)"
+        }
+      ]
+    },
+    {
+      "id": "E226-09",
+      "row": "R226-MUTATION — sensitivity to five regressions + clean restore",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv1/mutation-report.json",
+          "exit": 0,
+          "note": "five frozen obligations each killed by an assertion; five extra mutants killed; survivor verdicts re-derived (3 killed via hand-mutant artifacts X1-X3, 2 ConfigureAwait justified as reasoning); stryker_re_run records why a Stryker re-run was not reproducible"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D226/rv1/mutation.log",
+          "exit": 0,
+          "note": "per-mutant patch hash, before/after sha256, build/test exit codes, counts, killing test, assertion message"
+        },
+        {
+          "kind": "file",
+          "path": "artifacts/pdca/D226/rv1/mutation.exit",
+          "note": "verifier exit code 0 (fail-closed)"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv1/mutation-negative-controls.json",
+          "note": "five negative controls, ALL nonzero: no-match patch, surviving mutant, hash-mismatch detection, failing control, invalid artifact path"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D226/rv1/traceability.json",
+          "note": "frozen obligation → mutant → patch → killing test, row by row"
+        },
+        {
+          "kind": "dir",
+          "path": "artifacts/pdca/D226/rv1/mutations",
+          "note": "ten patch artifacts, one per mutant"
+        }
+      ]
+    }
+  ],
+  "generated_by": "corrective DO n=2/3"
+}

@@ -1,0 +1,35 @@
+{
+  "row": "E226-02",
+  "inherited_from": "rv1",
+  "rv1_status": "met",
+  "rv1_requirement": "R226-CAPTURE — sentinel, zero/count, pre/post-Close selection, unavailable metadata, snapshot-before-disposal",
+  "acceptance": {
+    "accepted": true,
+    "reason": "inherited rv1 row retained unchanged"
+  },
+  "evidence": [
+    {
+      "kind": "test",
+      "path": "tests/nextorm.core.tests/RecordsAffectedTests.cs",
+      "exists": true,
+      "exit": 0,
+      "note": "12 capture/lifetime facts"
+    },
+    {
+      "kind": "probe",
+      "path": "artifacts/pdca/D226/rv1/release-probe.json",
+      "exists": true,
+      "exit": 0,
+      "note": "D1 real-driver metadata, 31/31 oracle rows"
+    },
+    {
+      "kind": "log",
+      "path": "artifacts/pdca/D226/rv1/logs/boundary-sqlite-rawcommand.log",
+      "exists": true,
+      "exit": 0,
+      "note": "sqlite DML sentinel→total, async, CloseReader path, query sentinel"
+    }
+  ],
+  "rv1_frozen_verified": true,
+  "verifier": "artifacts/pdca/D226/rv2/verify-accepted-evidence.py"
+}
