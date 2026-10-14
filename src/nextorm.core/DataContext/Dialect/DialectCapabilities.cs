@@ -727,6 +727,16 @@ public interface ISqlServerFunctions
     /// <see cref="SqlServerFunctions"/> member (for example <c>patindex</c>, <c>json_object</c>).
     /// </summary>
     string Render(string name, IReadOnlyList<string> args);
+
+    /// <summary>
+    /// True when the dialect also exposes the SQL Server session/server identity functions
+    /// (<see cref="SqlServerFunctions.server_name"/>, <c>host_id</c>, <c>host_name</c>, <c>app_name</c>,
+    /// <c>suser_name</c>, <c>original_login</c>) through its
+    /// <see cref="ISqlDialect.SessionInfoFunctions"/> renderer. The default is <see langword="false"/>, so
+    /// an external <see cref="ISqlServerFunctions"/> written for the T-SQL scalar library alone does not
+    /// silently gain the identity surface.
+    /// </summary>
+    bool SupportsSessionIdentity => false;
 }
 
 /// <summary>

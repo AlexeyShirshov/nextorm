@@ -155,6 +155,12 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         if (node.Method.DeclaringType == typeof(SqlServerFunctions))
             throw new NotSupportedException($"The {node.Method.Name} function is not supported by the in-memory provider.");
 
+        // The shared server/connection identity functions have no in-memory equivalent either: reject them
+        // explicitly instead of compiling the marker call against the null sentinel surface (which would
+        // fault with a NullReferenceException).
+        if (SessionInfoFunctionTranslator.IsIdentityFunction(node.Method.DeclaringType, node.Method.Name))
+            throw new NotSupportedException($"The {node.Method.Name} function is not supported by the in-memory provider.");
+
         if (node.Method.DeclaringType == typeof(CommonFunctions))
         {
             if (node.Method.Name == nameof(CommonFunctions.collate) && node.Arguments.Count == 2)

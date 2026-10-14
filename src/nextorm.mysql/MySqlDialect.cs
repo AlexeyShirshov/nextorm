@@ -582,7 +582,8 @@ internal sealed class MySqlSessionInfoFunctions : ISessionInfoFunctions
     public static readonly MySqlSessionInfoFunctions Instance = new();
 
     public bool Supports(string name) =>
-        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version";
+        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version"
+            or "connection_id" or "user";
 
     public string Render(string name) => name switch
     {
@@ -591,6 +592,8 @@ internal sealed class MySqlSessionInfoFunctions : ISessionInfoFunctions
         "current_schema" => "schema()",
         "current_database" => "database()",
         "version" => "version()",
+        "connection_id" => "CAST(CONNECTION_ID() AS UNSIGNED)",
+        "user" => "USER()",
         _ => throw new NotSupportedException($"The {name} session information function is not supported by MySQL/MariaDB.")
     };
 }

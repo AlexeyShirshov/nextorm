@@ -180,3 +180,13 @@ Held freeze; recorded for `docs/specs/status/D53-public-api-freeze-1.md` (basis 
 ## Progress log
 
 2026-10-13T00:56:00Z | PLAN | r1 | n1/3 | PLAN persisted (r=1); plan_state: ready; DO has NOT started — PLAN→DO boundary handoff to the collection parent | docs/specs/status/D219-session-identity-functions-1.md
+2026-10-14T09:50:31Z | DO | r1 | n1/3 | production + unit tests green (C1/C2/C3); C5 boundary deferred | artifacts/pdca/D219/rv1/{report.json,logs/*}
+2026-10-14 | DO | r1 | n1/3 | integration/runtime (C4) executed on SQLServer/PostgreSQL/MySQL/ClickHouse/MariaDB/SQLite; 394 executed / 0 skipped (386 SpecificTests + 8 DialectCapabilityContractTests, exit 0); MariaDB green on an explicit mariadb:11.4 container (native version() contains MariaDB) | artifacts/pdca/D219/rv1/{scope-integration.json,logs/c4-*}
+2026-10-14T09:58:00Z | DO | r1 | n1/3 | defects D219-C4-MYSQL-RESERVED-ALIAS + D219-C4-PG-INETNETMASK observed on the first C4 attempt and fixed in-chunk (2 fixes applied); 3 failed -> 0 failed | artifacts/pdca/D219/rv1/logs/c4-specific-attempt1.log
+2026-10-14T10:45:00Z | DO | r1 | n1/3 | docs chunk 3/3 (D219-07): EN+RU `scalar-functions/09-system-functions.md` reconciled (15-function per-provider identity table, null semantics, client-vs-server, security caveat, exclusions lifted), `roadmap/sql-function-coverage-gap.md` + `roadmap/sql-capabilities-gap-analysis.md:42` updated, toc links verified; C8 docfx exit 0 with 0 broken-link warnings | artifacts/pdca/D219/rv1/logs/c8-docfx.log
+
+## Notes
+
+- Correction recorded in docs: `SqlFunctions.SqlServer.server_name()` renders the documented `@@SERVERNAME` — SQL Server has no native `SERVER_NAME()` function, so that name is never emitted.
+- `Sql.user()` is the MySQL/MariaDB client `user@host` pair and does NOT replace `current_user()` (the effective authenticated account).
+- No new pages created (`10-system-functions.md`/`11-sqlserver-scalars.md` remain stale paths); no toc/structure/guide renumbering; public docs contain no links to `docs/specs/**`.

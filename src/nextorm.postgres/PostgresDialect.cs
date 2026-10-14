@@ -640,13 +640,20 @@ internal sealed class PostgresSessionInfoFunctions : ISessionInfoFunctions
     public static readonly PostgresSessionInfoFunctions Instance = new();
 
     public bool Supports(string name) =>
-        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version";
+        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version"
+            or "pg_backend_pid" or "inet_server_addr" or "inet_server_port" or "inet_client_addr"
+            or "inet_client_port";
 
     public string Render(string name) => name switch
     {
         "current_user" or "session_user" or "current_schema" => name,
         "current_database" => "current_database()",
         "version" => "version()",
+        "pg_backend_pid" => "pg_backend_pid()",
+        "inet_server_addr" => "CAST(inet_server_addr() AS text)",
+        "inet_server_port" => "inet_server_port()",
+        "inet_client_addr" => "CAST(inet_client_addr() AS text)",
+        "inet_client_port" => "inet_client_port()",
         _ => throw new NotSupportedException($"The {name} session information function is not supported by PostgreSQL.")
     };
 }

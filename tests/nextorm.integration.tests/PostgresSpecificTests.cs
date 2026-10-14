@@ -2516,6 +2516,123 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
     private static int RawProcedureKey() => Random.Shared.Next(2_000_000, int.MaxValue);
 
+    // ---- T219 (#219): session/server identity runtime on the real PostgreSQL server ----
+
+    /// <summary>
+    /// The PostgreSQL identity functions execute and materialize their declared CLR types: the backend pid
+    /// as <see cref="int"/>, the addresses as nullable text and the ports as <see cref="int"/>?. The
+    /// container is reached over TCP, so both addresses and ports are present; their native values are
+    /// cross-checked on the same held connection (the context owns one connection for its lifetime).
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T219")]
+    public void SessionIdentity_PostgresFunctions_ShouldExecuteAndMaterialize()
+    {
+        var ctx = _sut.DataProvider;
+
+        var projected = ctx.From<ISimpleEntity>().Where(x => x.Id == 1)
+            .Select(_ => new
+            {
+                Pid = SqlFunctions.Sql.pg_backend_pid(),
+                ServerAddr = SqlFunctions.Sql.inet_server_addr(),
+                ServerPort = SqlFunctions.Sql.inet_server_port(),
+                ClientAddr = SqlFunctions.Sql.inet_client_addr(),
+                ClientPort = SqlFunctions.Sql.inet_client_port()
+            })
+            .First();
+
+        projected.Pid.Should().BePositive("pg_backend_pid() is a live backend process id");
+
+        // PostgreSQL inet values are rendered as text with their netmask ("10.0.0.1/32"); the address
+        // part is what must parse as an IP address.
+        static string Address(string value) => value.Split('/')[0];
+
+        projected.ServerAddr.Should().NotBeNullOrWhiteSpace();
+        System.Net.IPAddress.TryParse(Address(projected.ServerAddr), out _).Should().BeTrue(
+            $"'{projected.ServerAddr}' is the native inet address rendered as text");
+        projected.ServerPort.Should().NotBeNull();
+        projected.ServerPort!.Value.Should().BeInRange(1, 65535);
+
+        projected.ClientAddr.Should().NotBeNullOrWhiteSpace();
+        System.Net.IPAddress.TryParse(Address(projected.ClientAddr), out _).Should().BeTrue(
+            $"'{projected.ClientAddr}' is the native inet address rendered as text");
+        projected.ClientPort.Should().NotBeNull();
+        projected.ClientPort!.Value.Should().BeInRange(1, 65535);
+
+        using var native = ctx.ExecuteRaw(
+            "select pg_backend_pid() as pid, CAST(inet_server_addr() AS text) as server_addr, " +
+            "inet_server_port() as server_port, CAST(inet_client_addr() AS text) as client_addr, " +
+            "inet_client_port() as client_port");
+
+        var row = native.Read<PgIdentityProbe>().Single();
+
+        row.Pid.Should().Be(projected.Pid, "the projected pid is the pid of the context's one connection");
+        row.ServerAddr.Should().Be(projected.ServerAddr);
+        row.ServerPort.Should().Be(projected.ServerPort);
+        row.ClientAddr.Should().Be(projected.ClientAddr);
+        row.ClientPort.Should().Be(projected.ClientPort);
+    }
+
+    /// <summary>
+    /// The PostgreSQL network functions allow SQL NULL (the documented unix-socket case) and the CLR
+    /// mapping keeps NULL as NULL instead of substituting an empty string or a default port. A native
+    /// unix-socket fixture is deferred with a trigger, so the NULL is produced by the server for a
+    /// condition that never picks the address, over the ordinary TCP connection — both through the query
+    /// engine and through a raw command.
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T219")]
+    public void SessionIdentity_PostgresNetworkFunctions_ShouldMaterializeSqlNull()
+    {
+        var ctx = _sut.DataProvider;
+
+        var projected = ctx.From<ISimpleEntity>().Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Addr = x.Id < 0 ? SqlFunctions.Sql.inet_server_addr() : null,
+                Port = x.Id < 0 ? SqlFunctions.Sql.inet_server_port() : null
+            })
+            .First();
+
+        projected.Addr.Should().BeNull("a SQL NULL inet address must stay NULL, never an empty string");
+        projected.Port.Should().BeNull("a SQL NULL inet port must stay NULL, never 0");
+
+        using var result = ctx.ExecuteRaw(
+            "select case when 1 = 0 then CAST(inet_server_addr() AS text) end as addr, " +
+            "case when 1 = 0 then inet_client_port() end as port");
+
+        var row = result.Read<PgNullProbe>().Single();
+        row.Addr.Should().BeNull();
+        row.Port.Should().BeNull();
+    }
+
+    private sealed class PgIdentityProbe
+    {
+        [Column("pid")]
+        public int Pid { get; set; }
+
+        [Column("server_addr")]
+        public string? ServerAddr { get; set; }
+
+        [Column("server_port")]
+        public int? ServerPort { get; set; }
+
+        [Column("client_addr")]
+        public string? ClientAddr { get; set; }
+
+        [Column("client_port")]
+        public int? ClientPort { get; set; }
+    }
+
+    private sealed class PgNullProbe
+    {
+        [Column("addr")]
+        public string? Addr { get; set; }
+
+        [Column("port")]
+        public int? Port { get; set; }
+    }
+
     public interface IDynamicRecordRow
     {
         [Column("a")]

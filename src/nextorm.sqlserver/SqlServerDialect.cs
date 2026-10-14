@@ -773,7 +773,9 @@ internal sealed class SqlServerSessionInfoFunctions : ISessionInfoFunctions
     public static readonly SqlServerSessionInfoFunctions Instance = new();
 
     public bool Supports(string name) =>
-        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version";
+        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version"
+            or "sqlserver.server_name" or "sqlserver.host_id" or "sqlserver.host_name"
+            or "sqlserver.app_name" or "sqlserver.suser_name" or "sqlserver.original_login";
 
     public string Render(string name) => name switch
     {
@@ -782,6 +784,12 @@ internal sealed class SqlServerSessionInfoFunctions : ISessionInfoFunctions
         "current_schema" => "schema_name()",
         "current_database" => "db_name()",
         "version" => "@@version",
+        "sqlserver.server_name" => "@@SERVERNAME",
+        "sqlserver.host_id" => "HOST_ID()",
+        "sqlserver.host_name" => "HOST_NAME()",
+        "sqlserver.app_name" => "APP_NAME()",
+        "sqlserver.suser_name" => "SUSER_NAME()",
+        "sqlserver.original_login" => "ORIGINAL_LOGIN()",
         _ => throw new NotSupportedException($"The {name} session information function is not supported by SQL Server.")
     };
 }
@@ -1022,6 +1030,9 @@ internal sealed class SqlServerScalarFunctions : IScalarFunctions
 internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
 {
     internal static readonly SqlServerSpecificFunctions Instance = new();
+
+    /// <summary>The SQL Server identity surface is exposed next to the T-SQL scalar library.</summary>
+    bool ISqlServerFunctions.SupportsSessionIdentity => true;
 
     /// <inheritdoc/>
     public bool Supports(string name) => name is

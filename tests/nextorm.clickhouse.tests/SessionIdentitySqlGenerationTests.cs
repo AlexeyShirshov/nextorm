@@ -1,0 +1,114 @@
+using FluentAssertions;
+using NextORM.Core;
+
+namespace NextORM.ClickHouse.Tests;
+
+/// <summary>
+/// Session/server identity functions (T219 / #219) on ClickHouse (no database): the capability keys every provider
+/// answers through <see cref="ISessionInfoFunctions"/> and the expression-level SQL generation for the
+/// 15 functions added by the task, plus the legacy session family as a regression.
+/// </summary>
+public class SessionIdentitySqlGenerationTests
+{
+    private static ISessionInfoFunctions Session => ClickHouseDialect.Instance.SessionInfoFunctions!;
+
+    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
+
+    private static string MethodName(string key)
+    {
+        var dot = key.LastIndexOf('.');
+        return dot < 0 ? key : key[(dot + 1)..];
+    }
+
+    /// <summary>Every identity/session key the provider reports as supported renders; the others fail closed.</summary>
+    [Theory]
+    [InlineData("sqlserver.server_name", null)]
+    [InlineData("sqlserver.host_id", null)]
+    [InlineData("sqlserver.host_name", null)]
+    [InlineData("sqlserver.app_name", null)]
+    [InlineData("sqlserver.suser_name", null)]
+    [InlineData("sqlserver.original_login", null)]
+    [InlineData("pg_backend_pid", null)]
+    [InlineData("inet_server_addr", null)]
+    [InlineData("inet_server_port", null)]
+    [InlineData("inet_client_addr", null)]
+    [InlineData("inet_client_port", null)]
+    [InlineData("connection_id", "CAST(connectionId() AS UInt64)")]
+    [InlineData("user", null)]
+    [InlineData("clickhouse.host_name", "hostName()")]
+    [InlineData("clickhouse.tcp_port", "CAST(tcpPort() AS Int32)")]
+    [InlineData("current_user", "currentUser()")]
+    [InlineData("session_user", null)]
+    [InlineData("current_schema", null)]
+    [InlineData("current_database", "currentDatabase()")]
+    [InlineData("version", "version()")]
+    public void SessionInfoKeys_ShouldRenderNativeSqlOrFailClosed(string key, string? expected)
+    {
+        if (expected is null)
+        {
+            Session.Supports(key).Should().BeFalse($"ClickHouse does not implement {key}");
+            var render = () => Session.Render(key);
+            render.Should().Throw<NotSupportedException>().WithMessage($"*{key}*");
+            return;
+        }
+
+        Session.Supports(key).Should().BeTrue();
+        Session.Render(key).Should().Be(expected);
+    }
+
+    /// <summary>The expression-level path: every added function emits the native SQL or throws before any SQL.</summary>
+    [Theory]
+    [InlineData("sqlserver.server_name", null)]
+    [InlineData("sqlserver.host_id", null)]
+    [InlineData("sqlserver.host_name", null)]
+    [InlineData("sqlserver.app_name", null)]
+    [InlineData("sqlserver.suser_name", null)]
+    [InlineData("sqlserver.original_login", null)]
+    [InlineData("pg_backend_pid", null)]
+    [InlineData("inet_server_addr", null)]
+    [InlineData("inet_server_port", null)]
+    [InlineData("inet_client_addr", null)]
+    [InlineData("inet_client_port", null)]
+    [InlineData("connection_id", "CAST(connectionId() AS UInt64)")]
+    [InlineData("user", null)]
+    [InlineData("clickhouse.host_name", "hostName()")]
+    [InlineData("clickhouse.tcp_port", "CAST(tcpPort() AS Int32)")]
+    public void NewIdentityFunctions_ShouldGenerateSqlOrFailClosed(string key, string? expected)
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        Func<string> act = key switch
+        {
+            "sqlserver.server_name" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.server_name() })),
+            "sqlserver.host_id" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.host_id() })),
+            "sqlserver.host_name" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.host_name() })),
+            "sqlserver.app_name" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.app_name() })),
+            "sqlserver.suser_name" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.suser_name() })),
+            "sqlserver.original_login" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.original_login() })),
+            "pg_backend_pid" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.pg_backend_pid() })),
+            "inet_server_addr" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.inet_server_addr() })),
+            "inet_server_port" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.inet_server_port() })),
+            "inet_client_addr" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.inet_client_addr() })),
+            "inet_client_port" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.inet_client_port() })),
+            "connection_id" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.connection_id() })),
+            "user" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.user() })),
+            "clickhouse.host_name" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.host_name() })),
+            "clickhouse.tcp_port" => () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.tcp_port() })),
+            _ => throw new ArgumentOutOfRangeException(nameof(key), key, null)
+        };
+
+        if (expected is null)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{MethodName(key)}*");
+        else
+            act().Should().Contain(expected);
+    }
+
+    /// <summary>Only SQL Server exposes the T-SQL surface, so the identity flag cannot leak here.</summary>
+    [Fact]
+    public void SqlServerFunctionsSurface_ShouldBeAbsent()
+        => ClickHouseDialect.Instance.SqlServerFunctions.Should().BeNull();
+}

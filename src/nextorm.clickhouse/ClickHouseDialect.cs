@@ -850,13 +850,18 @@ internal sealed class ClickHouseSessionInfoFunctions : ISessionInfoFunctions
 {
     public static readonly ClickHouseSessionInfoFunctions Instance = new();
 
-    public bool Supports(string name) => name is "current_user" or "current_database" or "version";
+    public bool Supports(string name) =>
+        name is "current_user" or "current_database" or "version"
+            or "connection_id" or "clickhouse.host_name" or "clickhouse.tcp_port";
 
     public string Render(string name) => name switch
     {
         "current_user" => "currentUser()",
         "current_database" => "currentDatabase()",
         "version" => "version()",
+        "connection_id" => "CAST(connectionId() AS UInt64)",
+        "clickhouse.host_name" => "hostName()",
+        "clickhouse.tcp_port" => "CAST(tcpPort() AS Int32)",
         _ => throw new NotSupportedException($"The {name} session information function is not supported by ClickHouse.")
     };
 }

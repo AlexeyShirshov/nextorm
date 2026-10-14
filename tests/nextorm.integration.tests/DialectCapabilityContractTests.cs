@@ -17,6 +17,19 @@ public sealed class DialectCapabilityContractTests
 
     private static readonly string[] UuidNames = ["gen_random_uuid", "uuidv7"];
 
+    /// <summary>
+    /// The session/server identity keys added by T219 (#219): the shared identity members and the
+    /// vendor-keyed SQL Server / ClickHouse members, as registered on the session-information renderer.
+    /// </summary>
+    private static readonly string[] IdentityNames =
+    [
+        "pg_backend_pid", "inet_server_addr", "inet_server_port", "inet_client_addr", "inet_client_port",
+        "connection_id", "user",
+        "sqlserver.server_name", "sqlserver.host_id", "sqlserver.host_name", "sqlserver.app_name",
+        "sqlserver.suser_name", "sqlserver.original_login",
+        "clickhouse.host_name", "clickhouse.tcp_port"
+    ];
+
     private static readonly string[] XmlNames = ["value", "query", "exist"];
 
     private static readonly string[] ScalarNames =
@@ -88,6 +101,23 @@ public sealed class DialectCapabilityContractTests
                         continue;
 
                     session.Render(name).Should().NotBeNullOrEmpty();
+                }
+
+                // T219 (#219): every added identity key reaches every dialect through the same renderer.
+                // A key the dialect reports as supported must render native SQL; one it does not support
+                // must fail closed with NotSupportedException and never fall back to a portable rendering.
+                foreach (var name in IdentityNames)
+                {
+                    if (session.Supports(name))
+                    {
+                        session.Render(name).Should().NotBeNullOrEmpty(
+                            $"{dialect.GetType().Name} reports support for {name}");
+                    }
+                    else
+                    {
+                        var render = () => session.Render(name);
+                        render.Should().Throw<NotSupportedException>().WithMessage($"*{name}*");
+                    }
                 }
             }
 
@@ -336,6 +366,91 @@ public sealed class DialectCapabilityContractTests
             {
                 var act = () => lockRenderer.Render(LockMode.Update, LockWaitMode.Wait, KeywordCase.Lower, "\"t1\"");
                 act.Should().Throw<NotSupportedException>($"{dialect.GetType().Name} must reject a source lock");
+            }
+        }
+    }
+
+    /// <summary>
+    /// T219 (#219): the T-SQL identity members are gated by
+    /// <see cref="ISqlServerFunctions.SupportsSessionIdentity"/>, and the flag is an opt-in: only the SQL
+    /// Server dialect reports <c>true</c>. A dialect that never exposes the surface has no
+    /// <see cref="ISqlDialect.SqlServerFunctions"/> object at all, so the members cannot leak.
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T219")]
+    public void SessionIdentity_ShouldBeOptedIntoBySqlServerOnly()
+    {
+        var dialects = AllDialects().ToList();
+        dialects.Should().NotBeEmpty("the provider dialect assemblies must be loaded");
+
+        var sqlServer = dialects.Single(d => d.GetType().Name == "SqlServerDialect");
+        sqlServer.SqlServerFunctions.Should().NotBeNull("SQL Server exposes the T-SQL identity surface");
+        sqlServer.SqlServerFunctions!.SupportsSessionIdentity.Should().BeTrue();
+
+        foreach (var dialect in dialects.Where(d => d.GetType().Name != "SqlServerDialect"))
+        {
+            if (dialect.SqlServerFunctions is not { } functions)
+                continue;
+
+            functions.SupportsSessionIdentity.Should().BeFalse(
+                $"{dialect.GetType().Name} must not report the T-SQL identity surface");
+        }
+    }
+
+    /// <summary>
+    /// T219 (#219): <c>SupportsSessionIdentity</c> must stay a default interface method, not an abstract
+    /// member: an <see cref="ISqlServerFunctions"/> implementation written before the member existed keeps
+    /// the fail-closed default. The default value itself is pinned by the core tests; this asserts the
+    /// interface shape so adding a member cannot silently become a breaking change.
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T219")]
+    public void SupportsSessionIdentity_ShouldRemainADefaultInterfaceMethod()
+    {
+        var property = typeof(ISqlServerFunctions).GetProperty(nameof(ISqlServerFunctions.SupportsSessionIdentity));
+
+        property.Should().NotBeNull();
+        property!.PropertyType.Should().Be<bool>();
+        property.GetMethod.Should().NotBeNull();
+        property.GetMethod!.IsAbstract.Should().BeFalse(
+            "the member keeps its default implementation so existing custom dialects stay compatible");
+    }
+
+    /// <summary>
+    /// T219 (#219): the per-provider contract of the 15 identity keys. Exactly the keys of the approved
+    /// matrix are advertised, every other key is refused by <c>Supports</c> (and by <c>Render</c>, asserted
+    /// above), so no provider silently over- or under-reports the surface — including MariaDB, which
+    /// inherits the MySQL set.
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T219")]
+    public void SessionIdentityKeys_ShouldFollowThePerProviderContract()
+    {
+        var byName = AllDialects().ToDictionary(d => d.GetType().Name);
+
+        var expected = new Dictionary<string, string[]>
+        {
+            ["PostgresDialect"] =
+                ["pg_backend_pid", "inet_server_addr", "inet_server_port", "inet_client_addr", "inet_client_port"],
+            ["MySqlDialect"] = ["connection_id", "user"],
+            ["MariaDbDialect"] = ["connection_id", "user"],
+            ["SqlServerDialect"] =
+                ["sqlserver.server_name", "sqlserver.host_id", "sqlserver.host_name", "sqlserver.app_name",
+                 "sqlserver.suser_name", "sqlserver.original_login"],
+            ["ClickHouseDialect"] = ["connection_id", "clickhouse.host_name", "clickhouse.tcp_port"],
+            ["SqliteDialect"] = []
+        };
+
+        foreach (var (dialectName, keys) in expected)
+        {
+            byName.Should().ContainKey(dialectName);
+            var session = byName[dialectName].SessionInfoFunctions;
+            session.Should().NotBeNull($"{dialectName} renders the session family");
+
+            foreach (var key in IdentityNames)
+            {
+                session!.Supports(key).Should().Be(
+                    keys.Contains(key), $"{dialectName} must advertise {key} exactly as the contract states");
             }
         }
     }

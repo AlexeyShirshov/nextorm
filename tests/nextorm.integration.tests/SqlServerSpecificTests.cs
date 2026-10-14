@@ -2576,6 +2576,81 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         }
     }
 
+    // ---- T219 (#219): session/server identity runtime on the real SQL Server ----
+
+    /// <summary>
+    /// The SQL Server identity members execute on the server and materialize as nullable strings: the
+    /// server-side identities (<c>@@SERVERNAME</c>, <c>SUSER_NAME()</c>, <c>ORIGINAL_LOGIN()</c>) are
+    /// present, while the client-reported ones (<c>HOST_ID()</c>/<c>HOST_NAME()</c>/<c>APP_NAME()</c>)
+    /// are nullable and never substituted by an empty string. Every projected value is cross-checked
+    /// against the native function on the same held connection, which pins the exact rendering.
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T219")]
+    public void SessionIdentity_SqlServerFunctions_ShouldExecuteAndMatchNativeValues()
+    {
+        var ctx = _sut.DataProvider;
+
+        var projected = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(_ => new
+            {
+                ServerName = SqlFunctions.SqlServer.server_name(),
+                HostId = SqlFunctions.SqlServer.host_id(),
+                HostName = SqlFunctions.SqlServer.host_name(),
+                AppName = SqlFunctions.SqlServer.app_name(),
+                SuserName = SqlFunctions.SqlServer.suser_name(),
+                OriginalLogin = SqlFunctions.SqlServer.original_login()
+            })
+            .First();
+
+        // Server identities are always present for a connected session.
+        projected.ServerName.Should().NotBeNullOrWhiteSpace();
+        projected.SuserName.Should().NotBeNullOrWhiteSpace();
+        projected.OriginalLogin.Should().NotBeNullOrWhiteSpace();
+
+        // Client-reported identities are nullable by contract: NULL or a real value, never "".
+        (projected.HostId is null || projected.HostId.Length > 0).Should().BeTrue(
+            "HOST_ID() is a nullable client value, never an empty string");
+        (projected.HostName is null || projected.HostName.Length > 0).Should().BeTrue(
+            "HOST_NAME() is a nullable client value, never an empty string");
+        (projected.AppName is null || projected.AppName.Length > 0).Should().BeTrue(
+            "APP_NAME() is a nullable client value, never an empty string");
+
+        using var native = ctx.ExecuteRaw(
+            "select @@SERVERNAME as server_name, HOST_ID() as host_id, HOST_NAME() as host_name, " +
+            "APP_NAME() as app_name, SUSER_NAME() as suser_name, ORIGINAL_LOGIN() as original_login");
+
+        var row = native.Read<SqlServerIdentityProbe>().Single();
+
+        row.ServerName.Should().Be(projected.ServerName);
+        row.HostId.Should().Be(projected.HostId);
+        row.HostName.Should().Be(projected.HostName);
+        row.AppName.Should().Be(projected.AppName);
+        row.SuserName.Should().Be(projected.SuserName);
+        row.OriginalLogin.Should().Be(projected.OriginalLogin);
+    }
+
+    private sealed class SqlServerIdentityProbe
+    {
+        [Column("server_name")]
+        public string? ServerName { get; set; }
+
+        [Column("host_id")]
+        public string? HostId { get; set; }
+
+        [Column("host_name")]
+        public string? HostName { get; set; }
+
+        [Column("app_name")]
+        public string? AppName { get; set; }
+
+        [Column("suser_name")]
+        public string? SuserName { get; set; }
+
+        [Column("original_login")]
+        public string? OriginalLogin { get; set; }
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

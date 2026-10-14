@@ -208,11 +208,15 @@ Sequence access is shipped as well: `SqlFunctions.SqlServer.next_value_for(seque
 * **Cryptographic:** `CRYPT_GEN_RANDOM`; `HASHBYTES` is shipped, and the `ENCRYPTBY*`/`DECRYPTBY*`/
   `SIGNBY*`/`VERIFYSIGNEDBY*`/`CERT*`/`KEY_*` family is **<span style="color:orange">out of scope</span>**.
 * **System:** `SESSION_CONTEXT`, `SESSION_ID`, `@@ROWCOUNT`/`@@ERROR`/`ERROR_*` (`COMPRESS`/`DECOMPRESS`,
-  `CURRENT_TIMEZONE(_ID)` and `NEWSEQUENTIALID` are shipped; `XACT_STATE`, `HOST_NAME`/`HOST_ID`,
-  `APP_NAME`, `IDENT_CURRENT`, `MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY` are the 10
-  documented exclusions — connection/session/statement scope, reachable through raw SQL or a
-  `[SqlFunction]` wrapper).
-* **<span style="color:orange">out of scope</span>:** security/identity (`SUSER_*`, `HAS_PERMS_BY_NAME`, `IS_MEMBER`, ...),
+  `CURRENT_TIMEZONE(_ID)` and `NEWSEQUENTIALID` are shipped; the session/server identity subset
+  `@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME` and `ORIGINAL_LOGIN` is shipped in
+  [#219](https://github.com/AlexeyShirshov/nextorm/issues/219); `CURRENT_REQUEST_ID`,
+  `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`, `MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and
+  `SCOPE_IDENTITY` are the 7 documented exclusions — connection/session/statement scope, reachable
+  through raw SQL or a `[SqlFunction]` wrapper).
+* **<span style="color:orange">out of scope</span>:** security/identity beyond the shipped
+  `SUSER_NAME`/`ORIGINAL_LOGIN` (`SUSER_ID`/`SUSER_SID`/`SUSER_SNAME`/`SYSTEM_USER`,
+  `HAS_PERMS_BY_NAME`, `IS_MEMBER`, ...),
   metadata beyond the shipped A-D subset (`COLUMNPROPERTY`, `INDEXPROPERTY`, `sys.*`), the
   system-statistical (`@@CPU_BUSY`, ...), collation, rowset (`OPENROWSET`/`OPENQUERY`), cursor, AI
   (`AI_*`), vector (`VECTOR_*`), text/image (`TEXTPTR`/`TEXTVALID`).

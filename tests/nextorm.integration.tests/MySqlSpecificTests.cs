@@ -672,6 +672,59 @@ public sealed class MySqlSpecificTests : ProviderTestSuite
         act.Should().Throw<ArgumentException>();
     }
 
+    // ---- T219 (#219): session/server identity runtime on the real MySQL server ----
+
+    /// <summary>
+    /// MySQL's identity functions execute on the server: <c>CONNECTION_ID()</c> keeps its full unsigned
+    /// range (the projection is <see cref="ulong"/>), <c>USER()</c> reports the client account as
+    /// <c>user@host</c> and the legacy <c>current_user()</c> reports the effective authenticated account.
+    /// All three are cross-checked against the native functions on the same held connection.
+    /// </summary>
+    [Fact]
+    [Trait("PDCA", "T219")]
+    public void SessionIdentity_MySqlFunctions_ShouldExecuteAndMatchNativeValues()
+    {
+        var ctx = _sut.DataProvider;
+
+        var projected = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(_ => new
+            {
+                ConnectionId = SqlFunctions.Sql.connection_id(),
+                User = SqlFunctions.Sql.user(),
+                CurrentUser = SqlFunctions.Sql.current_user()
+            })
+            .First();
+
+        projected.ConnectionId.Should().BePositive("CONNECTION_ID() is a live server connection id");
+        projected.User.Should().NotBeNullOrWhiteSpace();
+        projected.User.Should().Contain("@", "USER() is the client account as user@host");
+        projected.CurrentUser.Should().NotBeNullOrWhiteSpace();
+
+        using var native = ctx.ExecuteRaw(
+            "select CAST(CONNECTION_ID() AS UNSIGNED) as connection_id, USER() as `user`, CURRENT_USER() as `current_user`");
+
+        var row = native.Read<MySqlIdentityProbe>().Single();
+
+        // USER() and CURRENT_USER() are different functions and are not conflated by the surface; for the
+        // container account they can coincidentally resolve to the same string, so only the values the
+        // server itself reports are compared (the differing SQL is pinned by the dialect tests).
+        row.ConnectionId.Should().Be(projected.ConnectionId);
+        row.User.Should().Be(projected.User);
+        row.CurrentUser.Should().Be(projected.CurrentUser);
+    }
+
+    private sealed class MySqlIdentityProbe
+    {
+        [Column("connection_id")]
+        public ulong ConnectionId { get; set; }
+
+        [Column("user")]
+        public string User { get; set; } = "";
+
+        [Column("current_user")]
+        public string CurrentUser { get; set; } = "";
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();
