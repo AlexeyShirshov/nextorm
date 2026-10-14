@@ -1,6 +1,6 @@
 {
   "task": "T218 (#218) SQL Server sequences (NEXT VALUE FOR) \u2014 cross-provider",
-  "tree": "16cc6b48c8da86eb464d986083ca0a72cf4980cd",
+  "tree": "8cbd306cd0c074a8b0c121cc4f6e64bee04e7f61",
   "contract_rv": 1,
   "status_file": "docs/specs/status/D218-sqlserver-sequences-1.md",
   "required_rows": [
@@ -556,6 +556,11 @@
           "command": "python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
           "exit": 0,
           "value": "n=3 rebind; E08 open (gap/incomplete) forbids PASS per the contract"
+        },
+        {
+          "kind": "binding",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/source-identity.txt",
+          "value": "n=3 corrective commit d4db38231d365cd70ee1b97afebc25a62e09815d, tree 8cbd306cd0c074a8b0c121cc4f6e64bee04e7f61 (git rev-parse HEAD / HEAD^{tree}); product byte-unchanged from 22b96233; src diff 0 files"
         }
       ]
     }
@@ -571,6 +576,7 @@
     "n=3 corrective (routed from escalate; no replan, no STOP, no src change): E08 moved met -> open (gap/incomplete, product delta ~5 KB) on the decisive A/B control (A pre-D1 784.4 KB vs B HEAD 789.53 KB, stable, alternating same session); see E08-ab.md and logs/e08-ab-*.log.",
     "n=3 corrective test-only: tests/nextorm.integration.tests/SqlServerSpecificTests.cs adds the multi-row distinct-consecutive-values scenario; DOCKER_HOST class run Total 97 / Failed 0 / Skipped 0 (row :87).",
     "n=3 corrective mutations (row :91): M1 gate-off, M2 corrupt render, M3 drop alias, M4 drop ]] escaping \u2014 each RED exit 2 -> restore -> GREEN exit 0; branch-mutation-map.md + logs/n3-m{1..4}-*.log.",
-    "n=3 tree 16cc6b48c8da86eb464d986083ca0a72cf4980cd = HEAD^{tree} + the integration-test additive (this cycle's status file and generated artifacts excluded)."
+    "n=3 tree 16cc6b48c8da86eb464d986083ca0a72cf4980cd = HEAD^{tree} + the integration-test additive (this cycle's status file and generated artifacts excluded).",
+    "n=3 corrective revision rebound: commit d4db38231d365cd70ee1b97afebc25a62e09815d (tree 8cbd306cd0c074a8b0c121cc4f6e64bee04e7f61); the pre-commit source footprint 16cc6b48c8da86eb464d986083ca0a72cf4980cd is superseded by the real corrective commit tree (append-only)."
   ]
 }

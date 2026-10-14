@@ -25,3 +25,4 @@ product unchanged from 22b962333f04f39cb383687828a904da5f2174f1 (git diff 22b962
 n=3 test-only change: tests/nextorm.integration.tests/SqlServerSpecificTests.cs — NextValueFor_MultipleRows_ShouldReturnDistinctConsecutiveValues (row :87); class run DOCKER_HOST Total 97 / Failed 0 / Skipped 0
 n=3 mutations (row :91): M1 gate-off, M2 corrupt `next value for`, M3 drop `nextval`, M4 drop `]]` — each RED exit 2 -> restore -> GREEN exit 0; branch-mutation-map.md
 escalate n=3 routed decision: E08 oracle decidable — A/B control pre-D1 784.4 KB vs HEAD 789.53 KB (stable) => gap/incomplete, product delta ~5 KB; E08 stays open; no src change
+n=3 corrective commit d4db38231d365cd70ee1b97afebc25a62e09815d (tree 8cbd306cd0c074a8b0c121cc4f6e64bee04e7f61); source footprint 16cc6b48c8da86eb464d986083ca0a72cf4980cd superseded by the real commit tree
