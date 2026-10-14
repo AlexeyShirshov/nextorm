@@ -18,3 +18,10 @@ cb3d5b6bddd79f6468a432eee537c8b01e85b578
 317f0078b86d8b7f53bfe86ca07178dee020e017
 product unchanged from 22b962333f04f39cb383687828a904da5f2174f1 (test-only corrective: tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs + docs/specs/status/D218-sqlserver-sequences-1.md)
 pre-existing unrelated worktree churn (not staged, not part of T218): examples/**, docs[+ru]/assets/diagrams/nextorm-command-execution.svg, docs/specs/status/D216-row-locking-1.md, docs/specs/status/evidence/pivot-typed-overload/
+
+== n=3 corrective (escalate-routed, test-only) ==
+source footprint tree 16cc6b48c8da86eb464d986083ca0a72cf4980cd (= HEAD^{tree} + tests/nextorm.integration.tests/SqlServerSpecificTests.cs; this cycle's status file and generated artifacts excluded)
+product unchanged from 22b962333f04f39cb383687828a904da5f2174f1 (git diff 22b96233..HEAD -- src => 0 files)
+n=3 test-only change: tests/nextorm.integration.tests/SqlServerSpecificTests.cs — NextValueFor_MultipleRows_ShouldReturnDistinctConsecutiveValues (row :87); class run DOCKER_HOST Total 97 / Failed 0 / Skipped 0
+n=3 mutations (row :91): M1 gate-off, M2 corrupt `next value for`, M3 drop `nextval`, M4 drop `]]` — each RED exit 2 -> restore -> GREEN exit 0; branch-mutation-map.md
+escalate n=3 routed decision: E08 oracle decidable — A/B control pre-D1 784.4 KB vs HEAD 789.53 KB (stable) => gap/incomplete, product delta ~5 KB; E08 stays open; no src change

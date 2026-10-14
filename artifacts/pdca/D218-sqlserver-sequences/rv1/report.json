@@ -14,7 +14,8 @@
       "src/nextorm.core/Query/SqlFunctions.SqlServer.cs",
       "src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs",
       "src/nextorm.sqlserver/SqlServerDialect.cs",
-      "tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs"
+      "tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs",
+      "tests/nextorm.integration.tests/SqlServerSpecificTests.cs"
     ],
     "rebuild": "affected",
     "boundary": "before DO->CHECK: full SQL-gen sweep over all six provider test projects (tests/nextorm.{core,sqlserver,postgres,mariadb,mysql,sqlite,clickhouse}.tests, each exit 0) + SQL Server integration with DOCKER_HOST (-class nextorm.integration.tests.SqlServerSpecificTests) + acceptance benchmark + coverage collect",
@@ -45,6 +46,13 @@
       "reason": "CHECK->DO corrective is test-only: it adds executed assertions to tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs (NUL, default(string), 'a.', '.b', '.', and a 129-char schema component in SequenceFunctions_Guards_ShouldThrow; a ']' inside the schema component ([s]]q].[t]) and a nextval alias escaping case in SequenceFunctions_ShouldEscapeClosingBracketAndNotEscapeTheIdentifier). No product file changes; scope.files gains this test file.",
       "added_selectors": [
         "FullyQualifiedName~SqlServerFunctionsSqlGenerationTests"
+      ],
+      "validated_before_run": true
+    },
+    {
+      "reason": "corrective DO n=3 (routed from escalate): adds the E08 A/B control measurement (pre-D1 worktree vs HEAD, same session/job/filter) and one SQL-Server-only integration scenario (multi-row NEXT VALUE FOR distinct consecutive values) in tests/nextorm.integration.tests/SqlServerSpecificTests.cs (test-only; scope.files gains it). No product change; the four product mutations are captured in branch-mutation-map.md and the manifest E04 row, not as report executions (their RED runs exit 2 and are not scope runs).",
+      "added_selectors": [
+        "nextorm.integration.tests.SqlServerSpecificTests"
       ],
       "validated_before_run": true
     }
@@ -770,6 +778,154 @@
       "artifact_revision": "cb3d5b6b",
       "exit_code": 0,
       "selected_count": 5
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "d218-n3",
+      "artifact_revision": "d218-n3",
+      "exit_code": 0,
+      "selected_count": 97
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-class",
+        "nextorm.integration.tests.SqlServerSpecificTests",
+        "-noColor"
+      ],
+      "phase": "boundary",
+      "source_revision": "d218-n3",
+      "artifact_revision": "d218-n3",
+      "exit_code": 0,
+      "selected_count": 97
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=t218-preparation",
+        "--filter",
+        "*Prepare_Control_Patindex*"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690-pre-d1",
+      "artifact_revision": "f8caa690-pre-d1",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=t218-preparation",
+        "--filter",
+        "*Prepare_Control_Patindex*"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690-pre-d1",
+      "artifact_revision": "f8caa690-pre-d1",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=t218-preparation",
+        "--filter",
+        "*Prepare_Control_Patindex*"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690-pre-d1",
+      "artifact_revision": "f8caa690-pre-d1",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=t218-preparation",
+        "--filter",
+        "*Prepare_Control_Patindex*"
+      ],
+      "phase": "boundary",
+      "source_revision": "d218-n3",
+      "artifact_revision": "d218-n3",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=t218-preparation",
+        "--filter",
+        "*Prepare_Control_Patindex*"
+      ],
+      "phase": "boundary",
+      "source_revision": "d218-n3",
+      "artifact_revision": "d218-n3",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=t218-preparation",
+        "--filter",
+        "*Prepare_Control_Patindex*"
+      ],
+      "phase": "boundary",
+      "source_revision": "d218-n3",
+      "artifact_revision": "d218-n3",
+      "exit_code": 0,
+      "selected_count": 1
     }
   ],
   "notes": [
@@ -778,6 +934,10 @@
     "Full command output: artifacts/pdca/D218-sqlserver-sequences/rv1/logs/*.log",
     "Corrective revision cb3d5b6bddd79f6468a432eee537c8b01e85b578 (tree 317f0078b86d8b7f53bfe86ca07178dee020e017), appended by CHECK->DO (r=1, n=2/3, test-only): no product byte changed vs 22b96233. The corrective solution build `dotnet build nextorm.slnx -c Debug` (exit 0, 0 Warning(s)/0 Error(s), logs/corrective-build.log) is recorded in NOTES and in manifest E10, not as a boundary execution: the frozen report already carries one boundary solution build and the validator caps boundary solution builds at one. Its pre-test role (fresh artifacts for the --no-build corrective reruns) is covered by the two inner `dotnet build tests/nextorm.sqlserver.tests -c Debug` executions that precede them.",
     "Mutation #4 (drop the `]]` escaping in SqlServerDialect.QuoteIdentifier, :171): RED exit 2 (logs/mutation4-red.log, the new schema-']' case fails at SqlServerFunctionsSqlGenerationTests.cs:677), reverted via `git checkout -- src/nextorm.sqlserver/SqlServerDialect.cs`, rebuild exit 0, GREEN exit 0 (logs/mutation4-green.log, 33/33). No product change was committed.",
-    "E08 disposition: artifacts/pdca/D218-sqlserver-sequences/rv1/E08-disposition.md (control time <=105% in all four post runs; the +0.65% allocation delta is reproducible but appears on byte-unchanged control code, so it is stated as incomparable, not accepted as a regression)."
+    "E08 disposition: artifacts/pdca/D218-sqlserver-sequences/rv1/E08-disposition.md (control time <=105% in all four post runs; the +0.65% allocation delta is reproducible but appears on byte-unchanged control code, so it is stated as incomparable, not accepted as a regression).",
+    "n=3 corrective (routed from escalate, no replan, no src change): E08 A/B control \u2014 A = detached worktree /tmp/opencode/t218-ab at f8caa690 (pre-D1) with a control-only projection of the same benchmark, B = HEAD; alternating A B A B A B, same job + filter (logs/e08-ab-{A1,B1,A2,B2,A3,B3}.log, all exit 0). Allocated: A 784.39/784.39/784.46 KB, B 789.53 KB x3 (Gen0 93.7500 both). Delta ~+5.14 KB (+0.66 %) tracks the product source state, so it is a real D1 allocation on the query-preparation path -> E08 gap/incomplete, product delta ~5 KB; escalation to planner r=2 (artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md).",
+    "n=3 corrective test: tests/nextorm.integration.tests/SqlServerSpecificTests.cs adds NextValueFor_MultipleRows_ShouldReturnDistinctConsecutiveValues (projects next_value_for over the multi-row simple_entity, asserts 10 distinct consecutive values from 100; unique `create sequence ... no cycle` fixture + finally cleanup). Class run with DOCKER_HOST: Total 97 / Failed 0 / Skipped 0 (logs/n3-integration-sqlserverspecific.log) -> closes row :87.",
+    "n=3 corrective mutations (row :91): four byte-level product mutations, each RED (exit 2) -> restore -> GREEN (exit 0) \u2014 M1 gate-off, M2 corrupt `next value for`, M3 drop `nextval` alias, M4 drop `]]` escaping; full argument arrays and counts in branch-mutation-map.md + logs/n3-m{1..4}-*.log.",
+    "n=3 corrective source footprint tree 16cc6b48c8da86eb464d986083ca0a72cf4980cd (HEAD^{tree} + the integration test additive; this cycle's status file and generated artifacts excluded); rebound from 317f0078."
   ]
 }

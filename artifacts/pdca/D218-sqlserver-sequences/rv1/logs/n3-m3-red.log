@@ -1,0 +1,68 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+failed NextORM.SqlServer.Tests.SqlServerFunctionsSqlGenerationTests.SequenceFunctions_NonConstantName_ShouldThrow (61ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+  Expected a <System.NotSupportedException> to be thrown, but no exception was thrown.
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+    at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+    at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+    at NextORM.SqlServer.Tests.SqlServerFunctionsSqlGenerationTests.AssertUnsupported(Action act, String pattern) in /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs:770
+    at NextORM.SqlServer.Tests.SqlServerFunctionsSqlGenerationTests.SequenceFunctions_NonConstantName_ShouldThrow() in /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs:740
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.SqlServer.Tests.SqlServerFunctionsSqlGenerationTests.SequenceFunctions_ShouldEscapeClosingBracketAndNotEscapeTheIdentifier (5ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+  Expected aliasEscaping "select next value for 'x]; drop table t; --' as [V] from complex_entity" to contain "next value for [x]]; drop table t; --]".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.SqlServer.Tests.SqlServerFunctionsSqlGenerationTests.SequenceFunctions_ShouldEscapeClosingBracketAndNotEscapeTheIdentifier() in /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs:693
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.SqlServer.Tests.SqlServerFunctionsSqlGenerationTests.SequenceFunctions_Guards_ShouldThrow (10ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+  Expected a <System.NotSupportedException> to be thrown, but no exception was thrown.
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+    at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+    at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+    at NextORM.SqlServer.Tests.SqlServerFunctionsSqlGenerationTests.AssertUnsupported(Action act, String pattern) in /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs:770
+    at NextORM.SqlServer.Tests.SqlServerFunctionsSqlGenerationTests.SequenceFunctions_Guards_ShouldThrow() in /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs:722
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.SqlServer.Tests.SqlServerFunctionsSqlGenerationTests.SequenceFunctions_ShouldEmitNextValueForForBothAliases (3ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+  Expected viaAlias "select next value for 'order_seq' as [V] from complex_entity
+   where id = 1" to contain "next value for [order_seq]".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.SqlServer.Tests.SqlServerFunctionsSqlGenerationTests.SequenceFunctions_ShouldEmitNextValueForForBothAliases() in /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs:639
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) failed with 4 error(s) (1s 093ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 33
+  failed: 4
+  succeeded: 29
+  skipped: 0
+  duration: 1s 376ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

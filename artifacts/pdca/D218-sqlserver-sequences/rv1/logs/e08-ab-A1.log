@@ -1,0 +1,136 @@
+// Validating benchmarks:
+//    * Assembly nextorm.benchmark, Version=1.0.9.0, Culture=neutral, PublicKeyToken=null is located in temp. If you are running benchmarks from xUnit you need to disable shadow copy. It's not supported by design.
+
+// ***** BenchmarkRunner: Start   *****
+// ***** Found 1 benchmark(s) in total *****
+// ***** Building 1 exe(s) in Parallel: Start   *****
+// ***** Done, took 00:00:00 (0.05 sec)   *****
+// Found 1 benchmarks:
+//   T218PreparationControlBenchmark.Prepare_Control_Patindex_Uncached: ShortRun(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)
+
+// **************************
+// Benchmark: T218PreparationControlBenchmark.Prepare_Control_Patindex_Uncached: ShortRun(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)
+// *** Execute ***
+// Launch: 1 / 1
+// ! Failed to set up priority High for process System.Diagnostics.Process (nextorm.benchmark). Make sure you have the right permissions. Message: Permission denied
+
+// Benchmark Process Environment Information:
+// BenchmarkDotNet v0.15.8
+// Runtime=.NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+// GC=Concurrent Workstation
+// HardwareIntrinsics=AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT,X86Base+SSE+SSE2,AES+PCLMUL VectorSize=256
+// Job: Job-ZYJCSJ(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)
+
+OverheadJitting  1: 1 op, 305875.00 ns, 305.8750 us/op
+WorkloadJitting  1: 1 op, 8829985.00 ns, 8.8300 ms/op
+
+OverheadJitting  2: 16 op, 781488.00 ns, 48.8430 us/op
+WorkloadJitting  2: 16 op, 134203135.00 ns, 8.3877 ms/op
+
+WorkloadPilot    1: 16 op, 109591726.00 ns, 6.8495 ms/op
+WorkloadPilot    2: 32 op, 273940292.00 ns, 8.5606 ms/op
+WorkloadPilot    3: 64 op, 458189256.00 ns, 7.1592 ms/op
+WorkloadPilot    4: 128 op, 826004510.00 ns, 6.4532 ms/op
+
+OverheadWarmup   1: 128 op, 3637.00 ns, 28.4141 ns/op
+OverheadWarmup   2: 128 op, 1172.00 ns, 9.1563 ns/op
+OverheadWarmup   3: 128 op, 1653.00 ns, 12.9141 ns/op
+OverheadWarmup   4: 128 op, 1112.00 ns, 8.6875 ns/op
+OverheadWarmup   5: 128 op, 952.00 ns, 7.4375 ns/op
+OverheadWarmup   6: 128 op, 1082.00 ns, 8.4531 ns/op
+OverheadWarmup   7: 128 op, 1974.00 ns, 15.4219 ns/op
+OverheadWarmup   8: 128 op, 1222.00 ns, 9.5469 ns/op
+
+OverheadActual   1: 128 op, 1102.00 ns, 8.6094 ns/op
+OverheadActual   2: 128 op, 2264.00 ns, 17.6875 ns/op
+OverheadActual   3: 128 op, 972.00 ns, 7.5938 ns/op
+OverheadActual   4: 128 op, 1042.00 ns, 8.1406 ns/op
+OverheadActual   5: 128 op, 942.00 ns, 7.3594 ns/op
+OverheadActual   6: 128 op, 962.00 ns, 7.5156 ns/op
+OverheadActual   7: 128 op, 1393.00 ns, 10.8828 ns/op
+OverheadActual   8: 128 op, 1583.00 ns, 12.3672 ns/op
+OverheadActual   9: 128 op, 982.00 ns, 7.6719 ns/op
+OverheadActual  10: 128 op, 942.00 ns, 7.3594 ns/op
+OverheadActual  11: 128 op, 962.00 ns, 7.5156 ns/op
+OverheadActual  12: 128 op, 972.00 ns, 7.5938 ns/op
+OverheadActual  13: 128 op, 972.00 ns, 7.5938 ns/op
+OverheadActual  14: 128 op, 962.00 ns, 7.5156 ns/op
+OverheadActual  15: 128 op, 962.00 ns, 7.5156 ns/op
+OverheadActual  16: 128 op, 1252.00 ns, 9.7813 ns/op
+OverheadActual  17: 128 op, 1112.00 ns, 8.6875 ns/op
+OverheadActual  18: 128 op, 972.00 ns, 7.5938 ns/op
+OverheadActual  19: 128 op, 1002.00 ns, 7.8281 ns/op
+OverheadActual  20: 128 op, 1092.00 ns, 8.5313 ns/op
+
+WorkloadWarmup   1: 128 op, 411014334.00 ns, 3.2110 ms/op
+WorkloadWarmup   2: 128 op, 186470019.00 ns, 1.4568 ms/op
+WorkloadWarmup   3: 128 op, 189608033.00 ns, 1.4813 ms/op
+
+WorkloadActual   1: 128 op, 101665842.00 ns, 794.2644 us/op
+WorkloadActual   2: 128 op, 135493614.00 ns, 1.0585 ms/op
+WorkloadActual   3: 128 op, 135292527.00 ns, 1.0570 ms/op
+
+WorkloadResult   1: 128 op, 101664865.00 ns, 794.2568 us/op
+WorkloadResult   2: 128 op, 135492637.00 ns, 1.0585 ms/op
+WorkloadResult   3: 128 op, 135291550.00 ns, 1.0570 ms/op
+// GC:  12 0 0 102811784 128
+// Threading:  0 0 128
+
+
+Mean = 969.919 us, StdErr = 87.832 us (9.06%), N = 3, StdDev = 152.130 us
+Min = 794.257 us, Q1 = 925.611 us, Median = 1,056.965 us, Q3 = 1,057.751 us, Max = 1,058.536 us
+IQR = 132.140 us, LowerFence = 727.401 us, UpperFence = 1,255.960 us
+ConfidenceInterval = [-1,805.504 us; 3,745.343 us] (CI 99.9%), Margin = 2,775.424 us (286.15% of Mean)
+Skewness = -0.38, Kurtosis = 0.67, MValue = 2
+
+// ** Remained 0 (0.0 %) benchmark(s) to run. Estimated finish 2026-10-14 10:24 (0h 0m from now) **
+// ***** BenchmarkRunner: Finish  *****
+
+// * Export *
+  benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.csv
+  benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report-github.md
+  benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html
+
+// * Detailed results *
+T218PreparationControlBenchmark.Prepare_Control_Patindex_Uncached: ShortRun(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)
+Runtime = ; GC = 
+Mean = 969.919 us, StdErr = 87.832 us (9.06%), N = 3, StdDev = 152.130 us
+Min = 794.257 us, Q1 = 925.611 us, Median = 1,056.965 us, Q3 = 1,057.751 us, Max = 1,058.536 us
+IQR = 132.140 us, LowerFence = 727.401 us, UpperFence = 1,255.960 us
+ConfidenceInterval = [-1,805.504 us; 3,745.343 us] (CI 99.9%), Margin = 2,775.424 us (286.15% of Mean)
+Skewness = -0.38, Kurtosis = 0.67, MValue = 2
+-------------------- Histogram --------------------
+[787.952 us ; 1,064.841 us) | @@@
+---------------------------------------------------
+
+// * Summary *
+
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+
+Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
+LaunchCount=1  WarmupCount=3  Categories=t218-preparation  
+
+| Method                            | Mean     | Error      | StdDev   | Gen0    | Allocated |
+|---------------------------------- |---------:|-----------:|---------:|--------:|----------:|
+| Prepare_Control_Patindex_Uncached | 969.9 us | 2,775.4 us | 152.1 us | 93.7500 | 784.39 KB |
+
+// * Legends *
+  Mean      : Arithmetic mean of all measurements
+  Error     : Half of 99.9% confidence interval
+  StdDev    : Standard deviation of all measurements
+  Gen0      : GC Generation 0 collects per 1000 operations
+  Allocated : Allocated memory per single operation (managed only, inclusive, 1KB = 1024B)
+  1 us      : 1 Microsecond (0.000001 sec)
+
+// * Diagnostic Output - MemoryDiagnoser *
+
+
+// ***** BenchmarkRunner: End *****
+Run time: 00:00:03 (3.59 sec), executed benchmarks: 1
+
+Global total time: 00:00:03 (3.99 sec), executed benchmarks: 1
+// * Artifacts cleanup *
+Artifacts cleanup is finished

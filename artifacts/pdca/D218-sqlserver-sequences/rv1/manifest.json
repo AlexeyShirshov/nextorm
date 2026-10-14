@@ -1,6 +1,6 @@
 {
   "task": "T218 (#218) SQL Server sequences (NEXT VALUE FOR) \u2014 cross-provider",
-  "tree": "317f0078b86d8b7f53bfe86ca07178dee020e017",
+  "tree": "16cc6b48c8da86eb464d986083ca0a72cf4980cd",
   "contract_rv": 1,
   "status_file": "docs/specs/status/D218-sqlserver-sequences-1.md",
   "required_rows": [
@@ -206,6 +206,39 @@
           "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsSqlGenerationTests",
           "exit": 0,
           "value": "git checkout -- src/nextorm.sqlserver/SqlServerDialect.cs; rebuild exit 0; GREEN 33/33 exit 0"
+        },
+        {
+          "kind": "mutation-map",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md",
+          "value": "added/changed branch -> test/guard table + 4 mutation outcomes RED->GREEN"
+        },
+        {
+          "kind": "mutation",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/n3-m1-red.log",
+          "command": "dotnet test tests/nextorm.postgres.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsRejectionTests",
+          "exit": 2,
+          "value": "M1 remove provider gate: RED 3 failed / 0 succeeded (NullReferenceException instead of NotSupportedException); GREEN n3-m1-green.log exit 0 (3/3)"
+        },
+        {
+          "kind": "mutation",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/n3-m2-red.log",
+          "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsSqlGenerationTests",
+          "exit": 2,
+          "value": "M2 corrupt NEXT VALUE FOR render: RED 6 failed / 27 succeeded; GREEN n3-m2-green.log exit 0 (33/33)"
+        },
+        {
+          "kind": "mutation",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/n3-m3-red.log",
+          "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsSqlGenerationTests",
+          "exit": 2,
+          "value": "M3 drop nextval alias dispatch: RED 4 failed / 29 succeeded; GREEN n3-m3-green.log exit 0 (33/33)"
+        },
+        {
+          "kind": "mutation",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/n3-m4-red.log",
+          "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsSqlGenerationTests",
+          "exit": 2,
+          "value": "M4 drop ]] escaping: RED 1 failed / 32 succeeded; GREEN n3-m4-green.log exit 0 (33/33); src restored clean"
         }
       ]
     },
@@ -224,6 +257,13 @@
           "kind": "integration-cases",
           "path": "tests/nextorm.integration.tests/SqlServerSpecificTests.cs",
           "value": "NextValueFor_BothAliases_ShouldAdvanceTheSameSequence (10/15/20, bare+schema); NextValueFor_SameSequenceRepeatedInOneRow_ShouldReturnTheSameValue (1/1); NextValueFor_BigintBoundaries_ShouldMaterializeAsLong (long.MaxValue/MinValue)"
+        },
+        {
+          "kind": "integration",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/n3-integration-sqlserverspecific.log",
+          "command": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.SqlServerSpecificTests -noColor",
+          "exit": 0,
+          "value": "Total 97 / Failed 0 / Skipped 0; new NextValueFor_MultipleRows_ShouldReturnDistinctConsecutiveValues projects next_value_for over the multi-row set and asserts distinct consecutive values per row (closes row :87, >=96)"
         }
       ]
     },
@@ -291,7 +331,7 @@
     },
     {
       "id": "E08",
-      "status": "met",
+      "status": "open",
       "evidence": [
         {
           "kind": "benchmark",
@@ -361,8 +401,51 @@
           "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=t218-preparation",
           "exit": 0,
           "value": "CHECK POST (22b96233-era HEAD): control 909.197 us (Min 644.836 / Max 1315.473 / StdDev 357.132) / 789.47 KB; 5 cases"
+        },
+        {
+          "kind": "benchmark-ab",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/e08-ab-A1.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=t218-preparation --filter *Prepare_Control_Patindex*",
+          "exit": 0,
+          "value": "A pre-D1 784.39 KB / Gen0 93.7500 / Mean 969.9 us (worktree f8caa690, control-only projection)"
+        },
+        {
+          "kind": "benchmark-ab",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/e08-ab-B1.log",
+          "exit": 0,
+          "value": "B HEAD 789.53 KB / Gen0 93.7500 / Mean 2.473 ms"
+        },
+        {
+          "kind": "benchmark-ab",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/e08-ab-A2.log",
+          "exit": 0,
+          "value": "A pre-D1 784.39 KB / Gen0 93.7500 / Mean 789.3 us"
+        },
+        {
+          "kind": "benchmark-ab",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/e08-ab-B2.log",
+          "exit": 0,
+          "value": "B HEAD 789.53 KB / Gen0 93.7500 / Mean 2.380 ms"
+        },
+        {
+          "kind": "benchmark-ab",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/e08-ab-A3.log",
+          "exit": 0,
+          "value": "A pre-D1 784.46 KB / Gen0 93.7500 / Mean 2.395 ms"
+        },
+        {
+          "kind": "benchmark-ab",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/e08-ab-B3.log",
+          "exit": 0,
+          "value": "B HEAD 789.53 KB / Gen0 93.7500 / Mean 2.412 ms"
+        },
+        {
+          "kind": "disposition",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md",
+          "value": "A/B raw numbers + conclusion: allocations not equal, delta attributable to D1; outcome gap/incomplete product delta ~5 KB (escalate n=3)"
         }
-      ]
+      ],
+      "reason": "gap/incomplete, product delta ~5 KB. The A/B control (same session, alternating A B A B A B, same job and filter) shows the allocation criterion is a discriminating oracle and fails: A pre-D1 784.39/784.39/784.46 KB vs B HEAD 789.53 KB x3 (Gen0 identical 93.7500); the ~+5.14 KB (+0.66 %) delta tracks the product source state, so it is a real D1 allocation on the query-preparation path (control patindex flows through the D1-changed translator) -> routed to planner r=2 with the obligation to remove it (explicit contract supersession; preserve R1-R7; no allocation tolerance). No src change made here."
     },
     {
       "id": "E09",
@@ -454,6 +537,25 @@
           "command": "dotnet build nextorm.slnx -c Debug",
           "exit": 0,
           "value": "0 Warning(s), 0 Error(s); recorded here rather than as a boundary report execution because the frozen report already carries one boundary solution build (cap = 1)"
+        },
+        {
+          "kind": "binding",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/source-identity.txt",
+          "value": "n=3 corrective source footprint tree 16cc6b48c8da86eb464d986083ca0a72cf4980cd (HEAD^{tree} + integration-test additive; status file and generated artifacts excluded); commit recorded in source-identity.txt"
+        },
+        {
+          "kind": "report",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
+          "command": "python3 scripts/validate_inner_loop.py report artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
+          "exit": 0,
+          "value": "52 executions after the n=3 append (A/B pair + integration run + integration build)"
+        },
+        {
+          "kind": "manifest",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
+          "command": "python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
+          "exit": 0,
+          "value": "n=3 rebind; E08 open (gap/incomplete) forbids PASS per the contract"
         }
       ]
     }
@@ -465,6 +567,10 @@
     "Corrective revision cb3d5b6bddd79f6468a432eee537c8b01e85b578 (tree 317f0078b86d8b7f53bfe86ca07178dee020e017); tree rebound from the DO freeze to the corrective commit. DO freeze b5dc7eb remains as historical evidence (append-only).",
     "E04 met by the corrective executed assertions (NUL/default(string)/'a.'/'.b'/'.'/oversized schema; schema-']' and nextval escaping) plus mutation #4 RED exit 2 -> revert -> GREEN exit 0.",
     "E08 met by E08-disposition.md (control <=105% of baseline in every post run; reproducible +0.65% allocation delta on unchanged code stated as incomparable).",
-    "E10 met by the corrective binding (commit cb3d5b6b / tree 317f0078) + report and manifest validators exit 0."
+    "E10 met by the corrective binding (commit cb3d5b6b / tree 317f0078) + report and manifest validators exit 0.",
+    "n=3 corrective (routed from escalate; no replan, no STOP, no src change): E08 moved met -> open (gap/incomplete, product delta ~5 KB) on the decisive A/B control (A pre-D1 784.4 KB vs B HEAD 789.53 KB, stable, alternating same session); see E08-ab.md and logs/e08-ab-*.log.",
+    "n=3 corrective test-only: tests/nextorm.integration.tests/SqlServerSpecificTests.cs adds the multi-row distinct-consecutive-values scenario; DOCKER_HOST class run Total 97 / Failed 0 / Skipped 0 (row :87).",
+    "n=3 corrective mutations (row :91): M1 gate-off, M2 corrupt render, M3 drop alias, M4 drop ]] escaping \u2014 each RED exit 2 -> restore -> GREEN exit 0; branch-mutation-map.md + logs/n3-m{1..4}-*.log.",
+    "n=3 tree 16cc6b48c8da86eb464d986083ca0a72cf4980cd = HEAD^{tree} + the integration-test additive (this cycle's status file and generated artifacts excluded)."
   ]
 }

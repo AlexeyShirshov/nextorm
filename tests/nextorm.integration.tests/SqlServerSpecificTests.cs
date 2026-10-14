@@ -2545,6 +2545,37 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         }
     }
 
+    [Fact]
+    [Trait("Issue", "218")]
+    public void NextValueFor_MultipleRows_ShouldReturnDistinctConsecutiveValues()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop sequence if exists dbo.t218_seq_rows");
+        Execute(ctx, "create sequence dbo.t218_seq_rows as bigint start with 100 increment by 1 no cycle");
+
+        try
+        {
+            // A multi-row source evaluates NEXT VALUE FOR once per row: every row must carry its own
+            // value, and the N values must be exactly N distinct consecutive sequence values from 100
+            // (no row sharing a value, no gap). The order is not asserted because T-SQL assigns the
+            // values during evaluation, not in ORDER BY order.
+            var rows = _sut.SimpleEntity
+                .Select(x => new { x.Id, N = SqlFunctions.SqlServer.next_value_for("t218_seq_rows") })
+                .ToList();
+
+            rows.Should().NotBeEmpty();
+
+            var values = rows.Select(r => r.N).ToList();
+            values.Should().OnlyHaveUniqueItems();
+
+            values.OrderBy(v => v).Should().Equal(Enumerable.Range(100, values.Count).Select(i => (long)i));
+        }
+        finally
+        {
+            Execute(ctx, "drop sequence if exists dbo.t218_seq_rows");
+        }
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();
