@@ -3,7 +3,7 @@
  "contract_rv": 3,
  "cycle": "N=1",
  "issue": "#232",
- "last_updated": "2026-10-14T21:58:32Z",
+ "last_updated": "2026-10-14T22:15:26Z",
  "milestone": "1.0.9-rc3",
  "plan_revision": 3,
  "records": [
@@ -1325,6 +1325,438 @@
    "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C-variant-pivot-free.err",
    "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C-variant-pivot-free.out",
    "stdout_sha256": "13535eb36a6c94a525824c1e49330a6058201ac27c17c5fa7eb5b43bb1baada2",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "dotnet",
+    "build",
+    "examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj",
+    "-c",
+    "Debug",
+    "-p:NextOrmVersion=1.0.9-rc3-local",
+    "-p:RestoreAdditionalProjectSources=/tmp/opencode/t232-feed",
+    "-p:NuGetAudit=false"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:11:17Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C13-example-build.exit",
+   "name": "C13-example-build",
+   "note": "typed AdventureWorks example against the local rc3 feed (published rc2 lacks the typed API); NuGetAudit off for the environment advisory",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C13-example-build.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C13-example-build.out",
+   "stdout_sha256": "d79607a597e37a3cbc33080d13355471eb2c57000a5700ae6ac8aec6d668f039",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "dotnet",
+    "build",
+    "src/nextorm.sqlserver/nextorm.sqlserver.csproj",
+    "-c",
+    "Debug",
+    "-p:NuGetAudit=false"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:11:21Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-xml-build.exit",
+   "name": "C14-xml-build",
+   "note": "XML-doc / CS1591 build evidence (core + sqlserver)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-xml-build.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-xml-build.out",
+   "stdout_sha256": "035e5b5f1c12b6840ec5d4743ff7503e1c1e040bfd2607ac5cecea65d655a4f9",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "git",
+    "grep",
+    "-n",
+    "-E",
+    "docs/specs/|todo_sqlserver_typed_pivot_unpivot",
+    "--",
+    "docs",
+    "readme.md",
+    ":(exclude)docs/specs"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:11:21Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-specs-link-scan.exit",
+   "name": "C14-specs-link-scan",
+   "note": "public docs must not link to internal specs (empty output = clean)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-specs-link-scan.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-specs-link-scan.out",
+   "stdout_sha256": "f3b3778c8bbdeb4a789becd89881fa6e5da60d651250e560f59579ad526c7bc4",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "dotnet",
+    "build",
+    "src/nextorm.sqlserver/nextorm.sqlserver.csproj",
+    "-c",
+    "Debug",
+    "-p:NuGetAudit=false"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:11:43Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-xml-build.exit",
+   "name": "C14-xml-build",
+   "note": "XML-doc / CS1591 build evidence (core + sqlserver)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-xml-build.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-xml-build.out",
+   "stdout_sha256": "2ae62ccc931b74a2bf3042ae3729d511e948b16c19f8d578129035eca38fb5d4",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "git",
+    "grep",
+    "-n",
+    "-E",
+    "\\]\\([^)]*docs/specs/|href=\\\"[^\\\"]*docs/specs/|todo_sqlserver_typed_pivot_unpivot",
+    "--",
+    "docs",
+    "readme.md",
+    ":(exclude)docs/specs"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:11:43Z",
+   "exit": 1,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-specs-link-scan.exit",
+   "name": "C14-specs-link-scan",
+   "note": "public docs must not link to internal specs (empty output = clean)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-specs-link-scan.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-specs-link-scan.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "dotnet",
+    "build",
+    "src/nextorm.sqlserver/nextorm.sqlserver.csproj",
+    "-c",
+    "Debug",
+    "-p:NuGetAudit=false"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:14:28Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-xml-build.exit",
+   "name": "C14-xml-build",
+   "note": "XML-doc / CS1591 build evidence (core + sqlserver)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-xml-build.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-xml-build.out",
+   "stdout_sha256": "1a5c70ba5a8f0dfd064cb6320b9204397d78f46a863d3aef3314951b225798d8",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "git",
+    "grep",
+    "-n",
+    "-E",
+    "\\]\\([^)]*docs/specs/|href=\\\"[^\\\"]*docs/specs/|todo_sqlserver_typed_pivot_unpivot",
+    "--",
+    "docs",
+    "readme.md",
+    ":(exclude)docs/specs"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:14:28Z",
+   "exit": 1,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-specs-link-scan.exit",
+   "name": "C14-specs-link-scan",
+   "note": "public docs must not link to internal specs (empty output = clean)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-specs-link-scan.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-specs-link-scan.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "dotnet",
+    "build",
+    "examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj",
+    "-c",
+    "Debug",
+    "-p:NextOrmVersion=1.0.9-rc3-local",
+    "-p:RestoreAdditionalProjectSources=/tmp/opencode/t232-feed",
+    "-p:NuGetAudit=false"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:14:31Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C13-example-build.exit",
+   "name": "C13-example-build",
+   "note": "typed AdventureWorks example against the local rc3 feed (published rc2 lacks the typed API); NuGetAudit off for the environment advisory",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C13-example-build.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C13-example-build.out",
+   "stdout_sha256": "6021928131fa6b9e1a2282b31dfd8336d8edfa51e0bc546911c13bff0f7caa0b",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:14Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-01.exit",
+   "name": "C19-brief-D-01",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-01.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-01.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-02.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:14Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-02.exit",
+   "name": "C19-brief-D-02",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-02.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-02.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-02.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-03.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:14Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-03.exit",
+   "name": "C19-brief-D-03",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-03.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-03.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-03.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-04.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:14Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-04.exit",
+   "name": "C19-brief-D-04",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-04.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-04.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-04.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-05.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:14Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-05.exit",
+   "name": "C19-brief-D-05",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-05.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-05.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-brief-D-05.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:14Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-01.exit",
+   "name": "C19-report-D-01",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-01.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-01.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-02.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:14Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-02.exit",
+   "name": "C19-report-D-02",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-02.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-02.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-02.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-03.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:14Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-03.exit",
+   "name": "C19-report-D-03",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-03.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-03.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-03.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-04.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:14Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-04.exit",
+   "name": "C19-report-D-04",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-04.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-04.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-04.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-05.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:14Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-05.exit",
+   "name": "C19-report-D-05",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-05.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-05.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-report-D-05.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/briefs/D-06.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:14Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-rv3-brief-D-06.exit",
+   "name": "C19-rv3-brief-D-06",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/briefs/D-06.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-rv3-brief-D-06.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-rv3-brief-D-06.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/reports/D-06.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:14Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-rv3-report-D-06.exit",
+   "name": "C19-rv3-report-D-06",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/reports/D-06.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-rv3-report-D-06.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-rv3-report-D-06.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "dotnet",
+    "build",
+    "examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj",
+    "-c",
+    "Debug",
+    "-p:NextOrmVersion=1.0.9-rc3-local",
+    "-p:RestoreAdditionalProjectSources=/tmp/opencode/t232-feed",
+    "-p:NuGetAudit=false"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T22:15:26Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C13-example-build.exit",
+   "name": "C13-example-build",
+   "note": "typed AdventureWorks example against the local rc3 feed (published rc2 lacks the typed API); NuGetAudit off for the environment advisory",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C13-example-build.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C13-example-build.out",
+   "stdout_sha256": "d79607a597e37a3cbc33080d13355471eb2c57000a5700ae6ac8aec6d668f039",
    "timed_out": false
   }
  ],

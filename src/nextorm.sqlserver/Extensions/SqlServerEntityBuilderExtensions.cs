@@ -82,8 +82,14 @@ public static class SqlServerEntityBuilderExtensions
     /// <para>
     /// Each value is the data value matched by the pivoted column (the same string
     /// <c>PivotValue.Create</c> takes), not its SQL identifier: the identifier is derived from it the way
-    /// the renderer escapes the <c>IN</c> list. A cell whose type is non-nullable against a SQL NULL
-    /// behaves like the matching <see cref="TableAlias"/> accessor; the nullability is never inferred.
+    /// the renderer escapes the <c>IN</c> list. The value string is a <b>runtime identifier</b> with no
+    /// compile-time membership guarantee — it is never validated against the data. A value absent from
+    /// the data still renders its column but materializes as SQL <c>NULL</c> for every row, so declare the
+    /// cell nullable when that is possible; an invalid name or an incompatible explicit cell type can
+    /// fail during query preparation or materialization. A cell whose type is non-nullable against a SQL
+    /// NULL behaves like the matching <see cref="TableAlias"/> accessor; the nullability is never
+    /// inferred. A truly dynamic PIVOT whose value list is known only at runtime is outside this typed
+    /// overload and stays with the untyped <see cref="TableAlias"/> path.
     /// </para>
     /// <para>
     /// The returned builder is a full source over the typed projection: its members are usable in
@@ -149,6 +155,14 @@ public static class SqlServerEntityBuilderExtensions
     /// reads the value column and <c>unpivot.Name&lt;string&gt;("qtr")</c> the name column, using the same
     /// role identifiers the <c>UNPIVOT ([val] for [qtr] in (...))</c> clause takes. A direct member of the
     /// inner source is a grouping member.
+    /// <para>
+    /// The role identifiers passed to <c>Value</c>/<c>Name</c> are <b>runtime</b> values: they are matched
+    /// against the <c>UNPIVOT ([value] for [name] in (...))</c> clause at runtime, so an incompatible
+    /// explicit cell type or a malformed role name is not rejected at compile time. SQL Server excludes a
+    /// source cell whose value is <c>NULL</c>, so the stacked result contains only non-null cells and can
+    /// have fewer rows than <c>columns × source rows</c>; declaring the value cell nullable models that
+    /// exclusion.
+    /// </para>
     /// <para>
     /// The returned builder is a full source over the typed projection (see the typed <c>Pivot</c>
     /// overload); like every derived source it is materialized with an explicit <c>Select</c>. Requires a

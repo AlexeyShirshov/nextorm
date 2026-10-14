@@ -208,6 +208,85 @@ pivot (sum([Margin]) for [QuarterNum] in ([1], [2], [3], [4])) as [t2]
 order by CategoryName
 ```
 
+### Typed result shape
+
+The overloads above return an untyped [`TableAlias`](xref:NextORM.Core.TableAlias) source — every
+grouping column and every pivoted column is read by name. SQL Server also exposes **typed** overloads
+that declare the result members and the CLR cell type of each pivoted column once, and derive the
+`IN (...)` list from that projection:
+
+```csharp
+var typed = ctx.From<Sales>()
+    .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter,
+        (s, pivot) => new
+        {
+            s.Category,                       // a direct member of the inner source is a grouping column
+            Q1 = pivot.Value<decimal?>("1"),  // the explicit CLR cell type of the pivoted column "1"
+            Q2 = pivot.Value<decimal?>("2")
+        });
+
+var rows = typed
+    .OrderBy(x => x.Q1)                       // typed members are usable in Where/OrderBy/Select
+    .Select(x => new { x.Category, x.Q1, x.Q2 })
+    .ToList();
+```
+
+```sql
+select category, [Q1], [Q2]
+ from (select category, [1] as [Q1], [2] as [Q2]
+ from sales pivot (sum([Margin]) for [Quarter] in ([1], [2])) as [t1]) as [t2]
+ order by t2.[Q1]
+```
+
+The typed members are **aliases** over the pivoted columns (`Q1 = pivot.Value<decimal?>("1")` emits
+`[1] as [Q1]`), so the shape can rename cells and order them differently from the `IN` list. A
+grouping member is any other direct member of the inner source (`s.Category`); inner members that the
+projection does not mention remain grouping inputs. `Value<T>` requires the CLR type explicitly —
+there is no inference and no automatic nullability: use `decimal?`/`int?`/`string?` when an absent value
+or an excluded `NULL` cell is possible (see below). A subset of the grouping members is allowed; the
+operator still groups by every remaining inner member. Because the projection is a derived source, it
+composes further: `Where`/`OrderBy`/`Select` on the result, a further `From(...)`, or `AsCte` to reuse it
+as a CTE. As for every derived source, materializing it needs an explicit `Select`.
+
+```csharp
+var byQuarter = ctx.From(orderMargins)   // a derived query (join + computed Margin/FOR columns)
+    .Pivot(PivotAggregate.Sum, m => m.Margin, m => m.QuarterNum,
+        (m, pivot) => new { m.Category, Q4 = pivot.Value<decimal?>("4") })
+    .Select(m => new { m.Category, m.Q4 })
+    .ToList();
+```
+
+`Unpivot` mirrors this: the projection declares the two role columns
+(`unpivot.Value<decimal?>("val")`, `unpivot.Name<string>("qtr")`) using the same identifiers the
+`UNPIVOT ([val] for [qtr] in (...))` clause takes, and any other direct member is a grouping column.
+SQL Server **excludes** a source cell whose value is `NULL`, so the stacked result can have fewer rows
+than `columns × source rows`; declare the value cell nullable to model that exclusion.
+
+```csharp
+var stacked = ctx.From<Quarterly>()
+    .Unpivot(
+        (m, unpivot) => new
+        {
+            m.Category,
+            Quarter = unpivot.Name<string>("qtr"),
+            Value = unpivot.Value<decimal?>("val")
+        },
+        UnpivotColumn.Create("q1"), UnpivotColumn.Create("q2"))
+    .Select(x => new { x.Category, x.Quarter, x.Value })
+    .ToList();
+```
+
+The value and role strings are **runtime identifiers**: they are not checked against the data or the
+inner mapping at compile time. An absent PIVOT value still renders its column but yields SQL `NULL`, so
+a non-nullable cell would fail materialization — declare it nullable; an invalid name or an incompatible
+cell type can fail during query preparation or materialization instead of at compile time. A truly
+dynamic PIVOT whose value list is only known at runtime cannot be expressed as a typed shape and stays
+with the untyped `TableAlias` overload. The typed projection is fail-closed: a duplicate value, a
+projection that declares no value, a non-constant value name, a grouping member that is also the
+aggregate or `FOR` column, an empty UNPIVOT column list, a missing UNPIVOT role and conflicting role
+identifiers all throw `ArgumentException` (or `NotSupportedException` for reading the inner source as a
+whole) instead of emitting wrong SQL.
+
 ## `TABLESAMPLE`
 
 [`FromOptions.TableSample`](xref:NextORM.Core.FromOptions.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) adds a `TABLESAMPLE` modifier to the

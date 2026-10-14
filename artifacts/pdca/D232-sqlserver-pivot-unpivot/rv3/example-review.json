@@ -1,0 +1,34 @@
+{
+ "argv": [
+  "dotnet",
+  "build",
+  "examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj",
+  "-c",
+  "Debug",
+  "-p:NextOrmVersion=1.0.9-rc3-local",
+  "-p:RestoreAdditionalProjectSources=/tmp/opencode/t232-feed",
+  "-p:NuGetAudit=false"
+ ],
+ "build_summary": {
+  "errors": 0,
+  "succeeded": true,
+  "warnings": 0
+ },
+ "captured": "2026-10-14T22:15:26Z",
+ "criterion": [
+  "E232-13",
+  "AC-10"
+ ],
+ "exit": 0,
+ "feed": "/tmp/opencode/t232-feed",
+ "local_version": "1.0.9-rc3-local",
+ "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C13-example-build.out",
+ "no_by_name_cell_reads": true,
+ "no_pivotvalue_create": true,
+ "note": "examples consume published packages; the unreleased typed API needs the local feed (packed by C13). The literal `dotnet build <example> -c Debug` cannot resolve the typed API from published 1.0.9-rc2.",
+ "packaging_caveat": "OPEN PACKAGING CAVEAT (for CHECK): the AdventureWorks example consumes PUBLISHED packages (`examples/Directory.Packages.props` NextOrmVersion), and the typed PIVOT/UNPIVOT API is not in the published 1.0.9-rc2. C13 therefore builds against a locally packed 1.0.9-rc3-local feed (/tmp/opencode/t232-feed) with -p:NextOrmVersion=1.0.9-rc3-local -p:RestoreAdditionalProjectSources=<feed>. The example compiles only after that local pack; the plain literal command against published rc2 fails to resolve the typed API. Publishing rc3 removes the caveat.",
+ "single_value_declaration": true,
+ "sql_aligned_numeric": true,
+ "unit": "D-06",
+ "uses_typed_projection": true
+}

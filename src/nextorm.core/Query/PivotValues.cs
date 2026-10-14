@@ -10,6 +10,18 @@ namespace NextORM.Core;
 /// ordinary <c>Select</c> over an existing <c>PIVOT</c> source. Only the query translator may bind a
 /// <see cref="Value{T}"/> call; executing an accessor outside a query expression throws
 /// <see cref="NotSupportedException"/>.
+/// <para>
+/// The value string is a <b>runtime identifier</b>: it is not checked against the pivoted column at
+/// compile time, so nothing guarantees the declared shape matches the data. A value that is absent from
+/// the data still renders its result column but materializes as SQL <c>NULL</c> for every row (declare
+/// the cell nullable when that is possible), and a malformed name or an incompatible explicit cell type
+/// can fail during query preparation or materialization instead of being rejected up front.
+/// </para>
+/// <para>
+/// This is the typed, statically declared projection: every pivot value is named in the projection. A
+/// truly dynamic PIVOT whose value list is known only at runtime stays outside this API and with the
+/// untyped <see cref="TableAlias"/> path.
+/// </para>
 /// </remarks>
 public sealed class PivotValues
 {
@@ -26,7 +38,11 @@ public sealed class PivotValues
     /// the <c>PivotValue</c> values), with an explicit CLR cell type.
     /// </summary>
     /// <typeparam name="T">The CLR type of the result column value.</typeparam>
-    /// <param name="columnName">The pivot value that names the result column.</param>
+    /// <param name="columnName">
+    /// The pivot value that names the result column. It is resolved at runtime, so an absent value or an
+    /// incompatible <typeparamref name="T"/> is not rejected by the compiler: an absent value may yield
+    /// SQL <c>NULL</c>, and an invalid name or type can fail during query preparation or materialization.
+    /// </param>
     /// <returns>The cell value, materialized as <typeparamref name="T"/>.</returns>
     /// <exception cref="NotSupportedException">
     /// Always thrown: the accessor is translation-only and can only be used inside a query expression.
@@ -45,6 +61,17 @@ public sealed class PivotValues
 /// ordinary <c>Select</c> over an existing <c>UNPIVOT</c> source. Only the query translator may bind a
 /// <see cref="Name{T}"/>/<see cref="Value{T}"/> call; executing an accessor outside a query
 /// expression throws <see cref="NotSupportedException"/>.
+/// <para>
+/// The two role identifiers are resolved at runtime: they are not checked at compile time, so a missing
+/// role identifier or an incompatible explicit cell type can fail during query preparation or
+/// materialization rather than being rejected up front.
+/// </para>
+/// <para>
+/// SQL Server <c>UNPIVOT</c> <b>excludes</b> a source cell whose value is <c>NULL</c>: the stacked result
+/// contains only non-null cells, so fewer rows than <c>columns × source rows</c> are expected. Declaring
+/// the value column non-nullable asserts only that the surviving cells are non-null; it does not change
+/// the exclusion.
+/// </para>
 /// </remarks>
 public sealed class UnpivotValues
 {
@@ -61,7 +88,7 @@ public sealed class UnpivotValues
     /// source column name) with an explicit CLR type.
     /// </summary>
     /// <typeparam name="T">The CLR type of the name column value.</typeparam>
-    /// <param name="nameColumn">The name of the UNPIVOT name column (the <c>FOR</c> identifier).</param>
+    /// <param name="nameColumn">The name of the UNPIVOT name column (the <c>FOR</c> identifier), resolved at runtime.</param>
     /// <returns>The name value, materialized as <typeparamref name="T"/>.</returns>
     /// <exception cref="NotSupportedException">
     /// Always thrown: the accessor is translation-only and can only be used inside a query expression.
@@ -74,7 +101,7 @@ public sealed class UnpivotValues
     /// column values) with an explicit CLR type.
     /// </summary>
     /// <typeparam name="T">The CLR type of the value column value.</typeparam>
-    /// <param name="valueColumn">The name of the UNPIVOT value column.</param>
+    /// <param name="valueColumn">The name of the UNPIVOT value column, resolved at runtime. Source cells whose value is <c>NULL</c> are excluded by SQL Server.</param>
     /// <returns>The value, materialized as <typeparamref name="T"/>.</returns>
     /// <exception cref="NotSupportedException">
     /// Always thrown: the accessor is translation-only and can only be used inside a query expression.

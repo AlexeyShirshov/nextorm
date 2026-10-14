@@ -5708,3 +5708,39 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
 **P0 — нет; P1 по именам — нет.** Новые имена следуют конвенциям; XML-doc полон (`GenerateDocumentationFile=true` + `TreatWarningsAsErrors=true`, build `0/0` ⇒ CS1591 гейтится). Публичные доки EN+RU обновлены (`docs/advanced/eager-loading.md` + RU, `docs/index.md:156` — факт удаления `AsSingleQuery`); в публичных доках `AsSingleQuery` не упоминается (только непубликуемые внутренние `docs/specs/comparison/*`). API-0621 (`capability-matrix.md:110` «opt-in `AsSingleQuery`») — внутренняя спека, не продуктовая поверхность. Более позднее #209 расширило `EagerLoadMode` до 5 членов и добавило context/query-настройки стратегии — отдельное Обновление 11.10.2026 выше (P2 **EL2**), здесь не переоткрывается.
 
 **Прогон.** `git diff v1.0.9-rc1..HEAD -- 'src/**/*.cs'` — публичных добавлений JSON-группы 4 + enum; `slopwatch` локально не установлен (скан вручную).
+
+---
+
+## Аудит 15.10.2026 (#232, D-06, r=3) — типизированные SQL Server `PIVOT`/`UNPIVOT` (P0 — нет; P1 по именам — нет; P2 — PIV-TYP1 (Шаг 5))
+
+**Область (uncommitted, r=3).** Добавлена **типизированная** публичная поверхность `PIVOT`/`UNPIVOT`:
+два новых public-типа `NextORM.Core.PivotValues`/`UnpivotValues` (`src/nextorm.core/Query/PivotValues.cs` —
+`sealed`, public parameterless ctor + 3 translation-only accessor'а `PivotValues.Value<T>(string)`,
+`UnpivotValues.Name<T>(string)`, `UnpivotValues.Value<T>(string)`) и две provider-перегрузки
+`NextORM.SqlServer.SqlServerEntityBuilderExtensions.Pivot<TEntity,TShape>(…)` / `.Unpivot<TEntity,TShape>(…)`
+(`src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs`). Легаси-перегрузки (untyped
+`TableAlias`) и их SQL **не тронуты**; `PIVOT`/`UNPIVOT` AST (`PivotExpression`) и рендерер без изменений;
+`ISqlDialect`/capability-поверхность не менялись.
+
+- **Имена.** `PivotValues`/`UnpivotValues` — описательные маркеры-существительные в ряду существующих
+  DSL-маркеров (`TableAlias`); `Value<T>`/`Name<T>` — короткие терминалы формы, зеркалят SQL-роли
+  `UNPIVOT ([value] for [name])`; родовые параметры `TEntity`/`TShape` — существующая конвенция
+  (`Projection<T1..T8>`). BCL-конфликтов/аббревиатур нет (`Pivot*`/`Unpivot*` в BCL отсутствуют).
+- **XML-doc 100 %** (CS1591 — ошибка сборки): покрыты оба типа, оба конструктора, три accessor'а и обе
+  перегрузки, включая runtime-семантику строк-идентификаторов, исключение `NULL`-ячеек в `UNPIVOT` и
+  границу динамического `PIVOT`.
+- **Публичные доки EN+RU** обновлены: `docs/guide/provider-specific-sql/sqlserver.md` §«Typed result
+  shape» + RU-зеркало «Типизированная форма результата» (типизированные примеры, группировка и
+  подмножества, явные nullable-типы, алиасы членов, композиция через производный источник и `AsCte`,
+  роли `UNPIVOT`, fail-closed ошибки, runtime-семантика, динамический `PIVOT`); легаси `TableAlias`-раздел
+  сохранён и явно отделён. Ссылок на `docs/specs/**` нет.
+
+| # | Ур. | Место | Оценка | Рекомендация |
+|---|-----|-------|--------|--------------|
+| PIV-TYP1 | **P2 (Шаг 5)** | `src/nextorm.core/Query/PivotValues.cs`; `src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs` | Типизированная поверхность `PIVOT`/`UNPIVOT` (**2** новых public-типа + **2** public parameterless ctor + **3** accessor'а + **2** перегрузки) — **зарегистрирована как кандидат, статус `registered / pending acceptance`, не «implemented»**: принятие выполняется в цикле (CHECK) по закоммиченному evidence. `find -name 'PublicAPI*.txt'` — **0**; `PublicApiAnalyzers` не подключён (Шаг 5, issue #53). **`PIV-RD2` сохранён (P2 OPEN / [#53](https://github.com/AlexeyShirshov/nextorm/issues/53))** | Внести подписи в `PublicAPI.Unshipped.txt` при заморозке; точные сигнатуры — в T53-кандидатах `docs/specs/status/collection-1.0.9-todo.md` §T232 (tag `#232`) |
+
+ℹ️ **Наблюдения.** (1) **P0/P1 по именам — нет.** (2) Легаси-поверхность `Pivot`/`Unpivot` (`TableAlias`)
+и её SQL не изменены; `PIV-RD2` не переоткрывается, `PIV-DOC1`/`PIV-NAME1` не затрагиваются. (3) **T53
+freeze HELD, не активируется** — кандидаты зарегистрированы в `collection-1.0.9-todo.md` (tag `#232`),
+`PublicAPI.*.txt` не вводится, анализаторы не включаются. (4) Новых публичных типов вне `PIVOT`-группы
+нет → Приложение A дельта: 2 (`PivotValues`/`UnpivotValues`) до заморозки.

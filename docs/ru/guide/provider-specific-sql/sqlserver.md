@@ -209,6 +209,89 @@ pivot (sum([Margin]) for [QuarterNum] in ([1], [2], [3], [4])) as [t2]
 order by CategoryName
 ```
 
+### Типизированная форма результата
+
+Перегрузки выше возвращают нетипизированный источник [`TableAlias`](xref:NextORM.Core.TableAlias) —
+каждая группирующая и каждая сведённая колонка читается по имени. SQL Server также предоставляет
+**типизированные** перегрузки, которые объявляют члены результата и CLR-тип каждой сведённой колонки
+один раз, а список `IN (...)` выводят из этой проекции:
+
+```csharp
+var typed = ctx.From<Sales>()
+    .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter,
+        (s, pivot) => new
+        {
+            s.Category,                       // прямой член внутреннего источника — группирующая колонка
+            Q1 = pivot.Value<decimal?>("1"),  // явный CLR-тип ячейки сведённой колонки "1"
+            Q2 = pivot.Value<decimal?>("2")
+        });
+
+var rows = typed
+    .OrderBy(x => x.Q1)                       // типизированные члены доступны в Where/OrderBy/Select
+    .Select(x => new { x.Category, x.Q1, x.Q2 })
+    .ToList();
+```
+
+```sql
+select category, [Q1], [Q2]
+ from (select category, [1] as [Q1], [2] as [Q2]
+ from sales pivot (sum([Margin]) for [Quarter] in ([1], [2])) as [t1]) as [t2]
+ order by t2.[Q1]
+```
+
+Типизированные члены — это **псевдонимы** над сведёнными колонками
+(`Q1 = pivot.Value<decimal?>("1")` рендерит `[1] as [Q1]`), поэтому форма может переименовывать
+ячейки и располагать их иначе, чем в списке `IN`. Группирующий член — любой другой прямой член
+внутреннего источника (`s.Category`); члены, которые проекция не упоминает, остаются входом
+группировки. `Value<T>` требует CLR-тип явно — вывода нет и nullability не выводится автоматически:
+используйте `decimal?`/`int?`/`string?`, когда возможны отсутствующее значение или исключённая
+`NULL`-ячейка (см. ниже). Разрешено объявить подмножество группирующих членов; оператор всё равно
+группирует по всем остальным членам внутреннего источника. Поскольку проекция — производный
+источник, она компонуется дальше: `Where`/`OrderBy`/`Select` по результату, ещё один `From(...)` или
+`AsCte` для переиспользования как CTE. Как и для любого производного источника, для материализации
+нужен явный `Select`.
+
+```csharp
+var byQuarter = ctx.From(orderMargins)   // производный запрос (join + вычисляемые Margin/FOR-колонки)
+    .Pivot(PivotAggregate.Sum, m => m.Margin, m => m.QuarterNum,
+        (m, pivot) => new { m.Category, Q4 = pivot.Value<decimal?>("4") })
+    .Select(m => new { m.Category, m.Q4 })
+    .ToList();
+```
+
+`Unpivot` устроен так же: проекция объявляет две ролевые колонки
+(`unpivot.Value<decimal?>("val")`, `unpivot.Name<string>("qtr")`) с теми же идентификаторами, что и
+клауза `UNPIVOT ([val] for [qtr] in (...))`, а любой другой прямой член — группирующая колонка.
+SQL Server **исключает** ячейку источника со значением `NULL`, поэтому в сведённом результате может
+оказаться меньше строк, чем `колонки × строки источника`; объявляйте ячейку значения nullable, чтобы
+смоделировать это исключение.
+
+```csharp
+var stacked = ctx.From<Quarterly>()
+    .Unpivot(
+        (m, unpivot) => new
+        {
+            m.Category,
+            Quarter = unpivot.Name<string>("qtr"),
+            Value = unpivot.Value<decimal?>("val")
+        },
+        UnpivotColumn.Create("q1"), UnpivotColumn.Create("q2"))
+    .Select(x => new { x.Category, x.Quarter, x.Value })
+    .ToList();
+```
+
+Строки значений и ролей — **рантайм-идентификаторы**: они не проверяются ни против данных, ни против
+внутреннего маппинга на этапе компиляции. Отсутствующее значение PIVOT всё равно рендерит свою
+колонку, но даёт SQL `NULL`, поэтому non-nullable ячейка упадёт при материализации — объявляйте её
+nullable; неверное имя или несовместимый тип ячейки могут упасть при подготовке или материализации
+запроса, а не на компиляции. По-настоящему динамический PIVOT, список значений которого известен
+только в рантайме, нельзя выразить типизированной формой — он остаётся на нетипизированной
+перегрузке `TableAlias`. Типизированная проекция fail-closed: дублирующееся значение, проекция без
+значений, неконстантное имя значения, группирующий член, совпадающий с агрегатом или `FOR`-колонкой,
+пустой список колонок UNPIVOT, отсутствующая роль UNPIVOT и конфликтующие идентификаторы ролей
+выбрасывают `ArgumentException` (или `NotSupportedException` при чтении внутреннего источника
+целиком), а не порождают неверный SQL.
+
 ## `TABLESAMPLE`
 
 [`FromOptions.TableSample`](xref:NextORM.Core.FromOptions.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к

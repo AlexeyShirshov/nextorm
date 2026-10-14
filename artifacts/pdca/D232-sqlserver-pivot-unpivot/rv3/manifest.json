@@ -140,14 +140,60 @@
    "status": "open"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "example-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/example-review.json"
+    },
+    {
+     "exit": 0,
+     "kind": "build-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C13-example-build.out"
+    },
+    {
+     "kind": "example",
+     "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs"
+    },
+    {
+     "kind": "example-sql",
+     "path": "examples/nextorm.examples.mssql.adventureworks/Sql/mssql_quarterly_pivot.sql"
+    }
+   ],
    "id": "E232-13",
-   "reason": "the typed AdventureWorks example is produced in D-06",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "docs-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/docs-review.json"
+    },
+    {
+     "exit": 0,
+     "kind": "build-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-xml-build.out"
+    },
+    {
+     "kind": "spec-link-scan",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-specs-link-scan.out"
+    },
+    {
+     "kind": "docs",
+     "path": "docs/guide/provider-specific-sql/sqlserver.md"
+    },
+    {
+     "kind": "docs",
+     "path": "docs/ru/guide/provider-specific-sql/sqlserver.md"
+    },
+    {
+     "kind": "registry",
+     "path": "docs/specs/design/API-NAMING-REVIEW.md"
+    }
+   ],
    "id": "E232-14",
-   "reason": "bilingual/XML docs are produced in D-06",
-   "status": "open"
+   "status": "met"
   },
   {
    "id": "E232-15",

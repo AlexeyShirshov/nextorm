@@ -1,0 +1,15 @@
+{
+ "argv": [
+  "dotnet",
+  "build",
+  "examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj",
+  "-c",
+  "Debug",
+  "-p:NextOrmVersion=1.0.9-rc3-local",
+  "-p:RestoreAdditionalProjectSources=/tmp/opencode/t232-feed",
+  "-p:NuGetAudit=false"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T22:15:25Z",
+ "env": {}
+}

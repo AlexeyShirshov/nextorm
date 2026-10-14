@@ -32,7 +32,10 @@ Subcommands (the delta invocation catalog C20..C33)
   cache-locality                     C30  cache/command locality + source review
   prerequisite-mutation              C31  controlled prerequisite mutants
   manifest                           C32  validate_inner_loop.py manifest <rv3 manifest>
+  scopes                             C19  validate_inner_loop.py brief/report for rv1 D-01..D-05 and rv3 D-06
   fulfill                            C33  contract/provenance/counters/delta fulfillment check
+  example                            C13  build the typed AdventureWorks example + source audit
+  docs                               C14  XML-doc build evidence + EN/RU semantic match + spec-link scan
 
 Exit codes: 0 = ok, 2 = violation, 1 = usage/unreadable/missing required input.
 """
@@ -976,6 +979,168 @@ def cmd_fulfill():
 USAGE = __doc__
 
 
+# --------------------------------------------------------------------------- C13/C14 (D-06 docs/example)
+FEED = "/tmp/opencode/t232-feed"
+FEED_PACKAGES = [
+    ("src/nextorm.core/nextorm.core.csproj", "nextorm.1.0.9-rc3-local.nupkg"),
+    ("src/nextorm.sqlserver/nextorm.sqlserver.csproj", "nextorm.sqlserver.1.0.9-rc3-local.nupkg"),
+    ("src/nextorm.postgres/nextorm.postgres.csproj", "nextorm.postgres.1.0.9-rc3-local.nupkg"),
+    ("src/nextorm.clickhouse/nextorm.clickhouse.csproj", "nextorm.clickhouse.1.0.9-rc3-local.nupkg"),
+]
+EXAMPLE_PROJECT = "examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj"
+EXAMPLE_SOURCE = "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs"
+EXAMPLE_SQL = "examples/nextorm.examples.mssql.adventureworks/Sql/mssql_quarterly_pivot.sql"
+DOCS_EN = "docs/guide/provider-specific-sql/sqlserver.md"
+DOCS_RU = "docs/ru/guide/provider-specific-sql/sqlserver.md"
+LOCAL_VERSION = "1.0.9-rc3-local"
+
+
+def _text(rel_path):
+    with open(os.path.join(ROOT, rel_path), encoding="utf-8") as handle:
+        return handle.read()
+
+
+def _ensure_feed():
+    """Pack the example-consumer packages at ``LOCAL_VERSION`` when the local feed is absent.
+
+    The examples consume *published* packages by design (`examples/Directory.Packages.props`
+    ``NextOrmVersion``); the typed PIVOT/UNPIVOT API is unreleased, so C13 and the solution gate must be
+    built against a freshly packed local feed. ``-p:NuGetAudit=false`` is required because a fresh
+    restore otherwise fails on a NuGet audit advisory (NU1902/NU1903) unrelated to this task.
+    """
+    os.makedirs(FEED, exist_ok=True)
+    for project, package in FEED_PACKAGES:
+        if os.path.exists(os.path.join(FEED, package)):
+            continue
+        run(["dotnet", "pack", project, "-c", "Debug", "-p:Version=" + LOCAL_VERSION,
+             "-p:NuGetAudit=false", "-o", FEED], "C13-feed-pack-" + package.split(".")[0],
+            phase="boundary", note="pack local consumer feed " + package)
+
+
+def cmd_scopes():
+    """C19 (rv3): re-validate every brief/report with scripts/validate_inner_loop.py.
+
+    Covers both contract roots: the rv1 D-01..D-05 set (as the original C19 did) and the rv3
+    D-06 unit added by this plan revision. Any non-zero validator exit makes the command exit 2.
+    """
+    results = {"briefs": [], "reports": []}
+    for base, prefix in ((R1_REL, "C19"), (A_REL, "C19-rv3")):
+        for kind, mode in (("briefs", "brief"), ("reports", "report")):
+            directory = os.path.join(ROOT, base, kind)
+            if not os.path.isdir(directory):
+                continue
+            for name in sorted(os.listdir(directory)):
+                if not name.endswith(".json"):
+                    continue
+                path = os.path.join(directory, name)
+                code = run(["python3", "scripts/validate_inner_loop.py", mode, _rel(path)],
+                           prefix + "-" + mode + "-" + name[:-5], phase="boundary",
+                           note="validate_inner_loop.py %s %s" % (mode, _rel(path)))
+                results[kind].append({"path": _rel(path), "exit": code})
+    bad = [item for item in results["briefs"] + results["reports"] if item["exit"] != 0]
+    _write_json(os.path.join(A, "scope-map.json"), results)
+    print(json.dumps(results, indent=1))
+    return 0 if not bad else 2
+
+
+def cmd_example():
+    """C13 (D-06/E232-13): build the typed AdventureWorks example and audit its source."""
+    _ensure_feed()
+    overrides = ["-p:NextOrmVersion=" + LOCAL_VERSION, "-p:RestoreAdditionalProjectSources=" + FEED,
+                 "-p:NuGetAudit=false"]
+    argv = ["dotnet", "build", EXAMPLE_PROJECT, "-c", "Debug"] + overrides
+    exit_code = run(argv, "C13-example-build", phase="boundary",
+                    note="typed AdventureWorks example against the local rc3 feed "
+                         "(published rc2 lacks the typed API); NuGetAudit off for the environment advisory")
+    summary = _parse_build_summary(_read_text(os.path.join(LOGS, "C13-example-build.out")))
+    source = _text(EXAMPLE_SOURCE)
+    sql = _text(EXAMPLE_SQL)
+    quarterly = source.split("public static async Task QuarterlyPivot", 1)[-1].split("private static void Print", 1)[0]
+    review = {
+        "unit": "D-06", "criterion": ["E232-13", "AC-10"],
+        "exit": exit_code, "argv": argv, "build_summary": summary,
+        "log": _rel(os.path.join(LOGS, "C13-example-build.out")),
+        "uses_typed_projection": "pivot.Value<decimal?>" in quarterly,
+        "no_pivotvalue_create": "PivotValue.Create" not in quarterly,
+        "no_by_name_cell_reads": 'GetNullableDecimal("[1]")' not in quarterly
+                                 and 'GetString("CategoryName")' not in quarterly,
+        "single_value_declaration": quarterly.count("pivot.Value<decimal?>") == 4,
+        "sql_aligned_numeric": "FOR QuarterNum IN ([1], [2], [3], [4])" in sql and "[Q1]" not in sql,
+        "feed": FEED, "local_version": LOCAL_VERSION,
+        "note": "examples consume published packages; the unreleased typed API needs the local feed "
+                "(packed by C13). The literal `dotnet build <example> -c Debug` cannot resolve the "
+                "typed API from published 1.0.9-rc2.",
+        "packaging_caveat": "OPEN PACKAGING CAVEAT (for CHECK): the AdventureWorks example consumes "
+                "PUBLISHED packages (`examples/Directory.Packages.props` NextOrmVersion), and the typed "
+                "PIVOT/UNPIVOT API is not in the published 1.0.9-rc2. C13 therefore builds against a "
+                "locally packed 1.0.9-rc3-local feed (/tmp/opencode/t232-feed) with "
+                "-p:NextOrmVersion=1.0.9-rc3-local -p:RestoreAdditionalProjectSources=<feed>. The example "
+                "compiles only after that local pack; the plain literal command against published rc2 "
+                "fails to resolve the typed API. Publishing rc3 removes the caveat.",
+        "captured": _now(),
+    }
+    _write_json(os.path.join(A, "example-review.json"), review)
+    print(json.dumps({k: review[k] for k in ("exit", "uses_typed_projection", "no_pivotvalue_create",
+           "no_by_name_cell_reads", "single_value_declaration", "sql_aligned_numeric")}, indent=1))
+    ok = (exit_code == 0 and summary.get("warnings") == 0 and summary.get("errors") == 0
+          and review["uses_typed_projection"] and review["no_pivotvalue_create"]
+          and review["no_by_name_cell_reads"] and review["single_value_declaration"]
+          and review["sql_aligned_numeric"])
+    return 0 if ok else 2
+
+
+def cmd_docs():
+    """C14 (D-06/E232-14): XML-doc build evidence + EN/RU semantic match + no public-specs links."""
+    build_exit = run(["dotnet", "build", "src/nextorm.sqlserver/nextorm.sqlserver.csproj", "-c", "Debug",
+                      "-p:NuGetAudit=false"], "C14-xml-build", phase="boundary",
+                     note="XML-doc / CS1591 build evidence (core + sqlserver)")
+    build_summary = _parse_build_summary(_read_text(os.path.join(LOGS, "C14-xml-build.out")))
+    xml_core_path = os.path.join(ROOT, "src/nextorm.core/bin/linux/Debug/net10.0/nextorm.core.xml")
+    xml_sql_path = os.path.join(ROOT, "src/nextorm.sqlserver/bin/linux/Debug/net10.0/nextorm.sqlserver.xml")
+    core_xml = open(xml_core_path, encoding="utf-8").read() if os.path.exists(xml_core_path) else ""
+    sql_xml = open(xml_sql_path, encoding="utf-8").read() if os.path.exists(xml_sql_path) else ""
+    en = _text(DOCS_EN)
+    ru = _text(DOCS_RU)
+
+    spec_scan = run(["git", "grep", "-n", "-E",
+                     r"\]\([^)]*docs/specs/|href=\"[^\"]*docs/specs/|todo_sqlserver_typed_pivot_unpivot", "--",
+                     "docs", "readme.md", ":(exclude)docs/specs"], "C14-specs-link-scan", phase="boundary",
+                    note="public docs must not link to internal specs (empty output = clean)")
+    spec_scan_out = _read_text(os.path.join(LOGS, "C14-specs-link-scan.out"))
+
+    findings = {
+        "unit": "D-06", "criterion": ["E232-14", "AC-04", "AC-05"],
+        "en": DOCS_EN, "ru": DOCS_RU,
+        "xml_build_exit": build_exit, "xml_build_summary": build_summary,
+        "xml_members_core": all(token in core_xml for token in (
+            "NextORM.Core.PivotValues", "NextORM.Core.UnpivotValues",
+            "PivotValues.Value``1(System.String)", "UnpivotValues.Name``1(System.String)",
+            "UnpivotValues.Value``1(System.String)")),
+        "xml_members_sqlserver": "Pivot``2(" in sql_xml and "Unpivot``2(" in sql_xml,
+        "en_typed_heading": "### Typed result shape" in en,
+        "ru_typed_heading": "### Типизированная форма результата" in ru,
+        "en_runtime_semantics": "runtime identifier" in en,
+        "ru_runtime_semantics": "рантайм-идентификаторы" in ru,
+        "en_dynamic_boundary": "dynamic PIVOT" in en,
+        "ru_dynamic_boundary": "динамический PIVOT" in ru,
+        "en_unpivot_null": "excludes" in en and "NULL" in en,
+        "ru_unpivot_null": "исключает" in ru and "NULL" in ru,
+        "public_spec_link_scan_exit": spec_scan, "public_spec_link_scan_clean": spec_scan_out.strip() == "",
+        "en_ru_code_fence_parity": en.count("```") == ru.count("```"),
+        "captured": _now(),
+    }
+    _write_json(os.path.join(A, "docs-review.json"), findings)
+    print(json.dumps({k: v for k, v in findings.items() if isinstance(v, (bool, int))}, indent=1))
+    ok = (build_exit == 0 and build_summary.get("warnings") == 0 and build_summary.get("errors") == 0
+          and findings["xml_members_core"] and findings["xml_members_sqlserver"]
+          and findings["en_typed_heading"] and findings["ru_typed_heading"]
+          and findings["en_runtime_semantics"] and findings["ru_runtime_semantics"]
+          and findings["en_dynamic_boundary"] and findings["ru_dynamic_boundary"]
+          and findings["en_unpivot_null"] and findings["ru_unpivot_null"]
+          and findings["public_spec_link_scan_clean"] and findings["en_ru_code_fence_parity"])
+    return 0 if ok else 2
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
@@ -1019,8 +1184,14 @@ def main(argv=None):
         return cmd_prerequisite_mutation()
     if command == "manifest":
         return cmd_manifest()
+    if command == "scopes":
+        return cmd_scopes()
     if command == "fulfill":
         return cmd_fulfill()
+    if command == "docs":
+        return cmd_docs()
+    if command == "example":
+        return cmd_example()
     print("ERROR: unknown subcommand %r" % command, file=sys.stderr)
     print(USAGE, file=sys.stderr)
     return 1
