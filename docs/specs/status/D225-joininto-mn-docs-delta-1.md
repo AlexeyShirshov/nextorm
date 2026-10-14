@@ -322,3 +322,5 @@ CHECK re-gather budget: **2 targeted gathers total, owner CHECK**, existing-tree
 `docs.patch`, `portability.json`, `structural.json`, `providers.json`, `coverage.cobertura.xml`,
 `Summary.txt`, `manifest.json`, `evidence.json`, `semantic-review.md`, `malformed-review.md`,
 `implicit-scope.md`, `roslyn.json`, `logs/{diff-check,docfx,build,joininto,coverage,coverage-threshold,integration,clickhouse,composite-oracles,composite-rejection,composite-remainder,patch,discovery}.log`.
+
+- 2026-10-14 23:47 UTC | D8 | revision r=3 | iteration 1/3 | **DO→CHECK handoff**: the swept working tree was committed as `e9bea5f7cd29e34ee58428a846dd950c55dd2106` (parent `0ed8e01dae44122276056f9f89676d913891ff09`, the frozen baseline `$B`). The manifest binds `tree: 0ed8e01d` + `contract_rv: 2`, and every execution records `source_revision == artifact_revision == 0ed8e01d`; no provider/API/test or out-of-footprint file was staged (36 paths: 5 footprint docs + this status file + `artifacts/pdca/D225/rv2/**`). CHECK evidence is append-only and must not silently rebind the tree, baseline or obligations.
