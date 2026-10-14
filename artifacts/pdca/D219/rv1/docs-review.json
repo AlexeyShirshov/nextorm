@@ -1,0 +1,53 @@
+{
+  "task": "T219 (#219)",
+  "rv": 1,
+  "en": "docs/scalar-functions/09-system-functions.md",
+  "ru": "docs/ru/scalar-functions/09-system-functions.md",
+  "parity": {
+    "en_diff": "+76/-... (task commit b5f8b360)",
+    "ru_diff": "+73/-... (task commit b5f8b360)",
+    "all_15_functions_present_in_both": true,
+    "per_key_occurrence_check": "server_name/host_id/host_name/app_name/suser_name/pg_backend_pid/inet_*/connection_id/user()/tcp_port/hostName() present in both; original_login en=6 ru=5 (prose wording, both present)",
+    "table_content": "per-provider identity table, null semantics, client-vs-server distinction, security caveat (client-supplied HOST/APP untrusted)"
+  },
+  "exclusions_lifted": [
+    {
+      "file": "docs/specs/roadmap/sql-function-coverage-gap.md",
+      "change": "SQL Server system section: the shipped identity subset (@@SERVERNAME, HOST_ID, HOST_NAME, APP_NAME, SUSER_NAME, ORIGINAL_LOGIN) removed from the documented-exclusions list; exclusions 10 -> 7; security/identity exclusions narrowed to the unshipped SUSER_ID/SUSER_SID/SUSER_SNAME/SYSTEM_USER family"
+    },
+    {
+      "file": "docs/specs/roadmap/sql-capabilities-gap-analysis.md",
+      "change": "row 25 extended with the #219 session/server identity completion and the exact per-provider support matrix"
+    }
+  ],
+  "stale_paths_absent": {
+    "docs/scalar-functions/10-system-functions.md": "absent",
+    "docs/scalar-functions/11-sqlserver-scalars.md": "absent",
+    "note": "10-sequences.md is the pre-existing D218 page, not a T219 artifact"
+  },
+  "toc": {
+    "changed": false,
+    "files": [
+      "docs/scalar-functions/toc.yml",
+      "docs/ru/toc.yml"
+    ],
+    "note": "links verified; no structure/renumbering change (guide renumbering not required)"
+  },
+  "public_spec_links": {
+    "tokens": "docs/specs",
+    "matches_in_public_pages": 0,
+    "scope": "docs/scalar-functions/09-system-functions.md + RU mirror"
+  },
+  "docfx": {
+    "command": "dotnet docfx docs/docfx.json",
+    "exit": 0,
+    "warnings": 2,
+    "errors": 0,
+    "warnings_detail": "2 pre-existing source-generator duplicate-source warnings (AnalyzerReleases.Shipped/Unshipped.md), unrelated to T219; no broken-link/invalid-xref warning",
+    "log": "artifacts/pdca/D219/rv1/logs/c8-docfx.log"
+  },
+  "artifacts": [
+    "artifacts/pdca/D219/rv1/task.patch"
+  ],
+  "recorded_at_head": "b5f8b360b9ef5fd3fb86a546c9615f3cbf1d86f5"
+}

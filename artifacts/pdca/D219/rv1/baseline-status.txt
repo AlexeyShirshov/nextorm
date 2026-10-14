@@ -1,0 +1,36 @@
+T219 (#219) rv=1 — pre-existing unrelated churn preserved by chunk 4/4 (baseline preservation, R219-08)
+Chunk-start status had 59 porcelain entries = 28 T219 task paths + the 31 entries below.
+After the task commit (#219 add session/server identity functions, b5f8b360) the status is exactly these 31 entries.
+No unrelated file was staged, edited or committed by this chunk.
+
+ M .opencode/agents/nextorm-code-auditor.md
+ M .opencode/agents/nextorm-db-perf-analyst.md
+ M .opencode/agents/nextorm-design-engineer.md
+ M .opencode/agents/nextorm-inmemory-perf-analyst.md
+ M .opencode/agents/nextorm-performance-analyst.md
+ M .opencode/agents/nextorm-scout.md
+ M .opencode/skills/implementing-todo-features/SKILL.md
+ M .opencode/skills/nextorm-pdca/SKILL.md
+ M AGENTS.md
+ M artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md
+ M artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md
+ M artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log
+ M artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
+ M artifacts/pdca/D218-sqlserver-sequences/rv1/report.json
+ M docs/assets/diagrams/nextorm-command-execution.svg
+ M docs/ru/assets/diagrams/nextorm-command-execution.svg
+ M docs/specs/status/D216-row-locking-1.md
+ M docs/specs/status/D218-sqlserver-sequences-1.md
+ M examples/Directory.Packages.props
+ M examples/README.md
+ M examples/VERIFICATION.md
+ M examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs
+ M examples/nextorm.examples.clickhouse.analytics/README.md
+ M examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+ M examples/nextorm.examples.mssql.adventureworks/README.md
+ M examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs
+ M examples/nextorm.examples.postgres.aviasales/README.md
+?? benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report-github.md
+?? benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.csv
+?? benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html
+?? docs/specs/status/evidence/pivot-typed-overload/

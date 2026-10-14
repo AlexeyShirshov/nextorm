@@ -174,8 +174,8 @@ Held freeze; recorded for `docs/specs/status/D53-public-api-freeze-1.md` (basis 
 - Attempt n: 1/3
 - Evidence contract rv: 1
 - plan_state: ready
-- defect_key registry: (empty)
-- Defect history: none yet — no defects observed; no attempt/revision reset.
+- defect_key registry: D219-C4-MYSQL-RESERVED-ALIAS (r1/n1, 1 fix applied), D219-C4-PG-INETNETMASK (r1/n1, 1 fix applied)
+- Defect history: D219-C4-MYSQL-RESERVED-ALIAS — observed r1/n1 on C4 attempt 1 (MySQL/MariaDB `current_user` collided with a reserved word in the integration test projection: 3 failed / exit 2), fixed in-chunk (1 fix applied), final C4 0 failed; evidence artifacts/pdca/D219/rv1/logs/c4-specific-attempt1.log. D219-C4-PG-INETNETMASK — observed r1/n1 on the same attempt (PostgreSQL renders `inet` as text with its netmask, e.g. 10.0.0.1/32), fixed in-chunk (1 fix applied), final C4 0 failed; same evidence. No attempt/revision reset: r stays 1, n stays 1/3.
 
 ## Progress log
 
@@ -190,3 +190,4 @@ Held freeze; recorded for `docs/specs/status/D53-public-api-freeze-1.md` (basis 
 - Correction recorded in docs: `SqlFunctions.SqlServer.server_name()` renders the documented `@@SERVERNAME` — SQL Server has no native `SERVER_NAME()` function, so that name is never emitted.
 - `Sql.user()` is the MySQL/MariaDB client `user@host` pair and does NOT replace `current_user()` (the effective authenticated account).
 - No new pages created (`10-system-functions.md`/`11-sqlserver-scalars.md` remain stale paths); no toc/structure/guide renumbering; public docs contain no links to `docs/specs/**`.
+2026-10-14T10:14:20Z | DO | r1 | n1/3 | DO chunk 4/4 complete (D219-08): product+tests+docs committed (b5f8b360, 28 files, explicit paths only); single DO->CHECK boundary sweep C5 exit 0 (11838 total / 11639 succeeded / 0 failed / 199 capability-based skips, 0 provider skips); C6 exit 0; C7 exit 0 (line-rate 0.8812 >= 0.85, branch-rate 0.8039 >= 0.75); C9 manifest + report/brief validators exit 0; frozen evidence manifest rv=1 written | artifacts/pdca/D219/rv1/manifest.json

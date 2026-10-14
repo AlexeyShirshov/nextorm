@@ -1,0 +1,28 @@
+T219 (#219) — capability / fail-closed evidence summary (rv=1)
+================================================================================
+tree: b5f8b360b9ef5fd3fb86a546c9615f3cbf1d86f5 (product commit)
+
+Inner capability runs (C2, provider projects, no database):
+  provider    union(SqlGeneration|Dialect)  SqlGeneration  Dialect  failed  skipped  log
+  sqlserver   655                          605            50       0       0        logs/c2-sqlserver.log
+  postgres    860                          829            31       0       0        logs/c2-postgres.log
+  mysql       367                          342            25       0       0        logs/c2-mysql.log
+  mariadb     273                          261            12       0       0        logs/c2-mariadb.log
+  clickhouse  582                          505            77       0       0        logs/c2-clickhouse.log
+  sqlite      759                          734            25       0       0        logs/c2-sqlite.log
+
+Per-provider key contract (15 new keys + 5 legacy keys):
+  sqlserver : sqlserver.{server_name,host_id,host_name,app_name,suser_name,original_login} support+render;
+              the other 9 new keys fail closed (NotSupportedException)
+  postgres  : pg_backend_pid, inet_server_addr, inet_server_port, inet_client_addr, inet_client_port;
+              the other 10 fail closed
+  mysql     : connection_id (CAST(CONNECTION_ID() AS UNSIGNED)), user (USER()); mariadb inherits the same keys
+  clickhouse: connection_id (CAST(connectionId() AS UInt64)), clickhouse.host_name (hostName()),
+              clickhouse.tcp_port (CAST(tcpPort() AS Int32))
+  sqlite    : none of the 15; every key fails closed (Supports=false, Render throws)
+  marker: NotSupportedException raised at translation (before any SQL is emitted); no fallback rendering
+
+SQL Server gate:
+  ISqlServerFunctions.SupportsSessionIdentity is a default interface method returning false; only
+  SqlServerDialect enables it via explicit interface implementation, so the T-SQL scalar library alone
+  cannot enable the identity surface (DialectCapabilityContractTests.SessionIdentity_ShouldBeOptedIntoBySqlServerOnly).

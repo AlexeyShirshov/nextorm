@@ -1,0 +1,20 @@
+=== product file list (git diff --name-only aa31113b b5f8b360 -- src) ===
+src/nextorm.clickhouse/ClickHouseDialect.cs
+src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs
+src/nextorm.core/DataContext/InMemoryScalarFunctionRewriter.cs
+src/nextorm.core/Query/SqlFunctions.ClickHouse.cs
+src/nextorm.core/Query/SqlFunctions.SqlServer.cs
+src/nextorm.core/Query/SqlFunctions.cs
+src/nextorm.core/Visitors/SessionInfoFunctionTranslator.cs
+src/nextorm.mysql/MySqlDialect.cs
+src/nextorm.postgres/PostgresDialect.cs
+src/nextorm.sqlserver/SqlServerDialect.cs
+=== cache/command/planner/materializer token scan over the product diff ===
+token_scan_exit=1
+=== files touched under DataContext/ Query/ Visitors/ ===
+src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs
+src/nextorm.core/DataContext/InMemoryScalarFunctionRewriter.cs
+src/nextorm.core/Query/SqlFunctions.ClickHouse.cs
+src/nextorm.core/Query/SqlFunctions.SqlServer.cs
+src/nextorm.core/Query/SqlFunctions.cs
+src/nextorm.core/Visitors/SessionInfoFunctionTranslator.cs

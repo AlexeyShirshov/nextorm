@@ -1,0 +1,40 @@
+T219 (#219) rv=1 — source identity (tree-bound evidence)
+======================================================================
+product commit (tested tree): b5f8b360b9ef5fd3fb86a546c9615f3cbf1d86f5
+product tree (git rev-parse b5f8b360b9ef5fd3fb86a546c9615f3cbf1d86f5^{tree}): 14a93f2bbb4554a690740e3b62361e06a70a9e99
+git rev-parse HEAD at recording: b5f8b360b9ef5fd3fb86a546c9615f3cbf1d86f5  (equal to the product commit: the evidence commit follows)
+base_commit: aa31113b
+
+Committed task paths (git show --name-only b5f8b360b9ef5fd3fb86a546c9615f3cbf1d86f5), blob hashes from the product commit:
+  72745864f2a1bc0e9519e5ca337c756b95125987  docs/ru/scalar-functions/09-system-functions.md
+  7abe30a5e6e78d37ea732ee987463b2ab1672b3a  docs/scalar-functions/09-system-functions.md
+  bdd4bd15d8c07a42508e04d28cd550580eba0454  docs/specs/roadmap/sql-capabilities-gap-analysis.md
+  b3ea4a23b73ab65ad0a70abfdbc0049b58efa45c  docs/specs/roadmap/sql-function-coverage-gap.md
+  77c58b93e30001f7da472ee7a7864537455050ab  docs/specs/status/D219-session-identity-functions-1.md
+  c50058524093a2ab6daf3d915b88ca60af4f803f  src/nextorm.clickhouse/ClickHouseDialect.cs
+  5d5f0bb995341dfcb7ee5deb6087ae0a6117a621  src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs
+  8ec2f3015a4f316a1f1617d9ee75d4a7bd3da172  src/nextorm.core/DataContext/InMemoryScalarFunctionRewriter.cs
+  f4b7896a461549b4991f9ecbfbb66fbe2a79aae8  src/nextorm.core/Query/SqlFunctions.ClickHouse.cs
+  c39ec104eb7c8e6819722f88798b6dba36d86b43  src/nextorm.core/Query/SqlFunctions.SqlServer.cs
+  efe73a290efad1db61258d679adf7ca8f04d3dea  src/nextorm.core/Query/SqlFunctions.cs
+  8417870d4f4306484eba3a3f567b40658fcff101  src/nextorm.core/Visitors/SessionInfoFunctionTranslator.cs
+  d7e51b98b7e3ab6672674d9aa08495fd6ec3f9a4  src/nextorm.mysql/MySqlDialect.cs
+  6bdb37e780f12e95d9db1c4a64896085e2670422  src/nextorm.postgres/PostgresDialect.cs
+  5eb306f377a83333afadb45fd954252e3e821f8d  src/nextorm.sqlserver/SqlServerDialect.cs
+  62c1d08bd4731f02c58d3cfc59817aed41724482  tests/nextorm.clickhouse.tests/SessionIdentitySqlGenerationTests.cs
+  fa6bcd5e788b74c9c6060bb01d73850e11f04b06  tests/nextorm.core.tests/SessionIdentityInMemoryTests.cs
+  8378da058935f118deb8559ddd31879aa756e6f6  tests/nextorm.integration.tests/ClickHouseSpecificTests.cs
+  ad9844e5b8faa5fb76a147e28e2747313e2ff229  tests/nextorm.integration.tests/DialectCapabilityContractTests.cs
+  c68c9e7d01ddbb541d3545f32e12c4890c806d94  tests/nextorm.integration.tests/MariaDbSessionIdentitySpecificTests.cs
+  9747ff3e0a120842f3e6149857a0d53c25e426d1  tests/nextorm.integration.tests/MySqlSpecificTests.cs
+  996e19b1b387b915e6eba4bfc84af50a054105a0  tests/nextorm.integration.tests/PostgresSpecificTests.cs
+  b4137017952e87d4c852c1d5dc9141368bf3f0fd  tests/nextorm.integration.tests/SqlServerSpecificTests.cs
+  e07a73cda6de660797290180dac843fa1b07e374  tests/nextorm.mariadb.tests/SessionIdentitySqlGenerationTests.cs
+  6d93554e8c23a6bb5e99d7316eabfedd3db395fe  tests/nextorm.mysql.tests/SessionIdentitySqlGenerationTests.cs
+  2443b07cbff9bb48f8fae09409873e3ce369929b  tests/nextorm.postgres.tests/SessionIdentitySqlGenerationTests.cs
+  028b75a7afc34fff770b6d99dd3c6acaad04a283  tests/nextorm.sqlite.tests/SessionIdentitySqlGenerationTests.cs
+  78ba2462d624783d78bb363089187db5dbe2dc82  tests/nextorm.sqlserver.tests/SessionIdentitySqlGenerationTests.cs
+
+Per-file sha256 of the worktree copies + of the evidence artifacts: hashes.json (same directory).
+The evidence commit adds only artifacts/pdca/D219/rv1/** and docs/specs/status/D219-session-identity-functions-1.md;
+the product/test/docs bytes are unchanged from the product commit.

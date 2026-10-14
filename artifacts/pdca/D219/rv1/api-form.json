@@ -1,0 +1,114 @@
+{
+  "task": "T219 (#219)",
+  "rv": 1,
+  "recorded_at_head": "b5f8b360b9ef5fd3fb86a546c9615f3cbf1d86f5",
+  "method": "roslyn action=members on the four declaring surfaces (post-commit tree); list must equal the frozen T53 candidate list",
+  "members": [
+    {
+      "surface": "SqlServerFunctions",
+      "member": "server_name()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.SqlServer.cs:23:24",
+      "clr": "string?"
+    },
+    {
+      "surface": "SqlServerFunctions",
+      "member": "host_id()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.SqlServer.cs:30:24",
+      "clr": "string?"
+    },
+    {
+      "surface": "SqlServerFunctions",
+      "member": "host_name()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.SqlServer.cs:39:24",
+      "clr": "string?"
+    },
+    {
+      "surface": "SqlServerFunctions",
+      "member": "app_name()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.SqlServer.cs:46:24",
+      "clr": "string?"
+    },
+    {
+      "surface": "SqlServerFunctions",
+      "member": "suser_name()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.SqlServer.cs:53:24",
+      "clr": "string?"
+    },
+    {
+      "surface": "SqlServerFunctions",
+      "member": "original_login()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.SqlServer.cs:60:24",
+      "clr": "string?"
+    },
+    {
+      "surface": "CommonFunctions (SqlFunctions.Sql)",
+      "member": "pg_backend_pid()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.cs:457:20",
+      "clr": "int"
+    },
+    {
+      "surface": "CommonFunctions (SqlFunctions.Sql)",
+      "member": "inet_server_addr()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.cs:465:24",
+      "clr": "string?"
+    },
+    {
+      "surface": "CommonFunctions (SqlFunctions.Sql)",
+      "member": "inet_server_port()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.cs:472:21",
+      "clr": "int?"
+    },
+    {
+      "surface": "CommonFunctions (SqlFunctions.Sql)",
+      "member": "inet_client_addr()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.cs:479:24",
+      "clr": "string?"
+    },
+    {
+      "surface": "CommonFunctions (SqlFunctions.Sql)",
+      "member": "inet_client_port()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.cs:486:21",
+      "clr": "int?"
+    },
+    {
+      "surface": "CommonFunctions (SqlFunctions.Sql)",
+      "member": "connection_id()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.cs:494:22",
+      "clr": "ulong"
+    },
+    {
+      "surface": "CommonFunctions (SqlFunctions.Sql)",
+      "member": "user()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.cs:502:23",
+      "clr": "string"
+    },
+    {
+      "surface": "ClickHouseFunctions",
+      "member": "host_name()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:41:23",
+      "clr": "string"
+    },
+    {
+      "surface": "ClickHouseFunctions",
+      "member": "tcp_port()",
+      "file_line": "src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:47:20",
+      "clr": "int"
+    },
+    {
+      "surface": "ISqlServerFunctions",
+      "member": "SupportsSessionIdentity",
+      "file_line": "src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs:739:10",
+      "clr": "bool (default interface implementation => false)"
+    }
+  ],
+  "negative_form": {
+    "new_top_level_objects": 0,
+    "ambiguous_analogs": "none: every member sits on an existing sentinel object or the existing ISqlServerFunctions interface (a default interface member, no new abstraction)",
+    "unrecorded_public_additions": "the T53 candidate list in the D219 status file matches the Roslyn member list exactly (15 methods + 1 interface property); no other public member was added (api-diff.patch -- src touches only the sentinel/interface/dialect/translator files)",
+    "existing_sentinel_properties_unchanged": true
+  },
+  "evidence": [
+    "artifacts/pdca/D219/rv1/api-diff.patch",
+    "docs/specs/status/D219-session-identity-functions-1.md (T53 candidates section)"
+  ]
+}

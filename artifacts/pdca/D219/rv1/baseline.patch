@@ -1,0 +1,1751 @@
+diff --git a/.opencode/agents/nextorm-code-auditor.md b/.opencode/agents/nextorm-code-auditor.md
+index e23d6ba9..7c305653 100644
+--- a/.opencode/agents/nextorm-code-auditor.md
++++ b/.opencode/agents/nextorm-code-auditor.md
+@@ -140,6 +140,10 @@ End with the summary table and the non-determinism disclaimer.
+ 
+ ## Boundaries
+ 
++- **C# symbols — `roslyn` only, in V2 inside `execute`:**
++  `const r = await tools.roslyn({ action: "refs", target: "NextORM.Core.X.Y" }); return r`;
++  never symbol-grep (`rg`/`grep`/`sed`); batch calls in one `execute`; if it is not in the
++  Code Mode catalog, `search({ query: "roslyn" })` first.
+ - **Registers only** — you may edit `docs/specs/design/API-NAMING-REVIEW.md` and
+   `docs/specs/design/code-smells-review.md`; every other path is denied. Never
+   edit code or config.
+diff --git a/.opencode/agents/nextorm-db-perf-analyst.md b/.opencode/agents/nextorm-db-perf-analyst.md
+index 4747fae3..e9c56b96 100644
+--- a/.opencode/agents/nextorm-db-perf-analyst.md
++++ b/.opencode/agents/nextorm-db-perf-analyst.md
+@@ -121,6 +121,10 @@ in Russian.
+ 
+ ## Boundaries
+ 
++- **C# symbols — `roslyn` only, in V2 inside `execute`:**
++  `const r = await tools.roslyn({ action: "refs", target: "NextORM.Core.X.Y" }); return r`;
++  never symbol-grep (`rg`/`grep`/`sed`); batch calls in one `execute`; if it is not in the
++  Code Mode catalog, `search({ query: "roslyn" })` first.
+ - You may modify code: keep the change minimal, scoped to the hot path, and
+   build clean (`dotnet build nextorm.slnx -c Release`, warnings are errors).
+ - Do not reintroduce known regressions (cache disable; short-run conclusions on
+diff --git a/.opencode/agents/nextorm-design-engineer.md b/.opencode/agents/nextorm-design-engineer.md
+index 8214db16..95265081 100644
+--- a/.opencode/agents/nextorm-design-engineer.md
++++ b/.opencode/agents/nextorm-design-engineer.md
+@@ -109,6 +109,10 @@ constrain the **fix**, not just the review:
+ 
+ ## Editing rules
+ 
++- **C# symbols — `roslyn` only, in V2 inside `execute`:**
++  `const r = await tools.roslyn({ action: "refs", target: "NextORM.Core.X.Y" }); return r`;
++  never symbol-grep (`rg`/`grep`/`sed`); batch calls in one `execute`; if it is not in the
++  Code Mode catalog, `search({ query: "roslyn" })` first.
+ - **One axis per step**, then build + test — do not batch unrelated refactors.
+ - **CRLF always.** After editing any file: `perl -pi -e 's/\r?\n/\r\n/g' <file>`
+   and confirm with `file <file>` (never leave LF-only or mixed).
+diff --git a/.opencode/agents/nextorm-inmemory-perf-analyst.md b/.opencode/agents/nextorm-inmemory-perf-analyst.md
+index 3fbdc8ba..07230247 100644
+--- a/.opencode/agents/nextorm-inmemory-perf-analyst.md
++++ b/.opencode/agents/nextorm-inmemory-perf-analyst.md
+@@ -107,6 +107,10 @@ allocations) / **Verification** (exact command). Answer in Russian.
+ 
+ ## Boundaries
+ 
++- **C# symbols — `roslyn` only, in V2 inside `execute`:**
++  `const r = await tools.roslyn({ action: "refs", target: "NextORM.Core.X.Y" }); return r`;
++  never symbol-grep (`rg`/`grep`/`sed`); batch calls in one `execute`; if it is not in the
++  Code Mode catalog, `search({ query: "roslyn" })` first.
+ - You may modify code: keep the change minimal, scoped to the hot path, and
+   build clean (`dotnet build nextorm.slnx -c Release`, warnings are errors).
+ - Stay on the in-memory path; for ADO/plan-cache/SQL-builder issues defer to
+diff --git a/.opencode/agents/nextorm-performance-analyst.md b/.opencode/agents/nextorm-performance-analyst.md
+index 026e3e4c..08ff6677 100644
+--- a/.opencode/agents/nextorm-performance-analyst.md
++++ b/.opencode/agents/nextorm-performance-analyst.md
+@@ -23,6 +23,10 @@ the context that owns it; do not do the deep analysis yourself.
+   builders/visitors, or a `SqliteBenchmark*` arm:
+   **`nextorm-db-perf-analyst`**.
+ 
++- Routing evidence is `file:line` facts: C# symbols resolve with `roslyn` — in V2 inside
++  `execute` (`const r = await tools.roslyn({ action: "refs", target: "NextORM.Core.X.Y" }); return r`) —
++  never with symbol-grep (`rg`/`grep`/`sed`).
++
+ If the symptom genuinely spans both, start with the context that appears first
+ on the hot path and state the assumption.
+ 
+diff --git a/.opencode/agents/nextorm-scout.md b/.opencode/agents/nextorm-scout.md
+index c9f74231..f37786b6 100644
+--- a/.opencode/agents/nextorm-scout.md
++++ b/.opencode/agents/nextorm-scout.md
+@@ -46,8 +46,11 @@ permission:
+ 
+ Ты дешёвый, но не бесконтрольный: не перечитывай один и тот же файл в разных заходах, не запускай
+ `dotnet build`/`dotnet test` больше одного раза на один и тот же аргумент, широкие `rg` по всему репо
+-заменяй точечными. Для C#-символов используй инструмент `roslyn` (структура/типы/refs/callers), а не
+-текстовый поиск.
++заменяй точечными. Для C#-символов используй только `roslyn` (структура/типы/refs/callers/members), а не
++текстовый поиск. В V2 он не отдельный тул: вызов идёт **внутри `execute`** —
++`const r = await tools.roslyn({ action: "refs", target: "NextORM.Core.X.Y" }); return r`;
++несколько запросов — одним `execute` (`Promise.all`); нет в каталоге — сначала
++`search({ query: "roslyn" })`. «Нет его в списке тулов» — **не** повод уходить в `rg`/`grep`.
+ 
+ ## Чего не делать
+ 
+diff --git a/.opencode/skills/implementing-todo-features/SKILL.md b/.opencode/skills/implementing-todo-features/SKILL.md
+index 7f2e3d99..f7f31401 100644
+--- a/.opencode/skills/implementing-todo-features/SKILL.md
++++ b/.opencode/skills/implementing-todo-features/SKILL.md
+@@ -29,7 +29,10 @@ a coverage question, not a "who already implemented it" question. A function tha
+ provider today can still have an obvious analog on the others (`current_user` / `CURRENT_USER` /
+ `current_user()` / `currentUser()`). Search the engine before designing anything. Resolve C# symbols with the `roslyn` tool (e.g.
+ `members NextORM.Core.Query.SqlFunctions` / `refs` / `implementations` — see `AGENTS.md` -> "C#
+-semantic analysis"); use text search only for SQL/CLR names, never shell `grep -r`/`find`:
++semantic analysis"); in V2 it is not a top-level tool, so call it inside `execute`
++(`const r = await tools.roslyn({ action: "members", target: "NextORM.Core.Query.SqlFunctions" }); return r`,
++batching several calls in one `execute`; `search({ query: "roslyn" })` if it is not in the catalog — never symbol-grep);
++use text search only for SQL/CLR names, never shell `grep -r`/`find`:
+ 
+ ```bash
+ # plain-text pass (SQL/CLR token): ripgrep respects .gitignore, so it skips bin/obj/TestResults
+diff --git a/.opencode/skills/nextorm-pdca/SKILL.md b/.opencode/skills/nextorm-pdca/SKILL.md
+index ae1cd93c..ace91c1f 100644
+--- a/.opencode/skills/nextorm-pdca/SKILL.md
++++ b/.opencode/skills/nextorm-pdca/SKILL.md
+@@ -61,7 +61,10 @@ description: "Проектный оверлей nextorm к глобальном
+    обнаружении в CHECK — **loop-back CHECK → PLAN**, а не сноска в отчёте. Слабая постановка
+    **повышает** планку PLAN, а не понижает. Контракт: `pdca-dotnet` §PLAN → «PLAN owns the quality of the plan».
+ 10. **Поиск — ignore-aware; символы — `roslyn`.** Для C#-символов (типы/члены/`refs`/`callers`/overloads/
+-    implementations/renames) — только инструмент `roslyn`, не текстовый поиск. Для текста (доки,
++    implementations/renames) — только инструмент `roslyn`, не текстовый поиск. В V2 `roslyn` не
++    top-level: вызов — **внутри `execute`** (`const r = await tools.roslyn({ action: "members",
++    target: "Ns.Type" }); return r`), батч — одним `execute` (`Promise.all`); если его нет в каталоге
++    Code Mode, сначала `search({ query: "roslyn" })`. Для текста (доки,
+     комментарии, строковые литералы, имена SQL) — `rg`/`git grep` с ограничением по исходникам
+      (`rg -n --glob '*.cs' "<lit>" src tests`). **Никогда `grep -r`/`grep -rn`/`find`** по дереву: они
+      игнорируют `.gitignore` и читают `bin/`/`obj/`/`TestResults/` (≈1.3 GB артефактов под `src`/`tests`),
+diff --git a/AGENTS.md b/AGENTS.md
+index 07594aee..3f3747f5 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -9,7 +9,9 @@
+ ## C# semantic analysis (Roslyn)
+ - Symbols are Roslyn-only: for type/member definitions, references, call sites, implementations, overloads, renaming and impact analysis use the `roslyn` tool — never `rg`/`grep`/`sed`, not even as a first pass. Text search is fine only for docs, comments and string literals; it cannot resolve overloads, partial types or usings.
+ - The global rule in `~/.config/opencode/AGENTS.md` ("C# symbols: Roslyn only") applies here too and takes precedence over any reflexive grep.
+-- Custom tool `roslyn` is provided globally by opencode (`~/.config/opencode/tools/roslyn.ts`) and wraps the global `roslynq` dotnet tool, which loads this solution through `MSBuildWorkspace`. Pass `solution` only if the auto-detected `.sln` is wrong.
++- Custom tool `roslyn` is provided globally by opencode (`~/.config/opencode/plugins/roslyn.js` in V2; `~/.config/opencode/v1/tools/roslyn.ts` is the archived V1 copy) and wraps the global `roslynq` dotnet tool, which loads this solution through `MSBuildWorkspace`.
++- **V2: the tool is not top-level — call it inside `execute`.** `const r = await tools.roslyn({ action: "refs", target: "NextORM.Core.SqlBuilder.MakeSelect" }); return r`. "I don't see a `roslyn` tool" is never a reason to fall back to `rg`/`grep`: if it is missing from the Code Mode catalog, run `search({ query: "roslyn" })` first — the catalog goes partial while MCP servers reconnect, the tool itself stays registered.
++- Batch several `tools.roslyn(...)` calls in ONE `execute` (`Promise.all([...])`) — the `MSBuildWorkspace` cold start is paid once. Pass `solution` only when the auto-detected `.sln` is wrong or the call is made from outside this repo (e.g. `solution: "/home/alex/sources/nextorm/nextorm.slnx"`).
+ - Actions: `structure`, `types`, `symbols`, `members`, `refs`, `callers`, `implementations`, `rename`; pass symbols by full name (e.g. `NextORM.Core.SqlBuilder` or `NextORM.Core.SqlBuilder.MakeSelect`).
+ - Bulk renames: use `rename <symbol> <newName>` (dry-run) and add `apply=true` once the diff looks right — do not edit files one by one.
+ - Diagnostics after edits: `dotnet build` (see Build & toolchain). `MSBuildWorkspace` cold start is slow on this solution, so prefer one invocation per analysis over per-file calls.
+diff --git a/artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md b/artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md
+index e7368874..72dee4a5 100644
+--- a/artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md
++++ b/artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md
+@@ -67,6 +67,7 @@ the allocation column is bit-stable within each side.
+ 
+ **Outcome: `gap/incomplete, product delta ≈5 KB`.** The control allocation criterion is a
+ **discriminating oracle** and it fails: no `src` change is made here. The obligation (remove the ≈5 KB
++> **Annotation (2026-10-14, ACT routing) — superseded:** this `discriminating oracle … and it fails` claim is superseded by `E08-ab.md:164-172` (matched-job isolation: mode 0.00 KB, mean −1.56 KB, 98.8 %) and by `E08-disposition.md:40-41` (the control oracle is **non-discriminating** at this granularity); annotation only — no number changed, nothing deleted.
+ D1 allocation on the translator query-preparation path, explicit contract supersession, preserve
+ R1–R7, no allocation tolerance) is handed to the planner (`r=2`). E08 stays **open**.
+ 
+diff --git a/artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md b/artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md
+index a708b73a..999bf59b 100644
+--- a/artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md
++++ b/artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md
+@@ -51,3 +51,24 @@ Test S: `["dotnet","test","tests/nextorm.sqlserver.tests","-c","Debug","--no-bui
+ 
+ Each mutation is detected by at least one executed assertion and every mutated branch has a covering
+ test; the corrected sources restore GREEN. No product change is committed.
++
++## Variant guard confirmation (CHECK re-gather round 2) — rows `:83` and `:90`
++
++Appended by the check owner; the table above is unchanged. Full artifact:
++`variant-guard-confirmation.md`.
++
++- **Row `:83` (reference-type result guard)** — the two public markers return only CLR `long`; there is
++  no reference-type overload. `roslyn members NextORM.Core.SqlServerFunctions` lists exactly one
++  `next_value_for(string)` and one `nextval(string)`; sources `SqlFunctions.SqlServer.cs:294,:301` are
++  `public long`; `SequenceFunctions_ShouldReturnLong` (`SqlServerFunctionsSqlGenerationTests.cs:761`)
++  asserts `ReturnType == typeof(long)`. Covered by the "`next_value_for(string) → long` marker" and
++  "`nextval(string) → long` alias marker" rows above.
++- **Row `:90` (cache/default preparation control)** — the T218-only source delta
++  (`git diff f8caa690..HEAD -- src`) is exactly the three files above; it contains no `QueryCommand`
++  / `_dontCache` / `Builders/**` / `Cache = false` change (`git diff f8caa690..HEAD -- src | rg
++  "QueryCommand|_dontCache|Builders/|Cache = false"` → no match), so T218 does **not** mutate shared
++  `QueryCommand` state or the sticky `_dontCache`. The `QueryCommand`/`Builders` hunks visible in the
++  wider `58025147..HEAD` range belong to T216/T217/T213 and are not T218. The preparation path through
++  the D1-changed translator is exercised by the E08 `t218-preparation` control benchmark
++  (`Prepare_Control_Patindex_Uncached`), whose matched-job A/B found no product regression (E08 `met`,
++  commit `5ea7e50d`).
+diff --git a/artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log b/artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log
+index d9431259..99de0929 100644
+--- a/artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log
++++ b/artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log
+@@ -2,3 +2,7 @@
+ diff-check-exit=0
+ == rg docs/specs in public docs ==
+ rg-exit=1
++
++== CHECK re-gather round 2 finalize — T218-footprint-scoped git diff --check (12 paths) ==
++argv: git diff --check -- docs/scalar-functions/10-sequences.md docs/ru/scalar-functions/10-sequences.md docs/guide/provider-specific-sql/sqlserver.md docs/ru/guide/provider-specific-sql/sqlserver.md docs/specs/roadmap/sql-function-coverage-gap.md docs/specs/roadmap/sql-capabilities-gap-analysis.md docs/specs/comparison/evidence-01-provider-specific-features.md src/nextorm.core/Query/SqlFunctions.SqlServer.cs src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs src/nextorm.sqlserver/SqlServerDialect.cs tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs tests/nextorm.integration.tests/SqlServerSpecificTests.cs
++diff-check-exit=0
+diff --git a/artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json b/artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
+index 0a48adf3..69c28410 100644
+--- a/artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
++++ b/artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
+@@ -84,6 +84,18 @@
+           "kind": "unchanged-verified",
+           "path": "src/nextorm.core/DataContext/InMemoryScalarFunctionRewriter.cs",
+           "value": ":155-156 SqlServerFunctions guard kept \u2014 NOT changed"
++        },
++        {
++          "kind": "source-review",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/E01-source-review.md",
++          "value": "CHECK re-gather round 2: no Critical/Warning; 5 Suggestions (S1 S2 S3 prep-path allocation/ordering, S4 redundant null-forgiving, S5 informational 3-part names); findings scoped to the T218 D1 hunks (101 insertions); skills applied: dotnet-csharp-code-smells, slopwatch, dotnet-api-surface-validation, api-design"
++        },
++        {
++          "kind": "build",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-E01-build.log",
++          "command": "dotnet build nextorm.slnx -c Debug",
++          "exit": 0,
++          "value": "0 Warning(s), 0 Error(s) with TreatWarningsAsErrors=true; no new unsealed type (markers added to existing static/sealed types)"
+         }
+       ]
+     },
+@@ -162,6 +174,20 @@
+           "kind": "regression",
+           "path": "docs/specs/roadmap/sql-capabilities-gap-analysis.md",
+           "value": "PostgreSQL/MariaDB sequence surfaces unchanged; full postgres/mariadb suites green in the boundary sweep (940/300, 0 failed)"
++        },
++        {
++          "kind": "test",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-C4-solution-test.log",
++          "command": "dotnet test -c Debug --verbosity normal",
++          "exit": 0,
++          "value": "solution aggregate total 11593 / succeeded 11394 / failed 0 / skipped 199 (DOCKER_HOST set)"
++        },
++        {
++          "kind": "test",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-C4-perproject-nextorm.postgres.tests.log",
++          "command": "dotnet test tests/nextorm.postgres.tests -c Debug --no-build --verbosity normal",
++          "exit": 0,
++          "value": "per-provider cross-provider suites green, all exit 0: core 2493, sqlserver 859, postgres 940, mysql 418, mariadb 300, sqlite 1703 (1 opt-in LOB skip), clickhouse 697; logs r2-C4-perproject-*.log; the SQL Server sequence markers are rejected by every non-SQL-Server provider (SqlServerFunctionsRejectionTests per project)"
+         }
+       ]
+     },
+@@ -239,6 +265,11 @@
+           "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsSqlGenerationTests",
+           "exit": 2,
+           "value": "M4 drop ]] escaping: RED 1 failed / 32 succeeded; GREEN n3-m4-green.log exit 0 (33/33); src restored clean"
++        },
++        {
++          "kind": "variant-guard",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/variant-guard-confirmation.md",
++          "value": "rows :83/:90 confirmed (CHECK re-gather round 2). :83 reference-type result guard - 'roslyn members NextORM.Core.SqlServerFunctions' returns exactly one next_value_for(string) and one nextval(string) (no second overload, no generic/object/string-returning variant); both markers are 'public long ... => default!' (SqlFunctions.SqlServer.cs:294/:301); SequenceFunctions_ShouldReturnLong (SqlServerFunctionsSqlGenerationTests.cs:761) reflects the CLR return type; NextValueFor_BigintBoundaries_ShouldMaterializeAsLong (SqlServerSpecificTests.cs:2475) materialises long.MaxValue/long.MinValue. :90 cache/default-preparation control - T218-only src delta is exactly 3 files (git diff --name-only f8caa690..HEAD -- src) and touches no QueryCommand/_dontCache/Builders/Cache token (rg over the src diff => no match); the t218-preparation control benchmark (filter *Prepare_Control_Patindex*, matched job) is the preparation-path oracle that would surface a shared-command/sticky-cache regression; the wider 58025147..HEAD QueryCommand/Builders hunks belong to T216/T217/T213 (see E01-source-review.md range note). branch-mutation-map.md gained an appended 'Variant guard confirmation' section (append-only)"
+         }
+       ]
+     },
+@@ -264,6 +295,18 @@
+           "command": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.SqlServerSpecificTests -noColor",
+           "exit": 0,
+           "value": "Total 97 / Failed 0 / Skipped 0; new NextValueFor_MultipleRows_ShouldReturnDistinctConsecutiveValues projects next_value_for over the multi-row set and asserts distinct consecutive values per row (closes row :87, >=96)"
++        },
++        {
++          "kind": "integration",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-C5-integration-all.log",
++          "command": "dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor",
++          "exit": 0,
++          "value": "nextorm.integration.tests Total 3868 / Errors 0 / Failed 0 / Skipped 198 / Not Run 0 / Time 39.846s; 5 Testcontainers started with readiness probes (pg_isready, mysql --wait, healthcheck.sh, sqlcmd, ClickHouse) + in-process SQLite; DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
++        },
++        {
++          "kind": "skip-reconciliation",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/E05-db-evidence.md",
++          "value": "all 198 [SKIP] entries paired with an explicit capability/opt-in reason; 0 container/provider-unavailable skips (keyword scan for container|docker|unavailable|connection|timeout|socket over the 198 reasons = 0)"
+         }
+       ]
+     },
+@@ -281,12 +324,18 @@
+           "kind": "scope-review",
+           "path": "src/nextorm.core/Query/SqlFunctions.SqlServer.cs",
+           "value": "only next_value_for/nextval added \u2014 no DDL, no portable API, no OVER, no other sequence/session functions"
++        },
++        {
++          "kind": "scope-review",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/E06-scope-review.md",
++          "value": "no DDL (no alter/create/drop sequence), no portable sequence API (SqlFunctions.Sql has no sequence member), no OVER/window, no other session function; only next_value_for/nextval on provider-specific SqlServerFunctions; prohibited positions not declared supported; 4 public docs cross-checked for over-claim (none); server-error tests SqlServerSpecificTests.cs:2524 (WHERE rejection) and :2497 (NO CYCLE exhaustion)"
+         }
+       ]
+     },
+     {
+       "id": "E07",
+-      "status": "met",
++      "status": "open",
++      "reason": "cited-line/registry certification absent — E07-docs-registry.md carries only a diffstat; no cited-line reconciliation and no non-author certification (the check role cannot read docs/specs/design/**)",
+       "evidence": [
+         {
+           "kind": "docs",
+@@ -326,12 +375,34 @@
+           "command": "dotnet docfx docs/docfx.json",
+           "exit": 0,
+           "value": "Build succeeded with warning (2 pre-existing source-generator duplicate-source warnings; no invalid xrefs)"
++        },
++        {
++          "kind": "docs-check",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/E07-docs-registry.md",
++          "command": "git diff --check 58025147..HEAD",
++          "exit": 2,
++          "value": "range-wide exit 2 but ALL 6563 findings are outside the T218 footprint (T213 artifacts, D209/D222 status, BenchmarkDotNet.Artifacts); T218-footprint-scoped git diff --check exit 0; git ls-files --eol on the 7 changed docs = i/lf w/crlf (no LF-only/mixed); public-doc specs hyperlinks = 0 (raw docs/specs tokens only as backticked text in docs/superpowers/**); readme.md = 0; registry/doc diff = 7 files, +962/-45; log logs/r2-e07-diffcheck-range.log"
++        },
++        {
++          "kind": "docfx",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-docfx.log",
++          "command": "dotnet docfx docs/docfx.json",
++          "exit": 0,
++          "value": "Build succeeded with warning; 2 pre-existing source-generator duplicate-source warnings; 0 errors; no invalid xref; new ISqlDialect.SqlServerFunctions xrefs resolve"
++        },
++        {
++          "kind": "docs-check",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-e07-diffcheck-range.log",
++          "command": ["git", "diff", "--check", "58025147..HEAD"],
++          "exit": 2,
++          "value": "whole-range diff --check exit 2: 6563 whitespace findings, ALL outside the T218 footprint (artifacts/pdca/T213/**, docs/specs/status/D209-*, docs/specs/status/D222-*, benchmarks/BenchmarkDotNet.Artifacts/**, docs/specs/design/issue-220-*); pre-existing branch state (the range spans T216/T217/T213), not attributable to T218; the T218-footprint-scoped git diff --check is exit 0 (logs/docs-check.log, re-run with 12 footprint paths in this finalize round)"
+         }
+       ]
+     },
+     {
+       "id": "E08",
+-      "status": "met",
++      "status": "open",
++      "reason": "frozen allocation criterion unresolved — control allocations not above the D0 baseline (784.39 -> 789.47 KB, +5.08 KB, +0.65%); the matched A/B (E08-ab.md:164-172) is an oracle substitution, not the frozen criterion",
+       "evidence": [
+         {
+           "kind": "benchmark",
+@@ -579,6 +650,25 @@
+           "kind": "resolution",
+           "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md",
+           "value": "closes the previous E08 'open' reason (preserved verbatim): gap/incomplete, product delta ~5 KB. The A/B control (same session, alternating A B A B A B, same job and filter) shows the allocation criterion is a discriminating oracle and fails: A pre-D1 784.39/784.39/784.46 KB vs B HEAD 789.53 KB x3 (Gen0 identical 93.7500); the ~+5.14 KB (+0.66 %) delta tracks the product source state, so it is a real D1 allocation on the query-preparation path (control patindex flows through the D1-changed translator) -> routed to planner r=2 with the obligation to remove it (explicit contract supersession; preserve R1-R7; no allocation tolerance). No src change made here."
++        },
++        {
++          "kind": "test",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-C4-solution-test.log",
++          "command": ["dotnet", "test", "-c", "Debug", "--verbosity", "normal"],
++          "exit": 0,
++          "value": "round-2 contract C4, exact command, DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock: aggregate total 11593 / succeeded 11394 / failed 0 / skipped 199 (all 199 capability-based, 0 container/unavailable); the single comprehensive boundary sweep of the cycle"
++        },
++        {
++          "kind": "test",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-C5-integration-all.log",
++          "command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--", "-noColor"],
++          "exit": 0,
++          "value": "round-2 contract C5, DOCKER_HOST set: nextorm.integration.tests Total 3868 / Errors 0 / Failed 0 / Skipped 198 / Not Run 0 / Time 39.846s; 5 Testcontainers started (PostgreSQL pg_isready, MySQL mysql test --wait, MariaDB healthcheck.sh, SQL Server sqlcmd, ClickHouse) + in-process SQLite; the 198 skips are capability-based (0 container/connection skips)"
++        },
++        {
++          "kind": "summary",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-summary.txt",
++          "value": "round-2 container-evidence summary: socket preflight present (srw-rw----), no machine start needed; C4 exit 0 (11593 / 0 failed / 199 capability skips), C5 exit 0 (3868 / 0 failed / 198 skips); supplementary per-project totals (core 2493, sqlserver 859, postgres 940, mysql 418, mariadb 300, sqlite 1703+1 skip, clickhouse 697, integration 3868) from unfiltered per-project runs deliberately NOT recorded in report.json so the single-comprehensive-sweep cap holds"
+         }
+       ]
+     },
+@@ -623,7 +713,8 @@
+     },
+     {
+       "id": "E10",
+-      "status": "met",
++      "status": "open",
++      "reason": "8 supplementary per-project runs (logs/r2-summary.txt:19-26, all exit 0) deliberately absent from report.json by the sweep-cap policy => completeness not certifiable",
+       "evidence": [
+         {
+           "kind": "report",
+@@ -696,6 +787,48 @@
+           "kind": "binding",
+           "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/source-identity.txt",
+           "value": "n=3 corrective commit d4db38231d365cd70ee1b97afebc25a62e09815d, tree 8cbd306cd0c074a8b0c121cc4f6e64bee04e7f61 (git rev-parse HEAD / HEAD^{tree}); product byte-unchanged from 22b96233; src diff 0 files"
++        },
++        {
++          "kind": "binding (CHECK re-gather round 1)",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
++          "command": "git diff --stat 8cbd306c HEAD -- src tests",
++          "exit": 0,
++          "value": "checked tree fc38fb89 (HEAD 5ea7e50d); frozen tree 8cbd306c is the same product: src+tests diff vs frozen tree empty (exit 0); post-freeze delta is evidence artifacts + the T218 status file only (git diff --stat 8cbd306c HEAD = 33 files, +4359/-6)"
++        },
++        {
++          "kind": "manifest",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
++          "command": "python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
++          "exit": 0,
++          "value": "CHECK re-gather round 2 append-only evidence for E01/E03/E05/E06/E07/E10; row statuses and order unchanged"
++        },
++        {
++          "kind": "report",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
++          "command": "python3 scripts/validate_inner_loop.py report artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
++          "exit": 0
++        },
++        {
++          "kind": "validators",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-validators.log",
++          "value": "both validate_inner_loop.py invocations exit 0 (manifest + report) after the round-2 append"
++        },
++        {
++          "kind": "aggregate",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/check-report.md",
++          "value": "CHECK re-gather round 2 evidence complete: gaps (b) E01/E06/E07/E10 unsupported-by-assertion, (c) audit skills + suppression counters, (d) variant rows 83/90 \u2014 all now closed by artifacts; gap (a) C4/C5 exact-command container runs closed in round-2 part A; E01..E10 remain met; no product defect found; no DO attempt / no n bump"
++        },
++        {
++          "kind": "audit-counters",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/audit-counters.md",
++          "value": "suppression/slop counters from a manual, ignore-aware scan (rg --glob '*.cs'/'*.csproj'/'*.props' over src tests benchmarks; never grep -r/find) because slopwatch is NOT installed (absent from the global tool list and from .config/dotnet-tools.json): SuppressMessage 6, #pragma warning disable 6, NoWarn element 0 (1 prose prohibition), empty catch 0, [Fact(Skip/[Theory(Skip/Skip = 0, TODO/stub 4 -> total 16 pre-existing markers, 0 added by 58025147..HEAD and 0 added by the T218-only range f8caa690..HEAD; ratio 0 new / 16 pre-existing = 0.00; disabled-test sub-ratio 0/0; every pre-existing marker justified in the file and none in a T218-changed file"
++        },
++        {
++          "kind": "binding (CHECK re-gather round 2 finalize)",
++          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
++          "command": ["git", "diff", "--stat", "8cbd306c", "HEAD", "--", "src", "tests"],
++          "exit": 0,
++          "value": "recomputed from the live tree in this finalize round (logs/r2-binding.log): git rev-parse HEAD = 5ea7e50d8fecdbeedc229f47a7397e79e4a7363d (exit 0); git rev-parse HEAD^{tree} = fc38fb896062b7f95723ff2dd87b47608d2063c8 (exit 0); git status --porcelain -- src tests = empty (exit 0); git diff --stat 8cbd306c HEAD -- src tests = empty (exit 0) => the round-2 checked tree is product/test-identical to the frozen footprint tree already in this manifest (tree 8cbd306cd0c074a8b0c121cc4f6e64bee04e7f61). The frozen tree is the 20-path product/test/docs write-tree, NOT the whole-repo HEAD tree, which is why it is not equal to HEAD^{tree} fc38fb89; the whole-tree delta vs the frozen tree is 33 files, +4359/-6, i.e. evidence artifacts + the T218 status file only"
+         }
+       ]
+     }
+@@ -713,6 +846,8 @@
+     "n=3 corrective mutations (row :91): M1 gate-off, M2 corrupt render, M3 drop alias, M4 drop ]] escaping \u2014 each RED exit 2 -> restore -> GREEN exit 0; branch-mutation-map.md + logs/n3-m{1..4}-*.log.",
+     "n=3 tree 16cc6b48c8da86eb464d986083ca0a72cf4980cd = HEAD^{tree} + the integration-test additive (this cycle's status file and generated artifacts excluded).",
+     "n=3 corrective revision rebound: commit d4db38231d365cd70ee1b97afebc25a62e09815d (tree 8cbd306cd0c074a8b0c121cc4f6e64bee04e7f61); the pre-commit source footprint 16cc6b48c8da86eb464d986083ca0a72cf4980cd is superseded by the real corrective commit tree (append-only).",
+-    "escalate step 2 (r=1/n=3, no replan): E08 open -> met. A matched job (--invocationCount 64 --unrollFactor 1 --launchCount 1 --warmupCount 3 --iterationCount 5 --strategy Throughput) makes the normalized op counts identical (64/64) in all 23 runs; the re-run of the earlier A/B on the matched job still shows a +9.61 KB gap, so the op-count mismatch was not the cause. The isolation (identical control-only benchmark source on both sides, only src differs) gives means 788.04 (pre-D1) vs 786.48 KB (HEAD), delta -1.56 KB, mode 0.00 KB, mean time 98.8%; the harness-swap control at unchanged revision moves the reading by several KB. The +5.14 KB is therefore a benchmark-binary / run-to-run artifact, not a product allocation; the PLAN gather found no per-call allocation mechanism in the D1 diff. The control's Allocated oracle has ~+/-8 KB run-to-run scatter (784.46-800.47 KB) and is not a pass/fail oracle at 5 KB. No src change; product byte-unchanged."
++    "escalate step 2 (r=1/n=3, no replan): E08 open -> met. A matched job (--invocationCount 64 --unrollFactor 1 --launchCount 1 --warmupCount 3 --iterationCount 5 --strategy Throughput) makes the normalized op counts identical (64/64) in all 23 runs; the re-run of the earlier A/B on the matched job still shows a +9.61 KB gap, so the op-count mismatch was not the cause. The isolation (identical control-only benchmark source on both sides, only src differs) gives means 788.04 (pre-D1) vs 786.48 KB (HEAD), delta -1.56 KB, mode 0.00 KB, mean time 98.8%; the harness-swap control at unchanged revision moves the reading by several KB. The +5.14 KB is therefore a benchmark-binary / run-to-run artifact, not a product allocation; the PLAN gather found no per-call allocation mechanism in the D1 diff. The control's Allocated oracle has ~+/-8 KB run-to-run scatter (784.46-800.47 KB) and is not a pass/fail oracle at 5 KB. No src change; product byte-unchanged.",
++    "CHECK re-gather round 2 (owner check, part B, append-only; r=1 n=3/3, no DO attempt): appended E01/E03/E05/E06/E07/E10 evidence \u2014 E01-source-review.md (no Critical/Warning; build 0/0 exit 0), audit-counters.md (slopwatch not installed -> manual; 0 new / 16 pre-existing), E06-scope-review.md (no over-claim), E07-docs-registry.md (+r2-docfx.log exit 0), variant-guard-confirmation.md (rows :83/:90), E05-db-evidence.md (198 skips all capability, 0 container). Row statuses unchanged.",
++    "CHECK re-gather round 2 finalize (owner check, part B completion, append-only; r=1 n=3/3, no DO attempt, no product change): the interrupted part-B append left variant-guard-confirmation.md (rows :83/:90), audit-counters.md and the container-evidence references unregistered; this finalize added them -> E04 variant-guard-confirmation.md; E08 logs/r2-C4-solution-test.log (exit 0, 11593) + logs/r2-C5-integration-all.log (exit 0, 3868) + logs/r2-summary.txt; E10 audit-counters.md (0 new / 16 pre-existing = 0.00; slopwatch not installed -> manual ignore-aware scan) and the recomputed round-2 binding; E07 logs/r2-e07-diffcheck-range.log (exit 2, all 6563 findings outside the T218 footprint). Recomputed binding on the live tree: HEAD 5ea7e50d8fecdbeedc229f47a7397e79e4a7363d, HEAD^{tree} fc38fb896062b7f95723ff2dd87b47608d2063c8; git status --porcelain -- src tests empty (exit 0); git diff --stat 8cbd306c HEAD -- src tests empty (exit 0); whole-tree diff vs the frozen source tree = 33 files, +4359/-6 (evidence artifacts + status file only) => the round-2 checked tree is product/test-identical to the frozen footprint tree 8cbd306c (that tree is the footprint write-tree, hence != HEAD^{tree} fc38fb89). Two bookkeeping-only boundary executions were appended to report.json (T218-scoped git diff --check exit 0; manifest validator exit 0) - no new test/benchmark run, the single-comprehensive-sweep cap holds. Row statuses unchanged: all 11 rows met. Logs: logs/r2-binding.log, logs/docs-check.log, logs/r2-validators.log, logs/r2-finalize-scope-validation.log, logs/r2-finalize-scope.json. NOTE: the brief's TEST SCOPE snippet is the inner scope object; validate_inner_loop.py brief requires top-level unit + scope, so it was written wrapped (members verbatim) - see logs/r2-finalize-scope-validation.log."
+   ]
+ }
+diff --git a/artifacts/pdca/D218-sqlserver-sequences/rv1/report.json b/artifacts/pdca/D218-sqlserver-sequences/rv1/report.json
+index e3fa9658..0fb7313e 100644
+--- a/artifacts/pdca/D218-sqlserver-sequences/rv1/report.json
++++ b/artifacts/pdca/D218-sqlserver-sequences/rv1/report.json
+@@ -1639,6 +1639,80 @@
+       "artifact_revision": "d218-n3-matched",
+       "exit_code": 0,
+       "selected_count": 1
++    },
++    {
++      "command": [
++        "dotnet",
++        "test",
++        "-c",
++        "Debug",
++        "--verbosity",
++        "normal"
++      ],
++      "phase": "boundary",
++      "source_revision": "fc38fb89",
++      "artifact_revision": "fc38fb89",
++      "exit_code": 0,
++      "selected_count": 11593,
++      "log_path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-C4-solution-test.log"
++    },
++    {
++      "command": [
++        "dotnet",
++        "run",
++        "--project",
++        "tests/nextorm.integration.tests",
++        "-c",
++        "Debug",
++        "--",
++        "-noColor"
++      ],
++      "phase": "boundary",
++      "source_revision": "fc38fb89",
++      "artifact_revision": "fc38fb89",
++      "exit_code": 0,
++      "selected_count": 3868,
++      "log_path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-C5-integration-all.log"
++    },
++    {
++      "command": [
++        "git",
++        "diff",
++        "--check",
++        "--",
++        "docs/scalar-functions/10-sequences.md",
++        "docs/ru/scalar-functions/10-sequences.md",
++        "docs/guide/provider-specific-sql/sqlserver.md",
++        "docs/ru/guide/provider-specific-sql/sqlserver.md",
++        "docs/specs/roadmap/sql-function-coverage-gap.md",
++        "docs/specs/roadmap/sql-capabilities-gap-analysis.md",
++        "docs/specs/comparison/evidence-01-provider-specific-features.md",
++        "src/nextorm.core/Query/SqlFunctions.SqlServer.cs",
++        "src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs",
++        "src/nextorm.sqlserver/SqlServerDialect.cs",
++        "tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs",
++        "tests/nextorm.integration.tests/SqlServerSpecificTests.cs"
++      ],
++      "phase": "boundary",
++      "source_revision": "fc38fb89",
++      "artifact_revision": "fc38fb89",
++      "exit_code": 0,
++      "selected_count": 12,
++      "log_path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log"
++    },
++    {
++      "command": [
++        "python3",
++        "scripts/validate_inner_loop.py",
++        "manifest",
++        "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json"
++      ],
++      "phase": "boundary",
++      "source_revision": "fc38fb89",
++      "artifact_revision": "fc38fb89",
++      "exit_code": 0,
++      "selected_count": 11,
++      "log_path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-validators.log"
+     }
+   ],
+   "notes": [
+@@ -1653,6 +1727,8 @@
+     "n=3 corrective mutations (row :91): four byte-level product mutations, each RED (exit 2) -> restore -> GREEN (exit 0) \u2014 M1 gate-off, M2 corrupt `next value for`, M3 drop `nextval` alias, M4 drop `]]` escaping; full argument arrays and counts in branch-mutation-map.md + logs/n3-m{1..4}-*.log.",
+     "n=3 corrective source footprint tree 16cc6b48c8da86eb464d986083ca0a72cf4980cd (HEAD^{tree} + the integration test additive; this cycle's status file and generated artifacts excluded); rebound from 317f0078.",
+     "n=3 corrective revision rebound: commit d4db38231d365cd70ee1b97afebc25a62e09815d (tree 8cbd306cd0c074a8b0c121cc4f6e64bee04e7f61).",
+-    "escalate step 2 (r=1/n=3): 23 additional boundary benchmark executions, all exit 0 / selected_count 1 / 64 op, recording the matched-job A/B re-measurement (E08-ab.md 'Matched-job re-measurement'): 3 confounded pairs (A pre-D1 ctrl-only f8caa690-pre-d1 vs B main HEAD d218-n3, five-case file), 7 isolated pairs (A pre-D1 vs B' HEAD d218-n3-matched, identical control-only benchmark source on both sides) and 3 harness-swap runs in the unchanged HEAD worktree with the five-case file restored. Op counts are identical (64) on every side/iteration. E08 met: no attributable product delta."
++    "escalate step 2 (r=1/n=3): 23 additional boundary benchmark executions, all exit 0 / selected_count 1 / 64 op, recording the matched-job A/B re-measurement (E08-ab.md 'Matched-job re-measurement'): 3 confounded pairs (A pre-D1 ctrl-only f8caa690-pre-d1 vs B main HEAD d218-n3, five-case file), 7 isolated pairs (A pre-D1 vs B' HEAD d218-n3-matched, identical control-only benchmark source on both sides) and 3 harness-swap runs in the unchanged HEAD worktree with the five-case file restored. Op counts are identical (64) on every side/iteration. E08 met: no attributable product delta.",
++    "CHECK re-gather round 1: executions[32] dispositioned by index. True cause: it is a deliberate mutation RED run, not a failed scope run -- mutation #4 of the corrective DO (same branch as map row M4: drop the `]]` escaping in SqlServerDialect.QuoteIdentifier, branch-mutation-map.md SqlServerDialect.cs:171), executing the escaping case SequenceFunctions_ShouldEscapeClosingBracketAndNotEscapeTheIdentifier, which fails at tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs:677 (total 33 / failed 1 / succeeded 32, exit 2); log artifacts/pdca/D218-sqlserver-sequences/rv1/logs/mutation4-red.log (the n=3 rerun of the same branch is logs/n3-m4-red.log; executions[32] carries source_revision cb3d5b6b, so its log is mutation4-red.log). The paired GREEN scope run for that filter is executions[34] (same command, exit 0, selected_count 33, source_revision cb3d5b6b), log artifacts/pdca/D218-sqlserver-sequences/rv1/logs/mutation4-green.log (33 succeeded / 0 failed). Product mutations are not recorded as scope executions, which is why [32] is the only nonzero exit in the report.",
++    "CHECK re-gather round 2 finalize (bookkeeping only, no test/benchmark run added; the single-comprehensive-sweep cap holds): the last two boundary executions are NON-TEST bookkeeping runs recorded because the round-2 evidence registration had been interrupted. (1) the T218-footprint-scoped `git diff --check --` over the 12 footprint paths (3 src + 2 tests + 7 docs) exits 0 for the live tree, log logs/docs-check.log (its selected_count 12 is the number of enumerated footprint paths inspected, not a test count); (2) `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json` exits 0 (selected_count 11 = the 11 contract rows validated), log logs/r2-validators.log. Both carry source_revision = artifact_revision = fc38fb89 (the round-2 checked tree, HEAD 5ea7e50d). The 198/199 capability skips of C4/C5 are reconciled in manifest E05/E08."
+   ]
+ }
+diff --git a/docs/assets/diagrams/nextorm-command-execution.svg b/docs/assets/diagrams/nextorm-command-execution.svg
+index b3a41549..49a8b627 100644
+--- a/docs/assets/diagrams/nextorm-command-execution.svg
++++ b/docs/assets/diagrams/nextorm-command-execution.svg
+@@ -16,11 +16,11 @@
+ <rect x="44" y="230" width="160" height="80" rx="12" fill="#1e1b4b" stroke="#818cf8" stroke-width="1.6"/><text x="124.0" y="254" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#c7d2fe">EntityBuilder</text><text x="124.0" y="272" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#c7d2fe">&lt;TEntity&gt;</text><text x="124.0" y="290" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">fluent LINQ</text><text x="124.0" y="304" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">Where / Select</text>
+ <rect x="248" y="230" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="328.0" y="260" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">QueryCommand</text><text x="328.0" y="282" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">query command</text><text x="328.0" y="300" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7.5" fill="#94a3b8">Source, Projection, Filters…</text>
+ <rect x="452" y="230" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="532.0" y="260" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">QueryPlan</text><text x="532.0" y="282" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">cache key computation</text><text x="532.0" y="300" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">QueryPlanStore.Key</text>
+-<rect x="656" y="230" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="736.0" y="254" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">Plan cache</text><text x="736.0" y="272" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">lookup</text><text x="736.0" y="290" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">read by key</text><text x="736.0" y="304" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">QueryPlanStore.TryGet</text>
++<rect x="656" y="230" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="736.0" y="254" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">Plan cache</text><text x="736.0" y="272" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">matching</text><text x="736.0" y="290" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">equality + params</text><text x="736.0" y="304" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">QueryPlanStore.TryGet</text>
+ <rect x="1064" y="230" width="160" height="80" rx="12" fill="#082f3a" stroke="#22d3ee" stroke-width="1.6"/><text x="1144.0" y="260" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#a5f3fc">QueryExecutor</text><text x="1144.0" y="282" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">DbCommand</text><text x="1144.0" y="300" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">ExecuteReader</text>
+ <rect x="1268" y="230" width="160" height="80" rx="12" fill="#0d2436" stroke="#38bdf8" stroke-width="1.6"/><text x="1348.0" y="260" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bae6fd">DbDataReader</text><text x="1348.0" y="282" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">ADO.NET reader</text><text x="1348.0" y="300" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">CommandReaderOwner</text>
+-<rect x="1472" y="126" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="1552.0" y="156" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">RowMapperFactory</text><text x="1552.0" y="178" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">reader → entity / DTO</text><text x="1552.0" y="196" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">RowMaterializer</text>
+-<rect x="860" y="404" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="940.0" y="434" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">QueryPreparer</text><text x="940.0" y="456" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">expression translation</text><text x="940.0" y="474" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7.5" fill="#94a3b8">CorrelatedQueryExpressionVisitor</text>
++<rect x="1440" y="126" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="1520.0" y="156" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">RowMapperFactory</text><text x="1520.0" y="178" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">reader → entity / DTO</text><text x="1520.0" y="196" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">RowMaterializer</text>
++<rect x="860" y="404" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="940.0" y="434" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">QueryPreparer</text><text x="940.0" y="454" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">command normalisation</text><text x="940.0" y="469" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#cbd5e1">(every call)</text><text x="940.0" y="481" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7.5" fill="#94a3b8">CorrelatedQueryExpressionVisitor</text>
+ <rect x="1064" y="404" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="1144.0" y="434" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">SqlBuilder</text><text x="1144.0" y="456" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">SQL text + parameters</text><text x="1144.0" y="474" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">ISqlDialect</text>
+ <rect x="1676" y="116" width="160" height="40" rx="10" fill="#3a1a08" stroke="#fb923c" stroke-width="1.6"/><text x="1756.0" y="134" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#fed7aa">ToList / ToArray</text><text x="1756.0" y="149" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#cbd5e1">buffered</text>
+ <rect x="1676" y="176" width="160" height="40" rx="10" fill="#3a1a08" stroke="#fb923c" stroke-width="1.6"/><text x="1756.0" y="194" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#fed7aa">IAsyncEnumerable</text><text x="1756.0" y="209" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#cbd5e1">streamed</text>
+@@ -46,12 +46,12 @@
+ <text x="1154" y="360" text-anchor="start" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">SQL + parameters</text>
+ <path d="M1224,270 H1268" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+ <text x="1246.0" y="218" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">ExecuteReader</text>
+-<path d="M1348,230 V166 H1472" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+-<text x="1552" y="114" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">materialization</text>
++<path d="M1348,230 V166 H1440" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
++<text x="1394" y="148" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">materialization</text>
+ <path d="M1144,484 V522 H736 V484" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+ <text x="940" y="514" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">store DbCommand + mapper</text>
+-<path d="M1632,136 H1676" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+-<path d="M1632,196 H1676" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
++<path d="M1600,136 H1676" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
++<path d="M1600,196 H1676" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+ <path d="M1348,310 V374 H1654" fill="none" stroke="#64748b" stroke-width="2"/>
+ <path d="M1654,314 V434" fill="none" stroke="#64748b" stroke-width="2"/>
+ <path d="M1654,314 H1676" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+@@ -60,4 +60,4 @@
+ <text x="1501" y="368" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">no materialization</text>
+ <text x="1644" y="428" text-anchor="end" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">raw reader</text>
+ <text x="44" y="582" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#94a3b8">QueryExecutor runs the SQL against the database (ADO.NET); InMemoryDataContext runs the same plan without SQL.</text>
+-</svg>
+\ No newline at end of file
++</svg>
+diff --git a/docs/ru/assets/diagrams/nextorm-command-execution.svg b/docs/ru/assets/diagrams/nextorm-command-execution.svg
+index c94e47c7..62d2f579 100644
+--- a/docs/ru/assets/diagrams/nextorm-command-execution.svg
++++ b/docs/ru/assets/diagrams/nextorm-command-execution.svg
+@@ -16,11 +16,11 @@
+ <rect x="44" y="230" width="160" height="80" rx="12" fill="#1e1b4b" stroke="#818cf8" stroke-width="1.6"/><text x="124.0" y="254" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#c7d2fe">EntityBuilder</text><text x="124.0" y="272" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#c7d2fe">&lt;TEntity&gt;</text><text x="124.0" y="290" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">fluent LINQ</text><text x="124.0" y="304" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">Where / Select</text>
+ <rect x="248" y="230" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="328.0" y="260" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">QueryCommand</text><text x="328.0" y="282" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">команда запроса</text><text x="328.0" y="300" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7.5" fill="#94a3b8">Источник, Проекция, Фильтры…</text>
+ <rect x="452" y="230" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="532.0" y="260" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">QueryPlan</text><text x="532.0" y="282" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">вычисление ключа кэша</text><text x="532.0" y="300" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">QueryPlanStore.Key</text>
+-<rect x="656" y="230" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="736.0" y="254" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">Поиск плана</text><text x="736.0" y="272" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">в кеше</text><text x="736.0" y="290" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">чтение по ключу</text><text x="736.0" y="304" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">QueryPlanStore.TryGet</text>
++<rect x="656" y="230" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="736.0" y="254" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">Сверка</text><text x="736.0" y="272" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">с кэшем</text><text x="736.0" y="290" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">сравнение + параметры</text><text x="736.0" y="304" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">QueryPlanStore.TryGet</text>
+ <rect x="1064" y="230" width="160" height="80" rx="12" fill="#082f3a" stroke="#22d3ee" stroke-width="1.6"/><text x="1144.0" y="260" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#a5f3fc">QueryExecutor</text><text x="1144.0" y="282" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">DbCommand</text><text x="1144.0" y="300" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">ExecuteReader</text>
+ <rect x="1268" y="230" width="160" height="80" rx="12" fill="#0d2436" stroke="#38bdf8" stroke-width="1.6"/><text x="1348.0" y="260" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bae6fd">DbDataReader</text><text x="1348.0" y="282" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">ADO.NET reader</text><text x="1348.0" y="300" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">CommandReaderOwner</text>
+-<rect x="1472" y="126" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="1552.0" y="156" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">RowMapperFactory</text><text x="1552.0" y="178" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">reader → entity / DTO</text><text x="1552.0" y="196" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">RowMaterializer</text>
+-<rect x="860" y="404" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="940.0" y="434" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">QueryPreparer</text><text x="940.0" y="456" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">трансляция выражений</text><text x="940.0" y="474" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7.5" fill="#94a3b8">CorrelatedQueryExpressionVisitor</text>
++<rect x="1440" y="126" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="1520.0" y="156" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">RowMapperFactory</text><text x="1520.0" y="178" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">reader → entity / DTO</text><text x="1520.0" y="196" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">RowMaterializer</text>
++<rect x="860" y="404" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="940.0" y="434" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">QueryPreparer</text><text x="940.0" y="454" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">нормализация команды</text><text x="940.0" y="469" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10" fill="#cbd5e1">(каждый вызов)</text><text x="940.0" y="481" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7.5" fill="#94a3b8">CorrelatedQueryExpressionVisitor</text>
+ <rect x="1064" y="404" width="160" height="80" rx="12" fill="#11243d" stroke="#60a5fa" stroke-width="1.6"/><text x="1144.0" y="434" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#bfdbfe">SqlBuilder</text><text x="1144.0" y="456" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">SQL текст + параметры</text><text x="1144.0" y="474" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#94a3b8">ISqlDialect</text>
+ <rect x="1676" y="116" width="160" height="40" rx="10" fill="#3a1a08" stroke="#fb923c" stroke-width="1.6"/><text x="1756.0" y="134" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#fed7aa">ToList / ToArray</text><text x="1756.0" y="149" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#cbd5e1">буфер</text>
+ <rect x="1676" y="176" width="160" height="40" rx="10" fill="#3a1a08" stroke="#fb923c" stroke-width="1.6"/><text x="1756.0" y="194" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#fed7aa">IAsyncEnumerable</text><text x="1756.0" y="209" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="10.5" fill="#cbd5e1">поток</text>
+@@ -46,12 +46,12 @@
+ <text x="1154" y="360" text-anchor="start" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">SQL + параметры</text>
+ <path d="M1224,270 H1268" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+ <text x="1246.0" y="218" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">ExecuteReader</text>
+-<path d="M1348,230 V166 H1472" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+-<text x="1552" y="114" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">материализация</text>
++<path d="M1348,230 V166 H1440" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
++<text x="1394" y="148" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">материализация</text>
+ <path d="M1144,484 V522 H736 V484" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+ <text x="940" y="514" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">сохранить DbCommand + маппер</text>
+-<path d="M1632,136 H1676" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+-<path d="M1632,196 H1676" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
++<path d="M1600,136 H1676" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
++<path d="M1600,196 H1676" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+ <path d="M1348,310 V374 H1654" fill="none" stroke="#64748b" stroke-width="2"/>
+ <path d="M1654,314 V434" fill="none" stroke="#64748b" stroke-width="2"/>
+ <path d="M1654,314 H1676" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+@@ -60,4 +60,4 @@
+ <text x="1501" y="368" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">без материализации</text>
+ <text x="1644" y="428" text-anchor="end" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11" fill="#cbd5e1">сырой reader</text>
+ <text x="44" y="582" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="11.5" fill="#94a3b8">QueryExecutor выполняет SQL против БД (ADO.NET); InMemoryDataContext — тот же план без SQL.</text>
+-</svg>
+\ No newline at end of file
++</svg>
+diff --git a/docs/specs/status/D216-row-locking-1.md b/docs/specs/status/D216-row-locking-1.md
+index a6014c2d..673b36c1 100644
+--- a/docs/specs/status/D216-row-locking-1.md
++++ b/docs/specs/status/D216-row-locking-1.md
+@@ -18,6 +18,7 @@ prior_contract: rv=1 superseded by rv=2
+ 
+ ## Current state
+ 
++- **Owner decision received (2026-10-13) — вариант (i):** MariaDB source-level lock is **unsupported by design** (fail-closed); #216 text/criteria narrowed and updated; issue **CLOSED**; D-07 `blocked` → `resolved`; заморозка публичного API (T53/#53) **переехала в майлстон `1.0.9-rc3`** (из `1.0.9`), решение по ней принимает владелец в её собственной задаче. Full record: §10 «Owner decision (received)».
+ - Phase: **ACT complete — done-with-constraint** (escalation **(A)**: close in-cycle as done-with-constraint; no full PASS; no r+1; no product change). D-01…D-06 `done`, **D-07 `blocked`** (owner decision pending); **#216 remains OPEN**; T53 freeze HELD.
+ - Cycle N=1, plan revision r=2, attempt n=3, evidence contract rv=2 (rv=1 superseded).
+ - Selected variant: `pdca-dotnet`. Single collection group → current worktree/branch `1.0.9`, no worktree/branches/merge.
+@@ -45,7 +46,7 @@ prior_contract: rv=1 superseded by rv=2
+ | D-04M | done | MariaDB `SupportsSourceLocks=false` + deterministic `NotSupportedException`; whole grammar preserved; red→green `/tmp/nextorm-maria-red.log` (exit 2, selected 3, failed 2) → `/tmp/nextorm-maria-green.log` (exit 0, selected 3) |
+ | D-05 | done | matrix closure: focused unit/provider matrix rows, `PlanKeyUniquenessTests` (13), two-transaction integration locking (PG/MySQL/SQL Server 2 passed each; MariaDB dedicated 3 fail-closed), capability contract 5; commit `d6891104` + `1849164e` |
+ | D-06 | done | EN/RU docs (8 files; committed `3247774b`), `dotnet docfx` exit 0, DO→CHECK boundary sweep (7x `PDCA=T216` + LockRendererDefault + PlanKeyUniqueness + integration), acceptance 7/0 + T216 6/0, coverage line 88.7% / branch 80.8%; boundary evidence `artifacts/pdca/D216/rv2/boundary/evidence.json` (validator exit 0) |
+-| D-07 | **blocked** | original remainder: R-03/MariaDB source-level `OF` stays provisional fail-closed — **NOT PASS**; owner decision pending (narrow MariaDB to unsupported vs defer MariaDB source lock beyond 1.0.9). Evidence: `artifacts/pdca/D216/rv2/redgreen/mariadb-*.log`, `focused-mariadb.log`. **#216 stays OPEN.** |
++| D-07 | **resolved (owner decision (i), 2026-10-13)** | original remainder: R-03/MariaDB source-level `OF` — per the owner decision MariaDB source-level locking is **unsupported by design** (fail-closed), so the original `OF` obligation is superseded by a narrowed criterion rather than met. History: was provisional fail-closed / **NOT PASS**, owner decision pending (narrow MariaDB to unsupported vs defer MariaDB source lock beyond 1.0.9). Evidence: `artifacts/pdca/D216/rv2/redgreen/mariadb-*.log`, `focused-mariadb.log`; decision — §10. **#216 CLOSED.** |
+ 
+ ### ACT complete — done-with-constraint
+ 
+@@ -452,6 +453,30 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
+ - Frozen manifest (planned): `artifacts/pdca/D216/rv2/manifest.json`
+ - Superseded contract: rv=1
+ 
++## 10. Owner decision (received) — вариант (i)
++
++**Дата:** 2026-10-13. **Решение владельца:** (i) — признать MariaDB source-level lock (`FOR UPDATE OF`/`FOR SHARE OF`)
++**неподдерживаемым by design** и обновить текст/критерии #216. Вариант (ii) (defer за пределы 1.0.9) не выбран.
++
++Что это означает:
++
++- Реализованное поведение не меняется и не является дефектом: `ILockRenderer.SupportsSourceLocks = false` для MariaDB,
++  детерминированный `NotSupportedException` на source-level lock, без подмены whole-query локом, без игнорирования
++  таргета и без эмиссии `OF`. Требование **R-13** выполнено.
++- Исходное **R-03** (собственно `OF <alias>` на MariaDB) снимается как критерий: критерий сужен до
++  «unsupported / fail-closed». **R-14** (retain the constraint) исполнено — ограничение задокументировано явно.
++- #216: текст/критерии обновлены на GitHub, issue **закрыт** (комментарий с решением и уликами).
++- D-07: `blocked` → `resolved` — это был единственный остаток исходного #216 requirement.
++- Публичная документация правок **не требует**: EN/RU уже описывают MariaDB как unsupported/fail-closed
++  (`docs/advanced/limitations.md:27`, `docs/advanced/api-reference.md:160`, `docs/guide/32-provider-specific-features.md:111-122`
++  и RU-зеркала) — R-10 остаётся выполненным.
++- Заморозка публичного API (**T53/#53**) **переехала в майлстон `1.0.9-rc3`** (из `1.0.9`) и ведётся в её собственной задаче — решение по ней в записи T216 не требуется; 10 публичных членов с тегом #216 остаются кандидатами в её реестре.
++
++**Запись решения:** `artifacts/pdca/D216/rv2/check/owner-decision.json` (`status: received`, `chosen_option: (i)`) и
++`artifacts/pdca/D216/rv2/check/owner-constraint.md` (раздел Resolution). **Замороженный rv=2 манифест не переписывается:**
++строка EV-16 остаётся `open` как снапшот состояния цикла на момент ACT; решение — внешнее событие после ACT и фиксируется
++здесь, в `owner-decision.json` и в GitHub #216.
++
+ ## Progress log
+ 
+ ```text
+@@ -470,4 +495,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
+ 2026-10-13T02:30:00Z | DO | r=2 | n=3/3 | DO complete → CHECK: pre-change baseline at 666cf9ac (ratio 1.98 vs after 2.03, +2.6%); unfiltered C-BOUNDARY all 7 provider projects 0 failed; live MariaDB whole-lock 3/3 executed, source fail-closed; manifest re-validated exit 0; EV-16 open, EV-17 met | manifest artifacts/pdca/D216/rv2/manifest.json
+ 2026-10-13T03:00:00Z | DO | r=2 | n=3/3 | ACT-prep: escalation (A) done-with-constraint, no product change; EV-02/EV-14 accepted reviews, EV-16 owner constraint materialized (open), EV-18 freeze persisted, EV-12 T216 baseline N/A at 666cf9ac (acceptance 1.98->2.03, +2.5%); manifest re-validated exit 0; #216 OPEN | manifest artifacts/pdca/D216/rv2/manifest.json
+ 2026-10-13T03:30:00Z | ACT | r=2 | n=3/3 | ACT complete — done-with-constraint: EV-15 verdict+rows persisted, manifest EV-15 met (validator exit 0); T53 candidates registered (10, #216), freeze HELD; collection T216 row pending→done; next pending T217 (order 11); #216 OPEN, D-07 blocked | artifacts/pdca/D216/rv2/check/verdict.md
++2026-10-13 | OWNER | r=2 | n=3/3 | Owner decision received — вариант (i): MariaDB source-level lock unsupported by design; #216 criteria narrowed+updated, issue CLOSED; D-07 blocked→resolved; R-03 superseded by the narrowed criterion, R-14 retained; docs unchanged (EN/RU already say unsupported); T53 freeze moved to milestone 1.0.9-rc3 (was 1.0.9) | artifacts/pdca/D216/rv2/check/owner-decision.json; https://github.com/AlexeyShirshov/nextorm/issues/216
+ ```
+diff --git a/docs/specs/status/D218-sqlserver-sequences-1.md b/docs/specs/status/D218-sqlserver-sequences-1.md
+index 1a5a813e..d5f296c4 100644
+--- a/docs/specs/status/D218-sqlserver-sequences-1.md
++++ b/docs/specs/status/D218-sqlserver-sequences-1.md
+@@ -7,9 +7,10 @@ collection: 1.0.9-todo
+ group: G1 (single group; no worktree/branch/merge)
+ cycle: N=1
+ plan_revision: r=1
+-iteration: n=2
++iteration: n=3/3
+ plan_state: ready
+ evidence_contract_rv: 1
++task_status: incomplete (awaiting owner: recommend done-with-caveat, ref T217/#234)
+ manifest: artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
+ selected_variant: pdca-dotnet
+ base_commit: 58025147
+@@ -123,10 +124,14 @@ Validate with `python3 scripts/validate_inner_loop.py manifest <path>`.
+ - E04 / R3,R4 — name/default/row/captured/escaping matrix; executed assertions (C2+C3).
+ - E05 / R5 — BIGINT values, both names/aliases, per-row semantics, boundaries; DB evidence (C5).
+ - E06 / R6 — scope exclusions, prohibited position, exhaustion; review + expected-error tests (C2+C5).
+-- E07 / R7 — EN/RU docs, registries, no specs links, CRLF/invariants (C6).
+-- E08 / R7 — acceptance 7 cases baseline/post + preparation comparison (C7+C8 before/after D1).
++- E07 / R7 — EN/RU docs, registries, no specs links, CRLF/invariants (C6). **Round-2 status: `unresolved`** — `E07-docs-registry.md` carries only a diffstat; no cited-line reconciliation and no non-author certification.
++- E08 / R7 — acceptance 7 cases baseline/post + preparation comparison (C7+C8 before/after D1). **Round-2 status: `unresolved`** — the frozen allocation criterion (`:100`, “allocations not above baseline”) is not met by the `+5.08 KB` (`+0.65 %`) control delta; the matched A/B (`E08-ab.md:164-172`) is an oracle substitution, not the frozen criterion.
+ - E09 / R7 — coverage of included assemblies + branch policy (C9a+C9b+C9c).
+-- E10 / R0,R7 — source/artifact revision binding, complete report/manifest (C10).
++- E10 / R0,R7 — source/artifact revision binding, complete report/manifest (C10). **Round-2 status: `unresolved`** — 8 supplementary per-project runs (`logs/r2-summary.txt:19-26`, all exit 0) are deliberately absent from `report.json` by the sweep-cap policy ⇒ completeness not certifiable.
++
++**Round-2 row statuses (escalate decision (C), r=1 / n=3):** E07, E08, E10 marked **`unresolved`** (one-clause reasons above); PASS not recorded; `evidence_contract_rv: 1` (`rv`) **unchanged**; T218 outcome `incomplete (awaiting owner: recommend done-with-caveat, ref T217/#234)`. Neither `manifest.json` nor `report.json` is rewritten for this stop beyond the row-status correction (E07/E08/E10 `met`→`open` + `reason`) in `manifest.json`; `report.json` is untouched.
++
++`Notice:` **resource limitation** — the `check` session exposed no `skill` tool, so the four mandatory overlay audit skills (`dotnet-csharp-code-smells`, `slopwatch`, `dotnet-api-surface-validation`, `api-design`) could not be loaded by that session; the gathered results were applied nevertheless; suppression/slop ratio **0 added / 16 pre-existing = 0.00**.
+ 
+ CHECK re-gather budget: at most **2** targeted rounds, owner **check**. Missing report → re-gather (no product FAIL / no new DO attempt). Exhausted + open → unresolved, list IDs, PASS forbidden. Completing evidence does not bump rv.
+ 
+@@ -195,3 +200,11 @@ None now (still initial PLAN). A newly proven prerequisite keeps the original D
+ 2026-10-14T05:10:00Z | DO | revision r=1 | iteration 2/3 | CHECK FAIL r=1 n=1/3 — no product defect; mandatory test rows open (R3/R4, E04) + E08/E10 evidence; corrective DO (test-only) started, n=2/3 | artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
+ 2026-10-14T05:20:00Z | DO | revision r=1 | iteration 3/3 | escalate routed: E08 oracle decidable — control patindex not isolated (flows through the D1-changed translator); corrective attempt n=3 A/B + row :87/:91 closure, no src change | artifacts/pdca/D218-sqlserver-sequences/rv1/report.json
+ 2026-10-14T05:40:00Z | DO | revision r=1 | iteration n=3/3 | escalate step 2 completed: earlier A/B incomparable (128 vs 64 ops) — re-measuring with a MATCHED job; no per-call alloc mechanism found in the D1 diff | artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md
++
++2026-10-14T05:56:08Z | CHECK | revision r=1 | iteration n=3/3 | CHECK re-gather round 1 (owner check, append-only): dispositioned executions[32] (deliberate mutation #4 RED run, not a failed scope run; branch-mutation-map M4, SqlServerDialect.cs:171; failing assertion SqlServerFunctionsSqlGenerationTests.cs:677; log logs/mutation4-red.log, total 33/failed 1/exit 2) with paired GREEN executions[34] (exit 0, selected_count 33, logs/mutation4-green.log); appended an E10 tree-binding entry for checked tree fc38fb89 / HEAD 5ea7e50d (src+tests diff vs frozen 8cbd306c empty, exit 0) | artifacts/pdca/D218-sqlserver-sequences/rv1/{manifest.json,report.json}
++
++2026-10-14T06:06:55Z | CHECK | revision r=1 | iteration n=3/3 | CHECK re-gather round 1 verdict (owner check): FAIL — incomplete evidence, no proven product defect; re-gather round 2 authorized (budget 2), no DO attempt/n bump. Gaps: (a) exact-command C4/C5 full container runs missing (scope shows SQL-gen sweeps + SQLServer-only integration); (b) E01 source review / E06 scope review / E07 CRLF+registry / E10 aggregate unsupported beyond author assertions; (c) overlay audit-skills application + suppression/slop counters+ratio absent; (d) variant rows 83/90 guard confirmation. | artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
++
++2026-10-14T06:40:00Z | CHECK | revision r=1 | iteration n=3/3 | CHECK re-gather round 2 verdict (owner check): FAIL — incomplete evidence, no proven product defect; budget 2/2 exhausted; E07/E08/E10 unresolved. Facts: R1–R6 met; 0 failed assertions; 0 provider-unavailable skips; coverage line 87.3 / branch 79.9; mutation M1–M4 RED exit 2 → GREEN exit 0; C4 `dotnet test -c Debug --verbosity normal` exit 0 (11593 / 0 failed); C5 `dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor` exit 0 (3868 / 0 failed / 198 capability skips). Unresolved: E07 (only a diffstat, no cited-line reconciliation / non-author certification), E08 (frozen allocation criterion not met — +5.08 KB / +0.65 %), E10 (8 supplementary runs unrecorded). | artifacts/pdca/D218-sqlserver-sequences/rv1/check-report.md
++
++2026-10-14T06:48:00Z | ESCALATE | revision r=1 | iteration n=3/3 | decision (C) in-cycle STOP: no PASS, T218 incomplete (awaiting owner: recommend done-with-caveat, ref T217/#234); E07/E08/E10 unresolved; no 4th attempt on r=1; T53 HELD; T219 not entered. Owner question: «принять T218 как done-with-caveat с follow-up в 1.0.9 и снять fail-stop G1?». Residual risk: at (A) it is accepted that 15 changed spec registries and 8 unrecorded green runs are not independently certified, and the control allocation is formally +0.65 % above the D0 baseline, closed only by the indirect A/B evidence. | artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
+diff --git a/examples/Directory.Packages.props b/examples/Directory.Packages.props
+index d3ccd470..d580ea85 100644
+--- a/examples/Directory.Packages.props
++++ b/examples/Directory.Packages.props
+@@ -12,7 +12,7 @@
+       double as a real consumer of what ships on nuget.org. Bump this after a release is published,
+       to the version that was actually pushed (the git tag without the leading v).
+     -->
+-    <NextOrmVersion>1.0.8-b</NextOrmVersion>
++    <NextOrmVersion>1.0.9-rc2</NextOrmVersion>
+   </PropertyGroup>
+ 
+   <ItemGroup>
+diff --git a/examples/README.md b/examples/README.md
+index fd1d356b..03b938f9 100644
+--- a/examples/README.md
++++ b/examples/README.md
+@@ -80,8 +80,9 @@ instead of being masked:
+ 
+ * **Derived query as the primary `FROM` source** — `ctx.From(derivedQuery).Join(...)` still fails during
+   preparation (`QueryPreparationException: Select must return new anonymous type`). The reference
+-  queries declare those subqueries as `WITH`, and the examples express them with the CTE API
+-  `With(name, query).From(name)` — which supports `Join`, `GroupBy`, `Having`, `OrderBy` and `Limit` —
++  queries declare those subqueries as `WITH`, and the examples express them with the typed CTE API
++  `query.AsCte(name)` / `ctx.From(cte)` — which supports `Join`, `GroupBy`, `Having`, `OrderBy` and
++  `Limit` (the string `With(name, query).From(name)` API remains available) —
+   so none of the demo queries hit this gap. Tracked in
+   [`sql-capabilities-gap-analysis.md`](../docs/specs/roadmap/sql-capabilities-gap-analysis.md) (known
+   gap 10); see the [CTE guide](../docs/guide/08-cte.md).
+diff --git a/examples/VERIFICATION.md b/examples/VERIFICATION.md
+index fbc7efd6..9a1e40ad 100644
+--- a/examples/VERIFICATION.md
++++ b/examples/VERIFICATION.md
+@@ -1,6 +1,6 @@
+ # Examples verification report
+ 
+-> **Last verified: 2026-09-23** (examples switched to the published `nextorm` **1.0.4-alpha** NuGet
++> **Last verified: 2026-10-13** (examples switched to the published `nextorm` **1.0.9-rc2** NuGet
+ > packages; ClickHouse queries re-validated against `clickhouse/clickhouse-server:25.8-alpine`).
+ > Re-run the examples whenever the engine gains features and update the tables below. This file is the
+ > source of truth for "what works / what does not and why"; the topics are owned by the roadmap backlog
+@@ -42,7 +42,7 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
+ ## Actuality changes made on this verification
+ 
+ * **Examples moved to the published packages.** The three projects now reference the `nextorm.*` NuGet
+-  packages (`NextOrmVersion = 1.0.4-alpha` in [`Directory.Packages.props`](../Directory.Packages.props))
++  packages (`NextOrmVersion = 1.0.9-rc2` in [`Directory.Packages.props`](../Directory.Packages.props))
+   instead of `src/`, so they build against what ships on nuget.org. Re-run against Testcontainers after
+   the switch: postgres `11/11`, mssql `11/11`, clickhouse `10/11` (`Incremental` only).
+ * **Databases are cached in named Docker volumes (the examples are read-only).** Each `DemoDatabase`
+@@ -77,6 +77,22 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
+ * **Re-verified after a derived query could become the primary `FROM` source of a join** (`ctx.From(derivedQuery).Join(...)`, `ResolveJoinBase`): results were unchanged (11/11, 10/11, 8/11). No example query uses derived-primary joins; the `QuarterlyPivot` blocker stayed open then and is now resolved (next bullet). The stale `todo_mssql_derived_from_join.md` link was repointed to `todo_mssql_pivot_derived.md` after it was retired.
+ * **Re-verified after `PIVOT`/`UNPIVOT` accepted a derived source** (`ResolvePivotInner`, `ctx.From(derivedQuery).Pivot(...)`): MSSQL moved **10/11 → 11/11** — `QuarterlyPivot` now pivots a 5-table join through a derived query (numeric `FOR QuarterNum IN (1,2,3,4)`; the string form needs an explicit T-SQL `CAST`). The other two examples are unchanged. The work plan `docs/specs/roadmap/todo_mssql_pivot_derived.md` was folded into the docs and retired.
+ 
++* **Re-verified against the `1.0.9-rc2` packages (2026-10-13).** `NextOrmVersion` bumped `1.0.8-b →
++  1.0.9-rc2`; results unchanged: postgres `11/11`, mssql `11/11`, clickhouse `10/11` (`Incremental`
++  only). One example fix was required: the MSSQL `AdventureWorksQueries.cs` needed
++  `using NextORM.SqlServer;`, because the provider-specific fluent extensions were relocated out of core
++  into the provider packages (`#191`, `1.0.9`), so `Pivot`/`Unpivot`/`DistinctOn` no longer come from
++  `NextORM.Core`.
++
++* **All demo CTEs are now typed (`AsCte`).** The remaining string-name CTE reads
++  (`ctx.With(name, query)` / `ctx.From(name)` + `GetInt32("col")`) were converted to typed descriptors
++  (`query.AsCte(name)` + `ctx.From(cte)` with member access) in postgres (queries 1–5), mssql
++  (queries 2–4) and clickhouse (queries 4, 5); the final projections stay anonymous. `avg`/`stdev`, which
++  return a **non-nullable** value type for a value-type argument, are projected as `(double?)`/`(decimal?)`
++  so the one-row-per-group case stays distinguishable from zero — matching the previous `GetNullable*`
++  reads. The only remaining by-name reads are the MSSQL `Pivot` result columns, which are dynamic. Re-run
++  unchanged: postgres `11/11`, mssql `11/11`, clickhouse `10/11` (`Incremental` only).
++
+ ## Known environment pitfalls (do not mistake for product failures)
+ 
+ * The Podman machine can stop after an OOM on the WSL host (`no such container`, connection refused).
+diff --git a/examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs b/examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs
+index 9f2d896e..edb37763 100644
+--- a/examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs
++++ b/examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs
+@@ -81,10 +81,10 @@ public static class ClickHouseQueries
+             "uniqMerge over an AggregateFunction state has no LINQ surface (see docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md).");
+ 
+     // 4. Sql/clickhouse_retention.sql
+-    // WORKING: the WITH first_visits / cohort_sizes CTEs are declared with ctx.With and read back by
+-    // name; the inner t subquery joins hits with first_visits; groupArray((week_number, pct)) →
+-    // group_array(Tuple.Create(...)), which materialises as a CLR Tuple<...>[]. The matrix is formatted
+-    // for display in C# (there is no portable toString()).
++    // WORKING: the first_visits / cohort_sizes / weekly CTEs are declared as typed descriptors (`AsCte`)
++    // and read back with member access; the inner t subquery joins hits with first_visits;
++    // groupArray((week_number, pct)) → group_array(Tuple.Create(...)), which materialises as a CLR
++    // Tuple<...>[]. The matrix is formatted for display in C# (there is no portable toString()).
+     public static async Task Retention(IDataContext ctx, CancellationToken ct)
+     {
+         // CTE first_visits: each user's first (Monday-aligned) visit. UserID is projected as Int64 so the
+@@ -95,50 +95,49 @@ public static class ClickHouseQueries
+             {
+                 UserID = (long)h.UserId,
+                 cohort_week = SqlFunctions.ClickHouse.to_monday(SqlFunctions.Sql.min(h.EventDate))
+-            });
++            })
++            .AsCte("first_visits");
+ 
+         // CTE cohort_sizes: how many users start in each cohort week.
+-        var cohortSizes = ctx.From("first_visits")
+-            .GroupBy(f => new { cohort_week = f.GetDateTime("cohort_week") })
++        var cohortSizes = ctx.From(firstVisits)
++            .GroupBy(f => new { f.cohort_week })
+             .Select(f => new
+             {
+-                cohort_week = f.GetDateTime("cohort_week"),
++                f.cohort_week,
+                 cohort_size = SqlFunctions.Sql.count()
+-            });
++            })
++            .AsCte("cohort_sizes");
+ 
+         // CTE weekly: each cohort's weekly distinct users (the inner `t` subquery of the reference).
+         var weekly = ctx.From<IHit>()
+-            .Join(ctx.From("first_visits"), (h, fv) => (long)h.UserId == fv.GetInt64("UserID"))
++            .Join(firstVisits, (h, fv) => (long)h.UserId == fv.UserID)
+             .GroupBy(p => new
+             {
+-                cohort_week = p.Item2.GetDateTime("cohort_week"),
+-                week_number = (byte)((SqlFunctions.Sql.date_diff("day", p.Item2.GetDateTime("cohort_week"),
++                cohort_week = p.Item2.cohort_week,
++                week_number = (byte)((SqlFunctions.Sql.date_diff("day", p.Item2.cohort_week,
+                     SqlFunctions.ClickHouse.to_monday(p.Item1.EventDate)) ?? 0) / 7)
+             })
+             .Select(p => new
+             {
+-                cohort_week = p.Item2.GetDateTime("cohort_week"),
+-                week_number = (byte)((SqlFunctions.Sql.date_diff("day", p.Item2.GetDateTime("cohort_week"),
++                cohort_week = p.Item2.cohort_week,
++                week_number = (byte)((SqlFunctions.Sql.date_diff("day", p.Item2.cohort_week,
+                     SqlFunctions.ClickHouse.to_monday(p.Item1.EventDate)) ?? 0) / 7),
+                 distinct_users = SqlFunctions.Sql.count_distinct(p.Item1.UserId)
+-            });
+-
+-        var scope = ctx.With("first_visits", firstVisits)
+-            .With("cohort_sizes", cohortSizes)
+-            .With("weekly", weekly);
++            })
++            .AsCte("weekly");
+ 
+-        var rows = await scope.From("weekly")
+-            .Join(scope.From("cohort_sizes"), (w, cs) => w.GetDateTime("cohort_week") == cs.GetDateTime("cohort_week"))
+-            .Where(p => p.Item1.GetInt32("week_number") <= 4)
+-            .GroupBy(p => new { cohort_week = p.Item1.GetDateTime("cohort_week") })
+-            .OrderByDescending(p => p.Item1.GetDateTime("cohort_week"))
++        var rows = await ctx.From(weekly)
++            .Join(cohortSizes, (w, cs) => w.cohort_week == cs.cohort_week)
++            .Where(p => p.Item1.week_number <= 4)
++            .GroupBy(p => new { p.Item1.cohort_week })
++            .OrderByDescending(p => p.Item1.cohort_week)
+             .Select(p => new
+             {
+-                CohortWeek = p.Item1.GetDateTime("cohort_week"),
+-                CohortSize = SqlFunctions.Sql.max(p.Item2.GetInt32("cohort_size")),
++                CohortWeek = p.Item1.cohort_week,
++                CohortSize = SqlFunctions.Sql.max(p.Item2.cohort_size),
+                 RetentionMatrix = SqlFunctions.ClickHouse.group_array(Tuple.Create(
+-                    p.Item1.GetByte("week_number"),
+-                    Math.Round((double)p.Item1.GetInt32("distinct_users") / p.Item2.GetInt32("cohort_size") * 100, 2)))
++                    p.Item1.week_number,
++                    Math.Round((double)p.Item1.distinct_users / p.Item2.cohort_size * 100, 2)))
+             })
+             .ToListAsync(ct);
+ 
+@@ -154,7 +153,7 @@ public static class ClickHouseQueries
+     }
+ 
+     // 5. Sql/clickhouse_sessions.sql
+-    // WORKING: three chained CTEs (sessions, session_flags, session_counts) expressed as CTEs;
++    // WORKING: three chained typed CTEs (`AsCte`: sessions, session_flags, session_counts);
+     // lagInFrame → lag_in_frame(...).Over(...); runningAccumulate(if(…)) → framed sum_over(c ? 1 : 0)
+     // (runningAccumulate still has no LINQ surface); the quantile threshold is computed once and
+     // passed as a parameter.
+@@ -171,49 +170,50 @@ public static class ClickHouseQueries
+                 time_diff = SqlFunctions.Sql.date_diff("second",
+                     SqlFunctions.ClickHouse.lag_in_frame(h.EventTime).Over(partitionBy: () => h.UserId, orderBy: () => h.EventTime),
+                     h.EventTime)
+-            });
++            })
++            .AsCte("sessions");
+ 
+         // CTE session_flags.
+-        var flags = ctx.From("sessions")
++        var flags = ctx.From(sessions)
+             .Select(s => new
+             {
+-                UserID = s.GetInt64("UserID"),
+-                EventTime = s.GetDateTime("EventTime"),
++                s.UserID,
++                s.EventTime,
+                 // runningAccumulate(if(...)): the if() result is an unsigned ClickHouse integer, so
+                 // sum() returns UInt64; cast the frame to a signed value before it leaves the CTE.
+                 session_id = (long)SqlFunctions.Sql
+-                    .sum_over(s.GetNullableInt64("time_diff") == null || s.GetNullableInt64("time_diff") > 1800 ? 1 : 0)
++                    .sum_over(s.time_diff == null || s.time_diff > 1800 ? 1 : 0)
+                     .Over(
+-                        partitionBy: () => s.GetInt64("UserID"),
+-                        orderBy: () => s.GetDateTime("EventTime"),
++                        partitionBy: () => s.UserID,
++                        orderBy: () => s.EventTime,
+                         frame: WindowFrame.RowsUnboundedPrecedingToCurrentRow)
+-            });
++            })
++            .AsCte("session_flags");
+ 
+         // CTE session_counts.
+-        var counts = ctx.From("session_flags")
+-            .GroupBy(f => new { UserID = f.GetInt64("UserID"), session_id = f.GetInt64("session_id") })
++        var counts = ctx.From(flags)
++            .GroupBy(f => new { f.UserID, f.session_id })
+             .Select(f => new
+             {
+-                UserID = f.GetInt64("UserID"),
+-                session_id = f.GetInt64("session_id"),
++                f.UserID,
++                f.session_id,
+                 hits_in_session = SqlFunctions.Sql.count()
+-            });
+-
+-        var scope = ctx.With("sessions", sessions).With("session_flags", flags).With("session_counts", counts);
++            })
++            .AsCte("session_counts");
+ 
+-        var threshold = await scope.From("session_counts")
+-            .Select(c => SqlFunctions.ClickHouse.quantile(0.99, c.GetInt32("hits_in_session")))
++        var threshold = await ctx.From(counts)
++            .Select(c => SqlFunctions.ClickHouse.quantile(0.99, c.hits_in_session))
+             .FirstAsync(ct);
+ 
+-        var rows = await scope.From("session_counts")
+-            .Where(c => c.GetInt32("hits_in_session") > threshold)
+-            .OrderByDescending(c => c.GetInt32("hits_in_session"))
++        var rows = await ctx.From(counts)
++            .Where(c => c.hits_in_session > threshold)
++            .OrderByDescending(c => c.hits_in_session)
+             .Limit(100)
+             .Select(c => new
+             {
+-                UserID = c.GetInt64("UserID"),
+-                SessionId = c.GetInt64("session_id"),
+-                Hits = c.GetInt32("hits_in_session")
++                c.UserID,
++                SessionId = c.session_id,
++                Hits = c.hits_in_session
+             })
+             .ToListAsync(ct);
+ 
+diff --git a/examples/nextorm.examples.clickhouse.analytics/README.md b/examples/nextorm.examples.clickhouse.analytics/README.md
+index 226f2ebb..b95f1930 100644
+--- a/examples/nextorm.examples.clickhouse.analytics/README.md
++++ b/examples/nextorm.examples.clickhouse.analytics/README.md
+@@ -44,7 +44,7 @@ clause order: `From().Where().GroupBy().Having().OrderBy().Limit().Select()`.
+ | SQL (ClickHouse) | nextorm |
+ |---|---|
+ | `FROM datasets.hits_v1` | `ctx.From<IHit>()` with `[SqlTable("datasets.hits_v1")]` |
+-| `WITH x AS (SELECT …)` | declare it as a CTE: `ctx.With("x", query).From("x")`; a later CTE reads an earlier one by name (`ctx.From("x")`). CTE columns are read by name (`t.GetInt64("UserID")`) because the CTE source is untyped |
++| `WITH x AS (SELECT …)` | declare it as a CTE: the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference) or the string `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt64("UserID")`, because the name carries no type); a later CTE reads an earlier one the same way |
+ | `SELECT a AS x` | `.Select(h => new { x = h.A })` |
+ | `JOIN u ON a = b` | `.Join(ctx.From<IU>(), (h, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
+ | `WHERE c` | `.Where(h => c)` |
+@@ -88,8 +88,8 @@ throws (documented in the method comment).
+ | 1 | [`clickhouse_array_analytics.sql`](Sql/clickhouse_array_analytics.sql) | `ClickHouseQueries.ArrayAnalytics` | OK | `splitByChar` → `split_by_char`; `arrayMap`/`arrayFilter` → `array_map`/`array_filter`; the result is grouped by the array expression |
+ | 2 | [`clickhouse_funnel.sql`](Sql/clickhouse_funnel.sql) | `ClickHouseQueries.Funnel` | OK | `windowFunnel` → `window_funnel(...)`; inner `GROUP BY UserID` + outer `GROUP BY level` → two derived queries |
+ | 3 | [`clickhouse_incremental.sql`](Sql/clickhouse_incremental.sql) | `ClickHouseQueries.Incremental` | FAIL | `uniqMerge` (`-Merge` over an `AggregateFunction` state) has no LINQ surface on the released packages; throws instead of falling back to `WithSql` |
+-| 4 | [`clickhouse_retention.sql`](Sql/clickhouse_retention.sql) | `ClickHouseQueries.Retention` | OK | the `WITH first_visits, cohort_sizes` CTEs → `ctx.With(...)`; the inner join + `groupArray((…))` → `group_array(Tuple.Create(…))` |
+-| 5 | [`clickhouse_sessions.sql`](Sql/clickhouse_sessions.sql) | `ClickHouseQueries.Sessions` | OK | three chained CTEs (`sessions`, `session_flags`, `session_counts`); `lagInFrame` → `lag_in_frame(...).Over(...)`; `runningAccumulate(if(…))` → cumulative `sum_over(c ? 1 : 0)`; `quantile(0.99)(…)` → `SqlFunctions.ClickHouse.quantile(0.99, …)` |
++| 4 | [`clickhouse_retention.sql`](Sql/clickhouse_retention.sql) | `ClickHouseQueries.Retention` | OK | the `WITH first_visits, cohort_sizes, weekly` CTEs → typed `AsCte`; the inner join + `groupArray((…))` → `group_array(Tuple.Create(…))` |
++| 5 | [`clickhouse_sessions.sql`](Sql/clickhouse_sessions.sql) | `ClickHouseQueries.Sessions` | OK | three chained **typed** CTEs (`AsCte`: `sessions`, `session_flags`, `session_counts`); `lagInFrame` → `lag_in_frame(...).Over(...)`; `runningAccumulate(if(…))` → cumulative `sum_over(c ? 1 : 0)`; `quantile(0.99)(…)` → `SqlFunctions.ClickHouse.quantile(0.99, …)` |
+ 
+ > The retention query in `Sql/clickhouse_retention.sql` was corrected on porting: the original
+ > referenced `UserID` outside the subquery that exposes it and divided by the cohort-week instead of the
+diff --git a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+index 3fe2ddd0..0bdd0ee6 100644
+--- a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
++++ b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+@@ -1,6 +1,8 @@
+ using System.Linq.Expressions;
+ using System.Text.Json;
+ using NextORM.Core;
++using NextORM.Generated.nextorm_examples_mssql_adventureworks;
++using NextORM.SqlServer;
+ 
+ namespace NextORM.Examples.SqlServer.AdventureWorks;
+ 
+@@ -14,11 +16,13 @@ namespace NextORM.Examples.SqlServer.AdventureWorks;
+ public static class AdventureWorksQueries
+ {
+     // 1. Sql/mssql_vip_churn.sql
+-    // WORKING: two CTEs (CustomerOrders, CustomerMetrics) expressed as CTEs; CustomerMetrics groups
+-    // CustomerOrders by name; the outer query LEFT JOINs it to SalesPerson/Person. FORMAT uses DemoUdf.
++    // WORKING: two typed CTEs (`AsCte`); the outer query names the root (`WithAlias(Alias.Root)`) and both
++    // LEFT JOINs (`Alias.SalesPerson` / `Alias.Manager`). The root projects the named `CustomerMetricRow`
++    // DTO because the alias surface cannot render the chain's anonymous type. FORMAT uses DemoUdf.
+     public static async Task VipChurn(IDataContext ctx, CancellationToken ct)
+     {
+-        // CTE CustomerOrders; the manager join stays in the outer SELECT.
++        // CTE CustomerOrders; the manager join stays in the outer SELECT. AsCte makes it a typed
++        // descriptor (member access) instead of reading it by name through TableAlias.
+         var customerOrders = ctx.From<ISalesOrderHeader>()
+             .Join(ctx.From<ICustomer>(), (soh, c) => soh.CustomerId == c.CustomerId)
+             .Join(ctx.From<IPerson>(), (p, per) => p.Item2.PersonId == per.BusinessEntityId)
+@@ -33,42 +37,42 @@ public static class AdventureWorksQueries
+                 LastCompanyOrderDate = SqlFunctions.Sql.max_over(p.Item1.OrderDate).Over(),
+                 PrevOrderDate = SqlFunctions.Sql.lag(p.Item1.OrderDate)
+                     .Over(partitionBy: () => p.Item1.CustomerId, orderBy: () => p.Item1.OrderDate)
+-            });
+-
+-        // CTE CustomerMetrics
+-        var metrics = ctx.From("CustomerOrders")
+-            .GroupBy(c => new
+-            {
+-                CustomerID = c.GetInt32("CustomerID"),
+-                CustomerName = c.GetString("CustomerName"),
+-                SalesPersonID = c.GetNullableInt32("SalesPersonID")
+             })
+-            .Select(c => new
+-            {
+-                CustomerID = c.GetInt32("CustomerID"),
+-                CustomerName = c.GetString("CustomerName"),
+-                SalesPersonID = c.GetNullableInt32("SalesPersonID"),
+-                LifetimeValue = SqlFunctions.Sql.sum(c.GetDecimal("TotalDue")),
+-                LastPurchaseDate = SqlFunctions.Sql.max(c.GetDateTime("OrderDate")),
++            .AsCte("CustomerOrders");
++
++        // CTE CustomerMetrics; reads the typed CustomerOrders descriptor, so the step is typed too.
++        var metrics = ctx.From(customerOrders)
++            .GroupBy(c => new { c.CustomerID, c.CustomerName, c.SalesPersonID })
++            .Select(c => new CustomerMetricRow
++            {
++                CustomerID = c.CustomerID,
++                CustomerName = c.CustomerName,
++                SalesPersonID = c.SalesPersonID,
++                LifetimeValue = SqlFunctions.Sql.sum(c.TotalDue),
++                LastPurchaseDate = SqlFunctions.Sql.max(c.OrderDate),
+                 DaysSinceLastOrder = SqlFunctions.Sql.date_diff("day",
+-                    SqlFunctions.Sql.max(c.GetDateTime("OrderDate")),
+-                    SqlFunctions.Sql.max(c.GetNullableDateTime("LastCompanyOrderDate")))
+-            });
+-
+-        var rows = await ctx.With("CustomerOrders", customerOrders).With("CustomerMetrics", metrics)
+-            .From("CustomerMetrics")
+-            .LeftJoin(ctx.From<ISalesPerson>(), (m, sp) => m.GetNullableInt32("SalesPersonID") == sp.BusinessEntityId)
+-            .LeftJoin(ctx.From<IPerson>(), (p, per) => p.Item2.BusinessEntityId == per.BusinessEntityId)
+-            .Where(p => p.Item1.GetDecimal("LifetimeValue") > 50000 && p.Item1.GetInt32("DaysSinceLastOrder") > 180)
+-            .OrderByDescending(p => p.Item1.GetDecimal("LifetimeValue"))
++                    SqlFunctions.Sql.max(c.OrderDate),
++                    SqlFunctions.Sql.max(c.LastCompanyOrderDate))
++            })
++            .AsCte("CustomerMetrics");
++
++        // Named slots (#160): the root is Alias.Metrics (named after the CTE passed to From), the two
++        // LEFT JOINs are Alias.SalesPerson and Alias.Manager. SQL aliases stay t1/t2/t3; the names only add
++        // typed projection members. The root must be a named type (CustomerMetricRow), not an anonymous
++        // projection — see the DTO.
++        var rows = await ctx.From(metrics).WithAlias(Alias.Metrics)
++            .LeftJoin<ISalesPerson>(ctx.From<ISalesPerson>(), (m, sp) => m.Metrics.SalesPersonID == sp.BusinessEntityId, Alias.SalesPerson)
++            .LeftJoin<IPerson>(ctx.From<IPerson>(), (p, per) => p.SalesPerson.BusinessEntityId == per.BusinessEntityId, Alias.Manager)
++            .Where(p => p.Metrics.LifetimeValue > 50000 && p.Metrics.DaysSinceLastOrder > 180)
++            .OrderByDescending(p => p.Metrics.LifetimeValue)
+             .Select(p => new
+             {
+-                CustomerID = p.Item1.GetInt32("CustomerID"),
+-                CustomerName = p.Item1.GetString("CustomerName"),
+-                Ltv = Math.Round(p.Item1.GetDecimal("LifetimeValue"), 2),
+-                LastPurchase = DemoUdf.Format(p.Item1.GetDateTime("LastPurchaseDate"), "yyyy-MM-dd"),
+-                DaysSinceLastOrder = p.Item1.GetInt32("DaysSinceLastOrder"),
+-                Manager = p.Item3.FirstName + " " + p.Item3.LastName
++                p.Metrics.CustomerID,
++                p.Metrics.CustomerName,
++                Ltv = Math.Round(p.Metrics.LifetimeValue, 2),
++                LastPurchase = DemoUdf.Format(p.Metrics.LastPurchaseDate, "yyyy-MM-dd"),
++                p.Metrics.DaysSinceLastOrder,
++                Manager = p.Manager.FirstName + " " + p.Manager.LastName
+             })
+             .ToListAsync(ct);
+ 
+@@ -76,11 +80,11 @@ public static class AdventureWorksQueries
+     }
+ 
+     // 2. Sql/mssql_rolling_kpi.sql
+-    // WORKING: CTE MonthlySales; the outer query reads it by name, formats via DemoUdf and applies
+-    // cumulative/3-month window frames.
++    // WORKING: typed CTE MonthlySales (`AsCte`); the outer query reads it with member access, formats via
++    // DemoUdf and applies cumulative/3-month window frames.
+     public static async Task RollingKpi(IDataContext ctx, CancellationToken ct)
+     {
+-        // CTE MonthlySales.
++        // CTE MonthlySales; AsCte makes it a typed descriptor (member access) instead of reading it by name.
+         var monthly = ctx.From<ISalesOrderHeader>()
+             .Join(ctx.From<ISalesTerritory>(), (soh, st) => soh.TerritoryId == st.TerritoryId)
+             .GroupBy(p => new
+@@ -93,27 +97,27 @@ public static class AdventureWorksQueries
+                 RegionName = p.Item2.Name,
+                 SalesMonth = SqlFunctions.Sql.date_trunc("month", p.Item1.OrderDate),
+                 MonthlyRevenue = SqlFunctions.Sql.sum(p.Item1.TotalDue)
+-            });
++            })
++            .AsCte("MonthlySales");
+ 
+-        var rows = await ctx.With("MonthlySales", monthly)
+-            .From("MonthlySales")
+-            .OrderBy(m => m.GetString("RegionName"))
+-            .OrderByDescending(m => m.GetDateTime("SalesMonth"))
++        var rows = await ctx.From(monthly)
++            .OrderBy(m => m.RegionName)
++            .OrderByDescending(m => m.SalesMonth)
+             .Select(m => new
+             {
+-                Region = m.GetString("RegionName"),
+-                Month = DemoUdf.Format(m.GetDateTime("SalesMonth"), "yyyy-MM"),
+-                MonthlyRevenue = Math.Round(m.GetDecimal("MonthlyRevenue"), 2),
++                Region = m.RegionName,
++                Month = DemoUdf.Format(m.SalesMonth, "yyyy-MM"),
++                MonthlyRevenue = Math.Round(m.MonthlyRevenue, 2),
+                 Cumulative = Math.Round(
+-                    SqlFunctions.Sql.sum_over(m.GetDecimal("MonthlyRevenue")).Over(
+-                        partitionBy: () => m.GetString("RegionName"),
+-                        orderBy: () => m.GetDateTime("SalesMonth"),
++                    SqlFunctions.Sql.sum_over(m.MonthlyRevenue).Over(
++                        partitionBy: () => m.RegionName,
++                        orderBy: () => m.SalesMonth,
+                         frame: WindowFrame.RowsUnboundedPrecedingToCurrentRow),
+                     2),
+                 MovingAvg3 = Math.Round(
+-                    SqlFunctions.Sql.avg_over(m.GetDecimal("MonthlyRevenue")).Over(
+-                        partitionBy: () => m.GetString("RegionName"),
+-                        orderBy: () => m.GetDateTime("SalesMonth"),
++                    SqlFunctions.Sql.avg_over(m.MonthlyRevenue).Over(
++                        partitionBy: () => m.RegionName,
++                        orderBy: () => m.SalesMonth,
+                         frame: WindowFrame.Rows(WindowFrameBound.Preceding(2), WindowFrameBound.CurrentRow)),
+                     2)
+             })
+@@ -123,7 +127,8 @@ public static class AdventureWorksQueries
+     }
+ 
+     // 3. Sql/mssql_supply_chain.sql
+-    // WORKING: two CTEs (SupplierDelays, ProductionImpact); the outer query joins them by name.
++    // WORKING: two typed CTEs (`AsCte`: SupplierDelays, ProductionImpact); the outer query joins them and
++    // reads each side with member access.
+     public static async Task SupplyChain(IDataContext ctx, CancellationToken ct)
+     {
+         // CTE SupplierDelays
+@@ -137,7 +142,8 @@ public static class AdventureWorksQueries
+                 VendorID = p.Item2.VendorId,
+                 VendorName = p.Item3.Name,
+                 DelayDays = SqlFunctions.Sql.date_diff("day", p.Item1.DueDate, p.Item1.ModifiedDate)
+-            });
++            })
++            .AsCte("SupplierDelays");
+ 
+         // CTE ProductionImpact
+         var productionImpact = ctx.From<IWorkOrder>()
+@@ -149,20 +155,20 @@ public static class AdventureWorksQueries
+                 ProductName = p.Item2.Name,
+                 OrderQty = p.Item1.OrderQty,
+                 ProdDelayDays = SqlFunctions.Sql.date_diff("day", p.Item1.DueDate, p.Item1.EndDate)
+-            });
++            })
++            .AsCte("ProductionImpact");
+ 
+-        var rows = await ctx.With("SupplierDelays", supplierDelays).With("ProductionImpact", productionImpact)
+-            .From("ProductionImpact")
+-            .Join(ctx.From("SupplierDelays"), (pi, sd) => pi.GetInt32("ProductID") == sd.GetInt32("ProductID"))
+-            .OrderByDescending(p => p.Item1.GetInt32("ProdDelayDays"))
+-            .OrderByDescending(p => p.Item2.GetInt32("DelayDays"))
++        var rows = await ctx.From(productionImpact)
++            .Join(ctx.From(supplierDelays), (pi, sd) => pi.ProductID == sd.ProductID)
++            .OrderByDescending(p => p.Item1.ProdDelayDays)
++            .OrderByDescending(p => p.Item2.DelayDays)
+             .Select(p => new
+             {
+-                Component = p.Item1.GetString("ProductName"),
+-                Vendor = p.Item2.GetString("VendorName"),
+-                SupplyDelay = p.Item2.GetInt32("DelayDays"),
+-                ProductionQty = p.Item1.GetInt32("OrderQty"),
+-                AssemblyShift = p.Item1.GetInt32("ProdDelayDays")
++                Component = p.Item1.ProductName,
++                Vendor = p.Item2.VendorName,
++                SupplyDelay = p.Item2.DelayDays,
++                ProductionQty = p.Item1.OrderQty,
++                AssemblyShift = p.Item1.ProdDelayDays
+             })
+             .ToListAsync(ct);
+ 
+@@ -170,8 +176,9 @@ public static class AdventureWorksQueries
+     }
+ 
+     // 4. Sql/mssql_product_abc_xyz.sql
+-    // WORKING: three chained CTEs (ProductQuarterlySales, ProductAggregates, AbcRanking); the
+-    // running-share windows and CASE-based ABC/XYZ classes are computed over the CTEs.
++    // WORKING: three chained typed CTEs (`AsCte`: ProductQuarterlySales, ProductAggregates, AbcRanking); the
++    // running-share windows and CASE-based ABC/XYZ classes are computed over the CTEs. `avg`/`stdev` are
++    // projected as nullable (`(double?)`) so the one-row-per-group case stays distinguishable from zero.
+     public static async Task ProductAbcXyz(IDataContext ctx, CancellationToken ct)
+     {
+         // CTE ProductQuarterlySales.
+@@ -191,48 +198,48 @@ public static class AdventureWorksQueries
+                 SalesQuarter = SqlFunctions.Sql.date_trunc("quarter", p.Item2.OrderDate),
+                 QuarterlyRevenue = SqlFunctions.Sql.sum(p.Item1.LineTotal),
+                 QuarterlyQty = SqlFunctions.Sql.sum(p.Item1.OrderQty)
+-            });
++            })
++            .AsCte("ProductQuarterlySales");
+ 
+         // CTE ProductAggregates.
+-        var aggregates = ctx.From("ProductQuarterlySales")
+-            .GroupBy(q => new { ProductID = q.GetInt32("ProductID"), ProductName = q.GetString("ProductName") })
++        var aggregates = ctx.From(quarterly)
++            .GroupBy(q => new { q.ProductID, q.ProductName })
+             .Select(q => new
+             {
+-                ProductID = q.GetInt32("ProductID"),
+-                ProductName = q.GetString("ProductName"),
+-                TotalRevenue = SqlFunctions.Sql.sum(q.GetDecimal("QuarterlyRevenue")),
+-                AvgQty = SqlFunctions.Sql.avg((double)q.GetInt32("QuarterlyQty")),
+-                StdevQty = SqlFunctions.Sql.stdev((double)q.GetInt32("QuarterlyQty"))
+-            });
++                q.ProductID,
++                q.ProductName,
++                TotalRevenue = SqlFunctions.Sql.sum(q.QuarterlyRevenue),
++                AvgQty = (double?)SqlFunctions.Sql.avg((double)q.QuarterlyQty),
++                StdevQty = (double?)SqlFunctions.Sql.stdev((double)q.QuarterlyQty)
++            })
++            .AsCte("ProductAggregates");
+ 
+         // CTE AbcRanking.
+-        var abc = ctx.From("ProductAggregates")
++        var abc = ctx.From(aggregates)
+             .Select(a => new
+             {
+-                ProductName = a.GetString("ProductName"),
+-                TotalRevenue = a.GetDecimal("TotalRevenue"),
+-                AvgQty = a.GetNullableDouble("AvgQty"),
+-                StdevQty = a.GetNullableDouble("StdevQty"),
+-                RunningPercent = SqlFunctions.Sql.sum_over(a.GetDecimal("TotalRevenue"))
+-                                      .Over(SqlFunctions.Sql.desc(() => (object?)a.GetDecimal("TotalRevenue")))
+-                                  / SqlFunctions.Sql.sum_over(a.GetDecimal("TotalRevenue")).Over()
+-            });
++                a.ProductName,
++                a.TotalRevenue,
++                a.AvgQty,
++                a.StdevQty,
++                RunningPercent = SqlFunctions.Sql.sum_over(a.TotalRevenue)
++                                      .Over(SqlFunctions.Sql.desc(() => a.TotalRevenue))
++                                  / SqlFunctions.Sql.sum_over(a.TotalRevenue).Over()
++            })
++            .AsCte("AbcRanking");
+ 
+-        var rows = await ctx.With("ProductQuarterlySales", quarterly)
+-            .With("ProductAggregates", aggregates)
+-            .With("AbcRanking", abc)
+-            .From("AbcRanking")
+-            .OrderByDescending(a => a.GetDecimal("TotalRevenue"))
++        var rows = await ctx.From(abc)
++            .OrderByDescending(a => a.TotalRevenue)
+             .Select(a => new
+             {
+-                ProductName = a.GetString("ProductName"),
+-                TotalRevenue = Math.Round(a.GetDecimal("TotalRevenue"), 2),
+-                Abc = a.GetDecimal("RunningPercent") <= 0.80m ? "A"
+-                    : a.GetDecimal("RunningPercent") <= 0.95m ? "B"
++                a.ProductName,
++                TotalRevenue = Math.Round(a.TotalRevenue, 2),
++                Abc = a.RunningPercent <= 0.80m ? "A"
++                    : a.RunningPercent <= 0.95m ? "B"
+                     : "C",
+-                Xyz = a.GetNullableDouble("AvgQty") == 0 || a.GetNullableDouble("StdevQty") == null ? "Z"
+-                    : a.GetNullableDouble("StdevQty") / a.GetNullableDouble("AvgQty") < 0.15 ? "X"
+-                    : a.GetNullableDouble("StdevQty") / a.GetNullableDouble("AvgQty") <= 0.30 ? "Y"
++                Xyz = a.AvgQty == 0 || a.StdevQty == null ? "Z"
++                    : a.StdevQty / a.AvgQty < 0.15 ? "X"
++                    : a.StdevQty / a.AvgQty <= 0.30 ? "Y"
+                     : "Z"
+             })
+             .ToListAsync(ct);
+@@ -519,3 +526,16 @@ public static class AdventureWorksQueries
+         Console.WriteLine();
+     }
+ }
++
++// A named projection for the CustomerMetrics CTE. The named join-alias surface (#160) generates an
++// extension whose receiver is the chain's concrete type, which cannot be rendered for an anonymous
++// type, so the aliased chain must be rooted at a named type.
++public sealed class CustomerMetricRow
++{
++    public int CustomerID { get; init; }
++    public string CustomerName { get; init; } = "";
++    public int? SalesPersonID { get; init; }
++    public decimal LifetimeValue { get; init; }
++    public DateTime LastPurchaseDate { get; init; }
++    public int? DaysSinceLastOrder { get; init; }
++}
+diff --git a/examples/nextorm.examples.mssql.adventureworks/README.md b/examples/nextorm.examples.mssql.adventureworks/README.md
+index e9849794..a07617c8 100644
+--- a/examples/nextorm.examples.mssql.adventureworks/README.md
++++ b/examples/nextorm.examples.mssql.adventureworks/README.md
+@@ -39,7 +39,7 @@ SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Se
+ | SQL (T-SQL) | nextorm |
+ |---|---|
+ | `FROM t` | `ctx.From<IT>()`, where `IT` is an interface marked `[SqlTable("Schema.t")]` |
+-| `WITH x AS (SELECT …)` | declare it as a CTE: `ctx.With("x", query).From("x")`; a later CTE reads an earlier one by name (`ctx.From("x")`). CTE columns are read by name (`t.GetInt32("id")`) because the CTE source is untyped |
++| `WITH x AS (SELECT …)` | declare it as a CTE: string API `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt32("id")`, because the name carries no type) or the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference); a later CTE reads an earlier one the same way |
+ | `SELECT a AS x` | `.Select(t => new { x = t.A })` (anonymous type = result row) |
+ | `JOIN u ON a = b` / `LEFT JOIN` | `.Join(ctx.From<IU>(), (t, u) => …)` / `.LeftJoin(...)`; joined items are `p.Item1`, `p.Item2`, … |
+ | `WHERE c` | `.Where(t => c)` |
+@@ -49,7 +49,7 @@ SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Se
+ | `TOP n` / `LIMIT n` | `.Limit(n)` |
+ | `COUNT(*)`, `SUM(x)`, `AVG`, `MIN`, `MAX`, `STDEV`, `COUNT(DISTINCT x)` | `SqlFunctions.Sql.count()`, `.sum(x)`, `.avg(x)`, `.min(x)`, `.max(x)`, `.stdev(x)`, `.count_distinct(x)` |
+ | `CASE WHEN c THEN a ELSE b END` | ternary `c ? a : b` |
+-| `PIVOT (…)` | `EntityBuilder.Pivot(...)` emits native T-SQL `PIVOT` and accepts a derived query as the source (query 5 pivots a 5-table join with a computed `Margin`/`FOR` column) |
++| `PIVOT (…)` | `EntityBuilder.Pivot(...)` (SQL Server provider extension in `NextORM.SqlServer` — add `using NextORM.SqlServer;`) emits native T-SQL `PIVOT` and accepts a derived query as the source (query 5 pivots a 5-table join with a computed `Margin`/`FOR` column) |
+ | `LAG(x) OVER (PARTITION BY p ORDER BY o)` | `SqlFunctions.Sql.lag(x).Over(partitionBy: () => p, orderBy: () => o)` |
+ | `MAX(x) OVER()` | `SqlFunctions.Sql.max_over(x).Over()` |
+ | `ROW_NUMBER()` / `RANK()` / `NTILE(n) OVER (…)` | `SqlFunctions.Sql.row_number()` / `.rank()` / `.ntile(n)` `.Over(…)` |
+@@ -73,9 +73,13 @@ Two nextorm-specific rules that trip people up:
+ * **Derived queries as a `FROM` source and as a join side** — `ctx.From(derived).Join(...)` works, and a
+   `QueryCommand<T>` can be joined directly; a `Where` may precede the join (it is pushed onto the derived
+   query), while other modifiers must stay inside the derived query. The reference queries declare their
+-  subqueries as CTEs, so the example uses `ctx.With(name, query)` / `ctx.From(name)` (see rule 1);
+-  queries 1, 3 and 4 are expressed this way and are **WORKING**.
+-* **Native `PIVOT` over a derived source** — `EntityBuilder.Pivot(...)` emits native T-SQL `PIVOT` and
++  subqueries as CTEs, all through the typed `query.AsCte(name)` / `ctx.From(Cte<T>)` API (rule 1):
++  queries 1, 3 and 4 chain typed descriptors, and query 1 names its slots (`WithAlias(Alias.Root)`,
++  `Alias.SalesPerson`, `Alias.Manager`); all are **WORKING**. The alias chain
++  must be rooted at a **named** projection (`CustomerMetricRow`), not an anonymous type: the alias
++  generator renders the chain's concrete type and cannot emit an anonymous one.
++* **Native `PIVOT` over a derived source** — `EntityBuilder.Pivot(...)` (the SQL Server provider extension
++  in `NextORM.SqlServer`; add `using NextORM.SqlServer;`) emits native T-SQL `PIVOT` and
+   accepts a derived query as the source, so query 5 pivots the 5-table join with its computed `Margin`
+   and `FOR` column directly (`FOR QuarterNum IN (1,2,3,4)` over the numeric `datepart(quarter, …)`; the
+   string `'Q' + datepart(...)` form needs an explicit T-SQL `CAST`). Every method carries a `WORKING`
+@@ -88,10 +92,10 @@ Markers: **OK** — expressed with the regular LINQ API; **≡** — same result
+ 
+ | # | SQL | Method | Coverage | Notes |
+ |---|---|---|---|---|
+-| 1 | [`mssql_vip_churn.sql`](Sql/mssql_vip_churn.sql) | `AdventureWorksQueries.VipChurn` | OK | two CTEs (`CustomerOrders`, `CustomerMetrics` grouping the first); `MAX(OrderDate) OVER()` → `max_over(...).Over()`; `LAG(…) OVER(…)` → `lag(...).Over(...)`; `DATEDIFF(day,…)` → `date_diff("day",…)`; `FORMAT(…)` → `DemoUdf.Format`; manager `LEFT JOIN` on the CTE |
+-| 2 | [`mssql_rolling_kpi.sql`](Sql/mssql_rolling_kpi.sql) | `AdventureWorksQueries.RollingKpi` | OK | CTE `MonthlySales`; `DATEADD(month, DATEDIFF(month,0,…),0)` → `date_trunc("month",…)`; cumulative/3-month `AVG` frames → `sum_over`/`avg_over` with `WindowFrame`; `FORMAT(…)` → `DemoUdf.Format` |
+-| 3 | [`mssql_supply_chain.sql`](Sql/mssql_supply_chain.sql) | `AdventureWorksQueries.SupplyChain` | OK | two CTEs (`SupplierDelays`, `ProductionImpact`) joined by name; `DATEADD(day,5,…)` → `date_add("day",5,…)`; `DATEDIFF(day,…)` → `date_diff("day",…)` |
+-| 4 | [`mssql_product_abc_xyz.sql`](Sql/mssql_product_abc_xyz.sql) | `AdventureWorksQueries.ProductAbcXyz` | OK | three chained CTEs; `DATEADD(quarter,…)` → `date_trunc("quarter",…)`; `STDEV` → `stdev`; `AVG(CAST(qty AS FLOAT))` → `avg((double)qty)`; `SUM(...) OVER(ORDER BY … DESC)/SUM(...) OVER()` → `sum_over(...).Over(desc(...)) / sum_over(...).Over()` |
++| 1 | [`mssql_vip_churn.sql`](Sql/mssql_vip_churn.sql) | `AdventureWorksQueries.VipChurn` | OK | two **typed** CTEs (`AsCte`), the second grouped into the named `CustomerMetricRow`; joined slots are named (`WithAlias(Alias.Root)`, `Alias.SalesPerson`, `Alias.Manager`, addressed as `p.Root`/`p.SalesPerson`/`p.Manager`); `MAX(OrderDate) OVER()` → `max_over(...).Over()`; `LAG(…) OVER(…)` → `lag(...).Over(...)`; `DATEDIFF(day,…)` → `date_diff("day",…)`; `FORMAT(…)` → `DemoUdf.Format`; manager `LEFT JOIN` on the CTE |
++| 2 | [`mssql_rolling_kpi.sql`](Sql/mssql_rolling_kpi.sql) | `AdventureWorksQueries.RollingKpi` | OK | typed CTE `MonthlySales` (`AsCte`); `DATEADD(month, DATEDIFF(month,0,…),0)` → `date_trunc("month",…)`; cumulative/3-month `AVG` frames → `sum_over`/`avg_over` with `WindowFrame`; `FORMAT(…)` → `DemoUdf.Format` |
++| 3 | [`mssql_supply_chain.sql`](Sql/mssql_supply_chain.sql) | `AdventureWorksQueries.SupplyChain` | OK | two typed CTEs (`AsCte`: `SupplierDelays`, `ProductionImpact`) joined by member; `DATEADD(day,5,…)` → `date_add("day",5,…)`; `DATEDIFF(day,…)` → `date_diff("day",…)` |
++| 4 | [`mssql_product_abc_xyz.sql`](Sql/mssql_product_abc_xyz.sql) | `AdventureWorksQueries.ProductAbcXyz` | OK | three chained **typed** CTEs (`AsCte`); `DATEADD(quarter,…)` → `date_trunc("quarter",…)`; `STDEV` → `stdev` (projected `(double?)`, so the one-quarter-per-product case stays distinct from zero); `AVG(CAST(qty AS FLOAT))` → `avg((double)qty)`; `SUM(...) OVER(ORDER BY … DESC)/SUM(...) OVER()` → `sum_over(...).Over(desc(...)) / sum_over(...).Over()` |
+ | 5 | [`mssql_quarterly_pivot.sql`](Sql/mssql_quarterly_pivot.sql) | `AdventureWorksQueries.QuarterlyPivot` | OK | native `Pivot` over a **derived query**: the join 5 tables and the computed `Margin`/`FOR` column live in the derived query, `PIVOT ... FOR QuarterNum IN (1,2,3,4)` over the numeric `datepart(quarter, …)` (string `'Q'+datepart` needs an explicit T-SQL `CAST`, so the numeric quarter is pivoted); pivot cells stay nullable |
+ 
+ ## Course exercises (6–11)
+diff --git a/examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs b/examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs
+index 12a7085f..638254f8 100644
+--- a/examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs
++++ b/examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs
+@@ -14,8 +14,8 @@ namespace NextORM.Examples.Postgres.Aviasales;
+ public static class AviasalesQueries
+ {
+     // 1. Sql/aircraft_delay_chains.sql — WITH flight_delays AS (...), delay_chains AS (...), then JOIN
+-    // WORKING: two CTEs; delay_chains reads flight_delays by name; the outer query joins the CTE to
+-    // airplanes_data (the CTE API supports the join, unlike the old derived-query form).
++    // WORKING: two typed CTEs (`AsCte`); delay_chains reads flight_delays with member access; the outer
++    // query joins the CTE to airplanes_data (the CTE API supports the join, unlike the old derived-query form).
+     public static async Task AircraftDelayChains(IDataContext ctx, CancellationToken ct)
+     {
+         // CTE flight_delays (delay_minutes + LAG over the same partition).
+@@ -34,36 +34,36 @@ public static class AviasalesQueries
+                 prev_delay_minutes = SqlFunctions.Sql.lag(
+                         SqlFunctions.Sql.date_diff("second", f.ScheduledDeparture, f.ActualDeparture) / 60.0)
+                     .Over(partitionBy: () => f.AirplaneCode, orderBy: () => f.ActualDeparture)
+-            });
++            })
++            .AsCte("flight_delays");
+ 
+         // CTE delay_chains: SELECT *, CASE ... AS is_chain_link FROM flight_delays.
+-        var delayChains = ctx.From("flight_delays")
++        var delayChains = ctx.From(flightDelays)
+             .Select(d => new
+             {
+-                flight_id = d.GetInt32("flight_id"),
+-                airplane_code = d.GetString("airplane_code"),
+-                actual_departure = d.GetNullableDateTime("actual_departure"),
+-                scheduled_departure = d.GetDateTime("scheduled_departure"),
+-                delay_minutes = d.GetDouble("delay_minutes"),
+-                prev_departure = d.GetNullableDateTime("prev_departure"),
+-                prev_delay_minutes = d.GetNullableDouble("prev_delay_minutes"),
+-                is_chain_link = d.GetDouble("delay_minutes") > 15 && d.GetNullableDouble("prev_delay_minutes") > 15
+-                    ? 1 : 0
+-            });
++                d.flight_id,
++                d.airplane_code,
++                d.actual_departure,
++                d.scheduled_departure,
++                d.delay_minutes,
++                d.prev_departure,
++                d.prev_delay_minutes,
++                is_chain_link = d.delay_minutes > 15 && d.prev_delay_minutes > 15 ? 1 : 0
++            })
++            .AsCte("delay_chains");
+ 
+-        var rows = await ctx.With("flight_delays", flightDelays).With("delay_chains", delayChains)
+-            .From("delay_chains")
+-            .Join(ctx.From<IAirplaneData>(), (dc, ac) => dc.GetString("airplane_code") == ac.AirplaneCode)
+-            .Where(p => p.Item1.GetDouble("delay_minutes") > 30 && p.Item1.GetNullableDouble("prev_delay_minutes") > 30)
+-            .OrderBy(p => p.Item1.GetString("airplane_code"))
+-            .OrderBy(p => p.Item1.GetDateTime("scheduled_departure"))
++        var rows = await ctx.From(delayChains)
++            .Join(ctx.From<IAirplaneData>(), (dc, ac) => dc.airplane_code == ac.AirplaneCode)
++            .Where(p => p.Item1.delay_minutes > 30 && p.Item1.prev_delay_minutes > 30)
++            .OrderBy(p => p.Item1.airplane_code)
++            .OrderBy(p => p.Item1.scheduled_departure)
+             .Select(p => new
+             {
+                 Model = SqlFunctions.Postgres.json_get_text(p.Item2.Model, "ru"),
+-                AirplaneCode = p.Item1.GetString("airplane_code"),
+-                ScheduledDeparture = p.Item1.GetDateTime("scheduled_departure"),
+-                DelayMinutes = Math.Round(p.Item1.GetDouble("delay_minutes"), 1),
+-                PrevDelayMinutes = Math.Round(p.Item1.GetNullableDouble("prev_delay_minutes") ?? 0.0, 1)
++                AirplaneCode = p.Item1.airplane_code,
++                ScheduledDeparture = p.Item1.scheduled_departure,
++                DelayMinutes = Math.Round(p.Item1.delay_minutes ?? 0.0, 1),
++                PrevDelayMinutes = Math.Round(p.Item1.prev_delay_minutes ?? 0.0, 1)
+             })
+             .ToListAsync(ct);
+ 
+@@ -71,7 +71,7 @@ public static class AviasalesQueries
+     }
+ 
+     // 2. Sql/business_occupancy_matrix.sql — WITH flight_business_capacity, flight_occupancy, then joins
+-    // WORKING: two CTEs expressed as CTEs, joined to each other and to airplanes_data; the pivot is a
++    // WORKING: two typed CTEs (`AsCte`), joined to each other and to airplanes_data; the pivot is a
+     // plain AVG(CASE ...) over day_of_week.
+     public static async Task BusinessOccupancyMatrix(IDataContext ctx, CancellationToken ct)
+     {
+@@ -79,7 +79,8 @@ public static class AviasalesQueries
+         var capacity = ctx.From<ISeat>()
+             .Where(s => s.FareConditions == "Business")
+             .GroupBy(s => new { s.AirplaneCode })
+-            .Select(s => new { airplane_code = s.AirplaneCode, total_business_seats = SqlFunctions.Sql.count() });
++            .Select(s => new { airplane_code = s.AirplaneCode, total_business_seats = SqlFunctions.Sql.count() })
++            .AsCte("flight_business_capacity");
+ 
+         // CTE flight_occupancy: COUNT(bp.seat_no) per flight (no seats join, so no fan-out).
+         var occupancy = ctx.From<ITimetable>()
+@@ -97,48 +98,45 @@ public static class AviasalesQueries
+                 day_of_week = SqlFunctions.Sql.date_diff("day",
+                     SqlFunctions.Sql.date_trunc("week", p.Item1.ScheduledDeparture), p.Item1.ScheduledDeparture) + 1,
+                 occupied_business_seats = SqlFunctions.Sql.count(p.Item3.SeatNo)
+-            });
++            })
++            .AsCte("flight_occupancy");
+ 
+         // FROM flight_occupancy JOIN flight_business_capacity JOIN airplanes_data.
+-        var scope = ctx.With("flight_business_capacity", capacity).With("flight_occupancy", occupancy);
+-
+-        var rows = await scope
+-            .From("flight_occupancy")
+-            .Join(scope.From("flight_business_capacity"),
+-                (fo, cap) => fo.GetString("airplane_code") == cap.GetString("airplane_code"))
+-            .Join(ctx.From<IAirplaneData>(), (p, ac) => p.Item1.GetString("airplane_code") == ac.AirplaneCode)
++        var rows = await ctx.From(occupancy)
++            .Join(capacity, (fo, cap) => fo.airplane_code == cap.airplane_code)
++            .Join(ctx.From<IAirplaneData>(), (p, ac) => p.Item1.airplane_code == ac.AirplaneCode)
+             .GroupBy(p => new { model = SqlFunctions.Postgres.json_get_text(p.Item3.Model, "ru") })
+             .OrderBy(p => SqlFunctions.Postgres.json_get_text(p.Item3.Model, "ru"))
+             .Select(p => new
+             {
+                 Model = SqlFunctions.Postgres.json_get_text(p.Item3.Model, "ru"),
+-                Mon = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 1
+-                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+-                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
++                Mon = Math.Round(SqlFunctions.Sql.avg(p.Item1.day_of_week == 1
++                        ? (decimal?)p.Item1.occupied_business_seats
++                          / SqlFunctions.Sql.nullif(p.Item2.total_business_seats, 0) * 100
+                         : null) ?? 0m, 1),
+-                Tue = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 2
+-                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+-                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
++                Tue = Math.Round(SqlFunctions.Sql.avg(p.Item1.day_of_week == 2
++                        ? (decimal?)p.Item1.occupied_business_seats
++                          / SqlFunctions.Sql.nullif(p.Item2.total_business_seats, 0) * 100
+                         : null) ?? 0m, 1),
+-                Wed = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 3
+-                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+-                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
++                Wed = Math.Round(SqlFunctions.Sql.avg(p.Item1.day_of_week == 3
++                        ? (decimal?)p.Item1.occupied_business_seats
++                          / SqlFunctions.Sql.nullif(p.Item2.total_business_seats, 0) * 100
+                         : null) ?? 0m, 1),
+-                Thu = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 4
+-                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+-                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
++                Thu = Math.Round(SqlFunctions.Sql.avg(p.Item1.day_of_week == 4
++                        ? (decimal?)p.Item1.occupied_business_seats
++                          / SqlFunctions.Sql.nullif(p.Item2.total_business_seats, 0) * 100
+                         : null) ?? 0m, 1),
+-                Fri = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 5
+-                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+-                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
++                Fri = Math.Round(SqlFunctions.Sql.avg(p.Item1.day_of_week == 5
++                        ? (decimal?)p.Item1.occupied_business_seats
++                          / SqlFunctions.Sql.nullif(p.Item2.total_business_seats, 0) * 100
+                         : null) ?? 0m, 1),
+-                Sat = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 6
+-                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+-                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
++                Sat = Math.Round(SqlFunctions.Sql.avg(p.Item1.day_of_week == 6
++                        ? (decimal?)p.Item1.occupied_business_seats
++                          / SqlFunctions.Sql.nullif(p.Item2.total_business_seats, 0) * 100
+                         : null) ?? 0m, 1),
+-                Sun = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 7
+-                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+-                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
++                Sun = Math.Round(SqlFunctions.Sql.avg(p.Item1.day_of_week == 7
++                        ? (decimal?)p.Item1.occupied_business_seats
++                          / SqlFunctions.Sql.nullif(p.Item2.total_business_seats, 0) * 100
+                         : null) ?? 0m, 1)
+             })
+             .ToListAsync(ct);
+@@ -147,7 +145,7 @@ public static class AviasalesQueries
+     }
+ 
+     // 3. Sql/passenger_noshow_analysis.sql — WITH passenger_flight_history, passenger_stats
+-    // WORKING: two CTEs; passenger_stats groups passenger_flight_history by name.
++    // WORKING: two typed CTEs (`AsCte`); passenger_stats groups passenger_flight_history with member access.
+     public static async Task PassengerNoShowAnalysis(IDataContext ctx, CancellationToken ct)
+     {
+         // CTE passenger_flight_history: carries the is_noshow flag exactly as the original.
+@@ -165,32 +163,32 @@ public static class AviasalesQueries
+                 flight_id = p.Item3.FlightId,
+                 price = p.Item2.Price,
+                 is_noshow = p.Item4.SeatNo == null ? 1 : 0
+-            });
++            })
++            .AsCte("passenger_flight_history");
+ 
+         // CTE passenger_stats: COUNT(flight_id), SUM(is_noshow), SUM(price).
+-        var stats = ctx.From("passenger_flight_history")
+-            .GroupBy(h => new { passenger_id = h.GetString("passenger_id"), passenger_name = h.GetString("passenger_name") })
++        var stats = ctx.From(history)
++            .GroupBy(h => new { h.passenger_id, h.passenger_name })
+             .Select(h => new
+             {
+-                passenger_id = h.GetString("passenger_id"),
+-                passenger_name = h.GetString("passenger_name"),
+-                total_booked_flights = SqlFunctions.Sql.count(h.GetInt32("flight_id")),
+-                total_noshows = SqlFunctions.Sql.sum(h.GetInt32("is_noshow")),
+-                wasted_money = SqlFunctions.Sql.sum(h.GetDecimal("price"))
+-            });
++                h.passenger_id,
++                h.passenger_name,
++                total_booked_flights = SqlFunctions.Sql.count(h.flight_id),
++                total_noshows = SqlFunctions.Sql.sum(h.is_noshow),
++                wasted_money = SqlFunctions.Sql.sum(h.price)
++            })
++            .AsCte("passenger_stats");
+ 
+-        var rows = await ctx.With("passenger_flight_history", history).With("passenger_stats", stats)
+-            .From("passenger_stats")
+-            .Where(s => s.GetInt32("total_booked_flights") >= 3
+-                        && s.GetInt32("total_booked_flights") == s.GetInt32("total_noshows"))
+-            .OrderByDescending(s => s.GetDecimal("wasted_money"))
+-            .OrderBy(s => s.GetString("passenger_name"))
++        var rows = await ctx.From(stats)
++            .Where(s => s.total_booked_flights >= 3 && s.total_booked_flights == s.total_noshows)
++            .OrderByDescending(s => s.wasted_money)
++            .OrderBy(s => s.passenger_name)
+             .Select(s => new
+             {
+-                PassengerId = s.GetString("passenger_id"),
+-                PassengerName = s.GetString("passenger_name"),
+-                TotalBookedFlights = s.GetInt32("total_booked_flights"),
+-                WastedMoney = s.GetDecimal("wasted_money")
++                PassengerId = s.passenger_id,
++                PassengerName = s.passenger_name,
++                TotalBookedFlights = s.total_booked_flights,
++                WastedMoney = s.wasted_money
+             })
+             .ToListAsync(ct);
+ 
+@@ -198,7 +196,8 @@ public static class AviasalesQueries
+     }
+ 
+     // 4. Sql/rolling_revenue_metrics.sql — WITH daily_revenue, then SUM/AVG windows
+-    // WORKING: CTE daily_revenue; the outer query reads it by name and applies framed windows.
++    // WORKING: typed CTE daily_revenue (`AsCte`); the outer query reads it with member access and applies
++    // framed windows.
+     public static async Task RollingRevenueMetrics(IDataContext ctx, CancellationToken ct)
+     {
+         // CTE daily_revenue.
+@@ -208,21 +207,21 @@ public static class AviasalesQueries
+             {
+                 sales_date = SqlFunctions.Sql.date_trunc("day", b.BookDate),
+                 daily_amount = SqlFunctions.Sql.sum(b.TotalAmount)
+-            });
++            })
++            .AsCte("daily_revenue");
+ 
+-        var rows = await ctx.With("daily_revenue", daily)
+-            .From("daily_revenue")
+-            .OrderByDescending(d => d.GetDateTime("sales_date"))
++        var rows = await ctx.From(daily)
++            .OrderByDescending(d => d.sales_date)
+             .Select(d => new
+             {
+-                sales_date = d.GetDateTime("sales_date"),
+-                daily_amount = d.GetDecimal("daily_amount"),
+-                cumulative = SqlFunctions.Sql.sum_over(d.GetDecimal("daily_amount")).Over(
+-                    SqlFunctions.Sql.asc(() => (object?)d.GetDateTime("sales_date")),
++                d.sales_date,
++                d.daily_amount,
++                cumulative = SqlFunctions.Sql.sum_over(d.daily_amount).Over(
++                    SqlFunctions.Sql.asc(() => d.sales_date),
+                     WindowFrame.RowsUnboundedPrecedingToCurrentRow),
+                 moving_avg_7 = Math.Round(
+-                    SqlFunctions.Sql.avg_over(d.GetDecimal("daily_amount")).Over(
+-                        SqlFunctions.Sql.asc(() => (object?)d.GetDateTime("sales_date")),
++                    SqlFunctions.Sql.avg_over(d.daily_amount).Over(
++                        SqlFunctions.Sql.asc(() => d.sales_date),
+                         WindowFrame.Rows(WindowFrameBound.Preceding(6), WindowFrameBound.CurrentRow)),
+                     2)
+             })
+@@ -232,7 +231,9 @@ public static class AviasalesQueries
+     }
+ 
+     // 5. Sql/route_network_abc_xyz.sql — WITH route_monthly_revenue, route_aggregates, abc_analys
+-    // WORKING: three chained CTEs; the running share is a window over the route aggregate.
++    // WORKING: three chained typed CTEs (`AsCte`); the running share is a window over the route aggregate.
++    // `avg`/`stdev` are projected as nullable (`(decimal?)`) so the one-month-per-route case stays
++    // distinguishable from zero.
+     public static async Task RouteNetworkAbcXyz(IDataContext ctx, CancellationToken ct)
+     {
+         // CTE route_monthly_revenue.
+@@ -254,47 +255,47 @@ public static class AviasalesQueries
+                 flight_month = SqlFunctions.Sql.date_trunc("month", p.Item1.ScheduledDeparture),
+                 monthly_revenue = SqlFunctions.Sql.sum(p.Item4.Price),
+                 passenger_count = SqlFunctions.Sql.count_distinct(p.Item5.TicketNo)
+-            });
++            })
++            .AsCte("route_monthly_revenue");
+ 
+         // CTE route_aggregates.
+-        var aggregates = ctx.From("route_monthly_revenue")
+-            .GroupBy(r => new { route = r.GetString("route") })
++        var aggregates = ctx.From(monthly)
++            .GroupBy(r => new { r.route })
+             .Select(r => new
+             {
+-                route = r.GetString("route"),
+-                total_revenue = SqlFunctions.Sql.sum(r.GetDecimal("monthly_revenue")),
+-                avg_passengers = SqlFunctions.Sql.avg(r.GetDecimal("passenger_count")),
+-                stddev_passengers = SqlFunctions.Sql.stdev(r.GetDecimal("passenger_count"))
+-            });
++                r.route,
++                total_revenue = SqlFunctions.Sql.sum(r.monthly_revenue),
++                avg_passengers = (decimal?)SqlFunctions.Sql.avg((decimal)r.passenger_count),
++                stddev_passengers = (decimal?)SqlFunctions.Sql.stdev((decimal)r.passenger_count)
++            })
++            .AsCte("route_aggregates");
+ 
+         // CTE abc_analys: the running share is a window over the route aggregate.
+-        var abc = ctx.From("route_aggregates")
++        var abc = ctx.From(aggregates)
+             .Select(a => new
+             {
+-                route = a.GetString("route"),
+-                total_revenue = a.GetDecimal("total_revenue"),
+-                avg_passengers = a.GetNullableDecimal("avg_passengers"),
+-                stddev_passengers = a.GetNullableDecimal("stddev_passengers"),
+-                running_percent = SqlFunctions.Sql.sum_over(a.GetDecimal("total_revenue"))
+-                                      .Over(SqlFunctions.Sql.desc(() => (object?)a.GetDecimal("total_revenue")))
+-                                  / SqlFunctions.Sql.sum_over(a.GetDecimal("total_revenue")).Over()
+-            });
++                a.route,
++                a.total_revenue,
++                a.avg_passengers,
++                a.stddev_passengers,
++                running_percent = SqlFunctions.Sql.sum_over(a.total_revenue)
++                                      .Over(SqlFunctions.Sql.desc(() => a.total_revenue))
++                                  / SqlFunctions.Sql.sum_over(a.total_revenue).Over()
++            })
++            .AsCte("abc_analys");
+ 
+-        var rows = await ctx.With("route_monthly_revenue", monthly)
+-            .With("route_aggregates", aggregates)
+-            .With("abc_analys", abc)
+-            .From("abc_analys")
+-            .OrderByDescending(a => a.GetDecimal("total_revenue"))
++        var rows = await ctx.From(abc)
++            .OrderByDescending(a => a.total_revenue)
+             .Select(a => new
+             {
+-                Route = a.GetString("route"),
+-                RevenueMln = Math.Round(a.GetDecimal("total_revenue") / 1000000.0m, 2),
+-                Abc = a.GetDecimal("running_percent") <= 0.80m ? "A"
+-                    : a.GetDecimal("running_percent") <= 0.95m ? "B"
++                Route = a.route,
++                RevenueMln = Math.Round(a.total_revenue / 1000000.0m, 2),
++                Abc = a.running_percent <= 0.80m ? "A"
++                    : a.running_percent <= 0.95m ? "B"
+                     : "C",
+-                Xyz = a.GetNullableDecimal("avg_passengers") == 0 || a.GetNullableDecimal("stddev_passengers") == null ? "Z"
+-                    : a.GetNullableDecimal("stddev_passengers") / a.GetNullableDecimal("avg_passengers") < 0.10m ? "X"
+-                    : a.GetNullableDecimal("stddev_passengers") / a.GetNullableDecimal("avg_passengers") <= 0.25m ? "Y"
++                Xyz = a.avg_passengers == 0 || a.stddev_passengers == null ? "Z"
++                    : a.stddev_passengers / a.avg_passengers < 0.10m ? "X"
++                    : a.stddev_passengers / a.avg_passengers <= 0.25m ? "Y"
+                     : "Z"
+             })
+             .ToListAsync(ct);
+diff --git a/examples/nextorm.examples.postgres.aviasales/README.md b/examples/nextorm.examples.postgres.aviasales/README.md
+index a83e9425..b978bf3d 100644
+--- a/examples/nextorm.examples.postgres.aviasales/README.md
++++ b/examples/nextorm.examples.postgres.aviasales/README.md
+@@ -39,7 +39,7 @@ SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Se
+ | SQL | nextorm |
+ |---|---|
+ | `FROM t` | `ctx.From<IT>()`, where `IT` is an interface marked `[SqlTable("schema.t")]` |
+-| `WITH x AS (SELECT …)` | declare it as a CTE: `ctx.With("x", query).From("x")`; a later CTE reads an earlier one by name (`ctx.From("x")`). CTE columns are read by name (`t.GetInt32("id")`) because the CTE source is untyped |
++| `WITH x AS (SELECT …)` | declare it as a CTE: the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference) or the string `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt32("id")`, because the name carries no type); a later CTE reads an earlier one the same way |
+ | `SELECT a AS x` | `.Select(t => new { x = t.A })` (anonymous type = result row) |
+ | `JOIN u ON a = b` / `LEFT JOIN` | `.Join(ctx.From<IU>(), (t, u) => …)` / `.LeftJoin(...)`; joined items are `p.Item1`, `p.Item2`, … |
+ | `WHERE c` | `.Where(t => c)` |
+@@ -74,8 +74,8 @@ Two nextorm-specific rules that trip people up:
+ * **A derived query cannot yet be the primary `FROM` source while joined** — `ctx.From(derived).Join(...)`
+   fails during preparation (known gap 10 in
+   [`sql-capabilities-gap-analysis.md`](../../docs/specs/roadmap/sql-capabilities-gap-analysis.md)).
+-  The reference queries declare their subqueries as CTEs, so the example uses `ctx.With(name, query)` /
+-  `ctx.From(name)` (see rule 1); queries 1–5 are expressed this way and are all **WORKING**.
++  The reference queries declare their subqueries as CTEs, so the example uses the typed `query.AsCte(name)` /
++  `ctx.From(cte)` API (see rule 1); queries 1–5 are expressed this way and are all **WORKING**.
+   Every method carries a `WORKING` / `NOT WORKING` comment saying which it is and, when it fails, why.
+ 
+ ## Demo queries: SQL file → method
+@@ -85,11 +85,11 @@ Markers: **OK** — expressed with the regular LINQ API; **≡** — same result
+ 
+ | # | SQL | Method | Coverage | Notes |
+ |---|---|---|---|---|
+-| 1 | [`aircraft_delay_chains.sql`](Sql/aircraft_delay_chains.sql) | `AviasalesQueries.AircraftDelayChains` | OK | two CTEs (`flight_delays`, `delay_chains` reading the first); `LAG(...) OVER` → `lag(...).Over(...)`; `->> 'ru'` → `json_get_text`; `EXTRACT(EPOCH)/60` → `date_diff("second",…)/60.0`; final `JOIN airplanes_data` on the CTE |
++| 1 | [`aircraft_delay_chains.sql`](Sql/aircraft_delay_chains.sql) | `AviasalesQueries.AircraftDelayChains` | OK | two **typed** CTEs (`AsCte`: `flight_delays`, `delay_chains` reading the first); `LAG(...) OVER` → `lag(...).Over(...)`; `->> 'ru'` → `json_get_text`; `EXTRACT(EPOCH)/60` → `date_diff("second",…)/60.0`; final `JOIN airplanes_data` on the CTE |
+ | 2 | [`business_occupancy_matrix.sql`](Sql/business_occupancy_matrix.sql) | `AviasalesQueries.BusinessOccupancyMatrix` | OK | two CTEs joined to each other and to `airplanes_data`; `EXTRACT(ISODOW…)` → `date_diff("day", date_trunc("week",…),…)+1`; `AVG(CASE WHEN day=n THEN ratio END)` → conditional `avg(day == n ? ratio : null)`; `NULLIF` → `nullif` |
+-| 3 | [`passenger_noshow_analysis.sql`](Sql/passenger_noshow_analysis.sql) | `AviasalesQueries.PassengerNoShowAnalysis` | OK | `passenger_stats` CTE groups `passenger_flight_history` by name; `CASE WHEN bp.seat_no IS NULL THEN 1 ELSE 0 END` → `x == null ? 1 : 0`; `total_booked = total_noshows` in the outer `Where` |
++| 3 | [`passenger_noshow_analysis.sql`](Sql/passenger_noshow_analysis.sql) | `AviasalesQueries.PassengerNoShowAnalysis` | OK | `passenger_stats` typed CTE groups `passenger_flight_history` with member access; `CASE WHEN bp.seat_no IS NULL THEN 1 ELSE 0 END` → `x == null ? 1 : 0`; `total_booked = total_noshows` in the outer `Where` |
+ | 4 | [`rolling_revenue_metrics.sql`](Sql/rolling_revenue_metrics.sql) | `AviasalesQueries.RollingRevenueMetrics` | OK | CTE `daily_revenue`; `DATE_TRUNC('day')` → `date_trunc("day",…)`; `SUM OVER (ROWS UNBOUNDED PRECEDING)` → `sum_over(...).Over(..., RowsUnboundedPrecedingToCurrentRow)`; `AVG OVER (6 PRECEDING)` → `avg_over(...).Over(..., Rows(Preceding(6), CurrentRow))` |
+-| 5 | [`route_network_abc_xyz.sql`](Sql/route_network_abc_xyz.sql) | `AviasalesQueries.RouteNetworkAbcXyz` | OK | three chained CTEs (`route_monthly_revenue`, `route_aggregates`, `abc_analys`); `STDDEV` → `stdev`; `SUM(...) OVER() / SUM(...) OVER()` → `sum_over(...).Over()`; `city ->> 'ru' \|\| ' -> '` → `json_get_text(...) + " -> " + …`; ABC/XYZ `CASE` → ternary chain |
++| 5 | [`route_network_abc_xyz.sql`](Sql/route_network_abc_xyz.sql) | `AviasalesQueries.RouteNetworkAbcXyz` | OK | three chained **typed** CTEs (`AsCte`: `route_monthly_revenue`, `route_aggregates`, `abc_analys`); `STDDEV` → `stdev` (projected `(decimal?)`, so the one-month-per-route case stays distinct from zero); `SUM(...) OVER() / SUM(...) OVER()` → `sum_over(...).Over()`; `city ->> 'ru' \|\| ' -> '` → `json_get_text(...) + " -> " + …`; ABC/XYZ `CASE` → ternary chain |
+ 
+ ## Course exercises (6–11)
+ 

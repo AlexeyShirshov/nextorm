@@ -1,0 +1,43 @@
+{
+  "unit": "T219-D219-session-identity-functions",
+  "scope": {
+    "projects": [
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.mysql.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.clickhouse.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.core.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~SqlGenerationTests|FullyQualifiedName~DialectTests",
+      "FullyQualifiedName~SqlGenerationTests",
+      "FullyQualifiedName~DialectTests",
+      "FullyQualifiedName~InMemoryTests"
+    ],
+    "files": [
+      "src/nextorm.core/Query/SqlFunctions.cs",
+      "src/nextorm.core/Query/SqlFunctions.SqlServer.cs",
+      "src/nextorm.core/Query/SqlFunctions.ClickHouse.cs",
+      "src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs",
+      "src/nextorm.core/Visitors/SessionInfoFunctionTranslator.cs",
+      "src/nextorm.core/DataContext/InMemoryScalarFunctionRewriter.cs",
+      "src/nextorm.sqlserver/SqlServerDialect.cs",
+      "src/nextorm.postgres/PostgresDialect.cs",
+      "src/nextorm.mysql/MySqlDialect.cs",
+      "src/nextorm.clickhouse/ClickHouseDialect.cs",
+      "tests/nextorm.core.tests/SessionIdentityInMemoryTests.cs",
+      "tests/nextorm.sqlserver.tests/SessionIdentitySqlGenerationTests.cs",
+      "tests/nextorm.postgres.tests/SessionIdentitySqlGenerationTests.cs",
+      "tests/nextorm.mysql.tests/SessionIdentitySqlGenerationTests.cs",
+      "tests/nextorm.mariadb.tests/SessionIdentitySqlGenerationTests.cs",
+      "tests/nextorm.clickhouse.tests/SessionIdentitySqlGenerationTests.cs",
+      "tests/nextorm.sqlite.tests/SessionIdentitySqlGenerationTests.cs"
+    ],
+    "rationale": "Affected, filtered inner subset only: the six provider projects' SqlGeneration/Dialect tests exercise the new Supports/Render + translator registry per provider, and the core InMemoryTests subset covers the in-memory fail-closed guard and scalar (NULL/ulong) materialization. Integration (C4) and the single solution-wide sweep (C5) belong to the boundary chunk.",
+    "rebuild": "affected",
+    "boundary": "one DO->CHECK sweep in the boundary chunk: C5 (dotnet-coverage collect 'dotnet test nextorm.slnx -c Debug') plus C4 container integration; not run in DO chunk 1/3"
+  },
+  "scope_note": "DO chunk 1/3 (production + unit tests). The recorded C2 executions are the two halves of the brief's union filter (the report validator rejects a '|' token as a compound command); each half was also run as the union and the totals are identical. The single solution-wide sweep (C5) and container integration (C4) belong to the boundary chunk."
+}

@@ -1,0 +1,571 @@
+{
+  "task": "T219 (#219) Session / server identity functions across providers",
+  "tree": "b5f8b360b9ef5fd3fb86a546c9615f3cbf1d86f5",
+  "recorded_at_head": "b5f8b360b9ef5fd3fb86a546c9615f3cbf1d86f5",
+  "base_commit": "aa31113b",
+  "contract_rv": 1,
+  "rv": 1,
+  "status_file": "docs/specs/status/D219-session-identity-functions-1.md",
+  "selected_variant": "pdca-dotnet",
+  "frozen_at": "DO->CHECK boundary (DO chunk 4/4)",
+  "required_rows": [
+    "E219-01",
+    "E219-02",
+    "E219-03",
+    "E219-04",
+    "E219-05",
+    "E219-06",
+    "E219-07",
+    "E219-08",
+    "E219-09"
+  ],
+  "rows": [
+    {
+      "id": "E219-01",
+      "status": "met",
+      "scenario": "R219-01/P1 — API form: exactly the 15 session/identity functions on the existing sentinel surfaces plus one default interface member; no new top-level object, no unrecorded public addition",
+      "invocation": "roslyn action=members on NextORM.Core.{CommonFunctions,SqlServerFunctions,ClickHouseFunctions,ISqlServerFunctions} (inside execute) + git diff aa31113b b5f8b360 -- src",
+      "expected": "member list equals the frozen T53 candidate list (16 entries); no other public member added",
+      "artifact": "api-form.json, api-diff.patch, status file T53 section",
+      "owner": "coder",
+      "applicability": "always",
+      "rv": 1,
+      "evidence": [
+        {
+          "kind": "api-form",
+          "path": "artifacts/pdca/D219/rv1/api-form.json",
+          "value": "16 members: 6 SqlServer + 7 on CommonFunctions (SqlFunctions.Sql) + 2 ClickHouse + 1 ISqlServerFunctions property; matches the T53 candidate list exactly"
+        },
+        {
+          "kind": "api-diff",
+          "path": "artifacts/pdca/D219/rv1/api-diff.patch",
+          "value": "git diff aa31113b b5f8b360 -- src: 10 files, library-only additions (sentinel members, capability DIM, dialect switch arms, translator registry, in-memory guard)"
+        },
+        {
+          "kind": "source",
+          "path": "src/nextorm.core/Query/SqlFunctions.SqlServer.cs",
+          "value": "server_name :23, host_id :30, host_name :39, app_name :46, suser_name :53, original_login :60 — all public, all string?"
+        },
+        {
+          "kind": "source",
+          "path": "src/nextorm.core/Query/SqlFunctions.cs",
+          "value": "pg_backend_pid :457, inet_server_addr :465, inet_server_port :472, inet_client_addr :479, inet_client_port :486, connection_id :494, user :502"
+        },
+        {
+          "kind": "source",
+          "path": "src/nextorm.core/Query/SqlFunctions.ClickHouse.cs",
+          "value": "host_name :41 (string), tcp_port :47 (int)"
+        },
+        {
+          "kind": "source",
+          "path": "src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs",
+          "value": "ISqlServerFunctions.SupportsSessionIdentity :739 — default interface implementation, default false"
+        },
+        {
+          "kind": "status",
+          "path": "docs/specs/status/D219-session-identity-functions-1.md",
+          "value": "T53 candidates: recorded here only, freeze held (basis collection-1.0.9-todo.md:66); siblings untouched"
+        },
+        {
+          "kind": "negative",
+          "path": "artifacts/pdca/D219/rv1/api-form.json",
+          "value": "negative form: 0 new top-level objects, 0 ambiguous analogs, 0 unrecorded public additions; existing sentinel properties unchanged"
+        }
+      ]
+    },
+    {
+      "id": "E219-02",
+      "status": "met",
+      "scenario": "R219-02/P1 — translation/capabilities: every supported call emits the frozen SQL; every unsupported function/provider fails closed with NotSupportedException before any SQL; SQL Server additionally gated through ISqlServerFunctions.SupportsSessionIdentity",
+      "invocation": "C2: for p in sqlserver postgres mysql mariadb clickhouse sqlite; dotnet test tests/nextorm.$p.tests -c Debug --filter \"FullyQualifiedName~SqlGenerationTests|FullyQualifiedName~DialectTests\"",
+      "expected": "exit 0; positive native SQL per provider, negative NS, nonzero test counts",
+      "artifact": "capabilities.log, mapping-inventory.json, provider-matrix.json, c2-*.log",
+      "owner": "coder",
+      "applicability": "always",
+      "rv": 1,
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c2-sqlserver.log",
+          "command": [
+            "dotnet",
+            "test",
+            "tests/nextorm.sqlserver.tests",
+            "-c",
+            "Debug",
+            "--filter",
+            "FullyQualifiedName~SqlGenerationTests|FullyQualifiedName~DialectTests"
+          ],
+          "exit": 0,
+          "value": "union filter 655 succeeded / 0 failed / 0 skipped"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c2-postgres.log",
+          "exit": 0,
+          "value": "860 / 0 / 0"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c2-mysql.log",
+          "exit": 0,
+          "value": "367 / 0 / 0"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c2-mariadb.log",
+          "exit": 0,
+          "value": "273 / 0 / 0"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c2-clickhouse.log",
+          "exit": 0,
+          "value": "582 / 0 / 0"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c2-sqlite.log",
+          "exit": 0,
+          "value": "759 / 0 / 0"
+        },
+        {
+          "kind": "registry",
+          "path": "src/nextorm.core/Visitors/SessionInfoFunctionTranslator.cs",
+          "value": "one registry keyed by CLR declaring type: LegacyCommonKeys :27, IdentityCommonKeys :37, SqlServerKeys :49, ClickHouseKeys :60; Supports check then Render :101-107; no fallback rendering"
+        },
+        {
+          "kind": "interface",
+          "path": "src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs",
+          "value": "ISqlServerFunctions.SupportsSessionIdentity :739 DIM => false; SqlServerDialect.SpecificFunctions :1035 enables it explicitly; translator gate :83-84 throws before Render"
+        },
+        {
+          "kind": "test-case",
+          "path": "tests/nextorm.integration.tests/DialectCapabilityContractTests.cs",
+          "value": "SupportsSessionIdentity_ShouldRemainADefaultInterfaceMethod + SessionIdentity_ShouldBeOptedIntoBySqlServerOnly (logs/c4-dialectcap.log, exit 0, 8/8)"
+        },
+        {
+          "kind": "inventory",
+          "path": "artifacts/pdca/D219/rv1/mapping-inventory.json",
+          "value": "90 combinations covered: each provider project enumerates all 15 keys through Supports/Render plus the expression-level path"
+        }
+      ]
+    },
+    {
+      "id": "E219-03",
+      "status": "met",
+      "scenario": "R219-03/P1 — every one of the six providers is covered (SQL Server, PostgreSQL, MySQL, MariaDB, ClickHouse, SQLite), with no SQLite-only run and no skipped provider",
+      "invocation": "C2 (all six provider projects) + C5 boundary sweep of nextorm.slnx + C4 container run",
+      "expected": "exit 0, all six executed, no provider skip",
+      "artifact": "provider-matrix.json, provider-execution.json, inner-provider.log, boundary.log, c5-boundary.log",
+      "owner": "coder",
+      "applicability": "always",
+      "rv": 1,
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c5-boundary.log",
+          "command": [
+            "dotnet",
+            "tool",
+            "run",
+            "dotnet-coverage",
+            "collect",
+            "dotnet test nextorm.slnx -c Debug"
+          ],
+          "exit": 0,
+          "value": "boundary sweep exit 0: total 11838 / succeeded 11639 / failed 0 / skipped 199; all six providers executed; 199 skips all capability-based (container/docker/socket keyword matches = 0)"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c2-sqlserver.log",
+          "exit": 0,
+          "value": "655 executed"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c2-postgres.log",
+          "exit": 0,
+          "value": "860 executed"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c2-mysql.log",
+          "exit": 0,
+          "value": "367 executed"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c2-mariadb.log",
+          "exit": 0,
+          "value": "273 executed (separate tests/nextorm.mariadb.tests project; MariaDbDialect inherits MySqlDialect)"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c2-clickhouse.log",
+          "exit": 0,
+          "value": "582 executed"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c2-sqlite.log",
+          "exit": 0,
+          "value": "759 executed"
+        },
+        {
+          "kind": "matrix",
+          "path": "artifacts/pdca/D219/rv1/provider-matrix.json",
+          "value": "15 functions x 6 providers = 90 combinations, each either native SQL or the NS marker"
+        },
+        {
+          "kind": "execution",
+          "path": "artifacts/pdca/D219/rv1/provider-execution.json",
+          "value": "per-provider executed/skipped table + skip reconciliation for the boundary sweep"
+        }
+      ]
+    },
+    {
+      "id": "E219-04",
+      "status": "met",
+      "scenario": "R219-04/P1 — CLR types and NULL behaviour: stated types returned; PostgreSQL network functions allow SQL NULL; unsigned connection_id keeps its range; no input/null-default variant (zero-arg contract)",
+      "invocation": "C3 (core in-memory) + C4 (containers) + C5 (boundary sweep, core mapping tests)",
+      "expected": "exit 0; SQL NULL materializes as CLR null (never default/empty), no numeric narrowing",
+      "artifact": "nullable-types.json, c3-core-inmemory.log, c4-sessionidentity.log",
+      "owner": "coder",
+      "applicability": "always; native unix-socket fixture deferred per the PLAN matrix (managed socket fixture trigger)",
+      "rv": 1,
+      "evidence": [
+        {
+          "kind": "types",
+          "path": "artifacts/pdca/D219/rv1/nullable-types.json",
+          "value": "15 rows of CLR types + null conditions; string?/int? on the SQL Server strings and the PostgreSQL inet functions; pg_backend_pid int; connection_id ulong (no signed narrowing); ClickHouse host_name string / tcp_port int"
+        },
+        {
+          "kind": "integration-case",
+          "path": "tests/nextorm.integration.tests/PostgresSpecificTests.cs/2585",
+          "value": "SessionIdentity_PostgresNetworkFunctions_ShouldMaterializeSqlNull: a SQL NULL inet address stays NULL (never empty string) and a NULL port stays NULL (never 0), asserted both through projection and through a native ExecuteRaw probe"
+        },
+        {
+          "kind": "integration-case",
+          "path": "tests/nextorm.integration.tests/PostgresSpecificTests.cs/2529",
+          "value": "SessionIdentity_PostgresFunctions_ShouldExecuteAndMaterialize: pg_backend_pid > 0, addresses parse as IP, ports in 1..65535, and every value equals the native SQL value rendered on the same connection"
+        },
+        {
+          "kind": "unit-case",
+          "path": "tests/nextorm.core.tests/SessionIdentityInMemoryTests.cs",
+          "value": "scalar NULL materialization + unsigned connection_id materialization in the core scalar mapping tests (inside the boundary sweep)"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/logs/c4-sessionidentity.log",
+          "exit": 0,
+          "value": "9/9 identity tests green, exit 0 (0 skipped)"
+        },
+        {
+          "kind": "limit",
+          "path": "docs/specs/status/D219-session-identity-functions-1.md",
+          "value": "PLAN matrix: the native unix-socket fixture is deferred (trigger: managed socket fixture) and stays in 1.0.9; the guard + SQL-NULL materialization test is the applicable evidence this cycle"
+        }
+      ]
+    },
+    {
+      "id": "E219-05",
+      "status": "met",
+      "scenario": "R219-05/P1 — runtime: supported functions execute and materialize on the real providers; the in-memory provider fails closed",
+      "invocation": "C4: dotnet test tests/nextorm.integration.tests -c Debug --filter \"FullyQualifiedName~SpecificTests|FullyQualifiedName~DialectCapabilityContractTests\" (DOCKER_HOST=podman socket) + C3 core in-memory",
+      "expected": "exit 0; required provider cases executed; skips are not a pass",
+      "artifact": "runtime.log, c4-*.log, c3-core-inmemory.log, red-c3-core-inmemory.log",
+      "owner": "coder",
+      "applicability": "always",
+      "rv": 1,
+      "evidence": [
+        {
+          "kind": "integration",
+          "path": "artifacts/pdca/D219/rv1/logs/c4-specific.log",
+          "command": [
+            "dotnet",
+            "test",
+            "tests/nextorm.integration.tests",
+            "-c",
+            "Debug",
+            "--filter",
+            "FullyQualifiedName~SpecificTests"
+          ],
+          "exit": 0,
+          "value": "386 SpecificTests executed / 0 failed / 0 skipped"
+        },
+        {
+          "kind": "integration",
+          "path": "artifacts/pdca/D219/rv1/logs/c4-dialectcap.log",
+          "exit": 0,
+          "value": "8 DialectCapabilityContractTests / 0 failed / 0 skipped"
+        },
+        {
+          "kind": "integration",
+          "path": "artifacts/pdca/D219/rv1/logs/c4-sessionidentity.log",
+          "exit": 0,
+          "value": "the 9 identity tests of the four container providers + MariaDB, names and timings listed (SQL Server 11.5s, PostgreSQL 8.7s/11ms, MySQL 14.3s, MariaDB 9.1s on mariadb:11.4, ClickHouse 8.8s)"
+        },
+        {
+          "kind": "provider-meta",
+          "path": "artifacts/pdca/D219/rv1/logs/c4-specific-detailed.log",
+          "value": "container-backed run details (readiness, provider metadata)"
+        },
+        {
+          "kind": "unit",
+          "path": "artifacts/pdca/D219/rv1/logs/c3-core-inmemory.log",
+          "exit": 0,
+          "value": "183/183 green — in-memory fails closed with NotSupportedException for all 15 identity markers (no NullReferenceException), plus legacy session-family regression"
+        },
+        {
+          "kind": "red-green",
+          "path": "artifacts/pdca/D219/rv1/logs/red-c3-core-inmemory.log",
+          "exit": 2,
+          "value": "RED before the guard: exit 2, 10 failed with NullReferenceException — the regression test for the in-memory fix"
+        },
+        {
+          "kind": "container",
+          "path": "artifacts/pdca/D219/rv1/logs/c4-specific-attempt1.log",
+          "exit": 2,
+          "value": "first C4 attempt: 3 failed (2 defects D219-C4-MYSQL-RESERVED-ALIAS + D219-C4-PG-INETNETMASK), fixed in-chunk; final run 0 failed"
+        }
+      ]
+    },
+    {
+      "id": "E219-06",
+      "status": "met",
+      "scenario": "R219-06/P1 — docs: EN/RU reconciled, realized exclusions lifted, no stale paths, no public links to specs, DocFX succeeds",
+      "invocation": "C8: dotnet docfx docs/docfx.json + scoped doc diff review + rg for spec links/stale paths",
+      "expected": "exit 0; clean build, no broken-link warnings; scoped doc diff reviewed",
+      "artifact": "docfx.log, docs-review.json, task.patch",
+      "owner": "coder",
+      "applicability": "always",
+      "rv": 1,
+      "evidence": [
+        {
+          "kind": "docfx",
+          "path": "artifacts/pdca/D219/rv1/logs/c8-docfx.log",
+          "command": [
+            "dotnet",
+            "docfx",
+            "docs/docfx.json"
+          ],
+          "exit": 0,
+          "value": "Build succeeded with warning; 2 warnings / 0 errors; the 2 warnings are the pre-existing source-generator duplicate-source warnings; no broken link / invalid xref"
+        },
+        {
+          "kind": "docs",
+          "path": "docs/scalar-functions/09-system-functions.md",
+          "value": "15-function per-provider identity table, NULL semantics, client-vs-server distinction, security caveat, exclusions lifted (+76 lines)"
+        },
+        {
+          "kind": "docs",
+          "path": "docs/ru/scalar-functions/09-system-functions.md",
+          "value": "RU mirror reconciled (+73 lines); all 15 functions present"
+        },
+        {
+          "kind": "registry",
+          "path": "docs/specs/roadmap/sql-function-coverage-gap.md",
+          "value": "shipped identity subset removed from the exclusions (10 -> 7 documented exclusions); security/identity exclusions narrowed"
+        },
+        {
+          "kind": "registry",
+          "path": "docs/specs/roadmap/sql-capabilities-gap-analysis.md",
+          "value": "row 25 extended with the #219 completion and the per-provider matrix"
+        },
+        {
+          "kind": "docs-review",
+          "path": "artifacts/pdca/D219/rv1/docs-review.json",
+          "value": "EN/RU parity, stale paths absent (10-system-functions.md / 11-sqlserver-scalars.md not created), toc unchanged, public spec-link matches = 0"
+        },
+        {
+          "kind": "diff",
+          "path": "artifacts/pdca/D219/rv1/task.patch",
+          "value": "scoped docs diff of the task commit"
+        }
+      ]
+    },
+    {
+      "id": "E219-07",
+      "status": "met",
+      "scenario": "R219-07/P1 — quality: Debug build 0 warnings / 0 errors; coverage >= 85% line and >= 75% branch for the project-included set",
+      "invocation": "C1 dotnet build nextorm.slnx -c Debug; C5 dotnet-coverage collect; C6 reportgenerator JsonSummary; C7 threshold assert",
+      "expected": "all exit 0; 0 Warn/Err; >=85 / >=75",
+      "artifact": "build.log, coverage.cobertura.xml, coverage-report/Summary.json, threshold log",
+      "owner": "coder",
+      "applicability": "always",
+      "rv": 1,
+      "evidence": [
+        {
+          "kind": "build",
+          "path": "artifacts/pdca/D219/rv1/logs/build.log",
+          "command": [
+            "dotnet",
+            "build",
+            "nextorm.slnx",
+            "-c",
+            "Debug"
+          ],
+          "exit": 0,
+          "value": "Build succeeded — 0 Warning(s) / 0 Error(s) (TreatWarningsAsErrors=true)"
+        },
+        {
+          "kind": "coverage",
+          "path": "artifacts/pdca/D219/rv1/coverage.cobertura.xml",
+          "exit": 0,
+          "value": "line-rate 0.8812226872297625 / branch-rate 0.8039005401970131 (both above the thresholds)"
+        },
+        {
+          "kind": "coverage-json",
+          "path": "artifacts/pdca/D219/rv1/coverage-report/Summary.json",
+          "command": [
+            "reportgenerator",
+            "-reports:artifacts/pdca/D219/rv1/coverage.cobertura.xml",
+            "-targetdir:artifacts/pdca/D219/rv1/coverage-report",
+            "-reporttypes:JsonSummary"
+          ],
+          "exit": 0,
+          "value": "JsonSummary: 4 assemblies (nextorm.core/postgres/sqlite/sqlserver per coverage.settings.xml), 582 classes; line 88.7%, branch 80.8%, method 79.5%"
+        },
+        {
+          "kind": "thresholds",
+          "path": "artifacts/pdca/D219/rv1/logs/c7-thresholds.log",
+          "command": [
+            "python3",
+            "-c",
+            "assert line-rate>=.85 and branch-rate>=.75"
+          ],
+          "exit": 0,
+          "value": "C7 assert exit 0: line-rate 0.8812 >= 0.85 and branch-rate 0.8039 >= 0.75"
+        },
+        {
+          "kind": "report-generator",
+          "path": "artifacts/pdca/D219/rv1/logs/c6-reportgenerator.log",
+          "exit": 0,
+          "value": "exit 0; wrote coverage-report/Summary.json"
+        },
+        {
+          "kind": "build",
+          "path": "artifacts/pdca/D219/rv1/logs/build-c4-final.log",
+          "exit": 0,
+          "value": "the container-chunk rebuild of the same tree: Build succeeded, 0 Warning(s) / 0 Error(s)"
+        }
+      ]
+    },
+    {
+      "id": "E219-08",
+      "status": "met",
+      "scenario": "R219-08/P1 — isolation/finalization: sibling changes preserved and untouched, T53 candidates recorded, task-only commits, CRLF, valid status + manifest",
+      "invocation": "git status --porcelain / git show --stat PRODUCT_SHA / git show --stat EVIDENCE_SHA; git ls-files --eol; C9 manifest validator",
+      "expected": "no mixed commit, no lost baseline, no unrelated staged hunk, C9 exit 0",
+      "artifact": "baseline.patch, baseline-status.txt, task.patch, ownership.json, manifest.json",
+      "owner": "coder",
+      "applicability": "always",
+      "rv": 1,
+      "evidence": [
+        {
+          "kind": "baseline",
+          "path": "artifacts/pdca/D219/rv1/baseline.patch",
+          "value": "git diff HEAD (after the task commit) = the preserved unrelated churn only; the committed task diff is task.patch (git diff aa31113b b5f8b360)"
+        },
+        {
+          "kind": "ownership",
+          "path": "artifacts/pdca/D219/rv1/ownership.json",
+          "value": "28 task paths, all owned by this task and committed in b5f8b360; 31 unrelated entries preserved; forbidden paths never staged (.opencode/**, AGENTS.md, artifacts/pdca/D218-*, docs/**/assets/diagrams/*.svg, examples/**, D216/D218 status files)"
+        },
+        {
+          "kind": "baseline-status",
+          "path": "artifacts/pdca/D219/rv1/baseline-status.txt",
+          "value": "chunk-start status 59 entries = 28 task paths + the 31 preserved entries; post-commit status is exactly those 31 entries (27 modified + 4 untracked)"
+        },
+        {
+          "kind": "crlf",
+          "path": "git ls-files --eol on all 28 committed paths",
+          "value": "every one is 'i/lf w/crlf' (CRLF preserved; index normalized by core.autocrlf=true)"
+        },
+        {
+          "kind": "candidates",
+          "path": "docs/specs/status/D219-session-identity-functions-1.md",
+          "value": "T53 candidate list recorded (16 entries); D53 register untouched and the freeze is not declared done"
+        },
+        {
+          "kind": "manifest",
+          "path": "artifacts/pdca/D219/rv1/manifest.json",
+          "value": "frozen at the DO->CHECK boundary; row IDs E219-01..E219-09; tree = the product commit b5f8b360"
+        },
+        {
+          "kind": "validator",
+          "path": "artifacts/pdca/D219/rv1/logs/c9-manifest.log",
+          "command": [
+            "python3",
+            "scripts/validate_inner_loop.py",
+            "manifest",
+            "artifacts/pdca/D219/rv1/manifest.json"
+          ],
+          "exit": 0,
+          "value": "validate_inner_loop.py manifest => exit 0"
+        },
+        {
+          "kind": "source-identity",
+          "path": "artifacts/pdca/D219/rv1/source-identity.txt",
+          "value": "product commit b5f8b360 (tree 14a93f2b), base aa31113b, blob hashes of all 28 task paths; recorded at HEAD = the product commit"
+        },
+        {
+          "kind": "hashes",
+          "path": "artifacts/pdca/D219/rv1/hashes.json",
+          "value": "sha256 of every product file and every evidence artifact, recorded after the last evidence write (no stale hashes)"
+        }
+      ]
+    },
+    {
+      "id": "E219-09",
+      "status": "met",
+      "scenario": "R219-09/P1 — perf exemption + design/recon: scalar translation only, no query-path/cache/executor/materialization change",
+      "invocation": "roslyn action=callers on SessionInfoFunctionTranslator.TryTranslate / IsIdentityFunction; scoped diff scan of the product change",
+      "expected": "no execution/per-row/cache change; registry built once; DIM keeps custom dialects compatible",
+      "artifact": "perf-applicability.json, design-review.json, perf-scope-scan.log",
+      "owner": "scout->coder",
+      "applicability": "always",
+      "rv": 1,
+      "evidence": [
+        {
+          "kind": "perf",
+          "path": "artifacts/pdca/D219/rv1/perf-applicability.json",
+          "value": "benchmark_required=false: translation at prepare time; 0 cache/command/planner/materializer tokens in the product diff"
+        },
+        {
+          "kind": "roslyn-callers",
+          "path": "src/nextorm.core/Visitors/NormSqlTranslator.cs:456",
+          "value": "SessionInfoFunctionTranslator.TryTranslate has exactly 1 call site (prepare-time norm translation)"
+        },
+        {
+          "kind": "roslyn-callers",
+          "path": "src/nextorm.core/DataContext/InMemoryScalarFunctionRewriter.cs:161",
+          "value": "IsIdentityFunction has exactly 1 call site (compile-time expression rewrite)"
+        },
+        {
+          "kind": "scan",
+          "path": "artifacts/pdca/D219/rv1/logs/perf-scope-scan.log",
+          "value": "git diff aa31113b b5f8b360 -- src | rg '_dontCache|QueryCache|QueryCommand|SqlBuilder|QueryPlanner|RowMapper|RowMaterializer|GetPreparedQueryCommand|BenchmarkDotNet' => exit 1 (no matches); the 10 changed files are the sentinels, capabilities, dialect renderers, translator and the in-memory guard"
+        },
+        {
+          "kind": "design",
+          "path": "artifacts/pdca/D219/rv1/design-review.json",
+          "value": "SOLID/DRY, type design, compatibility (DIM default false), sealedness and perf-anti-pattern checklist: no finding; registry static and built once"
+        },
+        {
+          "kind": "reopen-trigger",
+          "path": "artifacts/pdca/D219/rv1/perf-applicability.json",
+          "value": "if a later diff adds execution/row/cache-path work, the exemption is void and PLAN must add a baseline benchmark"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Frozen at the DO->CHECK boundary; append-only afterwards.",
+    "tree = the product/test/docs commit b5f8b360b9ef5fd3fb86a546c9615f3cbf1d86f5; the evidence commit adds only artifacts/pdca/D219/rv1/** and the D219 status file.",
+    "Owners are role names; only the coder wrote product/tests/docs.",
+    "Single comprehensive sweep policy: exactly one solution-wide boundary test sweep (C5, exit 0) is recorded; the C2/C3/C4 runs are the brief's filtered inner/boundary subsets.",
+    "Row E219-04 carries the PLAN's documented limit: the native unix-socket fixture is deferred with a trigger (managed socket fixture) and remains in 1.0.9; the applicable evidence is the SQL-NULL materialization test."
+  ]
+}
