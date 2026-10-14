@@ -1,0 +1,511 @@
+{
+ "collection": "1.0.9-todo",
+ "contract_rv": 1,
+ "cycle": "N=1",
+ "issue": "#232",
+ "last_updated": "2026-10-14T19:27:44Z",
+ "milestone": "1.0.9-rc3",
+ "plan_revision": 1,
+ "records": [
+  {
+   "argv": [
+    "dotnet",
+    "build",
+    "src/nextorm.sqlserver/nextorm.sqlserver.csproj",
+    "-c",
+    "Debug"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:18:39Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.exit",
+   "name": "C04-build-sqlserver",
+   "note": "CS1591 baseline tension: capture the actual warning/error set without reopening the registry finding",
+   "phase": "inner",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.out",
+   "stdout_sha256": "6e5c1bc59b21f5247d9f4c412acd2cb44015a2771f9c7ef5c60cfc2478d47623"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~T232PreparationProbeTests"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:18:42Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C01-preparation.exit",
+   "name": "C01-preparation",
+   "note": "D-01 preparation probes (extension-call lifecycle, alias emission, source-registration ordering)",
+   "phase": "inner",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C01-preparation.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C01-preparation.out",
+   "stdout_sha256": "8dfc66f64ccb293f9b5dc1cdd1603452c379456c6c73c4c3b860bd5942b2c43e"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~Pivot|FullyQualifiedName~Unpivot|FullyQualifiedName~ProviderExtensionEagerGuardTests"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:18:48Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C06-legacy.exit",
+   "name": "C06-legacy",
+   "note": "legacy Pivot/Unpivot cases + ProviderExtensionEagerGuardTests (pre-change baseline)",
+   "phase": "inner",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C06-legacy.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C06-legacy.out",
+   "stdout_sha256": "d3439c29193ebd740b4fd2e1565222d51dc9d2aa7f04af670d1e299ad40d1afc"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "build",
+    "nextorm.slnx",
+    "-c",
+    "Debug"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:19:33Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/gate-solution-build.exit",
+   "name": "gate-solution-build",
+   "note": "build gate: dotnet build nextorm.slnx -c Debug must be 0 warnings / 0 errors",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/gate-solution-build.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/gate-solution-build.out",
+   "stdout_sha256": "6fe921b97e8eb94042c3797ed2c624db112653de8295d55a23ae99eb1d54345f"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.core.tests",
+    "-c",
+    "Debug",
+    "--no-build"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:20:01Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.core.tests.exit",
+   "name": "coverage-run-nextorm.core.tests",
+   "note": "coverage collection target (inside dotnet-coverage collect)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.core.tests.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.core.tests.out",
+   "stdout_sha256": "8596b5bc063e4f0825ac7d05c2d47570e1b70db1151532336ab72f9a5c6a5adb"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:20:18Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-01.exit",
+   "name": "C19-brief-D-01",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-01.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-01.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:20:18Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-01.exit",
+   "name": "C19-report-D-01",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-01.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-01.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlite.tests",
+    "-c",
+    "Debug",
+    "--no-build"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:20:29Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.sqlite.tests.exit",
+   "name": "coverage-run-nextorm.sqlite.tests",
+   "note": "coverage collection target (inside dotnet-coverage collect)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.sqlite.tests.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.sqlite.tests.out",
+   "stdout_sha256": "8ff25787a674868eacfb695831d7c736310e5f0b4506ec310da4f854804c2c66"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.postgres.tests",
+    "-c",
+    "Debug",
+    "--no-build"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:20:32Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.postgres.tests.exit",
+   "name": "coverage-run-nextorm.postgres.tests",
+   "note": "coverage collection target (inside dotnet-coverage collect)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.postgres.tests.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.postgres.tests.out",
+   "stdout_sha256": "67570c38f9e4e957bdb1f6598470333ad97651633393b20c7d3567ac1f6c935b"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--no-build"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:20:35Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.sqlserver.tests.exit",
+   "name": "coverage-run-nextorm.sqlserver.tests",
+   "note": "coverage collection target (inside dotnet-coverage collect)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.sqlserver.tests.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.sqlserver.tests.out",
+   "stdout_sha256": "8af53135090360d4cdcc48eaed4898c3e74a057fef2390c7f010d844f7f09dc3"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "tool",
+    "run",
+    "dotnet-coverage",
+    "collect",
+    "-f",
+    "cobertura",
+    "-s",
+    "coverage.settings.xml",
+    "-o",
+    "/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline/coverage.xml",
+    "python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py coverage-run"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:20:36Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C10-coverage-baseline.exit",
+   "name": "C10-coverage-baseline",
+   "note": "coverage collection (baseline); wraps python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py coverage-run",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C10-coverage-baseline.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C10-coverage-baseline.out",
+   "stdout_sha256": "b0297dad31392e7e73b56386e1db3694865402f15ba610d93a890c7fc5fe9d5b"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "tool",
+    "run",
+    "reportgenerator",
+    "-reports:/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline/coverage.xml",
+    "-targetdir:/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline/report",
+    "-reporttypes:JsonSummary;Cobertura"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:20:39Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C10-report-baseline.exit",
+   "name": "C10-report-baseline",
+   "note": "coverage report generation (baseline)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C10-report-baseline.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C10-report-baseline.out",
+   "stdout_sha256": "9bd11a8f83adb696e3c7f2fb6f45ffa6e03c851e5da62d3be03098fdbd277dfe"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.core.tests",
+    "-c",
+    "Debug",
+    "--no-build"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:21:25Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.core.tests.exit",
+   "name": "coverage-run-nextorm.core.tests",
+   "note": "coverage collection target (inside dotnet-coverage collect)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.core.tests.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.core.tests.out",
+   "stdout_sha256": "98d2f10d929d46129e582677cf34638cddcca279e7259b20c0940087ad88a5bf"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlite.tests",
+    "-c",
+    "Debug",
+    "--no-build"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:21:54Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.sqlite.tests.exit",
+   "name": "coverage-run-nextorm.sqlite.tests",
+   "note": "coverage collection target (inside dotnet-coverage collect)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.sqlite.tests.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.sqlite.tests.out",
+   "stdout_sha256": "5ed8a577954d6a728c62596d3081eb06305fc86e70f0a4a319dd6382cb2b6c97"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.postgres.tests",
+    "-c",
+    "Debug",
+    "--no-build"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:21:59Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.postgres.tests.exit",
+   "name": "coverage-run-nextorm.postgres.tests",
+   "note": "coverage collection target (inside dotnet-coverage collect)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.postgres.tests.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.postgres.tests.out",
+   "stdout_sha256": "9975f34fe81cdcef5a6e8ad9fbfdae6a7aca69bbd82d8b45eab4b47f1aaef3d3"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--no-build"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:22:02Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.sqlserver.tests.exit",
+   "name": "coverage-run-nextorm.sqlserver.tests",
+   "note": "coverage collection target (inside dotnet-coverage collect)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.sqlserver.tests.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.sqlserver.tests.out",
+   "stdout_sha256": "cee42fec40431f5838f231a4fa5376d8e9736f9b906f96f1e1654fc6a2ddc697"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.integration.tests",
+    "-c",
+    "Debug",
+    "--no-build"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:25:13Z",
+   "exit": 2,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.integration.tests.exit",
+   "name": "coverage-run-nextorm.integration.tests",
+   "note": "coverage collection target: six-provider integration suite (inside dotnet-coverage collect)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.integration.tests.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/coverage-run-nextorm.integration.tests.out",
+   "stdout_sha256": "3514670c782350b701fc2273456a02d0235c977021405ca2d46a8945e59ca7a8"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "tool",
+    "run",
+    "dotnet-coverage",
+    "collect",
+    "-f",
+    "cobertura",
+    "-s",
+    "coverage.settings.xml",
+    "-o",
+    "/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline/coverage.xml",
+    "python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py coverage-run"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:25:13Z",
+   "exit": 2,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C10-coverage-baseline.exit",
+   "name": "C10-coverage-baseline",
+   "note": "coverage collection (baseline); wraps python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py coverage-run",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C10-coverage-baseline.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C10-coverage-baseline.out",
+   "stdout_sha256": "362a37a617cece8265a38db0a8c81e45b7d0d70acbb28169481b31a6e305e687"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "tool",
+    "run",
+    "reportgenerator",
+    "-reports:/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline/coverage.xml",
+    "-targetdir:/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline/report",
+    "-reporttypes:JsonSummary;Cobertura"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:25:16Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C10-report-baseline.exit",
+   "name": "C10-report-baseline",
+   "note": "coverage report generation (baseline)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C10-report-baseline.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C10-report-baseline.out",
+   "stdout_sha256": "ee159a8946a917ef2666bd7622529f855f92eb037b4e9b096747ffc15be0b1fe"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "run",
+    "--project",
+    "benchmarks/nextorm.benchmark",
+    "-c",
+    "Release",
+    "--",
+    "--anyCategories=acceptance"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:27:04Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C15-acceptance-baseline.exit",
+   "name": "C15-acceptance-baseline",
+   "note": "acceptance perf gate: exactly 7 cases, no failures",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C15-acceptance-baseline.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C15-acceptance-baseline.out",
+   "stdout_sha256": "9e5928f56e7a764e9286c350a390b69fec5f9eb7c6e9824a4a5bc478a4a1dafc"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~T232PreparationProbeTests"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:27:44Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C01-preparation.exit",
+   "name": "C01-preparation",
+   "note": "D-01 preparation probes (extension-call lifecycle, alias emission, source-registration ordering)",
+   "phase": "inner",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C01-preparation.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C01-preparation.out",
+   "stdout_sha256": "7266f81708e0a4b5c2a49de7dea800d233e5ecad42fd63cbc94c2c646af64d13"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:27:44Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-01.exit",
+   "name": "C19-brief-D-01",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-01.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-01.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:27:44Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-01.exit",
+   "name": "C19-report-D-01",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-01.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-01.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "manifest",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/manifest.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T19:27:44Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C17-manifest.exit",
+   "name": "C17-manifest",
+   "note": "validate the frozen evidence manifest (row coverage + shape)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C17-manifest.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C17-manifest.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+ ],
+ "status_file": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+ "task": "T232 (#232) SQL Server typed PIVOT/UNPIVOT projection",
+ "tool_versions": {
+  "dotnet --version": "10.0.401",
+  "git --version": "git version 2.34.1",
+  "python3 --version": "Python 3.10.12"
+ },
+ "tree_at_do_start": {
+  "dirty_entries": 38,
+  "dirty_sha256": "f922028104caf044749241151699790a9c1e959218085ad2225ef20b2a7ca17c",
+  "head": "4a7e221bd1aa7639c385af93f8ea561d04c7403f"
+ },
+ "unit": "D-01 (evidence-only)"
+}

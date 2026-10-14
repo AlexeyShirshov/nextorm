@@ -1,0 +1,10 @@
+{
+ "applicable": false,
+ "attempted": null,
+ "criterion": "E232-10",
+ "implementation_files": [],
+ "killed": null,
+ "mandated_mutants": 6,
+ "reason": "no typed rewrite/guard/translation code present (D-01 is evidence-only)",
+ "unit": "D-05"
+}

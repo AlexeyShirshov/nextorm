@@ -1,0 +1,55 @@
+{
+ "unit": "D-01",
+ "scope": {
+  "projects": [
+   "tests/nextorm.sqlserver.tests"
+  ],
+  "selectors": [
+   "FullyQualifiedName~T232PreparationProbeTests",
+   "FullyQualifiedName~Pivot|FullyQualifiedName~Unpivot|FullyQualifiedName~ProviderExtensionEagerGuardTests"
+  ],
+  "files": [
+   "tests/nextorm.sqlserver.tests/T232PreparationProbeTests.cs",
+   "docs/specs/roadmap/todo_sqlserver_typed_pivot_unpivot.md"
+  ],
+  "rationale": "D-01 is evidence-only: the new preparation probe test is the only compiled input. The affected subset is the probe class plus the legacy Pivot/Unpivot/eager-guard inventory used as a pre-change baseline; the SQL Server test project is the only project touched.",
+  "rebuild": "affected",
+  "boundary": "Single post-implementation boundary planned for D-07: full per-project test sweeps plus the six-provider container integration run (C07/C08/C11); not executed by D-01."
+ },
+ "amendments": [],
+ "executions": [
+  {
+   "command": [
+    "dotnet",
+    "build",
+    "src/nextorm.sqlserver/nextorm.sqlserver.csproj",
+    "-c",
+    "Debug"
+   ],
+   "phase": "inner",
+   "source_revision": "4a7e221b",
+   "artifact_revision": "4a7e221b",
+   "exit_code": 0,
+   "selected_count": 1,
+   "note": "C04 baseline build; 0 warnings / 0 errors; artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.out"
+  },
+  {
+   "command": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~T232PreparationProbeTests"
+   ],
+   "phase": "inner",
+   "source_revision": "4a7e221b",
+   "artifact_revision": "4a7e221b",
+   "exit_code": 0,
+   "selected_count": 6,
+   "note": "C01 preparation probes; 6/6 passed; artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C01-preparation.out"
+  }
+ ],
+ "coverage_note": "C06 (legacy inventory) is recorded as provenance + legacy-inventory.json, not as a report execution: the C06 filter carries a '|' token that scripts/validate_inner_loop.py rejects in an execution (rule 7). C10 coverage baseline and C15 acceptance baseline are recorded through their own JSON files and provenance records."
+}

@@ -1,0 +1,15 @@
+{
+ "argv": [
+  "dotnet",
+  "run",
+  "--project",
+  "benchmarks/nextorm.benchmark",
+  "-c",
+  "Release",
+  "--",
+  "--anyCategories=acceptance"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T19:26:10Z",
+ "env": {}
+}

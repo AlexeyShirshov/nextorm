@@ -1,0 +1,128 @@
+{
+ "task": "T232 (#232) SQL Server typed PIVOT/UNPIVOT projection",
+ "tree": "4a7e221bd1aa7639c385af93f8ea561d04c7403f",
+ "status_file": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+ "contract_rv": 1,
+ "manifest_revision": "D-01 (initial; reconciled by CHECK at the DO->CHECK boundary)",
+ "required_rows": [
+  "E232-01",
+  "E232-02",
+  "E232-03",
+  "E232-04",
+  "E232-05",
+  "E232-06",
+  "E232-07",
+  "E232-08",
+  "E232-09",
+  "E232-10",
+  "E232-11",
+  "E232-12",
+  "E232-13",
+  "E232-14",
+  "E232-15",
+  "E232-16",
+  "E232-17"
+ ],
+ "rows": [
+  {
+   "id": "E232-01",
+   "status": "met",
+   "evidence": [
+    {"kind": "preparation", "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/preparation.json", "exit": 0},
+    {"kind": "test-log", "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C01-preparation.out", "exit": 0},
+    {"kind": "scout", "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/scout.md"},
+    {"kind": "test", "path": "tests/nextorm.sqlserver.tests/T232PreparationProbeTests.cs"}
+   ]
+  },
+  {
+   "id": "E232-02",
+   "status": "met",
+   "evidence": [
+    {"kind": "brief", "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json", "exit": 0},
+    {"kind": "report", "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json", "exit": 0},
+    {"kind": "scope-map", "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/scope-map.json"}
+   ]
+  },
+  {
+   "id": "E232-03",
+   "status": "open",
+   "reason": "approved public typed signatures are not introduced yet (D-04/D-06); C04 baseline captured in C04-build.json"
+  },
+  {
+   "id": "E232-04",
+   "status": "open",
+   "reason": "typed SQL tests do not exist yet (D-04)"
+  },
+  {
+   "id": "E232-05",
+   "status": "open",
+   "reason": "fail-closed typed guards do not exist yet (D-04)"
+  },
+  {
+   "id": "E232-06",
+   "status": "met",
+   "evidence": [
+    {"kind": "legacy-inventory", "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/legacy-inventory.json", "exit": 0},
+    {"kind": "test-log", "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C06-legacy.out", "exit": 0}
+   ]
+  },
+  {
+   "id": "E232-07",
+   "status": "open",
+   "reason": "six-provider capability cases are produced in D-05"
+  },
+  {
+   "id": "E232-08",
+   "status": "open",
+   "reason": "SQL Server container fixtures are produced in D-05"
+  },
+  {
+   "id": "E232-09",
+   "status": "open",
+   "reason": "cache/alias/source-binding typed tests are produced in D-05"
+  },
+  {
+   "id": "E232-10",
+   "status": "open",
+   "reason": "targeted mutation requires the typed implementation (D-05); see mutation.json (applicable=false at D-01)"
+  },
+  {
+   "id": "E232-11",
+   "status": "open",
+   "reason": "baseline coverage captured (coverage-summary-baseline.json); the candidate (C12) is measured at D-07"
+  },
+  {
+   "id": "E232-12",
+   "status": "open",
+   "reason": "the single boundary is executed at D-07"
+  },
+  {
+   "id": "E232-13",
+   "status": "open",
+   "reason": "the typed AdventureWorks example is produced in D-06"
+  },
+  {
+   "id": "E232-14",
+   "status": "open",
+   "reason": "bilingual/XML docs are produced in D-06"
+  },
+  {
+   "id": "E232-15",
+   "status": "open",
+   "reason": "acceptance baseline captured (perf/baseline); the candidate comparison is produced at D-07"
+  },
+  {
+   "id": "E232-16",
+   "status": "met",
+   "evidence": [
+    {"kind": "footprint", "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/footprint.json", "exit": 0},
+    {"kind": "foreign-baseline", "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/foreign-baseline.json"}
+   ]
+  },
+  {
+   "id": "E232-17",
+   "status": "open",
+   "reason": "manifest/provenance/counters are initialized by D-01; sealing and the fulfillment verdict belong to CHECK"
+  }
+ ]
+}

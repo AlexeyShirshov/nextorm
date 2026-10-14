@@ -1,0 +1,9 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) passed (2s 176ms)
+
+Test run summary: Passed!
+  total: 901
+  failed: 0
+  succeeded: 901
+  skipped: 0
+  duration: 2s 465ms

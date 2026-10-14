@@ -1,0 +1,42 @@
+{
+ "criterion": [
+  "E232-01",
+  "AC-08"
+ ],
+ "evidence": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C01-preparation.out",
+ "exit": 0,
+ "filter": "FullyQualifiedName~T232PreparationProbeTests",
+ "hypotheses": [
+  {
+   "fact": "ColumnName is set by the by-name route, so a member that differs from the column name is emitted as '<col> as [<Member>]'; a case-insensitive match emits the bare column (select category, [1] as [Q1], [2] as [Q2]).",
+   "outcome": "confirmed",
+   "probe": "PreparationProbe_PivotSource_ColumnByName_EmitsIdentifierAndRenameAlias / ...Unpivot...",
+   "unknown": "1 -- actual alias emission"
+  },
+  {
+   "fact": "Declared names are returned verbatim and convention-only names are derived after From<T>() registration; an unregistered entity resolves to the empty string (never silently defaulted).",
+   "outcome": "confirmed",
+   "probe": "PreparationProbe_MappedColumnName_IsResolvedAtExtensionCallLifecycle / ...NamingConvention... / ...Unregistered...",
+   "unknown": "2 -- metadata timing"
+  },
+  {
+   "fact": "The pivot renderer registers the TableAlias source (SqlSourceRenderer.MakePivot -> ctx.ColumnsProvider.Add(typeof(TableAlias), false)) before the select list is rendered, so by-name columns bind with no 'entity source parameter' failure.",
+   "outcome": "confirmed",
+   "probe": "PreparationProbe_PivotSource_ColumnByName_EmitsIdentifierAndRenameAlias",
+   "unknown": "4 -- source-registration ordering"
+  }
+ ],
+ "invocation": "C01",
+ "resolved_route": {
+  "by_name_translation": "NextORM.Core.SqlFunctions.Column<T>(object, string) -- src/nextorm.core/Query/SqlFunctions.cs:94:21 (roslyn: members/refs); translated by NormSqlTranslator.cs:46,56,102; BaseExpressionVisitor.AppendColumnReference resolves the source via ResolveColumnSource (src/nextorm.core/Visitors/BaseExpressionVisitor.cs:463-475,510-522)",
+  "metadata_source": "DataContextCache.Metadata populated by From<T>() (src/nextorm.core/DataContext/DataContextCache.cs)",
+  "public_name_helper": "NextORM.Core.MemberInfoExtensions.GetPropertyColumnName(MemberInfo, INamingConvention?) -- public, src/nextorm.core/MemberInfoExtensions.cs:44:26 (roslyn: members NextORM.Core.MemberInfoExtensions)"
+ },
+ "test_summary": {
+  "failed": 0,
+  "skipped": 0,
+  "succeeded": 6,
+  "total": 6
+ },
+ "unit": "D-01"
+}

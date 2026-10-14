@@ -1,0 +1,7 @@
+2026-10-15T00:25:13: Arguments
+2026-10-15T00:25:14:  -reports:/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline/coverage.xml
+2026-10-15T00:25:14:  -targetdir:/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline/report
+2026-10-15T00:25:14:  -reporttypes:JsonSummary;Cobertura
+2026-10-15T00:25:15: Writing report file '/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline/report/Cobertura.xml'
+2026-10-15T00:25:15: Writing report file '/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline/report/Summary.json'
+2026-10-15T00:25:16: Report generation took 2.6 seconds

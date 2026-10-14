@@ -1,0 +1,20 @@
+{
+ "unit": "D-01",
+ "scope": {
+  "projects": [
+   "tests/nextorm.sqlserver.tests"
+  ],
+  "selectors": [
+   "FullyQualifiedName~T232PreparationProbeTests",
+   "FullyQualifiedName~Pivot|FullyQualifiedName~Unpivot|FullyQualifiedName~ProviderExtensionEagerGuardTests"
+  ],
+  "files": [
+   "tests/nextorm.sqlserver.tests/T232PreparationProbeTests.cs",
+   "docs/specs/roadmap/todo_sqlserver_typed_pivot_unpivot.md"
+  ],
+  "rationale": "D-01 is evidence-only: the new preparation probe test is the only compiled input. The affected subset is the probe class plus the legacy Pivot/Unpivot/eager-guard inventory used as a pre-change baseline; the SQL Server test project is the only project touched.",
+  "rebuild": "affected",
+  "boundary": "Single post-implementation boundary planned for D-07: full per-project test sweeps plus the six-provider container integration run (C07/C08/C11); not executed by D-01."
+ },
+ "amendments": []
+}

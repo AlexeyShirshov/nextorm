@@ -1,0 +1,13 @@
+{
+ "argv": [
+  "dotnet",
+  "test",
+  "tests/nextorm.core.tests",
+  "-c",
+  "Debug",
+  "--no-build"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T19:21:10Z",
+ "env": {}
+}

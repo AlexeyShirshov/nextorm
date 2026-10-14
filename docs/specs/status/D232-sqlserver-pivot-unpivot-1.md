@@ -4,7 +4,7 @@
 - issue: [#232](https://github.com/AlexeyShirshov/nextorm/issues/232) — OPEN, label `enhancement`, milestone **1.0.9-rc3**
 - collection: `1.0.9-todo` (single group; current worktree/branch `1.0.9-rc3`; no worktree/branch/merge)
 - selected_variant: `pdca-dotnet` (+ overlay `nextorm-pdca`)
-- current cycle `N=1`; plan revision `r=1`; attempt `n=1` (not started); evidence contract `rv=1`
+- current cycle `N=1`; plan revision `r=1`; attempt `n=1` (in progress — D-01); evidence contract `rv=1`
 - **plan_state: `ready`** (gate 1 satisfied)
 - starting HEAD: `3e49fe0c`
 
@@ -402,4 +402,13 @@ Preserve CRLF; normalize only edited text files. Collection commit only after th
 
 ```text
 2026-10-14 17:54:07Z | PLAN | revision r=1 | iteration n=1/3 | PLAN ready — awaiting confirmation (collection PLAN→DO boundary; no user `go` awaited) | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
+2026-10-14 19:16:00Z | DO | revision r=1 | iteration n=1/3 | DO started — D-01 preparation probes (evidence-only; no production code) | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
+2026-10-14 19:18:39Z | DO | revision r=1 | iteration n=1/3 | D-01 C04 baseline build (src/nextorm.sqlserver): 0 warnings / 0 errors | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.out
+2026-10-14 19:18:42Z | DO | revision r=1 | iteration n=1/3 | D-01 C01 preparation probes: 6/6 passed — unknown 1 (alias emission) and unknown 4 (source-registration ordering) confirmed | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/preparation.json
+2026-10-14 19:18:48Z | DO | revision r=1 | iteration n=1/3 | D-01 C06 legacy baseline: 19/19 passed (16 pre-existing legacy cases + 3 probe-name overlap; 0 failed, 0 skipped) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/legacy-inventory.json
+2026-10-14 19:19:33Z | DO | revision r=1 | iteration n=1/3 | Build gate: `dotnet build nextorm.slnx -c Debug` = 0 warnings / 0 errors | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/gate-solution-build.out
+2026-10-14 19:22:53Z | DO | revision r=1 | iteration n=1/3 | D-01 C16 footprint: 36 foreign dirty entries captured; none touched (read-only set verified unchanged) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/foreign-baseline.json
+2026-10-14 19:25:16Z | DO | revision r=1 | iteration n=1/3 | D-01 C10 coverage baseline captured (line 88.3% / branch 80.3% within coverage.settings scope); wrapped integration run collect_exit=2 on one transient ClickHouse HttpClient timeout (unit projects exit 0) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage-summary-baseline.json
+2026-10-14 19:27:04Z | DO | revision r=1 | iteration n=1/3 | D-01 C15 acceptance baseline: 7 cases, 0 failures, wall 47.98s; cached/prepared 2.01 vs historical 1.87 | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/acceptance-baseline.json
+2026-10-14 19:27:44Z | DO | revision r=1 | iteration n=1/3 | D-01 complete: brief/report/manifest validators exit 0, scopes/fulfill exit 0; unit state D-01=done, D-02..D-07=pending | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json
 ```

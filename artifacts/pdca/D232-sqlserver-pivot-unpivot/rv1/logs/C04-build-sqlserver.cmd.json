@@ -1,0 +1,12 @@
+{
+ "argv": [
+  "dotnet",
+  "build",
+  "src/nextorm.sqlserver/nextorm.sqlserver.csproj",
+  "-c",
+  "Debug"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T19:18:38Z",
+ "env": {}
+}
