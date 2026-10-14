@@ -84,7 +84,8 @@ string? json = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, somestring from complex_entity for json path, root('items'), include_null_values
+select id, somestring
+ from complex_entity for json path, root('items'), include_null_values
 ```
 
 [`Path`](xref:NextORM.Core.ForJsonMode.Path) shapes the document from the projection aliases (the default) and
@@ -97,7 +98,8 @@ string? json = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, somestring from complex_entity for json auto
+select id, somestring
+ from complex_entity for json auto
 ```
 
 The optional `root` wraps the document in `ROOT('name')` and `includeNullValues` adds
@@ -150,7 +152,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where (isjson(somestring)) = 1
+select id
+ from complex_entity where (isjson(somestring)) = 1
 ```
 
 ### Turn JSON into rows with `openjson`
@@ -198,7 +201,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
+select id
+ from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 ```
 
 A plain JSON string is bound as `text`; parse it explicitly with `SqlFunctions.Postgres.json_cast(value)`
@@ -352,7 +356,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where (@norm_p0 @> @norm_p1) and (@norm_p2 ? 'key')
+select id
+ from complex_entity where (@norm_p0 @> @norm_p1) and (@norm_p2 ? 'key')
 ```
 
 ### SQL/JSON query functions
@@ -381,7 +386,7 @@ var rows = dataContext.From<IComplexEntity>()
 ```sql
 select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value",
        json_exists(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Exists"
-from complex_entity
+ from complex_entity
 ```
 
 `json_exists` has two forms: the two-argument `json_exists(json, "key")` is the top-level `?` operator,

@@ -33,7 +33,8 @@ var last = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select id from simple_entity order by id desc limit 1
+select id
+ from simple_entity order by id desc limit 1
 ```
 
 The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -55,7 +56,8 @@ var rows = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity order by nullableint, id desc
+select id
+ from complex_entity order by nullableint, id desc
 ```
 
 Keys are emitted in the order the calls were made and separated by commas.
@@ -74,7 +76,8 @@ var last = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select id from simple_entity order by 1 desc limit 1
+select id
+ from simple_entity order by 1 desc limit 1
 ```
 
 Output:
@@ -105,7 +108,8 @@ var rows = await dataContext.From<ComplexEntity>()
 
 ```sql
 -- SQLite
-select nullableint as 'Int', count(*) as 'Count' from complex_entity
+select nullableint as 'Int', count(*) as 'Count'
+ from complex_entity
  group by nullableint
  order by count(*) desc
 limit 10 offset 0
@@ -151,7 +155,8 @@ var page = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select id from simple_entity limit 1 offset 1
+select id
+ from simple_entity limit 1 offset 1
 ```
 
 Output:
@@ -212,7 +217,8 @@ var rows = await dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, nullableint from complex_entity order by id limit 2 by nullableint
+select id, nullableint
+ from complex_entity order by id limit 2 by nullableint
 ```
 
 Only ClickHouse supports it; every other SQL provider and the in-memory context throw
@@ -235,12 +241,14 @@ var rows = await dataContext.From<IComplexEntity>()
 
 ```sql
 -- PostgreSQL
-select id, nullableint from complex_entity order by nullableint fetch first 3 rows with ties
+select id, nullableint
+ from complex_entity order by nullableint fetch first 3 rows with ties
 ```
 
 ```sql
 -- SQL Server (no offset): TOP(n) WITH TIES
-select top(3) with ties id, nullableint from complex_entity order by nullableint
+select top(3) with ties id, nullableint
+ from complex_entity order by nullableint
 ```
 
 Only PostgreSQL and SQL Server support `WITH TIES`; every other SQL provider and the in-memory context
@@ -268,7 +276,8 @@ var first = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select id from simple_entity order by id limit 1
+select id
+ from simple_entity order by id limit 1
 ```
 
 Output:
@@ -286,7 +295,8 @@ var only = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select id from simple_entity where id = 2 limit 2
+select id
+ from simple_entity where id = 2 limit 2
 ```
 
 Output:
@@ -317,7 +327,8 @@ var exists = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select exists(select * from simple_entity where id = 100)
+select exists(select *
+ from simple_entity where id = 100)
 ```
 
 SQL Server has no boolean scalar, so it renders the same predicate as

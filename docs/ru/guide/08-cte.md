@@ -49,7 +49,9 @@ var rows = dataContext
 
 ```sql
 -- SQLite (all providers produce the same shape)
-with recent as (select id from complex_entity where (id > 1)) select id from recent
+with recent as (select id
+ from complex_entity where (id > 1)) select id
+ from recent
 ```
 
 Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -82,7 +84,9 @@ var rows = dataContext
 
 ```sql
 -- SQLite
-with recent as (select id from complex_entity where (id > 1)) select id from recent as 't1'
+with recent as (select id
+ from complex_entity where (id > 1)) select id
+ from recent as 't1'
 ```
 
 [`QueryCommand<T>.AsCte`](xref:NextORM.Core.QueryCommand`1.AsCte(System.String)) возвращает неизменяемый
@@ -355,7 +359,10 @@ var rows = dataContext
 ```
 
 ```sql
-with first as (select id from complex_entity where (id > 1)), second as (select id from first) select id from second
+with first as (select id
+ from complex_entity where (id > 1)), second as (select id
+ from first) select id
+ from second
 ```
 
 > **Вложенные CTE поднимаются автоматически.** Тело CTE, само несущее `WITH` — запрос, построенный как
@@ -410,9 +417,12 @@ var rows = dataContext
 
 ```sql
 -- SQLite
-with first as (select id, somestring as 'name' from complex_entity),
-     second as (select name, count(*) as 'count' from first group by name)
-select name, count from second order by count desc
+with first as (select id, somestring as 'name'
+ from complex_entity),
+     second as (select name, count(*) as 'count'
+ from first group by name)
+select name, count
+ from second order by count desc
 ```
 
 CTE можно соединить с другим CTE (или с таблицей). Обе стороны адресуются по имени, и каждый столбец
@@ -477,7 +487,11 @@ var converted = dataContext.From(left)
 
 ```sql
 -- SQLite: обе формы дают это
-with l as (select id as 'Id' from complex_entity where (id > 1)), r as (select id as 'Id' from simple_entity) select t1.Id, t2.Id from l as 't1' join r as 't2' on t1.Id = cast(t2.Id as bigint)
+with l as (select id as 'Id'
+ from complex_entity where (id > 1)), r as (select id as 'Id'
+ from simple_entity) select t1.Id, t2.Id
+ from l as 't1'
+ join r as 't2' on t1.Id = cast(t2.Id as bigint)
 ```
 
 Покрыты все семь операторов. Три оператора без условия (`CrossJoin`/`CrossApply`/`OuterApply`)
@@ -515,7 +529,8 @@ dataContext.From<IOrder>()
 
 ```sql
 -- PostgreSQL
-with recent as (select id from orders where (id > 1000)) update orders as "t1" set status = @p0 from recent as "t2" where t1.id = t2.id
+with recent as (select id
+ from orders where (id > 1000)) update orders as "t1" set status = @p0 from recent as "t2" where t1.id = t2.id
 ```
 
 Это работает на каждом провайдере с `UPDATE ... FROM`/`JOIN` (и `DELETE ... USING`/join), на любой
@@ -555,7 +570,10 @@ var numbers = dataContext
 
 ```sql
 -- SQLite: `with recursive` prefix
-with recursive nums as (select id as 'n' from simple_entity where id = 1 union all select (n + 1) as 'n' from nums where (n < 5)) select n from nums
+with recursive nums as (select id as 'n'
+ from simple_entity where id = 1 union all select (n + 1) as 'n'
+ from nums where (n < 5)) select n
+ from nums
 ```
 
 Вывод:
@@ -582,7 +600,10 @@ var numbers = dataContext
 
 ```sql
 -- SQL Server: no `recursive` keyword, depth option appended
-with nums as (select id as [n] from simple_entity where id = 1 union all select (n + 1) as [n] from nums where (n < 5)) select n from nums option (maxrecursion 100)
+with nums as (select id as [n]
+ from simple_entity where id = 1 union all select (n + 1) as [n]
+ from nums where (n < 5)) select n
+ from nums option (maxrecursion 100)
 ```
 
 ## CTE и захваченный параметр
@@ -606,7 +627,9 @@ var ids = prepared.ToList(dataContext);
 
 ```sql
 -- SQLite parameter placeholder; SQL Server/PostgreSQL use @threshold
-with recent as (select id from complex_entity where (id > $threshold)) select id from recent
+with recent as (select id
+ from complex_entity where (id > $threshold)) select id
+ from recent
 ```
 
 ## Переиспользование кэша планов

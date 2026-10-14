@@ -285,7 +285,8 @@ var ids = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity where (id < 5)
+select id
+ from simple_entity where (id < 5)
 ```
 
 Вывод:
@@ -307,7 +308,8 @@ var flags = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select b from complex_entity where b = 1
+select b
+ from complex_entity where b = 1
 ```
 
 Вывод:

@@ -84,7 +84,8 @@ string? json = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, somestring from complex_entity for json path, root('items'), include_null_values
+select id, somestring
+ from complex_entity for json path, root('items'), include_null_values
 ```
 
 [`Path`](xref:NextORM.Core.ForJsonMode.Path) формирует документ по псевдонимам проекции (по умолчанию), а
@@ -97,7 +98,8 @@ string? json = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, somestring from complex_entity for json auto
+select id, somestring
+ from complex_entity for json auto
 ```
 
 Необязательный `root` оборачивает документ в `ROOT('name')`, а `includeNullValues` добавляет
@@ -152,7 +154,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where (isjson(somestring)) = 1
+select id
+ from complex_entity where (isjson(somestring)) = 1
 ```
 
 ### Развернуть JSON в строки через `openjson`
@@ -200,7 +203,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
+select id
+ from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 ```
 
 Обычная JSON-строка привязывается как `text`; разберите её явно через
@@ -355,7 +359,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where (@norm_p0 @> @norm_p1) and (@norm_p2 ? 'key')
+select id
+ from complex_entity where (@norm_p0 @> @norm_p1) and (@norm_p2 ? 'key')
 ```
 
 ### SQL/JSON-функции запроса
@@ -384,7 +389,7 @@ var rows = dataContext.From<IComplexEntity>()
 ```sql
 select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value",
        json_exists(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Exists"
-from complex_entity
+ from complex_entity
 ```
 
 У `json_exists` две формы: двухаргументный `json_exists(json, "key")` — это оператор `?` верхнего

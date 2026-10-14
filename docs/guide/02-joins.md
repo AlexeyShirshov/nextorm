@@ -257,7 +257,10 @@ var chained = dataContext.From<Order>(b => b.Table("orders"))
 ```
 
 ```sql
-... join person as 't2' on t1.buyerid = t2.id join person as 't3' on t2.id = t3.id join person as 't4' on t3.id = t4.id
+...
+ join person as 't2' on t1.buyerid = t2.id
+ join person as 't3' on t2.id = t3.id
+ join person as 't4' on t3.id = t4.id
 ```
 
 An alias must be a valid C# identifier without `_` (reserved for composing the generated type names);
@@ -283,7 +286,8 @@ var rows = await dataContext.From<Order>(b => b.Table("orders"))
 
 ```sql
 -- SQLite: the CTE is joined by name, never wrapped in a derived (select ...) table
-... join people_cte as 't2' on t1.buyerid = t2.Id
+...
+ join people_cte as 't2' on t1.buyerid = t2.Id
 ```
 
 The named path is SQL-provider only: the in-memory provider throws `NotSupportedException`. A query may
@@ -511,9 +515,14 @@ var rows = dataContext.From<ISimpleEntity>()
 
 ```sql
 -- SQL Server
-... from simple_entity as [t1] outer apply (select id, somestring from complex_entity where ...) as [t2]
+...
+ from simple_entity as [t1]
+ outer apply (select id, somestring
+ from complex_entity where ...) as [t2]
 -- PostgreSQL / MySQL / MariaDB
-... from simple_entity as t1 left join lateral (select ...) as t2 on true
+...
+ from simple_entity as t1
+ left join lateral (select ...) as t2 on true
 ```
 
 ### Correlated APPLY / LATERAL
@@ -534,9 +543,14 @@ var rows = await dataContext.From<ISimpleEntity>()
 
 ```sql
 -- SQL Server
-... from simple_entity as [t1] cross apply (select ... from complex_entity as [t2] where t2.id = t1.id) as [t3]
+...
+ from simple_entity as [t1]
+ cross apply (select ...
+ from complex_entity as [t2] where t2.id = t1.id) as [t3]
 -- PostgreSQL / MySQL / MariaDB
-... from simple_entity as t1 cross join lateral (select ...) as t3
+...
+ from simple_entity as t1
+ cross join lateral (select ...) as t3
 ```
 
 The lambda parameter behaves like the outer parameter of a correlated scalar subquery: a column of the
@@ -617,7 +631,10 @@ var rows = await dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id, t2.requiredstring from simple_entity as 't1' join (select id, requiredstring, b as 'Boolean' from complex_entity where id = 3) as 't2' on cast(t1.id as bigint) = t2.id
+select t1.id, t2.requiredstring
+ from simple_entity as 't1'
+ join (select id, requiredstring, b as 'Boolean'
+ from complex_entity where id = 3) as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
 A typed CTE is **not** a subquery: pass a [`Cte<T>`](xref:NextORM.Core.Cte`1) straight to the same seven operators and it
@@ -641,7 +658,10 @@ var rows = await dataContext.From(derived)
 ```
 
 ```sql
-select t1.id, t2.id as 'SId' from (select id, requiredstring from complex_entity where (id > 0)) as 't1' join simple_entity as 't2' on cast(t1.id as bigint) = t2.id
+select t1.id, t2.id as 'SId'
+ from (select id, requiredstring
+ from complex_entity where (id > 0)) as 't1'
+ join simple_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
 A `Where` may be written before the join; it is applied to the derived table (`d => d.Id > 5` becomes a
@@ -667,7 +687,11 @@ var rows = await dataContext.From(derived)
 ```
 
 ```sql
-select t3.OrderId, t3.CustomerName, t4.requiredstring as 'Third' from (select t1.id as 'OrderId', t2.requiredstring as 'CustomerName' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3' join complex_entity as 't4' on cast(t3.OrderId as bigint) = t4.id where t3.CustomerName is not null
+select t3.OrderId, t3.CustomerName, t4.requiredstring as 'Third'
+ from (select t1.id as 'OrderId', t2.requiredstring as 'CustomerName'
+ from simple_entity as 't1'
+ join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3'
+ join complex_entity as 't4' on cast(t3.OrderId as bigint) = t4.id where t3.CustomerName is not null
 ```
 
 ## Joining a raw table
@@ -832,7 +856,9 @@ var global = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-... from simple_entity as `t1` global left any join complex_entity as `t2` on ...
+...
+ from simple_entity as `t1`
+ global left any join complex_entity as `t2` on ...
 ```
 
 The options are copied into the join they are declared on, so they stay scoped to that join and never

@@ -17,7 +17,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
+select id
+ from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 ```
 
 The aggregates collapse a result set into a single JSON document:
@@ -165,7 +166,7 @@ var rows = dataContext.From<IXmlEntity>()
 
 ```sql
 select t2.value.value('(.)[1]/@id', 'int') as [Id], t2.value.value('(.)[1]', 'nvarchar(100)') as [Text]
-from xml_entity as [t1]
+ from xml_entity as [t1]
  cross apply t1.payload.nodes('/root/item') as [t2](value)
 ```
 

@@ -261,7 +261,10 @@ var chained = dataContext.From<Order>(b => b.Table("orders"))
 ```
 
 ```sql
-... join person as 't2' on t1.buyerid = t2.id join person as 't3' on t2.id = t3.id join person as 't4' on t3.id = t4.id
+...
+ join person as 't2' on t1.buyerid = t2.id
+ join person as 't3' on t2.id = t3.id
+ join person as 't4' on t3.id = t4.id
 ```
 
 Псевдоним должен быть корректным идентификатором C# без `_` (зарезервирован для сборки имён
@@ -288,7 +291,8 @@ var rows = await dataContext.From<Order>(b => b.Table("orders"))
 
 ```sql
 -- SQLite: CTE присоединяется по имени, без обёртки в производную (select ...) таблицу
-... join people_cte as 't2' on t1.buyerid = t2.Id
+...
+ join people_cte as 't2' on t1.buyerid = t2.Id
 ```
 
 Именованный путь доступен только на SQL-провайдерах: провайдер in-memory бросает
@@ -524,9 +528,14 @@ var rows = dataContext.From<ISimpleEntity>()
 
 ```sql
 -- SQL Server
-... from simple_entity as [t1] outer apply (select id, somestring from complex_entity where ...) as [t2]
+...
+ from simple_entity as [t1]
+ outer apply (select id, somestring
+ from complex_entity where ...) as [t2]
 -- PostgreSQL / MySQL / MariaDB
-... from simple_entity as t1 left join lateral (select ...) as t2 on true
+...
+ from simple_entity as t1
+ left join lateral (select ...) as t2 on true
 ```
 
 ### Коррелированный APPLY / LATERAL
@@ -546,9 +555,14 @@ var rows = await dataContext.From<ISimpleEntity>()
 
 ```sql
 -- SQL Server
-... from simple_entity as [t1] cross apply (select ... from complex_entity as [t2] where t2.id = t1.id) as [t3]
+...
+ from simple_entity as [t1]
+ cross apply (select ...
+ from complex_entity as [t2] where t2.id = t1.id) as [t3]
 -- PostgreSQL / MySQL / MariaDB
-... from simple_entity as t1 cross join lateral (select ...) as t3
+...
+ from simple_entity as t1
+ cross join lateral (select ...) as t3
 ```
 
 Параметр лямбды ведёт себя как внешний параметр коррелированного скалярного подзапроса: столбец строки
@@ -627,7 +641,10 @@ var rows = await dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id, t2.requiredstring from simple_entity as 't1' join (select id, requiredstring, b as 'Boolean' from complex_entity where id = 3) as 't2' on cast(t1.id as bigint) = t2.id
+select t1.id, t2.requiredstring
+ from simple_entity as 't1'
+ join (select id, requiredstring, b as 'Boolean'
+ from complex_entity where id = 3) as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
 Типизированный CTE — **не** подзапрос: передайте [`Cte<T>`](xref:NextORM.Core.Cte`1) прямо в те же семь операторов, и он
@@ -651,7 +668,10 @@ var rows = await dataContext.From(derived)
 ```
 
 ```sql
-select t1.id, t2.id as 'SId' from (select id, requiredstring from complex_entity where (id > 0)) as 't1' join simple_entity as 't2' on cast(t1.id as bigint) = t2.id
+select t1.id, t2.id as 'SId'
+ from (select id, requiredstring
+ from complex_entity where (id > 0)) as 't1'
+ join simple_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
 `Where` можно написать до соединения — он применяется к производной таблице (`d => d.Id > 5`
@@ -679,7 +699,11 @@ var rows = await dataContext.From(derived)
 ```
 
 ```sql
-select t3.OrderId, t3.CustomerName, t4.requiredstring as 'Third' from (select t1.id as 'OrderId', t2.requiredstring as 'CustomerName' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3' join complex_entity as 't4' on cast(t3.OrderId as bigint) = t4.id where t3.CustomerName is not null
+select t3.OrderId, t3.CustomerName, t4.requiredstring as 'Third'
+ from (select t1.id as 'OrderId', t2.requiredstring as 'CustomerName'
+ from simple_entity as 't1'
+ join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3'
+ join complex_entity as 't4' on cast(t3.OrderId as bigint) = t4.id where t3.CustomerName is not null
 ```
 
 ## Соединение с необработанной таблицей
@@ -849,7 +873,9 @@ var global = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-... from simple_entity as `t1` global left any join complex_entity as `t2` on ...
+...
+ from simple_entity as `t1`
+ global left any join complex_entity as `t2` on ...
 ```
 
 Опции копируются в соединение, при объявлении которого они заданы, поэтому они привязаны к этому

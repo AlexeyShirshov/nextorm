@@ -64,7 +64,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where somestring like '%a%'
+select id
+ from complex_entity where somestring like '%a%'
 ```
 
 Значение времени выполнения в `Contains` не может быть экранировано во время преобразования, поэтому
@@ -81,7 +82,8 @@ var prepared = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQLite: % and the concatenation operator; SQL Server uses '+' and @needle
-select id from complex_entity where somestring like '%'||$needle||'%'
+select id
+ from complex_entity where somestring like '%'||$needle||'%'
 ```
 
 > В SQL Server нет логического скалярного типа, поэтому **проецируемый** предикат (например,
@@ -141,7 +143,8 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- PostgreSQL
-select id from complex_entity where somestring collate "C" = 'x' collate "C"
+select id
+ from complex_entity where somestring collate "C" = 'x' collate "C"
 ```
 
 `collate` принимает родное для провайдера имя коллации; оно должно быть константой. У in-memory
@@ -176,7 +179,8 @@ var rows = e
 
 ```sql
 -- PostgreSQL
-select somestring collate "C" as "String" from complex_entity
+select somestring collate "C" as "String"
+ from complex_entity
  where somestring collate "C" = 'x' order by somestring collate "C"
 ```
 

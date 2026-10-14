@@ -27,7 +27,9 @@ var rows = dataContext.From<IArrayEntity>()
 ```
 
 ```sql
-select id from array_entity left array join tags where id > 0
+select id
+ from array_entity
+ left array join tags where id > 0
 ```
 
 The scalar `array_join` (one row per element, projectable) and the clause methods
@@ -49,7 +51,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, nullableint from complex_entity order by id limit 2 by nullableint
+select id, nullableint
+ from complex_entity order by id limit 2 by nullableint
 ```
 
 See [Sorting and paging](../04-sorting-and-paging.md#limit-by-clickhouse)
@@ -70,7 +73,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select nullableint, count(*) from complex_entity group by nullableint with totals
+select nullableint, count(*)
+ from complex_entity group by nullableint with totals
 ```
 
 See [Grouping and aggregates](../03-grouping-and-aggregates.md#with-totals)
@@ -93,7 +97,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity final prewhere (nullableint > 0) settings max_threads = 2
+select id
+ from complex_entity final prewhere (nullableint > 0) settings max_threads = 2
 ```
 
 See [Query hints](../13-query-hints.md#clickhouse-query-modifiers)
@@ -141,7 +146,8 @@ var ids = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity where global in (@p0, @p1)
+select id
+ from simple_entity where global in (@p0, @p1)
 ```
 
 See [Filtering](../01-filtering-where.md#global-in-clickhouse)

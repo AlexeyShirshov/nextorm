@@ -198,7 +198,8 @@ var removed = e
 
 ```sql
 -- PostgreSQL
-with c as (select id from complex_entity where (id > 0)) delete from complex_entity as "t1" using c as "t2" where t1.id = cast(t2.id as bigint)
+with c as (select id
+ from complex_entity where (id > 0)) delete from complex_entity as "t1" using c as "t2" where t1.id = cast(t2.id as bigint)
 ```
 
 `with …` эмитится перед мутацией на каждом провайдере с multi-table delete, а CTE может стоять на любой позиции join. Два разных CTE с одинаковым именем по сторонам join отклоняются `InvalidOperationException`. См. [Common table expressions](08-cte.md).

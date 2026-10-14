@@ -26,7 +26,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where (id = any(@p0))
+select id
+ from complex_entity where (id = any(@p0))
 ```
 
 См. [Массивы (PostgreSQL)](../../scalar-functions/06-arrays.md#массивы-postgresql). Функции, возвращающие
@@ -70,7 +71,8 @@ var rows = dataContext.From<IReservation>()
 ```
 
 ```sql
-select id from reservation where (during && @p0)
+select id
+ from reservation where (during && @p0)
 ```
 
 `Range<T>` — `readonly struct` и сравнивается по своим PostgreSQL-характеристикам, поэтому
@@ -205,7 +207,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select distinct on (somestring) id, somestring from complex_entity order by somestring
+select distinct on (somestring) id, somestring
+ from complex_entity order by somestring
 ```
 
 См. [DISTINCT](../07-distinct.md).
@@ -277,7 +280,8 @@ var rows = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity where (id > 5) for update
+select id
+ from simple_entity where (id > 5) for update
 ```
 
 `LockMode.Update` генерирует `for update`, а `LockMode.Share` — `for share`. Оба принимают

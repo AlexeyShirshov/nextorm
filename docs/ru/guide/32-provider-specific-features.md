@@ -14,7 +14,8 @@ string? json = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, somestring from complex_entity for json path, root('items'), include_null_values
+select id, somestring
+ from complex_entity for json path, root('items'), include_null_values
 ```
 
 [`Path`](xref:NextORM.Core.ForJsonMode.Path) строит документ по псевдонимам проекции, [`Auto`](xref:NextORM.Core.ForJsonMode.Auto) — по структуре
@@ -37,7 +38,8 @@ string? xml = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity for xml raw('row'), root('items'), elements
+select id
+ from complex_entity for xml raw('row'), root('items'), elements
 ```
 
 Как и `ForJson`, `ForXml` возвращает `null` для пустого набора, а
@@ -62,10 +64,12 @@ var rows = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- PostgreSQL / MySQL / MariaDB
-select id from simple_entity where (id > 5) for update
+select id
+ from simple_entity where (id > 5) for update
 
 -- SQL Server
-select id from simple_entity with (updlock) where (id > 5)
+select id
+ from simple_entity with (updlock) where (id > 5)
 ```
 
 `ForUpdate()` блокирует строки монопольно; [`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare)
@@ -100,14 +104,14 @@ var rows = await dataContext.From<SimpleEntity>(o => o.ForUpdate())
 -- PostgreSQL
 select t1.id
  from simple_entity as "t1"
-join complex_entity as "t2" on cast(t1.id as bigint) = t2.id
+ join complex_entity as "t2" on cast(t1.id as bigint) = t2.id
 for update of "t1"
 for share of "t2"
 
 -- MySQL
 select t1.id
  from simple_entity as `t1`
-join complex_entity as `t2` on cast(t1.id as signed) = t2.id
+ join complex_entity as `t2` on cast(t1.id as signed) = t2.id
 for update of `t1`
 for share of `t2`
 ```
@@ -146,10 +150,12 @@ var claimed = await dataContext.From<Job>()
 
 ```sql
 -- PostgreSQL / MySQL / MariaDB
-select id from job where (state = 'pending') for update skip locked
+select id
+ from job where (state = 'pending') for update skip locked
 
 -- SQL Server (READPAST приближает SKIP LOCKED)
-select id from job with (updlock, readpast) where (state = 'pending')
+select id
+ from job with (updlock, readpast) where (state = 'pending')
 ```
 
 PostgreSQL и MySQL дописывают `nowait`/`skip locked` в конец

@@ -1,0 +1,19 @@
+$ bash artifacts/pdca/D224/rv1/run-evidence.sh docs
+(no findings printed on success)
+
+exit=0
+checks: EN+RU limitations layout note present; 23-sql-batch EN+RU present; no public docs/specs link; no whitespace-only line inside a ```sql fence
+
+## pass 2 (comment + de-indent residuals) — 2026-10-14
+$ python3 artifacts/pdca/D224/rv1/rewrite_docs_sql.py --dry-run   # before apply
+--- dry-run: 0 insertion(s) in 0 file(s)
+exit=0
+$ python3 artifacts/pdca/D224/rv1/rewrite_docs_sql.py --apply
+--- applied: 38 insertion(s) in 16 file(s)
+exit=0
+$ python3 artifacts/pdca/D224/rv1/rewrite_docs_sql.py --dry-run   # idempotence
+--- dry-run: 0 insertion(s) in 0 file(s)
+exit=0
+$ bash artifacts/pdca/D224/rv1/run-evidence.sh docs
+exit=0
+checks: EN+RU limitations layout note present; 23-sql-batch EN+RU present; no public docs/specs link; no whitespace-only line inside a ```sql fence

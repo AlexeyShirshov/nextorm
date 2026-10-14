@@ -128,8 +128,8 @@ The reference renders the same flat join as the collection form; the joined chil
 
 ```sql
 select t1.id, t1.name, t2.id, t2.order_id, t2.total
-from order as t1
-left join invoice as t2 on t1.id = t2.order_id
+ from order as t1
+ left join invoice as t2 on t1.id = t2.order_id
 ```
 
 `JoinOptions.OneToOne<TParent, TChild, TKey>(parentKey, childForeignKey)` configures the relationship locally through a `JoinInto` options lambda (the same two selectors) when it is not declared, fully replacing the declared metadata for that call:
@@ -176,14 +176,13 @@ The junction is projected as a derived `row_number()` link subquery, joined flat
 
 ```sql
 select t1.id, t1.title, t2.parent_key, t2.child_key, t2.occurrence, t3.id, t3.name
-from post as t1
-left join (
+ from post as t1
+ left join (
     select j.post_id as parent_key, j.tag_id as child_key,
            row_number() over (partition by j.post_id, j.tag_id order by j.tag_id) as occurrence
-   
  from tag_link as j
 ) as t2 on t1.id = t2.parent_key
-left join tag as t3 on t3.id = t2.child_key and t3.active
+ left join tag as t3 on t3.id = t2.child_key and t3.active
 ```
 
 The `(parent, child) => ...` predicate is an extra filter over the joined rows; the join keys come from the junction configuration, not from the predicate. Use `(p, t) => true` when no filter is needed.
@@ -200,8 +199,8 @@ For a list terminal the join is **part of the query** and the whole graph is rea
 
 ```sql
 select t1.id, t1.name, t2.id, t2.order_id, t2.name
-from order as t1
-left join order_item as t2 on t1.id = t2.order_id
+ from order as t1
+ left join order_item as t2 on t1.id = t2.order_id
 ```
 
 The rows are a denormalized `(parent, child)` stream; after the query runs, the list terminal:
@@ -249,8 +248,9 @@ A `Where` written **before** `JoinInto` filters the parent source. The predicate
 
 ```sql
 select t1.id, t1.name, t2.id, t2.order_id, t2.name
-from (select id, name from order limit 10 offset 20) as t1
-left join order_item as t2 on t1.id = t2.order_id
+ from (select id, name
+ from order limit 10 offset 20) as t1
+ left join order_item as t2 on t1.id = t2.order_id
 ```
 
 ## Multiple collections

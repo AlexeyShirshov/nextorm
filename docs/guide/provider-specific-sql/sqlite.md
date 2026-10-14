@@ -48,7 +48,7 @@ var rows = dataContext.From<IComplexEntity>()
 select printf('%d-%s', id, somestring) as 'Label',
        typeof(somestring) as 'Kind',
        unicode(somestring) as 'Ascii'
-from complex_entity
+ from complex_entity
 ```
 
 ## JSON1
@@ -89,7 +89,7 @@ var rows = dataContext.From<IComplexEntity>()
 select json_extract(somestring, '$.name') as 'Name',
        (somestring -> '$.name') as 'Raw',
        json_set(somestring, '$.name', 'nextorm') as 'Updated'
-from complex_entity
+ from complex_entity
 ```
 
 Aggregates turn a group into a JSON array/object:
@@ -215,7 +215,7 @@ var rows = dataContext.From<Article>()
 select rowid, title, bm25("article_fts") as 'Score',
        snippet("article_fts", 1, '[', ']', '...', 8) as 'Preview',
        highlight("article_fts", 0, '<b>', '</b>') as 'Marked'
-from article_fts
+ from article_fts
 where "article_fts" match $query
 order by rowid
 ```
@@ -242,7 +242,8 @@ var rows = dataContext
 ```
 
 ```sql
-select rowid, title from "article_fts"($query) where rowid > 0 order by rowid
+select rowid, title
+ from "article_fts"($query) where rowid > 0 order by rowid
 ```
 
 ### FTS5 maintenance commands

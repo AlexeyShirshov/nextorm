@@ -46,6 +46,11 @@
           "kind": "json",
           "path": "artifacts/pdca/D224/rv1/E02.json",
           "value": "per-project command/exit/selected_count for the 11 affected projects"
+        },
+        {
+          "kind": "json",
+          "path": "artifacts/pdca/D224/rv1/mapping.json",
+          "value": "criterion -> test mapping (R1/R3/R7): granular filtered --no-build runs naming the tests covering each open variant/guard row"
         }
       ]
     },
@@ -70,6 +75,10 @@
         {
           "kind": "baseline",
           "path": "tests/nextorm.sqlite.tests/Baselines/D160/positional/sqlite"
+        },
+        {
+          "kind": "snapshot",
+          "path": "artifacts/pdca/D224/rv1/d160-snapshot/"
         }
       ]
     },
@@ -110,6 +119,11 @@
           "kind": "log",
           "path": "artifacts/pdca/D224/rv1/E05-coverage.log",
           "exit": 0
+        },
+        {
+          "kind": "report",
+          "path": "artifacts/pdca/D224/rv1/E05-coverage-reconcile.md",
+          "value": "raw settings scope 86.7/79.5 vs CI-gated Summary.txt 87.3/79.9 (same XML, reportgenerator normalisation); both pass line>=85/branch>=75"
         }
       ]
     },
@@ -131,13 +145,32 @@
         {
           "kind": "docs",
           "path": "docs/guide/23-sql-batch.md"
+        },
+        {
+          "kind": "report",
+          "path": "artifacts/pdca/D224/rv1/E06-docs.md",
+          "value": "CHECK-gather docs round: 34 EN + 34 RU pages re-normalised, transformer idempotent (0 insertion(s) in 0 file(s)); known miss docs/guide/04-sorting-and-paging.md:106-112 fixed; residual = raw/opaque + extract() syntax + 2 08-cte prose lines"
         }
       ]
     },
     {
       "id": "E07",
-      "status": "open",
-      "reason": "CHECK-owned: the Roslyn-backed emitter inventory plus the reviewed diff proving LF-only emission and unchanged opaque contents/parameter-only path/keyword ownership/cache flags is produced by CHECK (plan E07 owner audit). No DO audit artifact."
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "report",
+          "path": "artifacts/pdca/D224/rv1/E07-audit.md",
+          "value": "SQL-emitter inventory (no AppendLine/Environment.NewLine left in any SQL builder; 38 SqlText.NewLine refs), no-CR evidence (6 literal-\\r sites all non-emission), suppression scan 0/692 added lines"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D224/rv1/E07-emitters.txt"
+        },
+        {
+          "kind": "log",
+          "path": "artifacts/pdca/D224/rv1/E07-suppression.txt"
+        }
+      ]
     }
   ]
 }

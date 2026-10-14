@@ -68,7 +68,8 @@ Both bounds reach the declared columns, and a read selects both back (SQLite out
 insert into reservation (id, during_lower, during_upper) values ($p0, $p1, $p2);
 
 -- Read
-select id, during_lower, during_upper from reservation where id = 1;
+select id, during_lower, during_upper
+ from reservation where id = 1;
 ```
 
 An unbounded side is written as a SQL `NULL`: `new Range<int>(…, lowerInfinite: true)` writes `during_lower = NULL`.

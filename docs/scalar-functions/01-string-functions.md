@@ -63,7 +63,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where somestring like '%a%'
+select id
+ from complex_entity where somestring like '%a%'
 ```
 
 A runtime value in `Contains` cannot be escaped at translation time, so the wildcards are concatenated
@@ -79,7 +80,8 @@ var prepared = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQLite: % and the concatenation operator; SQL Server uses '+' and @needle
-select id from complex_entity where somestring like '%'||$needle||'%'
+select id
+ from complex_entity where somestring like '%'||$needle||'%'
 ```
 
 > On SQL Server there is no boolean scalar type, so a **projected** predicate (for example
@@ -138,7 +140,8 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- PostgreSQL
-select id from complex_entity where somestring collate "C" = 'x' collate "C"
+select id
+ from complex_entity where somestring collate "C" = 'x' collate "C"
 ```
 
 `collate` takes the provider-native collation name; it must be a constant. The in-memory provider has no
@@ -173,7 +176,8 @@ var rows = e
 
 ```sql
 -- PostgreSQL
-select somestring collate "C" as "String" from complex_entity
+select somestring collate "C" as "String"
+ from complex_entity
  where somestring collate "C" = 'x' order by somestring collate "C"
 ```
 

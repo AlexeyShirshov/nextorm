@@ -45,7 +45,9 @@ var rows = ctx.From<Child>()
     .Select(c => new { c.Id, ParentName = c.Parent!.Name })
     .ToList();
 
-// select c.Id, p.Name from child as c left join parent as p on c.ParentId = p.Id
+// select c.Id, p.Name
+// from child as c
+// left join parent as p on c.ParentId = p.Id
 ```
 
 Разворачивание ссылки всегда **`LEFT JOIN`** — у связи нет флага обязательности, а `INNER` молча
@@ -89,7 +91,9 @@ var rows = ctx.From<Child>()
 var present = rows[0].Parent;   // principal-сущность, либо
 var absent = rows[1].Parent;    // null, когда внешний ключ висячий
 
-// select c.Id, p.Id, p.Age, p.Name from child as c left join parent as p on c.ParentId = p.Id
+// select c.Id, p.Id, p.Age, p.Name
+// from child as c
+// left join parent as p on c.ParentId = p.Id
 ```
 
 Проекция ссылки целиком поддерживается на всех провайдерах, включая in-memory. Провайдер in-memory

@@ -31,7 +31,7 @@ var rows = dataContext.From<IComplexEntity>()
 ```sql
 select field(status, 'new', 'open', 'closed'), substring_index(path, '/', 2),
        format(price, 2), md5(name), from_unixtime(updated_at_unix)
-from complex_entity
+ from complex_entity
 where find_in_set(status, 'new,open') > 0
 ```
 

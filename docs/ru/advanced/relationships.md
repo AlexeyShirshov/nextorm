@@ -128,8 +128,8 @@ var orders = ctx.From<Order>()
 
 ```sql
 select t1.id, t1.name, t2.id, t2.order_id, t2.total
-from order as t1
-left join invoice as t2 on t1.id = t2.order_id
+ from order as t1
+ left join invoice as t2 on t1.id = t2.order_id
 ```
 
 `JoinOptions.OneToOne<TParent, TChild, TKey>(parentKey, childForeignKey)` настраивает связь локально через лямбду опций `JoinInto` (те же два селектора), когда она не объявлена, полностью заменяя объявленные метаданные для этого вызова:
@@ -176,14 +176,13 @@ Junction проецируется как производный link-подза�
 
 ```sql
 select t1.id, t1.title, t2.parent_key, t2.child_key, t2.occurrence, t3.id, t3.name
-from post as t1
-left join (
+ from post as t1
+ left join (
     select j.post_id as parent_key, j.tag_id as child_key,
            row_number() over (partition by j.post_id, j.tag_id order by j.tag_id) as occurrence
-   
  from tag_link as j
 ) as t2 on t1.id = t2.parent_key
-left join tag as t3 on t3.id = t2.child_key and t3.active
+ left join tag as t3 on t3.id = t2.child_key and t3.active
 ```
 
 Предикат `(родитель, ребёнок) => ...` — дополнительный фильтр по соединённым строкам; ключи соединения берутся из конфигурации junction, а не из предиката. Используйте `(p, t) => true`, когда фильтр не нужен.
@@ -200,8 +199,8 @@ Junction, у которого внешний ключ родителя и/или
 
 ```sql
 select t1.id, t1.name, t2.id, t2.order_id, t2.name
-from order as t1
-left join order_item as t2 on t1.id = t2.order_id
+ from order as t1
+ left join order_item as t2 on t1.id = t2.order_id
 ```
 
 Строки — денормализованный поток `(родитель, ребёнок)`; после выполнения запроса списочный терминал:
@@ -249,8 +248,9 @@ public sealed class Order
 
 ```sql
 select t1.id, t1.name, t2.id, t2.order_id, t2.name
-from (select id, name from order limit 10 offset 20) as t1
-left join order_item as t2 on t1.id = t2.order_id
+ from (select id, name
+ from order limit 10 offset 20) as t1
+ left join order_item as t2 on t1.id = t2.order_id
 ```
 
 ## Несколько коллекций

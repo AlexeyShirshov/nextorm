@@ -114,10 +114,12 @@ using var dataContext = builder.CreateDataContext();
 
 ```sql
 -- родительский statement
-select id, name from order
+select id, name
+ from order
 
 -- дочерний statement (по одному на чанк не более чем из 1000 различных родительских ключей)
-select id, order_id, name from order_item where order_id in (@k0, @k1, @k2)
+select id, order_id, name
+ from order_item where order_id in (@k0, @k1, @k2)
 ```
 
 Предикат чанка — обычный список `IN`, поэтому он так же участвует в кэше планов и привязке параметров провайдера, как `Contains` по захваченной коллекции.
@@ -140,16 +142,16 @@ var orders = ctx.From<Order>()
 
 ```sql
 select t1.id, t1.name, t2.id, t2.order_id, t2.name
-from order as t1
-left join order_item as t2 on t1.id = t2.order_id
+ from order as t1
+ left join order_item as t2 on t1.id = t2.order_id
 ```
 
 Собственный `Where` дочернего запроса встраивается в `ON` соединения, поэтому фильтрует дочерние записи, не отбрасывая родителей без детей:
 
 ```sql
 select t1.id, t1.name, t2.id, t2.order_id, t2.name
-from order as t1
-left join order_item as t2 on t1.id = t2.order_id and t2.active
+ from order as t1
+ left join order_item as t2 on t1.id = t2.order_id and t2.active
 ```
 
 - **Один round trip, без чанкования ключей.** Источник родителя и каждый объявленный дочерний запрос соединяются одной командой `LEFT JOIN`. Списка `IN` и размера чанка нет, поэтому любое число родителей — включая более 1000 различных ключей — извлекается этой же командой, без молчаливого отката к split.

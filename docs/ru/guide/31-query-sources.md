@@ -32,7 +32,9 @@ var rows = await dataContext.From(inner)
 
 ```sql
 -- SQLite
-select id from (select id from simple_entity where (id > 8))
+select id
+ from (select id
+ from simple_entity where (id > 8))
 ```
 
 Вывод:

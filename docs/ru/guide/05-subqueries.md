@@ -90,7 +90,9 @@ var rows = await dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, (select id from simple_entity where (id = 1) limit 1) as 'sid' from complex_entity
+select id, (select id
+ from simple_entity where (id = 1) limit 1) as 'sid'
+ from complex_entity
 ```
 
 Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -171,8 +173,9 @@ var rows = await dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select t1.id, (select t2.id from simple_entity as 't2' where t2.id = t1.id limit 1) as 'sid'
-from complex_entity as 't1'
+select t1.id, (select t2.id
+ from simple_entity as 't2' where t2.id = t1.id limit 1) as 'sid'
+ from complex_entity as 't1'
 ```
 
 Внешний запрос квалифицирует только упомянутый член; внутренний запрос сохраняет свои столбцы и
@@ -258,7 +261,9 @@ var rows = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id from simple_entity as 't1' where exists(select * from complex_entity where (id = cast(t1.id as bigint)))
+select t1.id
+ from simple_entity as 't1' where exists(select *
+ from complex_entity where (id = cast(t1.id as bigint)))
 ```
 
 Вывод:
@@ -290,8 +295,10 @@ var rows = await dataContext.From<ISimpleEntity>()
 
 ```sql
 -- SQLite
-select t1.id from simple_entity as 't1'
-where (exists(select * from complex_entity as 't2' where (t2.id = cast(t1.id as bigint))) or (t1.id = 100))
+select t1.id
+ from simple_entity as 't1'
+where (exists(select *
+ from complex_entity as 't2' where (t2.id = cast(t1.id as bigint))) or (t1.id = 100))
 ```
 
 Отрицание предиката-подзапроса (`!SqlFunctions.Sql.exists(...)`) рендерится как `not (exists(...))`.
@@ -309,7 +316,9 @@ var row = await dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where (cast(id as integer) in (select id from simple_entity where (id = 2)))
+select id
+ from complex_entity where (cast(id as integer) in (select id
+ from simple_entity where (id = 2)))
 ```
 
 Вывод:
@@ -335,7 +344,9 @@ var rows = await dataContext.From<ISimpleEntity>()
 
 ```sql
 -- SQL Server / PostgreSQL
-select id from simple_entity where (cast(id as bigint) = any(select id from complex_entity))
+select id
+ from simple_entity where (cast(id as bigint) = any(select id
+ from complex_entity))
 ```
 
 SQLite не реализует `ANY` или `ALL`; тот же запрос принимается транслятором, но при выполнении

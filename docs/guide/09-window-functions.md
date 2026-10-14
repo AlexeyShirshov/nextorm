@@ -171,7 +171,7 @@ var rows = dataContext.From<IComplexEntity>()
 select id,
        lag(id, 1, 0) over (order by id) as `prev`,
        lagInFrame(id, 1, 0) over (order by id rows between current row and 1 following) as `prevInFrame`
-from complex_entity
+ from complex_entity
 ```
 
 ## Windowed aggregates
@@ -269,7 +269,8 @@ var rows = e
 ```
 
 ```sql
-select id, row_number() over w as 'rn', sum(id) over w as 'total' from complex_entity window w as (partition by nullableint order by id)
+select id, row_number() over w as 'rn', sum(id) over w as 'total'
+ from complex_entity window w as (partition by nullableint order by id)
 ```
 
 The name must be a plain SQL identifier. A repeated name on the same query, an invalid name, or

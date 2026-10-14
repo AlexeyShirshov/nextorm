@@ -170,7 +170,8 @@ var rows = await dataContext.From<Product>()
     .Select(p => new { p.Id, p.Name })
     .ToListAsync();
 
-// select id, name from product where (id > 1)
+// select id, name
+// from product where (id > 1)
 ```
 
 Соглашение применяется только к именам, производным от имени типа/свойства CLR. Имя, объявленное через
@@ -303,9 +304,12 @@ var rows = await dataContext.From<ISimpleEntity>()
     .Select(e => new { e.Id })
     .ToListAsync();
 
-// select "id" from "simple_entity" where ("id" > 1)     (PostgreSQL, SQLite)
-// select [id] from [simple_entity] where ([id] > 1)     (SQL Server)
-// select `id` from `simple_entity` where (`id` > 1)     (MySQL, MariaDB, ClickHouse)
+// select "id"
+// from "simple_entity" where ("id" > 1)     (PostgreSQL, SQLite)
+// select [id]
+// from [simple_entity] where ([id] > 1)     (SQL Server)
+// select `id`
+// from `simple_entity` where (`id` > 1)     (MySQL, MariaDB, ClickHouse)
 ```
 
 Каждый провайдер использует свой разделитель и удваивает внутренний (`"a""b"`, `[a]]b]`, `` `a``b` ``).

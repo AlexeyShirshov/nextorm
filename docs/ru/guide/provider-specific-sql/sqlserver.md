@@ -90,7 +90,7 @@ var rows = dataContext.From<IXmlEntity>()
 ```sql
 select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value],
        payload.exist('/root/item[2]') as [Exists]
-from xml_entity
+ from xml_entity
 ```
 
 Строковый метод `.nodes` — коррелированный источник `CrossApply`/`OuterApply`: `xml_nodes(xml, xpath)`
@@ -107,7 +107,7 @@ var rows = dataContext.From<IXmlEntity>()
 
 ```sql
 select t2.value.value('(.)[1]/@id', 'int') as [Id]
-from xml_entity as [t1]
+ from xml_entity as [t1]
  cross apply t1.payload.nodes('/root/item') as [t2](value)
 ```
 
@@ -200,11 +200,9 @@ var byQuarter = ctx.From(orderMargins)
 
 ```sql
 select CategoryName, [1], [4]
-from (select name as [CategoryName], datepart(quarter, OrderDate) as [QuarterNum],
+ from (select name as [CategoryName], datepart(quarter, OrderDate) as [QuarterNum],
              (LineTotal - StandardCost * OrderQty) as [Margin]
-     
  from sales_order_detail
-     
  join sales_order_header on sales_order_detail.OrderId = sales_order_header.OrderId
       where datepart(year, OrderDate) = 2013) as [t1]
 pivot (sum([Margin]) for [QuarterNum] in ([1], [2], [3], [4])) as [t2]
@@ -320,7 +318,7 @@ select patindex('%a%', somestring) as [Pos],
        json_array('a', id, 'b') as [Arr],
        json_object('id' : id) as [Obj],
        cast(case when json_path_exists(somestring, '$.id') = 1 then 1 else 0 end as bit) as [HasId]
-from complex_entity
+ from complex_entity
 ```
 
 * **Строковые:** `patindex(pattern, expression)`, `quotename(value)` / `quotename(value, quote)`,

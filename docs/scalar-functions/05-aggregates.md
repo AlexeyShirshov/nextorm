@@ -59,7 +59,7 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (where (b = true)) as "Total"
-from complex_entity group by nullableint
+ from complex_entity group by nullableint
 ```
 
 On ClickHouse the same query renders `toInt32(countIf((id > 10)))` and `sumIf(id, (b = true))`.

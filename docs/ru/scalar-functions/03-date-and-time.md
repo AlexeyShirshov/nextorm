@@ -13,7 +13,8 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQLite
-select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as integer) as 'Month', cast(strftime('%d', dt) as integer) as 'Day' from complex_entity where (id = 1)
+select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as integer) as 'Month', cast(strftime('%d', dt) as integer) as 'Day'
+ from complex_entity where (id = 1)
 ```
 
 ```sql
@@ -171,7 +172,7 @@ var rows = dataContext.From<IComplexEntity>()
 ```sql
 -- PostgreSQL
 select id, ('Total: '||to_char(m, 'FM9999999999999990.' || repeat('0', 2))) as total, to_char(dt, 'YYYY-MM') as month
-from complex_entity
+ from complex_entity
 ```
 
 | C# | PostgreSQL | SQL Server | MySQL/MariaDB | SQLite | ClickHouse |
@@ -309,7 +310,7 @@ var rows = dataContext.From<IComplexEntity>()
 select sysdatetime() as [Now], sysdatetimeoffset() as [NowOffset], sysutcdatetime() as [UtcNow],
        switchoffset(sysdatetimeoffset(), '-08:00') as [Switched], todatetimeoffset(dt, 120) as [Offset],
        timefromparts(1, 2, 3, 4, 7) as [Time], datetime2fromparts(2020, 1, 2, 3, 4, 5, 6, 3) as [Stamp]
-from complex_entity
+ from complex_entity
 ```
 
 | C# | SQL |

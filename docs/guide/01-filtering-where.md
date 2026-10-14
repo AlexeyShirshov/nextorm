@@ -42,7 +42,8 @@ var rows = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity where (id >= 9)
+select id
+ from simple_entity where (id >= 9)
 ```
 
 ## Null handling
@@ -57,7 +58,8 @@ var rows = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where somestring is null
+select id
+ from complex_entity where somestring is null
 ```
 
 `!= null` emits `is not null`. The rewrite is driven by the comparison operand being the `null`
@@ -76,7 +78,8 @@ var rows = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where (b = 1 and (id > 1))
+select id
+ from complex_entity where (b = 1 and (id > 1))
 ```
 
 On PostgreSQL the boolean literal is `true` (`b = true`); on SQLite and SQL Server it is `1`
@@ -94,7 +97,8 @@ var ids = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where not (b)
+select id
+ from complex_entity where not (b)
 ```
 
 The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -111,7 +115,8 @@ Output:
 ```
 
 ```sql
-select id from complex_entity where not ((b and (id > 1)))
+select id
+ from complex_entity where not ((b and (id > 1)))
 ```
 
 When a negation is projected rather than filtered, SQL Server has to materialise it as a `bit` value
@@ -130,7 +135,8 @@ var rows = await dataContext.From("simple_entity")
 ```
 
 ```sql
-select id from simple_entity where (id + 2) = 1
+select id
+ from simple_entity where (id + 2) = 1
 ```
 
 Unary minus is `-(x)` and the ones-complement is `~(x)`. Integral bitwise operators map as follows:
@@ -151,7 +157,8 @@ var rows = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity where (id & 1) = 1
+select id
+ from simple_entity where (id & 1) = 1
 ```
 
 > The shift operators are emitted literally. SQLite and PostgreSQL accept `<<` / `>>`; T-SQL does
@@ -197,7 +204,8 @@ var count = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select count(*) from complex_entity where case when nullableint is null then 0 else nullableint end = 1
+select count(*)
+ from complex_entity where case when nullableint is null then 0 else nullableint end = 1
 ```
 
 A C# `switch` expression over constant patterns becomes a searched `CASE`:
@@ -246,7 +254,8 @@ var rows = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select id from simple_entity where id = $norm_p0
+select id
+ from simple_entity where id = $norm_p0
 ```
 
 Runtime parameters are named `norm_p{index}`; the value `42` is bound to `norm_p0` by the terminal.
@@ -272,7 +281,10 @@ var rows = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select t1.id from simple_entity as 't1' join (select id from complex_entity where nullableint = $v) as 't2' on cast(t1.id as bigint) = t2.id where (t1.id != $v or t2.id != cast($v as bigint))
+select t1.id
+ from simple_entity as 't1'
+ join (select id
+ from complex_entity where nullableint = $v) as 't2' on cast(t1.id as bigint) = t2.id where (t1.id != $v or t2.id != cast($v as bigint))
 ```
 
 The three references to `v` — in the subquery and twice in `WHERE` — yield one `$v` parameter, bound
@@ -295,7 +307,8 @@ var ids = await dataContext.From<ComplexEntity>()
 
 ```sql
 -- SQLite
-select id from complex_entity where id in ($p0, $p1, $p2)
+select id
+ from complex_entity where id in ($p0, $p1, $p2)
 ```
 
 Output:
@@ -316,7 +329,8 @@ var ids = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where id in ($p0, $p1)
+select id
+ from complex_entity where id in ($p0, $p1)
 ```
 
 Output:
@@ -355,7 +369,8 @@ var ids = dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where global in (@p0, @p1)
+select id
+ from complex_entity where global in (@p0, @p1)
 ```
 
 Negate it with C# `!` to render `GLOBAL NOT IN`. The predicate requires

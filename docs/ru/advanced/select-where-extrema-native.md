@@ -51,31 +51,36 @@ var perTeam = dataContext.From<Player>()
 ```sql
 -- PostgreSQL, глобально (SelectWhereMax): внутренний ORDER BY ... LIMIT 1
 select t1.id, t1.score, t1.team_id as "TeamId", t1.name
-from (select * from players
+ from (select *
+ from players
  where score is not null order by "score" desc limit 1) as "t1"
 
 -- PostgreSQL, по группам (SelectWhereMin по new { TeamId }): DISTINCT ON по колонкам группы
 select t1.id, t1.score, t1.team_id as "TeamId", t1.name
-from (select distinct on ("team_id") * from (select * from players
+ from (select distinct on ("team_id") *
+ from (select *
+ from players
  where score is not null) __nextorm_extreme order by "team_id", "score") as "t1"
 ```
 
 ```sql
 -- ClickHouse, глобально (SelectWhereMax): один агрегат argMax над кортежем payload
 select t1.id, t1.score, t1.team_id as `TeamId`, t1.name
-from (select tupleElement(`__nextorm_extreme_tuple`, 1) as `id`, tupleElement(`__nextorm_extreme_tuple`, 2) as `score`, tupleElement(`__nextorm_extreme_tuple`, 3) as `team_id`, tupleElement(`__nextorm_extreme_tuple`, 4) as `name`
-from (
+ from (select tupleElement(`__nextorm_extreme_tuple`, 1) as `id`, tupleElement(`__nextorm_extreme_tuple`, 2) as `score`, tupleElement(`__nextorm_extreme_tuple`, 3) as `team_id`, tupleElement(`__nextorm_extreme_tuple`, 4) as `name`
+ from (
  select argMax(tuple(`id`, `score`, `team_id`, `name`), `score`) as `__nextorm_extreme_tuple`
- from (select * from players
+ from (select *
+ from players
  where score is not null) as `__nextorm_extreme_src`
  having count() > 0)) as `t1`
 
 -- ClickHouse, по группам (SelectWhereMin по new { TeamId }): агрегат рядом с колонками группы и GROUP BY
 select t1.id, t1.score, t1.team_id as `TeamId`, t1.name
-from (select `team_id`, tupleElement(`__nextorm_extreme_tuple`, 1) as `id`, tupleElement(`__nextorm_extreme_tuple`, 2) as `score`, tupleElement(`__nextorm_extreme_tuple`, 4) as `name`
-from (
+ from (select `team_id`, tupleElement(`__nextorm_extreme_tuple`, 1) as `id`, tupleElement(`__nextorm_extreme_tuple`, 2) as `score`, tupleElement(`__nextorm_extreme_tuple`, 4) as `name`
+ from (
  select `team_id`, argMin(tuple(`id`, `score`, `team_id`, `name`), `score`) as `__nextorm_extreme_tuple`
- from (select * from players
+ from (select *
+ from players
  where score is not null) as `__nextorm_extreme_src`
  group by `team_id`)) as `t1`
 ```

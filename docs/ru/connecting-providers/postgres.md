@@ -130,8 +130,10 @@ ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // offset 10
 ```
 
 ```sql
-select id from simple_entity limit 5 offset 10
-select id from simple_entity offset 10
+select id
+ from simple_entity limit 5 offset 10
+select id
+ from simple_entity offset 10
 ```
 
 `OFFSET` может появляться сам по себе, но `LIMIT` должен идти первым, когда присутствуют оба. Поскольку PostgreSQL
@@ -150,7 +152,7 @@ var query = ctx.From<IComplexEntity>()
 
 ```sql
 select coalesce(somestring, '') as "Fallback", extract(year from dt) as "Year"
-from complex_entity
+ from complex_entity
 ```
 
 ```csharp
@@ -177,7 +179,8 @@ ctx.From<IComplexEntity>().Where(e => e.Id == SqlFunctions.Postgres.any(SqlFunct
 ```
 
 ```sql
-select id from complex_entity where (id = any(@p0))
+select id
+ from complex_entity where (id = any(@p0))
 ```
 
 Функции для массивов (`cardinality`, `array_length`, `array_position`, ...) и операторы `@>`/`&&`
@@ -321,8 +324,8 @@ PostgreSQL также поддерживает многоколоночный т
 
 ```sql
 select t1.value, t2.somestring as "String"
-from all_rows() as "t1"
-join complex_entity as "t2" on t1.id = t2.id
+ from all_rows() as "t1"
+ join complex_entity as "t2" on t1.id = t2.id
 ```
 
 ## Различия провайдеров

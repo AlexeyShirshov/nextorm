@@ -44,7 +44,8 @@ var rows = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity where (id >= 9)
+select id
+ from simple_entity where (id >= 9)
 ```
 
 ## Обработка null
@@ -59,7 +60,8 @@ var rows = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where somestring is null
+select id
+ from complex_entity where somestring is null
 ```
 
 `!= null` генерирует `is not null`. Эта перезапись управляется тем, что операндом сравнения является
@@ -78,7 +80,8 @@ var rows = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where (b = 1 and (id > 1))
+select id
+ from complex_entity where (b = 1 and (id > 1))
 ```
 
 В PostgreSQL логический литерал - это `true` (`b = true`); в SQLite и SQL Server - `1`
@@ -96,7 +99,8 @@ var ids = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where not (b)
+select id
+ from complex_entity where not (b)
 ```
 
 Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -113,7 +117,8 @@ select id from complex_entity where not (b)
 ```
 
 ```sql
-select id from complex_entity where not ((b and (id > 1)))
+select id
+ from complex_entity where not ((b and (id > 1)))
 ```
 
 Когда отрицание проецируется, а не используется в фильтре, SQL Server вынужден материализовать его как
@@ -132,7 +137,8 @@ var rows = await dataContext.From("simple_entity")
 ```
 
 ```sql
-select id from simple_entity where (id + 2) = 1
+select id
+ from simple_entity where (id + 2) = 1
 ```
 
 Унарный минус - это `-(x)`, а дополнение до единицы - `~(x)`. Целочисленные побитовые операторы
@@ -154,7 +160,8 @@ var rows = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity where (id & 1) = 1
+select id
+ from simple_entity where (id & 1) = 1
 ```
 
 > Операторы сдвига генерируются буквально. SQLite и PostgreSQL принимают `<<` / `>>`; T-SQL -
@@ -200,7 +207,8 @@ var count = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select count(*) from complex_entity where case when nullableint is null then 0 else nullableint end = 1
+select count(*)
+ from complex_entity where case when nullableint is null then 0 else nullableint end = 1
 ```
 
 Выражение C# `switch` по константным шаблонам превращается в поисковый `CASE`:
@@ -251,7 +259,8 @@ var rows = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select id from simple_entity where id = $norm_p0
+select id
+ from simple_entity where id = $norm_p0
 ```
 
 Параметры времени выполнения именуются `norm_p{index}`; значение `42` привязывается к `norm_p0`
@@ -278,7 +287,10 @@ var rows = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select t1.id from simple_entity as 't1' join (select id from complex_entity where nullableint = $v) as 't2' on cast(t1.id as bigint) = t2.id where (t1.id != $v or t2.id != cast($v as bigint))
+select t1.id
+ from simple_entity as 't1'
+ join (select id
+ from complex_entity where nullableint = $v) as 't2' on cast(t1.id as bigint) = t2.id where (t1.id != $v or t2.id != cast($v as bigint))
 ```
 
 Три обращения к `v` — в подзапросе и дважды в `WHERE` — дают один параметр `$v`, связанный один раз.
@@ -300,7 +312,8 @@ var ids = await dataContext.From<ComplexEntity>()
 
 ```sql
 -- SQLite
-select id from complex_entity where id in ($p0, $p1, $p2)
+select id
+ from complex_entity where id in ($p0, $p1, $p2)
 ```
 
 Вывод:
@@ -321,7 +334,8 @@ var ids = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where id in ($p0, $p1)
+select id
+ from complex_entity where id in ($p0, $p1)
 ```
 
 Вывод:
@@ -360,7 +374,8 @@ var ids = dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where global in (@p0, @p1)
+select id
+ from complex_entity where global in (@p0, @p1)
 ```
 
 Отрицание через `!` в C# даёт `GLOBAL NOT IN`. Предикат требует

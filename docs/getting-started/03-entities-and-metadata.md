@@ -182,7 +182,8 @@ var rows = await dataContext.From<Product>()
     .Select(p => new { p.Id, p.Name })
     .ToListAsync();
 
-// select id, name from product where (id > 1)
+// select id, name
+// from product where (id > 1)
 ```
 
 The convention applies only to names derived from the CLR type/property name. A name declared with
@@ -321,9 +322,12 @@ var rows = await dataContext.From<ISimpleEntity>()
     .Select(e => new { e.Id })
     .ToListAsync();
 
-// select "id" from "simple_entity" where ("id" > 1)     (PostgreSQL, SQLite)
-// select [id] from [simple_entity] where ([id] > 1)     (SQL Server)
-// select `id` from `simple_entity` where (`id` > 1)     (MySQL, MariaDB, ClickHouse)
+// select "id"
+// from "simple_entity" where ("id" > 1)     (PostgreSQL, SQLite)
+// select [id]
+// from [simple_entity] where ([id] > 1)     (SQL Server)
+// select `id`
+// from `simple_entity` where (`id` > 1)     (MySQL, MariaDB, ClickHouse)
 ```
 
 Each provider uses its own delimiter and doubles an embedded one (`"a""b"`, `[a]]b]`, `` `a``b` ``).

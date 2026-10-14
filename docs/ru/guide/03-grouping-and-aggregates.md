@@ -53,7 +53,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select nullableint as 'Int', count(*) from complex_entity group by nullableint
+select nullableint as 'Int', count(*)
+ from complex_entity group by nullableint
 ```
 
 Для одной группирующей колонки анонимная обёртка необязательна: можно передать скалярное выражение
@@ -89,7 +90,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select nullableint as 'Int', count(*) from complex_entity group by nullableint having (count(*) > 1)
+select nullableint as 'Int', count(*)
+ from complex_entity group by nullableint having (count(*) > 1)
 ```
 
 Вывод:
@@ -131,7 +133,8 @@ var first = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select nullableint as 'Int', count(*) from complex_entity group by nullableint order by 2 limit 1
+select nullableint as 'Int', count(*)
+ from complex_entity group by nullableint order by 2 limit 1
 ```
 
 Вывод:
@@ -173,9 +176,11 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQL Server / PostgreSQL / SQLite
-select nullableint as 'Int', b as 'Boolean', count(*) from complex_entity group by rollup (nullableint, b)
+select nullableint as 'Int', b as 'Boolean', count(*)
+ from complex_entity group by rollup (nullableint, b)
 -- MySQL / MariaDB / ClickHouse
-select nullableint as 'Int', b as 'Boolean', count(*) from complex_entity group by nullableint, b with rollup
+select nullableint as 'Int', b as 'Boolean', count(*)
+ from complex_entity group by nullableint, b with rollup
 ```
 
 `ROLLUP` доступен на всех SQL-провайдерах; `CUBE` недоступен в MySQL/MariaDB. Провайдер in-memory не
@@ -204,7 +209,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select nullableint as 'Int', b as 'Boolean', count(*) from complex_entity group by grouping sets ((nullableint, b), (nullableint), ())
+select nullableint as 'Int', b as 'Boolean', count(*)
+ from complex_entity group by grouping sets ((nullableint, b), (nullableint), ())
 ```
 
 Grouping sets доступны в SQL Server, PostgreSQL, SQLite и ClickHouse
@@ -226,7 +232,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select distinct on (somestring) id, somestring from complex_entity order by somestring
+select distinct on (somestring) id, somestring
+ from complex_entity order by somestring
 ```
 
 Ключом может быть анонимный тип — тогда ключ составляется из нескольких колонок; ведущие выражения
@@ -549,7 +556,7 @@ var funnel = dataContext.From<IEventEntity>()
 select toInt32(windowFunnel(600)(ts, (event = 1), (event = 2))) as `Level`,
        toInt32(sequenceMatch('(?1).*(?2)')(ts, (event = 1), (event = 2))) as `Matched`,
        arrayStringConcat(retention((event = 1), (event = 2)), ',') as `Mask`
-from event_entity
+ from event_entity
 ```
 
 ## Агрегаты с FILTER
@@ -577,7 +584,7 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (where (b = true)) as "Total"
-from complex_entity group by nullableint
+ from complex_entity group by nullableint
 ```
 
 Тот же запрос в ClickHouse генерирует комбинатор `-If`:
@@ -585,7 +592,7 @@ from complex_entity group by nullableint
 ```sql
 -- ClickHouse
 select nullableint, toInt32(countIf((id > 10))) as `Big`, sumIf(id, (b = true)) as `Total`
-from complex_entity group by nullableint
+ from complex_entity group by nullableint
 ```
 
 Фильтр принимают `count`/`count_big`/`min`/`max`/`avg`/`sum` и `string_agg`. В ClickHouse `string_agg`

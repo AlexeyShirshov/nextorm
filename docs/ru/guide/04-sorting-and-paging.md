@@ -33,7 +33,8 @@ var last = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select id from simple_entity order by id desc limit 1
+select id
+ from simple_entity order by id desc limit 1
 ```
 
 Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -55,7 +56,8 @@ var rows = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity order by nullableint, id desc
+select id
+ from complex_entity order by nullableint, id desc
 ```
 
 Ключи генерируются в порядке выполнения вызовов и разделяются запятыми.
@@ -74,7 +76,8 @@ var last = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select id from simple_entity order by 1 desc limit 1
+select id
+ from simple_entity order by 1 desc limit 1
 ```
 
 Вывод:
@@ -104,7 +107,8 @@ var rows = await dataContext.From<ComplexEntity>()
 
 ```sql
 -- SQLite
-select nullableint as 'Int', count(*) as 'Count' from complex_entity
+select nullableint as 'Int', count(*) as 'Count'
+ from complex_entity
  group by nullableint
  order by count(*) desc
 limit 10 offset 0
@@ -150,7 +154,8 @@ var page = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select id from simple_entity limit 1 offset 1
+select id
+ from simple_entity limit 1 offset 1
 ```
 
 Вывод:
@@ -212,7 +217,8 @@ var rows = await dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, nullableint from complex_entity order by id limit 2 by nullableint
+select id, nullableint
+ from complex_entity order by id limit 2 by nullableint
 ```
 
 Поддерживается только ClickHouse; остальные SQL-провайдеры и контекст in-memory бросают
@@ -235,12 +241,14 @@ var rows = await dataContext.From<IComplexEntity>()
 
 ```sql
 -- PostgreSQL
-select id, nullableint from complex_entity order by nullableint fetch first 3 rows with ties
+select id, nullableint
+ from complex_entity order by nullableint fetch first 3 rows with ties
 ```
 
 ```sql
 -- SQL Server (без offset): TOP(n) WITH TIES
-select top(3) with ties id, nullableint from complex_entity order by nullableint
+select top(3) with ties id, nullableint
+ from complex_entity order by nullableint
 ```
 
 `WITH TIES` поддерживают только PostgreSQL и SQL Server; остальные SQL-провайдеры и in-memory
@@ -267,7 +275,8 @@ var first = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select id from simple_entity order by id limit 1
+select id
+ from simple_entity order by id limit 1
 ```
 
 Вывод:
@@ -285,7 +294,8 @@ var only = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select id from simple_entity where id = 2 limit 2
+select id
+ from simple_entity where id = 2 limit 2
 ```
 
 Вывод:
@@ -317,7 +327,8 @@ var exists = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select exists(select * from simple_entity where id = 100)
+select exists(select *
+ from simple_entity where id = 100)
 ```
 
 В SQL Server нет логического скаляра, поэтому он генерирует тот же предикат как

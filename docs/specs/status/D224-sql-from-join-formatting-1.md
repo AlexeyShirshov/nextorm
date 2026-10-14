@@ -7,10 +7,10 @@ collection: docs/specs/status/collection-1.0.9-todo.md
 group: G1
 cycle: 1
 plan_revision: 1
-plan_state: ready
+plan_state: done
 evidence_contract: rv1
-status: planned
-phase: PLAN
+status: done
+phase: ACT / EXIT
 created: 2026-10-13
 ---
 
@@ -107,7 +107,10 @@ SOLID/DRY: preserve writer/dialect responsibilities, reuse existing casing. Type
 - 2026-10-14T21:25Z | DO | revision r=1 | iteration 1/3 | D1 inventory + scoped runner: SQL/LF emitter inventory resolved with Roslyn; scope.json (11 projects / 101 selectors / 117 files) validated by `validate_inner_loop.py brief`; run-evidence.sh modes sql/baselines/integration/coverage/docs/audit. | artifacts/pdca/D224/rv1/{scope.json,run-evidence.sh}
 - 2026-10-14T21:25Z | DO | revision r=1 | iteration 1/3 | D2 product: SqlText.NewLine replaces library AppendLine at SqlBuilder/SqlMutationBuilder and provider WrapTableFunction/SqlServerDialect; LF-only, no indent layer, raw sources/literals untouched. | src/nextorm.core/DataContext/SqlText.cs
 - 2026-10-14T21:25Z | DO | revision r=1 | iteration 1/3 | D3 goldens + restoration: 11/11 projects green (2529/1747/976/895/454/336/733/31/126/10/147, 0 failed); opaque raw inputs (ExecuteRaw/WithSql/WithTableExpression/RenderQueryHints/MapperCacheKey) restored verbatim after a mechanical over-rewrite; the KeywordCase literal-preservation guard restored; integration expectations (MariaDB dynamic star, SQL Server OUTPUT INTO) corrected. | artifacts/pdca/D224/rv1/E02-summary.txt
-- 2026-10-14T21:25Z | DO | revision r=1 | iteration 1/3 | D4 docs EN+RU: unconditional FROM/JOIN-on-a-new-line layout note added to limitations; every generated-SQL sample under docs/**+docs/ru/** updated (raw fragments and compacted illustrations preserved); 23-sql-batch clarifies UseMultilineBatchSql is statement separation, not clause layout; no public link to specs. | docs/advanced/limitations.md
+- 2026-10-14T21:25Z | DO | revision r=1 | iteration 1/3 | D4 docs EN+RU: unconditional FROM/JOIN-on-a-new-line layout note added to limitations; every generated-SQL sample under docs/**+docs/ru/** updated (raw/opaque fragments and `extract(... from ...)`/DML/dialect forms preserved; compacted illustrations were NOT preserved — normalised in the CHECK-gather round: 34 EN + 34 RU pages); 23-sql-batch clarifies UseMultilineBatchSql is statement separation, not clause layout; no public link to specs. | docs/advanced/limitations.md
 - 2026-10-14T21:25Z | DO | revision r=1 | iteration 1/3 | D5 boundary evidence: build 0W/0E; solution sweep 11888 total/0 failed; integration 3904 total/0 failed with every provider executed (SQLite/PostgreSQL/SQL Server/MySQL/ClickHouse + MariaDB container case); D160 eight pairs re-signed (SHA-256 sidecars consistent) and invariant 3/3; coverage + manifest + evidence.json written. | artifacts/pdca/D224/rv1/manifest.json
 - 2026-10-14T21:25Z | DO-complete / awaiting CHECK | revision r=1 | iteration 1/3 | DO closed at the boundary; CHECK not started. E07 (Roslyn emitter inventory + reviewed diff) is a CHECK-owned placeholder left `open`. | docs/specs/status/D224-sql-from-join-formatting-1.md
 - Notice: todowrite mirror unavailable in lane session (no todowrite tool).
+- 2026-10-14T16:56Z | CHECK-gather | revision r=1 | iteration 1/3 | D4 follow-up: 34 EN + 34 RU public pages re-normalised so every generated-SELECT ```sql block puts FROM/JOIN on its own line; transformer idempotent (`rewrite_docs_sql.py --dry-run` → `0 insertion(s) in 0 file(s)`); known miss docs/guide/04-sorting-and-paging.md:106-112 fixed (+RU); residual preserved = 18 raw-mirror fragments + `extract(... from ...)` function syntax + 2 08-cte prose lines. | artifacts/pdca/D224/rv1/E06-docs.md
+- 2026-10-14T17:20Z | CHECK | revision r=1 | iteration 1/3 | CHECK PASS (independent verdict): R1–R7 all met; E01–E07 all met/closed; no defect key opened, no CHECK FAIL and no loop-back (first attempt); suppression scan 0/692 added lines; `src`/`tests` unchanged since HEAD `4e6aabde7d7513e4bfab0232c4bdf0bbba10443`. Evidence pointer `artifacts/pdca/D224/rv1/` (manifest.json E01..E07 all `met`; validators exit 0). | artifacts/pdca/D224/rv1/manifest.json
+- 2026-10-14T17:20Z | ACT / EXIT | revision r=1 | iteration 1/3 | Task accepted `done` (r=1 / rv=1 / n=1). DO commit `4e6a2abd` (`#224 SQL formatting: unconditional LF before FROM/JOIN`); product/tests unchanged by ACT. ACT commit stages `#224`: the CHECK-gather docs normalisation union (34 EN + 34 RU public pages per `E06-docs.md`; `.md` only, no SVG/diagrams), this status file, `docs/specs/status/collection-1.0.9-todo.md`, and `artifacts/pdca/D224/rv1/**` (excluding `__pycache__/**`). Collection lane G1 updated: T224 `done`; next pending = T225 (not started). Tracking issue #224 closed via `gh` in this ACT step. | artifacts/pdca/D224/rv1/E06-docs.md

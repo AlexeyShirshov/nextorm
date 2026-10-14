@@ -502,7 +502,7 @@ var rows = dataContext
 
 ```sql
 select id as `Id`, value as `Value`, name as `Name`
-from (select toInt64(id) as id, value, name
+ from (select toInt64(id) as id, value, name
  from generateRandom('id UInt64, value Float64, name String')) as `t1`
 limit 3
 ```

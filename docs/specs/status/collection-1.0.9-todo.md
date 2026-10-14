@@ -28,7 +28,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 
 | id | tasks (order) | worktree | branch/ref | status |
 |---|---|---|---|---|
-| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 → T225 → T201 (perf) → T53 (freeze, held) | no (single group) | current branch `1.0.9-rc3` | in-progress (fail-stop lifted — T217 done-with-caveat #234, T218 done-with-caveat #235) |
+| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 → T201 (perf) → T53 (freeze, held) | no (single group) | current branch `1.0.9-rc3` | in-progress (T224 done — CHECK PASS r=1/rv=1/n=1, R1–R7 met; fail-stop lifted — T217 done-with-caveat #234, T218 done-with-caveat #235) |
 
 Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/docs force one writer). T224 (SQL-format blast radius, ~697 exact-string asserts) sits late, after all functional changes; T225 (docs-only) after T223+T224; T201 (perf) measures the final composition; T53 held last. Addendum contract `cluster-1`/`cluster-2`; task contracts unchanged.
 
@@ -50,7 +50,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T218 | #218 | G1 | 12 | done-with-caveat | done (r=1) — E07/E08/E10 → #235; product `22b96233` | pdca-dotnet | N=1 | r=1 | 60d881b4 | docs/specs/status/D218-sqlserver-sequences-1.md |
 | T219 | #219 | G1 | 13 | done | done (r=1, rv=1, n=1/3) — CHECK PASS r=1/rv=1; E219-01..09 all met; product `b5f8b360` | pdca-dotnet | N=1 | r=1 | 4bfa5403 | docs/specs/status/D219-session-identity-functions-1.md |
 | T226 | #226 | G1 | 14 | done | done (r=2, rv=2, n=2/3) — CHECK PASS; 11/11 rows met | pdca-dotnet | N=1 | r=2 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
-| T224 | #224 | G1 | 15 | pending | ready | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
+| T224 | #224 | G1 | 15 | done | done (r=1, rv=1, n=1) — CHECK PASS r=1/rv=1; R1–R7 met; DO `4e6a2abd` | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
 | T225 | #225 | G1 | 16 | pending | ready | pdca-dotnet | N=1 | r=2 | 63bdb84f | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
 | T201 | #201 | G1 | 17 (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
 | T53  | #53  | G1 | 18 (held) | held | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
@@ -101,7 +101,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Blocker: **none** — lane G1 moved on; **T219 (#219) done** (CHECK PASS r=1/rv=1/n=1/3; no fail-stop, no escalation). (Prior history: T218 CHECK/escalate in-cycle STOP → owner accepted `done-with-caveat`, E07/E08/E10 → #235; earlier T217 terminal `incomplete` `D217-EVIDENCE-BINDING` → owner accepted `done-with-caveat` → #234.)
 - Defect id / history: `D217-EVIDENCE-BINDING` — r=2/n=3 → r=3/n=1 → r=4/n=1 → r=5/n=1, each a CHECK FAIL at the evidence gate (evidence-only regeneration / hash replacement); terminal `incomplete`.
 - Corrective-task status file: — (none created; the remedy is an **outside-T217** proposal, a human decision)
-- Next allowed step: resume lane G1 with **T224 (#224) DO** → T225 → T201 → T53 (held). **T226 (#226) done** (r=2, rv=2, n=2/3, CHECK PASS, 11/11 rows met; issue #226 left OPEN — closure owned by the collection owner). **T219 done** (CHECK PASS r=1/rv=1/n=1/3; no fail-stop, issue left OPEN with deferred triggers). Owner accepted T218 as `done-with-caveat` (E07/E08/E10 → **#235**); fail-stop G1 lifted. T217 accepted done-with-caveat (evidence-provenance → **#234**). T216's R-03/MariaDB constraint stays recorded (#216 OPEN).
+- Next allowed step: resume lane G1 with **T225 (#225) DO** → T201 → T53 (held). **T224 (#224) done** (r=1, rv=1, n=1, CHECK PASS r=1/rv=1; R1–R7 met, E01–E07 met/closed; DO `4e6a2abd`; issue #224 closed; status `docs/specs/status/D224-sql-from-join-formatting-1.md`; T225 NOT started). **T226 (#226) done** (r=2, rv=2, n=2/3, CHECK PASS, 11/11 rows met; issue #226 left OPEN — closure owned by the collection owner). **T219 done** (CHECK PASS r=1/rv=1/n=1/3; no fail-stop, issue left OPEN with deferred triggers). Owner accepted T218 as `done-with-caveat` (E07/E08/E10 → **#235**); fail-stop G1 lifted. T217 accepted done-with-caveat (evidence-provenance → **#234**). T216's R-03/MariaDB constraint stays recorded (#216 OPEN).
 
 ## Done / Verified / Incomplete
 
@@ -134,3 +134,10 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Lane update: **T226 done** (revision r=2, evidence contract rv=2, iteration n=2/3, CHECK PASS, 11/11 required rows met incl. E226-09-BATCH-ROWS and E226-09-N6); the G1 lane row is annotated accordingly and **G1 itself stays `in-progress`** (next task **T224**). The collection is NOT done and G1 is NOT done.
 - Done: T226 (#226) — `ProcedureResult.RecordsAffected` / `BatchResult.RecordsAffected` captured at reader release and exposed get-only; literal returned-row mutation obligation satisfied; fail-closed mutation verifier with six negative controls; provenance erratum; T53 freeze stays HELD with both members registered (tag `#226`).
 - Verified: T226 (#226) — manifest 11/11 `met` (validator exit 0), evidence report validator exit 0, audit `audit_miss=0`, seven-step seal ledger exit 0 each (`artifacts/pdca/D226/rv2/validation-ledger.{log,json}`), bound report sha256 `bc0d0a38103a2f51ad99c6a99da0546f8ec87415a0818c8956c5099d77b720b5`, coverage line 88.7 % / branch 80.8 %, five providers executed with 0 skips (ClickHouse 5/5), rv1 `sha256sum -c rv1-frozen.sha256` exit 0 (48/48), production bytes unchanged (`cf030526…`, `a166586f…`, `9e5a15b1…`, `9bf20094…`).
+
+
+## T224 (#224) — Done / Verified (appended)
+
+- Lane update: **T224 done** (revision r=1, evidence contract rv=1, iteration n=1/3, CHECK PASS, R1–R7 met and E01–E07 met/closed); the G1 lane row is annotated accordingly and **G1 itself stays `in-progress`** (next task **T225**, not started). The collection is NOT done and G1 is NOT done.
+- Done: T224 (#224) — SQL formatting: unconditional LF before `FROM`/`JOIN` (default layout, no opt-in flag, no nesting indentation layer); library `AppendLine()`/platform newlines replaced by explicit `'\n'` across the SQL emitters (`SqlText.NewLine`), opaque raw/literal SQL contents and the parameter-only path untouched. DO commit `4e6a2abd`; issue #224 closed.
+- Verified: T224 (#224) — build 0/0; 11/11 affected projects exit 0 (solution sweep 11888 total / 0 failed); D160 eight byte-exact baselines re-signed + positional invariant 3/3; integration 3904 total / 0 failed with SQLite/PostgreSQL/SQL Server/MySQL/ClickHouse and the MariaDB container case executed; coverage line 87.3 % / branch 79.9 % (>=85/75); manifest `artifacts/pdca/D224/rv1/manifest.json` E01..E07 all `met`, validators exit 0; public-docs normalisation idempotent (34 EN + 34 RU pages), suppression scan 0/692 added lines; `src`/`tests` unchanged since HEAD `4e6aabde`.

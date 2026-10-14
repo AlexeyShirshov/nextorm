@@ -113,7 +113,8 @@ var firstPage = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQLite / PostgreSQL: the distinct result is paged
-select distinct b as 'Boolean' from complex_entity limit 1
+select distinct b as 'Boolean'
+ from complex_entity limit 1
 ```
 
 ```sql
@@ -184,7 +185,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select distinct on (somestring) id, somestring from complex_entity order by somestring
+select distinct on (somestring) id, somestring
+ from complex_entity order by somestring
 ```
 
 The key may be an anonymous type to key on several columns. Only PostgreSQL implements `DISTINCT ON`;
@@ -216,12 +218,14 @@ var perGroup = dataContext.From<ExtremaEntity>()
 -- PostgreSQL
 -- global: an eligible integral key renders the native ORDER BY ... LIMIT 1
 select t1.id, t1.score, t1.category, t1.label
-from (select * from extrema_entity
+ from (select *
+ from extrema_entity
  where score is not null order by "score" desc limit 1) as "t1"
 
 -- per group: a string group key is not native-eligible, so the portable window lowering is kept
 select t1.id, t1.score, t1.category, t1.label
-from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn" from extrema_entity
+ from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn"
+ from extrema_entity
  where score is not null) as "t1"
  where t1."__nextorm_rn" = 1
 ```
@@ -245,7 +249,8 @@ var projected = dataContext.From<ExtremaEntity>()
 ```sql
 -- PostgreSQL
 select t1.id, t1.label
-from (select * from extrema_entity
+ from (select *
+ from extrema_entity
  where score is not null order by "score" desc limit 1) as "t1"
 ```
 
@@ -259,9 +264,10 @@ filtered to rank `1`, with the source condition ANDed with an `is not null` filt
 
 ```sql
 -- the portable shape: rank the source rows, then keep rank 1
-select <projection> from (
+select <projection>
+ from (
     select *, row_number() over (partition by <group> order by <value> desc) as rn
-    from <source>
+ from <source>
     where <value> is not null and <condition>
 ) t where t.rn = 1
 ```

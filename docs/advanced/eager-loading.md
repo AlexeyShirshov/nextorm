@@ -114,10 +114,12 @@ A query with at most 1000 distinct parent keys therefore issues exactly **two ro
 
 ```sql
 -- parent statement
-select id, name from order
+select id, name
+ from order
 
 -- child statement (one per chunk of at most 1000 distinct parent keys)
-select id, order_id, name from order_item where order_id in (@k0, @k1, @k2)
+select id, order_id, name
+ from order_item where order_id in (@k0, @k1, @k2)
 ```
 
 The chunk predicate is an ordinary `IN` list, so it participates in the plan cache and provider parameter binding exactly like a captured-collection `Contains`.
@@ -140,16 +142,16 @@ The builder then emits one denormalized command instead of the two statements ab
 
 ```sql
 select t1.id, t1.name, t2.id, t2.order_id, t2.name
-from order as t1
-left join order_item as t2 on t1.id = t2.order_id
+ from order as t1
+ left join order_item as t2 on t1.id = t2.order_id
 ```
 
 A child `Where` is folded into the join `ON`, so it filters the children without dropping childless parents:
 
 ```sql
 select t1.id, t1.name, t2.id, t2.order_id, t2.name
-from order as t1
-left join order_item as t2 on t1.id = t2.order_id and t2.active
+ from order as t1
+ left join order_item as t2 on t1.id = t2.order_id and t2.active
 ```
 
 - **One round trip, no key chunking.** The parent source and each declared child are joined in a single `LEFT JOIN` command. There is no `IN` list and no chunk size, so any number of parents — including more than 1000 distinct keys — is fetched by the same command, and there is no silent fallback to split.

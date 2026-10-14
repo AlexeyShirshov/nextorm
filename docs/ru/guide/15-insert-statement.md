@@ -192,8 +192,10 @@ var source = ctx
 ctx.CreateInsertBuilder<IOrder>()
     .Values(source, t => new { CustomerId = t.GetInt32("id") })
     .Insert();
-// with recent as (select id from simple_entity where (id > 1))
-// insert into "order" (customer_id) select id from recent as "t1"
+// with recent as (select id
+// from simple_entity where (id > 1))
+// insert into "order" (customer_id) select id
+// from recent as "t1"
 ```
 
 В PostgreSQL источником может быть даже модифицирующий CTE (`ctx.With(имя, insert.Returning(...))`); см.
@@ -210,7 +212,9 @@ var ids = new long[] { 1, 2, 3 };
 ctx.CreateInsertBuilder<IdRow>()
     .Values(ctx.FromTableFunction(() => SqlFunctions.Postgres.unnest(ids)), r => new { r.Value })
     .Insert();
-// insert into id_row (value) select unnest as "Value" from (select unnest from unnest(@ids)) as "t1"
+// insert into id_row (value) select unnest as "Value"
+// from (select unnest
+// from unnest(@ids)) as "t1"
 ```
 
 `unnest` и `generate_series` есть только в PostgreSQL.

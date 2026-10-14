@@ -68,7 +68,8 @@ var r = ctx.From<Reservation>().Where(x => x.Id == 1).Single();
 insert into reservation (id, during_lower, during_upper) values ($p0, $p1, $p2);
 
 -- Read
-select id, during_lower, during_upper from reservation where id = 1;
+select id, during_lower, during_upper
+ from reservation where id = 1;
 ```
 
 Неограниченная сторона записывается как SQL `NULL`: `new Range<int>(…, lowerInfinite: true)` пишет `during_lower = NULL`.

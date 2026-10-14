@@ -45,7 +45,9 @@ var rows = ctx.From<Child>()
     .Select(c => new { c.Id, ParentName = c.Parent!.Name })
     .ToList();
 
-// select c.Id, p.Name from child as c left join parent as p on c.ParentId = p.Id
+// select c.Id, p.Name
+// from child as c
+// left join parent as p on c.ParentId = p.Id
 ```
 
 The reference expansion is always a **`LEFT JOIN`** — a relationship carries no mandatory flag, and an
@@ -88,7 +90,9 @@ var rows = ctx.From<Child>()
 var present = rows[0].Parent;   // the principal entity, or
 var absent = rows[1].Parent;    // null when the foreign key dangles
 
-// select c.Id, p.Id, p.Age, p.Name from child as c left join parent as p on c.ParentId = p.Id
+// select c.Id, p.Id, p.Age, p.Name
+// from child as c
+// left join parent as p on c.ParentId = p.Id
 ```
 
 The in-memory provider resolves the entity (or `null`) from the mapped foreign/principal keys against the

@@ -90,7 +90,7 @@ var query = ctx.From<IComplexEntity>()
 
 ```sql
 select cast(strftime('%Y', dt) as integer) as 'Year', ifnull(somestring, '') as 'Fallback'
-from complex_entity
+ from complex_entity
 ```
 
 `SqlFunctions.Sql.like(column, pattern)` и `SqlFunctions.Sql.like(column, pattern, escapeChar)` отрисовывают предикат
@@ -105,8 +105,10 @@ ctx.From<IComplexEntity>().Offset(10).Select(x => x.Id);    // limit -1 offset 1
 ```
 
 ```sql
-select id from complex_entity limit 5 offset 10
-select id from complex_entity limit -1 offset 10
+select id
+ from complex_entity limit 5 offset 10
+select id
+ from complex_entity limit -1 offset 10
 ```
 
 В SQLite нет `OFFSET` без `LIMIT`, поэтому запрос только с offset выдаёт сигнальное значение `limit -1`.
@@ -180,7 +182,7 @@ var rows = ctx.From<Article>()
 ```sql
 select rowid, title, bm25("article_fts") as 'Score',
        snippet("article_fts", 1, '[', ']', '...', 8) as 'Preview'
-from article_fts
+ from article_fts
 where "article_fts" match $query
 order by rowid
 ```
@@ -197,7 +199,8 @@ var rows = ctx
 ```
 
 ```sql
-select rowid, title from "article_fts"($query) order by rowid
+select rowid, title
+ from "article_fts"($query) order by rowid
 ```
 
 У FTS3/4 нет встроенного `rank`: SQLite разрешает `rank(matchinfo(...))` через **зарегистрированную

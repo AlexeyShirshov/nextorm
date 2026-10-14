@@ -64,10 +64,12 @@ using IDataContext ctx = new SqlServerDataContext("Server=localhost;Database=app
 
 ```csharp
 ctx.From<ISimpleEntity>().Limit(5).Select(x => x.Id);
-// select top(5) id from simple_entity
+// select top(5) id
+// from simple_entity
 
 ctx.From<ISimpleEntity>().Page(5, 10).Select(x => x.Id);
-// select id from simple_entity order by (select null as anyorder)
+// select id
+// from simple_entity order by (select null as anyorder)
 // offset 10 rows
 // fetch next 5 rows only
 ```
@@ -225,8 +227,8 @@ var q = a.Select(x => x.Id).IntersectAll(b.Select(x => x.Id));
 
 ```sql
 select t1.value, t2.somestring as [String]
-from all_rows() as [t1]
-join complex_entity as [t2] on t1.id = t2.id
+ from all_rows() as [t1]
+ join complex_entity as [t2] on t1.id = t2.id
 ```
 
 ## Табличные параметры

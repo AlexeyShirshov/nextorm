@@ -32,7 +32,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, somestring from complex_entity where (id > 1) option (recompile, fast 10)
+select id, somestring
+ from complex_entity where (id > 1) option (recompile, fast 10)
 ```
 
 Blank hints are ignored. The hint list is part of the query plan key, so a hinted command never reuses
@@ -54,7 +55,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select /* reports.orders */ id from complex_entity where (id > 1)
+select /* reports.orders */ id
+ from complex_entity where (id > 1)
 ```
 
 Use it to identify a statement in a profiler, the server log or a server-side query store
@@ -194,12 +196,14 @@ Multiple hints are joined inside one comment (space-separated), the form both `p
 MySQL/MariaDB optimizer expect:
 
 ```csharp
-// PostgreSQL:  select /*+ SeqScan(simple_entity) */ id from simple_entity
+// PostgreSQL:  select /*+ SeqScan(simple_entity) */ id
+// from simple_entity
 var pg = dataContext.From<ISimpleEntity>()
     .Select(x => new { x.Id })
     .Hint("SeqScan(simple_entity)");
 
-// MySQL / MariaDB:  select /*+ MAX_EXECUTION_TIME(1000) */ id from simple_entity
+// MySQL / MariaDB:  select /*+ MAX_EXECUTION_TIME(1000) */ id
+// from simple_entity
 var my = dataContext.From<ISimpleEntity>()
     .Select(x => new { x.Id })
     .Hint("MAX_EXECUTION_TIME(1000)");
@@ -305,7 +309,8 @@ var rows = dataContext.From<IComplexEntity>(o => o.Sample(0.1, 0.5))
 ```
 
 ```sql
-select id, nullableint from complex_entity final sample 0.1 offset 0.5
+select id, nullableint
+ from complex_entity final sample 0.1 offset 0.5
 prewhere (nullableint > 0)
 where (b = true)
 settings max_threads = 2

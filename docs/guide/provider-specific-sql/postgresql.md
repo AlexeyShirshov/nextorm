@@ -26,7 +26,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where (id = any(@p0))
+select id
+ from complex_entity where (id = any(@p0))
 ```
 
 See [Arrays (PostgreSQL)](../../scalar-functions/06-arrays.md#arrays-postgresql). Functions that return an array
@@ -70,7 +71,8 @@ var rows = dataContext.From<IReservation>()
 ```
 
 ```sql
-select id from reservation where (during && @p0)
+select id
+ from reservation where (during && @p0)
 ```
 
 `Range<T>` is a `readonly struct` and compares by its PostgreSQL characteristics, so `Range<int>.Empty`
@@ -204,7 +206,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select distinct on (somestring) id, somestring from complex_entity order by somestring
+select distinct on (somestring) id, somestring
+ from complex_entity order by somestring
 ```
 
 See [Distinct](../07-distinct.md).
@@ -275,7 +278,8 @@ var rows = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity where (id > 5) for update
+select id
+ from simple_entity where (id > 5) for update
 ```
 
 `LockMode.Update` renders `for update` and `LockMode.Share` renders `for share`. Both accept a

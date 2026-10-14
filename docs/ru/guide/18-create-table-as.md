@@ -122,8 +122,9 @@ var sql = ctx.From(source)
     .Select(t => new { Id = t.GetInt32("id") })
     .ToBatchSql();
 // drop table if exists __nextorm_temp_xxxxxxxx;
-//  create temporary table __nextorm_temp_xxxxxxxx as select ...;
-//  select id from __nextorm_temp_xxxxxxxx
+// create temporary table __nextorm_temp_xxxxxxxx as select ...;
+// select id
+// from __nextorm_temp_xxxxxxxx
 ```
 
 Скалярные терминалы (`Count`, `Any`, …) и все терминалы материализации (`ToList`, `First`, `Single`, `ToAsyncEnumerable`, …) тоже выполняют батч.

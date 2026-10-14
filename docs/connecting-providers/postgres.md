@@ -129,8 +129,10 @@ ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // offset 10
 ```
 
 ```sql
-select id from simple_entity limit 5 offset 10
-select id from simple_entity offset 10
+select id
+ from simple_entity limit 5 offset 10
+select id
+ from simple_entity offset 10
 ```
 
 `OFFSET` may appear on its own, but `LIMIT` must come first when both are present. Because PostgreSQL
@@ -149,7 +151,7 @@ var query = ctx.From<IComplexEntity>()
 
 ```sql
 select coalesce(somestring, '') as "Fallback", extract(year from dt) as "Year"
-from complex_entity
+ from complex_entity
 ```
 
 ```csharp
@@ -176,7 +178,8 @@ ctx.From<IComplexEntity>().Where(e => e.Id == SqlFunctions.Postgres.any(SqlFunct
 ```
 
 ```sql
-select id from complex_entity where (id = any(@p0))
+select id
+ from complex_entity where (id = any(@p0))
 ```
 
 The array functions (`cardinality`, `array_length`, `array_position`, ...) and the `@>`/`&&` operators
@@ -319,8 +322,8 @@ Derived tables and table-valued functions must be aliased with double quotes:
 
 ```sql
 select t1.value, t2.somestring as "String"
-from all_rows() as "t1"
-join complex_entity as "t2" on t1.id = t2.id
+ from all_rows() as "t1"
+ join complex_entity as "t2" on t1.id = t2.id
 ```
 
 ## Provider differences

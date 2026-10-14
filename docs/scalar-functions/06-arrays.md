@@ -24,7 +24,8 @@ var same = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where (id = any(@p0))
+select id
+ from complex_entity where (id = any(@p0))
 ```
 
 A runtime array parameter uses the same [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) mechanism, so the array never has to be known when
@@ -40,7 +41,8 @@ var rows = prepared.ToList(new long[] { 1, 2, 3 });
 ```
 
 ```sql
-select id from complex_entity where id = any(@norm_p0)
+select id
+ from complex_entity where id = any(@norm_p0)
 ```
 
 The array functions and operators map to their PostgreSQL names:
@@ -84,7 +86,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm_p0, 1) = 3
+select cardinality(@norm_p1) as "N"
+ from complex_entity where array_length(@norm_p0, 1) = 3
 ```
 
 ## Arrays (ClickHouse)
@@ -227,7 +230,8 @@ var tags = dataContext.From<IArrayEntity>()
 ```
 
 ```sql
-select id, arrayJoin(tags) as `Tag` from array_entity where id = 1
+select id, arrayJoin(tags) as `Tag`
+ from array_entity where id = 1
 ```
 
 `EntityBuilder.ArrayJoin`/`LeftArrayJoin` render the `[LEFT] ARRAY JOIN` clause, which expands the rows
@@ -264,7 +268,7 @@ var rows = dataContext.From<IArrayEntity>()
 ```sql
 select id, __nextorm_aj_element as `Tag`
  from array_entity
-array join tags as __nextorm_aj_element
+ array join tags as __nextorm_aj_element
 where __nextorm_aj_element = 'b'
 ```
 

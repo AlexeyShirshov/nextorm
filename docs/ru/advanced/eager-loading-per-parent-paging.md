@@ -59,13 +59,14 @@ var parents = ctx.From<Order>()
 
 ```sql
 -- родительский statement (не меняется дочерней страницей)
-select id, name from "order" as 't1' order by t1.id
+select id, name
+ from "order" as 't1' order by t1.id
 
 -- один батчированный дочерний statement на чанк ключей (представительная форма)
 select t1.id, t1.order_id, t1.created_at
-from (
+ from (
     select *, row_number() over (partition by order_id order by created_at) as __nextorm_rn
-    from order_item
+ from order_item
 ) as t1
 where t1.order_id in (@k0, @k1, @k2)
   and t1.__nextorm_rn > 1 and t1.__nextorm_rn <= 3
@@ -80,10 +81,9 @@ where t1.order_id in (@k0, @k1, @k2)
 ```sql
 -- представительная форма: ранжированный ребёнок — производный источник, присоединяемый к каждому родителю
 select t1.id, t1.name, t3.id, t3.order_id, t3.created_at
-from "order" as t1
-left join (
+ from "order" as t1
+ left join (
     select *, row_number() over (partition by order_id order by created_at) as __nextorm_rn
-   
  from order_item
 ) as t3 on t1.id = t3.order_id and t3.__nextorm_rn > 1 and t3.__nextorm_rn <= 3
 order by t1.id, t3.created_at

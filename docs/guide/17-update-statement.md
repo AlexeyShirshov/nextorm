@@ -226,7 +226,8 @@ var updated = ctx.From<IOrder>()
 
 ```sql
 -- PostgreSQL
-with recent as (select id from orders where (id > 1000)) update orders as "t1" set status = @p0 from recent as "t2" where t1.id = t2.id
+with recent as (select id
+ from orders where (id > 1000)) update orders as "t1" set status = @p0 from recent as "t2" where t1.id = t2.id
 ```
 
 This works on every provider that supports `UPDATE ... FROM`/`JOIN`, including when the CTE sits on the
