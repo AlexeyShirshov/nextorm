@@ -894,6 +894,43 @@ public partial class QueryCommand
                                         }
                             }
 
+                            // Additive fallback: a metadata-less derived source read without a projection
+                            // still has to expose the derived subquery's own projection columns, exactly
+                            // as the column-shape (typed CTE) branches reuse ColumnShape. This is what
+                            // lets the intermediate command built by From(EntityBuilder<TShape>) for a
+                            // typed PIVOT/UNPIVOT result (a no-projection read of a derived shape with no
+                            // entity metadata) prepare. The block runs only where this branch previously
+                            // threw, so every query that prepares today keeps its existing path, SQL and
+                            // plan key. It never writes SelectListCache (a metadata-less shape key would
+                            // collide across different subqueries), never touches _dontCache and never
+                            // mutates the source command.
+                            if (!(selectList?.Length > 0)
+                                && cmd._from?.ColumnShape is null
+                                && cmd._from?.SubQuery?.SelectList is { Length: > 0 } derivedShape
+                                && TryGetReusableDerivedShape(derivedShape, out var reusableShape))
+                            {
+                                if (reusableShape.Length == 1
+                                    && TypeFacts.IsSingleColumnProjection(reusableShape[0].PropertyType))
+                                {
+                                    // A single scalar column stands for the whole row, mirroring the
+                                    // scalar reuse branch.
+                                    cmd.OneColumn = true;
+                                    selectList = [ProjectionOutputColumn(reusableShape[0])];
+                                }
+                                else
+                                {
+                                    // The derived table passes its source's projection through,
+                                    // mirroring the identity reuse branch.
+                                    selectList = reusableShape;
+                                }
+
+                                if (!cmd._dontCache && !noHash) unchecked
+                                {
+                                    for (var i = 0; i < selectList.Length; i++)
+                                        columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
+                                }
+                            }
+
                             if (!(selectList?.Length > 0))
                                 throw new QueryPreparationException("Select must return new anonymous type");
 
@@ -1418,6 +1455,32 @@ public partial class QueryCommand
             }
 
             return parameterName;
+        }
+
+        /// <summary>
+        /// Whether a derived subquery's projection can be passed through by a no-projection consumer: every
+        /// column has to stay addressable (a named output or a projection item, mirroring the shape checks
+        /// of the column-shape reuse branches) and to be an already-resolved column reference rather than a
+        /// row-member access. A row-member access would have to be re-translated against the derived source
+        /// while the derived source is the command being rendered, which recurses; such a shape keeps the
+        /// previous throwing behaviour instead of being passed through.
+        /// </summary>
+        private static bool TryGetReusableDerivedShape(SelectExpression[] shape, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SelectExpression[]? reusable)
+        {
+            reusable = null;
+            for (var i = 0; i < shape.Length; i++)
+            {
+                var column = shape[i];
+                if (column.PropertyName is null && column.OutputName is null)
+                    return false;
+
+                if (column.Expression is { } expression
+                    && TypeFacts.UnwrapConvert(expression) is MemberExpression)
+                    return false;
+            }
+
+            reusable = shape;
+            return true;
         }
 
         /// <summary>

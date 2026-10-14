@@ -18,6 +18,8 @@ keep their original rv1 paths verbatim).
 Subcommands (the delta invocation catalog C20..C33)
 ---------------------------------------------------
   repro --phase baseline --capture   C20  isolated repro children before any production edit
+  repro-candidate --phase before     C34  R01-R05 + R05b children with the additive fallback absent
+  repro-candidate --phase after      C35  the same children with the additive fallback in place
   derived-unit                       C21  typed derived builder/command unit cases
   derived-exec                       C22  SQL Server typed derived execution + provider matrix
   shared-regression                  C23  eight project suites + the container boundary
@@ -89,6 +91,14 @@ PROBES = [
     {"id": "R03-typed-command-projection", "role": "command", "filter": "FullyQualifiedName~Repro03_TypedCommandSource_ProjectsAsDerivedSource"},
     {"id": "R04-typed-command-self-join", "role": "join", "filter": "FullyQualifiedName~Repro04_TypedCommandSource_SelfJoinResolves"},
     {"id": "R05-pivot-free-control", "role": "control", "filter": "FullyQualifiedName~Repro05_PivotFreeDerivedControl_ProjectsAsDerivedSource"},
+]
+
+# C34/C35: the additive-fallback candidate sweep. The same frozen R01-R05 children plus the R05b
+# pivot-free builder control added by the r=3 additive amendment; executed once with the fallback
+# absent (before) and once with it in place (after).
+CANDIDATE_PROBES = PROBES + [
+    {"id": "R05b-pivot-free-builder-derived", "role": "control-builder",
+     "filter": "FullyQualifiedName~Repro05b_PivotFreeBuilderDerivedControl_ProjectsAsDerivedSource"},
 ]
 
 VARIANT_PROBES = {
@@ -293,9 +303,9 @@ def _record_self(name: str, exit_code: int, note: str) -> None:
     })
 
 
-def _probe_child(probe, logdir, timeout=300):
+def _probe_child(probe, logdir, timeout=300, prefix="C20-"):
     """Run one repro probe in its own process; classify the actual outcome verbatim."""
-    prefix = "C20-" + probe["id"]
+    prefix = prefix + probe["id"]
     exit_code = run([ "dotnet", "test", SQLSERVER_TESTS, "-c", "Debug", "--no-build",
                       "--filter", probe["filter"], "--", "-explicit", "only" ],
                     prefix, phase="inner", logdir=logdir, timeout=timeout,
@@ -424,6 +434,63 @@ def cmd_repro(phase: str, capture: bool):
         "acceptance": acceptance and {"cases": acceptance["cases_reported"], "exit": acceptance["exit"]},
     }, indent=1))
     return 0 if demonstrated else 2
+
+
+# --------------------------------------------------------------------------- C34/C35
+def cmd_repro_candidate(phase: str):
+    """Run the candidate probe sweep (R01-R05 + R05b) in isolated child processes.
+
+    ``--phase before`` expects the pre-fallback state: R01-R04 and R05b red, R05 green.
+    ``--phase after`` expects every probe green. Exit 0 iff the phase expectation holds.
+    """
+    if phase not in ("before", "after"):
+        print("ERROR: repro-candidate supports --phase before|after", file=sys.stderr)
+        return 1
+
+    label = "candidate-before" if phase == "before" else "candidate"
+    letter = "C34" if phase == "before" else "C35"
+    out_dir = os.path.join(A, "repro", label)
+    logdir = os.path.join(out_dir, "logs")
+    os.makedirs(logdir, exist_ok=True)
+
+    build_exit = run(["dotnet", "build", SQLSERVER_TESTS, "-c", "Debug"],
+                     letter + "-build-repro-tests", phase="inner", logdir=logdir,
+                     note="build the repro test project once before the isolated children (%s)" % phase)
+
+    probes = [_probe_child(probe, logdir, prefix=letter + "-") for probe in CANDIDATE_PROBES]
+    by_id = {p["id"]: p for p in probes}
+
+    green_all = all(p["exit"] == 0 for p in probes)
+    red_ids = [p["id"] for p in probes if p["exit"] != 0]
+    expected_red = [p["id"] for p in CANDIDATE_PROBES
+                    if p["role"] in ("builder", "command", "join", "control-builder")]
+    ok = green_all if phase == "after" else sorted(red_ids) == sorted(expected_red)
+
+    result = {
+        "unit": "D232-PREREQ-typed-derived / additive-fallback",
+        "criterion": ["EC232-REPRO", "AC-08", "AC-11", "V26", "V27", "V28", "V29"],
+        "phase": phase,
+        "captured": _now(),
+        "build_exit": build_exit,
+        "probes": probes,
+        "red_ids": red_ids,
+        "expected_red_ids": expected_red if phase == "before" else [],
+        "expectation_met": ok,
+        "fallback_absent": phase == "before",
+        "note": ("Candidate sweep with the additive fallback ABSENT: the four typed routes and the "
+                 "pivot-free builder control fail while the pivot-free direct control stays green."
+                 if phase == "before" else
+                 "Candidate sweep with the additive fallback in place: every probe green."),
+    }
+    _write_json(os.path.join(out_dir, label + ".json"), result)
+    print(json.dumps({
+        "phase": phase,
+        "build_exit": build_exit,
+        "probes": {p["id"]: {"exit": p["exit"], "kind": p["outcome"]["kind"],
+                             "exception": p["outcome"]["exception"]} for p in probes},
+        "expectation_met": ok,
+    }, indent=1))
+    return 0 if ok else 2
 
 
 def _copy_fresh_bdn(dest_dir: str, since_ts: float) -> list:
@@ -737,6 +804,13 @@ def main(argv=None):
             phase = rest[idx + 1] if idx + 1 < len(rest) else None
         capture = "--capture" in rest
         return cmd_repro(phase, capture)
+    if command == "repro-candidate":
+        phase = "after"
+        rest = argv[1:]
+        if "--phase" in rest:
+            idx = rest.index("--phase")
+            phase = rest[idx + 1] if idx + 1 < len(rest) else None
+        return cmd_repro_candidate(phase)
     if command == "derived-unit":
         return cmd_derived_unit()
     if command == "derived-exec":

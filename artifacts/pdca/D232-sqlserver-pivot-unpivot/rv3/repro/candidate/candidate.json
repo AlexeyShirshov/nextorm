@@ -1,0 +1,214 @@
+{
+ "build_exit": 0,
+ "captured": "2026-10-14T21:16:36Z",
+ "criterion": [
+  "EC232-REPRO",
+  "AC-08",
+  "AC-11",
+  "V26",
+  "V27",
+  "V28",
+  "V29"
+ ],
+ "expectation_met": true,
+ "expected_red_ids": [],
+ "fallback_absent": false,
+ "note": "Candidate sweep with the additive fallback in place: every probe green.",
+ "phase": "after",
+ "probes": [
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--filter",
+    "FullyQualifiedName~Repro01_TypedBuilderSource_ProjectsAsDerivedSource",
+    "--",
+    "-explicit",
+    "only"
+   ],
+   "err_log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/logs/C35-R01-typed-builder-projection.err",
+   "exit": 0,
+   "failed": 0,
+   "id": "R01-typed-builder-projection",
+   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/logs/C35-R01-typed-builder-projection.out",
+   "outcome": {
+    "assert_line": null,
+    "exception": null,
+    "fatal_line": null,
+    "kind": "pass",
+    "stack_overflow_marker": false,
+    "tail": "Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)\n/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) passed (678ms)\nTest run summary: Passed!\n  total: 1\n  failed: 0\n  succeeded: 1\n  skipped: 0\n  duration: 905ms"
+   },
+   "process_terminated": false,
+   "role": "builder",
+   "selected_count": 1,
+   "skipped": 0
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--filter",
+    "FullyQualifiedName~Repro02_TypedBuilderSource_WhereSelectIsComposable",
+    "--",
+    "-explicit",
+    "only"
+   ],
+   "err_log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/logs/C35-R02-typed-builder-where-select.err",
+   "exit": 0,
+   "failed": 0,
+   "id": "R02-typed-builder-where-select",
+   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/logs/C35-R02-typed-builder-where-select.out",
+   "outcome": {
+    "assert_line": null,
+    "exception": null,
+    "fatal_line": null,
+    "kind": "pass",
+    "stack_overflow_marker": false,
+    "tail": "Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)\n/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) passed (695ms)\nTest run summary: Passed!\n  total: 1\n  failed: 0\n  succeeded: 1\n  skipped: 0\n  duration: 924ms"
+   },
+   "process_terminated": false,
+   "role": "builder",
+   "selected_count": 1,
+   "skipped": 0
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--filter",
+    "FullyQualifiedName~Repro03_TypedCommandSource_ProjectsAsDerivedSource",
+    "--",
+    "-explicit",
+    "only"
+   ],
+   "err_log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/logs/C35-R03-typed-command-projection.err",
+   "exit": 0,
+   "failed": 0,
+   "id": "R03-typed-command-projection",
+   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/logs/C35-R03-typed-command-projection.out",
+   "outcome": {
+    "assert_line": null,
+    "exception": null,
+    "fatal_line": null,
+    "kind": "pass",
+    "stack_overflow_marker": false,
+    "tail": "Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)\n/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) passed (724ms)\nTest run summary: Passed!\n  total: 1\n  failed: 0\n  succeeded: 1\n  skipped: 0\n  duration: 949ms"
+   },
+   "process_terminated": false,
+   "role": "command",
+   "selected_count": 1,
+   "skipped": 0
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--filter",
+    "FullyQualifiedName~Repro04_TypedCommandSource_SelfJoinResolves",
+    "--",
+    "-explicit",
+    "only"
+   ],
+   "err_log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/logs/C35-R04-typed-command-self-join.err",
+   "exit": 0,
+   "failed": 0,
+   "id": "R04-typed-command-self-join",
+   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/logs/C35-R04-typed-command-self-join.out",
+   "outcome": {
+    "assert_line": null,
+    "exception": null,
+    "fatal_line": null,
+    "kind": "pass",
+    "stack_overflow_marker": false,
+    "tail": "Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)\n/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) passed (704ms)\nTest run summary: Passed!\n  total: 1\n  failed: 0\n  succeeded: 1\n  skipped: 0\n  duration: 942ms"
+   },
+   "process_terminated": false,
+   "role": "join",
+   "selected_count": 1,
+   "skipped": 0
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--filter",
+    "FullyQualifiedName~Repro05_PivotFreeDerivedControl_ProjectsAsDerivedSource",
+    "--",
+    "-explicit",
+    "only"
+   ],
+   "err_log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/logs/C35-R05-pivot-free-control.err",
+   "exit": 0,
+   "failed": 0,
+   "id": "R05-pivot-free-control",
+   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/logs/C35-R05-pivot-free-control.out",
+   "outcome": {
+    "assert_line": null,
+    "exception": null,
+    "fatal_line": null,
+    "kind": "pass",
+    "stack_overflow_marker": false,
+    "tail": "Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)\n/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) passed (680ms)\nTest run summary: Passed!\n  total: 1\n  failed: 0\n  succeeded: 1\n  skipped: 0\n  duration: 911ms"
+   },
+   "process_terminated": false,
+   "role": "control",
+   "selected_count": 1,
+   "skipped": 0
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--filter",
+    "FullyQualifiedName~Repro05b_PivotFreeBuilderDerivedControl_ProjectsAsDerivedSource",
+    "--",
+    "-explicit",
+    "only"
+   ],
+   "err_log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/logs/C35-R05b-pivot-free-builder-derived.err",
+   "exit": 0,
+   "failed": 0,
+   "id": "R05b-pivot-free-builder-derived",
+   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/logs/C35-R05b-pivot-free-builder-derived.out",
+   "outcome": {
+    "assert_line": null,
+    "exception": null,
+    "fatal_line": null,
+    "kind": "pass",
+    "stack_overflow_marker": false,
+    "tail": "Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)\n/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) passed (649ms)\nTest run summary: Passed!\n  total: 1\n  failed: 0\n  succeeded: 1\n  skipped: 0\n  duration: 862ms"
+   },
+   "process_terminated": false,
+   "role": "control-builder",
+   "selected_count": 1,
+   "skipped": 0
+  }
+ ],
+ "red_ids": [],
+ "unit": "D232-PREREQ-typed-derived / additive-fallback"
+}

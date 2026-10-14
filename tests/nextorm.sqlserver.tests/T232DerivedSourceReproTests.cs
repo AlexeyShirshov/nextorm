@@ -109,4 +109,36 @@ public class T232DerivedSourceReproTests
 
         sql.Should().Contain("select");
     }
+
+    // ------------------------------------------------------------------ V28 (c2): pivot-free builder mirror
+
+    /// <summary>
+    /// (c2) The pivot-free mirror of R01's route: a metadata-less <see cref="EntityBuilder{TShape}"/> whose
+    /// source is a derived projection is consumed through <c>From(EntityBuilder&lt;TShape&gt;)</c> +
+    /// <c>Select</c>. Unlike R05 (which embeds the projection directly through <c>From(QueryCommand)</c>),
+    /// this goes through the builder route the typed PIVOT result uses
+    /// (<c>From(EntityBuilder&lt;TShape&gt;)</c> materialises the builder with <c>ToCommand()</c>), so it
+    /// distinguishes a PIVOT-specific defect from a pre-existing core defect of the metadata-less derived
+    /// builder. The inner command is the same pivot-free projection as R05.
+    /// </summary>
+    [Fact(Explicit = true)]
+    public void Repro05b_PivotFreeBuilderDerivedControl_ProjectsAsDerivedSource()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var inner = ctx.From("t232_sales")
+            .Select(t => new
+            {
+                Category = SqlFunctions.Column<string>(t, "category"),
+                Margin = SqlFunctions.Column<decimal?>(t, "margin")
+            });
+
+        // The pivot-free analogue of the typed PIVOT builder: an EntityBuilder<TShape> over the derived
+        // projection command (its source, not a physical table).
+        var builder = ctx.From(inner);
+
+        var sql = SqlOf(ctx, ctx.From(builder).Select(x => new { x.Category, x.Margin }));
+
+        sql.Should().Contain("select");
+    }
 }

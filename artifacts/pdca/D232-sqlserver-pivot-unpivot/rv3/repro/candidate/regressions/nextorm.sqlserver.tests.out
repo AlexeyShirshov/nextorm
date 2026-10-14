@@ -1,0 +1,27 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+skipped NextORM.SqlServer.Tests.T232DerivedSourceReproTests.Repro05_PivotFreeDerivedControl_ProjectsAsDerivedSource
+  Not run (due to explicit test filtering)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+skipped NextORM.SqlServer.Tests.T232DerivedSourceReproTests.Repro04_TypedCommandSource_SelfJoinResolves
+  Not run (due to explicit test filtering)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+skipped NextORM.SqlServer.Tests.T232DerivedSourceReproTests.Repro05b_PivotFreeBuilderDerivedControl_ProjectsAsDerivedSource
+  Not run (due to explicit test filtering)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+skipped NextORM.SqlServer.Tests.T232DerivedSourceReproTests.Repro02_TypedBuilderSource_WhereSelectIsComposable
+  Not run (due to explicit test filtering)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+skipped NextORM.SqlServer.Tests.T232DerivedSourceReproTests.Repro03_TypedCommandSource_ProjectsAsDerivedSource
+  Not run (due to explicit test filtering)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+skipped NextORM.SqlServer.Tests.T232DerivedSourceReproTests.Repro01_TypedBuilderSource_ProjectsAsDerivedSource
+  Not run (due to explicit test filtering)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) passed (1s 474ms)
+
+Test run summary: Passed!
+  total: 946
+  failed: 0
+  succeeded: 940
+  skipped: 6
+  duration: 1s 697ms
