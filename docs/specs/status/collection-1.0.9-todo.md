@@ -21,14 +21,14 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 | T215 | #215 | убрать зависимость OneOf | pdca-dotnet | ready (r=1) |
 | T216 | #216 | row locking — FOR UPDATE vs FOR UPDATE OF | pdca-dotnet | done (r=2, rv=2, n=3/3) — done-with-constraint → resolved: owner decision (i) 2026-10-13 (MariaDB source-level lock unsupported by design); #216 narrowed & CLOSED; D-07 resolved |
 | T217 | #217 | DateTimeOffset — SQL-трансляция Now/UtcNow и частей даты | pdca-dotnet | done-with-caveat (r=5, rv=5; R217-01..07 met, R217-08 → #234) |
-| T218 | #218 | SQL Server sequences (NEXT VALUE FOR), кросс-провайдерно | pdca-dotnet | ready (r=1) |
+| T218 | #218 | SQL Server sequences (NEXT VALUE FOR), кросс-провайдерно | pdca-dotnet | done-with-caveat (r=1, rv=1; E07/E08/E10 → #235) |
 | T53 | #53 | IF6: public API freeze (PublicApiAnalyzers + PublicAPI.*) | pdca-dotnet | ready (r=1) — **HELD by owner** |
 
 ## Groups
 
 | id | tasks (order) | worktree | branch/ref | status |
 |---|---|---|---|---|
-| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 → T225 → T201 (perf) → T53 (freeze, held) | no (single group) | current branch `1.0.9-rc3` | in-progress (fail-stop lifted — T217 done-with-caveat, #234) |
+| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 → T225 → T201 (perf) → T53 (freeze, held) | no (single group) | current branch `1.0.9-rc3` | in-progress (fail-stop lifted — T217 done-with-caveat #234, T218 done-with-caveat #235) |
 
 Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/docs force one writer). T224 (SQL-format blast radius, ~697 exact-string asserts) sits late, after all functional changes; T225 (docs-only) after T223+T224; T201 (perf) measures the final composition; T53 held last. Addendum contract `cluster-1`/`cluster-2`; task contracts unchanged.
 
@@ -47,7 +47,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T223 | #223 | G1 | 9 | done | done (r=1, rv=1, n=2/3) | pdca-dotnet | N=1 | r=1 | e2d749db | docs/specs/status/D223-joininto-composite-junction-sql-1.md |
 | T216 | #216 | G1 | 10 | done | done-with-constraint → resolved (owner decision (i) 2026-10-13; #216 CLOSED) | pdca-dotnet | N=1 | r=2 | 1b7b9d8c | docs/specs/status/D216-row-locking-1.md |
 | T217 | #217 | G1 | 11 | done-with-caveat | done (r=5, rv=5) — R217-01..07 met, R217-08 → follow-up #234; product `94782852` | pdca-dotnet | N=1 | r=5 | 4108dc6e | docs/specs/status/D217-datetimeoffset-1.md |
-| T218 | #218 | G1 | 12 | pending | ready | pdca-dotnet | N=1 | r=1 | 60d881b4 | docs/specs/status/D218-sqlserver-sequences-1.md |
+| T218 | #218 | G1 | 12 | done-with-caveat | done (r=1) — E07/E08/E10 → #235; product `22b96233` | pdca-dotnet | N=1 | r=1 | 60d881b4 | docs/specs/status/D218-sqlserver-sequences-1.md |
 | T219 | #219 | G1 | 13 | pending | ready | pdca-dotnet | N=1 | r=1 | 4bfa5403 | docs/specs/status/D219-session-identity-functions-1.md |
 | T226 | #226 | G1 | 14 | pending | ready | pdca-dotnet | N=1 | r=1 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
 | T224 | #224 | G1 | 15 | pending | ready | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
@@ -97,10 +97,10 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 
 - Verification state (C): not reached — collection mid-flight (re-scope/re-cluster).
 - Last collection `C` result: —
-- Blocker: T217 **terminal `incomplete`** — defect `D217-EVIDENCE-BINDING` (fixes applied **3**, NOT resolved); group G1 fail-stop; no fourth attempt, no replan.
+- Blocker: lane G1 **stopped at T218 (#218)** — CHECK/escalate decision (C) in-cycle STOP: `incomplete` (awaiting owner: recommend **done-with-caveat**, ref T217/#234), E07/E08/E10 unresolved, re-gather budget 2/2 exhausted, no PASS, no 4th attempt on r=1; **T219 NOT entered**; T53 HELD. (Prior blocker T217 terminal `incomplete` `D217-EVIDENCE-BINDING` → owner accepted done-with-caveat, fail-stop lifted.)
 - Defect id / history: `D217-EVIDENCE-BINDING` — r=2/n=3 → r=3/n=1 → r=4/n=1 → r=5/n=1, each a CHECK FAIL at the evidence gate (evidence-only regeneration / hash replacement); terminal `incomplete`.
 - Corrective-task status file: — (none created; the remedy is an **outside-T217** proposal, a human decision)
-- Next allowed step: resume lane G1 with **T218 (#218) DO (r=1)** → T219 → T226 → T224 → T225 → T201 → T53 (held). T217 accepted done-with-caveat (evidence-provenance → **#234**). T216's R-03/MariaDB constraint stays recorded (#216 OPEN).
+- Next allowed step: resume lane G1 with **T219 (#219) DO (r=1)** → T226 → T224 → T225 → T201 → T53 (held). Owner accepted T218 as `done-with-caveat` (E07/E08/E10 → **#235**); fail-stop G1 lifted. T217 accepted done-with-caveat (evidence-provenance → **#234**). T216's R-03/MariaDB constraint stays recorded (#216 OPEN).
 
 ## Done / Verified / Incomplete
 
