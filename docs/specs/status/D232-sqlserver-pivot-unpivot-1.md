@@ -1,0 +1,405 @@
+# T232 (#232) — SQL Server PIVOT/UNPIVOT: типизированная проекция результата (вместо TableAlias по имени)
+
+- task_id: `T232`
+- issue: [#232](https://github.com/AlexeyShirshov/nextorm/issues/232) — OPEN, label `enhancement`, milestone **1.0.9-rc3**
+- collection: `1.0.9-todo` (single group; current worktree/branch `1.0.9-rc3`; no worktree/branch/merge)
+- selected_variant: `pdca-dotnet` (+ overlay `nextorm-pdca`)
+- current cycle `N=1`; plan revision `r=1`; attempt `n=1` (not started); evidence contract `rv=1`
+- **plan_state: `ready`** (gate 1 satisfied)
+- starting HEAD: `3e49fe0c`
+
+## Task
+
+SQL Server typed PIVOT/UNPIVOT projection. This invocation authored and persisted PLAN for the collection's **PLAN→DO handoff**; no user `go` is awaited — the collection caller owns the boundary.
+
+## Goal
+
+Declare result members and CLR cell types once, derive the PIVOT values from the projection, emit correct aliases, and return a full `EntityBuilder<TShape>` usable in filtering, ordering, selection, derived sources and CTEs.
+
+Approved signatures (immutable):
+
+```csharp
+public static EntityBuilder<TShape> Pivot<TEntity, TShape>(
+    this EntityBuilder<TEntity> builder,
+    PivotAggregate aggregate,
+    Expression<Func<TEntity, object?>> aggregateColumn,
+    Expression<Func<TEntity, object?>> forColumn,
+    Expression<Func<TEntity, PivotValues, TShape>> projection)
+
+public static EntityBuilder<TShape> Unpivot<TEntity, TShape>(
+    this EntityBuilder<TEntity> builder,
+    Expression<Func<TEntity, UnpivotValues, TShape>> projection,
+    params UnpivotColumn[] columns)
+```
+
+Accessors: `PivotValues.Value<T>(string)`, `UnpivotValues.Name<T>(string)`, `UnpivotValues.Value<T>(string)`.
+
+**Constraints:** preserve the legacy overloads and their SQL; no new AST node; no `BindEntity` workaround; no automatic nullability inference; no provider capability expansion; no duplicated PIVOT value declarations; no sticky command/plan-cache mutation; preserve warnings-as-errors, CRLF and foreign changes.
+
+**Minimal solution — three answers**
+1. Essential outcome: typed result shape, member aliases and source composability.
+2. Non-negotiable boundary: the approved surface, the existing PIVOT AST/renderer and legacy behaviour (`SqlServerEntityBuilderExtensions.cs:30,45,59`; `PivotExpression.cs:76-147`; `SqlServerDialect.cs:835-853`; `SqlSourceRenderer.cs:993-1020`).
+3. Minimum implementation: provider overloads + a provider-local reference-identity rewriter, two core markers + narrow exact recognition, the existing `Select` path and ordinal materialization.
+
+| Alternative | Benefits | Cost/risk | Decision |
+|---|---|---|---|
+| Existing PIVOT plus a rewritten `Select` | Reuses rendering, source registration and materialization | Correct grouping-name/source binding needs tests | **Selected** |
+| Native node in `QueryPreparer.PrepareColumns` | Specialized centralized handling | More concepts/core changes; duplicates projection support; the approved design rejects it | Rejected |
+| `BindEntity<TShape>` or a global `TableAlias` alias change | Superficially smaller local code | Does not rewrite members; changes unrelated/legacy behaviour | Rejected |
+
+**Design checklist**
+- Markers must be declared in **core**: core recognition compares declaring types, and core cannot reference a provider-only marker declaration.
+- The existing replacement visitors are **type-based** (`ReplaceExpressionVisitor.cs:17,22-25`). Build a **provider-local reference-identity rewriter** replacing only the two captured lambda parameters and their intended accesses.
+- Typed grouping/value accesses become `TableAlias`-bound typed column references using the existing `SqlFunctions.Column<T>` mechanism (`SqlFunctions.cs:82-95`; `NormSqlTranslator.cs:45-47,99-109`, `:106-107` sets `ColumnName`).
+- Actual grouping SQL names come from effective inner metadata for entities (`MemberInfoExtensions.GetPropertyColumnName:44` — public; `DataContextCache.Metadata` `DataContextCache.cs:51`) or from `QueryCommand.SelectList`/`SelectExpression.PropertyName:24` for derived projections; do not infer them from CLR names alone.
+- Core marker translation recognizes explicit generic method definitions, not arbitrary `Value`/`Name` methods (`TableAliasAccessors.IsAccessor:14-21` is name-only and stays `TableAlias`-only).
+- Ordinary `Select` marker use binds the relevant `TableAlias` source (`DefaultColumnsProvider.cs:14,121,243` — lookup is `(entityType, fromProjection)`), never a `PivotValues` source registration; an ambiguous unbound marker source fails clearly.
+- Public parameterless marker constructors support captured marker instances in ordinary `Select`; accessor methods are translation-only and throw when executed.
+- No abstraction beyond the two markers and one internal provider rewriter; each has two observable consumers/routes.
+- Materialization stays **ordinal-based** (`RowMapperFactory.cs:52`); aliases serve SQL naming/source consumption, not name-based row mapping.
+- No global alias switch, capability flag, public metadata resolver, package dependency or plan-cache redesign.
+
+## Current state
+
+- Approved specification dated 13.10.2026; implementation not started. Issue refs: #231 (examples), #160 (join aliases), #53 (PublicAPI freeze, HELD).
+- Pre-gate reconnaissance completed: public naming helper, provider internals access (`nextorm.core.csproj:81` grants `nextorm.sqlserver`), type-keyed source registration (`SqlSourceRenderer.cs:1014`; `DefaultColumnsProvider.cs:121,243`), sorting/source alias rules (`QueryCommand.QueryPreparer.cs:2594,2626-2661`; `SqlSourceRenderer.cs:1165-1186`; `MemberTranslator.cs:811-814`), the real validator schema, the runner/filter patterns, the 7-case acceptance benchmark and container availability.
+- Existing replacement visitors match by **type**, not parameter identity.
+- Existing `TableAlias` accessors leave `ColumnName` unset (`BaseExpressionVisitor.cs:442-456`); only `NormSqlTranslator.TranslateColumn:106-107` sets it.
+- CS1591 is **gated** (`src/Directory.Build.props:11` `GenerateDocumentationFile=true`; `Directory.Build.props:40` `TreatWarningsAsErrors=true`; no `NoWarn`/`CS1591` suppression found in `.props`/`.csproj`/`.editorconfig`) → XML-doc on new public members is a build obligation.
+- Podman socket `/mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock` exists; zero-skip six-provider runs are recorded in `docs/specs/status/collection-1.0.9-todo.md:116,117,127,140,147`.
+- 36 pre-existing foreign dirty entries; no `src/`/`tests/` overlap. Preserved, out of footprint.
+- Four execution-only unknowns remain (see Reconnaissance).
+- Existing task-local untracked recon: `docs/specs/status/evidence/pivot-typed-overload/evidence-01-recon.md` — preserve.
+- Committed legacy exact assertion (must stay): `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:3074` = `.Should().Be("select category, [1], [2]\n from sales pivot (sum(margin) for quarter in ([1], [2])) as [t1]");`
+
+## Durable state
+
+- Complete plan, the rv1 contract and the manifest path are persisted in this file before DO.
+- No implementation, test result, coverage figure or benchmark result is claimed by PLAN.
+- Gate 1 satisfied: every required planning item and a runnable verification route are specified; implementation outcomes are not asserted as passed.
+- This is the finalization of the initial r1 candidate with reconnaissance facts — not a contract supersession and not an attempt reset.
+- Manifest path is pinned below; DO writes the manifest, which CHECK reconciles.
+
+## Acceptance criteria
+
+| ID | Requirement and verification | Negative case |
+|---|---|---|
+| AC-01 | «Новые overload `Pivot`/`Unpivot` компилируются, возвращают `EntityBuilder<TShape>`; члены формы доступны в `Where`/`OrderBy`/`Select`.» Compile typed consumers; exact SQL assertions. | An invalid shape/member access must not be hidden by an untyped return. |
+| AC-02 | «SQL и данные совпадают с текущим `TableAlias`-путём (интеграционные тесты SQL Server).» Compare deterministic typed/legacy rows, clauses and value order; assert the intended member aliases. | Reordered values, missing aliases or incorrect derived/CTE consumption must be detected. |
+| AC-03 | «Существующие `Pivot`/`Unpivot` без изменений; их тесты зелёные.» Discover/run all 14 existing SQL cases and the eager guards; preserve the exact legacy SQL. | The legacy `[1]` must not acquire an unsolicited alias; existing throws remain. |
+| AC-04 | «Валидации дают ясные ошибки (fail-closed), динамический PIVOT и опечатка в значении документированы как нетипизируемые.» Assert the exception category/message and the bilingual/XML limitations. | Duplicate/empty values, consumed grouping members and zero UNPIVOT columns must fail clearly. |
+| AC-05 | «XML-doc на новые API; гайды EN+RU обновлены (`docs/guide/provider-specific-sql/sqlserver.md` + RU-зеркало).» Build with CS1591 gated; semantic docs review. | A missing public-member XML doc, or a missing RU/runtime-name explanation, fails. |
+| AC-06 | «Покрытие не ниже порогов CI.» Candidate line ≥85%, branch ≥75%; comparable touched-area coverage does not decrease. | Either a threshold failure or an area decrease fails, despite the non-`main` warning-only CI policy. |
+| AC-07 | Markers work in ordinary `Select`; explicit nullable/reference/value types and the supported shape forms materialize correctly. | Runtime marker execution throws; unrelated same-named methods are not recognized. |
+| AC-08 | Entity, derived and TVF inners; derived typed output and `AsCte` preserve the actual names and source qualification. | CLR/mapped-name confusion or ambiguous/wrong aliases fails exact SQL/runtime tests. |
+| AC-09 | SQL Server-only capability, eager/single-query guards and plan-cache locality remain unchanged. | Other providers must reject both typed operators; interleaved queries must not reuse stale shape/value state. |
+| AC-10 | The AdventureWorks quarterly example uses typed members and declares quarter values only once. | Retained `PivotValue.Create` duplication or by-name cell reads remain detectable. |
+| AC-11 | Scope evidence, branch inventory, targeted mutation and the acceptance benchmark are complete and valid. | Missing exits, zero selected cases, a surviving mandated mutant, skipped providers or an unexplained material regression fails. |
+| AC-12 | Foreign changes/CRLF preserved; the sibling handoff contains a green committed task implementation under the collection authorization. | Foreign staging/overwriting or dirty overlapping implementation files fails the handoff. |
+
+## Variant matrix
+
+All new test names below are **planned**, not verified repository symbols.
+
+| Row | Execution variant | Closure |
+|---|---|---|
+| V01 | Typed PIVOT / typed UNPIVOT | test: exact SQL and SQL Server parity for both |
+| V02 | Untyped legacy paths | test: all 14 existing cases; unchanged exact baseline |
+| V03 | Entity inner, mapped/naming-convention column | test: correct name at extension time and preparation |
+| V04 | Derived inner with a renamed member | test: resolve the SQL-visible projection output name |
+| V05 | TVF inner | test: deterministic SQL Server TVF and typed projection |
+| V06 | Full / subset grouping | test: both; unused inner members remain grouping inputs |
+| V07 | Aggregate/FOR member used as grouping | guard + tests, including converted accesses |
+| V08 | Value order | test: NewExpression argument and MemberInit binding order drive `IN` |
+| V09 | Duplicate PIVOT values | guard + test naming the offending value |
+| V10 | Empty PIVOT value projection | guard + test |
+| V11 | Nullable/non-nullable; value/reference/default | test: nullable aggregate, COUNT, reference UNPIVOT and NULL materialization |
+| V12 | Anonymous / record / record struct / MemberInit / scalar | test: existing `Select` forms; scalar has no invented member alias |
+| V13 | Subsequent `Where` / `OrderBy` / `Select` | test: both operators; defining-expression sort semantics |
+| V14 | Derived typed source / `AsCte` | test: exact aliases and SQL Server execution |
+| V15 | UNPIVOT zero columns / missing or conflicting roles | guard + tests |
+| V16 | UNPIVOT role names and repeated consistent references | test: one identifier per role; conflicting references fail |
+| V17 | Constant / captured string / null-empty / row-dependent name | test the first two; guard invalid and row-dependent names without arbitrary execution |
+| V18 | Typo or absent data value | test the emitted identifier/missing-cell behaviour; docs: no membership validation |
+| V19 | Dynamic PIVOT | guard/documented API boundary; the legacy path remains available |
+| V20 | SQLite/PostgreSQL/MySQL/MariaDB/ClickHouse | test: each provider rejects both typed operators |
+| V21 | Eager-load / single-query state | test: existing guards and typed equivalents |
+| V22 | Join alias generator, #160 | test: typed result joined twice; derived/CTE route, distinct qualification |
+| V23 | Ordinary `Select` / unrelated `Value` method / ambiguous marker source | test + ambiguity guard |
+| V24 | Cache reuse and interleaved shapes/values | test: stable reuse, distinct keys/results, no command mutation |
+| V25 | Null arguments, modifiers and capability defaults | guard/test: inherited rules plus new overload argument checks |
+
+Cover every row and the high-risk intersections V03/V04×V13/V14, V11×V01 and V22×V14; do not invent a full Cartesian product.
+
+## Priority matrix
+
+| Rows | Priority and basis |
+|---|---|
+| V01,V02,V11,V20 | **P1** — operator-class requirements (overlay class table): SQL sibling parity, capability per dialect, test per provider, nullable semantics |
+| V03–V10,V12–V19,V21–V25 | **P1** — approved invariants and the actual translation/source/cache execution path |
+| AC-05,AC-06,AC-11,AC-12 | **P1** — explicit acceptance/build/evidence/scope requirements |
+| Existing PIV-RD2 | **P2 unchanged** — #53 ownership; not a waiver for T232 |
+
+CHECK applies this matrix without downgrade.
+
+## Evidence contract `rv=1`
+
+Frozen manifest path: **`artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/manifest.json`**.
+Below, `A` denotes `artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1`. All future artifact sources are **planned**.
+
+**Real validator schemas** (`scripts/validate_inner_loop.py`, subcommands `brief|report|manifest` at `:586`, exit 0/2/1):
+- brief: top-level `unit` + `scope{projects[], selectors[], files[], rationale, rebuild:"affected"|"none", boundary}`; optional `amendments[]{reason, added_selectors[], validated_before_run}`.
+- report: brief + `executions[]{command[], phase:"inner"|"boundary", source_revision, artifact_revision, exit_code:int, selected_count:int>=1}`.
+- manifest: `task`, `tree`, `status_file`, `contract_rv`, unique `required_rows`, `rows[]{id, status:"met"|"open"|"na", evidence[], reason, predicate}`; `met` ⇒ non-empty `evidence[]{kind, path, exit:int?}`, `open` ⇒ `reason`, `na` ⇒ `predicate`.
+- Evidence entries carry **`kind`, `path`, optional integer `exit`**; extra keys are ignored by the validator, not validated. Rich provenance goes to `A/provenance.json`; row obligations to `A/contract.json`; the task-local fulfillment checker validates those separately.
+
+Every execution saves stdout, stderr and numeric exit-code files. Provenance records the exact argv/cwd, tool versions, source/tree digest, producer, timestamps and artifact hashes. A command listing alone is not execution evidence.
+
+**Exact planned invocation catalog**
+- C01 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py preparation`
+- C02 `python3 scripts/validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-04.json`
+- C03 `python3 scripts/validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-04.json`
+- C04 `dotnet build src/nextorm.sqlserver/nextorm.sqlserver.csproj -c Debug`
+- C05 `dotnet test tests/nextorm.sqlserver.tests -c Debug --filter "FullyQualifiedName~T232"`
+- C06 `dotnet test tests/nextorm.sqlserver.tests -c Debug --filter "FullyQualifiedName~Pivot|FullyQualifiedName~Unpivot|FullyQualifiedName~ProviderExtensionEagerGuardTests"`
+- C07 `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet test tests/nextorm.integration.tests -c Debug --filter "FullyQualifiedName~T232TypedOperators_RespectCapability"`
+- C08 `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet test tests/nextorm.integration.tests -c Debug --filter "FullyQualifiedName~T232SqlServerTests"`
+- C09 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py mutation`
+- C10 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py coverage baseline`
+- C11 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py boundary`
+- C12 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py coverage candidate`
+- C13 `dotnet build examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj -c Debug`
+- C14 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py docs`
+- C15 `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance`
+- C16 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py footprint`
+- C17 `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/manifest.json`
+- C18 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py fulfill`
+- C19 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py scopes`
+
+`verify.py` is task-local evidence plumbing, not a production framework. `scopes` validates each D-01..D-07 brief before execution and the report after, using the existing validator; expanded child argv are preserved. C02/C03 cover the main implementation unit.
+
+| ID / rv | Requirement; scenario | Evidence kinds + sources | Invocation and required result | Artifacts under A | Owner | Applicability predicate |
+|---|---|---|---|---|---|---|
+| E232-01 / 1 | AC-08,12; preparation/name lifecycle | Recon report, Roslyn/config facts, planned preparation tests | C01: exit 0, a concrete safe name-resolution route proven | `preparation.json`, `scout.md`, `foreign-baseline.json`, `C01.*` | scout/coder-preparation | Always |
+| E232-02 / 1 | AC-11; scope/inner-loop gate | Schema-valid briefs/reports and real execution records | C02,C03,C19: exit 0; each test execution selects ≥1 | `briefs/`, `reports/`, `scope-map.json`, logs | coder | Always, per unit |
+| E232-03 / 1 | AC-01,05,07; API/build/XML | Public API inspection and library build | C04: exit 0, no warnings/errors, approved signatures | `api-review.json`, `C04.*` | coder-build | APIs introduced |
+| E232-04 / 1 | AC-01,02,07,08; typed SQL/shapes/composition | Planned exact SQL tests | C05: exit 0, all designated cases run without skips | `typed-cases.json`, `C05.*` | coder-sql-tests | Typed APIs introduced |
+| E232-05 / 1 | AC-04; fail-closed validations | Planned negative tests and message assertions | C05: exit 0; every guard row represented | `guard-cases.json`, `C05.*` | coder-sql-tests | Typed APIs introduced |
+| E232-06 / 1 | AC-03,09; legacy/eager preservation | Existing tests at verified anchors and discovery inventory | C06: exit 0; all original 14 plus eager guards executed | `legacy-inventory.json`, `legacy-diff.json`, `C06.*` | coder-regression | Always |
+| E232-07 / 1 | AC-09; per-provider capability | Shared planned integration capability cases | C07: exit 0; all six providers executed, five reject both | `provider-matrix.json`, `C07.*` | coder-provider-tests | Always |
+| E232-08 / 1 | AC-02,07,08; SQL Server rows/ordinals/sources | Planned container fixture and parity tests | C08: exit 0; no SQL Server skips | `integration-cases.json`, `container-state.json`, `C08.*` | coder-integration | Always |
+| E232-09 / 1 | AC-09; cache/eager/join/source-binding | Planned tests and source review | C05,C08: exit 0; V21–V25 covered | `cache-alias-review.json`, associated logs | coder-core-tests | Always |
+| E232-10 / 1 | AC-11; targeted mutation/red arms | Controlled patches, assertion failures, restoration proof | C09: exit 0 iff every mandated mutant is killed and the tree restored | `mutation.json`, `mutants/`, `C09.*` | coder-mutation | New rewrite/guard/translation code present |
+| E232-11 / 1 | AC-06; coverage/branch delta | Comparable XML, summaries and changed-area mapping | C10,C12: exit 0; final ≥85/75, area does not decrease | `coverage/baseline/`, `coverage/candidate/`, `branch-delta.json` | coder-coverage | Always |
+| E232-12 / 1 | AC-03,09,11; final boundary | Full project suites and the six-provider container run | C11: exit 0; required cases/providers present, zero skips | `boundary.json`, `boundary-logs/`, `C11.*` | coder-boundary | Implementation units complete |
+| E232-13 / 1 | AC-10; example | Source review and example build | C13: exit 0; the C14 example audit passes | `example-review.json`, `C13.*` | coder-example | Always |
+| E232-14 / 1 | AC-04,05; bilingual/XML docs | Content review, XML build evidence and a public link scan | C14: exit 0; semantic EN/RU match, no public specs links | `docs-review.json`, `C14.*` | coder-docs | Always |
+| E232-15 / 1 | AC-11; acceptance performance | Actual BDN baseline/candidate reports | C15 twice: exit 0, seven cases; no unexplained material regression | `perf/baseline/`, `perf/candidate/`, `perf-comparison.json` | coder-perf | Query translation/preparation changes |
+| E232-16 / 1 | AC-12; scope/CRLF/handoff | Git inventories, staged allowlist and line-ending audit | C16: exit 0; foreign bytes preserved, shared implementation clean at handoff | `footprint.json`, `handoff.json`, `C16.*` | coder-handoff | Always |
+| E232-17 / 1 | AC-01…12; schema/fulfillment/sealing | Manifest, provenance and counters | C17,C18: exit 0; zero applicable open rows, valid required evidence/hashes | `manifest.json`, `contract.json`, `provenance.json`, `counters.json` | CHECK | Always |
+
+No `N/A` arm is planned. Tool/container/report absence is not an applicability exemption. Manifest exit 0 proves schema only; **C18** additionally enforces completion, required slots, evidence provenance and hashes. All rows stay in `required_rows`.
+
+**CHECK re-gather:** owner **CHECK**; budget **two targeted batches total per CHECK invocation**, at most one repeat per missing/ambiguous row; exhaustion yields an explicit evidence gap; persistent low confidence routes to planner, then `escalate` trigger 5.
+
+No supersession exists. A future justified rv2 explicitly supersedes rv1, preserves stable IDs/obligations and adds IDs for genuinely new variants. Missing reports alone cannot revise the contract.
+
+## Test strategy with per-unit scope + boundary
+
+**Planned assertions**
+- Preparation: mapped names available/resolved safely at extension time; the `TableAlias` registration precedes the relevant column use.
+- SQL: ordered `IN`, `[1] as [Q1]`, grouping aliases, UNPIVOT role aliases, scalar behaviour.
+- Shapes/cells: anonymous, record, record struct, MemberInit; nullable aggregate, COUNT, reference cells and NULL materialization.
+- Composition: defining-expression `OrderBy`, `Where`, `Select`, derived source, CTE, TVF and a twice-joined typed result.
+- Guards: consumed grouping, duplicates, empty values, zero columns, invalid names, missing/conflicting UNPIVOT roles, null arguments and ambiguous ordinary marker binding.
+- Marker recognition: ordinary `Select`, direct execution throws, an unrelated same-named method remains unrelated.
+- Cache: repeat the same query and interleave different shapes/values; inspect command state for no sticky mutation.
+- Integration: deterministic typed/legacy parity; the capability case inherited by all six provider suites.
+
+**Shared contract fixed in D-02:** alias spelling, value order, role identifiers, fixture rows, NULL/COUNT expectations, exception category/message fragments, provider matrix and ownership. Shared fixture/oracle data is test-only; no production abstraction.
+
+**Per-unit affected subsets**
+- D-01: `dotnet test tests/nextorm.sqlserver.tests -c Debug --filter "FullyQualifiedName~T232PreparationProbeTests"`; C04 actual baseline warning set; C06 baseline.
+- D-02: same project, filter `FullyQualifiedName~T232ProjectionContractTests`.
+- D-03: same project, filter `FullyQualifiedName~T232MarkerTests`, plus C04.
+- D-04: same project, filter `FullyQualifiedName~T232TypedPivotTests`, plus C04 and C06.
+- D-05: C05, C07, C08, C09.
+- D-06: C04, C13, C14; rerun a narrow affected SQL case if sample-driven production edits occur.
+- D-07: the single boundary below; coverage/performance/fulfillment assessment.
+
+New-API tests are introduced together with their compiling implementation unit. Do not report a compile failure as a selected runtime test or fabricate `selected_count`. Every scope amendment is validated before its added execution.
+
+**Single post-implementation boundary**, after D-06:
+- Full `dotnet test tests/nextorm.<project>.tests -c Debug` for `core`, `sqlite`, `postgres`, `sqlserver`, `mysql`, `mariadb`, `clickhouse`.
+- `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor`.
+- Require SQLite/PostgreSQL/SQL Server/MySQL/MariaDB/ClickHouse execution with no skips.
+- The pre-change comparable coverage setup is not an extra post-unit sweep.
+
+Load the running-integration-tests skill before any container execution. A missing socket invokes the documented start/recheck procedure; do not substitute SQLite-only success.
+
+**Coverage:** identical settings, suites and tool versions for baseline/candidate; task-local tools under `A/tools`, versions recorded.
+- Collector: `A/tools/dotnet-coverage collect "python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py coverage-run" -f cobertura -s coverage.settings.xml -o <measurement>/coverage.xml`.
+- Reporter: `A/tools/reportgenerator "-reports:<measurement>/coverage.xml" "-targetdir:<measurement>/report" "-reporttypes:JsonSummary;Cobertura"`.
+- `<measurement>` is exactly `A/coverage/baseline` or `A/coverage/candidate`; the wrapper records the expanded argv.
+- The candidate collection wraps the fixed C11 boundary; C12 assesses it without another sweep.
+- Record total/covered branch delta, added branches, uncovered locations and comparable touched-area coverage.
+
+**Mutation:** no Stryker run/config is claimed. Six targeted controlled mutants: (1) remove alias metadata; (2) reverse value order; (3) disable the duplicate guard; (4) disable the consumed-column guard; (5) disable the zero-column guard; (6) force a wrong mapped/derived grouping name. Every mutant must cause its designated assertion to fail, then be restored. This is targeted mutation evidence, not a repository-wide mutation score.
+
+No new guard/rewriter branch may remain untested. Unchanged general translator branches are outside the mutation denominator; discovered uncovered new branches remain active work.
+
+Counters: selected/executed/passed/failed/skipped per provider; guards covered/required; branch delta; mutants killed/attempted; applicable evidence complete/required; sealed hash-valid artifacts/required. Applicable P1/evidence-sealing ratios must be **100%**.
+
+## Docs plan
+
+- EN `docs/guide/provider-specific-sql/sqlserver.md:143-207` and the RU mirror `:144-208`: typed examples, grouping/subsets, explicit nullable types, aliases, composition/CTE, UNPIVOT roles and fail-closed errors.
+- Explain runtime identifier strings: no compile-time membership guarantee; absent PIVOT values may yield NULL; invalid names/types can fail at runtime.
+- Retain and distinguish the legacy/dynamic usage; documentation does not substitute for implementation.
+- XML-doc every new public type, constructor, accessor and overload (CS1591 is a build gate).
+- Update the AdventureWorks quarterly C#/SQL example to typed members and a single value declaration.
+- Add **PIV-TYP1**/#232 to `docs/specs/design/API-NAMING-REVIEW.md`; mark implemented only after accepted evidence. Preserve `PIV-RD2` P2 OPEN/#53.
+- Capability tables and `docs/specs/roadmap/sql-capabilities-gap-analysis.md`: **unchanged** (supported operators/providers do not change).
+- By-name getting-started guide (`docs/getting-started/03-entities-and-metadata.md:250-287`): unchanged; still valid.
+- No new public guide page; no renumbering/toc changes.
+- Create `docs/specs/roadmap/todo_sqlserver_typed_pivot_unpivot.md` as the saved feature plan, referencing this status and the immutable acceptance/unit IDs (a **DO** artifact, D-01).
+- No links from public documentation to internal specs.
+
+## Perf measurement
+
+**Required.** The change affects query construction/preparation/translation (`EntityBuilder.cs:331,343`; `QueryPreparer.cs:489`; `NormSqlTranslator.cs:99-109`), not per-row mapping (`RowMapperFactory.cs:52`).
+
+Run C15 before production edits and after completion, in an identical environment. Require the confirmed seven acceptance cases. Reference baseline: `docs/specs/performance/acceptance-benchmarks.md:37-45,63-95`, cached/prepared ratio 1.87, allocation ratio 7.42 — historical figures do not replace the live baseline.
+
+Capture tables, allocations, ratios and raw BDN artifacts. A delta below ~20% is noise, not a claimed improvement. An adverse ≥20% delta requires an explanation and one confirmation run; an unresolved material regression fails AC-11.
+
+The suite is a common query-path regression oracle, not a claim to benchmark typed PIVOT directly. No intentional cache-key-policy change.
+
+## Reconnaissance
+
+Read-only reconnaissance is sufficient for planning; no further speculative spike is needed to choose the design.
+
+**Four execution-only unknowns, carried explicitly**
+1. **Actual alias emission** — D-01 runs an existing-PIVOT + `SqlFunctions.Column<T>` preparation probe; D-03/D-04 verify the marker/typed `[1] as [Q1]`. Observable exact-SQL oracle exists.
+2. **Metadata timing** — D-01 tests a mapped entity and a naming convention at the extension-call lifecycle. D-04 must use registered effective metadata or an existing safe initialization/preparation route; never silently default before registration.
+3. **Marker cache equality** — D-03/D-04 add repeat/interleaved marker/shape/value tests and review existing hashing via Roslyn. Observable reuse/isolation is required; no guessed cache-policy change.
+4. **Source-registration ordering** — D-01/D-03 execute projection translation over the actual pivot source; failure to bind `TableAlias` is observable, followed by mandatory derived/CTE/runtime cases.
+
+These are implementation hypotheses with obtainable deterministic oracles, **not undemonstrable acceptance arms**. A failed probe adds an in-cycle prerequisite or prompts a real replan; it does not weaken criteria.
+
+**Committed pre-gate regression arms:** the exact legacy `Pivot_ShouldEmitPivotClause` (`SqlGenerationTests.cs:3060/3074`), the existing throw/cache/derived cases `:3060-3267`, and the eager guards `:27,33,39,45`. No committed typed-feature test is claimed; the new alias/cache/guard assertions and mutation red arms are produced during DO.
+
+CS1591 baseline tension: D-01 captures the actual C04 warnings/errors without reopening the "109 undocumented public types" registry finding.
+
+## Unit mode
+
+Sequential, current tree, one collection group. No branch/worktree/merge/push.
+
+The extension, translator and shared test-contract footprints overlap; parallel mutable-file ownership is prohibited. Coordinate T225's guide edits and finish T232's shared-file handoff before T233.
+
+## DO units
+
+| Unit | Ordered work; disposition | Criteria / scope | Write footprint |
+|---|---|---|---|
+| D-01 Preparation probes | **Fix now:** baseline inventory/build/perf/coverage; executable name-lifecycle/alias/source probes | AC-03,08,11,12; D-01 subset, C01,C06,C10,C15 | Preparation test; status/roadmap; `A/**` |
+| D-02 Test contract | **Fix now:** freeze the shared oracle/fixture contract; buildable legacy-vs-typed-column oracle; test data | AC-01…04,07…09; D-02 subset | Projection-contract test; integration fixture; `A/test-contract.json` |
+| D-03 Core markers | **Fix now:** documented core markers, translation-only behaviour, narrow recognition/`TableAlias` binding | AC-05,07,09; D-03 subset | Public marker file; internal `NormSqlTranslator.cs`; marker tests |
+| D-04 Provider overloads | **Fix now:** approved overloads, identity rewriter, actual grouping names, ordered extraction/guards; legacy construction plus `Select` | AC-01…04,07…09; D-04 subset | Public extension file; internal provider rewriter; typed SQL tests; shared capability test |
+| D-05 Integration/mutation | **Fix now:** SQL Server parity/TVF/CTE/join/cache cases, all-provider capability, branch closure and the six mutants | AC-02,07…09,11; D-05 subset | SQL tests and integration files; `A/**` |
+| D-06 Docs/example | **Fix now:** typed example, bilingual semantics, XML completion and the registry | AC-04,05,10; D-06 subset | Example C#/SQL, EN/RU guides, registry, XML on the listed public files |
+| D-07 Boundary/handoff | **Fix now:** one boundary, coverage/perf assessment, evidence sealing, CHECK and the authorized collection handoff | AC-01…12; C03,C11,C12,C15–C19 | Status/roadmap/registry final state; `A/**`; no new production scope |
+
+No parallel mutable ownership. Maintain the status/todo at every completed and newly started step.
+
+**Footprint exclusions (read-only under r1):** `PivotExpression.cs`, `BaseExpressionVisitor.cs`, `TableAliasAccessors.cs`, `SqlSourceRenderer.cs`, `SqlBuilder.cs`, `SqlFunctions.cs`, `Dialect/**`, `Builders/**`, project/package files and the existing 14 tests. A demonstrated need to edit these returns to PLAN.
+
+## Risks
+
+- **High:** mapping too early or a wrong derived name — D-01 lifecycle proof and D-04 actual-source resolution.
+- **High:** aliases valid only at top level — mandatory derived/CTE/join execution.
+- **High:** a wrong non-nullable type against SQL NULL — explicit ownership, deterministic tests/docs.
+- **High:** marker recognized as a source type or an arbitrary method — `TableAlias` binding and exact new-method recognition.
+- **Medium:** cache equality misses shape/value differences — interleaved tests and source review.
+- **Medium:** ordinary marker use is ambiguous in joins — fail clearly; typed overloads carry explicit rewritten source binding.
+- **Medium:** coverage inputs differ — freeze suites/settings/versions.
+- **Medium:** tools/containers fail — an evidence gap, not a skip exemption.
+- **Medium:** sibling overlap or foreign artifact damage — path ownership and byte-preservation audit.
+- **Low:** baseline documentation-warning tension — capture the actual build; do not broaden into registry cleanup.
+
+## Deferred + trigger
+
+No #232 acceptance requirement is deferred.
+
+- #53 PublicAPI freeze / PIV-RD2 — existing ownership; trigger: #53 resumes (add both new public surfaces to its candidates). Stays in its own milestone tracking; no #232 slice is moved.
+- Typed runtime-generated dynamic shapes — outside approved scope; trigger: an explicit new requirement. The legacy API remains usable now.
+- Repository-wide Stryker rollout — outside scope; trigger: approved infrastructure work. Targeted mutation remains mandatory now.
+- Any unfinished #232 slice remains active in **1.0.9-rc3**; splitting requires an active unit/issue with a duplicate-search first, never a later-release deferral or documentation substitution.
+
+## Decisions made
+
+- **Gate 1 satisfied, `plan_state: ready`**, with the contract pinned before DO.
+- The public naming helper and provider internals access eliminate the need for new core mapping/replacement helpers.
+- Only the necessary core edits: the public marker file and internal `NormSqlTranslator.cs`.
+- A provider-local identity rewriter avoids the existing visitors' type-wide parameter replacement.
+- Preserve legacy `TableAlias` behaviour; do not infer why `ColumnName` was historically unset.
+- `OrderBy` resolves defining expressions; tests must not assume alias/ordinal sorting.
+- Derived naming follows the actual projection descriptors and existing alias rules.
+- Duplicate comparison follows the existing identifier representation with ordinal equality; no invented collation equivalence.
+- UNPIVOT requires both roles; repeated consistent references reuse a role, conflicting identifiers fail.
+- No new capability flag; the existing dialect capability/renderer remains authoritative.
+- Supplemental provenance/fulfillment checking is explicit because the existing validator ignores additional evidence fields.
+
+## Next plan
+
+On continuation (collection lane resumes this same cycle from DO): execute D-01…D-07 **sequentially**. Before each production unit validate its brief; afterwards validate the report with the actual counts/exits.
+
+If a probe reveals a prerequisite, keep the original `D` active and blocked on the added dependency — not done or superseded. A genuine scope replacement requires an explicit mapping and preserved criteria.
+
+CHECK→PLAN creates a new `P:` task with the actual correction. Only materially changed work increments `r` and resets `n`; absent reports/renaming do not. Apply the no-fourth-attempt and persistent-low-confidence escalation rules.
+
+## Changed files
+
+**Actual:** none claimed by PLAN.
+
+**Planned tracked paths** (public/API flagged)
+- **PUBLIC** `src/nextorm.core/Query/PivotValues.cs`
+- **PUBLIC** `src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs`
+- internal `src/nextorm.core/Visitors/NormSqlTranslator.cs`
+- internal `src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs`
+- test `tests/nextorm.sqlserver.tests/T232PreparationProbeTests.cs`
+- test `tests/nextorm.sqlserver.tests/T232ProjectionContractTests.cs`
+- test `tests/nextorm.sqlserver.tests/T232MarkerTests.cs`
+- test `tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs`
+- test `tests/nextorm.integration.tests/CommonTestSuite.T232Pivot.cs`
+- test `tests/nextorm.integration.tests/T232SqlServerTests.cs`
+- test `tests/nextorm.integration.tests/T232PivotFixture.cs`
+- example `examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs`
+- example `examples/nextorm.examples.mssql.adventureworks/Sql/mssql_quarterly_pivot.sql`
+- docs `docs/guide/provider-specific-sql/sqlserver.md`
+- docs `docs/ru/guide/provider-specific-sql/sqlserver.md`
+- registry `docs/specs/design/API-NAMING-REVIEW.md`
+- plan `docs/specs/roadmap/todo_sqlserver_typed_pivot_unpivot.md`
+- status `docs/specs/status/D232-sqlserver-pivot-unpivot-1.md`
+
+Evidence plumbing/results: `artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/`; generated benchmark outputs are recorded, not indiscriminately staged.
+
+Preserve CRLF; normalize only edited text files. Collection commit only after the authorized continuation/acceptance, with explicit task paths and the `#232` prefix; never `git add -A`, merge or push.
+
+## Pointers
+
+- #232 approved specification; related #231, #160, #53.
+- Public naming helper `MemberInfoExtensions.cs:44`; metadata `DataContextCache.cs:51`.
+- Type-keyed sources `DefaultColumnsProvider.cs:14,121,243`; `SqlSourceRenderer.cs:1014`.
+- Inner/source rendering `SqlSourceRenderer.cs:1002,1008-1009,1023-1025`.
+- Identity correction `ReplaceExpressionVisitor.cs:17,22-25`; provider internals `nextorm.core.csproj:81`.
+- Alias translation `NormSqlTranslator.cs:45-47,106-107`; `BaseExpressionVisitor.cs:442-475`.
+- Sorting `QueryPreparer.cs:2594,2626-2661`; derived names `MemberTranslator.cs:811-814`.
+- Ordinal mapping `RowMapperFactory.cs:52`; legacy exact SQL `SqlGenerationTests.cs:3074`.
+- Validator `scripts/validate_inner_loop.py:172-277,495-562,586-591`.
+- Build/docs warnings `src/Directory.Build.props:11`; `Directory.Build.props:40`.
+- Containers `docs/specs/status/collection-1.0.9-todo.md:127,147`; performance reference `docs/specs/performance/acceptance-benchmarks.md:37-45,63-95`.
+
+## Progress log
+
+```text
+2026-10-14 17:54:07Z | PLAN | revision r=1 | iteration n=1/3 | PLAN ready — awaiting confirmation (collection PLAN→DO boundary; no user `go` awaited) | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
+```
