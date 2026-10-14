@@ -184,7 +184,9 @@ T213 delivered behavior + its artifacts are sufficient inputs; #223 is NOT a dep
 - Hunk roll-up (`disposition.md`): 14 `already-present` (superseded by T223), 4 `obsolete`, 8
   `conflict-reworked`; **0 carried**.
 - Evidence: `artifacts/pdca/D225/rv1/{disposition.md, semantic-review.md, DO_TO_PLAN.md, oracle-rejection.log,
-  oracle-remainder.log, scope.json}`.
+  oracle-remainder.log, scope.json, evidence.json, manifest.json}`. Validators
+  (`scripts/validate_inner_loop.py brief|report|manifest`) all exit 0; the manifest carries E01–E05 as `open`
+  with reasons (the DO→CHECK boundary was not reached), which forbids PASS.
 - DO-phase runs at HEAD `ee3ee9fe`: `dotnet build tests/nextorm.core.tests -c Debug` → 0 Warning(s)/0
   Error(s); the two oracle selectors exit 0 (4/4 and 17/17, 0 skipped).
 - Requested: a `planner` revision **r=3** — re-baseline to HEAD, re-scope C3 and E01 to the #213/#223
