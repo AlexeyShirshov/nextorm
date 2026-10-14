@@ -1,0 +1,8 @@
+# T225 (#225) — corrected E02 receipt, re-run AFTER the rv=4 status freeze (rv=3)
+# cwd: /home/alex/sources/nextorm | branch: 1.0.9-rc3 | HEAD: 30bd9c5f34bae15c5c7e2651ccc1f52405b0d02a
+# status_file_sha256_at_run: 38df95a146d9fa1172421ec0c1bf31957b4c306259c698a52bf08f38a3d6c6ec
+# timestamp: 2026-10-14 19:03 UTC
+argv: git diff --check 0ed8e01dae44122276056f9f89676d913891ff09 -- docs/advanced/relationships.md docs/ru/advanced/relationships.md docs/advanced/limitations.md docs/ru/advanced/limitations.md docs/advanced/eager-loading.md docs/ru/advanced/eager-loading.md docs/guide/02-joins.md docs/ru/guide/02-joins.md docs/guide/29-implicit-navigation.md docs/ru/guide/29-implicit-navigation.md docs/specs/comparison/capability-matrix.md docs/specs/comparison/linq2db-comparison.md docs/specs/comparison/linq2db-backlog-gap-analysis.md docs/specs/roadmap/sql-capabilities-gap-analysis.md docs/specs/roadmap/todo_eager_loading_pipeline.md docs/specs/roadmap/todo_navigation_properties.md docs/specs/status/D225-joininto-mn-docs-delta-1.md
+exit=0
+output_bytes=0
+diff_check_exit=0

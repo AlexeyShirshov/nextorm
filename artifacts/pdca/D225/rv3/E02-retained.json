@@ -1,0 +1,154 @@
+{
+ "row": "E02",
+ "requirement": "AC05-C5",
+ "priority": "P1",
+ "contract_rv_source": 2,
+ "retained_scenario": "Corrected authored-path whitespace validation: git diff --check $B -- <16 footprint paths> $S -> exit 0, empty output. Retained: dotnet docfx docs/docfx.json exit 0 / 0 errors; check_docs.py 16 files / 0 failures.",
+ "rv2_row": {
+  "id": "E02",
+  "status": "met",
+  "evidence": [
+   {
+    "kind": "log",
+    "path": "artifacts/pdca/D225/rv2/logs/diff-check.log",
+    "exit": 0
+   },
+   {
+    "kind": "log",
+    "path": "artifacts/pdca/D225/rv2/logs/docfx.log",
+    "exit": 0,
+    "value": "0 errors; 2 pre-existing source-generator duplicate-source warnings (unrelated to the docs delta)"
+   },
+   {
+    "kind": "report",
+    "path": "artifacts/pdca/D225/rv2/structural.json",
+    "value": "16 file(s) checked, 0 failure(s)"
+   },
+   {
+    "kind": "command",
+    "path": "artifacts/pdca/D225/rv2/evidence.json",
+    "command": "python3 artifacts/pdca/D225/rv2/check_docs.py --scope artifacts/pdca/D225/rv2/scope.json --baseline 0ed8e01d --output artifacts/pdca/D225/rv2/structural.json",
+    "exit": 0
+   }
+  ]
+ },
+ "original_invocations": [
+  {
+   "command": [
+    "git",
+    "diff",
+    "--check",
+    "0ed8e01dae44122276056f9f89676d913891ff09",
+    "--",
+    "docs/advanced/relationships.md",
+    "docs/ru/advanced/relationships.md",
+    "docs/advanced/limitations.md",
+    "docs/ru/advanced/limitations.md",
+    "docs/advanced/eager-loading.md",
+    "docs/ru/advanced/eager-loading.md",
+    "docs/guide/02-joins.md",
+    "docs/ru/guide/02-joins.md",
+    "docs/guide/29-implicit-navigation.md",
+    "docs/ru/guide/29-implicit-navigation.md",
+    "docs/specs/comparison/capability-matrix.md",
+    "docs/specs/comparison/linq2db-comparison.md",
+    "docs/specs/comparison/linq2db-backlog-gap-analysis.md",
+    "docs/specs/roadmap/sql-capabilities-gap-analysis.md",
+    "docs/specs/roadmap/todo_eager_loading_pipeline.md",
+    "docs/specs/roadmap/todo_navigation_properties.md",
+    "docs/specs/status/D225-joininto-mn-docs-delta-1.md"
+   ],
+   "phase": "boundary",
+   "exit_code": 0,
+   "selected_count": 1,
+   "value": null,
+   "log": "artifacts/pdca/D225/rv2/logs/diff-check.log",
+   "log_sha256": "da6316a9472cc48ed5a39333c6ce50b707ffface358e8b36e2443586fc20ba3d",
+   "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+   "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09"
+  },
+  {
+   "command": [
+    "dotnet",
+    "docfx",
+    "docs/docfx.json"
+   ],
+   "phase": "boundary",
+   "exit_code": 0,
+   "selected_count": 1,
+   "value": "0 errors, 2 pre-existing source-generator duplicate-source warnings",
+   "log": "artifacts/pdca/D225/rv2/logs/docfx.log",
+   "log_sha256": "eb09b63005afe6e7fa824eaa4e02c7b9831d3c957f61a2d1f8b7a3568e68156f",
+   "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+   "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09"
+  },
+  {
+   "command": [
+    "python3",
+    "artifacts/pdca/D225/rv2/check_docs.py",
+    "--scope",
+    "artifacts/pdca/D225/rv2/scope.json",
+    "--baseline",
+    "0ed8e01dae44122276056f9f89676d913891ff09",
+    "--output",
+    "artifacts/pdca/D225/rv2/structural.json"
+   ],
+   "phase": "boundary",
+   "exit_code": 0,
+   "selected_count": 16,
+   "value": "16 file(s) checked, 0 failure(s)",
+   "log": "artifacts/pdca/D225/rv2/structural.json",
+   "log_sha256": "ac28ff0a6d940ab4dd55335e6a7d649730ecacd1bbdd735dca44a374a450522a",
+   "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+   "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09"
+  }
+ ],
+ "retained_artifact_hashes": [
+  {
+   "path": "artifacts/pdca/D225/rv2/logs/diff-check.log",
+   "sha256": "da6316a9472cc48ed5a39333c6ce50b707ffface358e8b36e2443586fc20ba3d",
+   "bytes": 18,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/logs/docfx.log",
+   "sha256": "eb09b63005afe6e7fa824eaa4e02c7b9831d3c957f61a2d1f8b7a3568e68156f",
+   "bytes": 2878,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/structural.json",
+   "sha256": "ac28ff0a6d940ab4dd55335e6a7d649730ecacd1bbdd735dca44a374a450522a",
+   "bytes": 98,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/evidence.json",
+   "sha256": "c8156960344f3ec2821611f5c25fcc412c3c797dae68853a33b54a6b6f016476",
+   "bytes": 8551,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  }
+ ],
+ "source_integrity": [],
+ "frozen_revision": {
+  "baseline": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "rv2_artifacts_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+  "evaluated_tree_T": "30bd9c5f34bae15c5c7e2651ccc1f52405b0d02a"
+ },
+ "carried_forward": "Only the artifact-inclusive scenario is superseded (see supersession.md). Every C5 predicate is retained: the corrected command covers the same authored paths minus the raw $A2 evidence directory, which is outside authored-page validation.",
+ "superseded": true,
+ "supersedes_note": "rv3 supersedes only E02's artifact-inclusive whitespace scenario; the row ID, P1 priority and every C5 predicate are retained (see supersession.md).",
+ "rv2_status": "met",
+ "rv3_status": "met",
+ "immutability": "indexed by reference; the rv2 artifacts were neither rerun nor rewritten"
+}

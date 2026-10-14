@@ -1,0 +1,105 @@
+{
+ "row": "E05",
+ "requirement": "AC05-C8",
+ "priority": "P1",
+ "contract_rv_source": 2,
+ "retained_scenario": "Retained baseline-relative portability receipt: check_patch.py exit 0 (16 files, 8 hunks, 0 failures) with a temporary-index read-tree + apply --cached --check succeeding.",
+ "rv2_row": {
+  "id": "E05",
+  "status": "met",
+  "evidence": [
+   {
+    "kind": "patch",
+    "path": "artifacts/pdca/D225/rv2/docs.patch"
+   },
+   {
+    "kind": "report",
+    "path": "artifacts/pdca/D225/rv2/portability.json",
+    "value": "16 file(s), 8 hunk(s), 0 failure(s)"
+   },
+   {
+    "kind": "baseline",
+    "path": "artifacts/pdca/D225/rv2/baseline.json",
+    "value": "tree 0ed8e01d, footprint_clean true"
+   },
+   {
+    "kind": "log",
+    "path": "artifacts/pdca/D225/rv2/logs/patch.log",
+    "exit": 0,
+    "value": "git read-tree 0ed8e01d + git apply --cached --check exit 0 (temporary index)"
+   }
+  ]
+ },
+ "original_invocations": [
+  {
+   "command": [
+    "python3",
+    "artifacts/pdca/D225/rv2/check_patch.py",
+    "--baseline",
+    "0ed8e01dae44122276056f9f89676d913891ff09",
+    "--scope",
+    "artifacts/pdca/D225/rv2/scope.json",
+    "--patch",
+    "artifacts/pdca/D225/rv2/docs.patch",
+    "--report",
+    "artifacts/pdca/D225/rv2/portability.json"
+   ],
+   "phase": "boundary",
+   "exit_code": 0,
+   "selected_count": 16,
+   "value": "16 file(s), 8 hunk(s), 0 failure(s); read-tree + apply --cached --check exit 0",
+   "log": "artifacts/pdca/D225/rv2/logs/patch.log",
+   "log_sha256": "5b1540582a75b62d05267e1e2324891fd20d807890e28b8113f94d550bfefacb",
+   "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+   "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09"
+  }
+ ],
+ "retained_artifact_hashes": [
+  {
+   "path": "artifacts/pdca/D225/rv2/docs.patch",
+   "sha256": "d39af3f09317f41ac50064cb4b4b6972458eb6fbae8e23990e6afcc39b1911d5",
+   "bytes": 23748,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/portability.json",
+   "sha256": "ecbcd7a0f3277959282de7d72793db9f6e0cce0808d5007394af1d0d15c4f0c1",
+   "bytes": 1277,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/baseline.json",
+   "sha256": "ca74ccba3d78569c93a637d38302b90b0bfae23e10967abe287aaa076fc8cb9c",
+   "bytes": 371,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/logs/patch.log",
+   "sha256": "5b1540582a75b62d05267e1e2324891fd20d807890e28b8113f94d550bfefacb",
+   "bytes": 49,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  }
+ ],
+ "source_integrity": [],
+ "frozen_revision": {
+  "baseline": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "rv2_artifacts_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+  "evaluated_tree_T": "30bd9c5f34bae15c5c7e2651ccc1f52405b0d02a"
+ },
+ "carried_forward": "Baseline $B and the footprint are unchanged; the docs.patch artifact and portability report are immutable.",
+ "superseded": false,
+ "supersedes_note": "None: rv3 retains this row's ID, requirement, scenario and P1 priority unchanged.",
+ "rv2_status": "met",
+ "rv3_status": "met",
+ "immutability": "indexed by reference; the rv2 artifacts were neither rerun nor rewritten"
+}

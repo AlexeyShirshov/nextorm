@@ -1,0 +1,164 @@
+{
+ "row": "E01",
+ "requirement": "AC01-AC04",
+ "priority": "P1",
+ "contract_rv_source": 2,
+ "retained_scenario": "SEM audit of the delivered JoinInto behaviour plus the filtered core oracle (FullyQualifiedName~JoinInto: 159 selected / 159 passed / 0 skipped, exit 0); C1-C4 source/claim mappings.",
+ "rv2_row": {
+  "id": "E01",
+  "status": "met",
+  "evidence": [
+   {
+    "kind": "report",
+    "path": "artifacts/pdca/D225/rv2/semantic-review.md"
+   },
+   {
+    "kind": "receipts",
+    "path": "artifacts/pdca/D225/rv2/roslyn.json"
+   },
+   {
+    "kind": "log",
+    "path": "artifacts/pdca/D225/rv2/logs/joininto.log",
+    "exit": 0,
+    "value": "selected 159, succeeded 159, failed 0, skipped 0"
+   },
+   {
+    "kind": "command",
+    "path": "artifacts/pdca/D225/rv2/evidence.json",
+    "command": "dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~JoinInto",
+    "exit": 0
+   },
+   {
+    "kind": "source",
+    "path": "src/nextorm.core/Builders/Joins/JunctionLinkSourceFactory.cs",
+    "value": ":198-200 missing-junction guard; :205-206 composite routing"
+   },
+   {
+    "kind": "test",
+    "path": "tests/nextorm.core.tests/JoinIntoCompositeRemainderTests.cs",
+    "value": ":97 C2 1:N, :147 C2 1:1, :201/:402/:454/:514/:570/:626 C3/C4, :681/:695/:708/:721/:732 C1"
+   },
+   {
+    "kind": "test",
+    "path": "tests/nextorm.core.tests/JoinIntoManyToManySingleQueryTests.cs",
+    "value": ":20 and :67 C1 SingleQuery stitching"
+   }
+  ]
+ },
+ "original_invocations": [
+  {
+   "command": [
+    "dotnet",
+    "test",
+    "tests/nextorm.core.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--filter",
+    "FullyQualifiedName~JoinInto"
+   ],
+   "phase": "boundary",
+   "exit_code": 0,
+   "selected_count": 159,
+   "value": "succeeded 159, failed 0, skipped 0",
+   "log": "artifacts/pdca/D225/rv2/logs/joininto.log",
+   "log_sha256": "ba62828bcbf82fe52d2c9501b49fa39ef4bb4696bd5f13fea52b10092f4863cb",
+   "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+   "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09"
+  }
+ ],
+ "retained_artifact_hashes": [
+  {
+   "path": "artifacts/pdca/D225/rv2/semantic-review.md",
+   "sha256": "c5d91566848ffe35590e1c768861d5b707b726c1a3bd45afd76de92c43ea2e03",
+   "bytes": 5863,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/roslyn.json",
+   "sha256": "9f8b8935b62f9ecb8d94a9de4e63301c8eb9265e398707832d0a08b0ed154086",
+   "bytes": 4180,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/logs/joininto.log",
+   "sha256": "ba62828bcbf82fe52d2c9501b49fa39ef4bb4696bd5f13fea52b10092f4863cb",
+   "bytes": 366,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/evidence.json",
+   "sha256": "c8156960344f3ec2821611f5c25fcc412c3c797dae68853a33b54a6b6f016476",
+   "bytes": 8551,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "src/nextorm.core/Builders/Joins/JunctionLinkSourceFactory.cs",
+   "sha256": "c4eb743a4e20b1eba6d3bf2994857c61e7092bfb0179c90010e945a5b3d2a140",
+   "bytes": 19280,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "tests/nextorm.core.tests/JoinIntoCompositeRemainderTests.cs",
+   "sha256": "242c856b01bc90c5512356b4413cd4f52339d9d9aa46b60f4b956a5ccd69ce8d",
+   "bytes": 38523,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "tests/nextorm.core.tests/JoinIntoManyToManySingleQueryTests.cs",
+   "sha256": "d88fe1c48931425aef0f6c86de92a409583ac448ebe659a26c804022e2d93243",
+   "bytes": 6353,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  }
+ ],
+ "source_integrity": [
+  {
+   "path": "src/nextorm.core/Builders/Joins/JunctionLinkSourceFactory.cs",
+   "blob_sha1_at_T": "70fbd4786e24daff66996990ec110c7716585acf",
+   "sha256_at_T": "84f42c761a3c391e779a8967a7cc676a16d156cedafe2a50ba1dfa58f4b29b41",
+   "sha256_worktree": "c4eb743a4e20b1eba6d3bf2994857c61e7092bfb0179c90010e945a5b3d2a140",
+   "worktree_matches_T": false
+  },
+  {
+   "path": "tests/nextorm.core.tests/JoinIntoCompositeRemainderTests.cs",
+   "blob_sha1_at_T": "6eb08278e73f968ca3d8d57fb6ae4dd88a6ad96d",
+   "sha256_at_T": "4154d67627db51a5ae9be65e96e9308c8c3fe92a184a333a2dad89df74597fa3",
+   "sha256_worktree": "242c856b01bc90c5512356b4413cd4f52339d9d9aa46b60f4b956a5ccd69ce8d",
+   "worktree_matches_T": false
+  },
+  {
+   "path": "tests/nextorm.core.tests/JoinIntoManyToManySingleQueryTests.cs",
+   "blob_sha1_at_T": "3ac59f3b8fc825834f99fdf91cbf877febcb888e",
+   "sha256_at_T": "910064fe1d19d14f0f690499714e817db29d5c93ea492d6dec9cf4fcecc70c7d",
+   "sha256_worktree": "d88fe1c48931425aef0f6c86de92a409583ac448ebe659a26c804022e2d93243",
+   "worktree_matches_T": false
+  }
+ ],
+ "frozen_revision": {
+  "baseline": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "rv2_artifacts_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+  "evaluated_tree_T": "30bd9c5f34bae15c5c7e2651ccc1f52405b0d02a"
+ },
+ "carried_forward": "rv2 receipts unchanged; no compiled input and no footprint document changed since T, so the mapping still holds.",
+ "superseded": false,
+ "supersedes_note": "None: rv3 retains this row's ID, requirement, scenario and P1 priority unchanged.",
+ "rv2_status": "met",
+ "rv3_status": "met",
+ "immutability": "indexed by reference; the rv2 artifacts were neither rerun nor rewritten"
+}

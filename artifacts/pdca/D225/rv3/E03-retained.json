@@ -1,0 +1,76 @@
+{
+ "row": "E03",
+ "requirement": "AC06-C6",
+ "priority": "P1",
+ "contract_rv_source": 2,
+ "retained_scenario": "Retained single Debug solution build at the r=3 boundary: dotnet build nextorm.slnx -c Debug -> exit 0, 0 warnings / 0 errors.",
+ "rv2_row": {
+  "id": "E03",
+  "status": "met",
+  "evidence": [
+   {
+    "kind": "log",
+    "path": "artifacts/pdca/D225/rv2/logs/build.log",
+    "exit": 0,
+    "value": "0 Warning(s) / 0 Error(s)"
+   },
+   {
+    "kind": "command",
+    "path": "artifacts/pdca/D225/rv2/evidence.json",
+    "command": "dotnet build nextorm.slnx -c Debug",
+    "exit": 0
+   }
+  ]
+ },
+ "original_invocations": [
+  {
+   "command": [
+    "dotnet",
+    "build",
+    "nextorm.slnx",
+    "-c",
+    "Debug"
+   ],
+   "phase": "boundary",
+   "exit_code": 0,
+   "selected_count": 1,
+   "value": "0 Warning(s) / 0 Error(s)",
+   "log": "artifacts/pdca/D225/rv2/logs/build.log",
+   "log_sha256": "ba9e551b3be9cd2bfdd8df19fe2a4bb740974d4632aae921f3d3564c49e43695",
+   "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+   "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09"
+  }
+ ],
+ "retained_artifact_hashes": [
+  {
+   "path": "artifacts/pdca/D225/rv2/logs/build.log",
+   "sha256": "ba9e551b3be9cd2bfdd8df19fe2a4bb740974d4632aae921f3d3564c49e43695",
+   "bytes": 3618,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/evidence.json",
+   "sha256": "c8156960344f3ec2821611f5c25fcc412c3c797dae68853a33b54a6b6f016476",
+   "bytes": 8551,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  }
+ ],
+ "source_integrity": [],
+ "frozen_revision": {
+  "baseline": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "rv2_artifacts_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+  "evaluated_tree_T": "30bd9c5f34bae15c5c7e2651ccc1f52405b0d02a"
+ },
+ "carried_forward": "No compiled input changed since T (probe 1/2 of the drift proof); the same worktree content remains built and the receipt applies.",
+ "superseded": false,
+ "supersedes_note": "None: rv3 retains this row's ID, requirement, scenario and P1 priority unchanged.",
+ "rv2_status": "met",
+ "rv3_status": "met",
+ "immutability": "indexed by reference; the rv2 artifacts were neither rerun nor rewritten"
+}

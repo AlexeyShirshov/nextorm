@@ -1,0 +1,2 @@
+argv: python3 scripts/validate_inner_loop.py report artifacts/pdca/D225/rv3/evidence.json
+exit=0

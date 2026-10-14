@@ -1,0 +1,166 @@
+{
+ "row": "E06",
+ "requirement": "AC03-negative",
+ "priority": "P1",
+ "contract_rv_source": 2,
+ "retained_scenario": "Retained malformed-key negative oracles: FullyQualifiedName~JoinIntoCompositeJunctionRejectionTests 4/4 and FullyQualifiedName~JoinIntoCompositeRemainderTests 17/17, exit 0, no skips; guard sites unchanged.",
+ "rv2_row": {
+  "id": "E06",
+  "status": "met",
+  "evidence": [
+   {
+    "kind": "report",
+    "path": "artifacts/pdca/D225/rv2/malformed-review.md"
+   },
+   {
+    "kind": "log",
+    "path": "artifacts/pdca/D225/rv2/logs/composite-rejection.log",
+    "exit": 0,
+    "value": "selected 4, succeeded 4, failed 0, skipped 0"
+   },
+   {
+    "kind": "log",
+    "path": "artifacts/pdca/D225/rv2/logs/composite-remainder.log",
+    "exit": 0,
+    "value": "selected 17, succeeded 17, failed 0, skipped 0"
+   },
+   {
+    "kind": "log",
+    "path": "artifacts/pdca/D225/rv2/logs/composite-oracles.log",
+    "exit": 0,
+    "value": "combined-equivalent run: selected 21, succeeded 21, failed 0, skipped 0"
+   },
+   {
+    "kind": "test",
+    "path": "tests/nextorm.core.tests/JoinIntoCompositeJunctionRejectionTests.cs",
+    "value": ":113 support NotThrow; :226 contradictory order; :308 under-cover FK"
+   },
+   {
+    "kind": "source",
+    "path": "src/nextorm.core/Builders/Joins/JoinIntoManyToManySpec.cs",
+    "value": ":371-373 under-cover; :382-384 order; :388-390 type mismatch"
+   }
+  ]
+ },
+ "original_invocations": [
+  {
+   "command": [
+    "dotnet",
+    "test",
+    "tests/nextorm.core.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--filter",
+    "FullyQualifiedName~JoinIntoCompositeJunctionRejectionTests"
+   ],
+   "phase": "boundary",
+   "exit_code": 0,
+   "selected_count": 4,
+   "value": "succeeded 4, failed 0, skipped 0",
+   "log": "artifacts/pdca/D225/rv2/logs/composite-rejection.log",
+   "log_sha256": "25d88f0272949d41e722dc8c0467942046fcbc5420c3d57b412e100d027d86d8",
+   "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+   "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09"
+  },
+  {
+   "command": [
+    "dotnet",
+    "test",
+    "tests/nextorm.core.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--filter",
+    "FullyQualifiedName~JoinIntoCompositeRemainderTests"
+   ],
+   "phase": "boundary",
+   "exit_code": 0,
+   "selected_count": 17,
+   "value": "succeeded 17, failed 0, skipped 0",
+   "log": "artifacts/pdca/D225/rv2/logs/composite-remainder.log",
+   "log_sha256": "721f38f636c7ae26b940951e55ea5709bb78a4acab727f9f6d88a85054792319",
+   "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+   "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09"
+  }
+ ],
+ "retained_artifact_hashes": [
+  {
+   "path": "artifacts/pdca/D225/rv2/malformed-review.md",
+   "sha256": "74b55d751a96e24ff1d8de7488241576359cde40c449eaf533c7a1bc11a09b3a",
+   "bytes": 3489,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/logs/composite-rejection.log",
+   "sha256": "25d88f0272949d41e722dc8c0467942046fcbc5420c3d57b412e100d027d86d8",
+   "bytes": 362,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/logs/composite-remainder.log",
+   "sha256": "721f38f636c7ae26b940951e55ea5709bb78a4acab727f9f6d88a85054792319",
+   "bytes": 364,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/logs/composite-oracles.log",
+   "sha256": "4c1d9d35caff7d2f55e25dcb11bd486af8eb1bd3705132c4a858b4898b8a724d",
+   "bytes": 364,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "tests/nextorm.core.tests/JoinIntoCompositeJunctionRejectionTests.cs",
+   "sha256": "6104f8efd014b3235c1d010e369311308d2f5051c219c5b5cb824dde83d7a677",
+   "bytes": 22241,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "src/nextorm.core/Builders/Joins/JoinIntoManyToManySpec.cs",
+   "sha256": "4521821eac88f1328b02c4acc1b82adf309a5bd2b453b20e445717e11f317c0d",
+   "bytes": 34360,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  }
+ ],
+ "source_integrity": [
+  {
+   "path": "tests/nextorm.core.tests/JoinIntoCompositeJunctionRejectionTests.cs",
+   "blob_sha1_at_T": "59ffece9f4a3605d710178021b94691c095d45e0",
+   "sha256_at_T": "1208507c32c92e26b84a7f0ab54c1eb6b11c12bcccb0e34b72362decc05ae528",
+   "sha256_worktree": "6104f8efd014b3235c1d010e369311308d2f5051c219c5b5cb824dde83d7a677",
+   "worktree_matches_T": false
+  },
+  {
+   "path": "src/nextorm.core/Builders/Joins/JoinIntoManyToManySpec.cs",
+   "blob_sha1_at_T": "bbbe5003a20f992c3fac02688fdac3ffde785cfe",
+   "sha256_at_T": "f039dedf454f7cdc5a81f1df53a53be1ed11ad9a23ed538267f8408bcf7d230d",
+   "sha256_worktree": "4521821eac88f1328b02c4acc1b82adf309a5bd2b453b20e445717e11f317c0d",
+   "worktree_matches_T": false
+  }
+ ],
+ "frozen_revision": {
+  "baseline": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "rv2_artifacts_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+  "evaluated_tree_T": "30bd9c5f34bae15c5c7e2651ccc1f52405b0d02a"
+ },
+ "carried_forward": "Guard sites in src/** and the two test classes are byte-identical to T, so the negative evidence is still valid.",
+ "superseded": false,
+ "supersedes_note": "None: rv3 retains this row's ID, requirement, scenario and P1 priority unchanged.",
+ "rv2_status": "met",
+ "rv3_status": "met",
+ "immutability": "indexed by reference; the rv2 artifacts were neither rerun nor rewritten"
+}

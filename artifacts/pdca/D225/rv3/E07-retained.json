@@ -1,0 +1,136 @@
+{
+ "row": "E07",
+ "requirement": "AC05-scope",
+ "priority": "P1",
+ "contract_rv_source": 2,
+ "retained_scenario": "Retained SEM explicit/implicit navigation path audit and the EN/RU claim ledger; no implicit capability asserted without proof.",
+ "rv2_row": {
+  "id": "E07",
+  "status": "met",
+  "evidence": [
+   {
+    "kind": "report",
+    "path": "artifacts/pdca/D225/rv2/implicit-scope.md"
+   },
+   {
+    "kind": "receipts",
+    "path": "artifacts/pdca/D225/rv2/roslyn.json",
+    "value": "refs ResolveHop -> Resolve :70; members NavigationPathResolver :211/:266/:302"
+   },
+   {
+    "kind": "source",
+    "path": "src/nextorm.core/Visitors/NavigationPathResolver.cs",
+    "value": ":302-306 RequireSingleKey; :272-279 composite junction rejection; :45 XML contract"
+   },
+   {
+    "kind": "test",
+    "path": "tests/nextorm.core.tests/NavigationPathResolverTests.cs",
+    "value": ":795-801 composite-key fail-closed boundary"
+   },
+   {
+    "kind": "doc",
+    "path": "docs/guide/29-implicit-navigation.md",
+    "value": ":257 re-scoped EN bullet"
+   },
+   {
+    "kind": "doc",
+    "path": "docs/ru/guide/29-implicit-navigation.md",
+    "value": ":263 re-scoped RU bullet"
+   }
+  ]
+ },
+ "original_invocations": [],
+ "retained_artifact_hashes": [
+  {
+   "path": "artifacts/pdca/D225/rv2/implicit-scope.md",
+   "sha256": "ed6528f1248eb4011175e9f715e5ca28985f66c8f3cf9a084fa75f2256a68918",
+   "bytes": 3474,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "artifacts/pdca/D225/rv2/roslyn.json",
+   "sha256": "9f8b8935b62f9ecb8d94a9de4e63301c8eb9265e398707832d0a08b0ed154086",
+   "bytes": 4180,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "src/nextorm.core/Visitors/NavigationPathResolver.cs",
+   "sha256": "0b9c89ac7519b740e6447aed23df68ea560652aa17b9d7b50093ec04c4d301c1",
+   "bytes": 14861,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "tests/nextorm.core.tests/NavigationPathResolverTests.cs",
+   "sha256": "4b42e5506905d4bd40d7297b8640931a5f83a5182a25e0b507f09b30e0b6276e",
+   "bytes": 48151,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "docs/guide/29-implicit-navigation.md",
+   "sha256": "fc17d921b90606904acea26c719b928e5c77b19d3d40d7fa76715b2d7ca7decd",
+   "bytes": 16145,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  },
+  {
+   "path": "docs/ru/guide/29-implicit-navigation.md",
+   "sha256": "036b27aab859bbdb6d8bed5fc09f92b45174331180365e9c3ab77a7c13e70b44",
+   "bytes": 25013,
+   "tracked": true,
+   "rv2_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+   "worktree_clean_vs_HEAD": true
+  }
+ ],
+ "source_integrity": [
+  {
+   "path": "src/nextorm.core/Visitors/NavigationPathResolver.cs",
+   "blob_sha1_at_T": "af65e6edcd268b8503b711b2c874d271dc3218bd",
+   "sha256_at_T": "f6ef85b1bd2b41737af08f73a95fc8e40a1ed32d614a1f514c3400e17f9d373e",
+   "sha256_worktree": "0b9c89ac7519b740e6447aed23df68ea560652aa17b9d7b50093ec04c4d301c1",
+   "worktree_matches_T": false
+  },
+  {
+   "path": "tests/nextorm.core.tests/NavigationPathResolverTests.cs",
+   "blob_sha1_at_T": "dd72bb6f7c7ffde31552765d172ab8bed0acfde0",
+   "sha256_at_T": "c9c4b2dc43640dc94a435f060cd691195d038e7827bed89654bd145122da61d2",
+   "sha256_worktree": "4b42e5506905d4bd40d7297b8640931a5f83a5182a25e0b507f09b30e0b6276e",
+   "worktree_matches_T": false
+  },
+  {
+   "path": "docs/guide/29-implicit-navigation.md",
+   "blob_sha1_at_T": "c6056f9288e37424be26b217ae7589a1e4263482",
+   "sha256_at_T": "ff4de46083683a9d7b0b9776db989033dde8cce48ef595ca295d5be896c443d5",
+   "sha256_worktree": "fc17d921b90606904acea26c719b928e5c77b19d3d40d7fa76715b2d7ca7decd",
+   "worktree_matches_T": false
+  },
+  {
+   "path": "docs/ru/guide/29-implicit-navigation.md",
+   "blob_sha1_at_T": "d916c6d119df26746d7ca45482aa556d7bd6d8a1",
+   "sha256_at_T": "fcad6f6fc50c4d1f847bdfbbc7d2b9d50b84c1b8f65631b77c3a2555d10a516d",
+   "sha256_worktree": "036b27aab859bbdb6d8bed5fc09f92b45174331180365e9c3ab77a7c13e70b44",
+   "worktree_matches_T": false
+  }
+ ],
+ "frozen_revision": {
+  "baseline": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "source_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "artifact_revision": "0ed8e01dae44122276056f9f89676d913891ff09",
+  "rv2_artifacts_commit": "e9bea5f7cd29e34ee58428a846dd950c55dd2106",
+  "evaluated_tree_T": "30bd9c5f34bae15c5c7e2651ccc1f52405b0d02a"
+ },
+ "carried_forward": "Both guide bullets and the audited sources are unchanged since T; EN/RU verification stands.",
+ "superseded": false,
+ "supersedes_note": "None: rv3 retains this row's ID, requirement, scenario and P1 priority unchanged.",
+ "rv2_status": "met",
+ "rv3_status": "met",
+ "immutability": "indexed by reference; the rv2 artifacts were neither rerun nor rewritten"
+}

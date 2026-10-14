@@ -1,0 +1,2 @@
+argv: python3 scripts/validate_inner_loop.py brief artifacts/pdca/D225/rv3/scope.json
+exit=0
