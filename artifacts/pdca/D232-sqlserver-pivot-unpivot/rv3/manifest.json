@@ -175,9 +175,38 @@
    "status": "open"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "repro-baseline",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/baseline.json"
+    },
+    {
+     "kind": "production-before",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/production-before.json"
+    },
+    {
+     "exit": 2,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/logs/C20-R01-typed-builder-projection.out"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/logs/C20-R05-pivot-free-control.out"
+    },
+    {
+     "exit": 0,
+     "kind": "acceptance-baseline",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/logs/C20-acceptance-baseline.out"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs"
+    }
+   ],
    "id": "EC232-REPRO",
-   "reason": "isolated repro children, production hashes, frozen oracles; C20 exit 0 only after a genuine builder red (planned; C20 not yet run)",
-   "status": "open"
+   "status": "met"
   },
   {
    "id": "EC232-DERIVED-UNIT",

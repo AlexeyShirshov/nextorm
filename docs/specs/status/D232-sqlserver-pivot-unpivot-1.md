@@ -498,10 +498,23 @@ classification: additive in-cycle prerequisite
 remediation_unit: D232-PREREQ-typed-derived
 blocked_unit: D-05
 defect_1: projection dropped in From(EntityBuilder<T>) through implicit ToCommand(); mandatory runtime repro before production edits
+defect_1_repro: reproduced 2026-10-14 (C20 exit 0) — 4/4 builder+command routes fail with QueryPreparationException 'Select must return new anonymous type' at QueryCommand.QueryPreparer.PrepareColumns (:898) reached through PrepareFrom (:271); actual exception type XunitException wrapping NextORM.Core.QueryPreparationException, 1 selected / 1 failed per isolated child, no timeout
 defect_2: possible translation re-entry; unproven until isolated repro
+defect_2_repro: not reproduced 2026-10-14 — the isolated children terminate normally (no stack overflow, no process termination, ~0.6 s each); the recorded D-05 'StackOverflow' label is NOT confirmed by this repro and is superseded by the deterministic QueryPreparationException
+pivot_free_control: R05 passes (exit 0) — the pivot-free derived route composes, so the failure is PIVOT-specific and no general derived/projection-ownership change is warranted
 preserved_acceptance: AC-08 / V14 / V22 P1; D-04 XML promise unchanged
 closure: prerequisite evidence accepted; DO completion claim is insufficient
 ```
+
+### Repro probe routes (r=3, `T232DerivedSourceReproTests`, all `Explicit`)
+
+| Probe | Route | Result |
+|---|---|---|
+| R01 | `ctx.From(<typed EntityBuilder<TShape>>).Select(...)` | red — `QueryPreparationException : Select must return new anonymous type` |
+| R02 | `ctx.From(<typed EntityBuilder<TShape>>).Where(...).Select(...)` | red — same exception |
+| R03 | `ctx.From(<typed QueryCommand<TShape>>).Select(...)` | red — same exception |
+| R04 | self-join of the typed derived command | red — same exception |
+| R05 | pivot-free derived control (plain table source, `SqlFunctions.Column` projection) | pass (exit 0) |
 
 ```text
 key: D232-D05-unpivot-null-oracle
@@ -551,4 +564,9 @@ closed_by: C24 exit 0 (exactly one changed key `null_count_expectations.unpivot_
 2026-10-14 20:51:44Z | DO | revision r=3 | iteration n=1/3 | DO resumed at r=3: rv3 evidence plumbing, the independent oracle amendment and the typed-derived baseline repro (evidence-only; no production edit) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/
 2026-10-14 20:57:00Z | DO | revision r=3 | iteration n=1/3 | rv3 evidence plumbing created; C32 `manifest` validation exit 0 (30 rows: E232-01..17 carried verbatim + 13 delta rows) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/manifest.json
 2026-10-14 20:57:04Z | DO | revision r=3 | iteration n=1/3 | D232-AMEND-unpivot-null-oracle done: C24 exit 0 — exactly one changed key `null_count_expectations.unpivot_null_cell`, before/after sha256 recorded, source anchor T232SqlServerTests.cs:143-149; defect D232-D05-unpivot-null-oracle closed | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/amendment.json
+2026-10-14 21:25:00Z | DO | revision r=3 | iteration n=1/3 | D-05 partial work committed as historical/provisional (explicit D232 test + rv1 evidence paths only; no foreign path) | 9d9c9380
+2026-10-14 21:27:00Z | DO | revision r=3 | iteration n=1/3 | D232-PREREQ-typed-derived step 1: 5 planned regression probes added (`T232DerivedSourceReproTests`, all `Explicit` so the default suite is unaffected); `dotnet build tests/nextorm.sqlserver.tests -c Debug` = 0 warnings / 0 errors | tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs
+2026-10-14 21:57:14Z | DO | revision r=3 | iteration n=1/3 | C20 baseline repro exit 0: R01–R04 red (QueryPreparationException 'Select must return new anonymous type', 1 selected / 1 failed each, ~0.6 s, NO stack overflow / process termination), R05 pivot-free control PASSES; tree/production/oracle hashes frozen | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/baseline.json
+2026-10-14 21:57:14Z | DO | revision r=3 | iteration n=1/3 | C20 acceptance baseline: exactly 7 cases, 0 failures, wall 00:00:45 (45.9 s); Cached_ToList/Prepared_ToList ratio 2.12 (rv1 D-01 baseline 2.01, historical 1.87 — within noise); allocation ratio 7.77 | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/logs/C20-acceptance-baseline.out
+2026-10-14 21:00:34Z | DO | revision r=3 | iteration n=1/3 | D232-PREREQ-typed-derived repro captured (C20 exit 0) — all four typed routes red with `QueryPreparationException: Select must return new anonymous type` (R01 typed builder `.Select`, R02 typed builder `+Where+Select`, R03 `From(typed QueryCommand).Select`, R04 self-join of the typed command), pivot-free control R05 PASSES (no stack overflow); recursion hypothesis NOT reproduced; STOP routed to the orchestrator | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/baseline.json
 ```

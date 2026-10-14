@@ -297,7 +297,7 @@ def _probe_child(probe, logdir, timeout=300):
     """Run one repro probe in its own process; classify the actual outcome verbatim."""
     prefix = "C20-" + probe["id"]
     exit_code = run([ "dotnet", "test", SQLSERVER_TESTS, "-c", "Debug", "--no-build",
-                      "--filter", probe["filter"] ],
+                      "--filter", probe["filter"], "--", "-explicit", "only" ],
                     prefix, phase="inner", logdir=logdir, timeout=timeout,
                     note="isolated repro child '%s' (%s route)" % (probe["id"], probe["role"]))
     out = _read_text(os.path.join(logdir, prefix + ".out"))
@@ -308,7 +308,7 @@ def _probe_child(probe, logdir, timeout=300):
     return {
         "id": probe["id"],
         "role": probe["role"],
-        "argv": ["dotnet", "test", SQLSERVER_TESTS, "-c", "Debug", "--no-build", "--filter", probe["filter"]],
+        "argv": ["dotnet", "test", SQLSERVER_TESTS, "-c", "Debug", "--no-build", "--filter", probe["filter"], "--", "-explicit", "only"],
         "exit": exit_code,
         "selected_count": summary.get("total"),
         "failed": summary.get("failed"),
@@ -553,9 +553,11 @@ def cmd_build():
 
 
 # --------------------------------------------------------------------------- C21/C22/C23/C26..C31
-def _filtered_run(prefix, filter_value, phase="inner", timeout=900):
-    exit_code = run(["dotnet", "test", SQLSERVER_TESTS, "-c", "Debug", "--filter", filter_value], prefix,
-                    phase=phase, note="filtered: " + filter_value, timeout=timeout)
+def _filtered_run(prefix, filter_value, phase="inner", timeout=900, explicit_only=False):
+    argv = ["dotnet", "test", SQLSERVER_TESTS, "-c", "Debug", "--filter", filter_value]
+    if explicit_only:
+        argv = ["dotnet", "test", SQLSERVER_TESTS, "-c", "Debug", "--no-build", "--filter", filter_value, "--", "-explicit", "only"]
+    exit_code = run(argv, prefix, phase=phase, note="filtered: " + filter_value, timeout=timeout)
     out = _read_text(os.path.join(LOGS, prefix + ".out"))
     return exit_code, _parse_test_summary(out)
 
@@ -614,7 +616,7 @@ def cmd_variant(name: str):
     if spec is None:
         print("ERROR: unknown variant %r (expected one of %s)" % (name, ", ".join(sorted(VARIANT_PROBES))), file=sys.stderr)
         return 1
-    exit_code, summary = _filtered_run("C-variant-" + name, spec["filter"])
+    exit_code, summary = _filtered_run("C-variant-" + name, spec["filter"], explicit_only=True)
     record = {"unit": "D232-PREREQ-typed-derived", "criterion": spec["criterion"], "variant": name,
               "filter": spec["filter"], "exit": exit_code, "test_summary": summary, "captured": _now(),
               "log": _rel(os.path.join(LOGS, "C-variant-" + name + ".out"))}
