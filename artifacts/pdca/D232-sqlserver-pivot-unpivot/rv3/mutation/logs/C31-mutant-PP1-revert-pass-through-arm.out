@@ -1,0 +1,49 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+failed NextORM.Integration.Tests.T232SqlServerTests.TypedPivot_DerivedBuilderRoute_Executes (8s 936ms)
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: Microsoft.Data.SqlClient.SqlException : Invalid column name '1'.
+  Invalid column name '2'.
+    at Microsoft.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+    at Microsoft.Data.SqlClient.SqlInternalConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+    at Microsoft.Data.SqlClient.TdsParser.ThrowExceptionAndWarning(TdsParserStateObject stateObj, SqlCommand command, Boolean callerHasConnectionLock, Boolean asyncClose)
+    at Microsoft.Data.SqlClient.TdsParser.TryRun(RunBehavior runBehavior, SqlCommand cmdHandler, SqlDataReader dataStream, BulkCopySimpleResultSet bulkCopyHandler, TdsParserStateObject stateObj, Boolean& dataReady)
+    at Microsoft.Data.SqlClient.SqlDataReader.TryConsumeMetaData()
+    at Microsoft.Data.SqlClient.SqlDataReader.get_MetaData()
+    at Microsoft.Data.SqlClient.SqlCommand.FinishExecuteReader(SqlDataReader ds, RunBehavior runBehavior, String resetOptionsString, Boolean isInternal, Boolean forDescribeParameterEncryption, Boolean shouldCacheForAlwaysEncrypted)
+    at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReaderTds(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, Boolean isAsync, Int32 timeout, Task& task, Boolean asyncWrite, Boolean inRetry, SqlDataReader ds, Boolean describeParameterEncryptionRequest)
+    at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReader(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, TaskCompletionSource`1 completion, Int32 timeout, Task& task, Boolean& usedCache, Boolean asyncWrite, Boolean inRetry, String method)
+    at Microsoft.Data.SqlClient.SqlCommand.RunExecuteReader(CommandBehavior cmdBehavior, RunBehavior runBehavior, Boolean returnStream, String method)
+    at Microsoft.Data.SqlClient.SqlCommand.ExecuteReader(CommandBehavior behavior)
+    at Microsoft.Data.SqlClient.SqlCommand.ExecuteDbDataReader(CommandBehavior behavior)
+    at NextORM.Core.QueryExecutor.RunReader(DbCommand command, CommandBehavior behavior) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryExecutor.cs:181
+    at NextORM.Core.QueryExecutor.ToList[TResult](IPreparedQueryCommand`1 preparedQueryCommand, ReadOnlySpan`1 params) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryExecutor.cs:760
+    at NextORM.Core.DataContext.ToList[TResult](IPreparedQueryCommand`1 preparedQueryCommand, ReadOnlySpan`1 params) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:1646
+    at NextORM.Core.QueryCommand`1.ToList(ReadOnlySpan`1 params) in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.TResult.cs:276
+    at NextORM.Integration.Tests.T232SqlServerTests.TypedPivot_DerivedBuilderRoute_Executes() in /home/alex/sources/nextorm/tests/nextorm.integration.tests/T232SqlServerTests.cs:276
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) failed with 1 error(s) (20s 844ms)
+Exit code: 2
+  Standard output: [testcontainers.org 00:00:00.29] Connected to Docker:
+    Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+    Server Version: 5.8.6
+    Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+    API Version: 1.44
+    Operating System: fedora
+    Total Memory: 11.68 GB
+  [testcontainers.org 00:00:00.29] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+  [testcontainers.org 00:00:00.35] Reusable resource found
+  [testcontainers.org 00:00:00.43] Start Docker container 1b5207b30a62
+  [testcontainers.org 00:00:01.83] Wait for Docker container 1b5207b30a62 to complete readiness checks
+  [testcontainers.org 00:00:01.84] Execute "/bin/sh -c find /opt/mssql-tools*/bin/sqlcmd -type f -print -quit" at Docker container 1b5207b30a62
+  [testcontainers.org 00:00:01.99] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 1b5207b30a62
+  [testcontainers.org 00:00:07.70] Docker container 1b5207b30a62 ready
+  [testcontainers.org 00:00:08.78] Stop Docker container 1b5207b30a62
+
+Test run summary: Failed!
+  total: 1
+  failed: 1
+  succeeded: 0
+  skipped: 0
+  duration: 21s 072ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

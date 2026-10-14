@@ -1,0 +1,12 @@
+{
+ "applied": true,
+ "expected_failure": "the clone is not marked as a projection-output reference, so MakeColumn re-renders the defining expression instead of the derived table's output identifier",
+ "file": "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+ "id": "PP2-drop-output-reference",
+ "mutated_sha256": "8324ce912e7718e203e8605ee84736f95f0e04d52628917b74824d946d90ef35",
+ "original_sha256": "4d62380f20fb6c19c3c07f774de7d7b3dba6ed4eab68ebec3f66071ede24bb88",
+ "patch": {
+  "find": "                Expression = src.Expression,\n                OutputName = outputName,\n                IsProjectionOutputReference = true,",
+  "replace": "                Expression = src.Expression,\n                OutputName = outputName,"
+ }
+}

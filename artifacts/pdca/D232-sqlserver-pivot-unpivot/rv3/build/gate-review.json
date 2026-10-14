@@ -1,0 +1,16 @@
+{
+ "captured": "2026-10-14T21:47:25Z",
+ "gate": "build",
+ "results": {
+  "src/nextorm.core/nextorm.core.csproj": {
+   "errors": 0,
+   "exit": 0,
+   "warnings": 0
+  },
+  "src/nextorm.sqlserver/nextorm.sqlserver.csproj": {
+   "errors": 0,
+   "exit": 0,
+   "warnings": 0
+  }
+ }
+}

@@ -1,0 +1,23 @@
+{
+ "captured": "2026-10-14T21:52:29Z",
+ "collation_asserted_in_run": true,
+ "collation_source": "tests/nextorm.integration.tests/T232PivotFixture.cs:272,291-293",
+ "criterion": [
+  "EC232-CASE-SENSITIVE-ALIAS",
+  "V29",
+  "AC-08"
+ ],
+ "database_collation": "Latin1_General_100_CS_AS",
+ "exit": 0,
+ "filter": "FullyQualifiedName~T232CaseSensitiveAliasTests",
+ "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C-variant-case-sensitive-alias.out",
+ "project": "tests/nextorm.integration.tests",
+ "test_summary": {
+  "failed": 0,
+  "skipped": 0,
+  "succeeded": 1,
+  "total": 1
+ },
+ "unit": "D232-PREREQ-typed-derived",
+ "variant": "case-sensitive-alias"
+}

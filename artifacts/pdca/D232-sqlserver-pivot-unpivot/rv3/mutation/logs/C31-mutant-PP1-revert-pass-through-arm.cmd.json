@@ -1,0 +1,16 @@
+{
+ "argv": [
+  "dotnet",
+  "test",
+  "tests/nextorm.integration.tests",
+  "-c",
+  "Debug",
+  "--filter",
+  "FullyQualifiedName~TypedPivot_DerivedBuilderRoute_Executes"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T21:44:26Z",
+ "env": {
+  "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+ }
+}

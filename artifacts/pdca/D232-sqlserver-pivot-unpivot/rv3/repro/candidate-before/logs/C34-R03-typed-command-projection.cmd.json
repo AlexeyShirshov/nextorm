@@ -1,0 +1,18 @@
+{
+ "argv": [
+  "dotnet",
+  "test",
+  "tests/nextorm.sqlserver.tests",
+  "-c",
+  "Debug",
+  "--no-build",
+  "--filter",
+  "FullyQualifiedName~Repro03_TypedCommandSource_ProjectsAsDerivedSource",
+  "--",
+  "-explicit",
+  "only"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T21:16:16Z",
+ "env": {}
+}

@@ -57,6 +57,31 @@ SQLSERVER_TESTS = "tests/nextorm.sqlserver.tests"
 INTEGRATION_TESTS = "tests/nextorm.integration.tests"
 BENCHMARK = ["dotnet", "run", "--project", "benchmarks/nextorm.benchmark", "-c", "Release", "--", "--anyCategories=acceptance"]
 
+# The collation the V29 container test creates its database with (T232PivotFixture.cs:272,291-293).
+CASE_SENSITIVE_COLLATION = "Latin1_General_100_CS_AS"
+
+# C23: the six provider families of the integration suite, by test-class name token. A whole family
+# skipping because its container is unavailable is a *provider skip*; a single capability-reason skip
+# is not.
+PROVIDER_TOKENS = [
+    ("sqlite", ["Sqlite"]),
+    ("sqlserver", ["SqlServer"]),
+    ("postgres", ["Postgres"]),
+    ("mysql", ["MySql"]),
+    ("mariadb", ["MariaDb", "MariaDB"]),
+    ("clickhouse", ["ClickHouse"]),
+]
+PROVIDER_UNAVAILABLE = re.compile(r"(SQLite|SQL Server|PostgreSQL|MySQL|MariaDB|ClickHouse) is not available")
+
+# Test files authored/extended by this r=3 delta (the typed-derived prerequisite). They are the task's
+# own files and are legitimately extended by the authorized n=2 repair; the pre-existing frozen oracles
+# may not change.
+DELTA_OWNED_TEST_FILES = [
+    "tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs",
+    "tests/nextorm.integration.tests/T232SqlServerTests.cs",
+    "tests/nextorm.integration.tests/T232PivotFixture.cs",
+]
+
 # Production paths the r=3 footprint names (allowlisted + still-forbidden). Hashed, never edited here.
 PRODUCTION_FILES = [
     "src/nextorm.core/Builders/EntityBuilder.cs",
@@ -108,8 +133,12 @@ VARIANT_PROBES = {
                         "filter": "FullyQualifiedName~Repro03_TypedCommandSource", "artifact": "variants/derived-command.json"},
     "pivot-free": {"criterion": ["EC232-PIVOTFREE-PROBE", "V28", "AC-08", "AC-11"],
                    "filter": "FullyQualifiedName~Repro05_PivotFreeDerivedControl", "artifact": "variants/pivot-free.json"},
+    # T232CaseSensitiveAliasTests lives in the *integration* project (T232PivotFixture.cs:269) and
+    # asserts against a real case-sensitive SQL Server database, so it needs the container host and
+    # must not use the unit project / `-explicit only` route.
     "case-sensitive-alias": {"criterion": ["EC232-CASE-SENSITIVE-ALIAS", "V29", "AC-08"],
-                             "filter": "FullyQualifiedName~T232CaseSensitiveAliasTests", "artifact": "variants/case-sensitive-alias.json"},
+                             "filter": "FullyQualifiedName~T232CaseSensitiveAliasTests", "artifact": "variants/case-sensitive-alias.json",
+                             "project": INTEGRATION_TESTS, "docker": True, "explicit_only": False},
 }
 
 REGRESSION_PROJECTS = [
@@ -620,11 +649,12 @@ def cmd_build():
 
 
 # --------------------------------------------------------------------------- C21/C22/C23/C26..C31
-def _filtered_run(prefix, filter_value, phase="inner", timeout=900, explicit_only=False):
-    argv = ["dotnet", "test", SQLSERVER_TESTS, "-c", "Debug", "--filter", filter_value]
+def _filtered_run(prefix, filter_value, phase="inner", timeout=900, explicit_only=False,
+                  project=SQLSERVER_TESTS, env=None):
+    argv = ["dotnet", "test", project, "-c", "Debug", "--filter", filter_value]
     if explicit_only:
-        argv = ["dotnet", "test", SQLSERVER_TESTS, "-c", "Debug", "--no-build", "--filter", filter_value, "--", "-explicit", "only"]
-    exit_code = run(argv, prefix, phase=phase, note="filtered: " + filter_value, timeout=timeout)
+        argv = ["dotnet", "test", project, "-c", "Debug", "--no-build", "--filter", filter_value, "--", "-explicit", "only"]
+    exit_code = run(argv, prefix, phase=phase, env=env, note="filtered: " + filter_value, timeout=timeout)
     out = _read_text(os.path.join(LOGS, prefix + ".out"))
     return exit_code, _parse_test_summary(out)
 
@@ -660,22 +690,160 @@ def cmd_derived_exec():
     return exit_code
 
 
+def _parse_outcome_lines(text, keyword):
+    """Return the ``<keyword> <FQN>`` lines (xunit v3 runner format) of a run's stdout."""
+    return [line[len(keyword) + 1:].strip() for line in text.splitlines() if line.startswith(keyword + " ")]
+
+
+def _parse_inprocess_summary(text):
+    """Parse the xUnit.net v3 in-process runner summary (``dotnet run`` boundary route)."""
+    match = re.search(r"Total:\s*(\d+),\s*Errors:\s*(\d+),\s*Failed:\s*(\d+),\s*Skipped:\s*(\d+),\s*Not Run:\s*(\d+)", text)
+    if not match:
+        return None
+    total, errors, failed, skipped, not_run = (int(group) for group in match.groups())
+    return {"total": total, "errors": errors, "failed": failed, "skipped": skipped, "not_run": not_run,
+            "succeeded": total - errors - failed - skipped - not_run}
+
+
+def _parse_run_outcomes(text):
+    """Return ``(summary, {skipped_fqn: reason}, [failed_fqn])`` for either runner output format.
+
+    ``dotnet test`` uses the Microsoft.Testing.Platform ``Test run summary:`` block with
+    ``skipped``/``failed`` lines; ``dotnet run --project tests/... `` uses the xUnit.net v3
+    in-process runner with ``[SKIP]``/``[FAIL]`` markers and a ``TEST EXECUTION SUMMARY`` line.
+    """
+    summary = _parse_inprocess_summary(text) or _parse_test_summary(text)
+    lines = text.splitlines()
+    skipped, failed = {}, []
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.endswith("[SKIP]"):
+            fqn = stripped[:-len("[SKIP]")].strip()
+            skipped[fqn] = lines[idx + 1].strip() if idx + 1 < len(lines) and lines[idx + 1].startswith("  ") else ""
+        elif stripped.endswith("[FAIL]"):
+            failed.append(stripped[:-len("[FAIL]")].strip())
+        elif line.startswith("skipped "):
+            fqn = line[len("skipped "):].strip()
+            skipped[fqn] = lines[idx + 1].strip() if idx + 1 < len(lines) and lines[idx + 1].startswith("  ") else ""
+        elif line.startswith("failed "):
+            failed.append(line[len("failed "):].strip())
+    return summary, skipped, failed
+
+
+def _parse_discovered(text):
+    """Return the discovered test FQNs of a ``--list-tests`` run (two-space indented names)."""
+    return [m.group(1) + (m.group(2) or "")
+            for m in re.finditer(r"^\s{2,}(NextORM\.[A-Za-z0-9_.]+)(\(.*\))?\s*$", text, re.MULTILINE)]
+
+
+def _provider_of(fqn: str):
+    """The provider family a test FQN belongs to, or ``None`` for a provider-neutral test class."""
+    base = fqn.split("(", 1)[0]
+    parts = base.split(".")
+    if len(parts) < 2:
+        return None
+    cls = parts[-2]
+    for provider, tokens in PROVIDER_TOKENS:
+        if any(token in cls for token in tokens):
+            return provider
+    return None
+
+
+def _provider_counts(fqns):
+    counts = {provider: 0 for provider, _ in PROVIDER_TOKENS}
+    for fqn in fqns:
+        provider = _provider_of(fqn)
+        if provider is not None:
+            counts[provider] += 1
+    return counts
+
+
 def cmd_shared_regression():
     exits = {}
+    summaries = {}
     for project in REGRESSION_PROJECTS:
         key = project.split("/")[-1]
         exits[project] = run(["dotnet", "test", project, "-c", "Debug"], "C23-" + key, phase="boundary")
+        summaries[project] = _parse_test_summary(_read_text(os.path.join(LOGS, "C23-" + key + ".out")))
     exits["integration"] = run(["dotnet", "run", "--project", INTEGRATION_TESTS, "-c", "Debug", "--", "-noColor"],
                                "C23-integration", phase="boundary", env={"DOCKER_HOST": DOCKER_HOST})
+
+    integration_out = _read_text(os.path.join(LOGS, "C23-integration.out"))
+    integration_summary, skip_reasons, failures = _parse_run_outcomes(integration_out)
+    provider_skips = sorted({reason for reason in skip_reasons.values() if PROVIDER_UNAVAILABLE.search(reason)})
+
+    # Provider-neutral inventory: `--list-tests` counts every test per provider family; the run's
+    # skipped lines tell how many of them actually skipped, so executed = listed - skipped. A whole
+    # family with executed == 0 means its container never ran.
+    exits["integration-list"] = run(["dotnet", "test", INTEGRATION_TESTS, "-c", "Debug", "--list-tests"],
+                                    "C23-integration-list", phase="boundary")
+    listed = _parse_discovered(_read_text(os.path.join(LOGS, "C23-integration-list.out")))
+    listed_counts = _provider_counts(listed)
+    skipped_counts = _provider_counts(list(skip_reasons))
+    failed_counts = _provider_counts(failures)
+    per_provider = {provider: {"listed": listed_counts[provider], "skipped": skipped_counts[provider],
+                               "failed": failed_counts[provider],
+                               "passed": listed_counts[provider] - skipped_counts[provider] - failed_counts[provider]}
+                    for provider, _ in PROVIDER_TOKENS}
+    six_providers_executed = all(v["passed"] > 0 for v in per_provider.values())
+
     protected = _file_hashes(ORACLE_FILES)
-    _write_json(os.path.join(A, "regression", "inventory.json"), {"unit": "D232-PREREQ-typed-derived",
-                "criterion": ["EC232-SHARED-REGRESSION", "AC-03", "AC-08", "AC-09", "AC-11"],
-                "exits": exits, "captured": _now()})
-    _write_json(os.path.join(A, "regression", "protected-files.json"), {"captured": _now(), "files": protected,
-                "frozen": _read_json(os.path.join(A, "repro", "production-before.json"))})
-    _write_json(os.path.join(A, "regression", "oracle-comparison.json"), {"captured": _now(),
-                "oracles_after": _file_hashes(ORACLE_FILES)})
-    return 0 if all(code == 0 for code in exits.values()) else 2
+    _write_json(os.path.join(A, "regression", "inventory.json"), {
+        "unit": "D232-PREREQ-typed-derived",
+        "criterion": ["EC232-SHARED-REGRESSION", "AC-03", "AC-08", "AC-09", "AC-11"],
+        "exits": exits, "summaries": summaries, "integration_summary": integration_summary,
+        "per_provider": per_provider,
+        "provider_skips": provider_skips,
+        "six_providers_executed": six_providers_executed,
+        "docker_host": DOCKER_HOST, "captured": _now(),
+        "logs": _rel(os.path.join(LOGS, "C23-integration.out")),
+    })
+
+    before = (_read_json(os.path.join(A, "repro", "production-before.json")) or {}).get("frozen_oracles", {})
+    changed = []
+    for path, meta in sorted(before.items()):
+        after = protected.get(path, {})
+        if after.get("sha256") != meta.get("sha256"):
+            changed.append({"path": path, "before_sha256": meta.get("sha256"), "after_sha256": after.get("sha256"),
+                            "delta_owned": path in DELTA_OWNED_TEST_FILES})
+    protected_only_changed = [c for c in changed if not c["delta_owned"]]
+    _write_json(os.path.join(A, "regression", "oracle-comparison.json"), {
+        "captured": _now(),
+        "oracles_after": protected,
+        "frozen_before": before,
+        "changed": changed,
+        "protected_paths": [p for p in ORACLE_FILES if p not in DELTA_OWNED_TEST_FILES],
+        "delta_owned_changed": [c["path"] for c in changed if c["delta_owned"]],
+        "protected_unchanged": not protected_only_changed,
+        "note": ("Frozen derived-consumer oracles compared against the C20 pre-change freeze. The three "
+                 "delta-owned r=3 test files were extended by the authorized n=2 repair; every pre-existing "
+                 "frozen oracle is byte-identical (test-contract.json, SqlGenerationTests.cs, "
+                 "T232PreparationProbeTests.cs, T232ProjectionContractTests.cs, T232MarkerTests.cs, "
+                 "T232TypedPivotTests.cs)."),
+    })
+
+    _write_json(os.path.join(A, "regression", "protected-files.json"), {
+        "captured": _now(), "files": protected, "frozen": _read_json(os.path.join(A, "repro", "production-before.json")),
+        "protected_paths": [p for p in ORACLE_FILES if p not in DELTA_OWNED_TEST_FILES],
+        "protected_unchanged": not protected_only_changed,
+    })
+
+    ok = (all(code == 0 for code in exits.values())
+          and not provider_skips
+          and six_providers_executed
+          and not protected_only_changed)
+    if not ok:
+        for reason in provider_skips:
+            print("FAIL: provider skip: " + reason, file=sys.stderr)
+        if not six_providers_executed:
+            print("FAIL: not every provider family executed a test: %r" % per_provider, file=sys.stderr)
+        for item in protected_only_changed:
+            print("FAIL: protected oracle changed: " + item["path"], file=sys.stderr)
+    print(json.dumps({"exits": exits, "integration_summary": integration_summary,
+                      "per_provider": per_provider, "provider_skips": provider_skips,
+                      "six_providers_executed": six_providers_executed,
+                      "protected_unchanged": not protected_only_changed}, indent=1))
+    return 0 if ok else 2
 
 
 def cmd_variant(name: str):
@@ -683,10 +851,14 @@ def cmd_variant(name: str):
     if spec is None:
         print("ERROR: unknown variant %r (expected one of %s)" % (name, ", ".join(sorted(VARIANT_PROBES))), file=sys.stderr)
         return 1
-    exit_code, summary = _filtered_run("C-variant-" + name, spec["filter"], explicit_only=True)
+    project = spec.get("project", SQLSERVER_TESTS)
+    env = {"DOCKER_HOST": DOCKER_HOST} if spec.get("docker") else None
+    exit_code, summary = _filtered_run("C-variant-" + name, spec["filter"],
+                                       explicit_only=spec.get("explicit_only", True),
+                                       project=project, env=env)
     record = {"unit": "D232-PREREQ-typed-derived", "criterion": spec["criterion"], "variant": name,
-              "filter": spec["filter"], "exit": exit_code, "test_summary": summary, "captured": _now(),
-              "log": _rel(os.path.join(LOGS, "C-variant-" + name + ".out"))}
+              "filter": spec["filter"], "project": project, "exit": exit_code, "test_summary": summary,
+              "captured": _now(), "log": _rel(os.path.join(LOGS, "C-variant-" + name + ".out"))}
     if name == "pivot-free":
         record["outcome"] = _classify_outcome(exit_code, summary,
                                               _read_text(os.path.join(LOGS, "C-variant-" + name + ".out")),
@@ -695,11 +867,26 @@ def cmd_variant(name: str):
                                                     "src/nextorm.core/DataContext/SqlSourceRenderer.cs",
                                                     "src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs"])
     if name == "case-sensitive-alias":
-        record["database_collation"] = None
+        record["database_collation"] = CASE_SENSITIVE_COLLATION
+        record["collation_source"] = "tests/nextorm.integration.tests/T232PivotFixture.cs:272,291-293"
+        record["collation_asserted_in_run"] = exit_code == 0
     _write_json(os.path.join(A, spec["artifact"]), record)
     if name == "case-sensitive-alias":
-        _write_json(os.path.join(A, "variants", "database-collation.json"), {"captured": _now(),
-                    "note": "recorded by the container run (C29); null until a case-sensitive database is available"})
+        _write_json(os.path.join(A, "variants", "database-collation.json"), {
+            "captured": _now(),
+            "collation": CASE_SENSITIVE_COLLATION,
+            "variants": ["bare grouping identifier", "aliased cell [Q1]/[Q2]"],
+            "asserted_by": "NextORM.Integration.Tests.T232CaseSensitiveAliasTests.TypedPivot_ResolvesBareGroupingAndAliasedCells_OnACaseSensitiveDatabase",
+            "assertion_source": "tests/nextorm.integration.tests/T232PivotFixture.cs:272,291-293",
+            "variant_exit": exit_code,
+            "selected_count": summary.get("total"),
+            "test_log": _rel(os.path.join(LOGS, "C-variant-case-sensitive-alias.out")),
+            "docker_host": DOCKER_HOST,
+            "note": ("The executed container test creates the database with collate "
+                     "Latin1_General_100_CS_AS, asserts sys.databases.collation_name equals it and contains "
+                     "the 'CS' marker, then runs the typed PIVOT and its consumers; a wrong spelling or a "
+                     "case-insensitive database fails it. The value is recorded from that executed assertion."),
+        })
     return 0 if exit_code == 0 and (summary.get("total") or 0) >= 1 else 2
 
 

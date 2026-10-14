@@ -1,0 +1,18 @@
+{
+ "captured": "2026-10-14T21:52:46Z",
+ "criterion": [
+  "EC232-DERIVED-UNIT",
+  "AC-01",
+  "AC-03",
+  "AC-08"
+ ],
+ "exit": 0,
+ "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C21-derived-unit.out",
+ "test_summary": {
+  "failed": 0,
+  "skipped": 0,
+  "succeeded": 29,
+  "total": 29
+ },
+ "unit": "D232-PREREQ-typed-derived"
+}

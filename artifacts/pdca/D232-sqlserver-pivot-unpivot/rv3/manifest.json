@@ -111,22 +111,22 @@
   },
   {
    "id": "E232-07",
-   "reason": "six-provider capability cases are produced in D-05",
+   "reason": "rv1 provider-capability row; the r=3 delta evidence is carried by EC232-DERIVED-EXEC/EC232-CASE-SENSITIVE-ALIAS; rv1-artifact reconciliation is D-07/CHECK",
    "status": "open"
   },
   {
    "id": "E232-08",
-   "reason": "SQL Server container fixtures are produced in D-05",
+   "reason": "rv1 SQL Server integration row; the r=3 delta evidence is carried by EC232-DERIVED-EXEC/EC232-CASE-SENSITIVE-ALIAS; rv1-artifact reconciliation is D-07/CHECK",
    "status": "open"
   },
   {
    "id": "E232-09",
-   "reason": "cache/alias/source-binding typed tests are produced in D-05",
+   "reason": "rv1 cache/alias/source-binding row; the r=3 delta evidence is carried by EC232-CACHE-LOCALITY/EC232-SHARED-REGRESSION; rv1-artifact reconciliation is D-07/CHECK",
    "status": "open"
   },
   {
    "id": "E232-10",
-   "reason": "targeted mutation requires the typed implementation (D-05); see mutation.json (applicable=false at D-01)",
+   "reason": "rv1 targeted-mutation row; the r=3 delta evidence is carried by EC232-PREREQ-MUTATION (9/9 mutants killed, tree restored); rv1-artifact reconciliation is D-07/CHECK",
    "status": "open"
   },
   {
@@ -209,19 +209,85 @@
    "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "derived-unit",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/unit.json"
+    },
+    {
+     "kind": "case-inventory",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/case-inventory.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C21-derived-unit.out"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs"
+    }
+   ],
    "id": "EC232-DERIVED-UNIT",
-   "reason": "derived builder/command unit tests; every typed derived cell/route case selected (planned; C21 not yet run)",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "derived-exec",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/execution.json"
+    },
+    {
+     "kind": "provider-matrix",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/provider-matrix.json"
+    },
+    {
+     "kind": "container-state",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/container-state.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C22-derived-exec.out"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.integration.tests/T232SqlServerTests.cs"
+    }
+   ],
    "id": "EC232-DERIVED-EXEC",
-   "reason": "SQL Server executed; per-provider state recorded (planned; C22 not yet run)",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "regression-inventory",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/regression/inventory.json"
+    },
+    {
+     "kind": "oracle-comparison",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/regression/oracle-comparison.json"
+    },
+    {
+     "kind": "protected-files",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/regression/protected-files.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C23-integration.out"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C23-integration-list.out"
+    }
+   ],
    "id": "EC232-SHARED-REGRESSION",
-   "reason": "eight project suites + container boundary; no protected file changed (planned; C23 not yet run)",
-   "status": "open"
+   "status": "met"
   },
   {
    "evidence": [
@@ -247,39 +313,154 @@
    "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "api-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/build/api-review.json"
+    },
+    {
+     "kind": "gate-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/build/gate-review.json"
+    },
+    {
+     "exit": 0,
+     "kind": "build-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C25-build-core.out"
+    },
+    {
+     "exit": 0,
+     "kind": "build-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C25-build-sqlserver.out"
+    }
+   ],
    "id": "EC232-BUILD",
-   "reason": "core + provider builds: 0 warnings / 0 errors (planned; C25 not yet run)",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "variant",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/derived-builder.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C-variant-derived-builder.out"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs"
+    }
+   ],
    "id": "EC232-DERIVED-BUILDER",
-   "reason": "preserved projection/SQL/data and guarded controls (planned; C26 not yet run)",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "variant",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/derived-command.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C-variant-derived-command.out"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs"
+    }
+   ],
    "id": "EC232-DERIVED-COMMAND",
-   "reason": "equivalent emitted names, qualification and rows (planned; C27 not yet run)",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "variant",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/pivot-free.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C-variant-pivot-free.out"
+    }
+   ],
    "id": "EC232-PIVOTFREE-PROBE",
-   "reason": "pivot-free diagnostic with the actual outcome and source provenance (planned; C28 not yet run)",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "variant",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/case-sensitive-alias.json"
+    },
+    {
+     "kind": "database-collation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/database-collation.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C-variant-case-sensitive-alias.out"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.integration.tests/T232PivotFixture.cs"
+    }
+   ],
    "id": "EC232-CASE-SENSITIVE-ALIAS",
-   "reason": "case-sensitive database resolution for the bare and aliased identifiers (planned; C29 not yet run)",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "cache-locality",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/cache/locality.json"
+    },
+    {
+     "kind": "source-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/cache/source-review.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C30-cache-locality.out"
+    }
+   ],
    "id": "EC232-CACHE-LOCALITY",
-   "reason": "no sticky command/plan-cache state (planned; C30 not yet run)",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "kind": "mutation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/prerequisite.json"
+    },
+    {
+     "exit": 2,
+     "kind": "mutant-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/logs/C31-mutant-PP1-revert-pass-through.out"
+    },
+    {
+     "exit": 2,
+     "kind": "mutant-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/logs/C31-mutant-PP1-revert-pass-through-arm.out"
+    },
+    {
+     "exit": 0,
+     "kind": "restore-gate-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/logs/C31-restore-gate.out"
+    }
+   ],
    "id": "EC232-PREREQ-MUTATION",
-   "reason": "every mandated mutant killed and the tree restored (planned; C31 not yet run)",
-   "status": "open"
+   "status": "met"
   },
   {
    "id": "EC232-RV3-SEAL",
@@ -289,5 +470,5 @@
  ],
  "status_file": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
  "task": "T232 (#232) SQL Server typed PIVOT/UNPIVOT projection",
- "tree": "706dd7b7d3b24c444c8c6e7b0c5302430d12bc27"
+ "tree": "1.0.9-rc3@b05e94ba + 1 uncommitted production file (src/nextorm.core/Query/QueryCommand.QueryPreparer.cs, D-05 derived pass-through fix; evidence snapshot)"
 }

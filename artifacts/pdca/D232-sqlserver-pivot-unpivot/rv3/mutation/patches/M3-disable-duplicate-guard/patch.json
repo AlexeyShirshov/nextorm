@@ -1,0 +1,12 @@
+{
+ "applied": true,
+ "expected_failure": "the duplicate-value guard is neutralised, so a duplicate declaration no longer throws",
+ "file": "src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs",
+ "id": "M3-disable-duplicate-guard",
+ "mutated_sha256": "0dfc2bdca06da0008f21fd87f00ab9eb195fd8e01945556c6cecb646dafb6167",
+ "original_sha256": "14328cec5ff8d57b7ec6ab40f418e04664203301edf051fe250bdbadea9e563d",
+ "patch": {
+  "find": "            if (!seen.Add(value))",
+  "replace": "            if (!seen.Add(value) && value.Length == 0)"
+ }
+}

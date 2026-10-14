@@ -1,0 +1,28 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+failed NextORM.SqlServer.Tests.T232DerivedSourceReproTests.Repro06_DerivedGroupingColumn_KeepsTheUnaliasedIdentifier (218ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64)
+  Expected sql "select [Category], [Q1]
+   from (select [Category], [Q1]
+   from (select category, [1] as [Q1]
+   from sales pivot (sum(margin) for quarter in ([1])) as [t1]) as [t2]) as [t3]" to contain "select [category], [Q1]
+   from (select category, [1] as [Q1]".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.SqlServer.Tests.T232DerivedSourceReproTests.Repro06_DerivedGroupingColumn_KeepsTheUnaliasedIdentifier() in /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs:186
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/bin/linux/Debug/net10.0/nextorm.sqlserver.tests.dll (net10.0|x64) failed with 1 error(s) (716ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 1
+  failed: 1
+  succeeded: 0
+  skipped: 0
+  duration: 948ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

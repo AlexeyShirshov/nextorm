@@ -1,0 +1,14 @@
+{
+ "argv": [
+  "dotnet",
+  "test",
+  "tests/nextorm.sqlserver.tests",
+  "-c",
+  "Debug",
+  "--filter",
+  "FullyQualifiedName~T232TypedPivotTests"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T21:52:43Z",
+ "env": {}
+}

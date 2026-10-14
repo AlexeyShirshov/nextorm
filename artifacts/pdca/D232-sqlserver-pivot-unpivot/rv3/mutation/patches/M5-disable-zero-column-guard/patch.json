@@ -1,0 +1,12 @@
+{
+ "applied": true,
+ "expected_failure": "the zero-column guard is neutralised, so a typed UNPIVOT with no columns no longer throws",
+ "file": "src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs",
+ "id": "M5-disable-zero-column-guard",
+ "mutated_sha256": "e4e2fb20207ec6f6e1dfe5c75ff217ed7dc5a1183d6017ac6fa7867256f1e4eb",
+ "original_sha256": "909b71ba6c46a7c6fc72e32e9990c2f91cb7b20130e069e240609beb0e0d0bc3",
+ "patch": {
+  "find": "        if (columns.Length == 0)\n            throw new ArgumentException(\"An UNPIVOT requires at least one column.\", nameof(columns));\n        builder.EnsureNoEagerLoadState(nameof(Unpivot));\n\n        var (valueColumn, nameColumn) = PivotProjectionRewriter.ExtractUnpivotRoles(projection);",
+  "replace": "        if (columns.Length == 0 && columns.Length > 100)\n            throw new ArgumentException(\"An UNPIVOT requires at least one column.\", nameof(columns));\n        builder.EnsureNoEagerLoadState(nameof(Unpivot));\n\n        var (valueColumn, nameColumn) = PivotProjectionRewriter.ExtractUnpivotRoles(projection);"
+ }
+}

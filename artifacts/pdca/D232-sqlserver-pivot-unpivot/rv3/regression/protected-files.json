@@ -1,0 +1,136 @@
+{
+ "captured": "2026-10-14T21:58:15Z",
+ "files": {
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/test-contract.json": {
+   "exists": true,
+   "sha256": "2966db14791c1183a7582537d1874122020bc10e2b9e2bcda2077bd3e04481f9"
+  },
+  "tests/nextorm.integration.tests/T232PivotFixture.cs": {
+   "exists": true,
+   "sha256": "4d275aa7ff34074fda23657fb25de5445e263686d77516aacea789561f2127f7"
+  },
+  "tests/nextorm.integration.tests/T232SqlServerTests.cs": {
+   "exists": true,
+   "sha256": "7c96ee2aa63bd9e320d57cb9702491cceecda1eb8d01b9852c1b917ed10b8f19"
+  },
+  "tests/nextorm.sqlserver.tests/SqlGenerationTests.cs": {
+   "exists": true,
+   "sha256": "c5d3bf2b05c9e16df9f6d1f76dda88b1132d7f4120963c1645f8466fcd3ffeb9"
+  },
+  "tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs": {
+   "exists": true,
+   "sha256": "d1ec32d98302e7fb3fad186843ef9f978b79f874b28298302b86e95d76e59ce6"
+  },
+  "tests/nextorm.sqlserver.tests/T232MarkerTests.cs": {
+   "exists": true,
+   "sha256": "585b9dcdfcf04870c9f358cc83f60c43b516293a51ed4f307a59ee9a7ad712df"
+  },
+  "tests/nextorm.sqlserver.tests/T232PreparationProbeTests.cs": {
+   "exists": true,
+   "sha256": "46413affc7f6d3fe5f2a5da99c12f57fcafc8e109fbc07332a21462b86cc2af7"
+  },
+  "tests/nextorm.sqlserver.tests/T232ProjectionContractTests.cs": {
+   "exists": true,
+   "sha256": "4c049599e85dcc74c27c1a3615682f4ad15429242daf1a591c161d1394d09f96"
+  },
+  "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs": {
+   "exists": true,
+   "sha256": "946da414e9cdac41b76463ed1ffd878b356c2b20870a43972ebacb6d6d983e6f"
+  }
+ },
+ "frozen": {
+  "captured": "2026-10-14T20:56:57Z",
+  "frozen_oracles": {
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/test-contract.json": {
+    "exists": true,
+    "sha256": "2966db14791c1183a7582537d1874122020bc10e2b9e2bcda2077bd3e04481f9"
+   },
+   "tests/nextorm.integration.tests/T232PivotFixture.cs": {
+    "exists": true,
+    "sha256": "1c082a1b415d5310b39cb4ff1e5a4dc9f71b711ced8b687d6ec6ab7177c610d4"
+   },
+   "tests/nextorm.integration.tests/T232SqlServerTests.cs": {
+    "exists": true,
+    "sha256": "a9b026fe1050a9bb7face478e2f46b69dc1c5f8dc3a036c8361440ba01d71b70"
+   },
+   "tests/nextorm.sqlserver.tests/SqlGenerationTests.cs": {
+    "exists": true,
+    "sha256": "c5d3bf2b05c9e16df9f6d1f76dda88b1132d7f4120963c1645f8466fcd3ffeb9"
+   },
+   "tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs": {
+    "exists": true,
+    "sha256": "c01d7dd49fe2f2468969561715af5fe403cee31d1547fca1c156f1ca046c3d54"
+   },
+   "tests/nextorm.sqlserver.tests/T232MarkerTests.cs": {
+    "exists": true,
+    "sha256": "585b9dcdfcf04870c9f358cc83f60c43b516293a51ed4f307a59ee9a7ad712df"
+   },
+   "tests/nextorm.sqlserver.tests/T232PreparationProbeTests.cs": {
+    "exists": true,
+    "sha256": "46413affc7f6d3fe5f2a5da99c12f57fcafc8e109fbc07332a21462b86cc2af7"
+   },
+   "tests/nextorm.sqlserver.tests/T232ProjectionContractTests.cs": {
+    "exists": true,
+    "sha256": "4c049599e85dcc74c27c1a3615682f4ad15429242daf1a591c161d1394d09f96"
+   },
+   "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs": {
+    "exists": true,
+    "sha256": "946da414e9cdac41b76463ed1ffd878b356c2b20870a43972ebacb6d6d983e6f"
+   }
+  },
+  "note": "Source/tree/oracle hashes frozen BEFORE any engine change for the typed-derived prerequisite.",
+  "phase": "baseline",
+  "production_files": {
+   "src/nextorm.core/Builders/EntityBuilder.cs": {
+    "exists": true,
+    "sha256": "07e18ef7137f75685e7c809e4a22f3c3b8f8373a466d966a1bf1e546b7dd3d85"
+   },
+   "src/nextorm.core/DataContext/DataContextExtensions.cs": {
+    "exists": true,
+    "sha256": "4beed56daafe04e8ca9ea1a2eb1fbf23dfeb17c98005be041b9e08869bbdae2e"
+   },
+   "src/nextorm.core/DataContext/SqlBuilder.cs": {
+    "exists": true,
+    "sha256": "81625525db7d3610d1f158f2b0e6abe09b6eafe0b92f46149924aba8d87bf44b"
+   },
+   "src/nextorm.core/DataContext/SqlSourceRenderer.cs": {
+    "exists": true,
+    "sha256": "ae6d8ce3e56906d82da5be32584ec13b0c4cf8003649bcbc537a53550edd6122"
+   },
+   "src/nextorm.core/Expressions/FromExpression.cs": {
+    "exists": true,
+    "sha256": "cdcb290af836b1ef0750742a0d196426b2c94c966c386019d352e970ca6e868b"
+   },
+   "src/nextorm.core/Query/PivotValues.cs": {
+    "exists": true,
+    "sha256": "bce21f20f43b0136f557e0d81e83a5471a09e20c4cf1c65da4490f8bfb3a83ac"
+   },
+   "src/nextorm.core/Visitors/MemberTranslator.cs": {
+    "exists": true,
+    "sha256": "6d917fadfe5cecaf91b4eda45669e0d94f2a86aa990a3deaef35cd7c86b3c486"
+   },
+   "src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs": {
+    "exists": true,
+    "sha256": "14328cec5ff8d57b7ec6ab40f418e04664203301edf051fe250bdbadea9e563d"
+   },
+   "src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs": {
+    "exists": true,
+    "sha256": "909b71ba6c46a7c6fc72e32e9990c2f91cb7b20130e069e240609beb0e0d0bc3"
+   }
+  },
+  "tree": {
+   "dirty_entries": 39,
+   "dirty_sha256": "da64a7823bdf9a587136e7d42fbab4b975a8c3676b7f29f5b5192b61d0cf885d",
+   "head": "9d9c9380ad5d80b14ca1315a4f3647c205f65300"
+  }
+ },
+ "protected_paths": [
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/test-contract.json",
+  "tests/nextorm.sqlserver.tests/T232PreparationProbeTests.cs",
+  "tests/nextorm.sqlserver.tests/T232ProjectionContractTests.cs",
+  "tests/nextorm.sqlserver.tests/T232MarkerTests.cs",
+  "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs",
+  "tests/nextorm.sqlserver.tests/SqlGenerationTests.cs"
+ ],
+ "protected_unchanged": true
+}

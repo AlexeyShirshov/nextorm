@@ -915,13 +915,17 @@ public partial class QueryCommand
                                     // A single scalar column stands for the whole row, mirroring the
                                     // scalar reuse branch.
                                     cmd.OneColumn = true;
-                                    selectList = [ProjectionOutputColumn(reusableShape[0])];
+                                    selectList = [DerivedPassThroughColumn(reusableShape[0])];
                                 }
                                 else
                                 {
                                     // The derived table passes its source's projection through,
-                                    // mirroring the identity reuse branch.
-                                    selectList = reusableShape;
+                                    // mirroring the identity reuse branch. Each column is cloned so the
+                                    // consumer references the derived table's own output identifiers
+                                    // instead of re-rendering the inner defining expression (which would
+                                    // re-alias the underlying source column the derived table no longer
+                                    // exposes).
+                                    selectList = Array.ConvertAll(reusableShape, DerivedPassThroughColumn);
                                 }
 
                                 if (!cmd._dontCache && !noHash) unchecked
@@ -1481,6 +1485,74 @@ public partial class QueryCommand
 
             reusable = shape;
             return true;
+        }
+
+        /// <summary>
+        /// Clones a derived subquery's projection column into a consumer-side pass-through reference, so a
+        /// no-projection read of that derived source renders the source's own output identifier instead of
+        /// re-rendering the defining expression. Re-rendering would alias the underlying source column
+        /// again (for example <c>[1] as [Q1]</c>) over a derived table that already exposes the aliased
+        /// column, which the server rejects. The clone keeps the target member name (the row materializer
+        /// and member translation resolve against it) and marks itself as a projection output reference to
+        /// the identifier the derived table actually emits.
+        /// </summary>
+        /// <param name="src">The derived subquery's projection column to pass through.</param>
+        /// <returns>A consumer-side column referencing the derived source's output identifier.</returns>
+        private static SelectExpression DerivedPassThroughColumn(SelectExpression src)
+        {
+            // Mirror MakeColumn's alias decision exactly: a column whose defining expression references
+            // the source column named exactly like its target member is emitted without an alias, so the
+            // derived table exposes that bare column name; every other shape exposes the target member
+            // name through the alias MakeColumn emits. PropertyName participates in the identifier only
+            // when an alias is actually emitted, so a case-sensitive server still resolves the bare name.
+            var outputName = src.PropertyName is { } propertyName
+                ? TryGetColumnIdentifier(src.Expression, out var columnIdentifier)
+                    && string.Equals(columnIdentifier, propertyName, StringComparison.OrdinalIgnoreCase)
+                    ? columnIdentifier
+                    : propertyName
+                : src.OutputName;
+
+            return new SelectExpression(src.PropertyType)
+            {
+                Index = src.Index,
+                PropertyName = src.PropertyName,
+                Expression = src.Expression,
+                OutputName = outputName,
+                IsProjectionOutputReference = true,
+                ProviderType = src.ProviderType,
+                Converter = src.Converter,
+                DurationUnit = src.DurationUnit,
+                DurationPrecision = src.DurationPrecision,
+                IsLobStreaming = src.IsLobStreaming,
+                IsWideCountNarrowed = src.IsWideCountNarrowed,
+                ProjectionItem = src.ProjectionItem,
+            };
+        }
+
+        /// <summary>
+        /// Reads the constant source-column name of a <c>SqlFunctions.Column&lt;T&gt;(entity, "name")</c>
+        /// reference, recognised by declaring type, method name and a constant column argument.
+        /// </summary>
+        /// <param name="expression">The column defining expression.</param>
+        /// <param name="columnIdentifier">The referenced source-column name when recognised.</param>
+        /// <returns><see langword="true"/> when the expression is such a column reference.</returns>
+        private static bool TryGetColumnIdentifier(Expression? expression, out string columnIdentifier)
+        {
+            columnIdentifier = string.Empty;
+
+            if (expression is { } value
+                && TypeFacts.UnwrapConvert(value) is MethodCallExpression
+                {
+                    Method: { DeclaringType: var declaringType, Name: nameof(SqlFunctions.Column) },
+                    Arguments: [_, ConstantExpression { Value: string name }]
+                }
+                && declaringType == typeof(SqlFunctions))
+            {
+                columnIdentifier = name;
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>

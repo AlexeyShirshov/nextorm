@@ -1,0 +1,12 @@
+{
+ "argv": [
+  "dotnet",
+  "test",
+  "tests/nextorm.mysql.tests",
+  "-c",
+  "Debug"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T21:56:50Z",
+ "env": {}
+}

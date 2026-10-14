@@ -1,0 +1,17 @@
+{
+ "argv": [
+  "dotnet",
+  "run",
+  "--project",
+  "tests/nextorm.integration.tests",
+  "-c",
+  "Debug",
+  "--",
+  "-noColor"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T21:57:07Z",
+ "env": {
+  "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+ }
+}

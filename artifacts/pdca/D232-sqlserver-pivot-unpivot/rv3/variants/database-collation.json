@@ -1,0 +1,15 @@
+{
+ "asserted_by": "NextORM.Integration.Tests.T232CaseSensitiveAliasTests.TypedPivot_ResolvesBareGroupingAndAliasedCells_OnACaseSensitiveDatabase",
+ "assertion_source": "tests/nextorm.integration.tests/T232PivotFixture.cs:272,291-293",
+ "captured": "2026-10-14T21:52:29Z",
+ "collation": "Latin1_General_100_CS_AS",
+ "docker_host": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock",
+ "note": "The executed container test creates the database with collate Latin1_General_100_CS_AS, asserts sys.databases.collation_name equals it and contains the 'CS' marker, then runs the typed PIVOT and its consumers; a wrong spelling or a case-insensitive database fails it. The value is recorded from that executed assertion.",
+ "selected_count": 1,
+ "test_log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C-variant-case-sensitive-alias.out",
+ "variant_exit": 0,
+ "variants": [
+  "bare grouping identifier",
+  "aliased cell [Q1]/[Q2]"
+ ]
+}

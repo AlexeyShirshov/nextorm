@@ -3,7 +3,7 @@
  "contract_rv": 1,
  "cycle": "N=1",
  "issue": "#232",
- "last_updated": "2026-10-14T20:27:17Z",
+ "last_updated": "2026-10-14T21:59:36Z",
  "milestone": "1.0.9-rc3",
  "plan_revision": 1,
  "records": [
@@ -1417,6 +1417,186 @@
    ],
    "cwd": ".",
    "date": "2026-10-14T20:27:17Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-05.exit",
+   "name": "C19-report-D-05",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-05.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-05.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-05.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T21:59:36Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-01.exit",
+   "name": "C19-brief-D-01",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-01.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-01.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-02.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T21:59:36Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-02.exit",
+   "name": "C19-brief-D-02",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-02.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-02.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-02.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-03.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T21:59:36Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-03.exit",
+   "name": "C19-brief-D-03",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-03.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-03.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-03.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-04.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T21:59:36Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-04.exit",
+   "name": "C19-brief-D-04",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-04.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-04.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-04.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-05.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T21:59:36Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-05.exit",
+   "name": "C19-brief-D-05",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-05.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-05.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-05.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T21:59:36Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-01.exit",
+   "name": "C19-report-D-01",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-01.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-01.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-02.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T21:59:36Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-02.exit",
+   "name": "C19-report-D-02",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-02.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-02.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-02.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-03.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T21:59:36Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-03.exit",
+   "name": "C19-report-D-03",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-03.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-03.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-03.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-04.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T21:59:36Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-04.exit",
+   "name": "C19-report-D-04",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-04.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-04.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-04.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-05.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T21:59:36Z",
    "exit": 0,
    "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-05.exit",
    "name": "C19-report-D-05",

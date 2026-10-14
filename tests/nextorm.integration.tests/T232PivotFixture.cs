@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
+using Microsoft.Data.SqlClient;
 using NextORM.MariaDb;
 using NextORM.SqlServer;
 
@@ -69,6 +70,44 @@ internal static class T232PivotFixture
         unpivot.Should().Throw<NotSupportedException>(
                 $"{provider} has no UNPIVOT renderer and must reject the typed UNPIVOT source")
             .WithMessage("The UNPIVOT source construct is not supported by this provider.");
+    }
+
+    /// <summary>
+    /// Executes both typed operators on SQL Server (the supporting provider) over the deterministic
+    /// <c>t232_sales</c>/<c>t232_quarterly</c> fixture and asserts the returned shape and rows. The
+    /// capability case therefore runs all six providers: five reject and SQL Server executes.
+    /// </summary>
+    /// <param name="context">The SQL Server context under test.</param>
+    internal static void AssertTypedOperatorsSupported(IDataContext context)
+    {
+        T232SqlServerFixture.EnsureSeeded(context);
+
+        var pivotRows = context.From<IT232Sales>()
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter,
+                (m, pv) => new { m.Category, Q1 = pv.Value<decimal?>("1"), Q2 = pv.Value<decimal?>("2") })
+            .Select(x => new { x.Category, x.Q1, x.Q2 })
+            .ToList()
+            .OrderBy(r => r.Category)
+            .ToList();
+
+        pivotRows.Should().HaveCount(2);
+        pivotRows.Single(r => r.Category == "North").Should()
+            .BeEquivalentTo(new { Category = "North", Q1 = (decimal?)10m, Q2 = (decimal?)20m });
+        pivotRows.Single(r => r.Category == "South").Should()
+            .BeEquivalentTo(new { Category = "South", Q1 = (decimal?)5m, Q2 = (decimal?)null });
+
+        var unpivotRows = context.From<IT232Quarterly>()
+            .Unpivot(
+                (m, u) => new { m.Category, Name = u.Name<string>("qtr"), Value = u.Value<decimal?>("val") },
+                UnpivotColumn.Create("q1"), UnpivotColumn.Create("q2"))
+            .Select(x => new { x.Category, x.Name, x.Value })
+            .ToList();
+
+        // SQL Server UNPIVOT drops the NULL source cell, so the frozen fixture yields three rows.
+        unpivotRows.Should().HaveCount(3);
+        unpivotRows.Single(r => r.Category == "North" && r.Name == "q1").Value.Should().Be(10m);
+        unpivotRows.Single(r => r.Category == "North" && r.Name == "q2").Value.Should().Be(20m);
+        unpivotRows.Single(r => r.Category == "South" && r.Name == "q1").Value.Should().Be(5m);
     }
 }
 
@@ -197,5 +236,110 @@ internal static class T232SqlServerFixture
     private static void Exec(IDataContext ctx, string sql)
     {
         using var _ = ctx.ExecuteRaw(sql);
+    }
+}
+
+/// <summary>
+/// The PIVOT source entity of the case-sensitive fixture. Its members map to the same lowercase
+/// identifiers as <see cref="IT232Sales"/>, but the table lives in a case-sensitive database, so a
+/// wrong identifier spelling (<c>Category</c> instead of <c>category</c>) no longer resolves.
+/// </summary>
+[SqlTable("t232_cs_sales")]
+internal interface IT232CsSales
+{
+    [Column("category")]
+    string? Category { get; set; }
+
+    [Column("quarter")]
+    int Quarter { get; set; }
+
+    [Column("margin")]
+    decimal? Margin { get; set; }
+}
+
+/// <summary>
+/// V29 / AC-08 (#232): the typed PIVOT identifiers are resolved against a real case-sensitive
+/// database. The grouping column is emitted bare (<c>category</c>) and the pivoted cells are aliased
+/// (<c>[Q1]</c>); only a case-sensitive server can tell a correct identifier spelling from a wrong
+/// one, because the shared suite database is case-insensitive. The test creates the database with a
+/// case-sensitive collation, verifies the collation, executes the typed operator and its derived route
+/// and drops the database again.
+/// </summary>
+[Collection("SqlServer")]
+public sealed class T232CaseSensitiveAliasTests : ProviderTestSuite
+{
+    private const string DatabaseName = "t232_cs_db";
+    private const string CaseSensitiveCollation = "Latin1_General_100_CS_AS";
+
+    protected override ITestProvider Provider => SqlServerTestProvider.Instance;
+
+    /// <summary>Creates, uses and drops a case-sensitive database for the typed PIVOT identifier route.</summary>
+    [Fact]
+    public void TypedPivot_ResolvesBareGroupingAndAliasedCells_OnACaseSensitiveDatabase()
+    {
+        var admin = SqlServerContainer.ConnectionString;
+        var caseSensitive = new SqlConnectionStringBuilder(admin) { InitialCatalog = DatabaseName }.ConnectionString;
+
+        DropDatabase(admin);
+        Execute(admin, $"create database [{DatabaseName}] collate {CaseSensitiveCollation}");
+
+        SqlServerDataContext? ctx = null;
+        try
+        {
+            // The database must really be case-sensitive, otherwise the route would pass on a spelling
+            // mistake and the test would prove nothing. Latin1_General_100_CS_AS carries the CS marker.
+            var collation = ScalarString(admin, $"select collation_name from sys.databases where name = '{DatabaseName}'");
+            collation.Should().Be(CaseSensitiveCollation);
+            collation.Should().Contain("CS", "the fixture database must be case-sensitive");
+
+            Execute(caseSensitive,
+                "create table t232_cs_sales (category nvarchar(50) not null, quarter int not null, margin decimal(18,2) null)");
+            Execute(caseSensitive,
+                "insert into t232_cs_sales (category, quarter, margin) values (N'North', 1, 10), (N'North', 2, 20), (N'South', 1, 5)");
+
+            ctx = new SqlServerDataContext(caseSensitive, new DataContextBuilder());
+
+            var typed = ctx.From<IT232CsSales>()
+                .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter,
+                    (m, pv) => new { m.Category, Q1 = pv.Value<decimal?>("1"), Q2 = pv.Value<decimal?>("2") });
+
+            var rows = typed
+                .Select(x => new { x.Category, x.Q1, x.Q2 })
+                .ToList()
+                .OrderBy(r => r.Category)
+                .ToList();
+
+            rows.Should().HaveCount(2);
+            rows.Single(r => r.Category == "North").Should()
+                .BeEquivalentTo(new { Category = "North", Q1 = (decimal?)10m, Q2 = (decimal?)20m });
+            rows.Single(r => r.Category == "South").Q1.Should().Be(5m);
+        }
+        finally
+        {
+            ctx?.Dispose();
+            DropDatabase(admin);
+        }
+    }
+
+    private static void DropDatabase(string connectionString)
+        => Execute(connectionString,
+            $"if db_id('{DatabaseName}') is not null begin alter database [{DatabaseName}] set single_user with rollback immediate; drop database [{DatabaseName}]; end");
+
+    private static void Execute(string connectionString, string sql)
+    {
+        using var connection = new SqlConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.ExecuteNonQuery();
+    }
+
+    private static string? ScalarString(string connectionString, string sql)
+    {
+        using var connection = new SqlConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return command.ExecuteScalar() as string;
     }
 }

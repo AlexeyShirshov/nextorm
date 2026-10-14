@@ -6,7 +6,7 @@ namespace NextORM.Integration.Tests;
 
 /// <summary>
 /// D-05 (#232) SQL Server container-backed facts for the typed PIVOT/UNPIVOT result projection
-/// (evidence row E232-08, test-contract rows V01/V11/V14/V22/V24). The typed overloads are executed
+/// (evidence row E232-08, test-contract rows V01/V11/V14/V22/V24/V26/V27). The typed overloads are executed
 /// against the deterministic <c>T232SqlServerFixture</c> tables and compared with the legacy
 /// <see cref="TableAlias"/> path, the frozen oracle in <c>test-contract.json</c> and the materialized
 /// rows. The database is provided by <see cref="SqlServerTestProvider"/> (Testcontainers unless
@@ -250,5 +250,95 @@ public sealed class T232SqlServerTests : ProviderTestSuite
 
         // The shared Count/Any command still works after the typed runs: no sticky _dontCache leak.
         ctx.From<IT232Sales>().Where(s => s.Quarter == 1).Count().Should().Be(2);
+    }
+
+    // ------------------------------------------------------------------ V26/AC-08: derived builder route
+    //
+    // RESOLVED (D232-D05-derived-fallback-insufficient, r=3 n=2): the additive fallback clones the
+    // derived subquery's projection columns into projection-output references, so the intermediate
+    // derived layer emits the derived table's own output identifiers (`[category]`, `[Q1]`) instead of
+    // re-aliasing the underlying source column (`[1] as [Q1]` -> `Invalid column name '1'`). The facts
+    // below are ordinary facts again and execute against the real SQL Server container.
+
+    [Fact]
+    public void TypedPivot_DerivedBuilderRoute_Executes()
+    {
+        var ctx = Ctx;
+
+        // The typed result consumed as a derived EntityBuilder<TShape> source: From(EntityBuilder<TShape>)
+        // materialises the builder through ToCommand(), whose metadata-less derived intermediate is the
+        // route the gated projection-preserving fallback repairs. The projection must survive to the
+        // real database and return the pivot rows.
+        var typed = ctx.From<IT232Sales>()
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter,
+                (m, pv) => new { m.Category, Q1 = pv.Value<decimal?>("1"), Q2 = pv.Value<decimal?>("2") });
+
+        var rows = ctx.From(typed)
+            .Select(x => new { x.Category, x.Q1, x.Q2 })
+            .ToList()
+            .OrderBy(r => r.Category)
+            .ToList();
+
+        rows.Should().HaveCount(2);
+        rows.Single(r => r.Category == "North").Should()
+            .BeEquivalentTo(new { Category = "North", Q1 = (decimal?)10m, Q2 = (decimal?)20m });
+        rows.Single(r => r.Category == "South").Q1.Should().Be(5m);
+
+        // The typed members also compose through Where on the derived source after the projection survives.
+        var filtered = ctx.From(typed)
+            .Where(x => x.Q1 > 5)
+            .Select(x => new { x.Category, x.Q1 })
+            .ToList();
+
+        filtered.Should().ContainSingle();
+        filtered[0].Category.Should().Be("North");
+    }
+
+    // ------------------------------------------------------------------ V27/AC-08: derived command route
+
+    [Fact]
+    public void TypedPivot_DerivedCommandRoute_Executes()
+    {
+        var ctx = Ctx;
+
+        // The same typed result exposed as a QueryCommand<TShape> and consumed as a derived source.
+        var command = ctx.From<IT232Sales>()
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter,
+                (m, pv) => new { m.Category, Q1 = pv.Value<decimal?>("1") })
+            .ToCommand();
+
+        var rows = ctx.From(command)
+            .Select(x => new { x.Category, x.Q1 })
+            .ToList()
+            .OrderBy(r => r.Category)
+            .ToList();
+
+        rows.Select(r => r.Category).Should().Equal("North", "South");
+        rows.Single(r => r.Category == "North").Q1.Should().Be(10m);
+        rows.Single(r => r.Category == "South").Q1.Should().Be(5m);
+    }
+
+    [Fact]
+    public void TypedPivot_DerivedCommandSelfJoin_Executes()
+    {
+        var ctx = Ctx;
+
+        // The typed derived command joined to itself: both slots must resolve and qualify distinctly.
+        // The only pair with a.Q1 < b.Q1 is (South 5) x (North 10), which proves both sides read real rows.
+        var command = ctx.From<IT232Sales>()
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter,
+                (m, pv) => new { m.Category, Q1 = pv.Value<decimal?>("1") })
+            .ToCommand();
+
+        var rows = ctx.From(command)
+            .Join(ctx.From(command), (a, b) => a.Q1 < b.Q1)
+            .Select(p => new { Left = p.Item1.Category, LeftQ1 = p.Item1.Q1, Right = p.Item2.Category, RightQ1 = p.Item2.Q1 })
+            .ToList();
+
+        rows.Should().ContainSingle();
+        rows[0].Left.Should().Be("South");
+        rows[0].LeftQ1.Should().Be(5m);
+        rows[0].Right.Should().Be("North");
+        rows[0].RightQ1.Should().Be(10m);
     }
 }

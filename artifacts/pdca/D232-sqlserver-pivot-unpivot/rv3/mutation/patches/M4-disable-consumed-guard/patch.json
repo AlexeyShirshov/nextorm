@@ -1,0 +1,12 @@
+{
+ "applied": true,
+ "expected_failure": "the consumed-grouping guard is neutralised, so projecting the aggregate/FOR column no longer throws",
+ "file": "src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs",
+ "id": "M4-disable-consumed-guard",
+ "mutated_sha256": "4155fc5948e6e49e9141498b8c1d8c7962738b929128808b5284ec508e94c813",
+ "original_sha256": "14328cec5ff8d57b7ec6ab40f418e04664203301edf051fe250bdbadea9e563d",
+ "patch": {
+  "find": "            if (forbidden.Contains(member))",
+  "replace": "            if (forbidden.Contains(member) && member.Length == 0)"
+ }
+}

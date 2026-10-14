@@ -4,11 +4,14 @@
 - issue: [#232](https://github.com/AlexeyShirshov/nextorm/issues/232) — OPEN, label `enhancement`, milestone **1.0.9-rc3**
 - collection: `1.0.9-todo` (single group; current worktree/branch `1.0.9-rc3`; no worktree/branch/merge)
 - selected_variant: `pdca-dotnet` (+ overlay `nextorm-pdca`)
-- current cycle `N=1`; plan_revision: `r=3`; attempt: `n=1`; evidence_contract: `rv=3`
+- current cycle `N=1`; plan_revision: `r=3`; attempt: `n=2`; evidence_contract: `rv=3`
+- attempt `n=2` is **inside the already-authorized r=3 branch**: the binding `escalate` decision authorized exactly one more fix of `D232-D05-derived-fallback-insufficient` in `QueryCommand.QueryPreparer.cs`; no `planner` r=4 and no third attempt (`n=3` for this defect is forbidden)
 - current_plan: `P232-r3-gated-typed-derived-repair`
 - **plan_state: `ready`** (gate 1 satisfied; r=3 additive amendment re-affirmed)
 - starting HEAD: `3e49fe0c`
 - committed units: D-01 `9b4bf5d4`, D-02 `04d2289d`, D-03 `8f0d8309`, D-04 `706dd7b7`
+- r=3 commits: `3e894f1f`, `9d9c9380` (D-05 partial, historical/provisional), `4674ffde` (repro checkpoint), `b05e94ba` (additive fallback)
+- **D-05 (r=3 delta) status: `evidence-complete`** — the rv3 evidence set is sealed; this is **not** a CHECK verdict (EC232-RV3-SEAL, D-06 and D-07 remain open)
 
 ## Task
 
@@ -378,13 +381,34 @@ No parallel mutable ownership. Maintain the status/todo at every completed and n
 | D-02 Test contract | done | `04d2289d`; only the oracle amendment is added |
 | D-03 Core markers | done | `8f0d8309` |
 | D-04 Provider overloads | done | `706dd7b7`; D-04 assumption retained |
-| `D232-PREREQ-typed-derived` | active, pending | blocks D-05 |
+| `D232-PREREQ-typed-derived` | done (r=3 / n=2) | fallback `b05e94ba` + pass-through fix (this D-05 seal commit); R01–R07 green, V26/V27 green, C31 all 9 mutants killed |
 | `D232-AMEND-unpivot-null-oracle` | done | C24 exit 0; `rv3/oracle/amendment.json` (R1 contract key `unpivot_null_cell`) |
-| D-05 Integration/mutation | active / blocked | on both units above; partial work and original acceptance/remainder retained; partial results are historical/provisional and include the explicit C07 SQL Server skip (not six passing providers) |
+| D-05 Integration/mutation | **evidence-complete (r=3 delta)** | C21 29/29; C22 11/11 (0 skips); C23 eight suites exit 0 + integration 3922 total / 0 failed / 198 capability skips / **0 provider skips** (six providers executed); C29 V29 1/1; C07 six-provider 6/6 (0 skips); C31 9/9 mutants killed, restore gate exit 0; C25 0/0 both builds; manifest 16 `met` / 14 `open` (D-06/D-07/CHECK). Docs/example (D-06) + boundary/handoff (D-07) remainder retained |
 | D-06 Docs/example | not started | — |
 | D-07 Boundary/handoff | not started | — |
 
 No unit is superseded. The two additive units above keep D-05 active and preserve its criteria and remainder.
+
+### D-05 evidence (r=3 delta) — sealed (not a CHECK verdict)
+
+Concrete numbers, all from executed runs (logs under `artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/`):
+
+| Invocation | Command (abridged) | Exit | Selected / passed / failed / skipped |
+|---|---|---|---|
+| C29 | `dotnet test tests/nextorm.integration.tests -c Debug --filter FullyQualifiedName~T232CaseSensitiveAliasTests` (+`DOCKER_HOST`) | 0 | 1 / 1 / 0 / 0 — `Latin1_General_100_CS_AS` |
+| C21 | `dotnet test tests/nextorm.sqlserver.tests -c Debug --filter FullyQualifiedName~T232TypedPivotTests` | 0 | 29 / 29 / 0 / 0 |
+| C22 | `dotnet test tests/nextorm.integration.tests -c Debug --filter FullyQualifiedName~T232SqlServerTests` (+`DOCKER_HOST`) | 0 | 11 / 11 / 0 / 0 |
+| C23 (suites) | `dotnet test tests/nextorm.{core,sqlite,postgres,sqlserver,mysql,mariadb,clickhouse,alias}.tests -c Debug` | 0 ×8 | core 2529/2529, sqlite 1747/1746/0/1 (pre-existing LOB probe), sqlserver 948/940/0/8 (`Explicit` R-probes), postgres 976/976, mysql 454/454, mariadb 336/336, clickhouse 733/733, alias 147/147 |
+| C23 (boundary) | `DOCKER_HOST=… dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor` | 0 | 3922 / 3724 / 0 / 198 capability-reason skips, **0 provider skips** |
+| C23 (per provider) | `--list-tests` inventory minus skipped | 0 | sqlite 775, sqlserver 815, postgres 916, mysql 685, mariadb 117, clickhouse 290 passed |
+| C26/C27/C28 | `variant derived-builder / derived-command / pivot-free` | 0 ×3 | 1 / 1 / 0 / 0 each |
+| C25 | `dotnet build src/nextorm.core` + `src/nextorm.sqlserver` | 0 ×2 | 0 warnings / 0 errors both |
+| C30 | `dotnet test … --filter FullyQualifiedName~TypedPivot_RepeatedAndInterleavedQueries` | 0 | 1 / 1 / 0 / 0 |
+| C31 | 9 controlled prerequisite mutants | — | 9/9 killed; restore gate exit 0 (0 warnings / 0 errors) |
+| C24 | UNPIVOT-NULL oracle amendment | 0 | exactly one key amended |
+| C32-equivalent | `validate_inner_loop.py manifest rv3/manifest.json` | 0 | 16 `met` / 14 `open` |
+
+Open rows (genuinely unproven at D-05, never faked): `E232-03/04/05/11/12/13/14/15/17` (D-06/D-07/CHECK), `E232-07/08/09/10` (rv1 D-05 rows; the r=3 delta evidence is carried by the `EC232-*` rows, rv1 reconciliation is D-07/CHECK) and `EC232-RV3-SEAL` (CHECK).
 
 **Footprint allowlist (r=3, narrowly gated — engine changes previously excluded):** `Builders/EntityBuilder.cs` (internal marker/projection-preserving handoff only), `DataContext/DataContextExtensions.cs:1377` (gated builder-to-command routing only), `Visitors/MemberTranslator.cs:834` (the reproduced guard + neighbouring helper only), `Expressions/FromExpression.cs` (internal marker only if indispensable; the preferred design needs none), T232-owned tests under core/SQL Server/integration. Still forbidden: `SqlSourceRenderer.cs`, `SqlBuilder.cs`, `Dialect/**`, `PivotExpression.cs`, `BaseExpressionVisitor.cs`, `TableAliasAccessors.cs`, `SqlFunctions.cs`, other `Builders/**`, project/package files, the frozen 14 tests.
 
@@ -488,33 +512,50 @@ Stable **defect key** → observed revisions/attempts, number of fixes applied, 
 | `D232-D04-typed-remark-overgeneralized` | r=1 / n=1 | 1 | `tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs:17-24` | fixed in D-04 (test green) |
 | `D232-D04-celltype-oracle-anonymous-shape` | r=1 / n=1 | 1 | `tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs:244-274` | fixed in D-04 (test green) |
 | `D232-D04-wholesource-oracle-wrong-branch` | r=1 / n=1 | 1 | `tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs:431-457`; `src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs:54-57,329-330` | fixed in D-04 (both cases green) |
+| `D232-D05-derived-fallback-insufficient` | r=3 / n=1 | 1 (n=2, escalate-authorized; `n=3` forbidden) | `artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/blocker.json`; `.../rv3/mutation/prerequisite.json`; commit `b05e94ba` (insufficient fallback) → n=2 fix in `QueryCommand.QueryPreparer.cs` | fixed at n=2 (R01–R07 + V26/V27 green; PP1 revert mutant kills the R-probes and the SQL Server derived fact) |
 
 ### Open defect blocks (r=3)
 
 ```text
 key: D232-D05-typed-derived-source-not-composable
-state: open
+state: closed
 classification: additive in-cycle prerequisite
 remediation_unit: D232-PREREQ-typed-derived
 blocked_unit: D-05
 defect_1: projection dropped in From(EntityBuilder<T>) through implicit ToCommand(); mandatory runtime repro before production edits
 defect_1_repro: reproduced 2026-10-14 (C20 exit 0) — 4/4 builder+command routes fail with QueryPreparationException 'Select must return new anonymous type' at QueryCommand.QueryPreparer.PrepareColumns (:898) reached through PrepareFrom (:271); actual exception type XunitException wrapping NextORM.Core.QueryPreparationException, 1 selected / 1 failed per isolated child, no timeout
+defect_1_fix: additive gated fallback (TryGetReusableDerivedShape) added where the branch previously threw — commit b05e94ba; C34 red (fallback absent) / C35 green (fallback in place)
 defect_2: possible translation re-entry; unproven until isolated repro
 defect_2_repro: not reproduced 2026-10-14 — the isolated children terminate normally (no stack overflow, no process termination, ~0.6 s each); the recorded D-05 'StackOverflow' label is NOT confirmed by this repro and is superseded by the deterministic QueryPreparationException
 pivot_free_control: R05 passes (exit 0) — the pivot-free derived route composes, so the failure is PIVOT-specific and no general derived/projection-ownership change is warranted
 preserved_acceptance: AC-08 / V14 / V22 P1; D-04 XML promise unchanged
-closure: prerequisite evidence accepted; DO completion claim is insufficient
+closure: closed at r=3 / n=2 — the fallback was insufficient (D232-D05-derived-fallback-insufficient) and the escalate-authorized n=2 pass-through fix closed it; R01–R07 green and V26/V27 green on the real SQL Server
+
+key: D232-D05-derived-fallback-insufficient
+state: closed
+classification: in-cycle defect of the additive fallback (C08 red)
+symptom: SqlException "Invalid column name '1'" — the fallback set selectList = reusableShape, so the intermediate derived layer re-rendered the inner projection as "[1] as [Q1]" over a derived table that already exposes the aliased column Q1
+red_evidence: artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/blocker.json; commit 4674ffde (V26/V27 red, Explicit)
+authorization: binding escalate decision — exactly one more fix inside the authorized r=3 branch (n=2); no planner r=4, no n=3 for this defect
+fix: one new private static helper DerivedPassThroughColumn + TryGetColumnIdentifier in QueryCommand.QueryPreparer.cs; both fallback sub-branches clone the derived source's columns into IsProjectionOutputReference columns with OutputName = the identifier MakeColumn actually emits (bare N when SqlFunctions.Column(_,N) matches PropertyName case-insensitively, else PropertyName)
+invariants_kept: no existing branch changed; no SelectListCache/Cache/_dontCache write; no source-command mutation; frozen oracles unchanged
+closure: R01–R07 (unit) green; V26/V27 container facts green (11/11 T232SqlServerTests, 0 skips); six-provider capability C07 green (0 skips)
 ```
 
 ### Repro probe routes (r=3, `T232DerivedSourceReproTests`, all `Explicit`)
 
+Before the additive fallback each typed route threw `QueryPreparationException : Select must return new anonymous type`; with the fallback but before the n=2 fix the emitted middle layer was invalid (`[1] as [Q1]`). At r=3 / n=2 every probe asserts the **whole statement** and is green.
+
 | Probe | Route | Result |
 |---|---|---|
-| R01 | `ctx.From(<typed EntityBuilder<TShape>>).Select(...)` | red — `QueryPreparationException : Select must return new anonymous type` |
-| R02 | `ctx.From(<typed EntityBuilder<TShape>>).Where(...).Select(...)` | red — same exception |
-| R03 | `ctx.From(<typed QueryCommand<TShape>>).Select(...)` | red — same exception |
-| R04 | self-join of the typed derived command | red — same exception |
-| R05 | pivot-free derived control (plain table source, `SqlFunctions.Column` projection) | pass (exit 0) |
+| R01 | `ctx.From(<typed EntityBuilder<TShape>>).Select(...)` | green — `select [category], [Q1] from (select [category], [Q1] from (select category, [1] as [Q1] …) as [t2]) as [t3]` |
+| R02 | `ctx.From(<typed EntityBuilder<TShape>>).Where(...).Select(...)` | green — same statement + `where (t3.[Q1] > …)` |
+| R03 | `ctx.From(<typed QueryCommand<TShape>>).Select(...)` | green — identical to R01 |
+| R04 | self-join of the typed derived command | green — both slots qualified (`t3.[category]`, `t6.[category]`) |
+| R05 | pivot-free derived control via `From(QueryCommand)` | green — collapses to the bare two-layer projection |
+| R05b | pivot-free builder mirror (`From(EntityBuilder<TShape>)`) | green — intermediate layer `[category], [margin]` |
+| R06 | unaliased identifier (grouping column) | green — `[category]`, never `[Category]` (V29 prerequisite) |
+| R07 | two derived sources with different pivot values on one context | green — `[1]`/`[2]` stay distinct, repeat identical |
 
 ```text
 key: D232-D05-unpivot-null-oracle
@@ -578,4 +619,23 @@ closed_by: C24 exit 0 (exactly one changed key `null_count_expectations.unpivot_
 2026-10-15 02:20Z | DO | revision r=3 | iteration n=1/3 | Eight project suites (core/sqlite/postgres/sqlserver/mysql/mariadb/clickhouse/alias) exit 0 (sqlserver 946/940/0/6 — 6 skips are the Explicit R01–R05b probes; sqlite 1747/1746/0/1 pre-existing RowId LOB probe) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/SUMMARY.md
 2026-10-15 02:20Z | DO | revision r=3 | iteration n=1/3 | Tripwire NOT hit — no existing branch condition/behaviour, `FromExpression`/`ColumnShape`, non-pivot `ToCommand` or `SelectList` contract change was required; all forbidden files untouched | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/candidate/SUMMARY.md
 2026-10-15 02:20Z | DO | revision r=3 | iteration n=1/3 | D-05 NOT done — integration/capability/mutation remainder carried (C07 six-provider zero-skip, C08, C09/C31, V26/V27/V29 container routes) | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
+2026-10-15 02:45Z | DO | revision r=3 | iteration n=2/3 | escalate decision recorded: exactly one more fix of D232-D05-derived-fallback-insufficient INSIDE the authorized r=3 branch (QueryCommand.QueryPreparer.cs only); no planner r=4, no n=3 | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
+2026-10-15 02:45Z | DO | revision r=3 | iteration n=2/3 | fix applied: DerivedPassThroughColumn + TryGetColumnIdentifier clone the derived source's columns into IsProjectionOutputReference columns (OutputName = bare N when SqlFunctions.Column(_,N) matches PropertyName case-insensitively, else PropertyName); no existing branch changed, no SelectListCache/Cache/_dontCache write, no source-command mutation | src/nextorm.core/Query/QueryCommand.QueryPreparer.cs
+2026-10-15 02:45Z | DO | revision r=3 | iteration n=2/3 | build gate `dotnet build nextorm.slnx -c Debug` = exit 0, 0 warnings / 0 errors | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/logs/C31-restore-gate.out
+2026-10-15 02:45Z | DO | revision r=3 | iteration n=2/3 | R01–R07 rewritten to assert the whole statement; `dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build --filter FullyQualifiedName~T232DerivedSourceReproTests -- -explicit only` = exit 0 (8/8, 0 skipped) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/
+2026-10-15 02:45Z | DO | revision r=3 | iteration n=2/3 | C22 derived-exec: `DOCKER_HOST=… dotnet test tests/nextorm.integration.tests -c Debug --filter FullyQualifiedName~T232SqlServerTests` = exit 0 (11/11, 0 skipped); V26/V27 promoted from `[Fact(Explicit=true)]` to ordinary facts | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/execution.json
+2026-10-15 02:45Z | DO | revision r=3 | iteration n=2/3 | C07 six-provider capability: `… --filter FullyQualifiedName~T232TypedOperators_RespectCapability` = exit 0 (6/6, 0 skipped; SQL Server positive for both operators, five reject both) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C07-capability.out
+2026-10-15 02:45Z | DO | revision r=3 | iteration n=2/3 | C31 mutation 9/9 killed and restored: 6 original D-05 mutants + PP1-revert-pass-through (unit R-probes 7/8 red AND container derived fact red with `Invalid column name '1'`), PP2-drop-output-reference, PP3-always-property-name; restore gate = exit 0, 0 warnings / 0 errors | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/prerequisite.json
+2026-10-15 02:45Z | DO | revision r=3 | iteration n=2/3 | C29 V29 case-sensitive: `… --filter FullyQualifiedName~T232CaseSensitiveAliasTests` = exit 0 (1/1, 0 skipped) — bare `[category]` resolves on Latin1_General_100_CS_AS | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/case-sensitive-alias.json
+2026-10-15 03:00Z | DO | revision r=3 | iteration n=2/3 | C29 harness bug fixed (`verify.py` `cmd_variant`): `case-sensitive-alias` re-targeted to `dotnet test tests/nextorm.integration.tests -c Debug --filter FullyQualifiedName~T232CaseSensitiveAliasTests` with `DOCKER_HOST` (the class lives in `T232PivotFixture.cs:269`; the unit-project route produced `Zero tests ran`, exit 8); C29 exit 0 (1/1, 0 skipped); case-sensitive collation now recorded | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/case-sensitive-alias.json
+2026-10-15 03:00Z | DO | revision r=3 | iteration n=2/3 | V29 consumers recorded: bare grouping `[category]` and aliased cells `[Q1]`/`[Q2]` resolve on `Latin1_General_100_CS_AS` (asserted inside the executed container test) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/database-collation.json
+2026-10-15 03:01Z | DO | revision r=3 | iteration n=2/3 | C21 derived-unit exit 0 (29/29, 0 skipped) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/unit.json
+2026-10-15 03:01Z | DO | revision r=3 | iteration n=2/3 | C22 derived-exec exit 0 (11/11, 0 skipped) — typed derived execution on the SQL Server container | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/execution.json
+2026-10-15 03:02Z | DO | revision r=3 | iteration n=2/3 | C26/C27/C28 re-run against the fixed harness: derived-builder 1/1, derived-command 1/1, pivot-free 1/1 (all exit 0) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/
+2026-10-15 03:03Z | DO | revision r=3 | iteration n=2/3 | C23 shared-regression exit 0: eight project suites exit 0 (core 2529/2529, sqlite 1747/1746/0/1 pre-existing LOB probe, sqlserver 948/940/0/8 `Explicit` R-probes, postgres 976/976, mysql 454/454, mariadb 336/336, clickhouse 733/733, alias 147/147) + container boundary 3922 / 0 failed / 198 capability-reason skips / 0 provider skips; six providers executed (per-provider passed: sqlite 775, sqlserver 815, postgres 916, mysql 685, mariadb 117, clickhouse 290) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/regression/inventory.json
+2026-10-15 03:04Z | DO | revision r=3 | iteration n=2/3 | oracle comparison: every pre-existing frozen oracle byte-identical; only the three delta-owned r=3 test files changed (authorized n=2 promotion) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/regression/oracle-comparison.json
+2026-10-15 03:04Z | DO | revision r=3 | iteration n=2/3 | rv3 manifest rows flipped `open`→`met`: EC232-DERIVED-UNIT, EC232-DERIVED-EXEC, EC232-SHARED-REGRESSION, EC232-BUILD, EC232-DERIVED-BUILDER, EC232-DERIVED-COMMAND, EC232-PIVOTFREE-PROBE, EC232-CASE-SENSITIVE-ALIAS, EC232-CACHE-LOCALITY, EC232-PREREQ-MUTATION (EC232-ORACLE-AMEND already `met`); 16 `met` / 14 `open` | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/manifest.json
+2026-10-15 03:05Z | DO | revision r=3 | iteration n=2/3 | validators exit 0: `validate_inner_loop.py brief` (rv1 D-05) 0, `report` (rv1 D-05) 0, `manifest` (rv3) 0, and `rv1/verify.py scopes` 0 (every D-01..D-05 brief/report re-validated; rv1 `scope-map.json` content unchanged, only C19 log dates/provenance refreshed) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/validation.json
+2026-10-15 03:05Z | DO | revision r=3 | iteration n=2/3 | D-05 evidence-complete (r=3 delta) — **not** a CHECK verdict; EC232-RV3-SEAL, D-06 (docs/example) and D-07 (boundary/handoff) remain open | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
+2026-10-15 02:45Z | DO | revision r=3 | iteration n=2/3 | regressions: `FullyQualifiedName~T232` exit 0 (53/45/0/8), C06 legacy filter exit 0 (57/55/0/2), full nextorm.sqlserver.tests exit 0 (948/940/0/8), full nextorm.core.tests exit 0 (2529/2529/0/0); frozen 14 legacy tests + 3e894f1f oracle untouched | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/
 ```

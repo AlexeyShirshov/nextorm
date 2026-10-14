@@ -1,0 +1,18 @@
+{
+ "captured": "2026-10-14T21:47:38Z",
+ "criterion": [
+  "EC232-CACHE-LOCALITY",
+  "AC-09",
+  "V24",
+  "V26"
+ ],
+ "exit": 0,
+ "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C30-cache-locality.out",
+ "test_summary": {
+  "failed": 0,
+  "skipped": 0,
+  "succeeded": 1,
+  "total": 1
+ },
+ "unit": "D232-PREREQ-typed-derived"
+}
