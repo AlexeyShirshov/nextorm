@@ -668,6 +668,15 @@ public class SqlServerFunctionsSqlGenerationTests
         }));
         spaces.Should().Contain("next value for [order seq]");
 
+        // A raw ']' inside the schema component is doubled too, so neither component can terminate
+        // its bracket-quoted identifier.
+        var schemaEscaping = SqlOf(ctx, e.Select(x => new
+        {
+            V = SqlFunctions.SqlServer.next_value_for("s]q.t")
+        }));
+        schemaEscaping.Should().Contain("next value for [s]]q].[t]");
+        schemaEscaping.Should().NotContain("next value for [s]q].[t]");
+
         // A raw ']' is doubled, so the name text cannot terminate the bracket-quoted identifier.
         var escaping = SqlOf(ctx, e.Select(x => new
         {
@@ -675,6 +684,14 @@ public class SqlServerFunctionsSqlGenerationTests
         }));
         escaping.Should().Contain("next value for [x]]; drop table t; --]");
         escaping.Should().NotContain("next value for [x]; drop table t; --]");
+
+        // The nextval alias routes through the same per-component quoter.
+        var aliasEscaping = SqlOf(ctx, e.Select(x => new
+        {
+            V = SqlFunctions.SqlServer.nextval("x]; drop table t; --")
+        }));
+        aliasEscaping.Should().Contain("next value for [x]]; drop table t; --]");
+        aliasEscaping.Should().NotContain("next value for [x]; drop table t; --]");
     }
 
     [Fact]
@@ -687,12 +704,21 @@ public class SqlServerFunctionsSqlGenerationTests
             "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" +
             "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa";
         const string Name129 = Name128 + "a";
+        // Concatenating two constants stays a compile-time constant, so the schema-qualified name
+        // reaches the component-length guard (not the non-constant guard).
+        const string Schema129 = Name129 + ".t";
 
         AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for(null!) })), "*next_value_for*constant*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for(default(string)!) })), "*next_value_for*constant*");
         AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for("") })), "*next_value_for*empty*");
         AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for("a..b") })), "*next_value_for*empty component*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for("a.") })), "*next_value_for*empty component*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for(".b") })), "*next_value_for*empty component*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for(".") })), "*next_value_for*empty component*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for("a\u0000b") })), "*next_value_for*NUL*");
         AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for("s.a.b") })), "*next_value_for*at most two*");
         AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for(Name129) })), "*next_value_for*exceed*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for(Schema129) })), "*next_value_for*exceed*");
         AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.nextval(null!) })), "*nextval*constant*");
         AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.nextval("s.a.b") })), "*nextval*at most two*");
 

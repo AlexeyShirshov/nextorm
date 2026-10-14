@@ -7,7 +7,7 @@ collection: 1.0.9-todo
 group: G1 (single group; no worktree/branch/merge)
 cycle: N=1
 plan_revision: r=1
-iteration: n=1
+iteration: n=2
 plan_state: ready
 evidence_contract_rv: 1
 manifest: artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
@@ -191,3 +191,5 @@ None now (still initial PLAN). A newly proven prerequisite keeps the original D 
 2026-10-14T04:44:00Z | DO | revision r=1 | iteration 1/3 | **Notice: guide page had no sequence text to replace.** `docs/guide/provider-specific-sql/sqlserver.md` (+RU) contained no `NEXT VALUE FOR`/sequence section, so the D4 change is an **ADD** of a "Sequences"/"Последовательности" subsection (EN+RU) rather than a replacement — the only page whose "Not supported yet"/"Пока не поддерживается" claim was replaced is `docs[/ru]/scalar-functions/10-sequences.md`. No new TOC page, no renumbering, no `docs/articles/sqlserver-sequences.md`, no `12-sequences.md` | docs/guide/provider-specific-sql/sqlserver.md; docs/ru/guide/provider-specific-sql/sqlserver.md
 
 2026-10-14T04:44:30Z | DO | revision r=1 | iteration 1/3 | Observation (not a defect): the approved plan front-matter records `base_commit: 58025147`, while the current worktree HEAD is `f8caa690` (later sibling commits). Mechanical drift only; the frozen tree and evidence are bound to the current tree. DO→PLAN candidates: **none** — no anchor/premise divergence changed design, acceptance criteria or the evidence contract | artifacts/pdca/D218-sqlserver-sequences/rv1/source-identity.txt
+
+2026-10-14T05:10:00Z | DO | revision r=1 | iteration 2/3 | CHECK FAIL r=1 n=1/3 — no product defect; mandatory test rows open (R3/R4, E04) + E08/E10 evidence; corrective DO (test-only) started, n=2/3 | artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
