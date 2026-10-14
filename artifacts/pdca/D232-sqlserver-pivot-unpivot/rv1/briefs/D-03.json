@@ -1,0 +1,21 @@
+{
+ "unit": "D-03",
+ "scope": {
+  "projects": [
+   "src/nextorm.core",
+   "tests/nextorm.sqlserver.tests"
+  ],
+  "selectors": [
+   "FullyQualifiedName~T232MarkerTests"
+  ],
+  "files": [
+   "src/nextorm.core/Query/PivotValues.cs",
+   "src/nextorm.core/Visitors/NormSqlTranslator.cs",
+   "tests/nextorm.sqlserver.tests/T232MarkerTests.cs"
+  ],
+  "rationale": "D-03 adds the two translation-only core marker types and the narrow exact-definition recognition in the core translator, plus their behaviour tests. The compiled inputs are the new core marker file, the internal translator edit and the marker test class; the affected subset is the marker class in the SQL Server test project (compile gate: the core/sqlserver build). No provider overload, dialect, builder or existing test is touched.",
+  "rebuild": "affected",
+  "boundary": "Single post-implementation boundary planned for D-07: full per-project test sweeps plus the six-provider container integration run (C07/C08/C11); not executed by D-03. The solution-wide gate (dotnet build nextorm.slnx -c Debug = 0/0) and the legacy Pivot/Unpivot regression set are recorded as D-03 provenance logs, not as inner report executions."
+ },
+ "amendments": []
+}
