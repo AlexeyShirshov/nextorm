@@ -85,6 +85,10 @@ Record T225 as **terminal `incomplete`** now; do **not** redefine the oracle (A 
 - Escalate (strong): decision (B) — terminal `incomplete`.
 - Status persisted by coder; committed (`#225`).
 - 2026-10-13 03:46 UTC | PLAN | revision r=2 | iteration 1/3 | re-open: planner issued a genuinely new executable plan (r=1 was a gap declaration); plan_state=ready, contract rv=1 frozen | docs/specs/status/D225-joininto-mn-docs-delta-1.md
+- 2026-10-14 18:03 UTC | DO | revision r=2 | iteration 1/3 | DO started (docs carry, footprint-limited): B `aea0a9ba` verified present + ancestor of HEAD `ee3ee9fe`; 16 footprint paths clean (`git status --porcelain` empty); scope validated | artifacts/pdca/D225/rv1/scope.json (`validate_inner_loop.py brief` exit 0)
+- Notice: host tool catalog exposes no todowrite; sidebar todo mirror not updated this cycle; status file is the sole progress source.
+- Notice: plan r=2 text says milestone 1.0.9 / branch 1.0.9; the collection re-read renamed them to 1.0.9-rc3 / 1.0.9-rc3. Cosmetic drift; goal, criteria and footprint unaffected.
+- 2026-10-14 18:06 UTC | D2 | revision r=2 | iteration 1/3 | D2 blocked → **DO→PLAN candidate**: commit `d76c5ae3` (#223 Composite-junction M:N SQL link carrier, T223, 2026-10-13 14:49 +0500) is an ancestor of HEAD and landed after plan r=2 froze, so criterion C3 (document the SQL-generation rejection with the exact message) is obsolete — the message is absent from `src/**`, `JunctionLinkSourceFactory.cs:205-206` builds the composite carrier, and the designated oracle now asserts **support** (exit 0, selected 4, 4 passed). No footprint file was edited; D2 stays blocked/pending (not done, not superseded). | artifacts/pdca/D225/rv1/{disposition.md,semantic-review.md,DO_TO_PLAN.md,oracle-rejection.log,oracle-remainder.log}
 
 ## Done / Verified
 
@@ -163,3 +167,25 @@ Manifest `artifacts/pdca/D225/rv1/manifest.json`, materialized at DO→CHECK; CH
 ### Prerequisites / assumptions
 
 T213 delivered behavior + its artifacts are sufficient inputs; #223 is NOT a dependency; milestone unchanged (1.0.9); SDK/tools/Podman availability is an in-cycle verifiable precondition, not a promised future result.
+
+---
+
+## DO r=2 — DO→PLAN candidate (blocked)
+
+- Phase state: `PLAN` → `DO` → **DO→PLAN candidate** (DO not completed; no footprint edit made).
+- D2 remains **blocked/pending** — not `done`, not `superseded`. The frozen plan r=2 cannot be executed
+  coherently at HEAD.
+- Cause: commit `d76c5ae363e4e92b3bb77f57fbe7a878113a4d97` (#223 Composite-junction M:N SQL link carrier,
+  T223, 2026-10-13 14:49 +0500) is an ancestor of HEAD and landed after plan r=2 froze (B `aea0a9ba`,
+  2026-10-13 08:37 +0500). It implemented the composite-junction M:N SQL link carrier and rewrote 7 of the
+  16 footprint docs to the **support** wording. Criterion **C3** (document the SQL-generation rejection with
+  the exact message) is therefore obsolete, and **E01** (“prove the original AC07 meaning … against the
+  implementation”) is unsatisfiable.
+- Hunk roll-up (`disposition.md`): 14 `already-present` (superseded by T223), 4 `obsolete`, 8
+  `conflict-reworked`; **0 carried**.
+- Evidence: `artifacts/pdca/D225/rv1/{disposition.md, semantic-review.md, DO_TO_PLAN.md, oracle-rejection.log,
+  oracle-remainder.log, scope.json}`.
+- DO-phase runs at HEAD `ee3ee9fe`: `dotnet build tests/nextorm.core.tests -c Debug` → 0 Warning(s)/0
+  Error(s); the two oracle selectors exit 0 (4/4 and 17/17, 0 skipped).
+- Requested: a `planner` revision **r=3** — re-baseline to HEAD, re-scope C3 and E01 to the #213/#223
+  support statement, re-derive the 4 obsolete + 8 conflict-reworked hunks. DO must not improvise that scope.
