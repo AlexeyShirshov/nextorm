@@ -1,0 +1,76 @@
+{
+ "argv": [
+  "dotnet",
+  "test",
+  "tests/nextorm.integration.tests",
+  "-c",
+  "Debug",
+  "--filter",
+  "FullyQualifiedName~T232TypedOperators_RespectCapability"
+ ],
+ "captured": "2026-10-14T20:26:58Z",
+ "criterion": [
+  "E232-07",
+  "AC-09"
+ ],
+ "docker_host": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock",
+ "exit": 0,
+ "failed": 0,
+ "invocation": "C07",
+ "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C07-capability-six-provider.out",
+ "passed": 5,
+ "per_provider": {
+  "clickhouse": {
+   "result": "passed",
+   "typed_pivot": "rejected",
+   "typed_unpivot": "rejected"
+  },
+  "mariadb": {
+   "result": "passed",
+   "typed_pivot": "rejected",
+   "typed_unpivot": "rejected"
+  },
+  "mysql": {
+   "result": "passed",
+   "typed_pivot": "rejected",
+   "typed_unpivot": "rejected"
+  },
+  "postgres": {
+   "result": "passed",
+   "typed_pivot": "rejected",
+   "typed_unpivot": "rejected"
+  },
+  "sqlite": {
+   "result": "passed",
+   "typed_pivot": "rejected",
+   "typed_unpivot": "rejected"
+  },
+  "sqlserver": {
+   "note": "the SQL Server capability case skips itself; the supporting typed execution path is asserted by C08",
+   "result": "skipped-by-design",
+   "typed_pivot": "supported",
+   "typed_unpivot": "supported"
+  }
+ },
+ "rejection_contract": "NotSupportedException 'The PIVOT source construct is not supported by this provider.' / 'The UNPIVOT source construct is not supported by this provider.'",
+ "rows": [
+  "V20"
+ ],
+ "selected_count": 6,
+ "selected_tests": [
+  "NextORM.Integration.Tests.SqliteIntegrationTests.T232TypedOperators_RespectCapability",
+  "NextORM.Integration.Tests.PostgresIntegrationTests.T232TypedOperators_RespectCapability",
+  "NextORM.Integration.Tests.MySqlIntegrationTests.T232TypedOperators_RespectCapability",
+  "NextORM.Integration.Tests.MariaDbT232PivotTests.T232TypedOperators_RespectCapability",
+  "NextORM.Integration.Tests.ClickHouseT232PivotTests.T232TypedOperators_RespectCapability",
+  "NextORM.Integration.Tests.SqlServerIntegrationTests.T232TypedOperators_RespectCapability"
+ ],
+ "selected_tests_source": "dotnet test tests/nextorm.integration.tests -c Debug --no-build --list-tests --filter FullyQualifiedName~T232TypedOperators_RespectCapability (exit 0)",
+ "skipped": 1,
+ "tree": {
+  "dirty_entries": 42,
+  "dirty_sha256": "713c0ddcd8666ea0f31bd2e4a20d5166b25e82bf808cfaf91268aa0310676965",
+  "head": "706dd7b7"
+ },
+ "unit": "D-05"
+}

@@ -1,0 +1,14 @@
+{
+ "argv": [
+  "dotnet",
+  "test",
+  "tests/nextorm.sqlserver.tests",
+  "-c",
+  "Debug",
+  "--filter",
+  "FullyQualifiedName~TypedPivot_DuplicateValue_FailsClosed"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T20:14:01Z",
+ "env": {}
+}

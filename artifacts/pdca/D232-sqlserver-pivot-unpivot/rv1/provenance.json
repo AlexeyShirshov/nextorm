@@ -3,7 +3,7 @@
  "contract_rv": 1,
  "cycle": "N=1",
  "issue": "#232",
- "last_updated": "2026-10-14T20:05:47Z",
+ "last_updated": "2026-10-14T20:27:17Z",
  "milestone": "1.0.9-rc3",
  "plan_revision": 1,
  "records": [
@@ -975,6 +975,455 @@
    "phase": "boundary",
    "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-04.err",
    "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-04.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~TypedPivot_EmitsTheFrozenTypedProjection"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:13:56Z",
+   "exit": 2,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M1-remove-alias-metadata.exit",
+   "name": "C09-mutant-M1-remove-alias-metadata",
+   "note": "targeted mutant 'M1-remove-alias-metadata': the projected column name is no longer recorded, so the typed cell loses its '<column> as [<Member>]' rename alias",
+   "phase": "inner",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M1-remove-alias-metadata.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M1-remove-alias-metadata.out",
+   "stdout_sha256": "869f2f1d8eab5e4c6edf5bd313dc3b935647199e9ef29a22a62af3599e21fdf6"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~TypedPivot_DeclarationOrderDrivesBothTheInListAndTheProjection"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:14:01Z",
+   "exit": 2,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M2-reverse-value-order.exit",
+   "name": "C09-mutant-M2-reverse-value-order",
+   "note": "targeted mutant 'M2-reverse-value-order': the extracted values are reversed, so the IN (...) list no longer follows the projection declaration order",
+   "phase": "inner",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M2-reverse-value-order.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M2-reverse-value-order.out",
+   "stdout_sha256": "d1693f652be5f72c9ccb4cfeeb5447b6fed73040d88ec573e677574d51c7215c"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~TypedPivot_DuplicateValue_FailsClosed"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:14:04Z",
+   "exit": 2,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M3-disable-duplicate-guard.exit",
+   "name": "C09-mutant-M3-disable-duplicate-guard",
+   "note": "targeted mutant 'M3-disable-duplicate-guard': the duplicate-value guard is neutralised, so a duplicate declaration no longer throws",
+   "phase": "inner",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M3-disable-duplicate-guard.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M3-disable-duplicate-guard.out",
+   "stdout_sha256": "3164e5de51fda00d089ef8046c86abfcd3b877f6469dea7d84fb7e81b3d857f6"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~TypedPivot_ConsumedGroupingMember_FailsClosed"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:14:07Z",
+   "exit": 2,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M4-disable-consumed-guard.exit",
+   "name": "C09-mutant-M4-disable-consumed-guard",
+   "note": "targeted mutant 'M4-disable-consumed-guard': the consumed-grouping guard is neutralised, so projecting the aggregate/FOR column no longer throws",
+   "phase": "inner",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M4-disable-consumed-guard.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M4-disable-consumed-guard.out",
+   "stdout_sha256": "4693dce79a96f8ac938d70c7d561e901d0cf6babb94a982e0f0b2ac78d72f097"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~TypedUnpivot_ZeroColumns_FailsClosed"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:14:09Z",
+   "exit": 2,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M5-disable-zero-column-guard.exit",
+   "name": "C09-mutant-M5-disable-zero-column-guard",
+   "note": "targeted mutant 'M5-disable-zero-column-guard': the zero-column guard is neutralised, so a typed UNPIVOT with no columns no longer throws",
+   "phase": "inner",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M5-disable-zero-column-guard.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M5-disable-zero-column-guard.out",
+   "stdout_sha256": "4caa8ce8bf55b027727658861b1a99b4bf589b1ed317bc13c621eb466428d8d2"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~TypedPivot_EntityInner_UsesTheMappedColumnName"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:14:12Z",
+   "exit": 2,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M6-wrong-grouping-name.exit",
+   "name": "C09-mutant-M6-wrong-grouping-name",
+   "note": "targeted mutant 'M6-wrong-grouping-name': the mapped grouping name is replaced by the CLR member name, so the projected grouping column no longer matches the SQL column",
+   "phase": "inner",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M6-wrong-grouping-name.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M6-wrong-grouping-name.out",
+   "stdout_sha256": "e0ea374f8045e759892311fdb42bd148a226ccbd299f88ba53ae2e779fbee524"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "build",
+    "nextorm.slnx",
+    "-c",
+    "Debug"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:14:15Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-restore-gate.exit",
+   "name": "C09-restore-gate",
+   "note": "restoration proof: the solution builds 0 warnings / 0 errors after the mutants are removed",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-restore-gate.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-restore-gate.out",
+   "stdout_sha256": "25475cfac4380eaa7c200352ffed85233742f7be02b239420ea394a42bece794"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~T232"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:14:35Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C05-t232-sqlserver.exit",
+   "name": "C05-t232-sqlserver",
+   "note": "all T232 SQL-generation cases (typed SQL, shapes/cells, guards, markers, preparation probes, D-05 branch closure)",
+   "phase": "inner",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C05-t232-sqlserver.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C05-t232-sqlserver.out",
+   "stdout_sha256": "f05a01d7a6bb6cc7de3df12f47b43988ae52b425211b83fb730a29bbef8450af"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.integration.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~T232TypedOperators_RespectCapability"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:15:19Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C07-capability-six-provider.exit",
+   "name": "C07-capability-six-provider",
+   "note": "shared typed PIVOT/UNPIVOT capability case across all six providers; five must reject both operators",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C07-capability-six-provider.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C07-capability-six-provider.out",
+   "stdout_sha256": "1b3025393b10f12e6b8c9376f98c610a79ae8f5166d82421d7a80ebb7b1c1913"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.integration.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~T232SqlServerTests"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:15:39Z",
+   "exit": 134,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C08-sqlserver-integration.exit",
+   "name": "C08-sqlserver-integration",
+   "note": "SQL Server container-backed typed PIVOT/UNPIVOT facts (parity, ordinal, NULL/COUNT, derived/CTE, twice-joined, cache)",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C08-sqlserver-integration.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C08-sqlserver-integration.out",
+   "stdout_sha256": "5ed00d947da5dc7f50e9bf3db133283581fdb037029a2813126b2aafee9b9023"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.integration.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~T232SqlServerTests"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:25:36Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C08-sqlserver-integration.exit",
+   "name": "C08-sqlserver-integration",
+   "note": "SQL Server container-backed typed PIVOT/UNPIVOT facts: parity, ordinal, NULL/COUNT, composition, AsCte, CTE self-join, cache",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C08-sqlserver-integration.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C08-sqlserver-integration.out",
+   "stdout_sha256": "51950b68563a39b51ad38bc5561b18723f7e6f22ee3ea4029402782ff33c8ffe"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.integration.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~T232TypedOperators_RespectCapability"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:26:15Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C07-capability-six-provider.exit",
+   "name": "C07-capability-six-provider",
+   "note": "shared typed PIVOT/UNPIVOT capability case across all six providers; five must reject both operators",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C07-capability-six-provider.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C07-capability-six-provider.out",
+   "stdout_sha256": "27c47cb5fc7a131d28fd7aa58b3f1add8cd022ac4f9a6baac73216444ebdfabf"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "build",
+    "src/nextorm.sqlserver/nextorm.sqlserver.csproj",
+    "-c",
+    "Debug"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:27:12Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.exit",
+   "name": "C04-build-sqlserver",
+   "note": "CS1591 baseline tension: capture the actual warning/error set without reopening the registry finding",
+   "phase": "inner",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.out",
+   "stdout_sha256": "99a9b8505fdb8dbbd2c781a9a280900f43601d46a988fe603a7d723d68a1b03a"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:27:17Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-01.exit",
+   "name": "C19-brief-D-01",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-01.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-01.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-02.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:27:17Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-02.exit",
+   "name": "C19-brief-D-02",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-02.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-02.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-02.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-03.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:27:17Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-03.exit",
+   "name": "C19-brief-D-03",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-03.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-03.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-03.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-04.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:27:17Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-04.exit",
+   "name": "C19-brief-D-04",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-04.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-04.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-04.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "brief",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-05.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:27:17Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-05.exit",
+   "name": "C19-brief-D-05",
+   "note": "validate_inner_loop.py brief artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-05.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-05.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-brief-D-05.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:27:17Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-01.exit",
+   "name": "C19-report-D-01",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-01.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-01.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-02.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:27:17Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-02.exit",
+   "name": "C19-report-D-02",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-02.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-02.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-02.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-03.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:27:17Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-03.exit",
+   "name": "C19-report-D-03",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-03.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-03.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-03.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-04.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:27:17Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-04.exit",
+   "name": "C19-report-D-04",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-04.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-04.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-04.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "report",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-05.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:27:17Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-05.exit",
+   "name": "C19-report-D-05",
+   "note": "validate_inner_loop.py report artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-05.json",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-05.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C19-report-D-05.out",
    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   }
  ],

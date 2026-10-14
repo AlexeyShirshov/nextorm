@@ -389,30 +389,197 @@ def cmd_perf(mode: str):
     return exit_code
 
 
+def _read_bytes(path: str) -> bytes:
+    with open(path, "rb") as handle:
+        return handle.read()
+
+
+def _write_bytes(path: str, data: bytes) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as handle:
+        handle.write(data)
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+# The six mandated controlled mutants (D-05/E232-10). Each entry names its production file, the exact
+# one-occurrence text it replaces, the designated assertion that must go red, and why.
+MUTANTS = [
+    {
+        "id": "M1-remove-alias-metadata",
+        "file": "src/nextorm.core/Visitors/NormSqlTranslator.cs",
+        "find": "            visitor.AppendColumnReference(entity, columnName);\n            visitor.ColumnName = columnName;",
+        "replace": "            visitor.AppendColumnReference(entity, columnName);",
+        "assertion": "TypedPivot_EmitsTheFrozenTypedProjection",
+        "expected_failure": "the projected column name is no longer recorded, so the typed cell loses its '<column> as [<Member>]' rename alias",
+    },
+    {
+        "id": "M2-reverse-value-order",
+        "file": "src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs",
+        "find": "        return values;\n    }",
+        "replace": "        System.Array.Reverse(values);\n        return values;\n    }",
+        "assertion": "TypedPivot_DeclarationOrderDrivesBothTheInListAndTheProjection",
+        "expected_failure": "the extracted values are reversed, so the IN (...) list no longer follows the projection declaration order",
+    },
+    {
+        "id": "M3-disable-duplicate-guard",
+        "file": "src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs",
+        "find": "            if (!seen.Add(value))",
+        "replace": "            if (!seen.Add(value) && value.Length == 0)",
+        "assertion": "TypedPivot_DuplicateValue_FailsClosed",
+        "expected_failure": "the duplicate-value guard is neutralised, so a duplicate declaration no longer throws",
+    },
+    {
+        "id": "M4-disable-consumed-guard",
+        "file": "src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs",
+        "find": "            if (forbidden.Contains(member))",
+        "replace": "            if (forbidden.Contains(member) && member.Length == 0)",
+        "assertion": "TypedPivot_ConsumedGroupingMember_FailsClosed",
+        "expected_failure": "the consumed-grouping guard is neutralised, so projecting the aggregate/FOR column no longer throws",
+    },
+    {
+        "id": "M5-disable-zero-column-guard",
+        "file": "src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs",
+        "find": "        if (columns.Length == 0)\n            throw new ArgumentException(\"An UNPIVOT requires at least one column.\", nameof(columns));\n        builder.EnsureNoEagerLoadState(nameof(Unpivot));\n\n        var (valueColumn, nameColumn) = PivotProjectionRewriter.ExtractUnpivotRoles(projection);",
+        "replace": "        if (columns.Length == 0 && columns.Length > 100)\n            throw new ArgumentException(\"An UNPIVOT requires at least one column.\", nameof(columns));\n        builder.EnsureNoEagerLoadState(nameof(Unpivot));\n\n        var (valueColumn, nameColumn) = PivotProjectionRewriter.ExtractUnpivotRoles(projection);",
+        "assertion": "TypedUnpivot_ZeroColumns_FailsClosed",
+        "expected_failure": "the zero-column guard is neutralised, so a typed UNPIVOT with no columns no longer throws",
+    },
+    {
+        "id": "M6-wrong-grouping-name",
+        "file": "src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs",
+        "find": "        if (builder.Query is not { } innerQuery)\n            return member.GetPropertyColumnName(convention) is { Length: > 0 } name ? name : null;",
+        "replace": "        if (builder.Query is not { } innerQuery)\n            return member.Name;",
+        "assertion": "TypedPivot_EntityInner_UsesTheMappedColumnName",
+        "expected_failure": "the mapped grouping name is replaced by the CLR member name, so the projected grouping column no longer matches the SQL column",
+    },
+]
+
+
+def _apply_mutation(data: bytes, find: str, replace: str):
+    """Return (mutated_bytes, replacement_text) applying a one-occurrence CRLF/LF-tolerant patch."""
+    for convert in (lambda text: text.replace("\n", "\r\n"), lambda text: text):
+        needle = convert(find).encode("utf-8")
+        if data.count(needle) == 1:
+            return data.replace(needle, convert(replace).encode("utf-8")), convert(replace)
+    return None, None
+
+
 def cmd_mutation():
-    """C09: targeted mutation harness. Not applicable until the typed implementation exists (D-05)."""
-    impl_files = [
-        "src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs",
-        "src/nextorm.core/Query/PivotValues.cs",
-    ]
-    present = [path for path in impl_files if os.path.exists(os.path.join(ROOT, path))]
-    mutation = {
+    """C09: targeted mutation harness (D-05/E232-10).
+
+    Six controlled mutants of the typed PIVOT/UNPIVOT rewrite and guards. Each mutant is applied to
+    its production file, the designated assertion is executed (the rebuild compiles the mutation) and
+    must FAIL, then the original bytes are restored and the restoration is verified by sha256. This is
+    targeted mutation evidence, not a repository-wide mutation score.
+    """
+    backend = "tests/nextorm.sqlserver.tests"
+    mutants_dir = os.path.join(A, "mutants")
+    records = []
+    survivors = []
+    invalid = []
+
+    for mutant in MUTANTS:
+        full = os.path.join(ROOT, mutant["file"])
+        original = _read_bytes(full)
+        original_sha = _sha256_bytes(original)
+        mutated, _ = _apply_mutation(original, mutant["find"], mutant["replace"])
+
+        record = {
+            "id": mutant["id"],
+            "file": mutant["file"],
+            "patch": {"find": mutant["find"], "replace": mutant["replace"]},
+            "assertion": mutant["assertion"],
+            "expected_failure": mutant["expected_failure"],
+            "filter": "FullyQualifiedName~" + mutant["assertion"],
+            "original_sha256": original_sha,
+        }
+
+        if mutated is None:
+            record.update({"applied": False, "killed": False, "restored": True, "reason": "patch text not found exactly once"})
+            invalid.append(record)
+            records.append(record)
+            continue
+
+        record["applied"] = True
+        record["mutated_sha256"] = _sha256_bytes(mutated)
+        _write_bytes(full, mutated)
+        _write_bytes(os.path.join(mutants_dir, mutant["id"], "mutated.cs"), mutated)
+
+        prefix = "C09-mutant-" + mutant["id"]
+        exit_code = run(
+            ["dotnet", "test", backend, "-c", "Debug", "--filter", record["filter"]],
+            prefix,
+            phase="inner",
+            note="targeted mutant '%s': %s" % (mutant["id"], mutant["expected_failure"]),
+        )
+        out_path = os.path.join(LOGS, prefix + ".out")
+        out = open(out_path, encoding="utf-8", errors="replace").read()
+        _write_bytes(os.path.join(mutants_dir, mutant["id"], "red.out"), _read_bytes(out_path))
+        summary = _parse_test_summary(out)
+        selected = summary.get("total")
+        failed = summary.get("failed")
+        killed = bool(selected and selected >= 1 and failed and failed >= 1 and mutant["assertion"] in out)
+
+        _write_bytes(full, original)
+        restored_sha = _sha256_bytes(_read_bytes(full))
+        restored = restored_sha == original_sha
+
+        record.update(
+            {
+                "exit": exit_code,
+                "selected_count": selected,
+                "failed": failed,
+                "succeeded": summary.get("succeeded"),
+                "skipped": summary.get("skipped"),
+                "red_assertion_observed": bool(failed and failed >= 1),
+                "killed": killed,
+                "restored": restored,
+                "restored_sha256": restored_sha,
+                "log": _rel(out_path),
+                "patch_file": _rel(os.path.join(mutants_dir, mutant["id"], "patch.json")),
+            }
+        )
+        _write_json(os.path.join(mutants_dir, mutant["id"], "patch.json"), record)
+        if not killed:
+            survivors.append(record["id"])
+        records.append(record)
+
+    # Restoration proof: the whole solution must build clean once every file is restored.
+    gate_exit = run(
+        ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+        "C09-restore-gate",
+        phase="boundary",
+        note="restoration proof: the solution builds 0 warnings / 0 errors after the mutants are removed",
+    )
+    gate_summary = _parse_build_summary(open(os.path.join(LOGS, "C09-restore-gate.out"), encoding="utf-8").read())
+
+    restored_all = all(r.get("restored") for r in records)
+    killed_count = sum(1 for r in records if r.get("killed"))
+    result = {
         "unit": "D-05",
         "criterion": "E232-10",
-        "applicable": bool(present),
-        "implementation_files": present,
-        "reason": (
-            "no typed rewrite/guard/translation code present (D-01 is evidence-only)"
-            if not present
-            else "typed implementation present; run the six targeted mutants"
-        ),
+        "applicable": True,
+        "kind": "targeted-controlled-mutation",
+        "note": "Targeted mutation evidence only; not a repository-wide mutation score.",
         "mandated_mutants": 6,
-        "killed": None,
-        "attempted": None,
+        "attempted": len(records),
+        "killed": killed_count,
+        "survived": survivors,
+        "invalid_patches": [r["id"] for r in invalid],
+        "restored": restored_all,
+        "restore_gate": {"exit": gate_exit, **gate_summary, "log": _rel(os.path.join(LOGS, "C09-restore-gate.out"))},
+        "mutants": records,
     }
-    _write_json(os.path.join(A, "mutation.json"), mutation)
-    print(json.dumps({"mutation_applicable": bool(present)}, indent=1))
-    return 0
+    _write_json(os.path.join(A, "mutation.json"), result)
+    print(json.dumps({"attempted": len(records), "killed": killed_count, "survived": survivors,
+                      "restored": restored_all, "gate": gate_exit, **gate_summary}, indent=1))
+
+    ok = (killed_count == len(MUTANTS) and len(records) == len(MUTANTS) and restored_all
+          and gate_exit == 0 and gate_summary.get("errors") == 0 and gate_summary.get("warnings") == 0)
+    return 0 if ok else 2
 
 
 def cmd_coverage_run():

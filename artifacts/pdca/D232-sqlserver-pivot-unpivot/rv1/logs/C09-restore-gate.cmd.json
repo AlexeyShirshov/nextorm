@@ -1,0 +1,12 @@
+{
+ "argv": [
+  "dotnet",
+  "build",
+  "nextorm.slnx",
+  "-c",
+  "Debug"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T20:14:12Z",
+ "env": {}
+}

@@ -1,0 +1,25 @@
+{
+ "applied": true,
+ "assertion": "TypedPivot_DeclarationOrderDrivesBothTheInListAndTheProjection",
+ "exit": 2,
+ "expected_failure": "the extracted values are reversed, so the IN (...) list no longer follows the projection declaration order",
+ "failed": 1,
+ "file": "src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs",
+ "filter": "FullyQualifiedName~TypedPivot_DeclarationOrderDrivesBothTheInListAndTheProjection",
+ "id": "M2-reverse-value-order",
+ "killed": true,
+ "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C09-mutant-M2-reverse-value-order.out",
+ "mutated_sha256": "d1586afcc3156fe61360d10eedeb6a40da84aaa5e67b90b7226b4294a72c9334",
+ "original_sha256": "14328cec5ff8d57b7ec6ab40f418e04664203301edf051fe250bdbadea9e563d",
+ "patch": {
+  "find": "        return values;\n    }",
+  "replace": "        System.Array.Reverse(values);\n        return values;\n    }"
+ },
+ "patch_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/mutants/M2-reverse-value-order/patch.json",
+ "red_assertion_observed": true,
+ "restored": true,
+ "restored_sha256": "14328cec5ff8d57b7ec6ab40f418e04664203301edf051fe250bdbadea9e563d",
+ "selected_count": 1,
+ "skipped": 0,
+ "succeeded": 0
+}

@@ -1,0 +1,38 @@
+{
+ "api_version": "1.44",
+ "captured": "2026-10-14T20:26:58Z",
+ "containers": [
+  {
+   "id": "1b5207b30a62",
+   "image": "mcr.microsoft.com/mssql/server:2025-latest",
+   "status": "Exited (137)"
+  },
+  {
+   "id": "ff3bb6dd042f",
+   "image": "docker.io/library/postgres:17-alpine",
+   "status": "Exited (0)"
+  },
+  {
+   "id": "d703aedb9b21",
+   "image": "docker.io/library/mysql:8.4",
+   "status": "Exited (0)"
+  },
+  {
+   "id": "914f06a0ba5f",
+   "image": "docker.io/library/mariadb:11.4",
+   "status": "Exited (0)"
+  },
+  {
+   "id": "6bf39546e2b9",
+   "image": "docker.io/clickhouse/clickhouse-server:25.8-alpine",
+   "status": "Exited (0)"
+  }
+ ],
+ "docker_host": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock",
+ "kernel": "6.18.33.2-microsoft-standard-WSL2",
+ "note": "reused containers are stopped but kept by Testcontainers (WithReuse); SQL Server exit 137 is the reuse stop, not a test failure",
+ "os": "fedora",
+ "reuse": true,
+ "server_version": "5.8.6",
+ "unit": "D-05"
+}

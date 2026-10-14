@@ -43,6 +43,18 @@ public class T232TypedPivotTests
     {
     }
 
+    /// <summary>
+    /// A named derived projection whose <see cref="Unprojected"/> member is never selected: it lets a
+    /// typed projection name a CLR member that has no derived output column, so the unresolvable
+    /// grouping-member branch of the typed rewrite is exercised rather than silently defaulted.
+    /// </summary>
+    private sealed class DerivedRow
+    {
+        public int Id { get; set; }
+
+        public string? Unprojected { get; set; }
+    }
+
     /// <summary>An entity whose column name is resolved through the active naming convention.</summary>
     [SqlTable("t232_typed_widget")]
     private interface IWidget
@@ -507,5 +519,61 @@ public class T232TypedPivotTests
         new Action(() => ctx.From<IQuarterlyEntity>()
             .Unpivot((m, u) => new { m.Category, V = u.Value<decimal?>("val") }, null!))
             .Should().Throw<ArgumentNullException>();
+    }
+
+    // ------------------------------------------------------------------ D-05: branch closure
+
+    [Fact]
+    public void TypedPivot_EmptyMarkerValueName_FailsClosed()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // The empty name is rejected by the same fail-closed read that rejects a row-dependent name.
+        var act = () => ctx.From<ISalesEntity>()
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, (m, pv) => new { m.Category, V = pv.Value<decimal?>("") });
+
+        act.Should().Throw<ArgumentException>().WithMessage("*column name*");
+    }
+
+    [Fact]
+    public void TypedPivot_DerivedInner_MissingGroupingMember_FailsClosed()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // The derived projection selects only Id; Unprojected is a member of the CLR shape but not a
+        // derived output column, so no SQL name can be resolved for it — the rewrite must fail closed
+        // instead of defaulting to the CLR name.
+        var derived = ctx.From<ISalesEntity>().Where(s => s.Margin > 0).Select(s => new DerivedRow { Id = s.Id });
+
+        var act = () => ctx.From(derived)
+            .Pivot(PivotAggregate.Sum, x => x.Id, x => x.Id, (m, pv) => new { m.Unprojected, V = pv.Value<decimal?>("1") });
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*registered column name*");
+    }
+
+    [Fact]
+    public void TypedPivot_PlainSourceWithModifier_FailsClosed()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.From<ISalesEntity>()
+            .Where(s => s.Margin > 0)
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, (m, pv) => new { m.Category, V = pv.Value<decimal?>("1") });
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*plain table*");
+    }
+
+    [Fact]
+    public void TypedPivot_DerivedSourceWithModifier_FailsClosed()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var derived = ctx.From<ISalesEntity>().Where(s => s.Margin > 0).Select(s => new { s.Category, s.Quarter, s.Margin });
+
+        var act = () => ctx.From(derived)
+            .Where(x => x.Margin > 0)
+            .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.Quarter, (m, pv) => new { m.Category, V = pv.Value<decimal?>("1") });
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*derived query*");
     }
 }
