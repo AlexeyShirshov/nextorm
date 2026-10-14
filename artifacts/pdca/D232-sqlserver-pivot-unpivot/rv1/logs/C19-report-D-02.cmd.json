@@ -1,0 +1,11 @@
+{
+ "argv": [
+  "python3",
+  "scripts/validate_inner_loop.py",
+  "report",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-02.json"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T19:34:44Z",
+ "env": {}
+}

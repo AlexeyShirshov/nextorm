@@ -1,0 +1,54 @@
+{
+ "unit": "D-02",
+ "scope": {
+  "projects": [
+   "tests/nextorm.sqlserver.tests"
+  ],
+  "selectors": [
+   "FullyQualifiedName~T232ProjectionContractTests"
+  ],
+  "files": [
+   "tests/nextorm.sqlserver.tests/T232ProjectionContractTests.cs"
+  ],
+  "rationale": "D-02 freezes the shared legacy-vs-typed-column oracle. The only compiled input is the new projection-contract test class; it pins the exact legacy and by-name SqlFunctions.Column<T> SQL (aliases, value order, UNPIVOT roles) plus test-only fixture data. Its affected subset is that single class in the SQL Server test project; no production file is touched, so the inner loop is one filtered run over the class.",
+  "rebuild": "affected",
+  "boundary": "Single post-implementation boundary planned for D-07: full per-project test sweeps plus the six-provider container integration run (C07/C08/C11); not executed by D-02."
+ },
+ "amendments": [],
+ "executions": [
+  {
+   "command": [
+    "dotnet",
+    "build",
+    "src/nextorm.sqlserver/nextorm.sqlserver.csproj",
+    "-c",
+    "Debug"
+   ],
+   "phase": "inner",
+   "source_revision": "9b4bf5d4",
+   "artifact_revision": "9b4bf5d4",
+   "exit_code": 0,
+   "selected_count": 1,
+   "note": "C04 affected build (0 warnings / 0 errors); artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.out; build selects no tests, count 1 is the schema minimum recorded identically by D-01"
+  },
+  {
+   "command": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~T232ProjectionContractTests"
+   ],
+   "phase": "inner",
+   "source_revision": "9b4bf5d4",
+   "artifact_revision": "9b4bf5d4",
+   "exit_code": 0,
+   "selected_count": 5,
+   "note": "frozen legacy-vs-typed-column oracle; total 5 / failed 0 / skipped 0; artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D02-contract-tests.out"
+  }
+ ],
+ "frozen_contract": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/test-contract.json",
+ "coverage_note": "D-02 is test-only (no production code); the shared contract data is asserted by T232ProjectionContractTests and consumed by D-03/D-04/D-05. No coverage or boundary sweep belongs to this unit."
+}
