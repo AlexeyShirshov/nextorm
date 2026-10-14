@@ -1,0 +1,47 @@
+{
+ "applicable_evidence_complete_required": {
+  "complete": 0,
+  "required": 30
+ },
+ "attempt": 1,
+ "branch_delta": {
+  "added": null,
+  "covered": null
+ },
+ "contract_rv": 3,
+ "cycle": "N=1",
+ "guards_covered_required": {
+  "covered": 17,
+  "required": 17
+ },
+ "mutants_killed_attempted": {
+  "attempted": 6,
+  "killed": 6,
+  "scope": "D-04 typed rewriter/guards (rv1)"
+ },
+ "plan_revision": 3,
+ "sealed_hash_valid_artifacts_required": {
+  "required": null,
+  "valid": null
+ },
+ "selected_executed_passed_failed_skipped_per_provider": {},
+ "task": "T232 (#232)",
+ "units": {
+  "active": [
+   "D232-PREREQ-typed-derived",
+   "D232-AMEND-unpivot-null-oracle",
+   "D-05"
+  ],
+  "done": [
+   "D-01",
+   "D-02",
+   "D-03",
+   "D-04"
+  ],
+  "pending": [
+   "D-06",
+   "D-07"
+  ],
+  "superseded": []
+ }
+}

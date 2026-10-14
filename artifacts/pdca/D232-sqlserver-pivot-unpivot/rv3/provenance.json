@@ -1,0 +1,57 @@
+{
+ "collection": "1.0.9-todo",
+ "contract_rv": 3,
+ "cycle": "N=1",
+ "issue": "#232",
+ "last_updated": "2026-10-14T20:54:35Z",
+ "milestone": "1.0.9-rc3",
+ "plan_revision": 3,
+ "records": [
+  {
+   "argv": [
+    "python3",
+    "scripts/validate_inner_loop.py",
+    "manifest",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/manifest.json"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:53:57Z",
+   "exit": 0,
+   "exit_file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C32-manifest.exit",
+   "name": "C32-manifest",
+   "note": "validate the rv3 evidence manifest",
+   "phase": "boundary",
+   "stderr": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C32-manifest.err",
+   "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C32-manifest.out",
+   "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "timed_out": false
+  },
+  {
+   "argv": [
+    "python3",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py",
+    "oracle-amendment"
+   ],
+   "cwd": ".",
+   "date": "2026-10-14T20:54:35Z",
+   "exit": 0,
+   "name": "C24-oracle-amendment",
+   "note": "validate the one-key UNPIVOT-NULL oracle amendment (before/after hashes + single changed path)",
+   "phase": "boundary",
+   "timed_out": false
+  }
+ ],
+ "status_file": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+ "task": "T232 (#232) SQL Server typed PIVOT/UNPIVOT projection",
+ "tool_versions": {
+  "dotnet --version": "10.0.401",
+  "git --version": "git version 2.34.1",
+  "python3 --version": "Python 3.10.12"
+ },
+ "tree_at_do_start": {
+  "dirty_entries": 55,
+  "dirty_sha256": "d4da33a7c40b8d794def1e2d9ef37c8d1477f87b1628b9fc4f8c82a0fd4dba99",
+  "head": "706dd7b7d3b24c444c8c6e7b0c5302430d12bc27"
+ },
+ "unit": "D232-PREREQ-typed-derived / D232-AMEND-unpivot-null-oracle"
+}

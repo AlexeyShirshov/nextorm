@@ -4,9 +4,11 @@
 - issue: [#232](https://github.com/AlexeyShirshov/nextorm/issues/232) — OPEN, label `enhancement`, milestone **1.0.9-rc3**
 - collection: `1.0.9-todo` (single group; current worktree/branch `1.0.9-rc3`; no worktree/branch/merge)
 - selected_variant: `pdca-dotnet` (+ overlay `nextorm-pdca`)
-- current cycle `N=1`; plan revision `r=1`; attempt `n=1` (in progress — D-01); evidence contract `rv=1`
-- **plan_state: `ready`** (gate 1 satisfied)
+- current cycle `N=1`; plan_revision: `r=3`; attempt: `n=1`; evidence_contract: `rv=3`
+- current_plan: `P232-r3-gated-typed-derived-repair`
+- **plan_state: `ready`** (gate 1 satisfied; r=3 additive amendment re-affirmed)
 - starting HEAD: `3e49fe0c`
+- committed units: D-01 `9b4bf5d4`, D-02 `04d2289d`, D-03 `8f0d8309`, D-04 `706dd7b7`
 
 ## Task
 
@@ -80,6 +82,14 @@ Accessors: `PivotValues.Value<T>(string)`, `UnpivotValues.Name<T>(string)`, `Unp
 - This is the finalization of the initial r1 candidate with reconnaissance facts — not a contract supersession and not an attempt reset.
 - Manifest path is pinned below; DO writes the manifest, which CHECK reconciles.
 
+## Plan history
+
+```text
+r=1 / rv=1: initial candidate; D-01..D-04 executed and committed (9b4bf5d4, 04d2289d, 8f0d8309, 706dd7b7).
+r=2 / rv=2: issued in-session, never transcribed or executed; no rv2 artifact directory. Superseded by r=3 / rv=3 after binding escalation authorized narrowly gated engine changes previously excluded.
+r=3 / rv=3: additive typed-derived prerequisite and independent oracle amendment; n reset to 1 because implementation actions and authorized footprint materially changed. Original acceptance criteria retained.
+```
+
 ## Acceptance criteria
 
 | ID | Requirement and verification | Negative case |
@@ -128,6 +138,10 @@ All new test names below are **planned**, not verified repository symbols.
 | V23 | Ordinary `Select` / unrelated `Value` method / ambiguous marker source | test + ambiguity guard |
 | V24 | Cache reuse and interleaved shapes/values | test: stable reuse, distinct keys/results, no command mutation |
 | V25 | Null arguments, modifiers and capability defaults | guard/test: inherited rules plus new overload argument checks |
+| V26 | Typed derived **builder** route (P1) | test: preserved projection, SQL/data, composition; guard: marker/projection/no-own-modifier conditions, unmarked/modifier-bearing controls unchanged |
+| V27 | Typed derived **command** route (P1) | test: equivalent emitted names, qualification, rows |
+| V28 | Pivot-free derived recursion probe (P1) | test: baseline/candidate diagnostic with actual outcome + source provenance; guard: no general derived/projection change (a repair needing that expansion invokes STOP) |
+| V29 | Identifier case sensitivity (P1) | test: real case-sensitive-database resolution, bare `category` and aliased `[Q1]`, builder/command and derived/CTE/join consumers |
 
 Cover every row and the high-risk intersections V03/V04×V13/V14, V11×V01 and V22×V14; do not invent a full Cartesian product.
 
@@ -203,6 +217,52 @@ No `N/A` arm is planned. Tool/container/report absence is not an applicability e
 **CHECK re-gather:** owner **CHECK**; budget **two targeted batches total per CHECK invocation**, at most one repeat per missing/ambiguous row; exhaustion yields an explicit evidence gap; persistent low confidence routes to planner, then `escalate` trigger 5.
 
 No supersession exists. A future justified rv2 explicitly supersedes rv1, preserves stable IDs/obligations and adds IDs for genuinely new variants. Missing reports alone cannot revise the contract.
+
+## Evidence contract `rv=3` (additive; supersedes the unexecuted rv2)
+
+Frozen manifest path: **`artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/manifest.json`**.
+Below, `A` denotes `artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3`. All delta artifact sources are **planned** until their invocation runs.
+
+- **Carried verbatim:** rows **E232-01…E232-17** and invocations **C01…C19** keep their IDs, obligations and their **original `rv1/` artifact paths** (they are *not* rewritten to `rv3/`).
+- **rv2 row IDs preserved** with their obligations: `EC232-DERIVED-UNIT`, `EC232-DERIVED-EXEC`, `EC232-SHARED-REGRESSION`, `EC232-ORACLE-AMEND`, `EC232-BUILD`.
+- **rv3 supersedes the unexecuted rv2:** rv2 was issued in-session, never transcribed and never executed (no rv2 artifact directory). rv3 retains the same obligations and adds `EC232-REPRO`, the typed derived builder/command/case-sensitivity variants, the pivot-free probe, cache locality, prerequisite mutation and the rv3 seal.
+- **CHECK re-gather budget unchanged:** two targeted batches total per CHECK invocation, at most one repeat per missing/ambiguous row; exhaustion yields an explicit evidence gap.
+
+**Delta invocation catalog (planned `rv3/verify.py`; captures argv/cwd, stdout/stderr, numeric exits, selection counts and source+artifact hashes, and fails closed):**
+- C20 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py repro --phase baseline --capture`
+- C21 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py derived-unit`
+- C22 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py derived-exec`
+- C23 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py shared-regression`
+- C24 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py oracle-amendment`
+- C25 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py build`
+- C26 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py variant derived-builder`
+- C27 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py variant derived-command`
+- C28 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py variant pivot-free`
+- C29 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py variant case-sensitive-alias`
+- C30 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py cache-locality`
+- C31 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py prerequisite-mutation`
+- C32 `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/manifest.json`
+- C33 `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py fulfill`
+
+Semantics: **C20** runs the isolated repro children *before* production edits; outer exit 0 = the expected baseline failure was demonstrated and the controls recorded. **C25** runs `dotnet build src/nextorm.core/nextorm.core.csproj -c Debug` + `dotnet build src/nextorm.sqlserver/nextorm.sqlserver.csproj -c Debug`. **C23** runs the eight project suites (`core/sqlite/postgres/sqlserver/mysql/mariadb/clickhouse/alias`) plus the container boundary `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor`.
+
+| ID / rv | Requirement; scenario | Evidence kinds + sources | Invocation and required result | Artifacts under A | Owner | Applicability predicate |
+|---|---|---|---|---|---|---|
+| EC232-REPRO / 3 | AC-08,11; V26–V28 | Isolated repro children, production hashes, frozen oracles | C20: exited 0 only after a genuine builder red and records controls | `repro/baseline.json`, `repro/production-before.json`, `repro/logs/` | coder-prerequisite | Always (before production edits) |
+| EC232-DERIVED-UNIT / 3 | AC-01,03,08 | Planned derived builder/command unit tests + case inventory | C21: exit 0; every typed derived cell/route case selected | `derived/unit.json`, `derived/case-inventory.json` | coder-sql-tests | Typed derived surface present |
+| EC232-DERIVED-EXEC / 3 | AC-02,07,08,09 | Container fixture and execution matrix | C22: exit 0; SQL Server executed, per-provider state recorded | `derived/execution.json`, `derived/provider-matrix.json`, `derived/container-state.json` | coder-integration | Typed derived surface present |
+| EC232-SHARED-REGRESSION / 3 | AC-03,08,09,11 | Eight project suites + container boundary, protected-file audit | C23: exit 0; inventory and oracle comparison recorded, no protected file changed | `regression/inventory.json`, `regression/oracle-comparison.json`, `regression/protected-files.json`, `regression/logs/` | coder-regression | Always |
+| EC232-ORACLE-AMEND / 3 | AC-02,11 | Before/after oracle text, hashes, source anchor | C24: exit 0; exactly one key amended, before/after hashes match the record | `oracle/before.json`, `oracle/after.json`, `oracle/amendment.json` | coder-oracle | Independent amendment unit |
+| EC232-BUILD / 3 | AC-01,05,12 | Core + provider builds, API review | C25: exit 0, 0 warnings / 0 errors for both projects | `build/api-review.json`, `build/gate-review.json` | coder-build | Always |
+| EC232-DERIVED-BUILDER / 3 | AC-08,09; V26 | Builder-route variant execution | C26: exit 0; preserved projection/SQL/data, guarded controls | `variants/derived-builder.json` | coder-sql-tests | Builder route changed |
+| EC232-DERIVED-COMMAND / 3 | AC-08; V27 | Command-route variant execution | C27: exit 0; equivalent names, qualification and rows | `variants/derived-command.json` | coder-sql-tests | Command route changed |
+| EC232-PIVOTFREE-PROBE / 3 | AC-08,11; V28 | Pivot-free diagnostic with source provenance | C28: exit 0; actual outcome recorded | `variants/pivot-free.json` | coder-prerequisite | Always |
+| EC232-CASE-SENSITIVE-ALIAS / 3 | AC-08; V29 | Case-sensitive database resolution, bare and aliased identifiers | C29: exit 0; collation and both consumers recorded | `variants/case-sensitive-alias.json`, `variants/database-collation.json` | coder-integration | Derived surface present |
+| EC232-CACHE-LOCALITY / 3 | AC-09; V24,26 | Cache locality tests + source review | C30: exit 0; no sticky command/plan-cache state | `cache/locality.json`, `cache/source-review.json` | coder-core-tests | Always |
+| EC232-PREREQ-MUTATION / 3 | AC-11; V26,29 | Controlled prerequisite patches, red arms, restoration proof | C31: exit 0 iff every mandated mutant is killed and the tree restored | `mutation/prerequisite.json`, `mutation/patches/`, `mutation/logs/` | coder-mutation | New prerequisite code present |
+| EC232-RV3-SEAL / 3 | AC-01…12; CHECK | Manifest, contract, provenance, counters | C32,C33: exit 0; zero applicable open rows, valid required evidence/hashes | `manifest.json`, `contract.json`, `provenance.json`, `counters.json` | CHECK | Always |
+
+Every new row is **P1**.
 
 ## Test strategy with per-unit scope + boundary
 
@@ -310,7 +370,25 @@ The extension, translator and shared test-contract footprints overlap; parallel 
 
 No parallel mutable ownership. Maintain the status/todo at every completed and newly started step.
 
-**Footprint exclusions (read-only under r1):** `PivotExpression.cs`, `BaseExpressionVisitor.cs`, `TableAliasAccessors.cs`, `SqlSourceRenderer.cs`, `SqlBuilder.cs`, `SqlFunctions.cs`, `Dialect/**`, `Builders/**`, project/package files and the existing 14 tests. A demonstrated need to edit these returns to PLAN.
+### Unit ledger (r=3)
+
+| Unit | State | Commit / evidence |
+|---|---|---|
+| D-01 Preparation probes | done | `9b4bf5d4` (rv1 evidence) |
+| D-02 Test contract | done | `04d2289d`; only the oracle amendment is added |
+| D-03 Core markers | done | `8f0d8309` |
+| D-04 Provider overloads | done | `706dd7b7`; D-04 assumption retained |
+| `D232-PREREQ-typed-derived` | active, pending | blocks D-05 |
+| `D232-AMEND-unpivot-null-oracle` | done | C24 exit 0; `rv3/oracle/amendment.json` (R1 contract key `unpivot_null_cell`) |
+| D-05 Integration/mutation | active / blocked | on both units above; partial work and original acceptance/remainder retained; partial results are historical/provisional and include the explicit C07 SQL Server skip (not six passing providers) |
+| D-06 Docs/example | not started | — |
+| D-07 Boundary/handoff | not started | — |
+
+No unit is superseded. The two additive units above keep D-05 active and preserve its criteria and remainder.
+
+**Footprint allowlist (r=3, narrowly gated — engine changes previously excluded):** `Builders/EntityBuilder.cs` (internal marker/projection-preserving handoff only), `DataContext/DataContextExtensions.cs:1377` (gated builder-to-command routing only), `Visitors/MemberTranslator.cs:834` (the reproduced guard + neighbouring helper only), `Expressions/FromExpression.cs` (internal marker only if indispensable; the preferred design needs none), T232-owned tests under core/SQL Server/integration. Still forbidden: `SqlSourceRenderer.cs`, `SqlBuilder.cs`, `Dialect/**`, `PivotExpression.cs`, `BaseExpressionVisitor.cs`, `TableAliasAccessors.cs`, `SqlFunctions.cs`, other `Builders/**`, project/package files, the frozen 14 tests.
+
+**STOP rules (unchanged, binding):** a fix needing `SqlSourceRenderer.cs` / `SqlBuilder.cs` / `Dialect/**`, a frozen oracle change, or a general derived/projection-ownership change STOPS the unit and reports; it does not silently widen the footprint.
 
 ## Risks
 
@@ -411,6 +489,32 @@ Stable **defect key** → observed revisions/attempts, number of fixes applied, 
 | `D232-D04-celltype-oracle-anonymous-shape` | r=1 / n=1 | 1 | `tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs:244-274` | fixed in D-04 (test green) |
 | `D232-D04-wholesource-oracle-wrong-branch` | r=1 / n=1 | 1 | `tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs:431-457`; `src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs:54-57,329-330` | fixed in D-04 (both cases green) |
 
+### Open defect blocks (r=3)
+
+```text
+key: D232-D05-typed-derived-source-not-composable
+state: open
+classification: additive in-cycle prerequisite
+remediation_unit: D232-PREREQ-typed-derived
+blocked_unit: D-05
+defect_1: projection dropped in From(EntityBuilder<T>) through implicit ToCommand(); mandatory runtime repro before production edits
+defect_2: possible translation re-entry; unproven until isolated repro
+preserved_acceptance: AC-08 / V14 / V22 P1; D-04 XML promise unchanged
+closure: prerequisite evidence accepted; DO completion claim is insufficient
+```
+
+```text
+key: D232-D05-unpivot-null-oracle
+state: closed
+classification: independent test-contract amendment
+remediation_unit: D232-AMEND-unpivot-null-oracle
+blocked_unit: D-05
+correction: SQL Server UNPIVOT excludes NULL source cells
+closure: exact one-key amendment, before/after hashes and history verified
+retained_units: D-02 done; D-04 done
+closed_by: C24 exit 0 (exactly one changed key `null_count_expectations.unpivot_null_cell`; before/after sha256 recorded)
+```
+
 ## Progress log
 
 ```text
@@ -443,4 +547,8 @@ Stable **defect key** → observed revisions/attempts, number of fixes applied, 
 2026-10-14 20:18:11Z | DO | revision r=1 | iteration n=1/3 | D-04 shared six-provider capability case authored (CommonTestSuite.T232Pivot.cs + T232PivotFixture.cs with MySQL/PostgreSQL/SQLite inherited and MariaDB/ClickHouse re-pinned hosts); non-container smoke: 6 selected / 1 passed (SQLite — the assertion executes) / 5 skipped (SQL Server is the supporting provider; PostgreSQL, MySQL, ClickHouse, MariaDB are container-unavailable here, C07 runs them in D-05) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D04-capability-smoke.out
 2026-10-14 20:18:11Z | DO | revision r=1 | iteration n=1/3 | D-04 solution gate `dotnet build nextorm.slnx -c Debug` = 0 warnings / 0 errors; integration capability files compile 0/0 | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D04-gate-solution-build.out
 2026-10-14 20:18:11Z | DO | revision r=1 | iteration n=1/3 | D-04 brief/report validators exit 0; scopes exit 0 (all eight briefs/reports exit 0); unit state D-04=done, D-05..D-07=pending | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-04.json
+2026-10-14 20:51:44Z | PLAN | revision r=3 | iteration n=1/3 | r=3/rv=3 transcribed: additive typed-derived prerequisite + independent oracle amendment; narrow gated footprint allowlist; V26–V29 and delta rows EC232-REPRO…EC232-RV3-SEAL added; r=2/rv=2 (issued, never executed) superseded; n reset to 1 | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
+2026-10-14 20:51:44Z | DO | revision r=3 | iteration n=1/3 | DO resumed at r=3: rv3 evidence plumbing, the independent oracle amendment and the typed-derived baseline repro (evidence-only; no production edit) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/
+2026-10-14 20:57:00Z | DO | revision r=3 | iteration n=1/3 | rv3 evidence plumbing created; C32 `manifest` validation exit 0 (30 rows: E232-01..17 carried verbatim + 13 delta rows) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/manifest.json
+2026-10-14 20:57:04Z | DO | revision r=3 | iteration n=1/3 | D232-AMEND-unpivot-null-oracle done: C24 exit 0 — exactly one changed key `null_count_expectations.unpivot_null_cell`, before/after sha256 recorded, source anchor T232SqlServerTests.cs:143-149; defect D232-D05-unpivot-null-oracle closed | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/amendment.json
 ```

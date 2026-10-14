@@ -1,0 +1,12 @@
+{
+ "after": "A NULL source cell does not produce an output row; SQL Server UNPIVOT excludes NULL source cells",
+ "before_contract_copy": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/before-contract.json",
+ "before_sha256": "618d12770398fe7a4e8f77195efe331a7a84076276f23dadbb76cb00272157a1",
+ "captured": "2026-10-14T20:57:00Z",
+ "file": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/test-contract.json",
+ "json_path": "null_count_expectations.unpivot_null_cell",
+ "key": "unpivot_null_cell",
+ "note": "Recorded immediately before the one-key amendment; independent of D-02/D-04 (no mass invalidation).",
+ "source_anchor": "tests/nextorm.integration.tests/T232SqlServerTests.cs:143-149",
+ "value": "A NULL source cell becomes a row with a NULL value column"
+}

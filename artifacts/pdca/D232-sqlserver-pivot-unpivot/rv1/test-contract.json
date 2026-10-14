@@ -50,7 +50,7 @@
  "null_count_expectations": {
   "sum_missing_cell": "NULL (South has no quarter 2 row: the [2] cell materializes NULL)",
   "count_missing_cell": "0",
-  "unpivot_null_cell": "A NULL source cell becomes a row with a NULL value column",
+  "unpivot_null_cell": "A NULL source cell does not produce an output row; SQL Server UNPIVOT excludes NULL source cells",
   "nullable_aggregate": "A nullable aggregate member materializes null without throwing",
   "non_nullable_against_null": "A non-nullable cell type against a SQL NULL is an ownership defect, not silently coerced"
  },

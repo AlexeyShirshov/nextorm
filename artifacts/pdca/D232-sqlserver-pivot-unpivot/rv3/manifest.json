@@ -1,0 +1,264 @@
+{
+ "contract_rv": 3,
+ "manifest_revision": "rv=3 (additive; E232-01..17 carried verbatim from rv1, rv2 row IDs preserved, rv3 supersedes unexecuted rv2)",
+ "required_rows": [
+  "E232-01",
+  "E232-02",
+  "E232-03",
+  "E232-04",
+  "E232-05",
+  "E232-06",
+  "E232-07",
+  "E232-08",
+  "E232-09",
+  "E232-10",
+  "E232-11",
+  "E232-12",
+  "E232-13",
+  "E232-14",
+  "E232-15",
+  "E232-16",
+  "E232-17",
+  "EC232-REPRO",
+  "EC232-DERIVED-UNIT",
+  "EC232-DERIVED-EXEC",
+  "EC232-SHARED-REGRESSION",
+  "EC232-ORACLE-AMEND",
+  "EC232-BUILD",
+  "EC232-DERIVED-BUILDER",
+  "EC232-DERIVED-COMMAND",
+  "EC232-PIVOTFREE-PROBE",
+  "EC232-CASE-SENSITIVE-ALIAS",
+  "EC232-CACHE-LOCALITY",
+  "EC232-PREREQ-MUTATION",
+  "EC232-RV3-SEAL"
+ ],
+ "rows": [
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "preparation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/preparation.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C01-preparation.out"
+    },
+    {
+     "kind": "scout",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/scout.md"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232PreparationProbeTests.cs"
+    }
+   ],
+   "id": "E232-01",
+   "status": "met"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "brief",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json"
+    },
+    {
+     "exit": 0,
+     "kind": "report",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json"
+    },
+    {
+     "kind": "scope-map",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/scope-map.json"
+    }
+   ],
+   "id": "E232-02",
+   "status": "met"
+  },
+  {
+   "id": "E232-03",
+   "reason": "approved public typed signatures are not introduced yet (D-04/D-06); C04 baseline captured in C04-build.json",
+   "status": "open"
+  },
+  {
+   "id": "E232-04",
+   "reason": "typed SQL tests do not exist yet (D-04)",
+   "status": "open"
+  },
+  {
+   "id": "E232-05",
+   "reason": "fail-closed typed guards do not exist yet (D-04)",
+   "status": "open"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "legacy-inventory",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/legacy-inventory.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C06-legacy.out"
+    }
+   ],
+   "id": "E232-06",
+   "status": "met"
+  },
+  {
+   "id": "E232-07",
+   "reason": "six-provider capability cases are produced in D-05",
+   "status": "open"
+  },
+  {
+   "id": "E232-08",
+   "reason": "SQL Server container fixtures are produced in D-05",
+   "status": "open"
+  },
+  {
+   "id": "E232-09",
+   "reason": "cache/alias/source-binding typed tests are produced in D-05",
+   "status": "open"
+  },
+  {
+   "id": "E232-10",
+   "reason": "targeted mutation requires the typed implementation (D-05); see mutation.json (applicable=false at D-01)",
+   "status": "open"
+  },
+  {
+   "id": "E232-11",
+   "reason": "baseline coverage captured (coverage-summary-baseline.json); the candidate (C12) is measured at D-07",
+   "status": "open"
+  },
+  {
+   "id": "E232-12",
+   "reason": "the single boundary is executed at D-07",
+   "status": "open"
+  },
+  {
+   "id": "E232-13",
+   "reason": "the typed AdventureWorks example is produced in D-06",
+   "status": "open"
+  },
+  {
+   "id": "E232-14",
+   "reason": "bilingual/XML docs are produced in D-06",
+   "status": "open"
+  },
+  {
+   "id": "E232-15",
+   "reason": "acceptance baseline captured (perf/baseline); the candidate comparison is produced at D-07",
+   "status": "open"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "footprint",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/footprint.json"
+    },
+    {
+     "kind": "foreign-baseline",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/foreign-baseline.json"
+    }
+   ],
+   "id": "E232-16",
+   "status": "met"
+  },
+  {
+   "id": "E232-17",
+   "reason": "manifest/provenance/counters are initialized by D-01; sealing and the fulfillment verdict belong to CHECK",
+   "status": "open"
+  },
+  {
+   "id": "EC232-REPRO",
+   "reason": "isolated repro children, production hashes, frozen oracles; C20 exit 0 only after a genuine builder red (planned; C20 not yet run)",
+   "status": "open"
+  },
+  {
+   "id": "EC232-DERIVED-UNIT",
+   "reason": "derived builder/command unit tests; every typed derived cell/route case selected (planned; C21 not yet run)",
+   "status": "open"
+  },
+  {
+   "id": "EC232-DERIVED-EXEC",
+   "reason": "SQL Server executed; per-provider state recorded (planned; C22 not yet run)",
+   "status": "open"
+  },
+  {
+   "id": "EC232-SHARED-REGRESSION",
+   "reason": "eight project suites + container boundary; no protected file changed (planned; C23 not yet run)",
+   "status": "open"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "oracle-amendment",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/amendment.json"
+    },
+    {
+     "kind": "oracle-before",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/before.json"
+    },
+    {
+     "kind": "oracle-after",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/after.json"
+    },
+    {
+     "kind": "oracle-before-contract",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/before-contract.json"
+    }
+   ],
+   "id": "EC232-ORACLE-AMEND",
+   "status": "met"
+  },
+  {
+   "id": "EC232-BUILD",
+   "reason": "core + provider builds: 0 warnings / 0 errors (planned; C25 not yet run)",
+   "status": "open"
+  },
+  {
+   "id": "EC232-DERIVED-BUILDER",
+   "reason": "preserved projection/SQL/data and guarded controls (planned; C26 not yet run)",
+   "status": "open"
+  },
+  {
+   "id": "EC232-DERIVED-COMMAND",
+   "reason": "equivalent emitted names, qualification and rows (planned; C27 not yet run)",
+   "status": "open"
+  },
+  {
+   "id": "EC232-PIVOTFREE-PROBE",
+   "reason": "pivot-free diagnostic with the actual outcome and source provenance (planned; C28 not yet run)",
+   "status": "open"
+  },
+  {
+   "id": "EC232-CASE-SENSITIVE-ALIAS",
+   "reason": "case-sensitive database resolution for the bare and aliased identifiers (planned; C29 not yet run)",
+   "status": "open"
+  },
+  {
+   "id": "EC232-CACHE-LOCALITY",
+   "reason": "no sticky command/plan-cache state (planned; C30 not yet run)",
+   "status": "open"
+  },
+  {
+   "id": "EC232-PREREQ-MUTATION",
+   "reason": "every mandated mutant killed and the tree restored (planned; C31 not yet run)",
+   "status": "open"
+  },
+  {
+   "id": "EC232-RV3-SEAL",
+   "reason": "manifest/contract/provenance/counters valid; zero applicable open rows (planned; C32,C33 not yet run)",
+   "status": "open"
+  }
+ ],
+ "status_file": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+ "task": "T232 (#232) SQL Server typed PIVOT/UNPIVOT projection",
+ "tree": "706dd7b7d3b24c444c8c6e7b0c5302430d12bc27"
+}
