@@ -1,7 +1,7 @@
 ﻿# Collection 1.0.9-todo
 
 - collection-id: `1.0.9-todo`
-- input: milestone `1.0.9` (milestone #4) — **expanded twice**: origin {#213, #212, #211, #209, #201, #53}; owner added {#215, #216, #217, #218}; owner added {#219, #221, #222, #223, #224, #225, #226, #227}. Active set: T215, T216, T217, T218, T219, T221, T222, T223, T224, T225, T226, T227 (+ T209/T211/T212/T213 done). T201 (perf) and T53 (freeze) last; T53 held.
+- input: milestone **renamed `1.0.9` → `1.0.9-rc3`**; scope re-read 2026-10-14. Open in `1.0.9-rc3`: {#201 (perf), #213, #219, #225, **#232 (new)**, **#233 (new)**} + follow-ups {#234, #235}. Original set (now closed): #209, #210, #211, #212, #215, #216, #217, #218, #220, #221, #222, #223, #224, #226, #227, #228, #229, #230. Active lane: T225, T232, T233, T201 (perf last). #53 (freeze) is in the `1.0.9` milestone — **out of rc3 scope**, held.
 - base: branch `1.0.9` @ `58025147` (merge of #214 `1.0.9-rc2`); the branch was later **renamed to `1.0.9-rc3`** by a concurrent actor (the collection's commits rode along); HEAD advanced by PLAN/DO commits.
 - mode: autonomous; auto-commit authorized (task/collection status files and task paths only, explicit paths, never `-A`, message prefix `#<issue>`); push **never**
 - skills: `pdca-collection` + `pdca-dotnet` + `nextorm-pdca`
@@ -23,12 +23,14 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 | T217 | #217 | DateTimeOffset — SQL-трансляция Now/UtcNow и частей даты | pdca-dotnet | done-with-caveat (r=5, rv=5; R217-01..07 met, R217-08 → #234) |
 | T218 | #218 | SQL Server sequences (NEXT VALUE FOR), кросс-провайдерно | pdca-dotnet | done-with-caveat (r=1, rv=1; E07/E08/E10 → #235) |
 | T53 | #53 | IF6: public API freeze (PublicApiAnalyzers + PublicAPI.*) | pdca-dotnet | ready (r=1) — **HELD by owner** |
+| T232 | #232 | SQL Server PIVOT/UNPIVOT — типизированная проекция результата (вместо TableAlias по имени) | pdca-dotnet | pending (new, rc3 scope) |
+| T233 | #233 | Window functions — перегрузка `Over` (один partitionBy + один WindowOrder) | pdca-dotnet | pending (new, rc3 scope) |
 
 ## Groups
 
 | id | tasks (order) | worktree | branch/ref | status |
 |---|---|---|---|---|
-| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 → T201 (perf) → T53 (freeze, held) | no (single group) | current branch `1.0.9-rc3` | in-progress (T224 done — CHECK PASS r=1/rv=1/n=1, R1–R7 met; fail-stop lifted — T217 done-with-caveat #234, T218 done-with-caveat #235) |
+| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 → T232 → T233 → T201 (perf) | no (single group) | current branch `1.0.9-rc3` | in-progress (scope rc3: +T232/T233; T53 out of rc3 scope, held) |
 
 Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/docs force one writer). T224 (SQL-format blast radius, ~697 exact-string asserts) sits late, after all functional changes; T225 (docs-only) after T223+T224; T201 (perf) measures the final composition; T53 held last. Addendum contract `cluster-1`/`cluster-2`; task contracts unchanged.
 
@@ -52,8 +54,10 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T226 | #226 | G1 | 14 | done | done (r=2, rv=2, n=2/3) — CHECK PASS; 11/11 rows met | pdca-dotnet | N=1 | r=2 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
 | T224 | #224 | G1 | 15 | done | done (r=1, rv=1, n=1) — CHECK PASS r=1/rv=1; R1–R7 met; DO `4e6a2abd` | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
 | T225 | #225 | G1 | 16 | pending | ready | pdca-dotnet | N=1 | r=2 | 63bdb84f | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
-| T201 | #201 | G1 | 17 (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
-| T53  | #53  | G1 | 18 (held) | held | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
+| T232 | #232 | G1 | 17 | pending | pending | pdca-dotnet | N=1 | — | — | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md |
+| T233 | #233 | G1 | 18 | pending | pending | pdca-dotnet | N=1 | — | — | docs/specs/status/D233-window-over-overload-1.md |
+| T201 | #201 | G1 | 19 (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
+| T53  | #53  | — | out of rc3 scope (held) | held | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
 
 - Evidence contract (per task, frozen at that task's DO→CHECK): T209 rv=2 (done), T211 rv=2, T213 rv=5 (done), T216 rv=2, T226 rv=2 (done, 11/11 rows met), others rv=1. Manifests `artifacts/pdca/<task>/rv*/manifest.json`.
 - T221 (#221) done: CHECK PASS r=1/rv=1/n=2/3; DO `f884c52b`, corrective DO `4b49b063`, ACT `9cb2e14f`. Evidence `artifacts/pdca/D221/rv1/manifest.json` (E221-01..09 met; build 0/0; UN 46/46, Q 10/10, QN 9/9, integration 21/21 on five providers, 0 skipped; Stryker 76/68 killed/8 survived, 0 NoCoverage), `coverage-delta.md`, `mutation-disposition.md`, `ownership-evidence.md`; status `docs/specs/status/D221-interceptor-di-registration-1.md`. Issue #221 closed. T53 freeze stays HELD.
@@ -101,7 +105,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Blocker: **none** — lane G1 moved on; **T219 (#219) done** (CHECK PASS r=1/rv=1/n=1/3; no fail-stop, no escalation). (Prior history: T218 CHECK/escalate in-cycle STOP → owner accepted `done-with-caveat`, E07/E08/E10 → #235; earlier T217 terminal `incomplete` `D217-EVIDENCE-BINDING` → owner accepted `done-with-caveat` → #234.)
 - Defect id / history: `D217-EVIDENCE-BINDING` — r=2/n=3 → r=3/n=1 → r=4/n=1 → r=5/n=1, each a CHECK FAIL at the evidence gate (evidence-only regeneration / hash replacement); terminal `incomplete`.
 - Corrective-task status file: — (none created; the remedy is an **outside-T217** proposal, a human decision)
-- Next allowed step: resume lane G1 with **T225 (#225) DO** → T201 → T53 (held). **T224 (#224) done** (r=1, rv=1, n=1, CHECK PASS r=1/rv=1; R1–R7 met, E01–E07 met/closed; DO `4e6a2abd`; issue #224 closed; status `docs/specs/status/D224-sql-from-join-formatting-1.md`; T225 NOT started). **T226 (#226) done** (r=2, rv=2, n=2/3, CHECK PASS, 11/11 rows met; issue #226 left OPEN — closure owned by the collection owner). **T219 done** (CHECK PASS r=1/rv=1/n=1/3; no fail-stop, issue left OPEN with deferred triggers). Owner accepted T218 as `done-with-caveat` (E07/E08/E10 → **#235**); fail-stop G1 lifted. T217 accepted done-with-caveat (evidence-provenance → **#234**). T216's R-03/MariaDB constraint stays recorded (#216 OPEN).
+- Next allowed step: (1) own PLANs for the new rc3-scope tasks **T232 (#232)** and **T233 (#233)**; (2) resume lane G1: **T225 → T232 → T233 → T201 (perf last)**. Done in this lane: T209/T211/T212/T213/T215/T216/T219/T221/T222/T223/T224/T226/T227; done-with-caveat: T217 (→#234), T218 (→#235). #53 (freeze) is **out of rc3 scope** and held. #216 CLOSED (owner decision (i)).
 
 ## Done / Verified / Incomplete
 
