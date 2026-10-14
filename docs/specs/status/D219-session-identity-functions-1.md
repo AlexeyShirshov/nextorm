@@ -8,10 +8,14 @@ collection_status: docs/specs/status/collection-1.0.9-todo.md
 group: G1 (single group; no worktree/branch/merge)
 cycle: N=1
 plan_revision: r=1
-iteration: n=1
-plan_state: ready
+iteration: n=1/3
+plan_state: done
+check: PASS (r=1, rv=1, n=1/3)
 evidence_contract_rv: 1
 manifest: artifacts/pdca/D219/rv1/manifest.json
+do_commit: b5f8b360
+evidence_commit: fa1dc550
+check_regather_commit: be468abc
 selected_variant: pdca-dotnet
 base_commit: 706a83d1
 baseline_ref: 706a83d1
@@ -173,8 +177,10 @@ Held freeze; recorded for `docs/specs/status/D53-public-api-freeze-1.md` (basis 
 - Plan revision r: 1
 - Attempt n: 1/3
 - Evidence contract rv: 1
-- plan_state: ready
-- defect_key registry: D219-C4-MYSQL-RESERVED-ALIAS (r1/n1, 1 fix applied), D219-C4-PG-INETNETMASK (r1/n1, 1 fix applied)
+- phase: ACT / EXIT (cycle closed)
+- CHECK: PASS (r=1, rv=1, n=1/3)
+- plan_state: done
+- defect_key registry: empty (no open keys)
 - Defect history: D219-C4-MYSQL-RESERVED-ALIAS — observed r1/n1 on C4 attempt 1 (MySQL/MariaDB `current_user` collided with a reserved word in the integration test projection: 3 failed / exit 2), fixed in-chunk (1 fix applied), final C4 0 failed; evidence artifacts/pdca/D219/rv1/logs/c4-specific-attempt1.log. D219-C4-PG-INETNETMASK — observed r1/n1 on the same attempt (PostgreSQL renders `inet` as text with its netmask, e.g. 10.0.0.1/32), fixed in-chunk (1 fix applied), final C4 0 failed; same evidence. No attempt/revision reset: r stays 1, n stays 1/3.
 
 ## Progress log
@@ -192,3 +198,19 @@ Held freeze; recorded for `docs/specs/status/D53-public-api-freeze-1.md` (basis 
 - No new pages created (`10-system-functions.md`/`11-sqlserver-scalars.md` remain stale paths); no toc/structure/guide renumbering; public docs contain no links to `docs/specs/**`.
 2026-10-14T10:14:20Z | DO | r1 | n1/3 | DO chunk 4/4 complete (D219-08): product+tests+docs committed (b5f8b360, 28 files, explicit paths only); single DO->CHECK boundary sweep C5 exit 0 (11838 total / 11639 succeeded / 0 failed / 199 capability-based skips, 0 provider skips); C6 exit 0; C7 exit 0 (line-rate 0.8812 >= 0.85, branch-rate 0.8039 >= 0.75); C9 manifest + report/brief validators exit 0; frozen evidence manifest rv=1 written | artifacts/pdca/D219/rv1/manifest.json
 2026-10-14T11:55:54Z | CHECK | r1 | n1/3 | CHECK re-gather round 1 (E219-02/E219-04 negative/boundary evidence): 13 targeted filtered re-runs exit 0 (capability-false + custom-dialect default Supports=false -> NotSupportedException; SQL Server NULL propagation for the 6 nullable string identities; ulong connection_id max/zero boundary; in-memory fail-closed for the 15 functions); CRLF artifact 28/28 'i/lf w/crlf'; manifest row E219-08 command-in-path replaced by real artifacts and validate_inner_loop.py manifest exit 0 | artifacts/pdca/D219/rv1/check/rel/negative-boundary-evidence.json, artifacts/pdca/D219/rv1/crlf-check.txt
+2026-10-14T11:58:00Z | CHECK | r1 | n1/3 | CHECK PASS (r=1, rv=1, n=1/3): frozen manifest rv=1 rows E219-01..09 all `met` (manifest + report/brief validators exit 0); build 0/0; C2 six providers 3496 tests 0 failed 0 skipped; C3 core InMemoryTests 183; C4 integration 394 executed 0 skipped (SQLServer/PostgreSQL/MySQL/MariaDB/ClickHouse/SQLite); C5 boundary 11838 total / 0 failed / 199 capability-reason skips / 0 provider skips; coverage line 88.12% / branch 80.39% (>=85/75); C8 DocFX exit 0; Stryker scoped (core+core.tests) 41 tested / 34 killed / 7 survived / score 80.95% (all 7 dispositioned record-only, 0 NoCoverage); security stream no findings; perf exemption (translation-at-prepare-time, no per-row/cache change) confirmed independently | artifacts/pdca/D219/rv1/manifest.json
+2026-10-14T12:00:00Z | ACT | r1 | n1/3 | ACT close: acceptance R219-01..08 met; no replan, no r/n reset (r=1, n=1/3); deferred-with-trigger items stay in milestone 1.0.9 — ClickHouse `serverUUID`/`FQDN`/`getServerPort(name)`, `system_user`/`suser_sname` synonyms, PG native unix-socket NULL fixture (trigger: managed socket fixture); all 7 mutation survivors dispositioned record-only (5 pre-existing `SqlFunctions.cs` aggregate statics, 1 pre-existing `InMemoryScalarFunctionRewriter.cs:182`, 1 equivalent-on-the-frozen-API `SessionInfoFunctionTranslator.cs:123:19`); T53 freeze HELD; #219 left OPEN | docs/specs/status/collection-1.0.9-todo.md
+2026-10-14T12:00:17Z | EXIT | r1 | n1/3 | cycle closed: N=1 / r=1 / rv=1 / n=1/3, plan_state `done`, CHECK PASS, defect registry empty, no escalation | docs/specs/status/D219-session-identity-functions-1.md
+
+## ACT / closure
+
+- Acceptance R219-01..08 met (frozen manifest rv=1, rows E219-01..09 all `met`; manifest/report/brief validators exit 0). Cycle closed at N=1 / r=1 / rv=1 / n=1/3 with CHECK PASS; no replan, no attempt/revision reset.
+- Commits: product `b5f8b360` (28 files), DO evidence `fa1dc550`, CHECK re-gather evidence `be468abc`; no merge, no push.
+- Deferred with trigger (all remain in milestone 1.0.9; no future-milestone issue created):
+  - ClickHouse `serverUUID` / `FQDN` / `getServerPort(name)` — trigger: the corresponding identity/argument-function requirement.
+  - `system_user` / `suser_sname` synonyms — trigger: a separate-semantics/overload requirement.
+  - PostgreSQL native unix-socket NULL fixture — trigger: a managed socket fixture.
+- Mutation survivors: Stryker scoped to core + core.tests — 41 tested / 34 killed / 7 survived / score 80.95%. All 7 survivors are **record-only** (no product change): 5 pre-existing `SqlFunctions.cs` aggregate statics, 1 pre-existing `InMemoryScalarFunctionRewriter.cs:182`, 1 equivalent-on-the-frozen-API `SessionInfoFunctionTranslator.cs:123:19`.
+- Security: no findings. Perf: cached-path acceptance benchmark not required — translation happens at prepare time (no new per-row/cache/executor work), independently confirmed; the exemption basis stands (no waiver).
+- T53 public-API freeze stays **HELD**; the 16 session-identity members remain recorded candidates (this file §"T53 public-API candidates" and `collection-1.0.9-todo.md`), not registered.
+- Issue #219 left **OPEN** (deferred triggers tracked here and in the collection status).
