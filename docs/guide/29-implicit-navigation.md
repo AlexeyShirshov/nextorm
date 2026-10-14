@@ -254,7 +254,9 @@ client-side evaluation:
   outside a query expression always throws.
 * **Undeclared navigations** — a reference- or collection-typed member with no declared relationship is
   not inferred from a convention.
-* **Composite relationship keys** — only single-column foreign/principal/junction keys are supported.
+* **Composite relationship keys** — implicit navigation resolves only single-column
+  foreign/principal/junction keys and rejects a composite key; use an explicit
+  [`JoinInto`](../advanced/relationships.md), which joins and groups on every declared component.
 * **Navigation in grouping/paging modifier keys** — `GROUP BY`, `DISTINCT ON`, `LIMIT BY` and
   extreme-row keys do not evaluate navigation (use explicit joins there).
 * **Temp-table / table-valued (TVP) navigation** — navigation over a temp-table/TVP source is

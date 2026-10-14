@@ -1,9 +1,9 @@
 # D225 — T225 (#225): JoinInto composite-junction M:N docs delta (AC07 handoff, T213)
 
 - Task: T225 / issue [#225](https://github.com/AlexeyShirshov/nextorm/issues/225)
-- Collection: `1.0.9-todo`, group **G1** (single group — no worktree, no branch, no merge); branch `1.0.9`
-- Variant: `pdca-dotnet`; cycle **N=1**; plan_revision **r=2**; evidence-contract **rv=1 (frozen by PLAN r=2)**
-- **Plan state: `ready`** (re-open of T225) — history: PLAN r=1 = gap → escalation decision (B) → terminal `incomplete` (record preserved below)
+- Collection: `1.0.9-todo`, group **G1** (single group — no worktree, no branch, no merge); branch `1.0.9-rc3`
+- Variant: `pdca-dotnet`; cycle **N=1**; plan_revision **r=3**; evidence-contract **rv=2 (frozen by PLAN r=3)**
+- **Plan state: `ready`** (re-open of T225) — history: PLAN r=1 = gap → escalation decision (B) → terminal `incomplete` (record preserved below); r=2 → DO→PLAN candidate (#223 d76c5ae3) → PLAN r=3 (record preserved below)
 
 ## Phase state
 
@@ -191,3 +191,134 @@ T213 delivered behavior + its artifacts are sufficient inputs; #223 is NOT a dep
   Error(s); the two oracle selectors exit 0 (4/4 and 17/17, 0 skipped).
 - Requested: a `planner` revision **r=3** — re-baseline to HEAD, re-scope C3 and E01 to the #213/#223
   support statement, re-derive the 4 obsolete + 8 conflict-reworked hunks. DO must not improvise that scope.
+
+---
+
+## Plan r=3 (planner, medium) — READY (re-open; supersedes r=2)
+
+Cycle **N=1**; plan revision **r=3**; attempt **n=1/3**; evidence contract **rv=2 (frozen by PLAN r=3)**. r=3 takes the verified r=2 DO→PLAN candidate as mandatory input and replaces the obsolete C3/E01 semantics with a HEAD-based documentation correction.
+
+- **Administrative correction:** persisted branch/milestone labels corrected to **`1.0.9-rc3`** (collection `1.0.9-todo` renamed them; the r=1/r=2 records below keep their historical `1.0.9` text).
+- **Supersession:** rv2 explicitly supersedes rv1; E01–E05 IDs and all surviving obligations are retained; E01's false-rejection oracle and E05's obsolete-baseline replay are superseded; E06/E07 are added for malformed-key and implicit-scope variants. rv1 artifacts under `artifacts/pdca/D225/rv1/**` are preserved unchanged.
+- **Baseline:** `$B = 0ed8e01dae44122276056f9f89676d913891ff09`, captured and verified at DO start (`git rev-parse HEAD`), with all 16 footprint files verified clean before any edit or commit. `$A = artifacts/pdca/D225/rv2`.
+- **DO→PLAN candidate that r=3 resolves:** #223 (`d76c5ae3`) delivered composite-junction M:N SQL support; the literal `composite-junction M:N is not supported` is absent from `src/**`; the designated oracle now asserts support.
+
+### P: Reconcile AC07 with delivered #223 support, replacing obsolete rejection and patch-replay work with a HEAD-based documentation correction.
+**Goal:** Accurate EN/RU `JoinInto` documentation, preserving the externally owned reorganisation and all still-required acceptance obligations.
+**Minimal solution:** correct five stale authored files; documentation-only, fixed footprint; edit current content, not replay T213's superseded patch.
+| Alternative | Benefit | Cost/risk | Decision |
+|---|---|---|---|
+| Replay T213 against `aea0a9ba` | Preserves historical patch | Reintroduces false rejection; conflicts with #223 | Reject |
+| Rewrite all 16 documents | Broad consistency | Unnecessary churn and reorg risk | Reject |
+| Correct residual claims against `0ed8e01d` | Small, truthful delta | Requires explicit/implicit-path distinction | Choose |
+
+### Acceptance criteria — stable requirement IDs
+| Requirement / criterion | Acceptance and negative case |
+|---|---|
+| AC01 / C1 | Scalar M:N `JoinInto`, standalone and SingleQuery, described correctly; fail if either is called unsupported. |
+| AC02 / C2 | Composite 1:N/1:1 relationship keys and scalar M:N junction described correctly; fail on a blanket single-column restriction covering explicit `JoinInto`. |
+| AC03 / C3, revised | Composite-junction M:N SQL support described; malformed metadata still rejected by current validations; fail on the obsolete #223 rejection or an unconditional "all composite keys accepted" claim. |
+| AC04 / C4 | In-memory composite-junction stitching retained in the documentation model; fail if SQL support is presented as removing it. |
+| AC05 / C5 | EN/RU equivalent; changed authored files CRLF; links, numbering and TOCs consistent; no public→specs links; fail on any mismatch or structural violation. |
+| AC06 / C6 | One Debug solution build: exit 0, zero warnings/errors; fail otherwise. |
+| AC06 / C7 | Filtered coverage ≥85% line and ≥75% branch; required database providers actually run; fail below either threshold or on provider skips. These remain acceptance gates on this non-main branch. |
+| AC05 / C8 | Baseline-relative documentation patch applies through a temporary index, preserves reorg and stays within scope; fail on conflict, path movement or unrelated change. |
+
+### Gaps, assumptions and task continuity
+- Implicit-navigation composite-key support is **not established**. Gather its actual path first; absent proof, publish only explicit-`JoinInto` support, not an implicit capability or restriction.
+- `$S` = the existing T225-owned status file, retaining its current path.
+- `$A=artifacts/pdca/D225/rv2`; `$B=0ed8e01d`; `$F` = exactly the 16 documentation paths below.
+- Actual scope replacement: unfinished r=2 D1→D5, D2→D6, D3→D7, D4→D8; replacements remain active and inherit all surviving criteria and unfinished work. No blocker report or candidate marks work done.
+- Correct persisted branch/milestone labels to `1.0.9-rc3`; do not edit collection status or GitHub administration.
+
+### Explicit footprint and per-file documentation plan
+| Authored files | Disposition |
+|---|---|
+| `docs/advanced/relationships.md`; `docs/ru/advanced/relationships.md` | Audit; retain accurate composite support statements. |
+| `docs/advanced/limitations.md`; `docs/ru/advanced/limitations.md` | Audit; retain accurate content. |
+| `docs/advanced/eager-loading.md`; `docs/ru/advanced/eager-loading.md` | Audit; no invented composite-junction section. |
+| `docs/guide/02-joins.md`; `docs/ru/guide/02-joins.md` | Audit; no invented composite-junction section. |
+| `docs/guide/29-implicit-navigation.md:257`; `docs/ru/guide/29-implicit-navigation.md:263` | Re-scope the blanket key limitation using the evidence rule above. |
+| `docs/specs/comparison/capability-matrix.md:110` | Remove obsolete composite/scalar-M:N SingleQuery gaps; retain independently valid limitations. |
+| `docs/specs/comparison/linq2db-comparison.md:109` | Same correction against delivered behaviour. |
+| `docs/specs/comparison/linq2db-backlog-gap-analysis.md:54,346,405,505` | Correct every stale residual-gap statement consistently. |
+| `docs/specs/roadmap/sql-capabilities-gap-analysis.md:30,730` | Audit; retain T223 corrections. |
+| `docs/specs/roadmap/todo_eager_loading_pipeline.md:110-111` | Audit; retain accurate content. |
+| `docs/specs/roadmap/todo_navigation_properties.md:31` | Audit; retain accurate content. |
+
+Only these 16 files, `$A/**` and `$S` are authored-change scope. Generated DocFX/coverage output is not committed; T213 artifacts remain immutable. No moves, renumbering, TOC-path changes, product/API/tests, unrelated churn or other task statuses.
+
+### Ordered DO tasks
+- **D5 — fix now:** At first DO entry, capture `git rev-parse HEAD`, require `$B`, and verify the 16 files clean before task edits/commits. Persist this complete plan, supersession, contract, scope and administrative correction in `$S` before implementation. Baseline mismatch is a prerequisite failure, never silent rebasing.
+- **D6 — fix now:** Load `running-integration-tests`; prepare Podman, starting its machine if necessary. Carry forward the verified 26-hunk disposition as provenance, not a patch to replay. Gather Roslyn-first explicit/implicit paths; correct the three comparison specs and both guide bullets under the claim guard.
+- **D7 — fix now:** Independently gather EN/RU semantic comparisons against current implementation and existing tests; record all C1–C4 mappings, malformed-key negatives and implicit-scope decisions. Resolve factual mismatches within scope; no new tests or unverified assertions.
+- **D8 — fix now:** After edits stop, perform the **single boundary sweep**: structural/DocFX checks, solution build, existing oracles, coverage, container integration, portability and manifest validation. Freeze evidence at DO→CHECK; CHECK determines acceptance.
+- No residual correction is deferred. Collection-authorized autocommit may include explicit task paths only, prefix `#225`; never `-A`, push, branch or merge.
+
+### Execution, variants and priorities
+**Mode:** Sequential, one current tree; overlapping documentation and one evidence contract make parallel editing/worktrees unnecessary.
+| Variant | Closure |
+|---|---|
+| Scalar M:N: standalone / SingleQuery / AsSingleQuery spelling | Test existing suite plus documentation audit, E01. |
+| Composite 1:N / 1:1 / scalar-junction M:N | Test existing suite plus implementation audit, E01. |
+| Composite junction: multi-component parent / child / both | Test existing composite oracles plus routing audit, E01. |
+| In-memory versus SQL materialisation | Test existing suite and provider/source mapping, E01/E04. |
+| Incomplete FK coverage / contradictory component order | Test existing negative oracles, E06. |
+| Missing parent/child components or junction metadata | Guard current validation sites; do not imply valid-junction support accepts malformed metadata, E06. |
+| Explicit `JoinInto` versus implicit navigation | Guard evidence-scoped claims, E07. |
+| Null/default and value/reference components | Guard: introduce no new guarantees; audit claims against existing semantics, E01/E07. |
+| SQLite/PostgreSQL/SQL Server/MySQL/ClickHouse | Test existing integration suite, E04; other-provider-specific guarantees guarded out of this delta. |
+**Test strategy:** No new tests; existing core oracles, solution coverage and real-provider integration. CHECK rebuild policy **none**; all required execution belongs to D8.
+**Priority matrix:** E01–E07 are P1 by acceptance invariants; CHECK cannot downgrade them. Cached-path acceptance is inapplicable to this unrelated documentation-only cycle.
+**Performance:** No benchmark: edits at comparison `:110/:109` and guide `:257/:263` affect authored prose, not per-row execution.
+**Reconnaissance:** No design spike; #223 implementation and passing oracles establish the solution. D6's bounded path audit establishes documentation scope, not a new design.
+**Risks:** Unsupported implicit-path inference, provider skips, baseline drift and broad staging; claim guards, frozen baseline, provider logs and explicit-path commits control them.
+
+### Versioned evidence contract — rv=2
+All sources/artifacts below are **planned**, not claimed produced. Every row is unconditional, predicate **true: T225 acceptance**, owner **DO/coder** with independent CHECK review, revision **2**.
+`SEM` invocation: `tools.roslyn({action:"structure"})`, `tools.roslyn({action:"types"})`, then `members`/`refs`/`callers` with `target:T`, where each `T` is a discovered fully qualified symbol; record exact resolved calls and successful responses, never invent symbols.
+D5 creates planned artifact-local `check_docs.py`, `check_patch.py`, `check_coverage.py`: structural invariants, baseline/temp-index portability, and Summary.txt thresholds respectively; their invocations are fixed below.
+| Row / requirement | Required scenario, exact invocation and result | Expected evidence/artifacts under `$A` |
+|---|---|---|
+| E01 / AC01–AC04 | `SEM` audit against current definitions/tests; `dotnet test tests/nextorm.core.tests -c Debug --no-build --filter "FullyQualifiedName~JoinInto"`: exit 0, nonzero executed, no failures/skips; all C1–C4 source/claim mappings accurate. | Semantic report `semantic-review.md`, Roslyn receipts `roslyn.json`, `logs/joininto.log`; source anchors include `EntityBuilder.cs:736,757,815,838,883`, factory `:202-206`, existing positive tests. |
+| E02 / AC05 | `git diff --check "$B" -- "${F[@]}" "$S" "$A"`; `dotnet docfx docs/docfx.json`; `python3 "$A/check_docs.py" --scope "$A/scope.json" --baseline "$B" --output "$A/structural.json"`: all exit 0; zero structural/broken-link failures and no DocFX errors. | `logs/diff-check.log`, `logs/docfx.log`, `structural.json`; CRLF, EN/RU, links/TOCs/numbering, public→specs prohibition and generated-path exclusion. |
+| E03 / AC06-C6 | `dotnet build -c Debug`: exit 0, zero warnings/errors, once at boundary. | `logs/build.log`, build result in `evidence.json`. |
+| E04 / AC06-C7 | Exact coverage and integration commands below: all exit 0; coverage ≥85/75; SQLite plus all four container-backed providers executed, none skipped. | `logs/coverage.log`, copied `coverage.cobertura.xml`, `Summary.txt`, `logs/integration.log`, provider execution ledger `providers.json`. |
+| E05 / AC05-C8 | `python3 "$A/check_patch.py" --baseline "$B" --scope "$A/scope.json" --patch "$A/docs.patch" --report "$A/portability.json"`: exit 0; generates baseline-relative docs patch, temporary-index `read-tree`/`apply --cached --check` succeeds; no scope/reorg violation. | `scope.json`, `baseline.json`, `docs.patch`, `portability.json`, exact git-command receipts. |
+| E06 / AC03-negative | `dotnet test tests/nextorm.core.tests -c Debug --no-build --filter "FullyQualifiedName~JoinIntoCompositeJunctionRejectionTests\|FullyQualifiedName~JoinIntoCompositeRemainderTests"`: exit 0, both selectors executed, no failures/skips; `SEM` confirms malformed-key guards. | `logs/composite-oracles.log`, `malformed-review.md`; rejection tests `:226,:308`, spec `:371-384`, composite factory `:83`, metadata guards `:91,:198-199`. |
+| E07 / AC05-scope | `SEM` resolves explicit and implicit entry/call paths; successful receipts plus independent claim audit establish every guide assertion, or verify implicit capabilities remain unasserted. | `implicit-scope.md`, `roslyn.json`, EN/RU claim ledger; no unresolved capability presented as fact. |
+
+Coverage: `mkdir -p tests/coverage && dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"`; then `dotnet tool run reportgenerator -reports:tests/coverage/coverage.cobertura.xml -targetdir:tests/coverage/report -reporttypes:"Html;TextSummary;Cobertura" -riskhotspotassemblyfilters:"+nextorm.*"`; then `python3 "$A/check_coverage.py" tests/coverage/report/Summary.txt --line 85 --branch 75` (all exit 0).
+Integration: `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor`; missing socket prerequisite: `"/mnt/c/Program Files/RedHat/Podman/podman.exe" machine start`, wait/recheck, then execute.
+Manifest: **`artifacts/pdca/D225/rv2/manifest.json`**; required keys `task`, `tree`, `contract_rv`, `status_file`, `required_rows`, `rows[]`; each row has stable `id`, `status`, and nonempty `{kind,path,command?,exit?,value?}` evidence when met, reason when open, predicate when na.
+Freeze baseline independently of subsequent commits; bind manifest to exact evaluated tree revision and rv2 at DO→CHECK. CHECK evidence is append-only and cannot silently rebind tree, baseline or obligations. Validate: `python3 scripts/validate_inner_loop.py manifest "$A/manifest.json"` → 0 required; 2 violation, 1 error. No PASS with any required row open.
+CHECK re-gather budget: **2 targeted gathers total, owner CHECK**, existing-tree evidence only; exhaustion leaves acceptance unproven. Missing reports alone justify neither contract revision nor another DO.
+**Supersession:** rv2 explicitly supersedes rv1; retain E01–E05 IDs and surviving obligations, supersede E01's false rejection oracle and E05's obsolete-baseline replay, add E06/E07 for malformed-key and implicit-scope variants. Preserve rv1 artifacts unchanged.
+
+**Decisions:** C3 — describe delivered composite-junction M:N SQL support; separately document genuine malformed-key rejection, never the removed #223 message. Guide — re-scope EN:257/RU:263; first gather Roslyn explicit-versus-implicit paths, then assert only verified behaviour — no implicit blanket claim without proof. Comparison — correct all identified stale occurrences in the three comparison specs against delivered support, retaining independently valid gaps. Footprint — unchanged at 16 documentation files plus `$A/**` and `$S`. Baseline — `0ed8e01d`; capture and verify HEAD and clean footprint at DO start before any task edit/commit, then freeze. Contract — rv1→rv2 supersedes obsolete E01/E05 semantics, retains IDs and all surviving obligations, adds E06/E07.
+
+### Scope (validated before edits)
+`$A/scope.json` — projects `tests/nextorm.core.tests`; selectors `FullyQualifiedName~JoinInto`, `FullyQualifiedName~JoinIntoCompositeJunctionRejectionTests`, `FullyQualifiedName~JoinIntoCompositeRemainderTests`; the 16 footprint files; `rebuild: none`; boundary = D8 single sweep. Validated: `python3 scripts/validate_inner_loop.py brief artifacts/pdca/D225/rv2/scope.json` → exit 0.
+
+### DO r=3 progress log (appended)
+
+- 2026-10-14 23:22 UTC | PLAN | revision r=3 | iteration 1/3 | Replanned: planner issued r=3 (C3 superseded by T223 d76c5ae3 -> rv=2); r=2 DO→PLAN candidate verified; contract rv=2 frozen; administrative labels corrected to 1.0.9-rc3 | docs/specs/status/D225-joininto-mn-docs-delta-1.md
+- 2026-10-14 23:23 UTC | DO | revision r=3 | iteration 1/3 | DO started; HEAD `0ed8e01d` == required `$B`; 16 footprint files clean (`git diff --stat $B -- <footprint>` empty); scope validated | artifacts/pdca/D225/rv2/{baseline.json,scope.json} (validate_inner_loop.py brief exit 0)
+- Notice: host tool catalog exposes no todowrite; sidebar todo mirror not updated this cycle; status file is the sole progress source.
+- Notice: branch/milestone labels corrected to 1.0.9-rc3 (administrative drift).
+
+### DO r=3 — closed units (D5–D8)
+
+- 2026-10-14 23:25 UTC | D5 | revision r=3 | iteration 1/3 | **D5 closed**: `git rev-parse HEAD` = `0ed8e01dae44122276056f9f89676d913891ff09` == required `$B` (branch `1.0.9-rc3`); all 16 footprint files clean (no `M`, empty `git diff --stat $B -- <footprint>`); plan r=3 + supersession + contract rv=2 + scope + administrative correction persisted here; `python3 scripts/validate_inner_loop.py brief artifacts/pdca/D225/rv2/scope.json` → exit 0. | artifacts/pdca/D225/rv2/{baseline.json,scope.json,check_docs.py,check_patch.py,check_coverage.py}
+- 2026-10-14 23:29 UTC | D6 | revision r=3 | iteration 1/3 | **D6 closed**: `running-integration-tests` skill loaded; Podman socket present and `curl --unix-socket ... _ping` → `OK` (machine already running, no start needed); the verified 26-hunk disposition carried as provenance only (no patch replay); Roslyn-first explicit/implicit entry-and-call paths gathered; the three comparison specs and both guide bullets corrected under the claim guard — 5 authored files changed, 11 audited unchanged. | artifacts/pdca/D225/rv2/{roslyn.json,semantic-review.md,implicit-scope.md}
+- 2026-10-14 23:33 UTC | D7 | revision r=3 | iteration 1/3 | **D7 closed**: EN/RU semantic comparison against current implementation + existing tests recorded, with C1–C4 source/claim mappings, the malformed-key negatives and the implicit-scope decision; factual mismatches resolved inside scope; no new tests and no unverified assertion added. | artifacts/pdca/D225/rv2/{semantic-review.md,malformed-review.md,implicit-scope.md}
+- 2026-10-14 23:45 UTC | D8 | revision r=3 | iteration 1/3 | **D8 closed (single boundary sweep; evidence frozen at DO→CHECK)**: `git diff --check` exit 0; `check_docs.py` 16/16, 0 failures; `dotnet docfx` exit 0 with 0 errors (2 pre-existing source-generator duplicate-source warnings, unrelated to the delta); `dotnet build nextorm.slnx -c Debug` exit 0, 0 warnings / 0 errors; `FullyQualifiedName~JoinInto` 159 selected / 159 passed / 0 skipped; composite oracles 4/4 + 17/17, 0 skipped; coverage `line 87.30% (>=85)`, `branch 79.90% (>=75)`; integration `Total 3904, Errors 0, Failed 0, Skipped 198` with all 198 skips provider-capability (no provider-unavailable skip) and 5 provider containers actually started (PostgreSQL `ff3bb6dd042f`, SQL Server `1b5207b30a62`, MySQL `d703aedb9b21`, MariaDB `914f06a0ba5f`, ClickHouse `6bf39546e2b9`; ClickHouse confirmed by an isolated `-class …ClickHouseIntegrationTests` run: 148/148, 0 skipped); baseline-relative temp-index `read-tree` + `apply --cached --check` exit 0 (16 files, 8 hunks, 0 out-of-scope paths). Validators: `validate_inner_loop.py brief` 0, `report` 0, `manifest` 0; no manifest row is `open`. | artifacts/pdca/D225/rv2/{manifest.json,evidence.json,portability.json,providers.json,structural.json,Summary.txt,coverage.cobertura.xml,docs.patch,logs/**}
+- Notice (r=3, out of scope, reported not edited): the product XML doc at `src/nextorm.core/Builders/EntityBuilder.cs:730-732` still states that a "composite-junction many-to-many (carried by issue #223) is rejected with `NotSupportedException`", which contradicts the delivered behaviour asserted by `JoinIntoCompositeJunctionRejectionTests.cs:113`. It is product source, outside this documentation-only footprint, and was left untouched.
+- Notice (r=3): the E06 selector pair is recorded and executed as two separate in-scope filters (`…~JoinIntoCompositeJunctionRejectionTests` → 4/4; `…~JoinIntoCompositeRemainderTests` → 17/17); a `|`-joined filter is a compound command token and additionally fails the report validator's scope-conformance rule, so the split form is the evidence of record (the combined-equivalent run `logs/composite-oracles.log` also exits 0 with 21/21).
+
+### DO r=3 — artifact index (`artifacts/pdca/D225/rv2`)
+
+`scope.json`, `baseline.json`, `check_docs.py`, `check_patch.py`, `check_coverage.py`,
+`docs.patch`, `portability.json`, `structural.json`, `providers.json`, `coverage.cobertura.xml`,
+`Summary.txt`, `manifest.json`, `evidence.json`, `semantic-review.md`, `malformed-review.md`,
+`implicit-scope.md`, `roslyn.json`, `logs/{diff-check,docfx,build,joininto,coverage,coverage-threshold,integration,clickhouse,composite-oracles,composite-rejection,composite-remainder,patch,discovery}.log`.

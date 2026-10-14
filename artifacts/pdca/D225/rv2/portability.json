@@ -1,0 +1,53 @@
+{
+ "baseline": "0ed8e01dae44122276056f9f89676d913891ff09",
+ "patch": "artifacts/pdca/D225/rv2/docs.patch",
+ "files": 16,
+ "hunks": 8,
+ "receipts": [
+  {
+   "cmd": [
+    "git",
+    "diff",
+    "--binary",
+    "0ed8e01dae44122276056f9f89676d913891ff09",
+    "--",
+    "docs/advanced/relationships.md",
+    "docs/ru/advanced/relationships.md",
+    "docs/advanced/limitations.md",
+    "docs/ru/advanced/limitations.md",
+    "docs/advanced/eager-loading.md",
+    "docs/ru/advanced/eager-loading.md",
+    "docs/guide/02-joins.md",
+    "docs/ru/guide/02-joins.md",
+    "docs/guide/29-implicit-navigation.md",
+    "docs/ru/guide/29-implicit-navigation.md",
+    "docs/specs/comparison/capability-matrix.md",
+    "docs/specs/comparison/linq2db-comparison.md",
+    "docs/specs/comparison/linq2db-backlog-gap-analysis.md",
+    "docs/specs/roadmap/sql-capabilities-gap-analysis.md",
+    "docs/specs/roadmap/todo_eager_loading_pipeline.md",
+    "docs/specs/roadmap/todo_navigation_properties.md"
+   ],
+   "exit": 0
+  },
+  {
+   "cmd": [
+    "git",
+    "read-tree",
+    "0ed8e01dae44122276056f9f89676d913891ff09"
+   ],
+   "exit": 0
+  },
+  {
+   "cmd": [
+    "git",
+    "apply",
+    "--cached",
+    "--check",
+    "artifacts/pdca/D225/rv2/docs.patch"
+   ],
+   "exit": 0
+  }
+ ],
+ "failures": []
+}

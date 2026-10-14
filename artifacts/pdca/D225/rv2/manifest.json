@@ -1,0 +1,87 @@
+{
+ "task": "T225",
+ "tree": "0ed8e01dae44122276056f9f89676d913891ff09",
+ "contract_rv": 2,
+ "status_file": "docs/specs/status/D225-joininto-mn-docs-delta-1.md",
+ "required_rows": ["E01", "E02", "E03", "E04", "E05", "E06", "E07"],
+ "rows": [
+  {
+   "id": "E01",
+   "status": "met",
+   "evidence": [
+    {"kind": "report", "path": "artifacts/pdca/D225/rv2/semantic-review.md"},
+    {"kind": "receipts", "path": "artifacts/pdca/D225/rv2/roslyn.json"},
+    {"kind": "log", "path": "artifacts/pdca/D225/rv2/logs/joininto.log", "exit": 0, "value": "selected 159, succeeded 159, failed 0, skipped 0"},
+    {"kind": "command", "path": "artifacts/pdca/D225/rv2/evidence.json", "command": "dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~JoinInto", "exit": 0},
+    {"kind": "source", "path": "src/nextorm.core/Builders/Joins/JunctionLinkSourceFactory.cs", "value": ":198-200 missing-junction guard; :205-206 composite routing"},
+    {"kind": "test", "path": "tests/nextorm.core.tests/JoinIntoCompositeRemainderTests.cs", "value": ":97 C2 1:N, :147 C2 1:1, :201/:402/:454/:514/:570/:626 C3/C4, :681/:695/:708/:721/:732 C1"},
+    {"kind": "test", "path": "tests/nextorm.core.tests/JoinIntoManyToManySingleQueryTests.cs", "value": ":20 and :67 C1 SingleQuery stitching"}
+   ]
+  },
+  {
+   "id": "E02",
+   "status": "met",
+   "evidence": [
+    {"kind": "log", "path": "artifacts/pdca/D225/rv2/logs/diff-check.log", "exit": 0},
+    {"kind": "log", "path": "artifacts/pdca/D225/rv2/logs/docfx.log", "exit": 0, "value": "0 errors; 2 pre-existing source-generator duplicate-source warnings (unrelated to the docs delta)"},
+    {"kind": "report", "path": "artifacts/pdca/D225/rv2/structural.json", "value": "16 file(s) checked, 0 failure(s)"},
+    {"kind": "command", "path": "artifacts/pdca/D225/rv2/evidence.json", "command": "python3 artifacts/pdca/D225/rv2/check_docs.py --scope artifacts/pdca/D225/rv2/scope.json --baseline 0ed8e01d --output artifacts/pdca/D225/rv2/structural.json", "exit": 0}
+   ]
+  },
+  {
+   "id": "E03",
+   "status": "met",
+   "evidence": [
+    {"kind": "log", "path": "artifacts/pdca/D225/rv2/logs/build.log", "exit": 0, "value": "0 Warning(s) / 0 Error(s)"},
+    {"kind": "command", "path": "artifacts/pdca/D225/rv2/evidence.json", "command": "dotnet build nextorm.slnx -c Debug", "exit": 0}
+   ]
+  },
+  {
+   "id": "E04",
+   "status": "met",
+   "evidence": [
+    {"kind": "log", "path": "artifacts/pdca/D225/rv2/logs/coverage.log", "exit": 0, "value": "total 11888, succeeded 8786, skipped 3102, failed 0"},
+    {"kind": "coverage", "path": "artifacts/pdca/D225/rv2/coverage.cobertura.xml"},
+    {"kind": "coverage", "path": "artifacts/pdca/D225/rv2/Summary.txt"},
+    {"kind": "log", "path": "artifacts/pdca/D225/rv2/logs/coverage-threshold.log", "exit": 0, "value": "line 87.30% (>=85), branch 79.90% (>=75)"},
+    {"kind": "log", "path": "artifacts/pdca/D225/rv2/logs/integration.log", "exit": 0, "value": "Total 3904, Errors 0, Failed 0, Skipped 198, Not Run 0"},
+    {"kind": "ledger", "path": "artifacts/pdca/D225/rv2/providers.json", "value": "SQLite + PostgreSQL/SQL Server/MySQL/MariaDB/ClickHouse all executed; 5 containers started; no provider-unavailable skip"},
+    {"kind": "log", "path": "artifacts/pdca/D225/rv2/logs/clickhouse.log", "exit": 0, "value": "ClickHouseIntegrationTests Total 148, Skipped 0 (confirms the CH container executed in the full sweep)"}
+   ]
+  },
+  {
+   "id": "E05",
+   "status": "met",
+   "evidence": [
+    {"kind": "patch", "path": "artifacts/pdca/D225/rv2/docs.patch"},
+    {"kind": "report", "path": "artifacts/pdca/D225/rv2/portability.json", "value": "16 file(s), 8 hunk(s), 0 failure(s)"},
+    {"kind": "baseline", "path": "artifacts/pdca/D225/rv2/baseline.json", "value": "tree 0ed8e01d, footprint_clean true"},
+    {"kind": "log", "path": "artifacts/pdca/D225/rv2/logs/patch.log", "exit": 0, "value": "git read-tree 0ed8e01d + git apply --cached --check exit 0 (temporary index)"}
+   ]
+  },
+  {
+   "id": "E06",
+   "status": "met",
+   "evidence": [
+    {"kind": "report", "path": "artifacts/pdca/D225/rv2/malformed-review.md"},
+    {"kind": "log", "path": "artifacts/pdca/D225/rv2/logs/composite-rejection.log", "exit": 0, "value": "selected 4, succeeded 4, failed 0, skipped 0"},
+    {"kind": "log", "path": "artifacts/pdca/D225/rv2/logs/composite-remainder.log", "exit": 0, "value": "selected 17, succeeded 17, failed 0, skipped 0"},
+    {"kind": "log", "path": "artifacts/pdca/D225/rv2/logs/composite-oracles.log", "exit": 0, "value": "combined-equivalent run: selected 21, succeeded 21, failed 0, skipped 0"},
+    {"kind": "test", "path": "tests/nextorm.core.tests/JoinIntoCompositeJunctionRejectionTests.cs", "value": ":113 support NotThrow; :226 contradictory order; :308 under-cover FK"},
+    {"kind": "source", "path": "src/nextorm.core/Builders/Joins/JoinIntoManyToManySpec.cs", "value": ":371-373 under-cover; :382-384 order; :388-390 type mismatch"}
+   ]
+  },
+  {
+   "id": "E07",
+   "status": "met",
+   "evidence": [
+    {"kind": "report", "path": "artifacts/pdca/D225/rv2/implicit-scope.md"},
+    {"kind": "receipts", "path": "artifacts/pdca/D225/rv2/roslyn.json", "value": "refs ResolveHop -> Resolve :70; members NavigationPathResolver :211/:266/:302"},
+    {"kind": "source", "path": "src/nextorm.core/Visitors/NavigationPathResolver.cs", "value": ":302-306 RequireSingleKey; :272-279 composite junction rejection; :45 XML contract"},
+    {"kind": "test", "path": "tests/nextorm.core.tests/NavigationPathResolverTests.cs", "value": ":795-801 composite-key fail-closed boundary"},
+    {"kind": "doc", "path": "docs/guide/29-implicit-navigation.md", "value": ":257 re-scoped EN bullet"},
+    {"kind": "doc", "path": "docs/ru/guide/29-implicit-navigation.md", "value": ":263 re-scoped RU bullet"}
+   ]
+  }
+ ]
+}

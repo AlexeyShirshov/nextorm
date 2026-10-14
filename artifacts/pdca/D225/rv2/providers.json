@@ -1,0 +1,18 @@
+{
+ "task": "T225",
+ "tree": "0ed8e01dae44122276056f9f89676d913891ff09",
+ "contract_rv": 2,
+ "integration_log": "artifacts/pdca/D225/rv2/logs/integration.log",
+ "integration_summary": {"total": 3904, "errors": 0, "failed": 0, "skipped": 198, "not_run": 0, "exit": 0},
+ "skip_policy": "all 198 skips are provider-capability skips (e.g. 'This provider cannot run a CTAS batch'); no skip reason is 'provider is not available'",
+ "providers": [
+  {"provider": "SQLite", "backing": "in-process (no container)", "executed": true, "evidence": "NextORM.Integration.Tests.SqliteIntegrationTests present in the run log"},
+  {"provider": "PostgreSQL", "backing": "container", "container": "ff3bb6dd042f", "readiness_probe": "pg_isready --host localhost --dbname postgres --username postgres", "executed": true},
+  {"provider": "SQL Server", "backing": "container", "container": "1b5207b30a62", "readiness_probe": "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;", "executed": true},
+  {"provider": "MySQL", "backing": "container", "container": "d703aedb9b21", "readiness_probe": "mysql test --wait --silent --execute=SELECT 1;", "executed": true},
+  {"provider": "MariaDB", "backing": "container", "container": "914f06a0ba5f", "readiness_probe": "healthcheck.sh --connect --innodb_initialized", "executed": true},
+  {"provider": "ClickHouse", "backing": "container", "container": "6bf39546e2b9", "readiness_probe": "testcontainers port wait; isolated -class run started the same container", "executed": true, "isolated_evidence": "artifacts/pdca/D225/rv2/logs/clickhouse.log (Total 148, Skipped 0, Failed 0)"}
+ ],
+ "containers_started": 5,
+ "docker_host": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+}
