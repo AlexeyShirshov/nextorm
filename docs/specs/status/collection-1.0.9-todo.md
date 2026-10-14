@@ -30,7 +30,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 
 | id | tasks (order) | worktree | branch/ref | status |
 |---|---|---|---|---|
-| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 → T232 → T233 → T201 (perf) | no (single group) | current branch `1.0.9-rc3` | in-progress (scope rc3: +T232/T233; T53 out of rc3 scope, held) |
+| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 (done) → T232 → T233 → T201 (perf) | no (single group) | current branch `1.0.9-rc3` | in-progress (scope rc3: +T232/T233; T53 out of rc3 scope, held) |
 
 Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/docs force one writer). T224 (SQL-format blast radius, ~697 exact-string asserts) sits late, after all functional changes; T225 (docs-only) after T223+T224; T201 (perf) measures the final composition; T53 held last. Addendum contract `cluster-1`/`cluster-2`; task contracts unchanged.
 
@@ -53,7 +53,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T219 | #219 | G1 | 13 | done | done (r=1, rv=1, n=1/3) — CHECK PASS r=1/rv=1; E219-01..09 all met; product `b5f8b360` | pdca-dotnet | N=1 | r=1 | 4bfa5403 | docs/specs/status/D219-session-identity-functions-1.md |
 | T226 | #226 | G1 | 14 | done | done (r=2, rv=2, n=2/3) — CHECK PASS; 11/11 rows met | pdca-dotnet | N=1 | r=2 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
 | T224 | #224 | G1 | 15 | done | done (r=1, rv=1, n=1) — CHECK PASS r=1/rv=1; R1–R7 met; DO `4e6a2abd` | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
-| T225 | #225 | G1 | 16 | pending | ready | pdca-dotnet | N=1 | r=2 | 63bdb84f | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
+| T225 | #225 | G1 | 16 | done | done (r=4, rv=3, n=1/3) — CHECK PASS r=4/rv=3; E01–E07 met, C1–C8 met | pdca-dotnet | N=1 | r=4 | 7cbbab3b | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
 | T232 | #232 | G1 | 17 | pending | ready | pdca-dotnet | N=1 | r=1 | 4f1e1282 | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md |
 | T233 | #233 | G1 | 18 | pending | ready | pdca-dotnet | N=1 | r=1 | 82da47a9 | docs/specs/status/D233-window-over-overload-1.md |
 | T201 | #201 | G1 | 19 (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |

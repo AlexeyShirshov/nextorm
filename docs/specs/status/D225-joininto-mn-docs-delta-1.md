@@ -92,7 +92,11 @@ Record T225 as **terminal `incomplete`** now; do **not** redefine the oracle (A 
 
 ## Done / Verified
 
-None. T225 is terminal `incomplete`; its contribution to the collection ALL-barrier is **not** satisfied.
+**T225 (#225) — done.** Goal delivered: EN/RU `JoinInto` composite-junction M:N documentation is accurate against the delivered behaviour; the guide's blanket composite-key bullet is re-scoped to the implicit-navigation path with explicit `JoinInto` named; the three stale comparison specs are corrected.
+
+- CHECK (medium) verdict: **PASS** — E01–E07 all `met`, C1–C8 all `met`, no mandatory row open.
+- Evidence: `artifacts/pdca/D225/rv3/manifest.json` (rv=3, tree `30bd9c5f`, E01–E07 met); `artifacts/pdca/D225/rv2/**` (immutable sweep receipts incl. integration 3904 / coverage 87.3% line / 79.9% branch / 5 containers); `artifacts/pdca/D225/rv3/check/normalization.log`.
+- Delivery commits: `e9bea5f7` (docs + rv2 evidence), `30bd9c5f` (status handoff), `7cbbab3b` (rv3 evidence handoff), plus the ACT commit.
 
 ---
 
@@ -370,3 +374,11 @@ Cycle **N=1**; plan revision **r=4**; attempt **n=1/3**; evidence contract **rv=
 - 2026-10-14 19:03 UTC | D11 | revision r=4 | iteration 1/3 | **D11 closed**: status updates finished; evaluated materialization revision frozen at `T = 30bd9c5f34bae15c5c7e2651ccc1f52405b0d02a` (unchanged — no source/document/configuration byte changed in this pass); `$A3/manifest.json` published, bound to `tree = T` + `contract_rv = 3`, and validated (`python3 scripts/validate_inner_loop.py manifest …` → exit 0); `evidence.json` validated (`… report …` → exit 0); **drift proof**: the evaluated evidence domain (`src/**`, `tests/**`, the 16 footprint docs, `docs/specs/comparison`, `docs/specs/roadmap`, `nextorm.slnx`, `Directory.Build.props`, `Directory.Packages.props`, `global.json`, `coverage.settings.xml`) is byte-identical to `T` (probe 1: 0 changed names, exit 0; probe 2: 0 porcelain entries incl. untracked) ⇒ evidence reuse is valid and no repeat regression/container sweep was performed. | artifacts/pdca/D225/rv3/{manifest.json,evidence.json,logs/manifest-validate.log,logs/evidence-validate.log,logs/drift-check.log}
 - 2026-10-14 19:03 UTC | DO | revision r=4 | iteration 1/3 | **DO→CHECK handoff**: rv3 evidence frozen; E01–E07 all `met` in `$A3/manifest.json` (no `open` row, so PASS is not blocked by the manifest); rv2 artifacts were re-referenced, never rewritten; the corrected `git diff --check` was re-run after the status freeze (`logs/diff-check-final.log`, exit 0, empty output) so the receipt covers the frozen `$S`; CHECK budget remaining **1** (owner CHECK). | artifacts/pdca/D225/rv3/manifest.json
 - Notice (r=4, recorded for CHECK, not treated as disqualifying drift): 37 working-tree entries differ from `T`; apart from `$S` and the gitignored `$A3/**`, all 36 are outside the T225 footprint and outside the evaluated evidence domain (`.opencode/**`, `AGENTS.md`, `examples/**`, `docs/assets/**`, `docs/ru/assets/**`, other tasks' status files, `artifacts/pdca/D218-*/**`, untracked BenchmarkDotNet output, `docs/specs/status/evidence/**`). None was authored by this DO, and the newest such mtime (`2026-10-14 20:51:35 +0500`, i.e. `15:51:35 UTC`) predates the r=3 boundary sweep (`18:45 UTC`), so the retained receipts already evaluated that same content. Evidence: `artifacts/pdca/D225/rv3/logs/drift-check.log`.
+- 2026-10-14 19:12 UTC | CHECK | revision r=4 | iteration 1/3 | CHECK verdict: PASS — E01–E07 met, C1–C8 met, no mandatory row open; budget 2/2 consumed; E01/E06/E07 provenance holds closed by normalization (9/9, 0 drift, no edits); rv2→rv3 E02 supersession accepted with every C5 preserved. | artifacts/pdca/D225/rv3/check/normalization.log
+- 2026-10-14 19:12 UTC | ACT | revision r=4 | cycle N=1 CLOSED | status finalized; milestone 1.0.9-rc3; issue #225 closed.
+
+## ACT — out-of-scope findings routed (record only; do NOT create issues, do NOT add tasks, do NOT edit any other file)
+
+1. New-task candidate (milestone 1.0.9-rc3, deduplicate first): product XML doc src/nextorm.core/Builders/EntityBuilder.cs:730-732 still states a composite-junction many-to-many "(carried by issue #223) is rejected with NotSupportedException", contradicting the delivered behaviour and JoinIntoCompositeJunctionRejectionTests.cs:113. Outside the T225 16-file footprint; not a T225 defect.
+2. Deferred with trigger: docs/specs/comparison/evidence-01-eager-load-gaps.md and docs/specs/roadmap/evidence-01-eager-loading-single-query-api.md retain historical composite-key / composite-junction / SingleQuery residual claims; trigger — refresh/supersede before either is reused as current capability evidence.
+3. New-task candidate (milestone 1.0.9-rc3, deduplicate first): audit docs/specs/roadmap/sql-capabilities-gap-analysis.md:30,730 "implicit joins (slice C) remain open" against delivered declared-navigation behaviour; stale-current candidate, no established T225 contradiction.
