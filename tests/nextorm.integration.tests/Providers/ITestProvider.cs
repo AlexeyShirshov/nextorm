@@ -186,6 +186,15 @@ public interface ITestProvider
     /// </summary>
     bool SupportsTupleIn => true;
 
+    /// <summary>
+    /// True when the provider's driver reports a DML affected-row total through
+    /// <c>DbDataReader.RecordsAffected</c> for the raw/procedure and batch surfaces. PostgreSQL, SQL
+    /// Server, MySQL/MariaDB and SQLite do (measured in D226 D1); the ClickHouse driver reports <c>0</c>
+    /// for every statement, so the shared known-total assertions are skipped there and the shared
+    /// sentinel case is not asserted for it.
+    /// </summary>
+    bool SupportsAffectedRowMetadata => true;
+
     void EnsureSeeded();
 
     IDataContext CreateContext();

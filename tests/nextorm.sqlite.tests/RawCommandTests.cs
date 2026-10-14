@@ -1092,4 +1092,94 @@ public class RawCommandTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void Dml_RecordsAffected_IsSentinelUntilRelease_ThenTheDriverTotal()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var result = ctx.ExecuteRaw("delete from raw_orders where id = 1");
+
+            // A live reader is not a completed statement: only the release publishes the total.
+            result.RecordsAffected.Should().Be(-1);
+
+            result.Dispose();
+
+            // One row deleted; repeated reads are idempotent and never touch the released reader.
+            result.RecordsAffected.Should().Be(1);
+            result.RecordsAffected.Should().Be(1);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task DmlAsync_RecordsAffected_IsCapturedByAsyncRelease()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            await using var result = await ctx.ExecuteRawAsync(
+                "delete from raw_orders where id = 2",
+                [],
+                TestContext.Current.CancellationToken);
+
+            result.RecordsAffected.Should().Be(-1);
+
+            await result.DisposeAsync();
+
+            result.RecordsAffected.Should().Be(1);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Dml_RecordsAffected_IsCapturedWhenOutputParametersCloseTheReader()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // Accessing the outputs closes the reader (the CloseReader release path) without disposing
+            // the result, so the total has to be published there too.
+            var result = ctx.ExecuteRaw("delete from raw_orders where id = 1");
+
+            result.OutputParameters.Should().BeEmpty();
+            result.RecordsAffected.Should().Be(1);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Query_RecordsAffected_KeepsTheSentinelAfterRelease()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            using var result = ctx.ExecuteRaw("select id from raw_orders");
+
+            result.Read<int>().Should().HaveCount(2);
+
+            result.Dispose();
+
+            // A SELECT has no affected-row metadata: the sentinel survives the release.
+            result.RecordsAffected.Should().Be(-1);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
 }

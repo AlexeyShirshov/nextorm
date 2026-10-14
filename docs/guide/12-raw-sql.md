@@ -329,7 +329,7 @@ The statement text is passed through verbatim and is **not** put through the que
 
 > **Why `ProcedureParameter` and not a params object?** `WithSql`, `PrepareFromSql` and `FromSql` go through the query planner, so they also accept the planner's params-object convention: a plain object whose public instance properties become named parameters, in property order (`new { id = 1 }`). `ExecuteRaw` deliberately bypasses the planner - the text is sent verbatim and nothing enumerates an object's properties - so a parameter must be declared explicitly, by name. `ProcedureParameter` is that explicit descriptor, and it is a superset of a bare input value: besides `Name` and `Value` it carries the ADO.NET `Direction`, `DbType`, `Size` and `TypeName`, and the table-valued rows of `Table<T>`, so the same shape also serves output and return parameters and `ExecuteProcedure`. An anonymous object could only ever express inputs.
 
-`ProcedureResult` holds the command and its reader open until disposed. On SQL Server **without MARS**, an open reader blocks every other command on the same connection, so dispose the result before issuing another command on the context.
+`ProcedureResult` holds the command and its reader open until disposed. On SQL Server **without MARS**, an open reader blocks every other command on the same connection, so dispose the result before issuing another command on the context. The provider's affected-row total is captured when that reader is released; see [Rows affected (`RecordsAffected`)](#rows-affected-recordsaffected).
 
 ### Disposal
 
@@ -339,6 +339,24 @@ The statement text is passed through verbatim and is **not** put through the que
 using var result = dataContext.ExecuteRaw("delete from simple_entity where id = @id", [new ProcedureParameter("id", 7)]);
 // no Read call: the statement returns no result set
 ```
+
+### Rows affected (`RecordsAffected`)
+
+A [`ProcedureResult`](xref:NextORM.Core.ProcedureResult) also exposes the provider's affected-row total:
+
+```csharp
+// ProcedureResult
+public int RecordsAffected { get; }
+```
+
+* **Value.** The number of rows the command's DML statements affected, as reported by the driver - including `0` for a statement that changed nothing. It is `-1` when the command has no affected-row metadata (a query such as a plain `SELECT`) or when the value is not available yet.
+* **When it is populated.** The total is captured when the reader is released: by `Dispose`/`DisposeAsync` (sync or async), or implicitly when `OutputParameters`/`ReturnValue` closes the reader on first access. While the reader is still open the property stays `-1` - a partial read is **not** a completion signal, and the getter never reads a live reader. Read the property once the result has been read to the end or disposed.
+* **Early `Dispose` is fine.** Disposing before every result set has been read still captures the total, because the capture happens at release and does not depend on how far the sets were read. For a command whose driver reports a total, the only way to keep the `-1` sentinel is to never release the reader (an undisposed result).
+* **Never throws, never resets.** The getter returns the cached `int` and never touches the reader, so it is safe before, during and after disposal and does not throw once the result has been disposed; a repeated `Dispose` or repeated access keeps the captured value and never resets it.
+* **Not a row or set count.** It is the driver's DML total, not the number of rows materialised by `Read<T>()` and not the number of result sets; nextorm does not sum statements or count read rows, and there is no per-statement API.
+* **ClickHouse.** Its driver does not report a meaningful DML total: it returns `0` for both DML and queries, so `0` there is the driver's value rather than a row count. Stored procedures and the other unsupported shapes still throw `NotSupportedException` as described below.
+
+A result returned by [`ExecuteProcedure`](#stored-procedures-executeprocedure) exposes the same property.
 
 ### DML and DDL
 

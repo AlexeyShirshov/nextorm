@@ -668,4 +668,35 @@ public class RawResultSetTraversalTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void ReadSets_DmlAmongSets_ExposesOneDriverTotalAfterDispose()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var result = ctx.ExecuteRaw(
+                "create table rs_ra (id integer); " +
+                "insert into rs_ra (id) values (1),(2); " +
+                "update rs_ra set id = id + 10 where id <= 1; " +
+                "select id from rs_ra order by id");
+
+            // The traversal consumes the column-bearing set; the DML sets carry no columns and are skipped.
+            result.Should().ContainSingle();
+
+            result.RecordsAffected.Should().Be(-1);
+
+            result.Dispose();
+
+            // The SQLite driver reports one total for the command's DML statements (2 inserted +
+            // 1 updated = 3) rather than only the last statement's count; the value is the driver's,
+            // never a sum computed by nextorm.
+            result.RecordsAffected.Should().Be(3);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
 }

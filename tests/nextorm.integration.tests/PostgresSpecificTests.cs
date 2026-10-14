@@ -2134,6 +2134,41 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ExecuteProcedure_Dml_ShouldKeepTheRecordsAffectedSentinel()
+    {
+        var ctx = _sut.DataProvider;
+        var proc = "p_raw_ra_" + Guid.NewGuid().ToString("N")[..12];
+        var id = RawProcedureKey();
+
+        Execute(ctx, $"create procedure {proc}(in p_id int, in p_name text) language plpgsql as $$ begin insert into delete_entity (id, name, age) values (p_id, p_name, 1); end; $$");
+
+        try
+        {
+            var result = ctx.ExecuteProcedure(
+                proc,
+                [
+                    new ProcedureParameter("p_id", id, DbType: DbType.Int32),
+                    new ProcedureParameter("p_name", "proc-ra"),
+                ]);
+
+            result.RecordsAffected.Should().Be(-1);
+
+            result.Dispose();
+
+            // Npgsql exposes no affected-row total for a CALL of a procedure that itself performs the
+            // DML (measured on the real driver during T226), so the sentinel is the driver's value for
+            // this path; the DML total of a direct statement is covered by the shared raw suite.
+            result.RecordsAffected.Should().Be(-1);
+
+            ctx.From<IDeleteEntity>().Where(x => x.Id == id).Select(x => x.Name).ToList().Should().Equal("proc-ra");
+        }
+        finally
+        {
+            Execute(ctx, $"drop procedure if exists {proc}");
+        }
+    }
+
+    [Fact]
     public void ExecuteRaw_FunctionViaSelect_ShouldReturnValue()
     {
         // PostgreSQL functions are not procedures: Npgsql's CommandType.StoredProcedure generates

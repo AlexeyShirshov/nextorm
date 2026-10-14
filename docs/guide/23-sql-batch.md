@@ -217,9 +217,12 @@ select id, status from orders
 | Member | Effect |
 |---|---|
 | `ResultSetCount` | The number of result sets the batch produced. |
+| `RecordsAffected` | The driver's affected-row total for the whole batch, or `-1` when the batch has no affected-row metadata. |
 | `Read<TResult>()` | Returns the next set positionally, in the order the queries were added; each set is read once. |
 
 `Read<TResult>()` is typed: the requested type must match the projected type of the next query, otherwise it throws `InvalidOperationException` **without consuming the set**; reading past the last set throws `InvalidOperationException` as well. Enumerating the result and the positional `Read<TResult>()` cannot be mixed — either usage throws `InvalidOperationException`. `BatchResult` is **eager** and owns no reader or connection — every set is buffered before `Execute()` returns, so it is not disposable and does not stream. That buffering is the only difference from the streaming `ProcedureResult`; the cursor surface and the one-shot traversal rules are identical — see [Multiple result sets](12-raw-sql.md#multiple-result-sets) for the full cursor contract.
+
+`RecordsAffected` is one **driver total for the whole batch**: the rows affected by all of its DML statements together, whether they travelled as a native `DbBatch` or as a `;`-joined command. It is not `ResultSetCount`, not the number of materialised rows and not a sum nextorm computes, and there is no per-statement breakdown. The batch is eager, so the value is already fixed when `Execute()`/`ExecuteAsync()` returns; the getter owns no reader, never touches a database and is safe to read at any time. As with [`ProcedureResult`](12-raw-sql.md#rows-affected-recordsaffected), `-1` means the total is unknown or the metadata is unavailable (a batch whose statements are pure queries), while `0` is a real total from a DML that changed nothing. ClickHouse rejects batches outright (see [Provider support](#provider-support)).
 
 For a batch with a single result the `Query<TResult>` terminal still renders without executing through `BatchQuery<TResult>.ToSql()`, and the multi-result `AddQuery`/`Execute` form renders the whole batch without executing through `BatchBuilder.ToSql()` — both render the same text that execution runs, and `BatchBuilder.ToSql()` requires at least one result step (it throws `InvalidOperationException` otherwise).
 

@@ -513,4 +513,59 @@ public class BatchMultipleResultTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void Execute_SideEffectBatch_ExposesOneDriverRecordsAffected_NotTheResultSetCount()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var result = ctx.CreateBatchBuilder()
+                .Update(ctx.CreateUpdateBuilder<IBatchMixedEntity>().Set(x => x.Label, "updated").Where(x => x.Id == 1))
+                .AddQuery(ctx.From<IBatchMixedEntity>().OrderBy(x => x.Id).Select(x => x.Label))
+                .AddQuery(ctx.From<IBatchMixedEntity>().Where(x => x.Id == 2).Select(x => x.Label))
+                .Execute();
+
+            result.ResultSetCount.Should().Be(2);
+
+            // The returned rows are retained once, so a substitution of the total by the returned-row
+            // count cannot pass silently: the batch returns 3 rows over 2 result sets.
+            var firstSet = result.Read<string>();
+            var secondSet = result.Read<string>();
+            firstSet.Should().Equal("updated", "two");
+            secondSet.Should().Equal("two");
+            (firstSet.Count + secondSet.Count).Should().Be(3);
+
+            // The affected total is the driver's DML total: exactly one row was updated, which is
+            // neither the number of returned rows (3) nor the number of result sets (2). Asserted
+            // after the row assertions so a row-count substitution fails HERE, on the total.
+            result.RecordsAffected.Should().Be(1);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_SideEffectBatch_ExposesOneDriverRecordsAffected()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var result = await ctx.CreateBatchBuilder()
+                .Update(ctx.CreateUpdateBuilder<IBatchMixedEntity>().Set(x => x.Label, "async-updated").Where(x => x.Id == 1))
+                .AddQuery(ctx.From<IBatchMixedEntity>().OrderBy(x => x.Id).Select(x => x.Label))
+                .ExecuteAsync(TestContext.Current.CancellationToken);
+
+            result.RecordsAffected.Should().Be(1);
+            result.Read<string>().Should().Equal("async-updated", "two");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
 }

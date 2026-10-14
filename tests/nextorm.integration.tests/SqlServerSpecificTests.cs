@@ -756,6 +756,34 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ExecuteProcedure_Dml_ShouldExposeTheDriverRecordsAffectedAfterRelease()
+    {
+        var ctx = _sut.DataProvider;
+        var proc = "#raw_ra_" + Guid.NewGuid().ToString("N");
+        var id = Random.Shared.Next(1_000_000, int.MaxValue);
+
+        // The procedure inserts exactly one row; the id is embedded so the body needs no parameter.
+        Execute(ctx, $"create procedure {proc} as begin insert into delete_entity (id, name, age) values ({id}, 'proc-ra', 1); end;");
+
+        try
+        {
+            var result = ctx.ExecuteProcedure(proc, []);
+
+            // A live reader is not a completed statement: the total is published on release.
+            result.RecordsAffected.Should().Be(-1);
+
+            result.Dispose();
+
+            result.RecordsAffected.Should().Be(1);
+        }
+        finally
+        {
+            Execute(ctx, $"drop procedure if exists {proc};");
+            Execute(ctx, $"delete from delete_entity where id = {id};");
+        }
+    }
+
+    [Fact]
     public void Procedure_ReadSets_Heterogeneous_OutputsAfterExhaustion()
     {
         var ctx = _sut.DataProvider;

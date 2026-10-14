@@ -44,6 +44,10 @@ internal sealed class ClickHouseTestProvider : ITestProvider
     public bool SupportsBatch => false;
     public bool SupportsStoredProcedures => false;
 
+    // The ClickHouse driver reports 0 for every statement (measured in D226 D1), so the shared
+    // known-total / sentinel assertions do not apply; the provider cannot serve as a DML oracle.
+    public bool SupportsAffectedRowMetadata => false;
+
     /// <summary>ClickHouse emulates a table parameter with a native array expanded server-side with <c>arrayJoin(@p)</c>.</summary>
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => false;

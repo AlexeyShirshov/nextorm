@@ -360,4 +360,82 @@ public abstract partial class CommonTestSuite
 
         ctx.From<IDeleteEntity>().Where(x => x.Id == id).Select(x => x.Id).ToList().Should().BeEmpty();
     }
+
+    [Fact]
+    public void ExecuteRaw_Dml_ShouldExposeTheDriverRecordsAffectedAfterRelease()
+    {
+        Assert.SkipUnless(Provider.SupportsAffectedRowMetadata, "This provider's driver does not report an affected-row total.");
+
+        var ctx = _sut.DataProvider;
+        var id = RawKey();
+
+        using (ctx.ExecuteRaw(
+            "insert into delete_entity (id, name, age) values (@id, @name, @age)",
+            [
+                new ProcedureParameter("id", id),
+                new ProcedureParameter("name", "raw-ra"),
+                new ProcedureParameter("age", 3),
+            ]))
+        {
+        }
+
+        var result = ctx.ExecuteRaw("delete from delete_entity where id = @id", [new ProcedureParameter("id", id)]);
+
+        // A live reader is not a completed statement: the total is published only on release.
+        result.RecordsAffected.Should().Be(-1);
+
+        result.Dispose();
+
+        result.RecordsAffected.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ExecuteRawAsync_Dml_ShouldExposeTheDriverRecordsAffectedAfterAsyncRelease()
+    {
+        Assert.SkipUnless(Provider.SupportsAffectedRowMetadata, "This provider's driver does not report an affected-row total.");
+
+        var ctx = _sut.DataProvider;
+        var id = RawKey();
+        var ct = TestContext.Current.CancellationToken;
+
+        await using (await ctx.ExecuteRawAsync(
+            "insert into delete_entity (id, name, age) values (@id, @name, @age)",
+            [
+                new ProcedureParameter("id", id),
+                new ProcedureParameter("name", "raw-ra-async"),
+                new ProcedureParameter("age", 4),
+            ],
+            ct))
+        {
+        }
+
+        // Released early, without consuming any row: the driver total is still captured.
+        await using var result = await ctx.ExecuteRawAsync(
+            "delete from delete_entity where id = @id",
+            [new ProcedureParameter("id", id)],
+            ct);
+
+        result.RecordsAffected.Should().Be(-1);
+
+        await result.DisposeAsync();
+
+        result.RecordsAffected.Should().Be(1);
+    }
+
+    [Fact]
+    public void ExecuteRaw_Query_ShouldKeepTheRecordsAffectedSentinel()
+    {
+        Assert.SkipUnless(Provider.SupportsAffectedRowMetadata, "This provider's driver does not report an affected-row total.");
+
+        var ctx = _sut.DataProvider;
+
+        using var result = ctx.ExecuteRaw("select @v as value", [new ProcedureParameter("v", 1)]);
+
+        result.Read<int>().Should().Equal(1);
+
+        result.Dispose();
+
+        // A query has no affected-row metadata, so the sentinel survives the release.
+        result.RecordsAffected.Should().Be(-1);
+    }
 }
