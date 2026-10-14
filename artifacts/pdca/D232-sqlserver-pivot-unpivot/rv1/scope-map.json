@@ -11,6 +11,10 @@
   {
    "exit": 0,
    "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-03.json"
+  },
+  {
+   "exit": 0,
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-04.json"
   }
  ],
  "reports": [
@@ -25,6 +29,10 @@
   {
    "exit": 0,
    "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-03.json"
+  },
+  {
+   "exit": 0,
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-04.json"
   }
  ]
 }

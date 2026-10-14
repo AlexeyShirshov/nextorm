@@ -347,6 +347,9 @@ No #232 acceptance requirement is deferred.
 - UNPIVOT requires both roles; repeated consistent references reuse a role, conflicting identifiers fail.
 - No new capability flag; the existing dialect capability/renderer remains authoritative.
 - Supplemental provenance/fulfillment checking is explicit because the existing validator ignores additional evidence fields.
+- **D-04 clarification (adjudicated by the planner; `r=1`, `rv=1`, no replan, D-04 stays active, not superseded).** The current design is kept: the typed overloads return `EntityBuilder<TShape>` over a derived source and callers consume it through an explicit `Select(...)` before materialization. No `_exp`/select-list initialization is added to support projection-free terminals. The recorded assumption is:
+  > Typed Pivot/Unpivot return an EntityBuilder&lt;TShape&gt; over a derived source. Callers must provide an explicit Select(...) before materialization; direct terminal materialization of that returned builder is outside T232's acceptance scope. This does not relax typed Where/OrderBy/Select, derived-source/CTE composition, SQL/data parity, or the declared shape and cell-type requirements.
+- **D-04 oracle corrections (same adjudication, one axis each).** (1) The typed-consumption remark must state only the local typed-consumption contract — the unsupported generalization "like every derived source in the engine" is removed (evidence does not establish it). (2) The cell-type oracle asserts the declared cell member's CLR type (reflected off the returned shape), not the anonymous `TShape`; the `decimal?` expectation is kept. (3) The whole-source oracle is split: the marker-free `new { M = m }` input hits the first-firing `ArgumentException` (`requires at least one value`, `PivotProjectionRewriter.cs:54-57`) and is asserted as rejection of a projection without a value declaration; a separate case with a valid `PivotValues.Value<T>` declaration plus a prohibited whole-source reference targets the real direct-member branch (`PivotProjectionRewriter.cs:329-330`).
 
 ## Next plan
 
@@ -398,6 +401,16 @@ Preserve CRLF; normalize only edited text files. Collection commit only after th
 - Build/docs warnings `src/Directory.Build.props:11`; `Directory.Build.props:40`.
 - Containers `docs/specs/status/collection-1.0.9-todo.md:127,147`; performance reference `docs/specs/performance/acceptance-benchmarks.md:37-45,63-95`.
 
+## Defect history
+
+Stable **defect key** → observed revisions/attempts, number of fixes applied, evidence pointers, latest recurrence/outcome. Session/`task_id` resets never clear this table or `r`/`n`.
+
+| Defect key | Observed in | Fixes applied | Evidence | Status |
+|---|---|---|---|---|
+| `D232-D04-typed-remark-overgeneralized` | r=1 / n=1 | 1 | `tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs:17-24` | fixed in D-04 (test green) |
+| `D232-D04-celltype-oracle-anonymous-shape` | r=1 / n=1 | 1 | `tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs:244-274` | fixed in D-04 (test green) |
+| `D232-D04-wholesource-oracle-wrong-branch` | r=1 / n=1 | 1 | `tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs:431-457`; `src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs:54-57,329-330` | fixed in D-04 (both cases green) |
+
 ## Progress log
 
 ```text
@@ -420,4 +433,14 @@ Preserve CRLF; normalize only edited text files. Collection commit only after th
 2026-10-14 19:38:45Z | DO | revision r=1 | iteration n=1/3 | D-03 filtered run: 5/5 passed (0 failed, 0 skipped) — markers in ordinary Select, runtime throw, exact-definition recognition, fail-closed unbound source | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D03-marker-tests.out
 2026-10-14 19:38:45Z | DO | revision r=1 | iteration n=1/3 | D-03 regression: solution gate `dotnet build nextorm.slnx -c Debug` = 0 warnings / 0 errors; legacy Pivot/Unpivot + eager guards 26/26 passed (0 failed, 0 skipped) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D03-legacy-regression.out
 2026-10-14 19:38:45Z | DO | revision r=1 | iteration n=1/3 | D-03 brief/report validators exit 0; scopes exit 0; unit state D-03=done, D-04..D-07=pending | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-03.json
+2026-10-14 20:01:33Z | DO | revision r=1 | iteration n=1/3 | D-04 in progress: planner adjudication recorded — current design kept (typed overloads return EntityBuilder<TShape> over a derived source; callers pass an explicit Select(...) before materialization; no projection-free terminal support added), r=1/rv=1, D-04 stays active | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
+2026-10-14 20:18:11Z | DO | revision r=1 | iteration n=1/3 | D-04 repair 1: typed-consumption remark retargeted to the local contract; the unsupported "like every derived source in the engine" generalization removed (defect D232-D04-typed-remark-overgeneralized, 1 fix) | tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs
+2026-10-14 20:18:11Z | DO | revision r=1 | iteration n=1/3 | D-04 repair 2: the cell-type oracle reflects the declared shape member (decimal? kept) instead of returning the anonymous TShape (defect D232-D04-celltype-oracle-anonymous-shape, 1 fix) | tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs
+2026-10-14 20:18:11Z | DO | revision r=1 | iteration n=1/3 | D-04 repair 3: whole-source oracle split — the marker-free input asserts the first-firing ArgumentException (requires at least one value; PivotProjectionRewriter.cs:54-57), a new case with a valid PivotValues.Value<T> plus a whole-source reference targets the real direct-member branch (PivotProjectionRewriter.cs:329-330) (defect D232-D04-wholesource-oracle-wrong-branch, 1 fix) | tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs
+2026-10-14 20:18:11Z | DO | revision r=1 | iteration n=1/3 | D-04 C04 typed-overload build (src/nextorm.sqlserver): 0 warnings / 0 errors | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.out
+2026-10-14 20:18:11Z | DO | revision r=1 | iteration n=1/3 | D-04 filtered run: 25/25 passed (0 failed, 0 skipped) — exact typed SQL, shapes/cells, grouping-name resolution, composition, cache locality, every fail-closed guard | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D04-typed-pivot-tests.out
+2026-10-14 20:18:11Z | DO | revision r=1 | iteration n=1/3 | D-04 C06 legacy regression: 51/51 passed (0 failed, 0 skipped) — legacy Pivot/Unpivot + eager guards + typed subset, frozen legacy exact SQL preserved | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D04-legacy-regression.out
+2026-10-14 20:18:11Z | DO | revision r=1 | iteration n=1/3 | D-04 shared six-provider capability case authored (CommonTestSuite.T232Pivot.cs + T232PivotFixture.cs with MySQL/PostgreSQL/SQLite inherited and MariaDB/ClickHouse re-pinned hosts); non-container smoke: 6 selected / 1 passed (SQLite — the assertion executes) / 5 skipped (SQL Server is the supporting provider; PostgreSQL, MySQL, ClickHouse, MariaDB are container-unavailable here, C07 runs them in D-05) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D04-capability-smoke.out
+2026-10-14 20:18:11Z | DO | revision r=1 | iteration n=1/3 | D-04 solution gate `dotnet build nextorm.slnx -c Debug` = 0 warnings / 0 errors; integration capability files compile 0/0 | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D04-gate-solution-build.out
+2026-10-14 20:18:11Z | DO | revision r=1 | iteration n=1/3 | D-04 brief/report validators exit 0; scopes exit 0 (all eight briefs/reports exit 0); unit state D-04=done, D-05..D-07=pending | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-04.json
 ```

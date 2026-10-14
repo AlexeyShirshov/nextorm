@@ -1,0 +1,84 @@
+{
+ "unit": "D-04",
+ "scope": {
+  "projects": [
+   "src/nextorm.sqlserver",
+   "tests/nextorm.sqlserver.tests",
+   "tests/nextorm.integration.tests"
+  ],
+  "selectors": [
+   "FullyQualifiedName~T232TypedPivotTests"
+  ],
+  "files": [
+   "src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs",
+   "src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs",
+   "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs",
+   "tests/nextorm.integration.tests/CommonTestSuite.T232Pivot.cs",
+   "tests/nextorm.integration.tests/T232PivotFixture.cs"
+  ],
+  "rationale": "D-04 adds the approved typed Pivot/Unpivot provider overloads, the provider-local reference-identity rewriter and their SQL Server exact-SQL/guard tests. The compiled inputs are the public extension file, the internal provider rewriter, the typed SQL test class and the new shared six-provider capability case (a CommonTestSuite partial plus its fixture/hosts); the affected subset is the typed class in the SQL Server test project (compile gate: the SQL Server and integration test project builds). The adjudicated oracle repairs (typed-consumption remark, reflected cell type, split whole-source/no-value cases) touch only the same test file; no core file, dialect, builder, project/package file or existing test is touched.",
+  "rebuild": "affected",
+  "boundary": "Single post-implementation boundary planned for D-07 (full per-project sweeps plus the six-provider container run, C11). D-04 records only its affected subset plus the solution-wide build gate as provenance. The container execution of the shared capability case is C07/D-05; a non-container SQLite-only smoke of that case is recorded as supporting evidence, not as the boundary."
+ },
+ "amendments": [],
+ "executions": [
+  {
+   "command": [
+    "dotnet",
+    "build",
+    "src/nextorm.sqlserver/nextorm.sqlserver.csproj",
+    "-c",
+    "Debug"
+   ],
+   "phase": "inner",
+   "source_revision": "8f0d8309",
+   "artifact_revision": "8f0d8309",
+   "exit_code": 0,
+   "selected_count": 1,
+   "note": "C04 affected build of the typed overloads + provider rewriter (including src/nextorm.core): 0 warnings / 0 errors; artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.out"
+  },
+  {
+   "command": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--filter",
+    "FullyQualifiedName~T232TypedPivotTests"
+   ],
+   "phase": "inner",
+   "source_revision": "8f0d8309",
+   "artifact_revision": "8f0d8309",
+   "exit_code": 0,
+   "selected_count": 25,
+   "note": "typed SQL Server PIVOT/UNPIVOT cases after the adjudicated oracle repairs: 25 total / 25 passed / 0 failed / 0 skipped (exact typed SQL, shapes/cells, grouping-name resolution, composition, cache locality, every fail-closed guard); artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D04-typed-pivot-tests.out"
+  }
+ ],
+ "supporting_evidence": [
+  {
+   "kind": "legacy-regression",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D04-legacy-regression.out",
+   "exit": 0,
+   "note": "C06 legacy Pivot/Unpivot + eager guards plus the typed subset (compound '|' filter, so not a report execution): 51 total / 51 passed / 0 failed / 0 skipped; the frozen legacy exact SQL is preserved"
+  },
+  {
+   "kind": "capability-smoke",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D04-capability-smoke.out",
+   "exit": 0,
+   "note": "shared six-provider capability case, no containers: 6 selected — SQLite accepts and passes (the assertion executes), SQL Server skipped as the supporting provider, PostgreSQL/MySQL/ClickHouse/MariaDB skipped for container unavailability; the container run is C07/D-05"
+  },
+  {
+   "kind": "compile-gate",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D04-integration-capability-build.out",
+   "exit": 0,
+   "note": "tests/nextorm.integration.tests builds the new capability files: 0 warnings / 0 errors"
+  },
+  {
+   "kind": "build-gate",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/D04-gate-solution-build.out",
+   "exit": 0,
+   "note": "dotnet build nextorm.slnx -c Debug = 0 warnings / 0 errors on the final D-04 tree"
+  }
+ ]
+}
