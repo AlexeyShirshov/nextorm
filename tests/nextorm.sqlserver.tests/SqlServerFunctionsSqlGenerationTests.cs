@@ -608,9 +608,138 @@ public class SqlServerFunctionsSqlGenerationTests
         functions.Supports("formatmessage").Should().BeTrue();
         functions.Supports("isnumeric").Should().BeTrue();
         functions.Supports("str").Should().BeTrue();
+        functions.Supports("next_value_for").Should().BeTrue();
+        functions.Supports("nextval").Should().BeTrue();
         functions.Supports("log10").Should().BeFalse();
+
+        functions.Render("next_value_for", ["[s]"]).Should().Be("next value for [s]");
+        functions.Render("nextval", ["[s]"]).Should().Be("next value for [s]");
 
         var act = () => functions.Render("unknown", ["x"]);
         act.Should().Throw<NotSupportedException>().WithMessage("*unknown*not supported*");
     }
+
+    [Fact]
+    [Trait("Issue", "218")]
+    public void SequenceFunctions_ShouldEmitNextValueForForBothAliases()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var viaLongName = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            V = SqlFunctions.SqlServer.next_value_for("order_seq")
+        }));
+        viaLongName.Should().Contain("next value for [order_seq]");
+
+        var viaAlias = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            V = SqlFunctions.SqlServer.nextval("order_seq")
+        }));
+        viaAlias.Should().Contain("next value for [order_seq]");
+    }
+
+    [Fact]
+    [Trait("Issue", "218")]
+    public void SequenceFunctions_ShouldRenderBothComponentsSeparately()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            V = SqlFunctions.SqlServer.next_value_for("dbo.order_seq")
+        }));
+
+        sql.Should().Contain("next value for [dbo].[order_seq]");
+        sql.Should().NotContain("[dbo.order_seq]");
+    }
+
+    [Fact]
+    [Trait("Issue", "218")]
+    public void SequenceFunctions_ShouldEscapeClosingBracketAndNotEscapeTheIdentifier()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var spaces = SqlOf(ctx, e.Select(x => new
+        {
+            V = SqlFunctions.SqlServer.next_value_for("order seq")
+        }));
+        spaces.Should().Contain("next value for [order seq]");
+
+        // A raw ']' is doubled, so the name text cannot terminate the bracket-quoted identifier.
+        var escaping = SqlOf(ctx, e.Select(x => new
+        {
+            V = SqlFunctions.SqlServer.next_value_for("x]; drop table t; --")
+        }));
+        escaping.Should().Contain("next value for [x]]; drop table t; --]");
+        escaping.Should().NotContain("next value for [x]; drop table t; --]");
+    }
+
+    [Fact]
+    [Trait("Issue", "218")]
+    public void SequenceFunctions_Guards_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        const string Name128 =
+            "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" +
+            "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa";
+        const string Name129 = Name128 + "a";
+
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for(null!) })), "*next_value_for*constant*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for("") })), "*next_value_for*empty*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for("a..b") })), "*next_value_for*empty component*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for("s.a.b") })), "*next_value_for*at most two*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for(Name129) })), "*next_value_for*exceed*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.nextval(null!) })), "*nextval*constant*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.nextval("s.a.b") })), "*nextval*at most two*");
+
+        // The 128-character boundary itself is accepted (one component, quoted).
+        var atBoundary = SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for(Name128) }));
+        atBoundary.Should().Contain("next value for [" + Name128 + "]");
+    }
+
+    [Fact]
+    [Trait("Issue", "218")]
+    public void SequenceFunctions_NonConstantName_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var captured = "order_seq";
+
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for(captured) })), "*next_value_for*constant*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for(x.String!) })), "*next_value_for*constant*");
+        AssertUnsupported(() => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.nextval(captured) })), "*nextval*constant*");
+    }
+
+    [Fact]
+    [Trait("Issue", "218")]
+    public void SequenceFunctions_ShouldNotBindNameAsParameter()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            V = SqlFunctions.SqlServer.next_value_for("order_seq")
+        }));
+
+        sql.Should().Contain("next value for [order_seq]");
+        sql.Should().NotContain("@p");
+    }
+
+    [Fact]
+    [Trait("Issue", "218")]
+    public void SequenceFunctions_ShouldReturnLong()
+    {
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.next_value_for))!.ReturnType
+            .Should().Be(typeof(long));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.nextval))!.ReturnType
+            .Should().Be(typeof(long));
+    }
+
+    private static void AssertUnsupported(Action act, string pattern)
+        => act.Should().Throw<NotSupportedException>().WithMessage(pattern);
 }

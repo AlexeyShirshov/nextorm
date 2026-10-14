@@ -234,6 +234,29 @@ The cross-provider boolean predicates `contains`/`freetext` render `CONTAINS`/`F
 `SqlFunctions.IKeyRankRow<TKey>`; see
 [Table-valued functions](../11-table-valued-functions.md#built-in-table-functions).
 
+## Sequences
+
+`SqlFunctions.SqlServer.next_value_for(sequence)` and its alias `nextval(sequence)` render the T-SQL
+`NEXT VALUE FOR` expression and return CLR `long`. The name must be a constant string written as one
+component (`name`) or two (`schema.name`); the components are bracket-quoted separately and an embedded
+`]` is doubled, so the name text cannot escape the identifier:
+
+```csharp
+var rows = dataContext.From<IOrderEntity>()
+    .Select(x => new { Next = SqlFunctions.SqlServer.next_value_for("dbo.order_seq") })
+    .ToList();
+```
+
+```sql
+select next value for [dbo].[order_seq] as [Next] from order_entity
+```
+
+Non-constant or captured names (a column, a captured local, `null`/`default`) throw
+`NotSupportedException` before any SQL is emitted, and the name is never bound as a parameter. The
+sequence itself is an ordinary database object created with DDL; only its next value is exposed (no
+session `currval`/`lastval`, no value-returning `setval`). See
+[Sequences](../../scalar-functions/10-sequences.md#sql-server).
+
 ## T-SQL scalar functions
 
 `SqlFunctions.SqlServer` exposes the T-SQL-only scalar functions through

@@ -1,0 +1,14 @@
+f8caa690a32794ef6b87724f2d7cbf0f28647f9f
+ M docs/assets/diagrams/nextorm-command-execution.svg
+ M docs/ru/assets/diagrams/nextorm-command-execution.svg
+ M docs/specs/status/D216-row-locking-1.md
+ M examples/Directory.Packages.props
+ M examples/README.md
+ M examples/VERIFICATION.md
+ M examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs
+ M examples/nextorm.examples.clickhouse.analytics/README.md
+ M examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+ M examples/nextorm.examples.mssql.adventureworks/README.md
+ M examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs
+ M examples/nextorm.examples.postgres.aviasales/README.md
+?? docs/specs/status/evidence/pivot-typed-overload/

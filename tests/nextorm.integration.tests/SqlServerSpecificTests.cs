@@ -2421,6 +2421,130 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         public int Total { get; set; }
     }
 
+    [Fact]
+    [Trait("Issue", "218")]
+    public void NextValueFor_BothAliases_ShouldAdvanceTheSameSequence()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop sequence if exists dbo.t218_seq_aliases");
+        Execute(ctx, "create sequence dbo.t218_seq_aliases as bigint start with 10 increment by 5 no cycle");
+
+        try
+        {
+            // Both markers render the same NEXT VALUE FOR over one sequence object; the bare name and
+            // the schema-qualified name reach the same object in dbo. Each query is limited to the
+            // single seeded row by its WHERE clause (TOP/OFFSET are forbidden with NEXT VALUE FOR).
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => SqlFunctions.SqlServer.next_value_for("t218_seq_aliases")).ToList()[0].Should().Be(10L);
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => SqlFunctions.SqlServer.nextval("t218_seq_aliases")).ToList()[0].Should().Be(15L);
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => SqlFunctions.SqlServer.next_value_for("dbo.t218_seq_aliases")).ToList()[0].Should().Be(20L);
+        }
+        finally
+        {
+            Execute(ctx, "drop sequence if exists dbo.t218_seq_aliases");
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "218")]
+    public void NextValueFor_SameSequenceRepeatedInOneRow_ShouldReturnTheSameValue()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop sequence if exists dbo.t218_seq_row");
+        Execute(ctx, "create sequence dbo.t218_seq_row as bigint start with 1 increment by 1 no cycle");
+
+        try
+        {
+            var row = _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => new
+            {
+                A = SqlFunctions.SqlServer.next_value_for("t218_seq_row"),
+                B = SqlFunctions.SqlServer.nextval("t218_seq_row")
+            }).ToList()[0];
+
+            // T-SQL generates one value per row even when the same sequence is referenced twice.
+            row.A.Should().Be(1L);
+            row.B.Should().Be(1L);
+        }
+        finally
+        {
+            Execute(ctx, "drop sequence if exists dbo.t218_seq_row");
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "218")]
+    public void NextValueFor_BigintBoundaries_ShouldMaterializeAsLong()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop sequence if exists dbo.t218_seq_max");
+        Execute(ctx, "drop sequence if exists dbo.t218_seq_min");
+        Execute(ctx, "create sequence dbo.t218_seq_max as bigint start with 9223372036854775807 increment by 1 no cycle");
+        Execute(ctx, "create sequence dbo.t218_seq_min as bigint start with -9223372036854775808 increment by -1 no cycle");
+
+        try
+        {
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => SqlFunctions.SqlServer.next_value_for("t218_seq_max")).ToList()[0].Should().Be(long.MaxValue);
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => SqlFunctions.SqlServer.next_value_for("t218_seq_min")).ToList()[0].Should().Be(long.MinValue);
+        }
+        finally
+        {
+            Execute(ctx, "drop sequence if exists dbo.t218_seq_max");
+            Execute(ctx, "drop sequence if exists dbo.t218_seq_min");
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "218")]
+    public void NextValueFor_ExhaustedNoCycle_ShouldErrorNotWrapAround()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop sequence if exists dbo.t218_seq_exhaust");
+        Execute(ctx, "create sequence dbo.t218_seq_exhaust as bigint start with 9223372036854775806 increment by 1 no cycle");
+
+        try
+        {
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => SqlFunctions.SqlServer.next_value_for("t218_seq_exhaust")).ToList()[0].Should().Be(9223372036854775806L);
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => SqlFunctions.SqlServer.next_value_for("t218_seq_exhaust")).ToList()[0].Should().Be(long.MaxValue);
+
+            // NO CYCLE: the next call must fail on the server and must not wrap around to the minimum.
+            var act = () => _sut.SimpleEntity
+                .Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.SqlServer.next_value_for("t218_seq_exhaust"))
+                .ToList();
+
+            act.Should().Throw<SqlException>().WithMessage("*sequence*");
+        }
+        finally
+        {
+            Execute(ctx, "drop sequence if exists dbo.t218_seq_exhaust");
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "218")]
+    public void NextValueFor_InWhereClause_ShouldBeRejectedByTheServer()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop sequence if exists dbo.t218_seq_where");
+        Execute(ctx, "create sequence dbo.t218_seq_where as bigint start with 1 increment by 1 no cycle");
+
+        try
+        {
+            // T-SQL forbids NEXT VALUE FOR in a WHERE clause. Our surface declares only value positions
+            // supported, so the marker is passed through and the server rejects the statement — there is
+            // no client-side fallback that could fabricate a value.
+            var act = () => _sut.SimpleEntity
+                .Where(x => SqlFunctions.SqlServer.next_value_for("t218_seq_where") > 0)
+                .Select(x => x.Id)
+                .ToList();
+
+            act.Should().Throw<SqlException>();
+        }
+        finally
+        {
+            Execute(ctx, "drop sequence if exists dbo.t218_seq_where");
+        }
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

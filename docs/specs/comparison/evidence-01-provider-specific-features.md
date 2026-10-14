@@ -118,7 +118,7 @@ $ wc -l src/nextorm.{sqlite,sqlserver,postgres,mysql,mariadb,clickhouse}/*Dialec
 | Named windows / `GROUPS` / `EXCLUDE` / `NTH_VALUE` | no | not overridden (SQL Server has no `WINDOW` clause) | ISqlDialect.cs:340,346,353,325 |
 | Provider-specific aggregate family | yes (native `stdev`/`var`, `string_agg`) | `SupportsStringAgg=true`; `MakeCount` `count_big` | SqlServerDialect.cs:366,629 |
 | Provider-specific scalar library | yes | `SqlFunctions.SqlServer`; `ISqlDialect.SqlServerFunctions` | SqlFunctions.SqlServer.cs:15-327; SqlServerDialect.cs:696; SqlServerDialect.cs:962+ |
-| Sequences (`NEXT VALUE FOR`) | not found | no symbol | see Not found |
+| Sequences (`NEXT VALUE FOR`) | yes | `SqlFunctions.SqlServer.next_value_for(sequence)` / `nextval(sequence)` (CLR `long`) → `next value for [name]` / `[schema].[name]`; gated per name by `ISqlServerFunctions.Supports`/`Render` | SqlFunctions.SqlServer.cs:289-301; SqlServerScalarFunctionTranslator.cs:60,109-111,169; SqlServerDialect.cs:1045,1130 |
 
 ### F3. PostgreSQL (`src/nextorm.postgres/`)
 
@@ -236,18 +236,19 @@ $ wc -l src/nextorm.{sqlite,sqlserver,postgres,mysql,mariadb,clickhouse}/*Dialec
 
 ## Not found
 
-- SQL Server `NEXT VALUE FOR` / sequence access API: searched `docs/connecting-providers/sqlserver.md`,
-  `docs/guide/provider-specific-sql/sqlserver.md`, `src/nextorm.core/Query/SqlFunctions.SqlServer.cs`,
-  `src/nextorm.sqlserver/SqlServerDialect.cs` for `next value for` / `sequence` — only TVP "empty
-  sequence" prose (docs/connecting-providers/sqlserver.md:195,232) matched; no sequence function symbol.
+- ~~SQL Server `NEXT VALUE FOR` / sequence access API~~ — **shipped (#218)**: `SqlFunctions.SqlServer.next_value_for(sequence)` / `nextval(sequence)` (both CLR `long`)
+  render `next value for [name]` / `[schema].[name]` through
+  `ISqlServerFunctions` (`SqlFunctions.SqlServer.cs:289-301`, `SqlServerScalarFunctionTranslator.cs:60,109-111,169`,
+  `SqlServerDialect.cs:1045,1130`); the name must be a compile-time string of one or two nonempty
+  components and is never bound as a parameter.
 - `SupportsTemporalTable` on MySQL (only SQL Server and MariaDB override it).
 - ClickHouse `native JSON` column mapping: explicitly not mapped (docs/connecting-providers/clickhouse.md:235,260-263).
 - PostgreSQL / ClickHouse index hints: `IndexHints` is `null` (not overridden).
 
 ## Open questions
 
-- SQL Server sequence functions (`NEXT VALUE FOR`) may exist outside the searched symbols; not found in
-  the four files above.
+- ~~SQL Server sequence functions (`NEXT VALUE FOR`) may exist outside the searched symbols~~ — resolved (#218):
+  they exist now as `SqlFunctions.SqlServer.next_value_for`/`nextval` (see F2 and Not found above).
 - The ClickHouse server/cluster/file table functions are declared and gated (F6), but their end-to-end
   execution is not exercised by unit SQL-generation tests; the guide marks distributed table functions
   as out of scope (docs/guide/provider-specific-sql/clickhouse.md:258-260).

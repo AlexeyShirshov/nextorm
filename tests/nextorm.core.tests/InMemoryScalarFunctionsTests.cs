@@ -94,6 +94,23 @@ public class InMemoryScalarFunctionsTests
     }
 
     [Fact]
+    [Trait("Issue", "218")]
+    public void SqlServerSequenceFunctions_ShouldThrowBecauseNotSupported()
+    {
+        // The SQL Server sequence markers have no in-memory equivalent; the rewriter must reject them
+        // with a clear message instead of fabricating a value.
+        var nextValueFor = () => _sut.SimpleEntity
+            .Select(it => new { V = SqlFunctions.SqlServer.next_value_for("order_seq") })
+            .ToList();
+        var nextval = () => _sut.SimpleEntity
+            .Select(it => new { V = SqlFunctions.SqlServer.nextval("order_seq") })
+            .ToList();
+
+        nextValueFor.Should().Throw<NotSupportedException>().WithMessage("*next_value_for*not supported*");
+        nextval.Should().Throw<NotSupportedException>().WithMessage("*nextval*not supported*");
+    }
+
+    [Fact]
     public void SqlServerOnlyFunctions182_ShouldThrowBecauseNotSupported()
     {
         // Every one of the 47 SQL Server-only functions added for #182 must fail in memory with a

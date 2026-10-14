@@ -135,6 +135,14 @@ constructors are **not** candidates.
   existing join core; the source-explicit overloads are unchanged. Freeze remains **HELD**: no
   `PublicAPI.Shipped/Unshipped` file is created and the analyzer is not activated by this task.
 
+- **T218 (#218, `docs/specs/status/D218-sqlserver-sequences-1.md`):** SQL Server sequence access adds **2 public
+  members**, both on `SqlFunctions.SqlServer` and both returning CLR `long`:
+  `public long next_value_for(string sequence)` and
+  `public long nextval(string sequence)` (`SqlFunctions.SqlServer.cs:294,301`). Both translate to the same
+  T-SQL `NEXT VALUE FOR`; no other public surface changes (the translator/dialect additions are
+  `internal`). Freeze remains **HELD**: no `PublicAPI.Shipped/Unshipped` file is created and the analyzer is
+  not activated by this task.
+
 ## Overlap / footprint
 
 - Последовательность: API-результаты #209/#211/#212/#213 → T53 D1–D6; их Unshipped-правки (если уже

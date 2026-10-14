@@ -1041,7 +1041,8 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "type_id" or "type_name" or
         "filegroup_id" or "filegroup_name" or "file_id" or "file_idex" or "file_name" or
         "current_timezone" or "current_timezone_id" or "formatmessage" or "getansinull" or
-        "isdate" or "isnumeric" or "parsename" or "publishingservername" or "str";
+        "isdate" or "isnumeric" or "parsename" or "publishingservername" or "str" or
+        "next_value_for" or "nextval";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1124,6 +1125,9 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "parsename" => $"parsename({args[0]}, {args[1]})",
         "publishingservername" => "publishingservername()",
         "str" => $"str({string.Join(", ", args)})",
+        // The sequence name arrives already bracket-quoted by the translator; both aliases render the
+        // same T-SQL sequence expression.
+        "next_value_for" or "nextval" => $"next value for {args[0]}",
         _ => throw new NotSupportedException($"The {name} function is not supported by SQL Server.")
     };
 

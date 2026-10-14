@@ -1,0 +1,4 @@
+== git diff --check (T218 footprint) ==
+diff-check-exit=0
+== rg docs/specs in public docs ==
+rg-exit=1

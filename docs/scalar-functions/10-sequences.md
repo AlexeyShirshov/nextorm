@@ -2,15 +2,14 @@
 
 Server-side value generators: sequences advance and read, and UUID generators mint unique
 identifiers. Neither has a single portable spelling, because the providers do not offer the same set
-of operations. For sequences, PostgreSQL and MariaDB are supported today and SQL Server is tracked in
-[#218](https://github.com/AlexeyShirshov/nextorm/issues/218).
+of operations. For sequences, PostgreSQL, MariaDB and SQL Server are supported today.
 
-| Operation | PostgreSQL | MariaDB |
-|---|---|---|
-| Next value | `SqlFunctions.Postgres.nextval(seq)` | `SqlFunctions.MySql.nextval(seq)` / `next_value_for(seq)` |
-| Set the next value | `SqlFunctions.Postgres.setval(seq, value)` | `SqlFunctions.MySql.setval(seq, value)` |
-| Current value (session) | `SqlFunctions.Postgres.currval(seq)` | — |
-| Last value (session/connection) | `SqlFunctions.Postgres.lastval()` | `SqlFunctions.MySql.lastval(seq)` |
+| Operation | PostgreSQL | MariaDB | SQL Server |
+|---|---|---|---|
+| Next value | `SqlFunctions.Postgres.nextval(seq)` | `SqlFunctions.MySql.nextval(seq)` / `next_value_for(seq)` | `SqlFunctions.SqlServer.next_value_for(seq)` / `nextval(seq)` |
+| Set the next value | `SqlFunctions.Postgres.setval(seq, value)` | `SqlFunctions.MySql.setval(seq, value)` | — |
+| Current value (session) | `SqlFunctions.Postgres.currval(seq)` | — | — |
+| Last value (session/connection) | `SqlFunctions.Postgres.lastval()` | `SqlFunctions.MySql.lastval(seq)` | — |
 
 ## PostgreSQL
 
@@ -58,9 +57,31 @@ value.
 
 ## SQL Server
 
-Not supported yet. SQL Server reads a sequence through `NEXT VALUE FOR <sequence>`; it has no
-session-scoped `currval`/`lastval` and no value-returning `setval` (its equivalent is the DDL
-`ALTER SEQUENCE ... RESTART WITH`). Tracked in
+SQL Server reads a sequence through `NEXT VALUE FOR`, exposed by
+`SqlFunctions.SqlServer.next_value_for(sequence)` and its alias `nextval(sequence)` (both return CLR
+`long`). The name must be a constant string naming one object, written as either one component
+(`name`) or two (`schema.name`); each component is bracket-quoted separately with an embedded `]`
+doubled, so raw name text cannot escape the identifier:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.SqlServer.next_value_for(sequence)` | `next value for [sequence]` |
+| `SqlFunctions.SqlServer.next_value_for("dbo.sequence")` | `next value for [dbo].[sequence]` |
+| `SqlFunctions.SqlServer.nextval(sequence)` | `next value for [sequence]` |
+
+```csharp
+var rows = dataContext.From<IOrderEntity>()
+    .Select(x => new { Id = SqlFunctions.SqlServer.next_value_for("order_seq") })
+    .ToList();
+```
+
+A non-constant or captured name (a column, a captured local, `default`/`null`) is rejected with
+`NotSupportedException`, and the name is never bound as a SQL parameter — it is an identifier, not a
+value. SQL Server has no session-scoped `currval`/`lastval` and no value-returning `setval` (its
+equivalent is the DDL `ALTER SEQUENCE ... RESTART WITH`), so only the next value is exposed. These
+names require a provider that reports them through
+[`ISqlDialect.SqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions); every other
+provider rejects them. Tracked in
 [#218](https://github.com/AlexeyShirshov/nextorm/issues/218).
 
 ## UUID generators

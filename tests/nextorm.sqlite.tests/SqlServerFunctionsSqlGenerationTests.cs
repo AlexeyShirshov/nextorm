@@ -26,6 +26,8 @@ public class SqlServerFunctionsSqlGenerationTests
         AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.difference(x.String, "a") }), "difference");
         AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.unicode(x.String) }), "unicode");
         AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.nchar(65) }), "nchar");
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for("order_seq") }), "next_value_for");
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.nextval("order_seq") }), "nextval");
     }
 
     [Fact]

@@ -284,6 +284,23 @@ namespace NextORM.Core;
         public Guid? newsequentialid() => default!;
 
         /// <summary>
+        /// <c>NEXT VALUE FOR [sequence]</c>: the next value of the named sequence object (SQL Server
+        /// 2012+). <paramref name="sequence"/> must be a constant string naming one object, written as
+        /// either one component (<c>[name]</c>) or two (<c>[schema].[name]</c>); each component is
+        /// bracket-quoted with an embedded <c>]</c> doubled, and the name is never bound as a SQL
+        /// parameter. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public long next_value_for(string sequence) => default!;
+
+        /// <summary>
+        /// <c>nextval(sequence)</c>: an alias of <see cref="next_value_for(string)"/> that renders the
+        /// same <c>NEXT VALUE FOR [sequence]</c> expression (SQL Server 2012+). Requires a provider
+        /// that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public long nextval(string sequence) => default!;
+
+        /// <summary>
         /// <c>json_array(value, ...)</c>: constructs a JSON array text from the arguments. Requires a
         /// provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server
         /// 2022+).

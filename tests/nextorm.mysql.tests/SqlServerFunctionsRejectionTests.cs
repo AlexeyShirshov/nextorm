@@ -48,6 +48,8 @@ public class SqlServerFunctionsRejectionTests
         AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.rand() }), "rand");
         AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.rand(0) }), "rand");
         AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.stuff(x.String, 1, 2, "x") }), "stuff");
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.next_value_for("order_seq") }), "next_value_for");
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.nextval("order_seq") }), "nextval");
     }
 
     [Fact]

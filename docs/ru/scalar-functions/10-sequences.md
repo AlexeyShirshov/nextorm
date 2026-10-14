@@ -2,16 +2,15 @@
 
 Серверные генераторы значений: последовательности продвигаются и читаются, а генераторы UUID создают
 уникальные идентификаторы. Ни у того, ни у другого нет единого переносимого написания, потому что
-набор операций у провайдеров различается. Для последовательностей сегодня поддержаны PostgreSQL и
-MariaDB, а SQL Server отслеживается в
-[#218](https://github.com/AlexeyShirshov/nextorm/issues/218).
+набор операций у провайдеров различается. Для последовательностей сегодня поддержаны PostgreSQL,
+MariaDB и SQL Server.
 
-| Операция | PostgreSQL | MariaDB |
-|---|---|---|
-| Следующее значение | `SqlFunctions.Postgres.nextval(seq)` | `SqlFunctions.MySql.nextval(seq)` / `next_value_for(seq)` |
-| Задать следующее значение | `SqlFunctions.Postgres.setval(seq, value)` | `SqlFunctions.MySql.setval(seq, value)` |
-| Текущее значение (сессия) | `SqlFunctions.Postgres.currval(seq)` | — |
-| Последнее значение (сессия/соединение) | `SqlFunctions.Postgres.lastval()` | `SqlFunctions.MySql.lastval(seq)` |
+| Операция | PostgreSQL | MariaDB | SQL Server |
+|---|---|---|---|
+| Следующее значение | `SqlFunctions.Postgres.nextval(seq)` | `SqlFunctions.MySql.nextval(seq)` / `next_value_for(seq)` | `SqlFunctions.SqlServer.next_value_for(seq)` / `nextval(seq)` |
+| Задать следующее значение | `SqlFunctions.Postgres.setval(seq, value)` | `SqlFunctions.MySql.setval(seq, value)` | — |
+| Текущее значение (сессия) | `SqlFunctions.Postgres.currval(seq)` | — | — |
+| Последнее значение (сессия/соединение) | `SqlFunctions.Postgres.lastval()` | `SqlFunctions.MySql.lastval(seq)` | — |
 
 ## PostgreSQL
 
@@ -60,9 +59,32 @@ var rows = dataContext.From<IOrderEntity>()
 
 ## SQL Server
 
-Пока не поддержано. SQL Server читает последовательность через `NEXT VALUE FOR <sequence>`; у него нет
-привязанных к сессии `currval`/`lastval` и нет возвращающего значение `setval` (его эквивалент — DDL
-`ALTER SEQUENCE ... RESTART WITH`). Отслеживается в
+SQL Server читает последовательность через `NEXT VALUE FOR`, это открывают
+`SqlFunctions.SqlServer.next_value_for(sequence)` и его псевдоним `nextval(sequence)` (оба возвращают
+CLR `long`). Имя должно быть константной строкой, называющей один объект, и записываться либо одной
+компонентой (`name`), либо двумя (`schema.name`); каждая компонента квотируется квадратными скобками
+отдельно, а встроенная `]` удваивается, поэтому сырой текст имени не может выйти за пределы
+идентификатора:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.SqlServer.next_value_for(sequence)` | `next value for [sequence]` |
+| `SqlFunctions.SqlServer.next_value_for("dbo.sequence")` | `next value for [dbo].[sequence]` |
+| `SqlFunctions.SqlServer.nextval(sequence)` | `next value for [sequence]` |
+
+```csharp
+var rows = dataContext.From<IOrderEntity>()
+    .Select(x => new { Id = SqlFunctions.SqlServer.next_value_for("order_seq") })
+    .ToList();
+```
+
+Не-константное или захваченное имя (колонка, захваченная локальная переменная, `default`/`null`)
+отклоняется с `NotSupportedException`, и имя никогда не привязывается как SQL-параметр — это
+идентификатор, а не значение. У SQL Server нет привязанных к сессии `currval`/`lastval` и нет
+возвращающего значение `setval` (его эквивалент — DDL `ALTER SEQUENCE ... RESTART WITH`), поэтому
+открыто только следующее значение. Эти имена требуют провайдера, который сообщает их через
+[`ISqlDialect.SqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions); все прочие
+провайдеры их отклоняют. Отслеживается в
 [#218](https://github.com/AlexeyShirshov/nextorm/issues/218).
 
 ## Генераторы UUID

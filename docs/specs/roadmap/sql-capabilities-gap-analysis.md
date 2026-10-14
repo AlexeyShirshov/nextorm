@@ -573,7 +573,11 @@ to the ledger on 2026-09-29.
     `CURRENT_TIMEZONE(_ID)`/`FORMATMESSAGE`/`GETANSINULL`/`ISDATE`/`ISNUMERIC`/`PARSENAME`/
     `PUBLISHINGSERVERNAME`/`STR`). All are exposed through `SqlServerFunctions` /
     `ISqlServerFunctions`, gated per name; `ASCII`/`CHAR`/`TRANSLATE` inherit from `CommonFunctions`
-    (item 36), and `LOG10` stays on `Math.Log10`. Shipped:
+    (item 36), and `LOG10` stays on `Math.Log10`. Sequence access ships as
+    `SqlFunctions.SqlServer.next_value_for(sequence)` / `nextval(sequence)` (both CLR `long`), rendering
+    `NEXT VALUE FOR [name]` / `NEXT VALUE FOR [schema].[name]` with each component bracket-quoted and an
+    embedded `]` doubled; a non-constant/captured name is rejected ([#218](https://github.com/AlexeyShirshov/nextorm/issues/218)).
+    Shipped:
     [`guide/provider-specific-sql/sqlserver.md`](../../guide/provider-specific-sql/sqlserver.md#t-sql-scalar-functions) (+RU).
 39. **MySQL built-in function gaps — <span style="color:green">done</span>.** `SqlFunctions.MySql` (`MySqlFunctions`) is new;
     `FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`,
@@ -585,7 +589,9 @@ to the ledger on 2026-09-29.
     `REGEXP_SUBSTR`, `NVL`/`NVL2`, `ADD_MONTHS`, `MONTHS_BETWEEN`, `TO_CHAR`/`TO_DATE`/`TO_NUMBER`, `KDF`,
     `XXH3`/`XXH32`, `JSON_DETAILED`/`JSON_COMPACT` and the sequence functions (`NEXT VALUE FOR`/`NEXTVAL`/
     `SETVAL`/`LASTVAL`) are members of `SqlFunctions.MySql`, supported per name by
-    `MariaDbDialect.MySqlFunctions` and rejected by MySQL. See
+    `MariaDbDialect.MySqlFunctions` and rejected by MySQL. SQL Server exposes the same `NEXT VALUE FOR`
+    through `SqlFunctions.SqlServer.next_value_for`/`nextval`
+    ([#218](https://github.com/AlexeyShirshov/nextorm/issues/218)). See
     [MySQL and MariaDB-specific SQL](../../guide/provider-specific-sql/mysql.md#mariadb).
 41. **SQLite built-in function gaps — <span style="color:green">shipped</span>.** `SqlFunctions.Sqlite` (`SqliteFunctions`) plus
     `ISqlDialect.SqliteFunctions` cover the core scalars (`printf`/`format`, `hex`/`unhex`,

@@ -1,0 +1,389 @@
+{
+  "task": "T218 (#218) SQL Server sequences (NEXT VALUE FOR) \u2014 cross-provider",
+  "tree": "b5dc7eb833db291490c872fc9e20cdf352ee8030",
+  "contract_rv": 1,
+  "status_file": "docs/specs/status/D218-sqlserver-sequences-1.md",
+  "required_rows": [
+    "E00",
+    "E01",
+    "E02",
+    "E03",
+    "E04",
+    "E05",
+    "E06",
+    "E07",
+    "E08",
+    "E09",
+    "E10"
+  ],
+  "rows": [
+    {
+      "id": "E00",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "brief",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/brief.json",
+          "command": "python3 scripts/validate_inner_loop.py brief artifacts/pdca/D218-sqlserver-sequences/rv1/brief.json",
+          "exit": 0
+        },
+        {
+          "kind": "status",
+          "path": "docs/specs/status/D218-sqlserver-sequences-1.md",
+          "value": "plan r=1, cycle N=1, contract rv=1; progress log appended in DO"
+        },
+        {
+          "kind": "source-identity",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/source-identity.txt",
+          "value": "HEAD f8caa690a32794ef6b87724f2d7cbf0f28647f9f (plan base_commit 58025147 is an earlier snapshot: mechanical drift, no design impact)"
+        },
+        {
+          "kind": "footprint",
+          "path": "docs/specs/status/D53-public-api-freeze-1.md",
+          "value": "#218 T53 freeze candidates registered, freeze HELD"
+        }
+      ]
+    },
+    {
+      "id": "E01",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "build",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/boundary-build.log",
+          "command": "dotnet build nextorm.slnx -c Debug",
+          "exit": 0,
+          "value": "0 Warning(s), 0 Error(s)"
+        },
+        {
+          "kind": "source",
+          "path": "src/nextorm.core/Query/SqlFunctions.SqlServer.cs",
+          "value": "next_value_for :294, nextval :301 \u2014 both public, both CLR long"
+        },
+        {
+          "kind": "source",
+          "path": "src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs",
+          "value": "FunctionNames :60; SequenceFunctions :90-96; dispatch :109-111; EmitSequence :169; QuoteSequenceName :192 (NUL/empty/>128/>2 guards)"
+        },
+        {
+          "kind": "source",
+          "path": "src/nextorm.sqlserver/SqlServerDialect.cs",
+          "value": "ISqlServerFunctions.Supports :1045; Render :1130 => 'next value for {args[0]}'"
+        },
+        {
+          "kind": "unchanged-verified",
+          "path": "src/nextorm.core/Visitors/NormSqlTranslator.cs",
+          "value": ":453 dispatch already sufficient \u2014 NOT changed"
+        },
+        {
+          "kind": "unchanged-verified",
+          "path": "src/nextorm.core/DataContext/InMemoryScalarFunctionRewriter.cs",
+          "value": ":155-156 SqlServerFunctions guard kept \u2014 NOT changed"
+        }
+      ]
+    },
+    {
+      "id": "E02",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/boundary-sqlserver.log",
+          "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build --filter FullyQualifiedName~NextORM.SqlServer.Tests",
+          "exit": 0,
+          "value": "succeeded 859 / failed 0 / skipped 0"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/inner-test-sqlserver-scalargen.log",
+          "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsSqlGenerationTests",
+          "exit": 0,
+          "value": "succeeded 33 / failed 0 / skipped 0"
+        },
+        {
+          "kind": "test-case",
+          "path": "tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs",
+          "value": "SequenceFunctions_ShouldEmitNextValueForForBothAliases; ..._ShouldRenderBothComponentsSeparately => 'next value for [order_seq]', 'next value for [dbo].[order_seq]'"
+        }
+      ]
+    },
+    {
+      "id": "E03",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/inner-test-postgres-rejection.log",
+          "command": "dotnet test tests/nextorm.postgres.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsRejectionTests",
+          "exit": 0,
+          "value": "succeeded 3 / failed 0"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/inner-test-mysql-rejection.log",
+          "command": "dotnet test tests/nextorm.mysql.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsRejectionTests",
+          "exit": 0,
+          "value": "succeeded 3 / failed 0"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/inner-test-mariadb-rejection.log",
+          "command": "dotnet test tests/nextorm.mariadb.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsRejectionTests",
+          "exit": 0,
+          "value": "succeeded 3 / failed 0"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/inner-test-clickhouse-rejection.log",
+          "command": "dotnet test tests/nextorm.clickhouse.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsRejectionTests",
+          "exit": 0,
+          "value": "succeeded 3 / failed 0"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/inner-test-sqlite-scalargen.log",
+          "command": "dotnet test tests/nextorm.sqlite.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsSqlGenerationTests",
+          "exit": 0,
+          "value": "succeeded 8 / failed 0"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/inner-test-core-inmemory.log",
+          "command": "dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~InMemoryScalarFunctionsTests",
+          "exit": 0,
+          "value": "succeeded 19 / failed 0"
+        },
+        {
+          "kind": "regression",
+          "path": "docs/specs/roadmap/sql-capabilities-gap-analysis.md",
+          "value": "PostgreSQL/MariaDB sequence surfaces unchanged; full postgres/mariadb suites green in the boundary sweep (940/300, 0 failed)"
+        }
+      ]
+    },
+    {
+      "id": "E04",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/inner-test-sqlserver-scalargen.log",
+          "exit": 0,
+          "value": "SequenceFunctions_Guards_ShouldThrow; ..._NonConstantName_ShouldThrow; ..._ShouldEscapeClosingBracketAndNotEscapeTheIdentifier; ..._ShouldNotBindNameAsParameter"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/inner-test-core-inmemory.log",
+          "exit": 0,
+          "value": "SqlServerSequenceFunctions_ShouldThrowBecauseNotSupported"
+        },
+        {
+          "kind": "assertion",
+          "path": "tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs",
+          "value": "null/''/'a..b'/'s.a.b'/129-char rejected; 128-char accepted; 'x]; drop table t; --' => 'next value for [x]]; drop table t; --]'; captured local + x.String! rejected; no '@p' parameter"
+        }
+      ]
+    },
+    {
+      "id": "E05",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "integration",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/boundary-integration-sqlserverspecific.log",
+          "command": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class nextorm.integration.tests.SqlServerSpecificTests -noColor",
+          "exit": 0,
+          "value": "Total 96 / Errors 0 / Failed 0 / Skipped 0 (container 1b5207b30a62, reuse)"
+        },
+        {
+          "kind": "integration-cases",
+          "path": "tests/nextorm.integration.tests/SqlServerSpecificTests.cs",
+          "value": "NextValueFor_BothAliases_ShouldAdvanceTheSameSequence (10/15/20, bare+schema); NextValueFor_SameSequenceRepeatedInOneRow_ShouldReturnTheSameValue (1/1); NextValueFor_BigintBoundaries_ShouldMaterializeAsLong (long.MaxValue/MinValue)"
+        }
+      ]
+    },
+    {
+      "id": "E06",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "integration",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/boundary-integration-sqlserverspecific.log",
+          "exit": 0,
+          "value": "NextValueFor_ExhaustedNoCycle_ShouldErrorNotWrapAround => SqlException '*sequence*' (no wraparound); NextValueFor_InWhereClause_ShouldBeRejectedByTheServer => SqlException (T-SQL forbids NEXT VALUE FOR in WHERE; no client fallback)"
+        },
+        {
+          "kind": "scope-review",
+          "path": "src/nextorm.core/Query/SqlFunctions.SqlServer.cs",
+          "value": "only next_value_for/nextval added \u2014 no DDL, no portable API, no OVER, no other sequence/session functions"
+        }
+      ]
+    },
+    {
+      "id": "E07",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "docs",
+          "path": "docs/scalar-functions/10-sequences.md",
+          "value": "SQL Server section: supported, both aliases, 1-2 components, ]] escaping, non-constant rejection (+RU)"
+        },
+        {
+          "kind": "docs",
+          "path": "docs/guide/provider-specific-sql/sqlserver.md",
+          "value": "ADDED 'Sequences' subsection (no pre-existing sequence text to replace) (+RU); no TOC page/renumber/articles file"
+        },
+        {
+          "kind": "registry",
+          "path": "docs/specs/roadmap/sql-function-coverage-gap.md",
+          "value": "SQL Server summary row + per-provider section record sequence support"
+        },
+        {
+          "kind": "registry",
+          "path": "docs/specs/roadmap/sql-capabilities-gap-analysis.md",
+          "value": "\u00a75.38 + \u00a75.40 record SQL Server sequence support"
+        },
+        {
+          "kind": "registry",
+          "path": "docs/specs/comparison/evidence-01-provider-specific-features.md",
+          "value": "F2 row now 'yes' with file:line; Not-found/Open-questions NEXT VALUE FOR records resolved"
+        },
+        {
+          "kind": "docs-check",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log",
+          "command": "git diff --check -- <T218 footprint>",
+          "exit": 0,
+          "value": "no whitespace errors; rg 'docs/specs' in public docs => no matches; CRLF verified"
+        },
+        {
+          "kind": "docfx",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docfx.log",
+          "command": "dotnet docfx docs/docfx.json",
+          "exit": 0,
+          "value": "Build succeeded with warning (2 pre-existing source-generator duplicate-source warnings; no invalid xrefs)"
+        }
+      ]
+    },
+    {
+      "id": "E08",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "benchmark",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/d0-acceptance-baseline.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
+          "exit": 0,
+          "value": "7 cases executed (PRE-CHANGE baseline)"
+        },
+        {
+          "kind": "benchmark",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/d5-acceptance-post.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --anyCategories=acceptance",
+          "exit": 0,
+          "value": "7 cases executed (POST)"
+        },
+        {
+          "kind": "benchmark-comparison",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/d5-acceptance-post.log",
+          "value": "baseline->post means: 2.297->2.188 ms, 60.55->57.51 ms, 1.948->1.936 ms, 561.7->551.9 us, 882.3->882.7 us, 1876.9->1807.9 us, 2.033->1.875 ms; cached/prepared ratio 2.13 -> 2.05 (no cached-path regression)"
+        },
+        {
+          "kind": "benchmark",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/d0-t218-preparation-baseline.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=t218-preparation",
+          "exit": 0,
+          "value": "control Prepare_Control_Patindex_Uncached 879.5 us / 784.39 KB (PRE-CHANGE baseline)"
+        },
+        {
+          "kind": "benchmark",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/d5-t218-preparation-post.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --anyCategories=t218-preparation",
+          "exit": 0,
+          "value": "5 cases (control + 4 sequence); control 640.0 us / 789.47 KB => 72.8% of baseline mean (<=105%), allocations +0.65% with identical Gen0 (measurement noise)"
+        },
+        {
+          "kind": "benchmark-sequence-cases",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/d5-t218-preparation-post.log",
+          "value": "absolute POST (no invented baseline): NextValueFor_Bare 621.5 us/766.82 KB; NextValueFor_Schema 635.6 us/792.21 KB; Nextval_Bare 681.6 us/760.96 KB; Nextval_Schema 629.3 us/787.52 KB"
+        },
+        {
+          "kind": "notice",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/d0-acceptance-baseline.log",
+          "value": "NOTICE 1: 8 [BenchmarkCategory(\"acceptance\")] attributes exist in source, but the runtime category yields exactly 7 cases (the #168 SqlServerBufferedNumericAcceptanceBenchmark is compiled only with -p:AcceptanceBenchmark=true) \u2014 the plan's '7' holds; the new t218-preparation cases are NOT in the acceptance category"
+        }
+      ]
+    },
+    {
+      "id": "E09",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "coverage",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/coverage-report.log",
+          "command": "dotnet tool run reportgenerator -reports:tests/coverage/coverage.cobertura.xml -targetdir:tests/coverage/report -reporttypes:'Html;TextSummary;Cobertura' -riskhotspotassemblyfilters:'+nextorm.*'",
+          "exit": 0
+        },
+        {
+          "kind": "coverage-summary",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/coverage/report/Summary.txt",
+          "value": "Line coverage 87.3% (51827/59307); Branch coverage 79.9% (28045/35061); Method 78.4%; assemblies 4"
+        },
+        {
+          "kind": "coverage-classes",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/coverage/report/Summary.txt",
+          "value": "SqlServerScalarFunctionTranslator 93.4%; SqlServerSpecificFunctions 100%; nextorm.core 87.5%"
+        },
+        {
+          "kind": "coverage-collect",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/coverage-collect.log",
+          "command": "dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml \"dotnet test --no-build --verbosity normal\"",
+          "exit": 0,
+          "value": "total 11592 / failed 0 / succeeded 8519 / skipped 3073 (integration providers skipped: no DOCKER_HOST in the coverage run)"
+        },
+        {
+          "kind": "coverage-copy",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/coverage",
+          "value": "cp -a tests/coverage (C9c, exit 0)"
+        },
+        {
+          "kind": "thresholds",
+          "path": "coverage.settings.xml",
+          "value": "included assemblies nextorm.{core,sqlite,postgres,sqlserver}; line 87.3 >= 85, branch 79.9 >= 75"
+        }
+      ]
+    },
+    {
+      "id": "E10",
+      "status": "met",
+      "evidence": [
+        {
+          "kind": "report",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
+          "command": "python3 scripts/validate_inner_loop.py report artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
+          "exit": 0,
+          "value": "31 executions (17 inner / 14 boundary)"
+        },
+        {
+          "kind": "manifest",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
+          "command": "python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
+          "exit": 0
+        },
+        {
+          "kind": "freeze",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/../source-identity.txt",
+          "value": "frozen tree b5dc7eb833db291490c872fc9e20cdf352ee8030 = git write-tree of read-tree HEAD + the 20-path product/test/docs footprint (status file excluded); generated evidence under artifacts/ is gitignored and bound by path+exit"
+        },
+        {
+          "kind": "boundary-sweep",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs",
+          "value": "per-project namespace-scoped SQL-gen sweep, all exit 0: core 2493, sqlserver 859, postgres 940, mariadb 300, mysql 418, sqlite 1703 (1 pre-existing opt-in LOB probe skip), clickhouse 697; solution build 0/0"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Frozen at DO->CHECK; append-only during CHECK.",
+    "tree = git write-tree over read-tree HEAD + the product/test/docs footprint (status file and generated artifacts excluded).",
+    "Evidence revisions: baseline benchmarks f8caa690-pre-d1; all post-change runs f8caa690 (HEAD f8caa690a32794ef6b87724f2d7cbf0f28647f9f)."
+  ]
+}

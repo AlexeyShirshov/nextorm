@@ -1,0 +1,557 @@
+{
+  "unit": "T218 (#218) SQL Server sequences (NEXT VALUE FOR) \u2014 DO evidence",
+  "scope": {
+    "projects": [
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.core.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~SqlServerFunctionsSqlGenerationTests",
+      "FullyQualifiedName~CrossProviderScalarSqlGenerationTests",
+      "FullyQualifiedName~SqlServerFunctionsRejectionTests"
+    ],
+    "files": [
+      "src/nextorm.core/Query/SqlFunctions.SqlServer.cs",
+      "src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs",
+      "src/nextorm.sqlserver/SqlServerDialect.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "before DO->CHECK: full SQL-gen sweep over all six provider test projects (tests/nextorm.{core,sqlserver,postgres,mariadb,mysql,sqlite,clickhouse}.tests, each exit 0) + SQL Server integration with DOCKER_HOST (-class nextorm.integration.tests.SqlServerSpecificTests) + acceptance benchmark + coverage collect",
+    "rationale": "adds markers/translation/rendering on the SQL Server scalar-function path; affected SQL-gen assertions live in the SQL Server scalar-generation and cross-provider rejection suites; the boundary sweep must cover all providers because the capability gate is per-name/per-dialect"
+  },
+  "amendments": [
+    {
+      "reason": "D2 also adds an in-memory rejection test in tests/nextorm.core.tests/InMemoryScalarFunctionsTests.cs (the SqlServerFunctions rewriter guard path); the affected filtered subset must include it.",
+      "added_selectors": [
+        "FullyQualifiedName~InMemoryScalarFunctionsTests"
+      ],
+      "validated_before_run": true
+    },
+    {
+      "reason": "the boundary SQL-gen sweep is executed per provider project (serialised, one process each) so that each provider suite has its own real exit code; every run is scoped to that project's single root namespace, which keeps it filtered (the comprehensive-sweep cap is not exceeded) while covering the whole SQL-generation suite of the project.",
+      "added_selectors": [
+        "FullyQualifiedName~NextORM.Core.Tests",
+        "FullyQualifiedName~NextORM.SqlServer.Tests",
+        "FullyQualifiedName~NextORM.Postgres.Tests",
+        "FullyQualifiedName~NextORM.MariaDb.Tests",
+        "FullyQualifiedName~NextORM.MySql.Tests",
+        "FullyQualifiedName~NextORM.Sqlite.Tests",
+        "FullyQualifiedName~NextORM.ClickHouse.Tests"
+      ],
+      "validated_before_run": true
+    }
+  ],
+  "executions": [
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 2493
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.sqlserver.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 859
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.postgres.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 940
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.mysql.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 418
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.mariadb.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 300
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.clickhouse.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 697
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 1703
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 96
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 5
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~InMemoryScalarFunctionsTests"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 19
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlserver.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsSqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 33
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlserver.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~CrossProviderScalarSqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 2
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.postgres.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsRejectionTests"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 3
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.mysql.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsRejectionTests"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 3
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.mariadb.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsRejectionTests"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 3
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.clickhouse.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsRejectionTests"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 3
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsSqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "f8caa690-affected",
+      "artifact_revision": "f8caa690-affected",
+      "exit_code": 0,
+      "selected_count": 8
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "nextorm.slnx",
+        "-c",
+        "Debug"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690",
+      "artifact_revision": "f8caa690",
+      "exit_code": 0,
+      "selected_count": 8519
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~NextORM.Core.Tests"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690",
+      "artifact_revision": "f8caa690",
+      "exit_code": 0,
+      "selected_count": 2493
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlserver.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~NextORM.SqlServer.Tests"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690",
+      "artifact_revision": "f8caa690",
+      "exit_code": 0,
+      "selected_count": 859
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.postgres.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~NextORM.Postgres.Tests"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690",
+      "artifact_revision": "f8caa690",
+      "exit_code": 0,
+      "selected_count": 940
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.mariadb.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~NextORM.MariaDb.Tests"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690",
+      "artifact_revision": "f8caa690",
+      "exit_code": 0,
+      "selected_count": 300
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.mysql.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~NextORM.MySql.Tests"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690",
+      "artifact_revision": "f8caa690",
+      "exit_code": 0,
+      "selected_count": 418
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~NextORM.Sqlite.Tests"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690",
+      "artifact_revision": "f8caa690",
+      "exit_code": 0,
+      "selected_count": 1703
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.clickhouse.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~NextORM.ClickHouse.Tests"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690",
+      "artifact_revision": "f8caa690",
+      "exit_code": 0,
+      "selected_count": 697
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-class",
+        "nextorm.integration.tests.SqlServerSpecificTests",
+        "-noColor"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690",
+      "artifact_revision": "f8caa690",
+      "exit_code": 0,
+      "selected_count": 96
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690-pre-d1",
+      "artifact_revision": "f8caa690-pre-d1",
+      "exit_code": 0,
+      "selected_count": 7
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--no-build",
+        "--",
+        "--anyCategories=acceptance"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690",
+      "artifact_revision": "f8caa690",
+      "exit_code": 0,
+      "selected_count": 7
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=t218-preparation"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690-pre-d1",
+      "artifact_revision": "f8caa690-pre-d1",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--no-build",
+        "--",
+        "--anyCategories=t218-preparation"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690",
+      "artifact_revision": "f8caa690",
+      "exit_code": 0,
+      "selected_count": 5
+    },
+    {
+      "command": [
+        "dotnet",
+        "tool",
+        "run",
+        "dotnet-coverage",
+        "collect",
+        "-s",
+        "coverage.settings.xml",
+        "-f",
+        "cobertura",
+        "-o",
+        "tests/coverage/coverage.cobertura.xml",
+        "dotnet test --no-build --verbosity normal"
+      ],
+      "phase": "boundary",
+      "source_revision": "f8caa690",
+      "artifact_revision": "f8caa690",
+      "exit_code": 0,
+      "selected_count": 8519
+    }
+  ],
+  "notes": [
+    "Baseline benchmark executions carry the pre-change revision marker (f8caa690-pre-d1); all post-change executions carry f8caa690.",
+    "Inner test executions are the affected, filtered subset; the boundary is the serialised per-project SQL-gen sweep (namespace-scoped filters, amendment 2) plus the solution build, the DOCKER_HOST SQL Server integration class, the acceptance/preparation benchmark runs and the coverage collect.",
+    "Full command output: artifacts/pdca/D218-sqlserver-sequences/rv1/logs/*.log"
+  ]
+}

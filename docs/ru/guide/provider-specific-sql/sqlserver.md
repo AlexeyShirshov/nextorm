@@ -235,6 +235,30 @@ SQL Server поддерживает только метод `System`
 оценку `RANK` через `SqlFunctions.IKeyRankRow<TKey>`; см.
 [Табличные функции](../11-table-valued-functions.md#встроенные-табличные-функции).
 
+## Последовательности
+
+`SqlFunctions.SqlServer.next_value_for(sequence)` и его псевдоним `nextval(sequence)` рендерят
+T-SQL-выражение `NEXT VALUE FOR` и возвращают CLR `long`. Имя должно быть константной строкой,
+записанной одной компонентой (`name`) или двумя (`schema.name`); компоненты квотируются квадратными
+скобками отдельно, а встроенная `]` удваивается, поэтому текст имени не может выйти за пределы
+идентификатора:
+
+```csharp
+var rows = dataContext.From<IOrderEntity>()
+    .Select(x => new { Next = SqlFunctions.SqlServer.next_value_for("dbo.order_seq") })
+    .ToList();
+```
+
+```sql
+select next value for [dbo].[order_seq] as [Next] from order_entity
+```
+
+Не-константные или захваченные имена (колонка, захваченная локальная переменная, `null`/`default`)
+бросают `NotSupportedException` до генерации SQL, и имя никогда не привязывается как параметр. Сама
+последовательность — обычный объект базы, создаваемый через DDL; открыто только её следующее
+значение (без сессионных `currval`/`lastval` и без возвращающего значение `setval`). См.
+[Последовательности](../../scalar-functions/10-sequences.md#sql-server).
+
 ## Скаляры T-SQL
 
 `SqlFunctions.SqlServer` открывает скалярные функции, специфичные для T-SQL, через
