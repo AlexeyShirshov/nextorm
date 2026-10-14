@@ -1,0 +1,36 @@
+{
+ "amendments": [],
+ "scope": {
+  "boundary": "D-07 is the single post-implementation boundary for T232: C11 full per-project suites (core/sqlite/postgres/sqlserver/mysql/mariadb/clickhouse) plus the six-provider container integration run, C12 candidate coverage over the same boundary, C15 acceptance perf, C16 footprint, C17/C18/C19 sealing. No filtered inner subset is run; the boundary is the one comprehensive sweep.",
+  "files": [
+   "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+   "docs/specs/status/collection-1.0.9-todo.md",
+   "docs/specs/design/API-NAMING-REVIEW.md",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/candidate/coverage.xml",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/branch-delta.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/acceptance-candidate.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf-comparison.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/footprint.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/manifest.json"
+  ],
+  "projects": [
+   "tests/nextorm.core.tests",
+   "tests/nextorm.sqlite.tests",
+   "tests/nextorm.postgres.tests",
+   "tests/nextorm.sqlserver.tests",
+   "tests/nextorm.mysql.tests",
+   "tests/nextorm.mariadb.tests",
+   "tests/nextorm.clickhouse.tests",
+   "tests/nextorm.integration.tests"
+  ],
+  "rationale": "D-07 adds no production scope: it runs the one authorized boundary sweep, measures the candidate coverage/perf and seals the evidence. The recorded executions are the C11 boundary (its per-project suites and the six-provider container run are captured in rv1/boundary.json and logs/boundary-*.out), the C12 coverage candidate and the C15 acceptance perf; the sealed evidence is validated by C17/C18/C19. No compiled file is authored by D-07.",
+  "rebuild": "none",
+  "selectors": [
+   "FullyQualifiedName~T232",
+   "FullyQualifiedName~T232TypedOperators_RespectCapability",
+   "FullyQualifiedName~T232SqlServerTests"
+  ]
+ },
+ "unit": "D-07"
+}

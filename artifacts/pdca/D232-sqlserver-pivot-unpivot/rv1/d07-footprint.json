@@ -1,0 +1,42 @@
+{
+ "captured": "2026-10-14T23:35:31Z",
+ "checks": {
+  "added_foreign": [
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.html"
+  ],
+  "added_foreign_are_generated_benchmark_outputs": true,
+  "any_staged": [],
+  "baseline_foreign_count": 36,
+  "current_foreign_count": 50,
+  "edited_text_files_crlf": {
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/d07_assess.py": true,
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py": true,
+   "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md": true
+  },
+  "foreign_entries_staged": [],
+  "removed_foreign": [
+   "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs"
+  ],
+  "removed_foreign_explained": true,
+  "src_tests_dirty": []
+ },
+ "criterion": [
+  "E232-16",
+  "AC-12"
+ ],
+ "exit": 0
+}

@@ -79,19 +79,78 @@
    "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "build-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.out"
+    },
+    {
+     "exit": 0,
+     "kind": "api-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/build/api-review.json"
+    },
+    {
+     "kind": "gate-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/build/gate-review.json"
+    },
+    {
+     "exit": 0,
+     "kind": "build-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C25-build-sqlserver.out"
+    },
+    {
+     "exit": 0,
+     "kind": "docs-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/docs-review.json"
+    }
+   ],
    "id": "E232-03",
-   "reason": "approved public typed signatures are not introduced yet (D-04/D-06); C04 baseline captured in C04-build.json",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "report",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-05.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C05-t232-sqlserver.out"
+    },
+    {
+     "exit": 0,
+     "kind": "derived-unit",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/unit.json"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs"
+    }
+   ],
    "id": "E232-04",
-   "reason": "typed SQL tests do not exist yet (D-04)",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "derived-unit",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/unit.json"
+    },
+    {
+     "kind": "branch-closure",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/branch-closure.json"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs"
+    }
+   ],
    "id": "E232-05",
-   "reason": "fail-closed typed guards do not exist yet (D-04)",
-   "status": "open"
+   "status": "met"
   },
   {
    "evidence": [
@@ -110,34 +169,118 @@
    "status": "met"
   },
   {
+   "evidence": [
+    {
+     "kind": "provider-matrix",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/provider-matrix.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C07-capability-six-provider.out"
+    },
+    {
+     "kind": "provider-matrix",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/provider-matrix.json"
+    },
+    {
+     "kind": "boundary-summary",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary-summary.json"
+    }
+   ],
    "id": "E232-07",
-   "reason": "rv1 provider-capability row; the r=3 delta evidence is carried by EC232-DERIVED-EXEC/EC232-CASE-SENSITIVE-ALIAS; rv1-artifact reconciliation is D-07/CHECK",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "kind": "integration-cases",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/integration-cases.json"
+    },
+    {
+     "exit": 0,
+     "kind": "derived-exec",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/execution.json"
+    },
+    {
+     "kind": "container-state",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/container-state.json"
+    },
+    {
+     "kind": "boundary-summary",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary-summary.json"
+    }
+   ],
    "id": "E232-08",
-   "reason": "rv1 SQL Server integration row; the r=3 delta evidence is carried by EC232-DERIVED-EXEC/EC232-CASE-SENSITIVE-ALIAS; rv1-artifact reconciliation is D-07/CHECK",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "cache-locality",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/cache/locality.json"
+    },
+    {
+     "kind": "source-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/cache/source-review.json"
+    },
+    {
+     "exit": 0,
+     "kind": "report",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-05.json"
+    }
+   ],
    "id": "E232-09",
-   "reason": "rv1 cache/alias/source-binding row; the r=3 delta evidence is carried by EC232-CACHE-LOCALITY/EC232-SHARED-REGRESSION; rv1-artifact reconciliation is D-07/CHECK",
-   "status": "open"
+   "status": "met"
   },
   {
+   "evidence": [
+    {
+     "kind": "mutation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/mutation.json"
+    },
+    {
+     "kind": "mutation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/prerequisite.json"
+    },
+    {
+     "exit": 0,
+     "kind": "restore-gate-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/logs/C31-restore-gate.out"
+    }
+   ],
    "id": "E232-10",
-   "reason": "rv1 targeted-mutation row; the r=3 delta evidence is carried by EC232-PREREQ-MUTATION (9/9 mutants killed, tree restored); rv1-artifact reconciliation is D-07/CHECK",
-   "status": "open"
+   "status": "met"
   },
   {
    "id": "E232-11",
-   "reason": "baseline coverage captured (coverage-summary-baseline.json); the candidate (C12) is measured at D-07",
+   "reason": "C12 exit 0; candidate line 88.3% / branch 80.2% meet the 85/75 thresholds (baseline 88.3 / 80.3). The 'comparable touched-area coverage does not decrease' clause is NOT proven: per-class percentages decreased for three touched classes (SqlServerEntityBuilderExtensions line 97.4->95.5 / branch 80.5->75.0, NormSqlTranslator branch 89.6->87.2, QueryCommand.QueryPreparer branch 85.3->84.8) because the typed feature added new mostly-defensive branches; absolute covered lines/branches increased and no pre-existing covered line/branch was lost. Touched-area deltas, the uncovered new lines and the absolute-vs-percentage distinction are recorded in rv1/branch-delta.json. This is a CHECK/planner decision, not a claimed pass.",
    "status": "open"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "boundary",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary.json"
+    },
+    {
+     "kind": "boundary-summary",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary-summary.json"
+    },
+    {
+     "kind": "boundary-transients",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary-transients.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/boundary-integration.out"
+    }
+   ],
    "id": "E232-12",
-   "reason": "the single boundary is executed at D-07",
-   "status": "open"
+   "status": "met"
   },
   {
    "evidence": [
@@ -196,9 +339,24 @@
    "status": "met"
   },
   {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "acceptance-perf",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/acceptance-candidate.json"
+    },
+    {
+     "kind": "perf-comparison",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf-comparison.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C15-acceptance-candidate.out"
+    }
+   ],
    "id": "E232-15",
-   "reason": "acceptance baseline captured (perf/baseline); the candidate comparison is produced at D-07",
-   "status": "open"
+   "status": "met"
   },
   {
    "evidence": [
@@ -516,5 +674,5 @@
  ],
  "status_file": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
  "task": "T232 (#232) SQL Server typed PIVOT/UNPIVOT projection",
- "tree": "1.0.9-rc3@b05e94ba + 1 uncommitted production file (src/nextorm.core/Query/QueryCommand.QueryPreparer.cs, D-05 derived pass-through fix; evidence snapshot)"
+ "tree": "1.0.9-rc3 (D-07 boundary/handoff; D-01..D-07 committed; D-05 pass-through fix committed in 887de2cf)"
 }

@@ -1,0 +1,49 @@
+{
+ "criterion": [
+  "E232-12",
+  "AC-11"
+ ],
+ "captured": "2026-10-15T00:05:00Z",
+ "unit": "D-07",
+ "note": "C11 boundary was executed three times. Attempts 1 and 2 failed only the six-provider container integration leg with transient ClickHouse HttpClient timeouts (TaskCanceledException, 120 s); attempt 3 (the sealed boundary) is fully green. No provider was skipped; all six providers executed in every attempt. This mirrors the D-01 coverage-baseline note (a single transient ClickHouse HttpClient timeout).",
+ "attempts": [
+  {
+   "attempt": 1,
+   "utc": "2026-10-14T22:23:16Z",
+   "unit_suites_exit": "all 0",
+   "integration_exit": 1,
+   "integration_summary": {"total": 3922, "failed": 1, "skipped": 198},
+   "failure": "NextORM.Integration.Tests.ClickHouseJoinIntoOneToOneTests.JoinInto_OneToOne_ShouldAssignTheSingleChildWithItsIdentityAndPayloadAsync",
+   "failure_exception": "System.Threading.Tasks.TaskCanceledException : The request was canceled due to the configured HttpClient.Timeout of 120 seconds elapsing.",
+   "classification": "transient container/network timeout; no product or T232 code involved",
+   "preserved_log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C11-attempt1-boundary-integration.out",
+   "preserved_boundary": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/C11-boundary-attempt1-transient.json"
+  },
+  {
+   "attempt": 2,
+   "utc": "2026-10-14T22:39:43Z",
+   "unit_suites_exit": "all 0",
+   "integration_exit": 1,
+   "integration_summary": {"total": 3922, "failed": 2, "skipped": 198},
+   "failure_kind": "two ClickHouse HttpClient timeouts (TaskCanceledException, 120 s)",
+   "classification": "transient container/network timeout; no product or T232 code involved",
+   "preserved_log": null,
+   "evidence": "provenance.json boundary-integration exit=1 at 2026-10-14T22:39:43Z; the per-attempt log was overwritten by attempt 3"
+  }
+ ],
+ "isolation_confirmation": {
+  "command": ["dotnet", "test", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~ClickHouseJoinIntoOneToOneTests.JoinInto_OneToOne_ShouldAssignTheSingleChildWithItsIdentityAndPayloadAsync"],
+  "exit": 0,
+  "result": "1 selected / 1 passed / 0 failed / 0 skipped (8 s) — the timed-out test passes in isolation",
+  "env": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+ },
+ "sealed_attempt": {
+  "attempt": 3,
+  "utc": "2026-10-14T22:55:20Z",
+  "exits": {"core": 0, "sqlite": 0, "postgres": 0, "sqlserver": 0, "mysql": 0, "mariadb": 0, "clickhouse": 0, "integration": 0},
+  "integration_summary": {"total": 3922, "errors": 0, "failed": 0, "skipped": 198, "not_run": 0, "succeeded": 3724},
+  "provider_skips": [],
+  "boundary": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary.json",
+  "summary": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary-summary.json"
+ }
+}

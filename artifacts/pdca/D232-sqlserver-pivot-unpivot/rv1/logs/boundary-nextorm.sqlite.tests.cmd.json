@@ -1,0 +1,13 @@
+{
+ "argv": [
+  "dotnet",
+  "test",
+  "tests/nextorm.sqlite.tests",
+  "-c",
+  "Debug",
+  "--no-build"
+ ],
+ "cwd": ".",
+ "date": "2026-10-14T22:53:41Z",
+ "env": {}
+}

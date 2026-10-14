@@ -1,12 +1,24 @@
 {
  "applicable_evidence_complete_required": {
-  "complete": 0,
+  "complete": 27,
+  "note": "E232-17 and EC232-RV3-SEAL are CHECK-owned; E232-11 is open (touched-area percentage decrease).",
+  "open": [
+   "E232-11",
+   "E232-17",
+   "EC232-RV3-SEAL"
+  ],
   "required": 30
  },
  "attempt": 1,
  "branch_delta": {
-  "added": null,
-  "covered": null
+  "baseline_branch": 80.3,
+  "baseline_line": 88.3,
+  "branch": 80.2,
+  "delta_branch": -0.1,
+  "delta_line": 0.0,
+  "line": 88.3,
+  "touched_covered_abs_decreased": false,
+  "touched_pct_decreased": true
  },
  "contract_rv": 3,
  "cycle": "N=1",
@@ -15,33 +27,82 @@
   "required": 17
  },
  "mutants_killed_attempted": {
-  "attempted": 6,
-  "killed": 6,
-  "scope": "D-04 typed rewriter/guards (rv1)"
+  "attempted": 9,
+  "killed": 9,
+  "scope": "D-04 typed rewriter/guards (rv1, 6) + D-05 prerequisite (rv3, 3)"
  },
  "plan_revision": 3,
  "sealed_hash_valid_artifacts_required": {
-  "required": null,
-  "valid": null
+  "note": "rv3 manifest contract_rv=3 validated (C17) and fulfills (C18); CHECK re-seals.",
+  "required": 1,
+  "valid": 1
  },
- "selected_executed_passed_failed_skipped_per_provider": {},
+ "selected_executed_passed_failed_skipped_per_provider": {
+  "clickhouse": {
+   "failed": 0,
+   "passed": 733,
+   "selected": 733,
+   "skipped": 0
+  },
+  "core": {
+   "failed": 0,
+   "passed": 2529,
+   "selected": 2529,
+   "skipped": 0
+  },
+  "integration": {
+   "failed": 0,
+   "passed": 3724,
+   "provider_skips": 0,
+   "selected": 3922,
+   "skipped": 198
+  },
+  "mariadb": {
+   "failed": 0,
+   "passed": 336,
+   "selected": 336,
+   "skipped": 0
+  },
+  "mysql": {
+   "failed": 0,
+   "passed": 454,
+   "selected": 454,
+   "skipped": 0
+  },
+  "postgres": {
+   "failed": 0,
+   "passed": 976,
+   "selected": 976,
+   "skipped": 0
+  },
+  "sqlite": {
+   "failed": 0,
+   "passed": 1746,
+   "selected": 1747,
+   "skipped": 1
+  },
+  "sqlserver": {
+   "failed": 0,
+   "passed": 940,
+   "selected": 948,
+   "skipped": 8
+  }
+ },
  "task": "T232 (#232)",
  "units": {
-  "active": [
-   "D232-PREREQ-typed-derived",
-   "D232-AMEND-unpivot-null-oracle",
-   "D-05"
-  ],
+  "active": [],
   "done": [
    "D-01",
    "D-02",
    "D-03",
-   "D-04"
-  ],
-  "pending": [
+   "D-04",
+   "D-05",
    "D-06",
-   "D-07"
+   "D-07",
+   "D232-PREREQ-typed-derived",
+   "D232-AMEND-unpivot-null-oracle"
   ],
+  "pending": [],
   "superseded": []
  }
 }

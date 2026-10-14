@@ -1,7 +1,7 @@
 {
  "criterion": "E232-16",
  "foreign_baseline": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/foreign-baseline.json",
- "foreign_count": 36,
+ "foreign_count": 50,
  "foreign_entries": [
   {
    "path": ".opencode/agents/nextorm-code-auditor.md",
@@ -57,6 +57,66 @@
   },
   {
    "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-github.md",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.csv",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.html",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.csv",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.html",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.csv",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.html",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.csv",
+   "status": " M"
+  },
+  {
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.html",
    "status": " M"
   },
   {
@@ -116,10 +176,6 @@
    "status": " M"
   },
   {
-   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
-   "status": " M"
-  },
-  {
    "path": "examples/nextorm.examples.mssql.adventureworks/README.md",
    "status": " M"
   },
@@ -148,11 +204,11 @@
    "status": "??"
   }
  ],
- "total_dirty_entries": 137,
+ "total_dirty_entries": 80,
  "tree": {
-  "dirty_entries": 137,
-  "dirty_sha256": "c66ba15c80dd1e1de0ad0b6186dd81fca94bcbdd4b8798b27b86d82be1170601",
-  "head": "4a7e221bd1aa7639c385af93f8ea561d04c7403f"
+  "dirty_entries": 80,
+  "dirty_sha256": "eaf2fddfbdd8d0dbd2932d878e8a8dbcc9b84feb18bd11a59d415c667cb778a6",
+  "head": "001f9c9cc55c0bc6aa41a9a796c3db5f3a5c21c1"
  },
  "unit": "D-01"
 }

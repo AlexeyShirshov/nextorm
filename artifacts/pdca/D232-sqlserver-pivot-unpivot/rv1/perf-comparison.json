@@ -1,0 +1,53 @@
+{
+ "allocation_ratio_baseline": 7.77,
+ "allocation_ratio_candidate": 7.92,
+ "allocation_ratio_delta_pct": 1.9,
+ "baseline": {
+  "allocation_ratio": {
+   "alloc_ratio": "7.77",
+   "cached": "7.77",
+   "prepared": "1.00"
+  },
+  "cached_prepared_ratio": {
+   "cached": "2.01",
+   "cached_over_prepared": "2.01",
+   "prepared": "1.00"
+  },
+  "cases_reported": 7,
+  "exit": 0,
+  "global_total_time": "00:00:47 (47.98 sec), executed benchmarks: 7",
+  "mode": "baseline",
+  "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C15-acceptance-baseline.out"
+ },
+ "cached_prepared_ratio_delta_pct": 5.5,
+ "candidate": {
+  "allocation_ratio": null,
+  "cached_prepared_ratio": {
+   "cached": "2.12",
+   "cached_over_prepared": "2.12",
+   "prepared": "1.00"
+  },
+  "cases_reported": 7,
+  "exit": 0,
+  "global_total_time": "00:00:46 (46.79 sec), executed benchmarks: 7",
+  "mode": "candidate",
+  "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C15-acceptance-candidate.out"
+ },
+ "captured": "2026-10-14T23:35:31Z",
+ "cases": {
+  "baseline": 7,
+  "candidate": 7
+ },
+ "criterion": [
+  "E232-15",
+  "AC-11"
+ ],
+ "env_note": "NuGetAudit=false exported for the acceptance run (pre-existing NU1902/NU1903 advisory promoted by TreatWarningsAsErrors); argv unchanged.",
+ "material_regression": false,
+ "noise_threshold_pct": 20.0,
+ "reference_baseline": {
+  "allocation_ratio": 7.42,
+  "cached_prepared_ratio": 1.87,
+  "source": "docs/specs/performance/acceptance-benchmarks.md:37-45,63-95"
+ }
+}

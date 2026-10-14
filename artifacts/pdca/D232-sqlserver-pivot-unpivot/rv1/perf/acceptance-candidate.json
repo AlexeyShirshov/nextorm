@@ -1,0 +1,40 @@
+{
+ "allocation_ratio": null,
+ "bdn_artifacts": [
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/BenchmarkRun-20261015-043049.log",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.html",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-github.md",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.html",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.csv",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.csv",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.html",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.SqliteBenchmarkAny-report.html",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.csv",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.SqliteBenchmarkAny-report.csv",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html",
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/candidate/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv"
+ ],
+ "cached_prepared_ratio": {
+  "cached": "2.12",
+  "cached_over_prepared": "2.12",
+  "prepared": "1.00"
+ },
+ "cases_reported": 7,
+ "exit": 0,
+ "global_total_time": "00:00:46 (46.79 sec), executed benchmarks: 7",
+ "mode": "candidate",
+ "stdout": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C15-acceptance-candidate.out",
+ "summary_rows": [
+  "| Nextorm_Count | 2.187 ms | 0.3655 ms | 0.0200 ms |  1.00 | 46.8750 | 393.75 KB |        1.00 |",
+  "| Nextorm_GroupByCount | 57.10 ms | 2.130 ms | 0.117 ms |  1.00 | 6222.2222 | 2000.0000 |  50.11 MB |        1.00 |",
+  "| Nextorm_Cached | 2.022 ms | 0.1768 ms | 0.0097 ms | 74.2188 | 618.03 KB |",
+  "| Cached_PlanOnly_Param |   570.7 us | 38.18 us | 2.09 us |  0.64 | 64.4531 | 526.58 KB |        6.92 |",
+  "| Prepared_ToList       |   885.6 us | 91.77 us | 5.03 us |  1.00 |  8.7891 |  76.14 KB |        1.00 |",
+  "| Cached_ToList         | 1,880.8 us | 86.57 us | 4.75 us |  2.12 | 72.2656 | 602.72 KB |        7.92 |",
+  "| Nextorm_Cached_ToListAsync | 1.985 ms | 74.2188 | 616.28 KB |"
+ ]
+}

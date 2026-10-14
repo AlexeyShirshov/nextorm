@@ -1,0 +1,14 @@
+dotnet-coverage v18.11.2.0 [linux-x64 - .NET 10.0.12]
+
+SessionId: 72198523-7c62-409e-b37f-901a07d5adc6
+{
+ "coverage_run_exits": {
+  "tests/nextorm.core.tests": 0,
+  "tests/nextorm.sqlite.tests": 0,
+  "tests/nextorm.postgres.tests": 0,
+  "tests/nextorm.sqlserver.tests": 0,
+  "tests/nextorm.integration.tests": 0
+ },
+ "overall": 0
+}
+Code coverage results: /home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/candidate/coverage.xml.

@@ -1,0 +1,141 @@
+{
+ "amendments": [],
+ "executions": [
+  {
+   "artifact_revision": "001f9c9c",
+   "command": [
+    "python3",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py",
+    "boundary"
+   ],
+   "exit_code": 0,
+   "note": "C11 (E232-12): the single post-implementation boundary sweep — seven per-project suites (core 2529/2529, sqlite 1747/1746/0/1, postgres 976/976, sqlserver 948/940/0/8, mysql 454/454, mariadb 336/336, clickhouse 733/733) plus the six-provider container run (3922 total / 3724 passed / 0 failed / 198 capability skips / 0 provider skips). Per-suite numbers and log paths: rv1/boundary-summary.json; exit map: rv1/boundary.json; the two earlier transient attempts are documented in rv1/boundary-transients.json. (C11 is the rv1-catalog invocation; rv3/verify.py boundary is a thin delegate to the same script.)",
+   "phase": "boundary",
+   "selected_count": 11645,
+   "source_revision": "001f9c9c"
+  },
+  {
+   "artifact_revision": "001f9c9c",
+   "command": [
+    "python3",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py",
+    "coverage",
+    "candidate"
+   ],
+   "exit_code": 0,
+   "note": "C12 (E232-11/AC-06): dotnet-coverage collect over the fixed C11 boundary + reportgenerator; collect_exit 0 / report_exit 0; line 88.3% / branch 80.2% (baseline 88.3 / 80.3). Touched-class deltas and uncovered new lines: rv1/branch-delta.json; summary: rv1/coverage-summary-candidate.json. (C12 is the rv1-catalog invocation; rv3/verify.py coverage candidate is a thin delegate.)",
+   "phase": "boundary",
+   "selected_count": 10122,
+   "source_revision": "001f9c9c"
+  },
+  {
+   "artifact_revision": "001f9c9c",
+   "command": [
+    "dotnet",
+    "run",
+    "--project",
+    "benchmarks/nextorm.benchmark",
+    "-c",
+    "Release",
+    "--",
+    "--anyCategories=acceptance"
+   ],
+   "exit_code": 0,
+   "note": "C15 (E232-15/AC-11): acceptance perf candidate — exactly 7 cases, 0 failures, wall 46.79s; cached/prepared 2.12 vs baseline 2.01 (+5.5%, noise) and allocation ratio 7.92 vs 7.77 (+1.9%, noise). NuGetAudit=false was exported for the run (pre-existing NU1902/NU1903 advisory promoted by TreatWarningsAsErrors); the argv is unchanged. Comparison: rv1/perf-comparison.json.",
+   "phase": "boundary",
+   "selected_count": 7,
+   "source_revision": "001f9c9c"
+  },
+  {
+   "artifact_revision": "001f9c9c",
+   "command": [
+    "python3",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py",
+    "footprint"
+   ],
+   "exit_code": 0,
+   "note": "C16 (E232-16/AC-12): foreign dirty entries, no foreign staging, clean src/tests. rv1/footprint.json + rv1/d07-footprint.json. (C16 is the rv1-catalog invocation; rv3/verify.py footprint is a thin delegate.)",
+   "phase": "boundary",
+   "selected_count": 1,
+   "source_revision": "001f9c9c"
+  }
+ ],
+ "scope": {
+  "boundary": "D-07 is the single post-implementation boundary for T232: C11 full per-project suites (core/sqlite/postgres/sqlserver/mysql/mariadb/clickhouse) plus the six-provider container integration run, C12 candidate coverage over the same boundary, C15 acceptance perf, C16 footprint, C17/C18/C19 sealing. No filtered inner subset is run; the boundary is the one comprehensive sweep.",
+  "files": [
+   "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+   "docs/specs/status/collection-1.0.9-todo.md",
+   "docs/specs/design/API-NAMING-REVIEW.md",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/candidate/coverage.xml",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/branch-delta.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/acceptance-candidate.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf-comparison.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/footprint.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/manifest.json"
+  ],
+  "projects": [
+   "tests/nextorm.core.tests",
+   "tests/nextorm.sqlite.tests",
+   "tests/nextorm.postgres.tests",
+   "tests/nextorm.sqlserver.tests",
+   "tests/nextorm.mysql.tests",
+   "tests/nextorm.mariadb.tests",
+   "tests/nextorm.clickhouse.tests",
+   "tests/nextorm.integration.tests"
+  ],
+  "rationale": "D-07 adds no production scope: it runs the one authorized boundary sweep, measures the candidate coverage/perf and seals the evidence. The recorded executions are the C11 boundary (its per-project suites and the six-provider container run are captured in rv1/boundary.json and logs/boundary-*.out), the C12 coverage candidate and the C15 acceptance perf; the sealed evidence is validated by C17/C18/C19. No compiled file is authored by D-07.",
+  "rebuild": "none",
+  "selectors": [
+   "FullyQualifiedName~T232",
+   "FullyQualifiedName~T232TypedOperators_RespectCapability",
+   "FullyQualifiedName~T232SqlServerTests"
+  ]
+ },
+ "supporting_evidence": [
+  {
+   "exit": 0,
+   "kind": "boundary",
+   "note": "C11 per-suite + per-provider exit map, green on the sealed attempt",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary.json"
+  },
+  {
+   "kind": "boundary-summary",
+   "note": "per-suite totals/failures/skips and the six-provider container summary (0 provider skips)",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary-summary.json"
+  },
+  {
+   "kind": "boundary-transients",
+   "note": "the two earlier transient ClickHouse HttpClient timeouts + the isolation confirmation",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary-transients.json"
+  },
+  {
+   "exit": 0,
+   "kind": "coverage-summary",
+   "note": "C12 candidate line 88.3% / branch 80.2%; collect_exit 0 / report_exit 0",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage-summary-candidate.json"
+  },
+  {
+   "kind": "branch-delta",
+   "note": "AC-06 touched-class deltas and uncovered new lines",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/branch-delta.json"
+  },
+  {
+   "kind": "perf-comparison",
+   "note": "AC-11 acceptance perf candidate vs the D-01 baseline (no material regression)",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf-comparison.json"
+  },
+  {
+   "exit": 0,
+   "kind": "footprint",
+   "note": "C16 foreign-dirty / CRLF footprint",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/footprint.json"
+  },
+  {
+   "kind": "d07-footprint",
+   "note": "foreign-byte preservation, no foreign staging, CRLF, clean src/tests",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json"
+  }
+ ],
+ "unit": "D-07"
+}

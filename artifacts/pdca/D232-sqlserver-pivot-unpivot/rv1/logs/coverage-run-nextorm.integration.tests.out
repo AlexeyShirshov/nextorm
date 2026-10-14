@@ -101,6 +101,15 @@ skipped NextORM.Integration.Tests.SqliteIntegrationTests.OuterApply_OnPlainTable
 skipped NextORM.Integration.Tests.SqliteIntegrationTests.DeleteJoin_ShouldRemoveRowsMatchingAnotherTable
   This provider has no native multi-table DELETE.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.LobDataReader_UnsupportedProvider_ShouldThrowNotSupported
+  This provider implements the multi-column LOB reader terminal.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStreamAsync_ShouldThrowNotSupported
+  This provider implements streaming LOB reads.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.TempTableSource_UnsupportedProvider_ShouldThrow
+  This provider materialises a query into a temporary table.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.SqliteIntegrationTests.LobDataReader_UnsupportedProvider_ShouldThrowNotSupported
   This provider implements the multi-column LOB reader terminal.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
@@ -113,8 +122,20 @@ skipped NextORM.Integration.Tests.SqliteIntegrationTests.TempTableSource_Unsuppo
 skipped NextORM.Integration.Tests.SqliteIntegrationTests.CorrelatedScalarSingleOrDefaultValue_ShouldYieldDefaultWhenNoRowMatches
   This provider's scalar subqueries do not enforce cardinality (Single/SingleOrDefault are rejected there).
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.ExceptAll_WhenUnsupported_ShouldThrow
+  This provider supports EXCEPT ALL.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Insert_Returning_ShouldThrow_WhenProviderCannot
+  This provider can return inserted rows.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToTextReader_ShouldThrowNotSupported
+  This provider implements streaming LOB reads.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.SqliteIntegrationTests.CreateTableAs_UnsupportedProvider_ShouldThrow
   This provider materialises a query into a temporary table.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_RowStream_UnsupportedProvider_ShouldThrowNotSupported
+  This provider implements streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.SqliteIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReader_ShouldThrowNotSupported
   This provider implements streaming LOB reads.
@@ -122,8 +143,17 @@ skipped NextORM.Integration.Tests.SqliteIntegrationTests.Lob_UnsupportedProvider
 skipped NextORM.Integration.Tests.SqliteIntegrationTests.Lob_RowStream_UnsupportedProvider_ShouldThrowNotSupported
   This provider implements streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsStream_ShouldThrowNotSupported
+  This provider implements streaming LOB reads.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.IntersectAll_WhenUnsupported_ShouldThrow
+  This provider supports INTERSECT ALL.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.SqliteIntegrationTests.CorrelatedScalarSingleOrDefault_ShouldYieldNullWhenNoRowMatches
   This provider's scalar subqueries do not enforce cardinality (Single/SingleOrDefault are rejected there).
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStream_ShouldThrowNotSupported
+  This provider implements streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.Iteration14_MutationBesideRecursiveRead_ExecutesEveryTime
   Data-modifying CTE bodies are only supported by PostgreSQL.
@@ -137,14 +167,35 @@ skipped NextORM.Integration.Tests.MySqlIntegrationTests.ExecuteProcedureAsync_Un
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobAsync_Interceptor_ShouldRaiseLifecycleOncePerTerminal
   This provider does not implement streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Contains_TupleIn_OnProviderWithoutRowConstructor_ShouldReject
+  This provider supports tuple IN/Contains.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToTextReaderAsync_ShouldThrowNotSupported
+  This provider implements streaming LOB reads.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.Update_ReturningWholeEntity_ShouldReturnRow
   This provider cannot return updated rows.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.ExceptAll_WhenSupported_ShouldReturnOnlyLeftRows
   This provider does not support EXCEPT ALL.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsTextReader_ShouldThrowNotSupported
+  This provider implements streaming LOB reads.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_ZeroColumnProjection_ShouldThrowInvalidOperationException
   This provider does not implement streaming LOB reads.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToStreamAsync_ShouldThrowNotSupported
+  This provider implements streaming LOB reads.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToStream_ShouldThrowNotSupported
+  This provider implements streaming LOB reads.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.ExecuteProcedureAsync_UnsupportedProvider_ThrowsNotSupported
+  This provider supports stored procedures.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.LobDataReader_UnsupportedProviderAsync_ShouldThrowNotSupported
+  This provider implements the multi-column LOB reader terminal.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobDataReader_Dispose_ShouldReleaseReaderAndKeepContextUsable
   This provider does not implement the multi-column LOB reader terminal.
@@ -154,6 +205,9 @@ skipped NextORM.Integration.Tests.MySqlIntegrationTests.TableFunction_JsonEach_S
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_NonSingleColumnProjection_ShouldThrowInvalidOperationException
   This provider does not implement streaming LOB reads.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReaderAsync_ShouldThrowNotSupported
+  This provider implements streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_BufferedAfterStreaming_ShouldStillMaterialize
   This provider does not implement streaming LOB reads.
@@ -173,11 +227,20 @@ skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobDataReader_ToDataRead
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.TableFunction_WhereAndOrderBy_ShouldFilterAndSort
   The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.ExecuteProcedure_UnsupportedProvider_ThrowsNotSupported
+  This provider supports stored procedures.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobClob_ToTextReader_ShouldRoundTripAllChars
   This provider does not implement streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobStreamAsync_CancelledMidRead_ShouldReleaseReaderAndKeepContextUsable
   This provider does not implement streaming LOB reads.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_JsonEach_ShouldReturnRows
+  The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReader_ShouldThrowNotSupported
+  This provider implements streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_BufferedToListBeforeAndAfterStream_ShouldMatch
   This provider does not implement streaming LOB reads.
@@ -190,6 +253,12 @@ skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobClob_NamedColumnGetTe
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_Interceptor_OnFailure_ShouldRaiseFailedOnce
   This provider does not implement streaming LOB reads.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_WhereAndOrderBy_ShouldFilterAndSort
+  The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.Batch_UnsupportedProvider_ShouldThrow
+  This provider supports batches.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.ReturningIdentitySelector_ShouldReturnGeneratedKey
   This provider cannot return generated columns on the insert.
@@ -209,8 +278,17 @@ skipped NextORM.Integration.Tests.MySqlIntegrationTests.Insert_ReturningProjecti
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobTextReaderAsync_NonSingleColumnProjection_ShouldThrowInvalidOperationException
   This provider does not implement streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_GroupBy_ShouldAggregate
+  The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_JoinedToTable_ShouldReturnRows
+  The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobStreamAsync_CancelledBeforeOpen_ShouldThrowAndNotLeak
   This provider does not implement streaming LOB reads.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.PostgresIntegrationTests.CreateTableAs_UnsupportedProvider_ShouldThrow
+  This provider materialises a query into a temporary table.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_Dispose_ShouldReleaseReaderAndKeepContextUsable
   This provider does not implement streaming LOB reads.
@@ -251,6 +329,12 @@ skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobClob_RowTextReader_Sh
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobStreamAsync_NonSingleColumnProjection_ShouldReleaseReaderAndKeepContextUsable
   This provider does not implement streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.LobCapabilityProbeTests.MySql_Driver_Reads_Lobs_Buffered
+  Set NEXTORM_LOB_PROBE=1 to run the LOB capability probe.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
+skipped NextORM.Integration.Tests.LobCapabilityProbeTests.MariaDb_Driver_Reads_Lobs_Buffered
+  Set NEXTORM_LOB_PROBE=1 to run the LOB capability probe.
+  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobDataReader_DisposeAsync_ShouldReleaseReaderAndKeepContextUsable
   This provider does not implement the multi-column LOB reader terminal.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
@@ -284,20 +368,8 @@ skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_NonSingleColum
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_StreamingAfterBuffered_ShouldNotReuseBufferedPlan
   This provider does not implement streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.LobDataReader_UnsupportedProvider_ShouldThrowNotSupported
-  This provider implements the multi-column LOB reader terminal.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStreamAsync_ShouldThrowNotSupported
-  This provider implements streaming LOB reads.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.TempTableSource_UnsupportedProvider_ShouldThrow
-  This provider materialises a query into a temporary table.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobSync_Interceptor_ShouldRaiseLifecycleOncePerTerminal
   This provider does not implement streaming LOB reads.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.ExceptAll_WhenUnsupported_ShouldThrow
-  This provider supports EXCEPT ALL.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.BulkInsert_IgnoreDuplicates_WithReturning_ShouldReturnOnlyInsertedRows
   This provider cannot both skip conflicting rows and return written rows.
@@ -305,26 +377,14 @@ skipped NextORM.Integration.Tests.MySqlIntegrationTests.BulkInsert_IgnoreDuplica
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_ReadAfterDispose_ShouldThrowObjectDisposed
   This provider does not implement streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Insert_Returning_ShouldThrow_WhenProviderCannot
-  This provider can return inserted rows.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.Update_ReturningAsync_ShouldReturnUpdatedRows
   This provider cannot return updated rows.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.Iteration14_PreparedDml_ExecutesEveryTime
   Data-modifying CTE bodies are only supported by PostgreSQL.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToTextReader_ShouldThrowNotSupported
-  This provider implements streaming LOB reads.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_RowStream_UnsupportedProvider_ShouldThrowNotSupported
-  This provider implements streaming LOB reads.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_DisposeAsync_ShouldReleaseReaderAndKeepContextUsable
   This provider does not implement streaming LOB reads.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsStream_ShouldThrowNotSupported
-  This provider implements streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.ValueConverters_Returning_ShouldMaterializeConvertedValue
   This provider cannot return inserted rows.
@@ -335,9 +395,6 @@ skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_ToStream_WithPar
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.FullJoin_ShouldReturnBothSides
   This provider does not support FULL JOIN.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.IntersectAll_WhenUnsupported_ShouldThrow
-  This provider supports INTERSECT ALL.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobDataReader_ToDataReaderAsync_ShouldReadTwoColumnsAcrossRows
   This provider does not implement the multi-column LOB reader terminal.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
@@ -347,20 +404,11 @@ skipped NextORM.Integration.Tests.MySqlIntegrationTests.ReturningConversionProje
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.DynamicColumns_FullMerge_ShouldInsertThenUpdateKeys
   This provider cannot render a general multi-branch MERGE.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStream_ShouldThrowNotSupported
-  This provider implements streaming LOB reads.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.Update_Returning_ShouldReturnUpdatedRows
   This provider cannot return updated rows.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.ReturningKey_Batch_ShouldReturnEveryKey
   This provider cannot return generated columns on the insert.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Contains_TupleIn_OnProviderWithoutRowConstructor_ShouldReject
-  This provider supports tuple IN/Contains.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToTextReaderAsync_ShouldThrowNotSupported
-  This provider implements streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_ContextDisposedBeforeStream_ShouldThrowObjectDisposed
   This provider does not implement streaming LOB reads.
@@ -380,35 +428,17 @@ skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobClob_RowStream_NullAn
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.Insert_ReturningWholeEntity_OnInterface_ShouldThrow
   This provider cannot return inserted rows.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsTextReader_ShouldThrowNotSupported
-  This provider implements streaming LOB reads.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.TableFunction_JoinedToTable_ShouldReturnRows
   The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToStreamAsync_ShouldThrowNotSupported
-  This provider implements streaming LOB reads.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_ThreeColumnProjection_ShouldThrowInvalidOperationException
   This provider does not implement streaming LOB reads.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToStream_ShouldThrowNotSupported
-  This provider implements streaming LOB reads.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.ExecuteProcedureAsync_UnsupportedProvider_ThrowsNotSupported
-  This provider supports stored procedures.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.LobDataReader_UnsupportedProviderAsync_ShouldThrowNotSupported
-  This provider implements the multi-column LOB reader terminal.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobTextReaderAsync_PartialReadThenDispose_ShouldReleaseReaderAndKeepContextUsable
   This provider does not implement streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.Insert_Returning_ShouldReturnWrittenRow
   This provider cannot return inserted rows.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReaderAsync_ShouldThrowNotSupported
-  This provider implements streaming LOB reads.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.ReturningKey_NullableKeyType_ShouldMaterialize
   This provider cannot return inserted rows.
@@ -418,36 +448,6 @@ skipped NextORM.Integration.Tests.MySqlIntegrationTests.TableFunction_GroupBy_Sh
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_RowStream_EarlyBreak_ShouldReleaseAndNotPinStatement
   This provider does not implement streaming LOB reads.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.ExecuteProcedure_UnsupportedProvider_ThrowsNotSupported
-  This provider supports stored procedures.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_JsonEach_ShouldReturnRows
-  The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReader_ShouldThrowNotSupported
-  This provider implements streaming LOB reads.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_WhereAndOrderBy_ShouldFilterAndSort
-  The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.Batch_UnsupportedProvider_ShouldThrow
-  This provider supports batches.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_GroupBy_ShouldAggregate
-  The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_JoinedToTable_ShouldReturnRows
-  The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.PostgresIntegrationTests.CreateTableAs_UnsupportedProvider_ShouldThrow
-  This provider materialises a query into a temporary table.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.LobCapabilityProbeTests.MySql_Driver_Reads_Lobs_Buffered
-  Set NEXTORM_LOB_PROBE=1 to run the LOB capability probe.
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-skipped NextORM.Integration.Tests.LobCapabilityProbeTests.MariaDb_Driver_Reads_Lobs_Buffered
-  Set NEXTORM_LOB_PROBE=1 to run the LOB capability probe.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
 skipped NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_RowStream_UnsupportedProvider_ShouldThrowNotSupported
   This provider implements streaming LOB reads.
@@ -593,94 +593,11 @@ skipped NextORM.Integration.Tests.SqlServerIntegrationTests.Batch_CapturedParame
 skipped NextORM.Integration.Tests.SqlServerIntegrationTests.CreateTableAs_WithCteBody_ShouldBeReadableOnTheSameContext
   This provider cannot materialise a query into a temporary table.
   from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-failed NextORM.Integration.Tests.ClickHouseIntegrationTests.WriteJson_DuplicateLeafNamesAcrossSlots_ShouldBeAccepted (2m 00s 095ms)
-  from /home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64)
-  Xunit.MicrosoftTestingPlatform.XunitException: System.Threading.Tasks.TaskCanceledException : The request was canceled due to the configured HttpClient.Timeout of 120 seconds elapsing.
-  ---- System.TimeoutException : A task was canceled.
-  -------- System.Threading.Tasks.TaskCanceledException : A task was canceled.
-    at System.Net.Http.HttpClient.HandleFailure(Exception e, Boolean telemetryStarted, HttpResponseMessage response, CancellationTokenSource cts, CancellationToken cancellationToken, CancellationTokenSource pendingRequestsCts)
-    at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
-    at ClickHouse.Driver.ClickHouseClient.SendAsync(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationToken cancellationToken)
-    at ClickHouse.Driver.ClickHouseClient.PostSqlQueryAsync(String sql, ClickHouseParameterCollection parameters, QueryOptions options, Boolean rawBody, CancellationToken cancellationToken)
-    at ClickHouse.Driver.ADO.ClickHouseCommand.PostSqlQueryAsync(String sqlQuery, CancellationToken token, Boolean rawBody)
-    at ClickHouse.Driver.ADO.ClickHouseCommand.ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
-    at ClickHouse.Driver.ADO.ClickHouseCommand.ExecuteDbDataReader(CommandBehavior behavior)
-    at NextORM.Core.QueryExecutor.RunReader(DbCommand command, CommandBehavior behavior) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryExecutor.cs:181
-    at NextORM.Core.QueryExecutor.OpenReader(String commandText, IReadOnlyList`1 parameters, CommandType commandType) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryExecutor.cs:357
-    at NextORM.Core.DataContext.ExecuteRaw(String sql, IReadOnlyList`1 parameters) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:964
-    at NextORM.Integration.Tests.ClickHouseIntegrationTests.ExecuteRaw(IDataContext ctx, String sql) in /home/alex/sources/nextorm/tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:1720
-    at NextORM.Integration.Tests.ClickHouseIntegrationTests.EnsureJsonSlotDupSeed() in /home/alex/sources/nextorm/tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:1712
-    at NextORM.Integration.Tests.ClickHouseIntegrationTests.WriteJson_DuplicateLeafNamesAcrossSlots_ShouldBeAccepted() in /home/alex/sources/nextorm/tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:1606
-    at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
-    at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
-    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
-    at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
-    ----- Inner Stack Trace -----
-    
-    ----- Inner Stack Trace -----
-    at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
-    at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
-    at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
-    at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
-/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) failed with 1 error(s) (3m 15s 292ms)
-Exit code: 2
-  Standard output: [testcontainers.org 00:00:00.33] Connected to Docker:
-    Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
-    Server Version: 5.8.6
-    Kernel Version: 6.18.33.2-microsoft-standard-WSL2
-    API Version: 1.44
-    Operating System: fedora
-    Total Memory: 11.68 GB
-  [testcontainers.org 00:00:00.33] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
-  [testcontainers.org 00:00:00.33] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
-  [testcontainers.org 00:00:00.33] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
-  [testcontainers.org 00:00:00.49] Reusable resource found
-  [testcontainers.org 00:00:00.49] Reusable resource found
-  [testcontainers.org 00:00:00.49] Reusable resource found
-  [testcontainers.org 00:00:00.65] Start Docker container d703aedb9b21
-  [testcontainers.org 00:00:00.65] Start Docker container ff3bb6dd042f
-  [testcontainers.org 00:00:00.65] Start Docker container 914f06a0ba5f
-  [testcontainers.org 00:00:04.40] Wait for Docker container ff3bb6dd042f to complete readiness checks
-  [testcontainers.org 00:00:04.41] Execute "mkdir /var/lib/mysql-files" at Docker container d703aedb9b21
-  [testcontainers.org 00:00:04.41] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container ff3bb6dd042f
-  [testcontainers.org 00:00:04.44] Add file to tar archive: Content length: 48 byte(s), Target file: "/etc/mysql/my.cnf", UID: 0, GID: 0, Mode: 0600
-  [testcontainers.org 00:00:04.45] Copy tar archive to container: Content length: 48 byte(s), Docker container: d703aedb9b21
-  [testcontainers.org 00:00:04.71] Wait for Docker container 914f06a0ba5f to complete readiness checks
-  [testcontainers.org 00:00:04.72] Execute "healthcheck.sh --connect --innodb_initialized" at Docker container 914f06a0ba5f
-  [testcontainers.org 00:00:05.09] Docker container ff3bb6dd042f ready
-  [testcontainers.org 00:00:05.20] Wait for Docker container d703aedb9b21 to complete readiness checks
-  [testcontainers.org 00:00:05.21] Execute "mysql test --wait --silent --execute=SELECT 1;" at Docker container d703aedb9b21
-  [testcontainers.org 00:00:06.08] Execute "healthcheck.sh --connect --innodb_initialized" at Docker container 914f06a0ba5f
-  [testcontainers.org 00:00:06.44] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
-  [testcontainers.org 00:00:06.47] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
-  [testcontainers.org 00:00:06.49] Reusable resource found
-  [testcontainers.org 00:00:06.50] Reusable resource found
-  [testcontainers.org 00:00:06.50] Start Docker container 1b5207b30a62
-  [testcontainers.org 00:00:07.83] Start Docker container 6bf39546e2b9
-  [testcontainers.org 00:00:07.83] Execute "healthcheck.sh --connect --innodb_initialized" at Docker container 914f06a0ba5f
-  [testcontainers.org 00:00:08.09] Docker container 914f06a0ba5f ready
-  [testcontainers.org 00:00:09.47] Wait for Docker container 1b5207b30a62 to complete readiness checks
-  [testcontainers.org 00:00:10.07] Execute "/bin/sh -c find /opt/mssql-tools*/bin/sqlcmd -type f -print -quit" at Docker container 1b5207b30a62
-  [testcontainers.org 00:00:10.11] Wait for Docker container 6bf39546e2b9 to complete readiness checks
-  [testcontainers.org 00:00:10.17] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 1b5207b30a62
-  [testcontainers.org 00:00:11.06] Docker container d703aedb9b21 ready
-  [testcontainers.org 00:00:19.55] Docker container 6bf39546e2b9 ready
-  [testcontainers.org 00:00:19.64] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 1b5207b30a62
-  [testcontainers.org 00:00:27.53] Docker container 1b5207b30a62 ready
-  [native-measurement] rows=0 native[ms=1.78 alloc=12096 bytes=2 route=True serializer_count=1] managed[ms=7.43 alloc=125152 bytes=2 route=False serializer_count=0]
-  [native-measurement] rows=1 native[ms=1.59 alloc=11416 bytes=24 route=True serializer_count=1] managed[ms=5.57 alloc=59160 bytes=43 route=False serializer_count=0]
-  [native-measurement] rows=100 native[ms=1.32 alloc=17944 bytes=2389 route=True serializer_count=1] managed[ms=5.25 alloc=77544 bytes=4190 route=False serializer_count=0]
-  [native-measurement] rows=10000 native[ms=20.06 alloc=1060480 bytes=271493 route=True serializer_count=1] managed[ms=30.97 alloc=1373448 bytes=451494 route=False serializer_count=0]
-  [testcontainers.org 00:02:55.15] Stop Docker container ff3bb6dd042f
-  [testcontainers.org 00:02:55.72] Stop Docker container 1b5207b30a62
-  [testcontainers.org 00:03:06.40] Stop Docker container d703aedb9b21
-  [testcontainers.org 00:03:10.01] Stop Docker container 914f06a0ba5f
-  [testcontainers.org 00:03:10.72] Stop Docker container 6bf39546e2b9
+/home/alex/sources/nextorm/tests/nextorm.integration.tests/bin/linux/Debug/net10.0/nextorm.integration.tests.dll (net10.0|x64) passed (1m 07s 964ms)
 
-Test run summary: Failed!
-  total: 3904
-  failed: 1
-  succeeded: 3705
+Test run summary: Passed!
+  total: 3922
+  failed: 0
+  succeeded: 3724
   skipped: 198
-  duration: 3m 10s 313ms
-Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)
+  duration: 1m 08s 247ms

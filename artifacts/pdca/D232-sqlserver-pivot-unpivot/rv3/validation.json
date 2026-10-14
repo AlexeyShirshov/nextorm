@@ -1,6 +1,6 @@
 {
- "captured": "2026-10-14T22:05:00Z",
- "note": "D-05 seal validator exits; C32-equivalent manifest re-validation is also exit 0.",
+ "captured": "2026-10-14T23:34:48Z",
+ "note": "D-07 seal validator exits (C17/C18/C19 + the D-07 brief/report validators); C11/C12/C15/C16 are recorded under rv1.",
  "task": "T232 (#232) SQL Server typed PIVOT/UNPIVOT projection",
  "unit": "D-05 (r=3) evidence seal",
  "validators": [
@@ -9,20 +9,18 @@
     "python3",
     "scripts/validate_inner_loop.py",
     "brief",
-    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-05.json"
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/briefs/D-07.json"
    ],
-   "exit": 0,
-   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/D05-validate-brief.out"
+   "exit": 0
   },
   {
    "argv": [
     "python3",
     "scripts/validate_inner_loop.py",
     "report",
-    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-05.json"
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/reports/D-07.json"
    ],
-   "exit": 0,
-   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/D05-validate-report.out"
+   "exit": 0
   },
   {
    "argv": [
@@ -32,17 +30,34 @@
     "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/manifest.json"
    ],
    "exit": 0,
-   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/D05-validate-manifest.out"
+   "note": "C17; 30 rows: 27 met / 3 open (E232-11, E232-17, EC232-RV3-SEAL)"
+  },
+  {
+   "argv": [
+    "python3",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py",
+    "fulfill"
+   ],
+   "exit": 0,
+   "note": "C18/C33: contract/provenance/counters + manifest evidence paths"
   },
   {
    "argv": [
     "python3",
     "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py",
+    "fulfill"
+   ],
+   "exit": 0,
+   "note": "C18 (rv1 contract root)"
+  },
+  {
+   "argv": [
+    "python3",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/verify.py",
     "scopes"
    ],
    "exit": 0,
-   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C19-scopes.out",
-   "note": "C19: every rv1 brief (D-01..D-05) and report (D-01..D-05) re-validated exit 0; scope-map.json content unchanged"
+   "note": "C19: rv1 D-01..D-05 + rv3 D-06/D-07 briefs/reports re-validated"
   }
  ]
 }

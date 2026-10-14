@@ -36,6 +36,9 @@ Subcommands (the delta invocation catalog C20..C33)
   fulfill                            C33  contract/provenance/counters/delta fulfillment check
   example                            C13  build the typed AdventureWorks example + source audit
   docs                               C14  XML-doc build evidence + EN/RU semantic match + spec-link scan
+  boundary                           C11  delegate the single post-implementation boundary to rv1 (D-07)
+  coverage <baseline|candidate>      C12  delegate the coverage measurement to rv1 (D-07)
+  footprint                          C16  delegate the foreign-dirty / CRLF footprint to rv1 (D-07)
 
 Exit codes: 0 = ok, 2 = violation, 1 = usage/unreadable/missing required input.
 """
@@ -932,6 +935,42 @@ def cmd_manifest():
     return exit_code
 
 
+def _delegate_rv1(subcmd_args, prefix):
+    """C11/C12/C16 (D-07): delegate to the rv1-catalog ``verify.py``.
+
+    Rows E232-01..E232-17 and invocations C01..C19 keep their original rv1 artifact paths,
+    so the boundary/coverage/footprint evidence is written by the rv1 plumbing while the
+    argv/exit is also captured under this rv3 root.
+    """
+    argv = ["python3", R1_REL + "/verify.py"] + list(subcmd_args)
+    return run(argv, prefix, phase="boundary",
+               note="rv1-catalog invocation; E232 rows keep their rv1 artifact paths")
+
+
+def cmd_boundary_delegate():
+    """C11 (D-07): the single post-implementation boundary sweep (delegates to rv1)."""
+    code = _delegate_rv1(["boundary"], "C11-boundary")
+    print(json.dumps({"C11": code}, indent=1))
+    return code
+
+
+def cmd_coverage_delegate(mode):
+    """C12 (D-07): candidate coverage measurement (delegates to rv1)."""
+    if mode not in ("baseline", "candidate"):
+        print("ERROR: coverage <baseline|candidate>", file=sys.stderr)
+        return 1
+    code = _delegate_rv1(["coverage", mode], "C12-coverage-" + mode)
+    print(json.dumps({"C12": code, "mode": mode}, indent=1))
+    return code
+
+
+def cmd_footprint_delegate():
+    """C16 (D-07): foreign-dirty / CRLF footprint at handoff (delegates to rv1)."""
+    code = _delegate_rv1(["footprint"], "C16-footprint")
+    print(json.dumps({"C16": code}, indent=1))
+    return code
+
+
 def cmd_fulfill():
     violations = []
     contract = _read_json(os.path.join(A, "contract.json"))
@@ -1182,6 +1221,15 @@ def main(argv=None):
         return cmd_cache_locality()
     if command == "prerequisite-mutation":
         return cmd_prerequisite_mutation()
+    if command == "boundary":
+        return cmd_boundary_delegate()
+    if command == "coverage":
+        if len(argv) < 2:
+            print("ERROR: coverage <baseline|candidate>", file=sys.stderr)
+            return 1
+        return cmd_coverage_delegate(argv[1])
+    if command == "footprint":
+        return cmd_footprint_delegate()
     if command == "manifest":
         return cmd_manifest()
     if command == "scopes":
