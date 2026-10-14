@@ -75,8 +75,8 @@ public sealed class SqliteRowIdLobProbeTests
                 // The row is addressed by its explicit id (seeded as size index + 1) so the
                 // size -> row mapping never depends on an unordered SELECT's implicit order.
                 var projection = shape == "baseline"
-                    ? "SELECT payload FROM t WHERE id = $id"
-                    : "SELECT payload, rowid FROM t WHERE id = $id";
+                    ? "SELECT payload\n FROM t WHERE id = $id"
+                    : "SELECT payload, rowid\n FROM t WHERE id = $id";
 
                 var results = new ProbeResult[Sizes.Length];
                 for (var sizeIndex = 0; sizeIndex < Sizes.Length; sizeIndex++)

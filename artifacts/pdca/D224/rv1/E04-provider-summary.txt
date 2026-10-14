@@ -1,0 +1,6 @@
+SqliteIntegrationTests exit=0 ::    nextorm.integration.tests  Total: 711, Errors: 0, Failed: 0, Skipped: 41, Not Run: 0, Time: 8.180s 
+PostgresIntegrationTests exit=0 ::    nextorm.integration.tests  Total: 711, Errors: 0, Failed: 0, Skipped: 26, Not Run: 0, Time: 10.552s 
+SqlServerIntegrationTests exit=0 ::    nextorm.integration.tests  Total: 711, Errors: 0, Failed: 0, Skipped: 48, Not Run: 0, Time: 20.191s 
+MySqlIntegrationTests exit=0 ::    nextorm.integration.tests  Total: 711, Errors: 0, Failed: 0, Skipped: 80, Not Run: 0, Time: 15.138s 
+ClickHouseIntegrationTests exit=0 ::    nextorm.integration.tests  Total: 148, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 42.759s 
+DynamicColumnsMariaDbContainerTests exit=0 ::    nextorm.integration.tests  Total: 1, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 4.693s 

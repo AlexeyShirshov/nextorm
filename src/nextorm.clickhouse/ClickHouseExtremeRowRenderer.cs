@@ -83,15 +83,15 @@ internal sealed class ClickHouseExtremeRowRenderer : IExtremeRowRenderer
         {
             builder.Append(SqlKeywords.Of(keywordCase, "select "))
                 .Append(MakeTupleElementProjection(request.PayloadAliases, request.GroupAliases, tupleAlias, keywordCase))
-                .AppendLine()
+                .Append(SqlText.NewLine)
                 .Append(SqlKeywords.Of(keywordCase, "from ("))
-                .AppendLine().Append(' ')
+                .Append(SqlText.NewLine).Append(' ')
                 .Append(SqlKeywords.Of(keywordCase, "select ")).Append(aggregate)
                 .Append(SqlKeywords.Of(keywordCase, " as ")).Append(ClickHouseDialect.Instance.QuoteIdentifier(tupleAlias))
-                .AppendLine().Append(' ')
+                .Append(SqlText.NewLine).Append(' ')
                 .Append(SqlKeywords.Of(keywordCase, "from (")).Append(request.SourceSql).Append(')')
                 .Append(SqlKeywords.Of(keywordCase, " as ")).Append(ClickHouseDialect.Instance.QuoteIdentifier(sourceAlias))
-                .AppendLine().Append(' ')
+                .Append(SqlText.NewLine).Append(' ')
                 .Append(SqlKeywords.Of(keywordCase, "having count() > 0"))
                 .Append(')');
 
@@ -107,15 +107,15 @@ internal sealed class ClickHouseExtremeRowRenderer : IExtremeRowRenderer
         if (projection.Length > 0)
             builder.Append(", ").Append(projection);
 
-        builder.AppendLine()
+        builder.Append(SqlText.NewLine)
             .Append(SqlKeywords.Of(keywordCase, "from ("))
-            .AppendLine().Append(' ')
+            .Append(SqlText.NewLine).Append(' ')
             .Append(SqlKeywords.Of(keywordCase, "select ")).Append(groups).Append(", ").Append(aggregate)
             .Append(SqlKeywords.Of(keywordCase, " as ")).Append(ClickHouseDialect.Instance.QuoteIdentifier(tupleAlias))
-            .AppendLine().Append(' ')
+            .Append(SqlText.NewLine).Append(' ')
             .Append(SqlKeywords.Of(keywordCase, "from (")).Append(request.SourceSql).Append(')')
             .Append(SqlKeywords.Of(keywordCase, " as ")).Append(ClickHouseDialect.Instance.QuoteIdentifier(sourceAlias))
-            .AppendLine().Append(' ')
+            .Append(SqlText.NewLine).Append(' ')
             .Append(SqlKeywords.Of(keywordCase, "group by ")).Append(groups)
             .Append(')');
 

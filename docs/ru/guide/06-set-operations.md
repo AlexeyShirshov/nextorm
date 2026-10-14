@@ -44,15 +44,19 @@ var all = dataContext.From<ISimpleEntity>().Select(it => it.Id)
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
  union 
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
  union all 
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Сторонами также могут быть разные сущности, если типы элементов совпадают. В наборе интеграционных
@@ -81,15 +85,19 @@ var onlyLeft = dataContext.From<ISimpleEntity>().Select(it => it.Id)
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
  intersect 
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
  except 
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Между разными сущностями: поскольку `simple_entity` содержит ids `1..10`, а `complex_entity` —
@@ -117,9 +125,11 @@ dataContext.From(cmd).Count();
 
 ```sql
 -- PostgreSQL only
-select id from simple_entity
+select id
+ from simple_entity
  intersect all 
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 ```csharp

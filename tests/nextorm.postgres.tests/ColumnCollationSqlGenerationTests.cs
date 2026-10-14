@@ -54,7 +54,7 @@ public class ColumnCollationSqlGenerationTests
         var e = ctx.From<ICollatedEntity>();
 
         SqlOf(ctx, e.Select(x => new { x.Name }))
-            .Should().Be("select name collate \"C\" as \"Name\" from collated_entity");
+            .Should().Be("select name collate \"C\" as \"Name\"\n from collated_entity");
     }
 
     [Fact]

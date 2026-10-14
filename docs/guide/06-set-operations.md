@@ -42,15 +42,19 @@ var all = dataContext.From<ISimpleEntity>().Select(it => it.Id)
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
  union 
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
  union all 
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 The two sides may also be different entities as long as the element types line up. In the
@@ -78,15 +82,19 @@ var onlyLeft = dataContext.From<ISimpleEntity>().Select(it => it.Id)
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
  intersect 
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
  except 
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Cross-entity: because `simple_entity` holds ids `1..10` and `complex_entity` holds `1..3`,
@@ -114,9 +122,11 @@ dataContext.From(cmd).Count();
 
 ```sql
 -- PostgreSQL only
-select id from simple_entity
+select id
+ from simple_entity
  intersect all 
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 ```csharp

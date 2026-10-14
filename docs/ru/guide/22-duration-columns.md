@@ -80,11 +80,13 @@ var overdue = ctx.From<Task>()
 
 ```sql
 -- PostgreSQL / MySQL / MariaDB: @p0 несёт нативную длительность
-select id, estimate from tasks
+select id, estimate
+ from tasks
  where (estimate > @p0);   -- @p0 = interval '00:05:00' / time '00:05:00'
 
 -- SQL Server / SQLite / ClickHouse: @p0 несёт целочисленное значение в единице хранения
-select id, estimate from tasks
+select id, estimate
+ from tasks
  where (estimate > @p0);   -- @p0 = 300 (секунды из [Duration(DurationUnit.Seconds)])
 ```
 

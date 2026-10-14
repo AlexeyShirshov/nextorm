@@ -65,7 +65,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, row_number() over (partition by nullableint order by id) as 'rn' from complex_entity
+select id, row_number() over (partition by nullableint order by id) as 'rn'
+ from complex_entity
 ```
 
 The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -97,7 +98,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, rank() over (order by id) as 'r', dense_rank() over (order by id) as 'dr' from complex_entity
+select id, rank() over (order by id) as 'r', dense_rank() over (order by id) as 'dr'
+ from complex_entity
 ```
 
 A descending key is written with `SqlFunctions.Sql.desc`. When several keys (or a mix of directions) are needed,
@@ -116,7 +118,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, row_number() over (partition by nullableint order by id desc) as 'r' from complex_entity
+select id, row_number() over (partition by nullableint order by id desc) as 'r'
+ from complex_entity
 ```
 
 ## `lag` and `lead` with offset and default
@@ -136,7 +139,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, lag(id, 1, 0) over (order by id) as 'prev', lead(nullableint, 2, 0) over (order by id) as 'next' from complex_entity
+select id, lag(id, 1, 0) over (order by id) as 'prev', lead(nullableint, 2, 0) over (order by id) as 'next'
+ from complex_entity
 ```
 
 ### `lagInFrame` / `leadInFrame` (ClickHouse)
@@ -184,7 +188,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, sum(id) over (partition by nullableint) as 'total', count(*) over (partition by nullableint) as 'n' from complex_entity
+select id, sum(id) over (partition by nullableint) as 'total', count(*) over (partition by nullableint) as 'n'
+ from complex_entity
 ```
 
 ## Frames
@@ -227,7 +232,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, sum(id) over (order by id rows between unbounded preceding and current row) as 'running', sum(id) over (order by id rows between 1 preceding and 1 following) as 'sliding' from complex_entity
+select id, sum(id) over (order by id rows between unbounded preceding and current row) as 'running', sum(id) over (order by id rows between 1 preceding and 1 following) as 'sliding'
+ from complex_entity
 ```
 
 A frame may also exclude rows around the current one with

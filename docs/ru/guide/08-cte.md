@@ -123,10 +123,18 @@ var pairs = dataContext.From(recent)
 
 ```sql
 -- SQLite: разнородные дескрипторы
-with recent as (select id as 'Id', somestring as 'String' from complex_entity), other as (select id as 'Id' from simple_entity) select t1.Id, t1.String, t2.Id from recent as 't1' join other as 't2' on t1.Id = cast(t2.Id as bigint)
+with recent as (select id as 'Id', somestring as 'String'
+ from complex_entity), other as (select id as 'Id'
+ from simple_entity) select t1.Id, t1.String, t2.Id
+ from recent as 't1'
+ join other as 't2' on t1.Id = cast(t2.Id as bigint)
 
--- SQLite: self-join одного дескриптора -> одно объявление, два алиаса
-with recent as (select id as 'Id', somestring as 'String' from complex_entity) select t1.Id, t2.Id from recent as 't1' join recent as 't2' on t1.Id = t2.Id
+-- SQLite: self-
+join одного дескриптора -> одно объявление, два алиаса
+with recent as (select id as 'Id', somestring as 'String'
+ from complex_entity) select t1.Id, t2.Id
+ from recent as 't1'
+ join recent as 't2' on t1.Id = t2.Id
 ```
 
 Зависимости поднимаются автоматически: `From(Cte<T>)` присоединяет объявление дескриптора вместе с каждым
@@ -184,11 +192,14 @@ var rows = dataContext.From(numbers).ToList();
 
 ```sql
 -- SQLite
-with recursive nums as (select id as 'Id' from simple_entity
+with recursive nums as (select id as 'Id'
+ from simple_entity
  where id = 1
  union all
- select (Id + 1) as 'c0' from nums as 't1'
- where (t1.Id < 5)) select id from nums as 't1'
+ select (Id + 1) as 'c0'
+ from nums as 't1'
+ where (t1.Id < 5)) select id
+ from nums as 't1'
 ```
 
 Та же поверхность покрывает анонимную проекцию с несколькими слотами:
@@ -208,11 +219,14 @@ var rows = dataContext.From(numbers)
 
 ```sql
 -- SQLite
-with recursive nums as (select id as 'Id', (id + 1) as 'Next' from simple_entity
+with recursive nums as (select id as 'Id', (id + 1) as 'Next'
+ from simple_entity
  where id = 1
  union all
- select (id + 1) as 'Id', (Next + 1) as 'Next' from nums as 't1'
- where (t1.Id < 4)) select Id, Next from nums as 't1'
+ select (id + 1) as 'Id', (Next + 1) as 'Next'
+ from nums as 't1'
+ where (t1.Id < 4)) select Id, Next
+ from nums as 't1'
 ```
 
 ... и DTO-проекция, например member-init `CteNumberRow` из строкового API ниже:
@@ -237,11 +251,14 @@ var rows = dataContext.From(numbers)
 
 ```sql
 -- SQLite
-with recursive nums as (select id as 'n' from simple_entity
+with recursive nums as (select id as 'n'
+ from simple_entity
  where id = 1
  union all
- select (n + 1) as 'n' from nums as 't1'
- where (t1.n < 5)) select n from nums as 't1'
+ select (n + 1) as 'n'
+ from nums as 't1'
+ where (t1.n < 5)) select n
+ from nums as 't1'
 ```
 
 ### Форму задаёт якорь
@@ -288,11 +305,14 @@ var rows = dataContext.From(numbers).ToList();
 
 ```sql
 -- SQL Server: без ключевого слова `recursive`, опция глубины в конце
-with nums as (select id as [Id] from simple_entity
+with nums as (select id as [Id]
+ from simple_entity
  where id = 1
  union all
- select (Id + 1) as [c0] from nums as [t1]
- where (t1.Id < 5)) select id from nums as [t1] option (maxrecursion 100)
+ select (Id + 1) as [c0]
+ from nums as [t1]
+ where (t1.Id < 5)) select id
+ from nums as [t1] option (maxrecursion 100)
 ```
 
 ### Различия провайдеров (типизированная рекурсия)
@@ -414,7 +434,11 @@ var rows = dataContext
 
 ```sql
 -- SQLite
-with l as (select id from complex_entity), r as (select id from simple_entity) select t1.id, t2.id from l as 't1' join r as 't2' on t1.id = t2.id
+with l as (select id
+ from complex_entity), r as (select id
+ from simple_entity) select t1.id, t2.id
+ from l as 't1'
+ join r as 't2' on t1.id = t2.id
 ```
 
 > У источника CTE нет сопоставленной сущности, поэтому столбцы читаются по имени (`t.GetInt64("id")` /
@@ -638,7 +662,8 @@ var updated = dataContext
 
 ```sql
 -- PostgreSQL
-with upd as (update orders set total = @p0 where customer_id = 7 returning id, total) select id, total from upd as "t1"
+with upd as (update orders set total = @p0 where customer_id = 7 returning id, total) select id, total
+ from upd as "t1"
 ```
 
 ```csharp
@@ -658,7 +683,8 @@ var removed = dataContext
 
 ```sql
 -- PostgreSQL
-with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName" from del as "t1"
+with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName"
+ from del as "t1"
 ```
 
 ```csharp
@@ -682,7 +708,8 @@ var removed = dataContext
 
 ```sql
 -- PostgreSQL: читающая сторона тела по всей проекции выше
-select "__s1_id", "__s2_name" from del as "t1"
+select "__s1_id", "__s2_name"
+ from del as "t1"
 ```
 
 Write-CTE документируется вместе с поверхностью записи, к которой принадлежит — типизированное чтение через

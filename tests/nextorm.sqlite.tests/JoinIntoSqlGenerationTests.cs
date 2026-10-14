@@ -29,7 +29,7 @@ public class JoinIntoSqlGenerationTests
             .JoinInto(ctx.From<JoinIntoChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
             .ToCommand());
 
-        sql.Should().Contain("select t1.id, t1.name from join_into_parent as 't1'")
+        sql.Should().Contain("select t1.id, t1.name\n from join_into_parent as 't1'")
             .And.Contain("left join join_into_child as 't2' on t1.id = t2.parent_id");
     }
 
@@ -42,7 +42,7 @@ public class JoinIntoSqlGenerationTests
             .JoinInto(ctx.From<JoinIntoChild>(), (p, c) => p.Id == c.ParentId, p => p.Children, JoinType.Inner)
             .ToCommand());
 
-        sql.Should().Contain("select t1.id, t1.name from join_into_parent as 't1'")
+        sql.Should().Contain("select t1.id, t1.name\n from join_into_parent as 't1'")
             .And.Contain(" join join_into_child as 't2' on t1.id = t2.parent_id")
             .And.NotContain("left join", "an Inner JoinInto must render an inner join");
     }
@@ -56,7 +56,7 @@ public class JoinIntoSqlGenerationTests
             .JoinInto(ctx.From<JoinIntoChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
             .ToParentCommand());
 
-        sql.Should().Be("select id, name from join_into_parent");
+        sql.Should().Be("select id, name\n from join_into_parent");
     }
 
     [Fact]

@@ -27,8 +27,8 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(3);
         statements[0].Should().StartWith("update simple_entity");
-        statements[1].Should().Contain("select id from simple_entity").And.Contain("@b1_min");
-        statements[2].Should().Contain("select id from simple_entity").And.Contain("@b2_max");
+        statements[1].Should().Contain("select id\n from simple_entity").And.Contain("@b1_min");
+        statements[2].Should().Contain("select id\n from simple_entity").And.Contain("@b2_max");
     }
 
     [Fact]

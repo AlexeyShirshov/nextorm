@@ -151,7 +151,7 @@ public class ToDataReaderSqliteTests
 
         var sql = BufferedSql(ctx, command);
 
-        sql.Should().Be("select id, name from reader_probe");
+        sql.Should().Be("select id, name\n from reader_probe");
         sql.Should().NotContain("rowid");
     }
 
@@ -166,7 +166,7 @@ public class ToDataReaderSqliteTests
                 .Select(x => new { x.Id, x.Name })
                 .ToDataReader();
 
-            Normalize(interceptor.Statements.Single()).Should().Be("select id, name from reader_probe");
+            Normalize(interceptor.Statements.Single()).Should().Be("select id, name\n from reader_probe");
             reader.FieldCount.Should().Be(2, "the locator-free path must not append a rowid column");
             reader.GetName(0).Should().Be("id");
             reader.GetName(1).Should().Be("name");

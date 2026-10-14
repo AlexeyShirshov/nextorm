@@ -122,10 +122,18 @@ var pairs = dataContext.From(recent)
 
 ```sql
 -- SQLite: heterogeneous descriptors
-with recent as (select id as 'Id', somestring as 'String' from complex_entity), other as (select id as 'Id' from simple_entity) select t1.Id, t1.String, t2.Id from recent as 't1' join other as 't2' on t1.Id = cast(t2.Id as bigint)
+with recent as (select id as 'Id', somestring as 'String'
+ from complex_entity), other as (select id as 'Id'
+ from simple_entity) select t1.Id, t1.String, t2.Id
+ from recent as 't1'
+ join other as 't2' on t1.Id = cast(t2.Id as bigint)
 
--- SQLite: self-join of one descriptor -> one declaration, two aliases
-with recent as (select id as 'Id', somestring as 'String' from complex_entity) select t1.Id, t2.Id from recent as 't1' join recent as 't2' on t1.Id = t2.Id
+-- SQLite: self-
+join of one descriptor -> one declaration, two aliases
+with recent as (select id as 'Id', somestring as 'String'
+ from complex_entity) select t1.Id, t2.Id
+ from recent as 't1'
+ join recent as 't2' on t1.Id = t2.Id
 ```
 
 Dependencies are hoisted automatically: `From(Cte<T>)` attaches the descriptor's declaration together with
@@ -182,11 +190,14 @@ var rows = dataContext.From(numbers).ToList();
 
 ```sql
 -- SQLite
-with recursive nums as (select id as 'Id' from simple_entity
+with recursive nums as (select id as 'Id'
+ from simple_entity
  where id = 1
  union all
- select (Id + 1) as 'c0' from nums as 't1'
- where (t1.Id < 5)) select id from nums as 't1'
+ select (Id + 1) as 'c0'
+ from nums as 't1'
+ where (t1.Id < 5)) select id
+ from nums as 't1'
 ```
 
 The same surface covers an anonymous projection with several slots:
@@ -206,11 +217,14 @@ var rows = dataContext.From(numbers)
 
 ```sql
 -- SQLite
-with recursive nums as (select id as 'Id', (id + 1) as 'Next' from simple_entity
+with recursive nums as (select id as 'Id', (id + 1) as 'Next'
+ from simple_entity
  where id = 1
  union all
- select (id + 1) as 'Id', (Next + 1) as 'Next' from nums as 't1'
- where (t1.Id < 4)) select Id, Next from nums as 't1'
+ select (id + 1) as 'Id', (Next + 1) as 'Next'
+ from nums as 't1'
+ where (t1.Id < 4)) select Id, Next
+ from nums as 't1'
 ```
 
 ... and a DTO projection, for example the member-init `CteNumberRow` used by the string API below:
@@ -235,11 +249,14 @@ var rows = dataContext.From(numbers)
 
 ```sql
 -- SQLite
-with recursive nums as (select id as 'n' from simple_entity
+with recursive nums as (select id as 'n'
+ from simple_entity
  where id = 1
  union all
- select (n + 1) as 'n' from nums as 't1'
- where (t1.n < 5)) select n from nums as 't1'
+ select (n + 1) as 'n'
+ from nums as 't1'
+ where (t1.n < 5)) select n
+ from nums as 't1'
 ```
 
 ### The anchor defines the shape
@@ -286,11 +303,14 @@ var rows = dataContext.From(numbers).ToList();
 
 ```sql
 -- SQL Server: no `recursive` keyword, depth option appended
-with nums as (select id as [Id] from simple_entity
+with nums as (select id as [Id]
+ from simple_entity
  where id = 1
  union all
- select (Id + 1) as [c0] from nums as [t1]
- where (t1.Id < 5)) select id from nums as [t1] option (maxrecursion 100)
+ select (Id + 1) as [c0]
+ from nums as [t1]
+ where (t1.Id < 5)) select id
+ from nums as [t1] option (maxrecursion 100)
 ```
 
 ### Provider differences (typed recursion)
@@ -409,7 +429,11 @@ var rows = dataContext
 
 ```sql
 -- SQLite
-with l as (select id from complex_entity), r as (select id from simple_entity) select t1.id, t2.id from l as 't1' join r as 't2' on t1.id = t2.id
+with l as (select id
+ from complex_entity), r as (select id
+ from simple_entity) select t1.id, t2.id
+ from l as 't1'
+ join r as 't2' on t1.id = t2.id
 ```
 
 > The CTE source has no mapped entity, so its columns are read by name (`t.GetInt64("id")` /
@@ -632,7 +656,8 @@ var updated = dataContext
 
 ```sql
 -- PostgreSQL
-with upd as (update orders set total = @p0 where customer_id = 7 returning id, total) select id, total from upd as "t1"
+with upd as (update orders set total = @p0 where customer_id = 7 returning id, total) select id, total
+ from upd as "t1"
 ```
 
 ```csharp
@@ -652,7 +677,8 @@ var removed = dataContext
 
 ```sql
 -- PostgreSQL
-with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName" from del as "t1"
+with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName"
+ from del as "t1"
 ```
 
 ```csharp
@@ -676,7 +702,8 @@ stored alias rather than the CLR member name:
 
 ```sql
 -- PostgreSQL: read side of the whole-projection body above
-select "__s1_id", "__s2_name" from del as "t1"
+select "__s1_id", "__s2_name"
+ from del as "t1"
 ```
 
 The write CTE is documented together with the write surface it belongs to — typed read-back via

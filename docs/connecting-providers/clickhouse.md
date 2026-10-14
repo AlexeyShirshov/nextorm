@@ -160,7 +160,8 @@ var query = ctx.From<ISimpleEntity>().Select(x => new { Label = "id:" + x.Id });
 ```
 
 ```sql
-select concat('id:', id) as `Label` from simple_entity
+select concat('id:', id) as `Label`
+ from simple_entity
 ```
 
 ## Table-valued parameters

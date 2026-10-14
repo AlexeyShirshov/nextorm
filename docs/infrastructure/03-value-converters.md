@@ -205,7 +205,8 @@ var customer = ctx.From<Customer>().Where(x => x.Id == 1).ToList().Single();
 ```
 
 ```sql
-select id, address from customers
+select id, address
+ from customers
  where id = 1
 ```
 
@@ -235,7 +236,8 @@ ctx.From<Customer>().Where(x => x.Address == berlin).ToList();
 ```
 
 ```sql
-select id, address from customers
+select id, address
+ from customers
  where address = @p0
 ```
 
@@ -308,7 +310,8 @@ var orders = ctx.From<Order>()
 ```
 
 ```sql
-select id, status from orders
+select id, status
+ from orders
  where id = 1
 ```
 
@@ -322,7 +325,8 @@ ctx.From<Order>().Where(x => x.Status == Status.Active).ToList();
 ```
 
 ```sql
-select id, status from orders
+select id, status
+ from orders
  where status = @p0
 ```
 
@@ -335,7 +339,8 @@ ctx.From<Order>().Where(x => new[] { state, Status.Closed }.Contains(x.Status)).
 ```
 
 ```sql
-select id, status from orders
+select id, status
+ from orders
  where status in (@p0, @p1)
 ```
 
@@ -354,7 +359,8 @@ ctx.From<Order>().Where(x => x.Id == 1).Select(x => x.Status).ToList();
 ```
 
 ```sql
-select status from orders
+select status
+ from orders
  where id = 1
 ```
 

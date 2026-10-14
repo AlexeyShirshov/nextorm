@@ -69,7 +69,7 @@ public class DynamicColumnsTests
         var sql = ((DbPreparedQueryCommand<DynamicColumnsEntity>)ctx.GetPreparedQueryCommand(
             ctx.From<DynamicColumnsEntity>().ToCommand(), false, false, CancellationToken.None)).DbCommand.CommandText;
 
-        sql.Replace("\r\n", "\n").Should().Be("select id, name, * from dynamic_entity");
+        sql.Replace("\r\n", "\n").Should().Be("select id, name, *\n from dynamic_entity");
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class DynamicColumnsTests
         var sql = ((DbPreparedQueryCommand<DynamicColumnsEntity>)ctx.GetPreparedQueryCommand(
             ctx.From<DynamicColumnsEntity>().ToCommand(), false, false, CancellationToken.None)).DbCommand.CommandText;
 
-        sql.Replace("\r\n", "\n").Should().Be("select id, name, * from dynamic_entity");
+        sql.Replace("\r\n", "\n").Should().Be("select id, name, *\n from dynamic_entity");
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public class DynamicColumnsTests
         var sql = ((DbPreparedQueryCommand<DynamicColumnsEntity>)ctx.GetPreparedQueryCommand(
             ctx.From<DynamicColumnsEntity>().ToCommand(), false, false, CancellationToken.None)).DbCommand.CommandText;
 
-        sql.Replace("\r\n", "\n").Should().Be("select \"id\", \"name\", * from \"dynamic_entity\"");
+        sql.Replace("\r\n", "\n").Should().Be("select \"id\", \"name\", *\n from \"dynamic_entity\"");
     }
 
     [Fact]

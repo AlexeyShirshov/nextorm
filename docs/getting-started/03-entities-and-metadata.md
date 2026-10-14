@@ -54,7 +54,8 @@ public interface ISimpleEntity
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 * **Table name** - taken from `[SqlTable]` (preferred) or `[Table]`. When neither is present the CLR
@@ -124,7 +125,8 @@ var rows = await dataContext.From<Product>()
 ```
 
 ```sql
-select Id, Name from Product
+select Id, Name
+ from Product
 ```
 
 A bare interface works as a query source as long as the projection produces a scalar, an anonymous
@@ -144,7 +146,8 @@ var names = await dataContext.From<IProduct>()
 ```
 
 ```sql
-select Name from IProduct
+select Name
+ from IProduct
  where (Id > 1)
 ```
 
@@ -258,7 +261,8 @@ await foreach (var row in dataContext.From("simple_entity")
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 [`TableAlias`](xref:NextORM.Core.TableAlias) accessor methods (each takes the column name and returns the CLR value for that type):

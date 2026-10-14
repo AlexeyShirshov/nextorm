@@ -73,7 +73,8 @@ var stddev = ctx.From<IComplexEntity>()
 ```
 
 ```sql
-select stdev(cast(id as double precision)) from complex_entity
+select stdev(cast(id as double precision))
+ from complex_entity
 ```
 
 ## Date parts, coalesce and `LIKE`

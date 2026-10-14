@@ -72,7 +72,8 @@ Id = 3
 The generated SQL is a plain `select` over the mapped table and column:
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 ## Using a connection string

@@ -49,7 +49,8 @@ public interface ISimpleEntity
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 * **Имя таблицы** - берётся из `[SqlTable]` (предпочтительно) или `[Table]`. Когда нет ни того, ни другого,
@@ -115,7 +116,8 @@ var rows = await dataContext.From<Product>()
 ```
 
 ```sql
-select Id, Name from Product
+select Id, Name
+ from Product
 ```
 
 Голый интерфейс годится как источник запроса, пока проекция даёт скаляр, анонимный тип, кортеж или DTO -
@@ -135,7 +137,8 @@ var names = await dataContext.From<IProduct>()
 ```
 
 ```sql
-select Name from IProduct
+select Name
+ from IProduct
  where (Id > 1)
 ```
 
@@ -244,7 +247,8 @@ await foreach (var row in dataContext.From("simple_entity")
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Методы-аксессоры [`TableAlias`](xref:NextORM.Core.TableAlias) (каждый принимает имя столбца и возвращает значение CLR для этого типа):

@@ -34,8 +34,10 @@ var person = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select jsonb_agg(somestring) from complex_entity
-select jsonb_build_object('id', id, 'name', somestring) from complex_entity
+select jsonb_agg(somestring)
+ from complex_entity
+select jsonb_build_object('id', id, 'name', somestring)
+ from complex_entity
 ```
 
 | C# | SQL |
@@ -95,7 +97,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select json_value(somestring, '$.id') as [Id], json_query(somestring, '$.name') as [Name], json_modify(somestring, '$.id', '1') as [Updated] from complex_entity
+select json_value(somestring, '$.id') as [Id], json_query(somestring, '$.name') as [Name], json_modify(somestring, '$.id', '1') as [Updated]
+ from complex_entity
 ```
 
 | C# | SQL |
@@ -131,7 +134,8 @@ var rows = dataContext.From<IXmlEntity>()
 ```
 
 ```sql
-select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value], payload.query('/root/item[1]') as [Fragment], payload.exist('/root/item[2]') as [Exists] from xml_entity
+select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value], payload.query('/root/item[1]') as [Fragment], payload.exist('/root/item[2]') as [Exists]
+ from xml_entity
 ```
 
 | C# | SQL |
@@ -162,7 +166,8 @@ var rows = dataContext.From<IXmlEntity>()
 
 ```sql
 select t2.value.value('(.)[1]/@id', 'int') as [Id], t2.value.value('(.)[1]', 'nvarchar(100)') as [Text]
-from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value)
+from xml_entity as [t1]
+ cross apply t1.payload.nodes('/root/item') as [t2](value)
 ```
 
 Операнд обязан быть колонкой внешней строки, а XQuery — строковым литералом; все прочие провайдеры

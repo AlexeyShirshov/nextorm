@@ -18,7 +18,7 @@ public sealed class CreateNextOrmContextTests : EfCoreMetadataCleanup
         using var ctx = db.CreateNextOrmContext(builder => builder.UseUppercaseKeywords());
         var sql = NextOrmSql.Of(ctx, ctx.From<ConfigureRow>().Select(x => new { x.Id }));
 
-        sql.Should().Be("SELECT configured_id AS 'Id' FROM configured_table");
+        sql.Should().Be("SELECT configured_id AS 'Id'\n FROM configured_table");
     }
 
     [Fact]
@@ -29,7 +29,7 @@ public sealed class CreateNextOrmContextTests : EfCoreMetadataCleanup
         using var ctx = db.CreateNextOrmContext(null);
         var sql = NextOrmSql.Of(ctx, ctx.From<ConfigureRow>().Select(x => new { x.Id }));
 
-        sql.Should().Be("select configured_id as 'Id' from configured_table");
+        sql.Should().Be("select configured_id as 'Id'\n from configured_table");
     }
 
     private sealed class ConfigureContext : DbContext

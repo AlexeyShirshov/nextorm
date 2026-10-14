@@ -45,7 +45,7 @@ public class JoinIntoManyToManySqlGenerationTests
             .JoinInto(ctx.From<JoinIntoManyChild>(), (p, c) => c.Id > 0, p => p.Children)
             .CreateJoinIntoPairCommand());
 
-        sql.Should().MatchRegex(@"left join \(select .*?from joinmnlink\)");
+        sql.Should().MatchRegex(@"left join \(select [\s\S]*?from joinmnlink\)");
         sql.Should().MatchRegex(@"rownumber\(\)\s*over\s*\(\s*partition by\s+[^)]+order by\s+[^)]+\)\s*as occurrence");
         sql.Should().Contain("from joinmnparent");
         sql.Should().Contain("parentkey").And.Contain("childkey");

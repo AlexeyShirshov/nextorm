@@ -180,7 +180,8 @@ from post as t1
 left join (
     select j.post_id as parent_key, j.tag_id as child_key,
            row_number() over (partition by j.post_id, j.tag_id order by j.tag_id) as occurrence
-    from tag_link as j
+   
+ from tag_link as j
 ) as t2 on t1.id = t2.parent_key
 left join tag as t3 on t3.id = t2.child_key and t3.active
 ```

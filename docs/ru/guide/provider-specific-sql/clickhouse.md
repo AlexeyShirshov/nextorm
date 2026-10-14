@@ -115,7 +115,9 @@ var rows = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id, t2.somestring from simple_entity as `t1` global left any join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
+select t1.id, t2.somestring
+ from simple_entity as `t1`
+ global left any join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
 ```
 
 См. [Соединения](../02-joins.md#специфичные-для-провайдера-модификаторы-соединения-clickhouse)

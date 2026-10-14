@@ -39,9 +39,11 @@ Renders as one batch:
 
 ```sql
 -- PostgreSQL
-create temporary table recent_orders as select id, total from orders
+create temporary table recent_orders as select id, total
+ from orders
  where (total > @b0_minTotal);
-select id, total from recent_orders
+select id, total
+ from recent_orders
 ```
 
 `Query<TResult>` returns the `BatchQuery<TResult>` terminal:
@@ -73,9 +75,11 @@ Each read prepends a `DROP TABLE IF EXISTS` so the batch is self-contained and r
 ```sql
 -- PostgreSQL
 drop table if exists __nextorm_temp_xxxxxxxx;
-create temporary table __nextorm_temp_xxxxxxxx as select id, total from orders
+create temporary table __nextorm_temp_xxxxxxxx as select id, total
+ from orders
  where (total > @b0_minTotal);
-select id, total from __nextorm_temp_xxxxxxxx
+select id, total
+ from __nextorm_temp_xxxxxxxx
 ```
 
 `ToBatchSql()` renders that batch without executing it, and every terminal (`ToList`, `First`, `Single`, `Count`, `Any`, `ToAsyncEnumerable`, …) runs it. A lazy source may itself read another lazy source; the tables are then materialised in dependency order before the read. The read command is re-rendered on every execution, so it is never stored in the plan cache (like every batch plan) and its captured variables become parameters as usual.
@@ -98,10 +102,13 @@ var rows = ctx.CreateBatchBuilder()
 
 ```sql
 -- PostgreSQL
-create temporary table recent_orders as select id, total from orders
+create temporary table recent_orders as select id, total
+ from orders
  where (total > @b0_minTotal);
-create temporary table recent_ids as select id from recent_orders;
-select id from recent_ids
+create temporary table recent_ids as select id
+ from recent_orders;
+select id
+ from recent_ids
 ```
 
 Replacing a persistent table — `CreateTable` with `DropExisting` drops it first, so the step can run again instead of failing on the second run:
@@ -117,8 +124,10 @@ var rows = ctx.CreateBatchBuilder()
 ```sql
 -- PostgreSQL
 drop table if exists order_archive;
-create table order_archive as select id, total from orders;
-select id from order_archive
+create table order_archive as select id, total
+ from orders;
+select id
+ from order_archive
 ```
 
 `DropExisting` is valid only for a persistent `CreateTable` (a `CreateTempTable` is session-scoped and rejects it) and cannot be combined with `IfNotExists`.
@@ -135,7 +144,8 @@ var updated = ctx.CreateBatchBuilder()
 ```sql
 -- PostgreSQL
 update orders set status = @p0 where (id = @b0_id);
-select id, status from orders
+select id, status
+ from orders
  where (id = @b1_id)
 ```
 
@@ -147,13 +157,15 @@ select id, status from orders
 
 Parameters are numbered across the whole batch, and a captured variable used by more than one statement gets a per-statement prefix (`b0_`, `b1_`, …), so placeholder names never collide — including in the `;`-joined form. A captured variable referenced twice within the same statement keeps a single parameter entry.
 
-The SQL blocks above are the PostgreSQL rendering. By default `ToSql()` prints the statements on one line separated by `; `; enable `DataContextBuilder.UseMultilineBatchSql()` to render each statement on its own line, as shown here. SQL Server renders the same pair differently — there is no `CREATE TEMPORARY TABLE ... AS SELECT` and `CreateTempTable` throws `NotSupportedException`, so a temporary target is created with `CreateTable` and a `#`-prefixed name:
+The SQL blocks above are the PostgreSQL rendering. By default `ToSql()` prints the statements on one line separated by `; `; enable `DataContextBuilder.UseMultilineBatchSql()` to render each statement on its own line, as shown here. `UseMultilineBatchSql()` controls only the **separation between statements** — it is not a clause-layout switch: the newline before `FROM`/`JOIN` inside each statement is emitted unconditionally by the statement writer (see [Limitations](../advanced/limitations.md)). SQL Server renders the same pair differently — there is no `CREATE TEMPORARY TABLE ... AS SELECT` and `CreateTempTable` throws `NotSupportedException`, so a temporary target is created with `CreateTable` and a `#`-prefixed name:
 
 ```sql
 -- SQL Server
-select id, total into #recent_orders from orders
+select id, total into #recent_orders
+ from orders
  where (total > @b0_minTotal);
-select id, total from #recent_orders
+select id, total
+ from #recent_orders
 ```
 
 ## Raw steps
@@ -204,9 +216,11 @@ The two queries go to the database as **one** batch — one round trip, one serv
 
 ```sql
 -- PostgreSQL
-select id, total from orders
+select id, total
+ from orders
  where (status = @b0_status);
-select id, status from orders
+select id, status
+ from orders
  where (status = @b1_status)
 ```
 

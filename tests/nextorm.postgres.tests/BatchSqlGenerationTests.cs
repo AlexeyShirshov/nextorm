@@ -20,7 +20,7 @@ public class BatchSqlGenerationTests
             .Query(ctx.From("recent_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();
 
-        sql.Should().Be("create temporary table recent_ids as select id from simple_entity; select id from recent_ids");
+        sql.Should().Be("create temporary table recent_ids as select id\n from simple_entity; select id\n from recent_ids");
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public class BatchSqlGenerationTests
             .Query(ctx.From("recent_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();
 
-        sql.Should().Be("create temporary table recent_ids as select id from simple_entity\n where (id > @b0_min); select id from recent_ids");
+        sql.Should().Be("create temporary table recent_ids as select id\n from simple_entity\n where (id > @b0_min); select id\n from recent_ids");
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class BatchSqlGenerationTests
             .Query(ctx.From("archive_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();
 
-        sql.Should().Be("create table archive_ids as select id from simple_entity; select id from archive_ids");
+        sql.Should().Be("create table archive_ids as select id\n from simple_entity; select id\n from archive_ids");
     }
 
     [Fact]
@@ -79,8 +79,8 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(3);
         statements[0].Should().StartWith("create temporary table first_ids as ");
-        statements[1].Should().Be("create temporary table second_ids as select id from first_ids");
-        statements[2].Should().Be("select id from second_ids");
+        statements[1].Should().Be("create temporary table second_ids as select id\n from first_ids");
+        statements[2].Should().Be("select id\n from second_ids");
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(2);
         statements[0].Should().Be("update simple_entity set id = @p0 where (id > @b0_min)");
-        statements[1].Should().Be("select id from simple_entity\n where (id > @b1_min)");
+        statements[1].Should().Be("select id\n from simple_entity\n where (id > @b1_min)");
     }
 
     [Fact]
@@ -164,8 +164,8 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(3);
         statements[0].Should().StartWith("update simple_entity set id = @p0");
-        statements[1].Should().Contain("select id from simple_entity").And.Contain("@b1_min");
-        statements[2].Should().Contain("select id from simple_entity").And.Contain("@b2_max");
+        statements[1].Should().Contain("select id\n from simple_entity").And.Contain("@b1_min");
+        statements[2].Should().Contain("select id\n from simple_entity").And.Contain("@b2_max");
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(2);
         statements[0].Should().Be("insert into insert_entity (name, age) values (@p0, @p1)");
-        statements[1].Should().Be("select name from insert_entity");
+        statements[1].Should().Be("select name\n from insert_entity");
     }
 
     [Fact]
@@ -198,7 +198,7 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(2);
         statements[0].Should().Be("delete from simple_entity where (id > @b0_max)");
-        statements[1].Should().Be("select id from simple_entity");
+        statements[1].Should().Be("select id\n from simple_entity");
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(2);
         statements[0].Should().Be("truncate table simple_entity");
-        statements[1].Should().Be("select id from simple_entity");
+        statements[1].Should().Be("select id\n from simple_entity");
     }
 
     [Fact]

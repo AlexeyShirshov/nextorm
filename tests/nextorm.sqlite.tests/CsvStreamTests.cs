@@ -790,7 +790,7 @@ public class CsvStreamTests
             streamingRowsRequested: false,
             suppressLobLocator: true,
             TestContext.Current.CancellationToken);
-        NormalizeCommand(csv).Should().Be("select data from csv_blob_row");
+        NormalizeCommand(csv).Should().Be("select data\n from csv_blob_row");
         NormalizeCommand(csv).Should().NotContain("rowid");
 
         var lob = (DbPreparedQueryCommand<byte[]>)planner.GetPreparedQueryCommand(
@@ -801,7 +801,7 @@ public class CsvStreamTests
             streamingRowsRequested: false,
             suppressLobLocator: false,
             TestContext.Current.CancellationToken);
-        NormalizeCommand(lob).Should().Be("select data, rowid from csv_blob_row");
+        NormalizeCommand(lob).Should().Be("select data, rowid\n from csv_blob_row");
     }
 
     /// <summary>

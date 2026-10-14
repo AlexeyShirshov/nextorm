@@ -18,7 +18,8 @@ var rows = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Вывод:
@@ -49,7 +50,8 @@ var rows = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select (id + 1) as 'Id' from simple_entity
+select (id + 1) as 'Id'
+ from simple_entity
 ```
 
 Вывод:
@@ -78,7 +80,8 @@ var rows = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id, (id + 1) as 'Calc' from complex_entity
+select id, (id + 1) as 'Calc'
+ from complex_entity
 ```
 
 Строковые члены конкатенируются оператором конкатенации провайдера (`||` в SQLite и PostgreSQL, `+` в
@@ -92,7 +95,8 @@ var rows = await dataContext.From<ComplexEntity>()
 
 ```sql
 -- SQLite
-select id, ((somestring || '/') || requiredstring) as 'Display' from complex_entity
+select id, ((somestring || '/') || requiredstring) as 'Display'
+ from complex_entity
 ```
 
 Вывод:
@@ -117,7 +121,8 @@ var rows = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select region_id as 'Region' from simple_entity
+select region_id as 'Region'
+ from simple_entity
 ```
 
 Первым аргументом должен быть параметр лямбды запроса (источник); имя сверяется с именем колонки в
@@ -156,7 +161,8 @@ var rows = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Вывод:
@@ -187,7 +193,8 @@ var rows = await dataContext.From("simple_entity")
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Вывод:
@@ -217,7 +224,8 @@ var rows = await dataContext.From("simple_entity")
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Вывод:
@@ -246,7 +254,8 @@ var rows = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Вывод:
@@ -326,14 +335,18 @@ var rows = await dataContext.From(inner)
 
 ```sql
 -- SQLite: no derived-table alias is required
-select id, Calc from (select id, (somestring || somestring) as 'Calc' from complex_entity)
+select id, Calc
+ from (select id, (somestring || somestring) as 'Calc'
+ from complex_entity)
 ```
 
 SQL Server требует, чтобы производная таблица имела псевдоним, и PostgreSQL аналогично:
 
 ```sql
 -- SQL Server
-select id, Calc from (select id, (somestring + somestring) as [Calc] from complex_entity) as [t1]
+select id, Calc
+ from (select id, (somestring + somestring) as [Calc]
+ from complex_entity) as [t1]
 ```
 
 ## Именованные псевдонимы соединений

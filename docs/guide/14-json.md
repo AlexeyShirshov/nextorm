@@ -134,7 +134,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select json_value(somestring, '$.id') as [Id], json_query(somestring, '$.name') as [Name], json_modify(somestring, '$.id', '1') as [Updated] from complex_entity
+select json_value(somestring, '$.id') as [Id], json_query(somestring, '$.name') as [Name], json_modify(somestring, '$.id', '1') as [Updated]
+ from complex_entity
 ```
 
 `SqlFunctions.SqlServer.isjson` tests whether a text value is valid JSON. On SQL Server a predicate
@@ -169,7 +170,8 @@ var entries = dataContext
 ```
 
 ```sql
-select [key] as [Key], value, type from openjson(@json) as [t1]
+select [key] as [Key], value, type
+ from openjson(@json) as [t1]
 ```
 
 For a typed projection declare your own `[SqlTableFunction("openjson")]` wrapper whose row shape
@@ -268,7 +270,8 @@ var document = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select jsonb_build_object('id', id, 'name', somestring) as "V" from complex_entity
+select jsonb_build_object('id', id, 'name', somestring) as "V"
+ from complex_entity
 ```
 
 | C# | SQL |
@@ -291,7 +294,8 @@ var json = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select jsonb_agg(jsonb_build_object('id', id, 'name', somestring)) from complex_entity
+select jsonb_agg(jsonb_build_object('id', id, 'name', somestring))
+ from complex_entity
 ```
 
 Nesting is expressed with `GroupBy`: the outer aggregate makes the document, the inner one makes each

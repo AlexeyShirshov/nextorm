@@ -88,9 +88,11 @@ var values = dataContext
 
 ```sql
 -- SQLite
-select value from json_each('[1,2,3]')
+select value
+ from json_each('[1,2,3]')
 -- SQL Server / PostgreSQL append an alias
-select value from json_each('[1,2,3]') as [t1]
+select value
+ from json_each('[1,2,3]') as [t1]
 ```
 
 Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -116,7 +118,8 @@ var prepared = dataContext
 
 ```sql
 -- SQLite placeholder; SQL Server/PostgreSQL use @id
-select id from rows_by_id($id)
+select id
+ from rows_by_id($id)
 ```
 
 Имя, квалифицированное схемой, с двумя аргументами рендерится как `app.rows_between(...)`:
@@ -132,7 +135,8 @@ var prepared = dataContext
 ```
 
 ```sql
-select id from app.rows_between($lo, $hi)
+select id
+ from app.rows_between($lo, $hi)
 ```
 
 ## Объединение, фильтрация и сортировка TVF
@@ -153,7 +157,9 @@ var rows = dataContext
 
 ```sql
 -- SQLite
-select t1.value, t2.somestring as 'String' from all_rows() as 't1' join complex_entity as 't2' on t1.id = t2.id
+select t1.value, t2.somestring as 'String'
+ from all_rows() as 't1'
+ join complex_entity as 't2' on t1.id = t2.id
 ```
 
 Обратный случай — таблица слева, TVF справа — ведёт себя так же и используется, когда функция
@@ -169,7 +175,9 @@ var rows = dataContext
 
 ```sql
 -- SQLite
-select t1.id, t2.value from simple_entity as 't1' join all_rows() as 't2' on t2.id = cast(t1.id as bigint)
+select t1.id, t2.value
+ from simple_entity as 't1'
+ join all_rows() as 't2' on t2.id = cast(t1.id as bigint)
 -- SQL Server / PostgreSQL отличаются только кавычками идентификаторов ([t2] / "t2")
 ```
 
@@ -190,9 +198,13 @@ var rows = dataContext
 
 ```sql
 -- SQL Server
-select t1.id, t2.value from simple_entity as [t1] cross apply all_rows() as [t2]
+select t1.id, t2.value
+ from simple_entity as [t1]
+ cross apply all_rows() as [t2]
 -- PostgreSQL / MySQL / MariaDB
-select t1.id, t2.value from simple_entity as "t1" cross join lateral all_rows() as "t2"
+select t1.id, t2.value
+ from simple_entity as "t1"
+ cross join lateral all_rows() as "t2"
 ```
 
 Если построить функцию внутри лямбды, она коррелируется с внешней строкой: захваченный столбец
@@ -208,9 +220,15 @@ var rows = dataContext
 
 ```sql
 -- SQL Server
-select t1.id, t3.value from simple_entity as [t1] cross apply (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
+select t1.id, t3.value
+ from simple_entity as [t1]
+ cross apply (select t2.id, t2.value
+ from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
 -- PostgreSQL
-select t1.id, t3.value from simple_entity as "t1" cross join lateral (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as "t2") as "t3"
+select t1.id, t3.value
+ from simple_entity as "t1"
+ cross join lateral (select t2.id, t2.value
+ from rows_by_id(cast(t1.id as bigint)) as "t2") as "t3"
 ```
 
 `OuterApply` — близнец, сохраняющий левые строки: он оставляет строки, для которых функция не вернула
@@ -328,7 +346,8 @@ var fragments = dataContext
 ```
 
 ```sql
-select value from string_split(@csv, @separator) as [t1]
+select value
+ from string_split(@csv, @separator) as [t1]
 ```
 
 `SqlFunctions.SqlServer.openjson` — из SQL Server 2016+ и возвращает [`SqlFunctions.IOpenJsonRow`](xref:NextORM.Core.SqlFunctions.IOpenJsonRow) (`key`/`value`/`type`).
@@ -344,7 +363,8 @@ var entries = dataContext
 ```
 
 ```sql
-select [key] as [Key], value, type from openjson(@json) as [t1]
+select [key] as [Key], value, type
+ from openjson(@json) as [t1]
 ```
 
 Для **типизированной схемы** (`OPENJSON ... WITH (...)`) объявите свой хелпер, чья форма строки
@@ -372,7 +392,8 @@ var person = dataContext
 ```
 
 ```sql
-select name, age from openjson(@json) with (name nvarchar(50) '$.name', age int '$.age') as [t1]
+select name, age
+ from openjson(@json) with (name nvarchar(50) '$.name', age int '$.age') as [t1]
 ```
 
 SQL Server также предоставляет полнотекстовые табличные функции `SqlFunctions.SqlServer.containstable` и
@@ -419,7 +440,8 @@ private static class JsonTableTvf
 ```
 
 ```sql
-select id, name from json_table(@doc, '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')) as `t1`
+select id, name
+ from json_table(@doc, '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')) as `t1`
 ```
 
 `VerbatimArguments` — родственный хук для функций, принимающих «сырой» идентификатор (имя таблицы или
@@ -437,7 +459,9 @@ var rows = dataContext
 ```
 
 ```sql
-select number as `Value` from (select toInt64(number) as number from numbers(@count)) as `t1`
+select number as `Value`
+ from (select toInt64(number) as number
+ from numbers(@count)) as `t1`
 ```
 
 Колонка `number` имеет тип `UInt64`, который не материализуется row reader'ом, поэтому диалект
@@ -454,7 +478,8 @@ var rows = dataContext
 ```
 
 ```sql
-select zero as `Value` from zeros(@count) as `t1`
+select zero as `Value`
+ from zeros(@count) as `t1`
 ```
 
 В отличие от `numbers`, колонка `zero` имеет тип `UInt8`, который row reader материализует напрямую
@@ -477,7 +502,8 @@ var rows = dataContext
 
 ```sql
 select id as `Id`, value as `Value`, name as `Name`
-from (select toInt64(id) as id, value, name from generateRandom('id UInt64, value Float64, name String')) as `t1`
+from (select toInt64(id) as id, value, name
+ from generateRandom('id UInt64, value Float64, name String')) as `t1`
 limit 3
 ```
 
@@ -514,7 +540,8 @@ var hits = dataContext
 ```
 
 ```sql
-select id as `Id`, name as `Name` from url(@url, @format, @structure) as `t1`
+select id as `Id`, name as `Name`
+ from url(@url, @format, @structure) as `t1`
 ```
 
 Функции доступны только в ClickHouse
@@ -573,7 +600,8 @@ var rows = dataContext
 ```
 
 ```sql
-select a, b from values('a UInt8, b String', (1, 'x'), (2, 'y')) as `t1`
+select a, b
+ from values('a UInt8, b String', (1, 'x'), (2, 'y')) as `t1`
 ```
 
 Аргумент `tuples` передаётся verbatim (см. `VerbatimArguments`), поэтому это SQL, написанный
@@ -600,7 +628,8 @@ var rows = dataContext
 ```
 
 ```sql
-select a, b from jsonb_to_recordset(@json) as "t1"(a integer, b text)
+select a, b
+ from jsonb_to_recordset(@json) as "t1"(a integer, b text)
 ```
 
 Типы колонок берутся из CLR→SQL-мэппинга провайдера (`byte`→`UInt8`, `int`→`integer`,

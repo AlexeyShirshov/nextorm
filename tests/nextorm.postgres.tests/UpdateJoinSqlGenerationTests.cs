@@ -38,7 +38,7 @@ public class UpdateJoinSqlGenerationTests
             .Set(p => p.Item1.Id, 0)
             .ToSql();
 
-        sql.Should().StartWith("with c as (select id from simple_entity");
+        sql.Should().StartWith("with c as (select id\n from simple_entity");
         sql.Should().Contain("update simple_entity as \"t1\" set id = @p0 from c as \"t2\" where t1.id = t2.id");
     }
 
@@ -60,8 +60,8 @@ public class UpdateJoinSqlGenerationTests
             .Set(p => p.Item1.Id, 0)
             .ToSql();
 
-        sql.Should().StartWith("with i as (select id from simple_entity");
-        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().StartWith("with i as (select id\n from simple_entity");
+        sql.Should().Contain("), o as (select id\n from i)");
         sql.Should().Contain("update simple_entity as \"t1\" set id = @p0 from o as \"t2\" where t1.id = t2.id");
         sql.Should().NotContain("with i as (with");
     }
@@ -214,7 +214,7 @@ public class UpdateJoinSqlGenerationTests
 
         var sql = SqlOf(ctx, ctx.With("upd", update).From("upd").Select(r => new { r.TargetId }));
 
-        sql.Should().StartWith("with src as (select id from simple_entity");
+        sql.Should().StartWith("with src as (select id\n from simple_entity");
         sql.Should().Contain("), upd as (update complex_entity as \"t1\" set somestring = @p0 from src as \"t2\"");
         sql.Should().NotContain("with src as (with");
     }
@@ -255,7 +255,7 @@ public class UpdateJoinSqlGenerationTests
             .Select(r => new { r.Id });
 
         SqlOf(ctx, scope).Should().Be(
-            "with upd as (update merge_entity as \"t1\" set name = t2.name from merge_entity as \"t2\" where t1.id = t2.id returning t1.id) select id from upd as \"t1\"");
+            "with upd as (update merge_entity as \"t1\" set name = t2.name from merge_entity as \"t2\" where t1.id = t2.id returning t1.id) select id\n from upd as \"t1\"");
     }
 
     [Fact]
@@ -369,7 +369,7 @@ public class UpdateJoinSqlGenerationTests
             .Set(p => p.Item1.String, "x")
             .ToSql();
 
-        sql.Should().StartWith("with c as (select id from simple_entity");
+        sql.Should().StartWith("with c as (select id\n from simple_entity");
         sql.Should().Contain("update /*+ SeqScan(t1) */ complex_entity as \"t1\"");
         (sql.IndexOf("/*+")).Should().BeGreaterThan(sql.IndexOf("update"));
     }

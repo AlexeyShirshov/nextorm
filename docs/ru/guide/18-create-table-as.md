@@ -88,8 +88,10 @@ var orders = ctx.CreateBatchBuilder()
 Материализация и чтение уходят в базу одним батчем; `.ToSql()` возвращает `;`-склеенный текст, который отправляется:
 
 ```sql
-create temporary table recent_orders as select id, total from orders
- where (total > @b0_minTotal); select id from recent_orders
+create temporary table recent_orders as select id, total
+ from orders
+ where (total > @b0_minTotal); select id
+ from recent_orders
 ```
 
 Захваченный `minTotal` становится параметром, а его имя получает префикс на утверждение (`b0_minTotal`), поэтому оно не может совпасть с одноимённой переменной в другом утверждении батча.

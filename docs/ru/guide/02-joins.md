@@ -51,7 +51,9 @@ var rows = await dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id, t2.requiredstring from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+select t1.id, t2.requiredstring
+ from simple_entity as 't1'
+ join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
 Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -90,8 +92,11 @@ var rows = await dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id, t2.requiredstring from (select id from simple_entity
- where (id > 2)) as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+select t1.id, t2.requiredstring
+ from (select id
+ from simple_entity
+ where (id > 2)) as 't1'
+ join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
  where t2.requiredstring = '34mfs'
 ```
 
@@ -108,8 +113,11 @@ var rows = await dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id, t2.requiredstring from (select id from simple_entity
- where (id > 2)) as 't1' right join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+select t1.id, t2.requiredstring
+ from (select id
+ from simple_entity
+ where (id > 2)) as 't1'
+ right join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
 тогда как после соединения тот же предикат попадает во внешний `where` и отбрасывает строки, которые
@@ -124,7 +132,9 @@ var rows = await dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id, t2.requiredstring from simple_entity as 't1' right join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+select t1.id, t2.requiredstring
+ from simple_entity as 't1'
+ right join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
  where (t1.id > 2)
 ```
 
@@ -143,7 +153,9 @@ var rows = await dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id as 'Order', t2.requiredstring as 'Customer' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+select t1.id as 'Order', t2.requiredstring as 'Customer'
+ from simple_entity as 't1'
+ join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
 Член проекции обычно — колонка одной из соединённых сущностей (`p.Item1.Id`), но целый элемент можно
@@ -159,7 +171,9 @@ var children = await dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t2.id, t2.nullableint, t2.somestring, ... from simple_entity as 't1' left join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+select t2.id, t2.nullableint, t2.somestring, ...
+ from simple_entity as 't1'
+ left join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
 Wildcard `SELECT *` не генерируется никогда — mapped-колонки перечисляются явно, — а сравнение целых
@@ -189,7 +203,10 @@ var rows = await dataContext.From<Order>(b => b.Table("orders"))
 ```
 
 ```sql
-select t2.id as 'Buyer', t3.id as 'Approver' from orders as 't1' join person as 't2' on t1.buyerid = t2.id join person as 't3' on t1.approverid = t3.id
+select t2.id as 'Buyer', t3.id as 'Approver'
+ from orders as 't1'
+ join person as 't2' on t1.buyerid = t2.id
+ join person as 't3' on t1.approverid = t3.id
 ```
 
 `Alias.<Name>` — маркер времени компиляции. Генератор исходного кода, поставляемый внутри пакета
@@ -227,7 +244,9 @@ var rows = await dataContext.From<Order>(b => b.Table("orders"))
 ```
 
 ```sql
-select t2.id from orders as 't1' cross join person as 't2'
+select t2.id
+ from orders as 't1'
+ cross join person as 't2'
 ```
 
 Внутри одной цепочки сгенерированная проекция сохраняет позиционные члены `ItemN` наряду с
@@ -325,7 +344,9 @@ var rows = await rooted
 ```
 
 ```sql
-select t1.id as 'OrderId', t2.id as 'Buyer' from orders as 't1' join person as 't2' on t1.buyerid = t2.id
+select t1.id as 'OrderId', t2.id as 'Buyer'
+ from orders as 't1'
+ join person as 't2' on t1.buyerid = t2.id
 ```
 
 `p.Root` — тот же слот 1, что и `p.Item1`. После корневого псевдонима может следовать позиционное
@@ -348,7 +369,9 @@ var rows = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id as 'LeftId', t2.requiredstring as 'RightString' from simple_entity as 't1' left join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+select t1.id as 'LeftId', t2.requiredstring as 'RightString'
+ from simple_entity as 't1'
+ left join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
 [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) и [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) генерируются в той же форме:
@@ -444,7 +467,9 @@ var count = dataContext.From<ISimpleEntity>().CrossJoin(dataContext.From<IComple
 ```
 
 ```sql
-select count(*) from simple_entity as 't1' cross join complex_entity as 't2'
+select count(*)
+ from simple_entity as 't1'
+ cross join complex_entity as 't2'
 ```
 
 Вывод:
@@ -475,9 +500,13 @@ var rows = await dataContext.From<ISimpleEntity>()
 
 ```sql
 -- SQL Server
-select t1.id, t2.somestring from simple_entity as [t1] cross apply complex_entity as [t2]
+select t1.id, t2.somestring
+ from simple_entity as [t1]
+ cross apply complex_entity as [t2]
 -- PostgreSQL / MySQL / MariaDB
-select t1.id, t2.somestring from simple_entity as t1 cross join complex_entity as t2
+select t1.id, t2.somestring
+ from simple_entity as t1
+ cross join complex_entity as t2
 ```
 
 `OUTER APPLY` по производной таблице:
@@ -544,9 +573,13 @@ var rows = dataContext.From<ISimpleEntity>()
 
 ```sql
 -- SQL Server
-select t1.id, t2.value from simple_entity as [t1] cross apply all_rows() as [t2]
+select t1.id, t2.value
+ from simple_entity as [t1]
+ cross apply all_rows() as [t2]
 -- PostgreSQL / MySQL / MariaDB
-select t1.id, t2.value from simple_entity as t1 cross join lateral all_rows() as t2
+select t1.id, t2.value
+ from simple_entity as t1
+ cross join lateral all_rows() as t2
 ```
 
 Корреляция функции со строкой левой стороны передаёт столбец этой строки аргументом функции; вызов тогда оборачивается в lateral-производную таблицу:
@@ -560,9 +593,15 @@ var rows = dataContext.From<ISimpleEntity>()
 
 ```sql
 -- SQL Server
-select t1.id, t3.value from simple_entity as [t1] cross apply (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
+select t1.id, t3.value
+ from simple_entity as [t1]
+ cross apply (select t2.id, t2.value
+ from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
 -- PostgreSQL / MySQL / MariaDB
-select t1.id, t3.value from simple_entity as t1 cross join lateral (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as t2) as t3
+select t1.id, t3.value
+ from simple_entity as t1
+ cross join lateral (select t2.id, t2.value
+ from rows_by_id(cast(t1.id as bigint)) as t2) as t3
 ```
 
 Как и любой коррелированный apply, коррелированная форма функции требует lateral-источника и отклоняется с `NotSupportedException` в SQLite/ClickHouse и в in-memory-провайдере; некоррелированная форма подчиняется правилам источника конкретного провайдера (`CROSS APPLY` в SQL Server, `CROSS JOIN LATERAL` в PostgreSQL/MySQL/MariaDB).
@@ -686,7 +725,11 @@ var rows = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id as 'A', t2.requiredstring as 'B', t3.id as 'C', t4.requiredstring as 'D' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id join simple_entity as 't3' on t2.id = cast(t3.id as bigint) join complex_entity as 't4' on cast(t3.id as bigint) = t4.id
+select t1.id as 'A', t2.requiredstring as 'B', t3.id as 'C', t4.requiredstring as 'D'
+ from simple_entity as 't1'
+ join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+ join simple_entity as 't3' on t2.id = cast(t3.id as bigint)
+ join complex_entity as 't4' on cast(t3.id as bigint) = t4.id
 ```
 
 Тот же приём наращивает арность вплоть до `JoinedEntityBuilder<T1..T8>` (восемь таблиц). При восьми
@@ -736,7 +779,11 @@ var rows = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t3.OrderId, t3.CustomerName, t4.id as 'Third' from (select t1.id as 'OrderId', t2.somestring as 'CustomerName' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3' join complex_entity as 't4' on cast(t3.OrderId as bigint) = t4.id
+select t3.OrderId, t3.CustomerName, t4.id as 'Third'
+ from (select t1.id as 'OrderId', t2.somestring as 'CustomerName'
+ from simple_entity as 't1'
+ join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3'
+ join complex_entity as 't4' on cast(t3.OrderId as bigint) = t4.id
 ```
 
 `As` объявлен один раз на `EntityBuilder<T>` и наследуется каждым `JoinedEntityBuilder<T1..Tn>`,
@@ -782,7 +829,9 @@ var rows = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id, t2.somestring from simple_entity as `t1` left any join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
+select t1.id, t2.somestring
+ from simple_entity as `t1`
+ left any join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
 ```
 
 [`JoinStrictness.Any`](xref:NextORM.Core.JoinStrictness.Any) рендерит `<type> any join` и оставляет одну
@@ -824,7 +873,9 @@ var ids = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
+select t1.id
+ from simple_entity as `t1`
+ left semi join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
 ```
 
 - [`SemiJoin`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.SemiJoin``2(NextORM.Core.EntityBuilder{``0},NextORM.Core.EntityBuilder{``1},System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) оставляет только левые колонки — по одной на каждую

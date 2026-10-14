@@ -67,7 +67,7 @@ public class LobSqlGenerationTests
         var sql = SequentialSql(ctx, SqliteDialect.Instance, command);
 
         // The payload keeps ordinal 0: the locator is only ever the trailing projected column.
-        sql.Should().Be("select payload, rowid from lob_probe");
+        sql.Should().Be("select payload, rowid\n from lob_probe");
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class LobSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var command = ctx.From<ILobProbeEntity>().Select(x => x.Body!);
 
-        SequentialSql(ctx, SqliteDialect.Instance, command).Should().Be("select body, rowid from lob_probe");
+        SequentialSql(ctx, SqliteDialect.Instance, command).Should().Be("select body, rowid\n from lob_probe");
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public class LobSqlGenerationTests
 
         var sql = Normalize(prepared.DbCommand.CommandText);
 
-        sql.Should().Be("select payload from lob_probe");
+        sql.Should().Be("select payload\n from lob_probe");
         sql.Should().NotContain("rowid");
     }
 
@@ -100,7 +100,7 @@ public class LobSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var command = ctx.From("lob_probe").Select(t => t.GetStream("payload"));
 
-        SequentialSql(ctx, SqliteDialect.Instance, command).Should().Be("select payload, rowid from lob_probe");
+        SequentialSql(ctx, SqliteDialect.Instance, command).Should().Be("select payload, rowid\n from lob_probe");
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public class LobSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var command = ctx.From("lob_probe").Select(t => t.GetTextReader("body"));
 
-        SequentialSql(ctx, SqliteDialect.Instance, command).Should().Be("select body, rowid from lob_probe");
+        SequentialSql(ctx, SqliteDialect.Instance, command).Should().Be("select body, rowid\n from lob_probe");
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public class LobSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var command = ctx.From("lob_probe").Select(t => t["payload"].AsStream);
 
-        SequentialSql(ctx, NullLocatorDialect.Instance, command).Should().Be("select payload from lob_probe");
+        SequentialSql(ctx, NullLocatorDialect.Instance, command).Should().Be("select payload\n from lob_probe");
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class LobSqlGenerationTests
 
         var prepared = StreamingRowsCommand(ctx, command);
 
-        Normalize(prepared.DbCommand.CommandText).Should().Be("select id, payload, rowid from lob_probe");
+        Normalize(prepared.DbCommand.CommandText).Should().Be("select id, payload, rowid\n from lob_probe");
         prepared.Behavior.Should().HaveFlag(CommandBehavior.SequentialAccess);
         prepared.MapDelegate.Should().NotBeNull();
     }
@@ -157,7 +157,7 @@ public class LobSqlGenerationTests
 
         var prepared = StreamingRowsCommand(ctx, command);
 
-        Normalize(prepared.DbCommand.CommandText).Should().Be("select id, body, rowid from lob_probe");
+        Normalize(prepared.DbCommand.CommandText).Should().Be("select id, body, rowid\n from lob_probe");
         prepared.Behavior.Should().HaveFlag(CommandBehavior.SequentialAccess);
         prepared.MapDelegate.Should().NotBeNull();
     }
@@ -241,7 +241,7 @@ public class LobSqlGenerationTests
         // untouched even on the sequential-access path.
         var sql = SequentialSql(ctx, NullLocatorDialect.Instance, command);
 
-        sql.Should().Be("select payload from lob_probe");
+        sql.Should().Be("select payload\n from lob_probe");
         sql.Should().NotContain("rowid");
     }
 

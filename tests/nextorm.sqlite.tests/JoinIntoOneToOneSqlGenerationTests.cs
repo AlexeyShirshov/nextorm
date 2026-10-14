@@ -29,7 +29,7 @@ public class JoinIntoOneToOneSqlGenerationTests
             .JoinInto(ctx.From<O2oChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
             .ToCommand());
 
-        sql.Should().Contain("select t1.id, t1.name from o2o_parent as 't1'")
+        sql.Should().Contain("select t1.id, t1.name\n from o2o_parent as 't1'")
             .And.Contain("left join o2o_child as 't2' on t1.id = t2.parent_id");
     }
 
@@ -42,7 +42,7 @@ public class JoinIntoOneToOneSqlGenerationTests
             .JoinInto(ctx.From<O2oChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary, JoinType.Inner)
             .ToCommand());
 
-        sql.Should().Contain("select t1.id, t1.name from o2o_parent as 't1'")
+        sql.Should().Contain("select t1.id, t1.name\n from o2o_parent as 't1'")
             .And.Contain(" join o2o_child as 't2' on t1.id = t2.parent_id")
             .And.NotContain("left join", "an Inner one-to-one JoinInto must render an inner join");
     }
@@ -56,7 +56,7 @@ public class JoinIntoOneToOneSqlGenerationTests
             .JoinInto(ctx.From<O2oChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
             .ToParentCommand());
 
-        sql.Should().Be("select id, name from o2o_parent");
+        sql.Should().Be("select id, name\n from o2o_parent");
     }
 }
 

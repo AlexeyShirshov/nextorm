@@ -183,7 +183,8 @@ var removed = dataContext
 
 ```sql
 -- PostgreSQL
-with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName" from del as "t1"
+with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName"
+ from del as "t1"
 ```
 
 A `RETURNING` projection is required (a side-effect-only mutation is out of scope), and such a statement

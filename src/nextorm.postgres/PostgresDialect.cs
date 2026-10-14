@@ -336,7 +336,7 @@ public class PostgresDialect : SqlDialectBase
     public override string WrapTableFunction(string name, string call) =>
         name is "generate_series" or "unnest" or "regexp_matches" or "regexp_split_to_table"
             or "jsonb_object_keys" or "jsonb_path_query"
-            ? $"(select {name} from {call})"
+            ? $"(select {name}\n from {call})"
             : call;
 
     // PostgreSQL has native json/jsonb types and the associated functions/operators.

@@ -178,7 +178,8 @@ var removed = dataContext
 
 ```sql
 -- PostgreSQL
-with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName" from del as "t1"
+with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName"
+ from del as "t1"
 ```
 
 Проекция `RETURNING` обязательна (мутация только с побочным эффектом вне области охвата), и такая

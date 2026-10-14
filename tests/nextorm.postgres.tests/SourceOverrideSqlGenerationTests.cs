@@ -25,7 +25,7 @@ public class SourceOverrideSqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.WithTableName("orders_archive").Select(x => new { x.Id }))
-            .Should().Be("select id from orders_archive");
+            .Should().Be("select id\n from orders_archive");
     }
 
     [Fact]
@@ -35,7 +35,7 @@ public class SourceOverrideSqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.WithSchema("sales").Select(x => new { x.Id }))
-            .Should().Be("select id from sales.simple_entity");
+            .Should().Be("select id\n from sales.simple_entity");
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public class SourceOverrideSqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.WithTableExpression("select id from other").Select(x => new { x.Id }))
-            .Should().Be("select id from (select id from other) as \"t1\"");
+            .Should().Be("select id\n from (select id from other) as \"t1\"");
     }
 
     [Fact]
@@ -80,6 +80,6 @@ public class SourceOverrideSqlGenerationTests
         var e = ctx.From<DynamicColumnsEntity>().WithTableExpression("select id from other");
 
         SqlOf(ctx, e.ToCommand())
-            .Should().Be("select id, * from (select id from other) as \"t1\"");
+            .Should().Be("select id, *\n from (select id from other) as \"t1\"");
     }
 }

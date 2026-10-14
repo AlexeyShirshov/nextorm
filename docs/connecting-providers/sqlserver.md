@@ -192,7 +192,8 @@ var sql = ctx.WithRecursive("nums", body, 100).From("nums")
 with nums as (
     select ... union all select ...
 )
-select n from nums option (maxrecursion 100)
+select n
+ from nums option (maxrecursion 100)
 ```
 
 The `recursive` modifier is omitted (T-SQL has none) and `maxRecursion` is rendered as the trailing

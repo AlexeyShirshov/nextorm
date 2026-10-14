@@ -88,9 +88,11 @@ var values = dataContext
 
 ```sql
 -- SQLite
-select value from json_each('[1,2,3]')
+select value
+ from json_each('[1,2,3]')
 -- SQL Server / PostgreSQL append an alias
-select value from json_each('[1,2,3]') as [t1]
+select value
+ from json_each('[1,2,3]') as [t1]
 ```
 
 The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -116,7 +118,8 @@ var prepared = dataContext
 
 ```sql
 -- SQLite placeholder; SQL Server/PostgreSQL use @id
-select id from rows_by_id($id)
+select id
+ from rows_by_id($id)
 ```
 
 A schema-qualified name with two arguments renders as `app.rows_between(...)`:
@@ -132,7 +135,8 @@ var prepared = dataContext
 ```
 
 ```sql
-select id from app.rows_between($lo, $hi)
+select id
+ from app.rows_between($lo, $hi)
 ```
 
 ## Join, filter and sort a TVF
@@ -153,7 +157,9 @@ var rows = dataContext
 
 ```sql
 -- SQLite
-select t1.value, t2.somestring as 'String' from all_rows() as 't1' join complex_entity as 't2' on t1.id = t2.id
+select t1.value, t2.somestring as 'String'
+ from all_rows() as 't1'
+ join complex_entity as 't2' on t1.id = t2.id
 ```
 
 The reverse — a table on the left, the TVF on the right — behaves the same, and is the shape used once
@@ -169,7 +175,9 @@ var rows = dataContext
 
 ```sql
 -- SQLite
-select t1.id, t2.value from simple_entity as 't1' join all_rows() as 't2' on t2.id = cast(t1.id as bigint)
+select t1.id, t2.value
+ from simple_entity as 't1'
+ join all_rows() as 't2' on t2.id = cast(t1.id as bigint)
 -- SQL Server / PostgreSQL differ only in identifier quoting ([t2] / "t2")
 ```
 
@@ -190,9 +198,13 @@ var rows = dataContext
 
 ```sql
 -- SQL Server
-select t1.id, t2.value from simple_entity as [t1] cross apply all_rows() as [t2]
+select t1.id, t2.value
+ from simple_entity as [t1]
+ cross apply all_rows() as [t2]
 -- PostgreSQL / MySQL / MariaDB
-select t1.id, t2.value from simple_entity as "t1" cross join lateral all_rows() as "t2"
+select t1.id, t2.value
+ from simple_entity as "t1"
+ cross join lateral all_rows() as "t2"
 ```
 
 Building the function inside the lambda correlates it with the outer row: the captured column becomes
@@ -208,9 +220,15 @@ var rows = dataContext
 
 ```sql
 -- SQL Server
-select t1.id, t3.value from simple_entity as [t1] cross apply (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
+select t1.id, t3.value
+ from simple_entity as [t1]
+ cross apply (select t2.id, t2.value
+ from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
 -- PostgreSQL
-select t1.id, t3.value from simple_entity as "t1" cross join lateral (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as "t2") as "t3"
+select t1.id, t3.value
+ from simple_entity as "t1"
+ cross join lateral (select t2.id, t2.value
+ from rows_by_id(cast(t1.id as bigint)) as "t2") as "t3"
 ```
 
 `OuterApply` is the left-preserving twin: it keeps left-hand rows for which the function returns no
@@ -328,7 +346,8 @@ var fragments = dataContext
 ```
 
 ```sql
-select value from string_split(@csv, @separator) as [t1]
+select value
+ from string_split(@csv, @separator) as [t1]
 ```
 
 `SqlFunctions.SqlServer.openjson` is SQL Server 2016+ and returns [`SqlFunctions.IOpenJsonRow`](xref:NextORM.Core.SqlFunctions.IOpenJsonRow) (`key`/`value`/`type`). The
@@ -344,7 +363,8 @@ var entries = dataContext
 ```
 
 ```sql
-select [key] as [Key], value, type from openjson(@json) as [t1]
+select [key] as [Key], value, type
+ from openjson(@json) as [t1]
 ```
 
 For a **typed schema** (`OPENJSON ... WITH (...)`) declare your own wrapper whose row shape matches the
@@ -372,7 +392,8 @@ var person = dataContext
 ```
 
 ```sql
-select name, age from openjson(@json) with (name nvarchar(50) '$.name', age int '$.age') as [t1]
+select name, age
+ from openjson(@json) with (name nvarchar(50) '$.name', age int '$.age') as [t1]
 ```
 
 SQL Server also ships the full-text table functions `SqlFunctions.SqlServer.containstable` and
@@ -419,7 +440,8 @@ private static class JsonTableTvf
 ```
 
 ```sql
-select id, name from json_table(@doc, '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')) as `t1`
+select id, name
+ from json_table(@doc, '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')) as `t1`
 ```
 
 `VerbatimArguments` is the related hook for functions that take a raw identifier (a table or column name):
@@ -437,7 +459,9 @@ var rows = dataContext
 ```
 
 ```sql
-select number as `Value` from (select toInt64(number) as number from numbers(@count)) as `t1`
+select number as `Value`
+ from (select toInt64(number) as number
+ from numbers(@count)) as `t1`
 ```
 
 The `number` column is `UInt64`, which the row reader cannot materialise, so the dialect wraps the call
@@ -454,7 +478,8 @@ var rows = dataContext
 ```
 
 ```sql
-select zero as `Value` from zeros(@count) as `t1`
+select zero as `Value`
+ from zeros(@count) as `t1`
 ```
 
 Unlike `numbers`, the `zero` column is `UInt8`, which the row reader materialises directly as `byte`,
@@ -477,7 +502,8 @@ var rows = dataContext
 
 ```sql
 select id as `Id`, value as `Value`, name as `Name`
-from (select toInt64(id) as id, value, name from generateRandom('id UInt64, value Float64, name String')) as `t1`
+from (select toInt64(id) as id, value, name
+ from generateRandom('id UInt64, value Float64, name String')) as `t1`
 limit 3
 ```
 
@@ -513,7 +539,8 @@ var hits = dataContext
 ```
 
 ```sql
-select id as `Id`, name as `Name` from url(@url, @format, @structure) as `t1`
+select id as `Id`, name as `Name`
+ from url(@url, @format, @structure) as `t1`
 ```
 
 The functions are ClickHouse-only ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)))
@@ -565,7 +592,8 @@ var rows = dataContext
 ```
 
 ```sql
-select a, b from values('a UInt8, b String', (1, 'x'), (2, 'y')) as `t1`
+select a, b
+ from values('a UInt8, b String', (1, 'x'), (2, 'y')) as `t1`
 ```
 
 The `tuples` argument is emitted verbatim (see `VerbatimArguments`), so it is developer-authored SQL only — never build it from user input.
@@ -590,7 +618,8 @@ var rows = dataContext
 ```
 
 ```sql
-select a, b from jsonb_to_recordset(@json) as "t1"(a integer, b text)
+select a, b
+ from jsonb_to_recordset(@json) as "t1"(a integer, b text)
 ```
 
 The column types come from the provider's CLR-to-SQL type mapping (`byte`→`UInt8`, `int`→`integer`, `string`→`text`/`String`); a nullable value type becomes `Nullable(T)` on ClickHouse. Only `LeadingArgument` and `AliasColumnList` are recognized, and each provider opts into the specific form it renders ([`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema))): ClickHouse renders only `LeadingArgument` and PostgreSQL only `AliasColumnList`. A declared form the provider does not implement is rejected with `NotSupportedException` — it is never emitted as SQL without the column list — and every other provider throws as well.

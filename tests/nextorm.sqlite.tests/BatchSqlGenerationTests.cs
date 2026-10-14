@@ -25,7 +25,7 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(2);
         statements[0].Should().Be("update simple_entity set id = $p0 where (id > $b0_min)");
-        statements[1].Should().Be("select id from simple_entity\n where (id > $b1_min)");
+        statements[1].Should().Be("select id\n from simple_entity\n where (id > $b1_min)");
     }
 
     [Fact]
@@ -45,8 +45,8 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(3);
         statements[0].Should().StartWith("update simple_entity set id = $p0");
-        statements[1].Should().Contain("select id from simple_entity").And.Contain("$b1_min");
-        statements[2].Should().Contain("select id from simple_entity").And.Contain("$b2_max");
+        statements[1].Should().Contain("select id\n from simple_entity").And.Contain("$b1_min");
+        statements[2].Should().Contain("select id\n from simple_entity").And.Contain("$b2_max");
     }
 
     [Fact]
@@ -74,8 +74,8 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(3);
         statements[0].Should().Be("drop table if exists archive");
-        statements[1].Should().Be("create table archive as select id from simple_entity");
-        statements[2].Should().Be("select id from simple_entity");
+        statements[1].Should().Be("create table archive as select id\n from simple_entity");
+        statements[2].Should().Be("select id\n from simple_entity");
     }
 
     [Fact]
@@ -91,8 +91,8 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(3);
         statements[0].Should().Be("drop table if exists archive");
-        statements[1].Should().Be("create table archive as select id from simple_entity");
-        statements[2].Should().Be("select id from simple_entity");
+        statements[1].Should().Be("create table archive as select id\n from simple_entity");
+        statements[2].Should().Be("select id\n from simple_entity");
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public class BatchSqlGenerationTests
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .ToSql();
 
-        sql.Should().Be("drop table if exists archive; select id from simple_entity");
+        sql.Should().Be("drop table if exists archive; select id\n from simple_entity");
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public class BatchSqlGenerationTests
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .ToSql();
 
-        sql.Should().Be("create table raw_a (id integer); create table raw_b (id integer); select id from simple_entity");
+        sql.Should().Be("create table raw_a (id integer); create table raw_b (id integer); select id\n from simple_entity");
     }
 
     [Fact]
@@ -204,6 +204,6 @@ public class BatchSqlGenerationTests
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .ToSql();
 
-        sql.Should().Be("select @p as v, {0}, $1; select id from simple_entity");
+        sql.Should().Be("select @p as v, {0}, $1; select id\n from simple_entity");
     }
 }

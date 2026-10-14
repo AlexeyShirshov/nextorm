@@ -164,7 +164,7 @@ public class DeleteSqlGenerationTests
             .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
             .ToSql();
 
-        sql.Should().StartWith("with c as (select id from complex_entity");
+        sql.Should().StartWith("with c as (select id\n from complex_entity");
         sql.Should().Contain("delete from complex_entity as \"t1\" using c as \"t2\" where t1.id = cast(t2.id as bigint)");
     }
 
@@ -184,8 +184,8 @@ public class DeleteSqlGenerationTests
             .Join(scope.From("o"), (t, c) => t.Id == c["id"].AsInt)
             .ToSql();
 
-        sql.Should().StartWith("with i as (select id from complex_entity");
-        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().StartWith("with i as (select id\n from complex_entity");
+        sql.Should().Contain("), o as (select id\n from i)");
         sql.Should().Contain("delete from complex_entity as \"t1\" using o as \"t2\" where t1.id = cast(t2.id as bigint)");
         sql.Should().NotContain("with i as (with");
     }
@@ -212,7 +212,7 @@ public class DeleteSqlGenerationTests
                 .Returning(x => new { x.Id, x.Name }))
             .From("del")
             .Select(r => new { r.Id, r.Name }))
-            .Should().Be("with del as (delete from merge_entity where id = 1 returning id, name) select id, name from del as \"t1\"");
+            .Should().Be("with del as (delete from merge_entity where id = 1 returning id, name) select id, name\n from del as \"t1\"");
     }
 
     [Fact]
@@ -248,7 +248,7 @@ public class DeleteSqlGenerationTests
 
         var sql = SqlOf(ctx, ctx.With("del", delete).From("del").Select(r => new { r.TargetId }));
 
-        sql.Should().StartWith("with src as (select id from simple_entity");
+        sql.Should().StartWith("with src as (select id\n from simple_entity");
         sql.Should().Contain("), del as (delete from complex_entity as \"t1\" using src as \"t2\"");
         sql.Should().NotContain("with src as (with");
     }
@@ -269,7 +269,7 @@ public class DeleteSqlGenerationTests
             .Select(r => new { r.Id });
 
         SqlOf(ctx, scope).Should().Be(
-            "with del as (delete from complex_entity as \"t1\" using simple_entity as \"t2\" where t1.id = cast(t2.id as bigint) returning t1.id) select id from del as \"t1\"");
+            "with del as (delete from complex_entity as \"t1\" using simple_entity as \"t2\" where t1.id = cast(t2.id as bigint) returning t1.id) select id\n from del as \"t1\"");
     }
 
     [Fact]
@@ -361,7 +361,7 @@ public class DeleteSqlGenerationTests
             .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
             .ToSql();
 
-        sql.Should().StartWith("with c as (select id from complex_entity");
+        sql.Should().StartWith("with c as (select id\n from complex_entity");
         sql.Should().Contain("delete /*+ SeqScan(t1) */ from complex_entity as \"t1\" using c as \"t2\"");
         (sql.IndexOf("/*+")).Should().BeGreaterThan(sql.IndexOf("delete"));
     }

@@ -413,7 +413,7 @@ public class ExtremeRowNativeSqlGenerationTests
         var sql = command.ToBatchSql();
 
         sql.Should().Contain("drop table if exists " + temp.Name);
-        sql.Should().Contain("create temporary table " + temp.Name + " as select id from simple_entity");
+        sql.Should().Contain("create temporary table " + temp.Name + " as select id\n from simple_entity");
         sql.Should().Contain("row_number() over (order by id desc)");
         sql.Should().NotContain("limit 1");
         sql.Should().NotContain("distinct on");

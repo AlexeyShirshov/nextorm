@@ -29,9 +29,9 @@ public class ProviderExtensionCloneTests
         var clone = distinctOn.Clone();
 
         SqlOf(ctx, distinctOn.OrderBy(x => x.Id).Select(x => new { x.Id }))
-            .Should().StartWith("select distinct on (id) id from simple_entity");
+            .Should().StartWith("select distinct on (id) id\n from simple_entity");
         SqlOf(ctx, clone.OrderBy(x => x.Id).Select(x => new { x.Id }))
-            .Should().StartWith("select distinct on (id) id from simple_entity");
+            .Should().StartWith("select distinct on (id) id\n from simple_entity");
 
         // The original builder never gained the DISTINCT ON clause itself.
         SqlOf(ctx, e.Select(x => new { x.Id })).Should().NotContain("distinct on");

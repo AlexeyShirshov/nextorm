@@ -53,7 +53,7 @@ public class ImplicitNavigationV32TempTableTests
         // The read over the temp table adds no navigation join against the base table. The batch holds
         // exactly one navigation join (the materialisation) — if a future change lowered navigation over
         // the temp-table/TVP source, this would become two and the deferral would no longer hold.
-        sql.Split("select id from " + tempTable.Name).Should().HaveCount(2, "the read selects from the temp table exactly once");
+        sql.Split("select id\n from " + tempTable.Name).Should().HaveCount(2, "the read selects from the temp table exactly once");
         sql.Split("left join").Should().HaveCount(
             2,
             "exactly one navigation join (in the temp-table materialisation); the deferred read must not add a base-table join");

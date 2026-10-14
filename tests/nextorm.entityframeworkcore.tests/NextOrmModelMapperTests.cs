@@ -21,7 +21,7 @@ public sealed class NextOrmModelMapperTests : EfCoreMetadataCleanup
         using var ctx = db.CreateNextOrmContext();
         var sql = NextOrmSql.Of(ctx, ctx.From<MappedRow>().Select(x => new { x.Id, x.Name }));
 
-        sql.Should().Be("select selected_id as 'Id', selected_name as 'Name' from mapped_table");
+        sql.Should().Be("select selected_id as 'Id', selected_name as 'Name'\n from mapped_table");
         sql.Should().NotContain("mapped_row");
     }
 

@@ -76,8 +76,10 @@ var orders = ctx.CreateBatchBuilder()
 The materialisation and the read go to the database as one batch; `.ToSql()` returns the `;`-joined text it sends:
 
 ```sql
-create temporary table recent_orders as select id, total from orders
- where (total > @b0_minTotal); select id from recent_orders
+create temporary table recent_orders as select id, total
+ from orders
+ where (total > @b0_minTotal); select id
+ from recent_orders
 ```
 
 The captured `minTotal` becomes a parameter, and its name is prefixed per statement (`b0_minTotal`) so it cannot collide with a same-named variable in another statement of the batch.

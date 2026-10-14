@@ -44,7 +44,7 @@ public sealed class DynamicColumnsMariaDbContainerTests : IDisposable
 
         // The statement that ran is the exact alias-qualified star form MariaDB accepts.
         SqlOf(_ctx, _ctx.From<DynamicReadProbe>().ToCommand())
-            .Should().Be("select t1.id, t1.name, `t1`.* from dynamic_read_probe as `t1`");
+            .Should().Be("select t1.id, t1.name, `t1`.*\n from dynamic_read_probe as `t1`");
     }
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)

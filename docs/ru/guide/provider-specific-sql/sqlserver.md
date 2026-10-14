@@ -23,7 +23,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select choose(2, 'a', 'b', 'c') as [Label] from complex_entity
+select choose(2, 'a', 'b', 'c') as [Label]
+ from complex_entity
 ```
 
 См. [Скалярные функции](../../scalar-functions/04-conditionals-and-conversion.md#условные-функции).
@@ -50,7 +51,8 @@ var rows = dataContext.From<ISimpleEntity>().ForUpdate().Select(e => e.Id).ToLis
 ```
 
 ```sql
-select id from simple_entity with (updlock)
+select id
+ from simple_entity with (updlock)
 ```
 
 `ForUpdate` рендерит `updlock` (блокировка обновления до конца транзакции), а `ForShare` — `holdlock`
@@ -105,7 +107,8 @@ var rows = dataContext.From<IXmlEntity>()
 
 ```sql
 select t2.value.value('(.)[1]/@id', 'int') as [Id]
-from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value)
+from xml_entity as [t1]
+ cross apply t1.payload.nodes('/root/item') as [t2](value)
 ```
 
 См. [Скалярные функции](../../scalar-functions/07-json-and-xml.md#методы-типа-xml-sql-server).
@@ -132,7 +135,8 @@ var rows = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity for system_time as of '2020-01-01 00:00:00'
+select id
+ from simple_entity for system_time as of '2020-01-01 00:00:00'
 ```
 
 MariaDB поддерживает ту же клаузу на системно-версионированных таблицах, кроме `CONTAINED IN`.
@@ -198,8 +202,10 @@ var byQuarter = ctx.From(orderMargins)
 select CategoryName, [1], [4]
 from (select name as [CategoryName], datepart(quarter, OrderDate) as [QuarterNum],
              (LineTotal - StandardCost * OrderQty) as [Margin]
-      from sales_order_detail
-      join sales_order_header on sales_order_detail.OrderId = sales_order_header.OrderId
+     
+ from sales_order_detail
+     
+ join sales_order_header on sales_order_detail.OrderId = sales_order_header.OrderId
       where datepart(year, OrderDate) = 2013) as [t1]
 pivot (sum([Margin]) for [QuarterNum] in ([1], [2], [3], [4])) as [t2]
 order by CategoryName
@@ -220,7 +226,8 @@ var rows = await dataContext.From<ISimpleEntity>(o => o.TableSample(10, TableSam
 ```
 
 ```sql
-select id from simple_entity tablesample (10 percent) repeatable (3)
+select id
+ from simple_entity tablesample (10 percent) repeatable (3)
 ```
 
 SQL Server поддерживает только метод `System`
@@ -250,7 +257,8 @@ var rows = dataContext.From<IOrderEntity>()
 ```
 
 ```sql
-select next value for [dbo].[order_seq] as [Next] from order_entity
+select next value for [dbo].[order_seq] as [Next]
+ from order_entity
 ```
 
 Не-константные или захваченные имена (колонка, захваченная локальная переменная, `null`/`default`)

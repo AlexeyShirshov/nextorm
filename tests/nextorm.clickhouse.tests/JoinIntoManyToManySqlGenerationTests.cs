@@ -45,7 +45,7 @@ public class JoinIntoManyToManySqlGenerationTests
             .JoinInto(ctx.From<JoinIntoManyChild>(), (p, c) => c.Id > 0, p => p.Children)
             .CreateJoinIntoPairCommand());
 
-        sql.Should().MatchRegex(@"left join \(select .*?from joinmnlink\)");
+        sql.Should().MatchRegex(@"left join \(select [\s\S]*?from joinmnlink\)");
         // ClickHouse's row_number() returns UInt64, so the dialect narrows it to Int32 to map to the
         // declared int `JoinIntoLink.Occurrence`.
         sql.Should().MatchRegex(@"toint32\(rownumber\(\)\s*over\s*\(\s*partition by\s+[^)]+order by\s+[^)]+\)\)\s*as occurrence");

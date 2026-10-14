@@ -16,7 +16,7 @@ public class CreateTableAsSqlGenerationTests
 
         ctx.From<ISimpleEntity>()
             .ToTempTableSql("recent_ids")
-            .Should().Be("create temporary table recent_ids as select id from simple_entity");
+            .Should().Be("create temporary table recent_ids as select id\n from simple_entity");
     }
 
     [Fact]
@@ -26,7 +26,7 @@ public class CreateTableAsSqlGenerationTests
 
         ctx.From<ISimpleEntity>()
             .ToTempTableSql("recent_ids", new CreateTableOptions { IfNotExists = true, Columns = ["a", "b"] })
-            .Should().Be("create temporary table if not exists recent_ids (a, b) as select id from simple_entity");
+            .Should().Be("create temporary table if not exists recent_ids (a, b) as select id\n from simple_entity");
     }
 
     [Fact]

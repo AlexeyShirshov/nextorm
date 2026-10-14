@@ -1,0 +1,6 @@
+rewrote    1 literal(s)  /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/SqlGenerationTests.cs
+rewrote    2 literal(s)  /home/alex/sources/nextorm/tests/nextorm.mysql.tests/SqlGenerationTests.cs
+rewrote    6 literal(s)  /home/alex/sources/nextorm/tests/nextorm.postgres.tests/SqlGenerationTests.cs
+rewrote    7 literal(s)  /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/SqlGenerationTests.cs
+rewrote    7 literal(s)  /home/alex/sources/nextorm/tests/nextorm.sqlserver.tests/SqlGenerationTests.cs
+--- applied: 23 literal(s) in 5 file(s)

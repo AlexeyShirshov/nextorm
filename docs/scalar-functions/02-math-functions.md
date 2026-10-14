@@ -19,7 +19,8 @@ var values = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select abs((id - 5)) from complex_entity
+select abs((id - 5))
+ from complex_entity
 ```
 
 The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).

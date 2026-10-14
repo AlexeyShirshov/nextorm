@@ -58,9 +58,9 @@ public class TempTableSourceSqlGenerationTests
             .ToBatchSql();
 
         sql.Should().Contain("drop table if exists " + source.Name);
-        sql.Should().Contain("create temporary table " + source.Name + " as select id from simple_entity");
+        sql.Should().Contain("create temporary table " + source.Name + " as select id\n from simple_entity");
         sql.Should().Contain("$b1_min");
-        sql.Should().Contain("select id from " + source.Name);
+        sql.Should().Contain("select id\n from " + source.Name);
         sql.Should().Contain("$b2_readMin");
     }
 
@@ -74,7 +74,7 @@ public class TempTableSourceSqlGenerationTests
         var sql = ctx.From(source).Select(t => new { Id = t.GetInt32("id") }).ToBatchSql();
 
         sql.Should().Contain("drop table if exists \"" + source.Name + "\"");
-        sql.Should().Contain("create temporary table \"" + source.Name + "\" as select \"id\" from \"simple_entity\"");
+        sql.Should().Contain("create temporary table \"" + source.Name + "\" as select \"id\"\n from \"simple_entity\"");
     }
 
     [Fact]
@@ -89,8 +89,8 @@ public class TempTableSourceSqlGenerationTests
             .Select(t => new { Id = t.GetInt32("id") })
             .ToBatchSql();
 
-        sql.Should().Contain("create temporary table " + source.Name + " as select id from simple_entity");
-        sql.Should().Contain("with ids as (select id from " + source.Name + ")");
+        sql.Should().Contain("create temporary table " + source.Name + " as select id\n from simple_entity");
+        sql.Should().Contain("with ids as (select id\n from " + source.Name + ")");
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public class TempTableSourceSqlGenerationTests
             .SelectWhereMax(t => t.GetInt32("id"), t => new { Id = t.GetInt32("id") })
             .ToBatchSql();
 
-        sql.Should().Contain("create temporary table " + source.Name + " as select id from simple_entity");
+        sql.Should().Contain("create temporary table " + source.Name + " as select id\n from simple_entity");
         sql.Should().Contain("row_number() over (order by id desc)");
         sql.Should().NotContain("limit 1");
         sql.Should().NotContain("distinct on");

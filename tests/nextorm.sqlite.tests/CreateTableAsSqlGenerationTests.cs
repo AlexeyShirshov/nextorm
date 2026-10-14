@@ -17,7 +17,7 @@ public class CreateTableAsSqlGenerationTests
 
         ctx.From<ISimpleEntity>()
             .ToTempTableSql("recent_ids")
-            .Should().Be("create temporary table recent_ids as select id from simple_entity");
+            .Should().Be("create temporary table recent_ids as select id\n from simple_entity");
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class CreateTableAsSqlGenerationTests
         var sql = ctx.From<ISimpleEntity>()
             .ToTableSql("archive", new CreateTableOptions { DropExisting = true });
 
-        sql.Should().Be("drop table if exists archive; create table archive as select id from simple_entity");
+        sql.Should().Be("drop table if exists archive; create table archive as select id\n from simple_entity");
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class CreateTableAsSqlGenerationTests
         var sql = ctx.From<ISimpleEntity>()
             .ToTableSql("archive", o => o.DropExisting());
 
-        sql.Should().Be("drop table if exists archive; create table archive as select id from simple_entity");
+        sql.Should().Be("drop table if exists archive; create table archive as select id\n from simple_entity");
     }
 
     [Fact]

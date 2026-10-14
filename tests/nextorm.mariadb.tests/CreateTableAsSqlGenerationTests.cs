@@ -17,7 +17,7 @@ public class CreateTableAsSqlGenerationTests
 
         ctx.From<ISimpleEntity>()
             .ToTempTableSql("recent_ids")
-            .Should().Be("create temporary table recent_ids as select id from simple_entity");
+            .Should().Be("create temporary table recent_ids as select id\n from simple_entity");
     }
 
     [Fact]
@@ -30,8 +30,8 @@ public class CreateTableAsSqlGenerationTests
         var sql = ctx.From(source).Select(t => new { Id = t.GetInt32("id") }).ToBatchSql();
 
         sql.Should().Contain("drop table if exists " + source.Name);
-        sql.Should().Contain("create temporary table " + source.Name + " as select id from simple_entity");
-        sql.Should().Contain("select id from " + source.Name);
+        sql.Should().Contain("create temporary table " + source.Name + " as select id\n from simple_entity");
+        sql.Should().Contain("select id\n from " + source.Name);
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class CreateTableAsSqlGenerationTests
 
         ctx.From<ISimpleEntity>()
             .ToTempTableSql("recent_ids", new CreateTableOptions { Columns = ["a"] })
-            .Should().Be("create temporary table recent_ids (a) as select id from simple_entity");
+            .Should().Be("create temporary table recent_ids (a) as select id\n from simple_entity");
     }
 
     [Fact]

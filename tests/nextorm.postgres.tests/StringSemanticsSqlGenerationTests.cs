@@ -28,7 +28,7 @@ public class StringSemanticsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { F = x.Datetime!.Value.ToString("yyyy-MM-dd") }))
-            .Should().Be("select to_char(dt, 'YYYY-MM-DD') as \"F\" from complex_entity");
+            .Should().Be("select to_char(dt, 'YYYY-MM-DD') as \"F\"\n from complex_entity");
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public class StringSemanticsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { F = $"{x.Datetime:yyyy-MM-dd}" }))
-            .Should().Be("select to_char(dt, 'YYYY-MM-DD') as \"F\" from complex_entity");
+            .Should().Be("select to_char(dt, 'YYYY-MM-DD') as \"F\"\n from complex_entity");
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class StringSemanticsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { F = string.Format("Id={0:F2}", x.Id) }))
-            .Should().Be("select ('Id='||to_char(id, 'FM9999999999999990.' || repeat('0', 2))) as \"F\" from complex_entity");
+            .Should().Be("select ('Id='||to_char(id, 'FM9999999999999990.' || repeat('0', 2))) as \"F\"\n from complex_entity");
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public class StringSemanticsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { F = SqlFunctions.Sql.collate(x.String, "C") }))
-            .Should().Be("select somestring collate \"C\" as \"F\" from complex_entity");
+            .Should().Be("select somestring collate \"C\" as \"F\"\n from complex_entity");
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class StringSemanticsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => string.CompareOrdinal(x.String, "a") > 0).Select(x => new { x.Id }))
-            .Should().Be("select id from complex_entity\n where (case when somestring collate \"C\" < 'a' collate \"C\" then -1 when somestring collate \"C\" > 'a' collate \"C\" then 1 else 0 end > 0)");
+            .Should().Be("select id\n from complex_entity\n where (case when somestring collate \"C\" < 'a' collate \"C\" then -1 when somestring collate \"C\" > 'a' collate \"C\" then 1 else 0 end > 0)");
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public class StringSemanticsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.String!.Contains("a", StringComparison.Ordinal)).Select(x => new { x.Id }))
-            .Should().Be("select id from complex_entity\n where somestring collate \"C\" like '%a%'");
+            .Should().Be("select id\n from complex_entity\n where somestring collate \"C\" like '%a%'");
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public class StringSemanticsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { F = x.String!.ToUpperInvariant() }))
-            .Should().Be("select upper(somestring) as \"F\" from complex_entity");
+            .Should().Be("select upper(somestring) as \"F\"\n from complex_entity");
     }
 
     [Fact]

@@ -52,7 +52,8 @@ foreach (var product in products)
 Генерируемая инструкция:
 
 ```sql
-select Id, Name, * from product
+select Id, Name, *
+ from product
 ```
 
 Сопоставленные колонки, как и раньше, читаются по порядковому номеру; хранилище читает следующие за

@@ -19,7 +19,7 @@ public class BatchSqlGenerationTests
             .Query(ctx.From("archive_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();
 
-        sql.Should().Be("select id into archive_ids from simple_entity; select id from archive_ids");
+        sql.Should().Be("select id into archive_ids\n from simple_entity; select id\n from archive_ids");
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(2);
         statements[0].Should().Be("update simple_entity set id = @p0 where (id > @b0_min)");
-        statements[1].Should().Be("select id from simple_entity\n where (id > @b1_min)");
+        statements[1].Should().Be("select id\n from simple_entity\n where (id > @b1_min)");
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class BatchSqlGenerationTests
         var statements = sql.Split("; ");
         statements.Should().HaveCount(3);
         statements[0].Should().StartWith("update simple_entity set id = @p0");
-        statements[1].Should().Contain("select id from simple_entity").And.Contain("@b1_min");
-        statements[2].Should().Contain("select id from simple_entity").And.Contain("@b2_max");
+        statements[1].Should().Contain("select id\n from simple_entity").And.Contain("@b1_min");
+        statements[2].Should().Contain("select id\n from simple_entity").And.Contain("@b2_max");
     }
 }

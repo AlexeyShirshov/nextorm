@@ -36,7 +36,7 @@ public class UpdateJoinSqlGenerationTests
             .Set(p => p.Item1.Id, 0)
             .ToSql();
 
-        sql.Should().StartWith("with c as (select id from simple_entity");
+        sql.Should().StartWith("with c as (select id\n from simple_entity");
         sql.Should().Contain("update [t1] set t1.id = @p0 from simple_entity as [t1] join c as [t2] on t1.id = t2.id");
     }
 

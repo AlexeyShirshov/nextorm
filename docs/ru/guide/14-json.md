@@ -136,7 +136,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select json_value(somestring, '$.id') as [Id], json_query(somestring, '$.name') as [Name], json_modify(somestring, '$.id', '1') as [Updated] from complex_entity
+select json_value(somestring, '$.id') as [Id], json_query(somestring, '$.name') as [Name], json_modify(somestring, '$.id', '1') as [Updated]
+ from complex_entity
 ```
 
 `SqlFunctions.SqlServer.isjson` проверяет, является ли текстовое значение корректным JSON. В SQL Server
@@ -171,7 +172,8 @@ var entries = dataContext
 ```
 
 ```sql
-select [key] as [Key], value, type from openjson(@json) as [t1]
+select [key] as [Key], value, type
+ from openjson(@json) as [t1]
 ```
 
 Для типизированной проекции объявите собственный `[SqlTableFunction("openjson")]`-враппер, форма строки
@@ -271,7 +273,8 @@ var document = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select jsonb_build_object('id', id, 'name', somestring) as "V" from complex_entity
+select jsonb_build_object('id', id, 'name', somestring) as "V"
+ from complex_entity
 ```
 
 | C# | SQL |
@@ -294,7 +297,8 @@ var json = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select jsonb_agg(jsonb_build_object('id', id, 'name', somestring)) from complex_entity
+select jsonb_agg(jsonb_build_object('id', id, 'name', somestring))
+ from complex_entity
 ```
 
 Вложенность выражается через `GroupBy`: внешний агрегат делает документ, внутренний — массив каждой

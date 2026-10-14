@@ -18,7 +18,7 @@ public class CreateTableAsSqlGenerationTests
 
         ctx.From<ISimpleEntity>()
             .ToTableSql("archive_ids")
-            .Should().Be("select id into archive_ids from simple_entity");
+            .Should().Be("select id into archive_ids\n from simple_entity");
     }
 
     [Fact]
@@ -31,7 +31,7 @@ public class CreateTableAsSqlGenerationTests
             .Where(x => x.Id > min)
             .ToTableSql("recent_ids");
 
-        Normalize(sql).Should().Be("select id into recent_ids from simple_entity\n where (id > @min)");
+        Normalize(sql).Should().Be("select id into recent_ids\n from simple_entity\n where (id > @min)");
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public class CreateTableAsSqlGenerationTests
             .ToTableSql("recent_ids");
 
         sql.Should().StartWith("with recent as ");
-        sql.Should().Contain(") select id into recent_ids from recent");
+        sql.Should().Contain(") select id into recent_ids\n from recent");
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class CreateTableAsSqlGenerationTests
         Normalize(ctx.From<ISimpleEntity>()
             .OrderBy(x => x.Id)
             .ToTableSql("archive_ids"))
-            .Should().Be("select id into archive_ids from simple_entity\n order by id");
+            .Should().Be("select id into archive_ids\n from simple_entity\n order by id");
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class CreateTableAsSqlGenerationTests
         Normalize(ctx.From<ISimpleEntity>()
             .WithKeywordCase(KeywordCase.Upper)
             .ToTableSql("archive_ids"))
-            .Should().Be("SELECT id INTO archive_ids FROM simple_entity");
+            .Should().Be("SELECT id INTO archive_ids\n FROM simple_entity");
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class CreateTableAsSqlGenerationTests
             .WithQuotedIdentifiers(true)
             .Select(x => new { x.Id })
             .ToTableSql("archive ids")
-            .Should().Be("select [id] into [archive ids] from [simple_entity]");
+            .Should().Be("select [id] into [archive ids]\n from [simple_entity]");
     }
 
     [Fact]

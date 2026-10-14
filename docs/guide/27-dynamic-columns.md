@@ -50,7 +50,8 @@ foreach (var product in products)
 The generated statement is:
 
 ```sql
-select Id, Name, * from product
+select Id, Name, *
+ from product
 ```
 
 The mapped columns are read by ordinal as usual; the store reads the fields after them through

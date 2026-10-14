@@ -117,7 +117,8 @@ var values = dataContext
 ```
 
 ```sql
-select value from json_each('["a","b","c"]')
+select value
+ from json_each('["a","b","c"]')
 ```
 
 ## Функции дат
@@ -156,7 +157,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select pi() as 'Pi', degrees(pi()) as 'Degrees', log2(8) as 'Log2' from complex_entity
+select pi() as 'Pi', degrees(pi()) as 'Degrees', log2(8) as 'Log2'
+ from complex_entity
 ```
 
 ## Полнотекстовый поиск (FTS3/FTS4/FTS5)

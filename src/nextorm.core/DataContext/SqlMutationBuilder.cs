@@ -1166,7 +1166,7 @@ internal static class SqlMutationBuilder
         var declare = SqlKeywords.Of(keywordCase, "declare ") + variable
             + SqlKeywords.Of(keywordCase, " table (") + target.ColumnDefinitions + "); ";
         var readBack = SqlKeywords.Of(keywordCase, "; select ") + columns
-            + SqlKeywords.Of(keywordCase, " from ") + variable;
+            + SqlText.NewLine + SqlKeywords.Of(keywordCase, " from ") + variable;
 
         return declare + sql + readBack;
     }

@@ -163,8 +163,8 @@ public class RootProjectionTests
 
         // A single-table root needs no alias, but the source must stay the physical table and slot 1
         // must resolve to its column (no nested projection, no flattening).
-        sql.Should().Be("select Id from orders");
-        sql.Should().NotContain("select * from (");
+        sql.Should().Be("select Id\n from orders");
+        sql.Should().NotContain("select *\n from (");
     }
 
     [Fact]

@@ -265,15 +265,15 @@ public class ClickHouseDialectTests
     public void WrapTableFunction_ShouldCastNumbersButNotZeros()
     {
         Dialect.WrapTableFunction("numbers", "numbers(3)")
-            .Should().Be("(select toInt64(number) as number from numbers(3))");
+            .Should().Be("(select toInt64(number) as number\n from numbers(3))");
         Dialect.WrapTableFunction("numbers_mt", "numbers_mt(3)")
-            .Should().Be("(select toInt64(number) as number from numbers_mt(3))");
+            .Should().Be("(select toInt64(number) as number\n from numbers_mt(3))");
         Dialect.WrapTableFunction("zeros", "zeros(3)").Should().Be("zeros(3)");
         Dialect.WrapTableFunction("zeros_mt", "zeros_mt(3)").Should().Be("zeros_mt(3)");
         Dialect.WrapTableFunction("generateRandom", "generateRandom()")
-            .Should().Be("(select toInt64(id) as id, value, name from generateRandom('id UInt64, value Float64, name String'))");
+            .Should().Be("(select toInt64(id) as id, value, name\n from generateRandom('id UInt64, value Float64, name String'))");
         Dialect.WrapTableFunction("generateRandom", "generateRandom(@seed)")
-            .Should().Be("(select toInt64(id) as id, value, name from generateRandom('id UInt64, value Float64, name String', @seed))");
+            .Should().Be("(select toInt64(id) as id, value, name\n from generateRandom('id UInt64, value Float64, name String', @seed))");
     }
 
     [Fact]

@@ -56,7 +56,8 @@ var elements = dataContext
 ```
 
 ```sql
-select unnest as "Value" from unnest(@norm_p0) as "t1"
+select unnest as "Value"
+ from unnest(@norm_p0) as "t1"
 ```
 
 If the fully qualified `SqlFunctions.*` names feel too verbose, import the surface with
@@ -93,10 +94,12 @@ var rows = await dataContext.From<SimpleEntity>(o => o.TableSample(10, TableSamp
 
 ```sql
 -- PostgreSQL
-select id from simple_entity tablesample system (10) repeatable (42)
+select id
+ from simple_entity tablesample system (10) repeatable (42)
 
 -- SQL Server
-select id from simple_entity tablesample (10 percent) repeatable (42)
+select id
+ from simple_entity tablesample (10 percent) repeatable (42)
 ```
 
 PostgreSQL supports both `System` and [`Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli);
@@ -128,7 +131,8 @@ var rows = await dataContext.From<IOrder>()
 
 ```sql
 -- SQL Server / PostgreSQL
-select id from sales.orders
+select id
+ from sales.orders
 ```
 
 The schema/database/server qualifiers are provider-specific; the levels a provider cannot express are
@@ -162,7 +166,8 @@ var rows = await dataContext.From<IOrder>()
 
 ```sql
 -- PostgreSQL
-select id from (select id from orders_2025 union all select id from orders_2026) as "t1"
+select id
+ from (select id from orders_2025 union all select id from orders_2026) as "t1"
 ```
 
 The override is part of the plan-cache key, so two queries that differ only in the override never share a

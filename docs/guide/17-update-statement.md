@@ -253,7 +253,8 @@ var updated = dataContext
 
 ```sql
 -- PostgreSQL
-with upd as (update orders set total = @p0 where customer_id = 7 returning id, total) select id, total from upd as "t1"
+with upd as (update orders set total = @p0 where customer_id = 7 returning id, total) select id, total
+ from upd as "t1"
 ```
 
 The joined form works the same way — `With(name, update)` over a multi-table

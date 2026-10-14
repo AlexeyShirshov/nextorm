@@ -164,7 +164,8 @@ ctx.CreateInsertBuilder<IOrder>()
 
 ```sql
 -- PostgreSQL: рендерится как INSERT ... SELECT
-insert into orders (id, amount) select id, amount from order_dto
+insert into orders (id, amount) select id, amount
+ from order_dto
  where active
 ```
 
@@ -299,7 +300,8 @@ var rows = dataContext
 
 ```sql
 -- PostgreSQL
-with ins as (insert into orders (customer_id) values (@p0) returning id, total) select id from ins as "t1"
+with ins as (insert into orders (customer_id) values (@p0) returning id, total) select id
+ from ins as "t1"
  where (t1.total > 0)
 ```
 
@@ -321,7 +323,9 @@ var rows = dataContext
 
 ```sql
 -- PostgreSQL
-with ins as (insert into orders (customer_id) values (@p0) returning id), src as (select total from orders) select Total from src
+with ins as (insert into orders (customer_id) values (@p0) returning id), src as (select total
+ from orders) select Total
+ from src
 ```
 
 > Строки, вставленные модифицирующим CTE, **не** видны другим CTE той же инструкции: PostgreSQL
@@ -348,8 +352,11 @@ var rows = scope
 
 ```sql
 -- PostgreSQL
-with src as (select id from customers
- where active), ins as (insert into orders (customer_id) select Id from src returning id) select id from ins as "t1"
+with src as (select id
+ from customers
+ where active), ins as (insert into orders (customer_id) select Id
+ from src returning id) select id
+ from ins as "t1"
 ```
 
 Модифицирующий CTE может также питать главный `INSERT ... SELECT`: `WITH` поднимается перед `INSERT`
@@ -369,7 +376,8 @@ dataContext.CreateInsertBuilder<IOrder>()
 
 ```sql
 -- PostgreSQL: WITH поднимается перед главным INSERT
-with ins as (insert into orders (customer_id) values (@p0) returning customer_id) insert into orders (customer_id) select "CustomerId" from ins as "t1"
+with ins as (insert into orders (customer_id) values (@p0) returning customer_id) insert into orders (customer_id) select "CustomerId"
+ from ins as "t1"
 ```
 
 Телом CTE может быть и `UPDATE` или `DELETE` (`With(имя, update)` / `With(имя, delete)`); у этих тел свои
@@ -548,7 +556,8 @@ var sql = ctx.CreateInsertBuilder<ISimpleEntity>()
 
 ```sql
 -- SQL Server (один батч)
-declare @t table (id bigint, name nvarchar(100)); insert into simple_entity (name) output inserted.id, inserted.name into @t (id, name) values (@p0); select id, name from @t
+declare @t table (id bigint, name nvarchar(100)); insert into simple_entity (name) output inserted.id, inserted.name into @t (id, name) values (@p0); select id, name
+ from @t
 ```
 
 Тот же метод доступен на returning-билдерах `UPDATE` и `DELETE` (для `DELETE` удалённая строка

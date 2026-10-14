@@ -164,7 +164,8 @@ ctx.CreateInsertBuilder<IOrder>()
 
 ```sql
 -- PostgreSQL: rendered as INSERT ... SELECT
-insert into orders (id, amount) select id, amount from order_dto
+insert into orders (id, amount) select id, amount
+ from order_dto
  where active
 ```
 
@@ -296,7 +297,8 @@ var rows = dataContext
 
 ```sql
 -- PostgreSQL
-with ins as (insert into orders (customer_id) values (@p0) returning id, total) select id from ins as "t1"
+with ins as (insert into orders (customer_id) values (@p0) returning id, total) select id
+ from ins as "t1"
  where (t1.total > 0)
 ```
 
@@ -318,7 +320,9 @@ var rows = dataContext
 
 ```sql
 -- PostgreSQL
-with ins as (insert into orders (customer_id) values (@p0) returning id), src as (select total from orders) select Total from src
+with ins as (insert into orders (customer_id) values (@p0) returning id), src as (select total
+ from orders) select Total
+ from src
 ```
 
 > The rows a data-modifying CTE inserts are **not** visible to the other CTEs of the same statement:
@@ -345,8 +349,11 @@ var rows = scope
 
 ```sql
 -- PostgreSQL
-with src as (select id from customers
- where active), ins as (insert into orders (customer_id) select Id from src returning id) select id from ins as "t1"
+with src as (select id
+ from customers
+ where active), ins as (insert into orders (customer_id) select Id
+ from src returning id) select id
+ from ins as "t1"
 ```
 
 A data-modifying CTE can also feed a main `INSERT ... SELECT`: the `WITH` is hoisted to precede `INSERT`
@@ -366,7 +373,8 @@ dataContext.CreateInsertBuilder<IOrder>()
 
 ```sql
 -- PostgreSQL: WITH hoisted before the main INSERT
-with ins as (insert into orders (customer_id) values (@p0) returning customer_id) insert into orders (customer_id) select "CustomerId" from ins as "t1"
+with ins as (insert into orders (customer_id) values (@p0) returning customer_id) insert into orders (customer_id) select "CustomerId"
+ from ins as "t1"
 ```
 
 The CTE body may also be an `UPDATE` or `DELETE` (`With(name, update)` / `With(name, delete)`); those
@@ -545,7 +553,8 @@ var sql = ctx.CreateInsertBuilder<ISimpleEntity>()
 
 ```sql
 -- SQL Server (one batch)
-declare @t table (id bigint, name nvarchar(100)); insert into simple_entity (name) output inserted.id, inserted.name into @t (id, name) values (@p0); select id, name from @t
+declare @t table (id bigint, name nvarchar(100)); insert into simple_entity (name) output inserted.id, inserted.name into @t (id, name) values (@p0); select id, name
+ from @t
 ```
 
 The same method is available on the `UPDATE` and `DELETE` returning builders (a `DELETE` reads the

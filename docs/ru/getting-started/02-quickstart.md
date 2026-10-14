@@ -69,7 +69,8 @@ Id = 3
 Сгенерированный SQL - это обычный `select` по отображённым таблице и столбцу:
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 ## Использование строки подключения

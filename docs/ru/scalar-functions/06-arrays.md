@@ -245,7 +245,9 @@ var ids = dataContext.From<IArrayEntity>()
 ```
 
 ```sql
-select id from array_entity left array join tags
+select id
+ from array_entity
+ left array join tags
 ```
 
 `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` добавляют ту же клаузу, но возвращают
@@ -262,7 +264,8 @@ var rows = dataContext.From<IArrayEntity>()
 ```
 
 ```sql
-select id, __nextorm_aj_element as `Tag` from array_entity
+select id, __nextorm_aj_element as `Tag`
+ from array_entity
 array join tags as __nextorm_aj_element
 where __nextorm_aj_element = 'b'
 ```

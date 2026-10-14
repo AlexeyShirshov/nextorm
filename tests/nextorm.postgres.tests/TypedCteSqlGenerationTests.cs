@@ -45,8 +45,8 @@ public class TypedCteSqlGenerationTests
 
         // Producer body exposes the property-name alias; the consumer body/final read reference it.
         sql.Should().Contain("inner as (select id as \"Id\"");
-        sql.Should().Contain("outer as (select \"Id\" from inner as");
-        sql.Should().Contain("select \"Id\" from outer as");
+        sql.Should().Contain("outer as (select \"Id\"\n from inner as");
+        sql.Should().Contain("select \"Id\"\n from outer as");
     }
 
     [Fact]

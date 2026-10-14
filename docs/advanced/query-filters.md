@@ -59,11 +59,13 @@ var ids = ctx.From<Document>()
 
 ```sql
 -- PostgreSQL
-select id from documents
+select id
+ from documents
  where ((id = 10 and not (is_deleted)) and tenant_id = @p0)
 
 -- SQL Server
-select id from documents
+select id
+ from documents
  where ((id = 10 and not ((is_deleted) = 1)) and tenant_id = @p0)
 ```
 
@@ -170,11 +172,13 @@ The tenant filter is still applied; only the soft-delete predicate is dropped:
 
 ```sql
 -- PostgreSQL
-select id from documents
+select id
+ from documents
  where (id = 10 and tenant_id = @p0)
 
 -- SQL Server
-select id from documents
+select id
+ from documents
  where (id = 10 and tenant_id = @p0)
 ```
 
@@ -205,12 +209,14 @@ var rows = ctx.From<Attachment>()
 
 ```sql
 -- PostgreSQL
-select t1.id from attachments as "t1"
+select t1.id
+ from attachments as "t1"
  join documents as "t2" on ((t1.document_id = t2.id and not (t2.is_deleted)) and t2.tenant_id = @p0)
  where not (t1.is_deleted)
 
 -- SQL Server
-select t1.id from attachments as [t1]
+select t1.id
+ from attachments as [t1]
  join documents as [t2] on ((t1.document_id = t2.id and not ((t2.is_deleted) = 1)) and t2.tenant_id = @p0)
  where not ((t1.is_deleted) = 1)
 ```
@@ -228,14 +234,18 @@ var rows = ctx.From<Document>()
 
 ```sql
 -- PostgreSQL
-select t1.id, (select t2.id from attachments as "t2"
+select t1.id, (select t2.id
+ from attachments as "t2"
  where (t2.document_id = t1.id and not (t2.is_deleted))
-limit 1) as "sid" from documents as "t1"
+limit 1) as "sid"
+ from documents as "t1"
  where (not (t1.is_deleted) and t1.tenant_id = @p0)
 
 -- SQL Server
-select t1.id, (select top(1) t2.id from attachments as [t2]
- where (t2.document_id = t1.id and not ((t2.is_deleted) = 1))) as [sid] from documents as [t1]
+select t1.id, (select top(1) t2.id
+ from attachments as [t2]
+ where (t2.document_id = t1.id and not ((t2.is_deleted) = 1))) as [sid]
+ from documents as [t1]
  where (not ((t1.is_deleted) = 1) and t1.tenant_id = @p0)
 ```
 
@@ -322,14 +332,16 @@ ctx.CreateInsertBuilder<ArchivedDocument>()
 insert into documents (id, tenant_id, is_deleted) values (@p0, @p1, @p2)
 
 insert into archived_documents (id, tenant_id, is_deleted)
-select id, tenant_id as "TenantId", is_deleted as "IsDeleted" from documents
+select id, tenant_id as "TenantId", is_deleted as "IsDeleted"
+ from documents
  where (((id > 0) and not (is_deleted)) and tenant_id = @p0)
 
 -- SQL Server
 insert into documents (id, tenant_id, is_deleted) values (@p0, @p1, @p2)
 
 insert into archived_documents (id, tenant_id, is_deleted)
-select id, tenant_id as [TenantId], is_deleted as [IsDeleted] from documents
+select id, tenant_id as [TenantId], is_deleted as [IsDeleted]
+ from documents
  where (((id > 0) and not ((is_deleted) = 1)) and tenant_id = @p0)
 ```
 
@@ -486,11 +498,13 @@ var rows = dataContext
 
 ```sql
 -- PostgreSQL
-select id from (select id, tenant_id, is_deleted from documents) as "t1"
+select id
+ from (select id, tenant_id, is_deleted from documents) as "t1"
  where (((t1.id > 10) and not (t1.is_deleted)) and t1.tenant_id = @p0)
 
 -- SQL Server
-select id from (select id, tenant_id, is_deleted from documents) as [t1]
+select id
+ from (select id, tenant_id, is_deleted from documents) as [t1]
  where (((t1.id > 10) and not ((t1.is_deleted) = 1)) and t1.tenant_id = @p0)
 ```
 

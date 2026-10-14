@@ -25,7 +25,7 @@ public class SourceOverrideSqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.WithDatabase("shop").Select(x => new { x.Id }))
-            .Should().Be("select id from shop.simple_entity");
+            .Should().Be("select id\n from shop.simple_entity");
     }
 
     [Fact]
@@ -46,6 +46,6 @@ public class SourceOverrideSqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.WithTableExpression("select id from other").Select(x => new { x.Id }))
-            .Should().Be("select id from (select id from other) as `t1`");
+            .Should().Be("select id\n from (select id from other) as `t1`");
     }
 }

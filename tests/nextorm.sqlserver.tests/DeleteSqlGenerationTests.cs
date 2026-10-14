@@ -99,7 +99,7 @@ public class DeleteSqlGenerationTests
             .Returning(x => new { x.Id, x.Name })
             .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
             .ToSql()
-            .Should().Be("declare @t table (id bigint, name nvarchar(100)); delete from merge_entity output deleted.id, deleted.name into @t (id, name) where id = 1; select id, name from @t");
+            .Should().Be("declare @t table (id bigint, name nvarchar(100)); delete from merge_entity output deleted.id, deleted.name into @t (id, name) where id = 1; select id, name\n from @t");
     }
 
     [Fact]

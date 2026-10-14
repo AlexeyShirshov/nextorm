@@ -65,7 +65,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, row_number() over (partition by nullableint order by id) as 'rn' from complex_entity
+select id, row_number() over (partition by nullableint order by id) as 'rn'
+ from complex_entity
 ```
 
 Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -98,7 +99,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, rank() over (order by id) as 'r', dense_rank() over (order by id) as 'dr' from complex_entity
+select id, rank() over (order by id) as 'r', dense_rank() over (order by id) as 'dr'
+ from complex_entity
 ```
 
 Убывающий ключ записывается через `SqlFunctions.Sql.desc`. Когда нужно несколько ключей (или смесь направлений),
@@ -117,7 +119,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, row_number() over (partition by nullableint order by id desc) as 'r' from complex_entity
+select id, row_number() over (partition by nullableint order by id desc) as 'r'
+ from complex_entity
 ```
 
 ## `lag` и `lead` со смещением и значением по умолчанию
@@ -138,7 +141,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, lag(id, 1, 0) over (order by id) as 'prev', lead(nullableint, 2, 0) over (order by id) as 'next' from complex_entity
+select id, lag(id, 1, 0) over (order by id) as 'prev', lead(nullableint, 2, 0) over (order by id) as 'next'
+ from complex_entity
 ```
 
 ### `lagInFrame` / `leadInFrame` (ClickHouse)
@@ -186,7 +190,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, sum(id) over (partition by nullableint) as 'total', count(*) over (partition by nullableint) as 'n' from complex_entity
+select id, sum(id) over (partition by nullableint) as 'total', count(*) over (partition by nullableint) as 'n'
+ from complex_entity
 ```
 
 ## Рамки (frames)
@@ -229,7 +234,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, sum(id) over (order by id rows between unbounded preceding and current row) as 'running', sum(id) over (order by id rows between 1 preceding and 1 following) as 'sliding' from complex_entity
+select id, sum(id) over (order by id rows between unbounded preceding and current row) as 'running', sum(id) over (order by id rows between 1 preceding and 1 following) as 'sliding'
+ from complex_entity
 ```
 
 Рамка может исключать строки вокруг текущей через

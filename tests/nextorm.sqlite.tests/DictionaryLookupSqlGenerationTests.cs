@@ -30,7 +30,7 @@ public class DictionaryLookupSqlGenerationTests
         var sql = SqlOf(ctx, e.Where(x => CapturedLookup[x.Int!.Value] < x.Datetime).Select(x => x.Id));
 
         sql.Should().Be(
-            "select id from complex_entity\n where (case when nullableint = $p0 then $p1 when nullableint = $p2 then $p3 end < dt)");
+            "select id\n from complex_entity\n where (case when nullableint = $p0 then $p1 when nullableint = $p2 then $p3 end < dt)");
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class DictionaryLookupSqlGenerationTests
         var sql = SqlOf(ctx, e.Where(x => lookup[x.Int!.Value] < x.Datetime).Select(x => x.Id));
 
         sql.Should().Be(
-            "select id from complex_entity\n where (case when nullableint = $p0 then $p1 when nullableint = $p2 then $p3 end < dt)");
+            "select id\n from complex_entity\n where (case when nullableint = $p0 then $p1 when nullableint = $p2 then $p3 end < dt)");
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class DictionaryLookupSqlGenerationTests
 
         var sql = prepared.DbCommand.CommandText.Replace("\r\n", "\n");
         sql.Should().NotContain("case");
-        sql.Should().Be("select id from complex_entity\n where ($p0 < dt)");
+        sql.Should().Be("select id\n from complex_entity\n where ($p0 < dt)");
         prepared.DbCommandParams[0].Value.Should().Be(new DateTime(2024, 2, 1));
     }
 

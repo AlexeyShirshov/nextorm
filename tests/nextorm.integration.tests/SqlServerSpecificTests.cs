@@ -1977,7 +1977,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         sql.Should().StartWith("declare @t table (id bigint, name nvarchar(100));");
         sql.Should().Contain("output inserted.id, inserted.name into @t (id, name)");
-        sql.Should().EndWith("; select id, name from @t");
+        sql.Should().EndWith("; select id, name\n from @t");
         sql.Should().NotContainEquivalentOf("identity");
 
         var rows = ExecuteTableVariableBatch(ctx, sql, new ProcedureParameter("p0", marker));
@@ -2021,7 +2021,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         sql.Should().StartWith("declare @t table (id int, name nvarchar(100));");
         sql.Should().Contain("output inserted.id, inserted.name into @t (id, name)");
-        sql.Should().EndWith("; select id, name from @t");
+        sql.Should().EndWith("; select id, name\n from @t");
 
         var rows = ExecuteTableVariableBatch(ctx, sql, new ProcedureParameter("p0", marker), new ProcedureParameter("id", id));
 
@@ -2063,7 +2063,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         sql.Should().StartWith("declare @t table (id int, name nvarchar(100));");
         sql.Should().Contain("output deleted.id, deleted.name into @t (id, name)");
-        sql.Should().EndWith("; select id, name from @t");
+        sql.Should().EndWith("; select id, name\n from @t");
 
         // the captured predicate local is bound under its source name (@id), not as a positional @pN
         var rows = ExecuteTableVariableBatch(ctx, sql, new ProcedureParameter("id", id));
@@ -2194,7 +2194,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         syncSql.Should().StartWith("declare @t table (id bigint, name nvarchar(100));");
         syncSql.Should().Contain("output inserted.id, inserted.name into @t (id, name)");
-        syncSql.Should().EndWith("; select id, name from @t");
+        syncSql.Should().EndWith("; select id, name\n from @t");
 
         ExecuteTableVariableBatch(ctx, syncSql, new ProcedureParameter("absentMarker", absentMarker))
             .Should().BeEmpty();
@@ -2235,7 +2235,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
             syncSql.Should().Contain("output inserted.id, inserted.basis, inserted.total into @t (id, basis, total)");
             syncSql.Should().NotContainEquivalentOf("identity");
             syncSql.Should().NotContainEquivalentOf(" as ");
-            syncSql.Should().EndWith("; select id, basis, total from @t");
+            syncSql.Should().EndWith("; select id, basis, total\n from @t");
 
             var syncRows = ExecuteTableVariableBatch<OutputIntoComputedRow>(ctx, syncSql, new ProcedureParameter("p0", 21));
 
@@ -2288,7 +2288,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
             syncSql.Should().StartWith("declare @t2 table (");
             syncSql.Should().Contain("output inserted.id, inserted.total into @t2 (id, total)");
-            syncSql.Should().EndWith("; select id, total from @t2");
+            syncSql.Should().EndWith("; select id, total\n from @t2");
 
             var syncRows = ExecuteTableVariableBatch<OutputIntoTotalRow>(
                 ctx, syncSql, new ProcedureParameter("p0", 22), new ProcedureParameter("id1", id1));
@@ -2343,7 +2343,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
             syncSql.Should().StartWith("declare @t3 table (");
             syncSql.Should().Contain("output deleted.id, deleted.total into @t3 (id, total)");
-            syncSql.Should().EndWith("; select id, total from @t3");
+            syncSql.Should().EndWith("; select id, total\n from @t3");
 
             var syncRows = ExecuteTableVariableBatch<OutputIntoTotalRow>(
                 ctx, syncSql, new ProcedureParameter("id1", id1));

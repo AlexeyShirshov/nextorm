@@ -81,9 +81,11 @@ ctx.From<ISimpleEntity>().Select(x => x.Id).ExceptAll(ctx.From<ISimpleEntity>().
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
  intersect all
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 ## Provider differences

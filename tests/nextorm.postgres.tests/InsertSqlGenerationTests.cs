@@ -388,7 +388,7 @@ public class InsertSqlGenerationTests
         Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>().Where(s => s.Age > min), s => new { s.Name, s.Age })
             .ToSql())
-            .Should().Be("insert into insert_entity (name, age) select Name, Age from insert_source\n where (Age > @min)");
+            .Should().Be("insert into insert_entity (name, age) select Name, Age\n from insert_source\n where (Age > @min)");
     }
 
     [Fact]
@@ -400,7 +400,7 @@ public class InsertSqlGenerationTests
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age })
             .Returning(x => new { x.Id, x.Name })
             .ToSql())
-            .Should().Be("insert into insert_entity (name, age) select Name, Age from insert_source returning id, name");
+            .Should().Be("insert into insert_entity (name, age) select Name, Age\n from insert_source returning id, name");
     }
 
     [Fact]
@@ -448,7 +448,7 @@ public class InsertSqlGenerationTests
                 .Returning(x => new { x.Id }))
             .From("ins")
             .Select(r => new { r.Id }))
-            .Should().Be("with ins as (insert into insert_entity (name, age) select Name, Age from insert_source returning id) select id from ins as \"t1\"");
+            .Should().Be("with ins as (insert into insert_entity (name, age) select Name, Age\n from insert_source returning id) select id\n from ins as \"t1\"");
     }
 
     [Fact]
@@ -462,7 +462,7 @@ public class InsertSqlGenerationTests
             .Returning(x => new { x.Id });
 
         SqlOf(ctx, scope.With("ins", insert).From("ins").Select(r => new { r.Id }))
-            .Should().Be("with src as (select Name, Age from insert_source), ins as (insert into insert_entity (name, age) select Name, Age from src returning id) select id from ins as \"t1\"");
+            .Should().Be("with src as (select Name, Age\n from insert_source), ins as (insert into insert_entity (name, age) select Name, Age\n from src returning id) select id\n from ins as \"t1\"");
     }
 
     [Fact]
@@ -476,7 +476,7 @@ public class InsertSqlGenerationTests
             .Returning(x => new { x.Id });
 
         SqlOf(ctx, ctx.With("ins", insert).From("ins").Select(r => new { r.Id }))
-            .Should().Be("with src as (select Name, Age from insert_source), ins as (insert into insert_entity (name, age) select Name, Age from src returning id) select id from ins as \"t1\"");
+            .Should().Be("with src as (select Name, Age\n from insert_source), ins as (insert into insert_entity (name, age) select Name, Age\n from src returning id) select id\n from ins as \"t1\"");
     }
 
     [Fact]
@@ -491,7 +491,7 @@ public class InsertSqlGenerationTests
         Normalize(ctx.CreateInsertBuilder<IValueEntity>()
             .Values(source, r => new { r.Value })
             .ToSql())
-            .Should().Be("with ins as (insert into value_entity (value) values (@p0) returning value) insert into value_entity (value) select value from ins as \"t1\"");
+            .Should().Be("with ins as (insert into value_entity (value) values (@p0) returning value) insert into value_entity (value) select value\n from ins as \"t1\"");
     }
 
     [Fact]
@@ -505,7 +505,7 @@ public class InsertSqlGenerationTests
             .Values(source, a => new { Name = a.GetString("name"), Age = a.GetInt32("age") })
             .ToSql());
 
-        sql.Should().Be("with c as (select Name, Age from insert_source) insert into insert_entity (name, age) select name, age from c");
+        sql.Should().Be("with c as (select Name, Age\n from insert_source) insert into insert_entity (name, age) select name, age\n from c");
     }
 
     [Fact]
@@ -524,7 +524,7 @@ public class InsertSqlGenerationTests
             .Values(source, a => new { Name = a.GetString("name"), Age = a.GetInt32("age") })
             .ToSql());
 
-        sql.Should().Be("with i as (select Name, Age from insert_source), o as (select Name, Age from i) insert into insert_entity (name, age) select name, age from o");
+        sql.Should().Be("with i as (select Name, Age\n from insert_source), o as (select Name, Age\n from i) insert into insert_entity (name, age) select name, age\n from o");
     }
 
     [Fact]
@@ -535,7 +535,7 @@ public class InsertSqlGenerationTests
         Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>(), s => new InsertEntity { Name = s.Name, Age = s.Age })
             .ToSql())
-            .Should().Be("insert into insert_entity (name, age) select Name, Age from insert_source");
+            .Should().Be("insert into insert_entity (name, age) select Name, Age\n from insert_source");
     }
 
     [Fact]
@@ -547,7 +547,7 @@ public class InsertSqlGenerationTests
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age })
             .ReturningIdentity<long>()
             .ToSql())
-            .Should().Be("insert into insert_entity (name, age) select Name, Age from insert_source; select lastval()");
+            .Should().Be("insert into insert_entity (name, age) select Name, Age\n from insert_source; select lastval()");
     }
 
     [Fact]
@@ -559,7 +559,7 @@ public class InsertSqlGenerationTests
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age })
             .ReturningKey<long>()
             .ToSql())
-            .Should().Be("insert into insert_entity (name, age) select Name, Age from insert_source returning id");
+            .Should().Be("insert into insert_entity (name, age) select Name, Age\n from insert_source returning id");
     }
 
     [Fact]
@@ -571,7 +571,7 @@ public class InsertSqlGenerationTests
         Normalize(ctx.CreateInsertBuilder<IValueEntity>()
             .Values(ctx.FromTableFunction(() => SqlFunctions.Postgres.unnest(values)), r => new { r.Value })
             .ToSql())
-            .Should().Be("insert into value_entity (value) select unnest as \"Value\" from (select unnest from unnest(@values)) as \"t1\"");
+            .Should().Be("insert into value_entity (value) select unnest as \"Value\"\n from (select unnest\n from unnest(@values)) as \"t1\"");
     }
 
     [Fact]
@@ -584,7 +584,7 @@ public class InsertSqlGenerationTests
                 .Returning(x => new { x.Id, x.Name }))
             .From("ins")
             .Select(r => new { r.Id, r.Name }))
-            .Should().Be("with ins as (insert into insert_entity (name) values (@p0) returning id, name) select id, name from ins as \"t1\"");
+            .Should().Be("with ins as (insert into insert_entity (name) values (@p0) returning id, name) select id, name\n from ins as \"t1\"");
     }
 
     [Fact]
@@ -598,7 +598,7 @@ public class InsertSqlGenerationTests
             .From("ins")
             .Where(r => r.Age > 0)
             .Select(r => new { r.Id }))
-            .Should().Be("with ins as (insert into insert_entity (name) values (@p0) returning id, age) select id from ins as \"t1\"\n where (t1.age > 0)");
+            .Should().Be("with ins as (insert into insert_entity (name) values (@p0) returning id, age) select id\n from ins as \"t1\"\n where (t1.age > 0)");
     }
 
     [Fact]
@@ -612,7 +612,7 @@ public class InsertSqlGenerationTests
             .With("src", ctx.From<InsertSource>().Select(s => new { s.Name }))
             .From("ins")
             .Select(r => new { r.Id }))
-            .Should().Be("with ins as (insert into insert_entity (name) values (@p0) returning id), src as (select Name from insert_source) select id from ins as \"t1\"");
+            .Should().Be("with ins as (insert into insert_entity (name) values (@p0) returning id), src as (select Name\n from insert_source) select id\n from ins as \"t1\"");
     }
 
     [Fact]
@@ -626,7 +626,7 @@ public class InsertSqlGenerationTests
             .With("src", ctx.From<InsertSource>().Select(s => new { s.Age }))
             .FromTable("src")
             .Select(t => new { age = t["Age"].AsInt }))
-            .Should().Be("with ins as (insert into insert_entity (name) values (@p0) returning id), src as (select Age from insert_source) select Age from src");
+            .Should().Be("with ins as (insert into insert_entity (name) values (@p0) returning id), src as (select Age\n from insert_source) select Age\n from src");
     }
 
     [Fact]
@@ -639,7 +639,7 @@ public class InsertSqlGenerationTests
                 .Returning())
             .From("ins")
             .Select(r => new { r.Id, r.Name }))
-            .Should().Be("with ins as (insert into insert_entity (name, age) values (@p0, @p1) returning id, name, age, total) select id, name from ins as \"t1\"");
+            .Should().Be("with ins as (insert into insert_entity (name, age) values (@p0, @p1) returning id, name, age, total) select id, name\n from ins as \"t1\"");
     }
 
     [Fact]

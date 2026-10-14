@@ -61,9 +61,9 @@ public class CorrelatedQueryTests
             sid = inner.Where(s => s.Id == it.Id).Select(s => s.Id).First()
         }));
 
-        sql.Should().Be("select t1.id, (select t2.id from simple_entity as 't2'\n"
+        sql.Should().Be("select t1.id, (select t2.id\n from simple_entity as 't2'\n"
             + " where cast(t2.id as bigint) = t1.id\n"
-            + "limit 1) as 'sid' from complex_entity as 't1'");
+            + "limit 1) as 'sid'\n from complex_entity as 't1'");
     }
 
     [Fact]
@@ -77,8 +77,8 @@ public class CorrelatedQueryTests
             .Where(it => it.Id == inner.Where(s => s.Id == it.Id).Select(s => s.Id).First())
             .Select(it => new { it.Id }));
 
-        sql.Should().Be("select t1.id from complex_entity as 't1'\n"
-            + " where t1.id = (select t2.id from simple_entity as 't2'\n"
+        sql.Should().Be("select t1.id\n from complex_entity as 't1'\n"
+            + " where t1.id = (select t2.id\n from simple_entity as 't2'\n"
             + " where cast(t2.id as bigint) = t1.id\n"
             + "limit 1)");
     }
@@ -94,8 +94,8 @@ public class CorrelatedQueryTests
             .OrderBy(it => inner.Where(s => s.Id == it.Id).Select(s => s.Id).First())
             .Select(it => new { it.Id }));
 
-        sql.Should().Be("select t1.id from complex_entity as 't1'\n"
-            + " order by (select t2.id from simple_entity as 't2'\n"
+        sql.Should().Be("select t1.id\n from complex_entity as 't1'\n"
+            + " order by (select t2.id\n from simple_entity as 't2'\n"
             + " where cast(t2.id as bigint) = t1.id\n"
             + "limit 1)");
     }
@@ -119,9 +119,9 @@ public class CorrelatedQueryTests
             x = inner.Where(i => i.Id == p.Item1.Id).Select(i => i.Id).First()
         }));
 
-        sql.Should().Be("select t1.id, (select t3.id from pair_inner as 't3'\n"
+        sql.Should().Be("select t1.id, (select t3.id\n from pair_inner as 't3'\n"
             + " where cast(t3.id as bigint) = t1.id\n"
-            + "limit 1) as 'x' from complex_entity as 't1' join simple_entity as 't2' on t1.id = cast(t2.id as bigint)");
+            + "limit 1) as 'x'\n from complex_entity as 't1'\n join simple_entity as 't2' on t1.id = cast(t2.id as bigint)");
     }
 
     /// <summary>
@@ -180,8 +180,8 @@ public class CorrelatedQueryTests
             has = SqlFunctions.Sql.exists(inner.Where(s => s.Id == it.Id))
         }));
 
-        sql.Should().Be("select t1.id, exists(select * from simple_entity as 't2'\n"
-            + " where cast(t2.id as bigint) = t1.id) from complex_entity as 't1'");
+        sql.Should().Be("select t1.id, exists(select *\n from simple_entity as 't2'\n"
+            + " where cast(t2.id as bigint) = t1.id)\n from complex_entity as 't1'");
     }
 
     [Fact]
@@ -233,9 +233,9 @@ public class CorrelatedQueryTests
             c = inner.Where(s => s.Id == it.Id).Count()
         }));
 
-        sql.Should().Be("select t1.id, (select count(*) from simple_entity as 't2'\n"
+        sql.Should().Be("select t1.id, (select count(*)\n from simple_entity as 't2'\n"
             + " where cast(t2.id as bigint) = t1.id\n"
-            + "limit 1) as 'c' from complex_entity as 't1'");
+            + "limit 1) as 'c'\n from complex_entity as 't1'");
     }
 
     [Fact]
@@ -254,10 +254,10 @@ public class CorrelatedQueryTests
             av = pairs.Where(p => p.Id == it.Id).Avg(p => p.A)
         }));
 
-        sql.Should().Contain("(select sum(t2.a) from pair_entity as 't2'");
-        sql.Should().Contain("(select min(t3.a) from pair_entity as 't3'");
-        sql.Should().Contain("(select max(t4.a) from pair_entity as 't4'");
-        sql.Should().Contain("(select avg(t5.a) from pair_entity as 't5'");
+        sql.Should().Contain("(select sum(t2.a)\n from pair_entity as 't2'");
+        sql.Should().Contain("(select min(t3.a)\n from pair_entity as 't3'");
+        sql.Should().Contain("(select max(t4.a)\n from pair_entity as 't4'");
+        sql.Should().Contain("(select avg(t5.a)\n from pair_entity as 't5'");
         sql.Should().Contain("where cast(t2.id as bigint) = t1.id");
     }
 
@@ -278,7 +278,7 @@ public class CorrelatedQueryTests
             c = inner.Where(s => s.Id == 1).Count()
         }));
 
-        sql.Should().Contain("(select count(*) from simple_entity");
+        sql.Should().Contain("(select count(*)\n from simple_entity");
         sql.Should().Contain("limit 1) as 'c'");
     }
 
@@ -321,11 +321,11 @@ public class CorrelatedQueryTests
                    .First()
         }));
 
-        sql.Should().Be("select t1.id, (select (select t3.id from simple_entity as 't3'\n"
+        sql.Should().Be("select t1.id, (select (select t3.id\n from simple_entity as 't3'\n"
             + " where t3.id = t2.id\n"
-            + "limit 1) from simple_entity as 't2'\n"
+            + "limit 1)\n from simple_entity as 't2'\n"
             + " where (t2.id > 0)\n"
-            + "limit 1) as 'x' from complex_entity as 't1'");
+            + "limit 1) as 'x'\n from complex_entity as 't1'");
     }
 
     /// <summary>
@@ -349,11 +349,11 @@ public class CorrelatedQueryTests
                    .First()
         }));
 
-        sql.Should().Be("select t1.id, (select (select t3.id from simple_entity as 't3'\n"
+        sql.Should().Be("select t1.id, (select (select t3.id\n from simple_entity as 't3'\n"
             + " where (t3.id = t2.id and cast(t3.id as bigint) = t1.id)\n"
-            + "limit 1) from simple_entity as 't2'\n"
+            + "limit 1)\n from simple_entity as 't2'\n"
             + " where cast(t2.id as bigint) = t1.id\n"
-            + "limit 1) as 'x' from complex_entity as 't1'");
+            + "limit 1) as 'x'\n from complex_entity as 't1'");
     }
 
     private static string SqlOfCached<T>(SqliteDataContext ctx, QueryCommand<T> cmd)
@@ -377,7 +377,7 @@ public class CorrelatedQueryTests
             .Select(g => new { g.Id }));
 
         sql.Should().Contain(" having ");
-        sql.Should().Contain("(select t2.id from simple_entity as 't2'");
+        sql.Should().Contain("(select t2.id\n from simple_entity as 't2'");
         sql.Should().Contain("cast(t2.id as bigint) = t1.id");
     }
 
@@ -398,7 +398,7 @@ public class CorrelatedQueryTests
             .Select(g => new { g.Id }));
 
         sql.Should().Contain(" having ");
-        sql.Should().Contain("(select id from simple_entity");
+        sql.Should().Contain("(select id\n from simple_entity");
         sql.Should().Contain("limit 1");
     }
 

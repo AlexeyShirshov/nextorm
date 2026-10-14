@@ -15,13 +15,17 @@ var names = dataContext.From<IComplexEntity>()
 
 ```sql
 -- PostgreSQL / SQL Server
-select string_agg(somestring, ',') from complex_entity
+select string_agg(somestring, ',')
+ from complex_entity
 -- ClickHouse
-select arrayStringConcat(groupArray(somestring), ',') from complex_entity
+select arrayStringConcat(groupArray(somestring), ',')
+ from complex_entity
 -- MySQL/MariaDB
-select group_concat(somestring separator ',') from complex_entity
+select group_concat(somestring separator ',')
+ from complex_entity
 -- SQLite
-select group_concat(somestring, ',') from complex_entity
+select group_concat(somestring, ',')
+ from complex_entity
 ```
 
 | C# | SQL | Providers |

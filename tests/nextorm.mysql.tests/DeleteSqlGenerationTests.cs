@@ -111,7 +111,7 @@ public class DeleteSqlGenerationTests
             .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
             .ToSql();
 
-        sql.Should().StartWith("with c as (select id from simple_entity");
+        sql.Should().StartWith("with c as (select id\n from simple_entity");
         sql.Should().Contain("delete /*+ NO_RANGE_OPTIMIZATION(t1) */ `t1` from complex_entity as `t1` join c as `t2`");
         (sql.IndexOf("/*+")).Should().BeGreaterThan(sql.IndexOf("delete"));
     }

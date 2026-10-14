@@ -26,7 +26,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.WithTag("app.list").Select(x => new { x.Id }))
-            .Should().Be("select /* app.list */ id from simple_entity");
+            .Should().Be("select /* app.list */ id\n from simple_entity");
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => new { x.Id }).WithTag("a*/b/*c\r\nd"))
-            .Should().Be("select /* a* /b/ *c d */ id from simple_entity");
+            .Should().Be("select /* a* /b/ *c d */ id\n from simple_entity");
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class SqlGenerationTests
 
         // MariaDB inherits the MySQL dialect and rejects a bare "*" mixed with explicit columns, so the
         // star is qualified with the FROM alias that the forced alias renders.
-        SqlOf(ctx, e.ToCommand()).Should().Be("select t1.id, `t1`.* from dynamic_entity as `t1`");
+        SqlOf(ctx, e.ToCommand()).Should().Be("select t1.id, `t1`.*\n from dynamic_entity as `t1`");
     }
 
     private static DynamicColumnsEntity DynamicWriteEntity()
@@ -204,7 +204,7 @@ public class SqlGenerationTests
         using var ctx = MariaDbTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select id from simple_entity");
+        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select id\n from simple_entity");
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public class SqlGenerationTests
         using var ctx = MariaDbTestContext.CreateQuoted();
         var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select `id` from `simple_entity`");
+        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select `id`\n from `simple_entity`");
     }
 
     [Fact]
@@ -425,7 +425,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => x.Id).IntersectAll(e.Select(x => x.Id)))
-            .Should().Be("select id from simple_entity\n intersect all \nselect id from simple_entity");
+            .Should().Be("select id\n from simple_entity\n intersect all \nselect id\n from simple_entity");
     }
 
     [Fact]
@@ -435,7 +435,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => x.Id).ExceptAll(e.Select(x => x.Id)))
-            .Should().Be("select id from simple_entity\n except all \nselect id from simple_entity");
+            .Should().Be("select id\n from simple_entity\n except all \nselect id\n from simple_entity");
     }
 
     [Fact]
@@ -512,7 +512,7 @@ public class SqlGenerationTests
             .Join(ctx.From<ISimpleEntity>(), (d, s) => d.Id == s.Id)
             .Select(p => new { p.Item1.Id, SId = p.Item2.Id, p.Item1.String }));
 
-        sql.Should().Be("select t1.id, t2.id as `SId`, t1.`String` from (select id, somestring as `String` from complex_entity\n where (id > 0)) as `t1` join simple_entity as `t2` on t1.id = cast(t2.id as signed)");
+        sql.Should().Be("select t1.id, t2.id as `SId`, t1.`String`\n from (select id, somestring as `String`\n from complex_entity\n where (id > 0)) as `t1`\n join simple_entity as `t2` on t1.id = cast(t2.id as signed)");
     }
 
     [Fact]
@@ -527,7 +527,7 @@ public class SqlGenerationTests
             .Join(ctx.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
             .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id }));
 
-        sql.Should().Be("select t3.`OrderId`, t3.`CustomerName`, t4.id as `Third` from (select t1.id as `OrderId`, t2.somestring as `CustomerName` from simple_entity as `t1` join complex_entity as `t2` on cast(t1.id as signed) = t2.id) as `t3` join complex_entity as `t4` on cast(t3.`OrderId` as signed) = t4.id");
+        sql.Should().Be("select t3.`OrderId`, t3.`CustomerName`, t4.id as `Third`\n from (select t1.id as `OrderId`, t2.somestring as `CustomerName`\n from simple_entity as `t1`\n join complex_entity as `t2` on cast(t1.id as signed) = t2.id) as `t3`\n join complex_entity as `t4` on cast(t3.`OrderId` as signed) = t4.id");
     }
 
     [Fact]
@@ -542,7 +542,7 @@ public class SqlGenerationTests
             .Join(ctx.From<ISimpleEntity>(), (d, s) => d.Id == s.Id)
             .Select(p => new { p.Item1.Id, SId = p.Item2.Id }));
 
-        sql.Should().Be("select t1.id, t2.id as `SId` from (select id, somestring as `String` from complex_entity) as `t1` join simple_entity as `t2` on t1.id = cast(t2.id as signed)\n where (t1.id > 5)");
+        sql.Should().Be("select t1.id, t2.id as `SId`\n from (select id, somestring as `String`\n from complex_entity) as `t1`\n join simple_entity as `t2` on t1.id = cast(t2.id as signed)\n where (t1.id > 5)");
     }
 
     [Fact]
@@ -556,7 +556,7 @@ public class SqlGenerationTests
             .Join(ctx.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
             .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id }));
 
-        sql.Should().Be("select t3.`OrderId`, t3.`CustomerName`, t4.id as `Third` from (select t1.id as `OrderId`, t2.somestring as `CustomerName` from simple_entity as `t1` join complex_entity as `t2` on cast(t1.id as signed) = t2.id) as `t3` join complex_entity as `t4` on cast(t3.`OrderId` as signed) = t4.id");
+        sql.Should().Be("select t3.`OrderId`, t3.`CustomerName`, t4.id as `Third`\n from (select t1.id as `OrderId`, t2.somestring as `CustomerName`\n from simple_entity as `t1`\n join complex_entity as `t2` on cast(t1.id as signed) = t2.id) as `t3`\n join complex_entity as `t4` on cast(t3.`OrderId` as signed) = t4.id");
     }
 
     [Fact]
@@ -587,7 +587,7 @@ public class SqlGenerationTests
             .Join(ctx.From<ISimpleEntity>(), (d, s3) => d.B == s3.Id)
             .Select(p => new { p.Item1.A, p.Item1.B, Third = p.Item2.Id }));
 
-        sql.Should().Be("select t3.`A`, t3.`B`, t4.id as `Third` from (select t1.id as `A`, t2.id as `B` from simple_entity as `t1` join simple_entity as `t2` on t1.id = t2.id) as `t3` join simple_entity as `t4` on t3.`B` = t4.id");
+        sql.Should().Be("select t3.`A`, t3.`B`, t4.id as `Third`\n from (select t1.id as `A`, t2.id as `B`\n from simple_entity as `t1`\n join simple_entity as `t2` on t1.id = t2.id) as `t3`\n join simple_entity as `t4` on t3.`B` = t4.id");
     }
 
     [Fact]
@@ -635,9 +635,9 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
 
-        sql.Should().StartWith("with i as (select id from complex_entity");
-        sql.Should().Contain("), o as (select id from i)");
-        sql.Should().EndWith("select id from o");
+        sql.Should().StartWith("with i as (select id\n from complex_entity");
+        sql.Should().Contain("), o as (select id\n from i)");
+        sql.Should().EndWith("select id\n from o");
         sql.Should().NotContain("with i as (with");
     }
 

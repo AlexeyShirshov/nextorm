@@ -206,7 +206,8 @@ var rows = dataContext
 ```
 
 ```sql
-select t1.id from (select id, somestring from complex_entity where id > @min) as "t1"
+select t1.id
+ from (select id, somestring from complex_entity where id > @min) as "t1"
 ```
 
 The fragment can also be the **joined** side (rendered as an aliased derived table):
@@ -220,7 +221,9 @@ var rows = dataContext
 ```
 
 ```sql
-select t1.id, t2.id from simple_entity as "t1" join (select id from complex_entity) as "t2" on t1.id = t2.id
+select t1.id, t2.id
+ from simple_entity as "t1"
+ join (select id from complex_entity) as "t2" on t1.id = t2.id
 ```
 
 The fragment is emitted verbatim (only pass trusted SQL). A provider opts in through
@@ -255,7 +258,8 @@ var rows = dataContext
 
 ```sql
 -- SQLite; other providers qualify the derived table as "t1" and the columns with their own quoting
-select id, tenant_id as 'TenantId' from (select id, tenant_id from complex_entity where id > @min)
+select id, tenant_id as 'TenantId'
+ from (select id, tenant_id from complex_entity where id > @min)
  where (id > 10)
 ```
 

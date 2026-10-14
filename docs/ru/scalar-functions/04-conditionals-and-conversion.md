@@ -16,16 +16,22 @@ var halves = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQLite
-select ifnull(somestring, '') from complex_entity
-select (cast(id as double precision) / 2) from complex_entity
+select ifnull(somestring, '')
+ from complex_entity
+select (cast(id as double precision) / 2)
+ from complex_entity
 
 -- SQL Server
-select isnull(somestring, '') from complex_entity
-select (cast(id as float) / 2) from complex_entity
+select isnull(somestring, '')
+ from complex_entity
+select (cast(id as float) / 2)
+ from complex_entity
 
 -- PostgreSQL
-select coalesce(somestring, '') from complex_entity
-select (cast(id as double precision) / 2) from complex_entity
+select coalesce(somestring, '')
+ from complex_entity
+select (cast(id as double precision) / 2)
+ from complex_entity
 ```
 
 Целевые типы числового приведения берутся из [`MakeTypeName`](xref:NextORM.Core.ISqlDialect.MakeTypeName(System.Type)):
@@ -57,7 +63,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 10) as "Lo" from complex_entity
+select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 10) as "Lo"
+ from complex_entity
 ```
 
 | C# | SQL |
@@ -101,7 +108,8 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- ClickHouse
-select id, multiIf((id = 1), 'one', (id = 2), 'two', 'many') as `Bucket` from complex_entity
+select id, multiIf((id = 1), 'one', (id = 2), 'two', 'many') as `Bucket`
+ from complex_entity
 ```
 
 ## Предикаты типов SQL Server

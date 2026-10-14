@@ -251,7 +251,7 @@ public class JoinAliasMutationGapTests
 
         var sql = RootProjectionTests.SqlOf(ctx, rooted.Select(p => p.Root.Id));
 
-        sql.Should().Contain("from (select Id, buyer_id as 'BuyerId' from orders");
+        sql.Should().Contain("from (select Id, buyer_id as 'BuyerId'\n from orders");
         sql.Should().Contain(") as 't1'");
     }
 
@@ -269,7 +269,7 @@ public class JoinAliasMutationGapTests
 
         var sql = RootProjectionTests.SqlOf(ctx, rooted.Select(p => p.Root));
 
-        sql.Should().Contain("from (select Id from orders) as 't1'");
+        sql.Should().Contain("from (select Id\n from orders) as 't1'");
     }
 
     // ------------------------------------------------- having/prewhere-only root rebasing --------
@@ -413,7 +413,7 @@ public class JoinAliasMutationGapTests
 
         var sql = RootProjectionTests.SqlOf(ctx, joined.Select(p => p.Buyer.Id));
 
-        sql.Should().Contain("from (select Id, buyer_id as 'BuyerId' from orders");
+        sql.Should().Contain("from (select Id, buyer_id as 'BuyerId'\n from orders");
         sql.Should().Contain(") as 't1'");
         sql.Should().Contain("join person as 't2'");
         sql.Should().Contain("on t1.BuyerId = t2.Id");

@@ -687,7 +687,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         sqlBuilder.Append(Kw(keywordCase, "offset ")).Append(paging.Offset).Append(Kw(keywordCase, " rows"));
 
         if (paging.Limit > 0)
-            sqlBuilder.AppendLine().Append(Kw(keywordCase, "fetch next ")).Append(paging.Limit)
+            sqlBuilder.Append(SqlText.NewLine).Append(Kw(keywordCase, "fetch next ")).Append(paging.Limit)
                 .Append(Kw(keywordCase, paging.HasWithTies ? " rows with ties" : " rows only"));
     }
 

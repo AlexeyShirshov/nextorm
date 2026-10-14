@@ -69,7 +69,8 @@ var rows = dataContext.From<IComplexEntity>(o => o.WithTableHint("nolock"))
 ```
 
 ```sql
-select id from complex_entity with (nolock)
+select id
+ from complex_entity with (nolock)
 ```
 
 [`JoinOptions.WithJoinTableHint(params string[] hints)`](xref:NextORM.Core.JoinOptions.WithJoinTableHint(System.String[])) прикрепляет такой же табличный хинт к
@@ -87,7 +88,9 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select t1.id from complex_entity as [t1] inner join simple_entity with (nolock) as [t2] on t1.id = t2.id
+select t1.id
+ from complex_entity as [t1]
+ inner join simple_entity with (nolock) as [t2] on t1.id = t2.id
 ```
 
 В сочетании с `WithTablesInScopeHint` всё равно получается одно предложение `WITH (...)` на этой
@@ -103,7 +106,9 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select t1.id from complex_entity with (holdlock) as [t1] inner join simple_entity with (nolock, holdlock) as [t2] on t1.id = t2.id
+select t1.id
+ from complex_entity with (holdlock) as [t1]
+ inner join simple_entity with (nolock, holdlock) as [t2] on t1.id = t2.id
 ```
 
 Хинты рендерятся дословно, поэтому передавайте только доверенные значения. Провайдер включается через
@@ -133,11 +138,14 @@ var rows = dataContext.From<IComplexEntity>(o => o.WithIndex("ix_complex_id"))
 
 ```sql
 -- MySQL/MariaDB  (также `force index (...)` / `ignore index (...)`):
-select id from complex_entity use index (ix_complex_id)
+select id
+ from complex_entity use index (ix_complex_id)
 -- SQLite  (ровно один индекс; `WithoutIndex()` рендерит `not indexed`):
-select id from complex_entity indexed by ix_complex_id
+select id
+ from complex_entity indexed by ix_complex_id
 -- SQL Server  (сливается в единственное предложение табличного хинта):
-select id from complex_entity with (index(ix_complex_id))
+select id
+ from complex_entity with (index(ix_complex_id))
 ```
 
 Провайдер включается через [`ISqlDialect.IndexHints`](xref:NextORM.Core.ISqlDialect.IndexHints) и
@@ -237,11 +245,17 @@ var rows = dataContext.From<ISimpleEntity>(o => o.WithTableHint("nolock"))
 
 ```sql
 -- SQL Server:
-select t1.id from simple_entity as [t1] inner loop join complex_entity as [t2] on t1.id = t2.id
+select t1.id
+ from simple_entity as [t1] inner loop
+ join complex_entity as [t2] on t1.id = t2.id
 -- PostgreSQL (pg_hint_plan):
-select /*+ HashJoin(t1 t2) */ id from simple_entity as "t1" join complex_entity as "t2" ...
+select /*+ HashJoin(t1 t2) */ id
+ from simple_entity as "t1"
+ join complex_entity as "t2" ...
 -- MySQL 8:
-select /*+ JOIN_ORDER(t1, t2) */ id from simple_entity as `t1` join complex_entity as `t2` ...
+select /*+ JOIN_ORDER(t1, t2) */ id
+ from simple_entity as `t1`
+ join complex_entity as `t2` ...
 ```
 
 Пустой хинт отклоняется через `ArgumentException` при выполнении лямбды. Для диалектов с inline-комментарием текст хинта рендерится как есть, поэтому

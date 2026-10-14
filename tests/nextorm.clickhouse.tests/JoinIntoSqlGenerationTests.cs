@@ -30,7 +30,7 @@ public class JoinIntoSqlGenerationTests
             .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
             .ToCommand());
 
-        sql.Should().Contain("select t1.id, t1.name from join_into_parent as `t1`")
+        sql.Should().Contain("select t1.id, t1.name\n from join_into_parent as `t1`")
             .And.Contain("left join join_into_child as `t2` on t1.id = t2.parent_id");
     }
 
@@ -43,7 +43,7 @@ public class JoinIntoSqlGenerationTests
             .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children, JoinType.Inner)
             .ToCommand());
 
-        sql.Should().Contain("select t1.id, t1.name from join_into_parent as `t1`")
+        sql.Should().Contain("select t1.id, t1.name\n from join_into_parent as `t1`")
             .And.Contain(" join join_into_child as `t2` on t1.id = t2.parent_id")
             .And.NotContain("left join", "an Inner JoinInto must render an inner join");
     }
@@ -57,7 +57,7 @@ public class JoinIntoSqlGenerationTests
             .JoinInto(ctx.From<ChExplicitChild>(), (p, c) => p.Id == c.ParentId, p => p.Children, p => p.Id, c => c.ParentId)
             .ToCommand());
 
-        sql.Should().Contain("select t1.id from join_explicit_parent as `t1`")
+        sql.Should().Contain("select t1.id\n from join_explicit_parent as `t1`")
             .And.Contain("left join join_explicit_child as `t2` on t1.id = t2.parent_id");
     }
 
@@ -72,7 +72,7 @@ public class JoinIntoSqlGenerationTests
 
         string sql = SqlOf(ctx, (dynamic)pair.CreateJoinIntoPairCommand());
 
-        sql.Should().Contain("from (select id, name from join_into_parent")
+        sql.Should().Contain("from (select id, name\n from join_into_parent")
             .And.Contain(") as `t1`")
             .And.Contain("left join join_into_child as `t2` on t1.id = t2.parent_id");
     }
@@ -103,11 +103,11 @@ public class JoinIntoSqlGenerationTests
 
         // The parent-only terminal must still drop the JoinInto; the modifier must not degrade it to a
         // regular join (which would leak the child join into the parent command).
-        parentOnly.Trim().Should().Be("select id, name from join_into_parent");
+        parentOnly.Trim().Should().Be("select id, name\n from join_into_parent");
         // The outer JoinInto pair needs real SQL nulls on the unmatched side, so ClickHouse injects its
         // query-local join_use_nulls setting into the denormalized statement.
         pairSql.Trim().Should().Be(
-            "select t1.id, t1.name, t2.id, t2.parent_id as `ParentId` from join_into_parent as `t1` "
+            "select t1.id, t1.name, t2.id, t2.parent_id as `ParentId`\n from join_into_parent as `t1`\n "
             + "global left join join_into_child as `t2` on t1.id = t2.parent_id\n settings join_use_nulls = 1");
 
         var plain = Parents(ctx)
@@ -134,7 +134,7 @@ public class JoinIntoSqlGenerationTests
             .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children, j => j.WithStrictness(JoinStrictness.Any))
             .CreateJoinIntoPairCommand());
 
-        parentOnly.Trim().Should().Be("select id, name from join_into_parent");
+        parentOnly.Trim().Should().Be("select id, name\n from join_into_parent");
         pairSql.Should().Contain("left any join join_into_child as `t2` on t1.id = t2.parent_id");
 
         var plain = Parents(ctx)

@@ -35,12 +35,16 @@ var rows = dataContext.From(nested).Select(t => new { t.Id }).ToList();
 
 ```sql
 -- SQLite (derived tables do not require an alias)
-select id from (select id from complex_entity)
+select id
+ from (select id
+ from complex_entity)
 ```
 
 ```sql
 -- SQL Server / PostgreSQL (the derived table is aliased)
-select id from (select id from complex_entity) as [t1]
+select id
+ from (select id
+ from complex_entity) as [t1]
 ```
 
 A derived table can itself be projected, filtered and joined like any source. A column that was
@@ -183,8 +187,11 @@ var rows = await dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id, (select top(1) t3.id from complex_entity as [t3]
- where t3.id = cast(t1.id as bigint)) as [cid] from simple_entity as [t1] join complex_entity as [t2] on cast(t1.id as bigint) = t2.id
+select t1.id, (select top(1) t3.id
+ from complex_entity as [t3]
+ where t3.id = cast(t1.id as bigint)) as [cid]
+ from simple_entity as [t1]
+ join complex_entity as [t2] on cast(t1.id as bigint) = t2.id
 ```
 
 A subquery may also appear in `HAVING`, where it can reference the grouping key. It is prepared through
@@ -214,9 +221,11 @@ var rows = await dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select t1.id, (select count(*) from complex_entity as 't2'
+select t1.id, (select count(*)
+ from complex_entity as 't2'
  where cast(t2.id as bigint) = t1.id
-limit 1) as 'cnt' from complex_entity as 't1'
+limit 1) as 'cnt'
+ from complex_entity as 't1'
 ```
 
 Correlation nests arbitrarily: a correlated subquery may itself contain a correlated subquery, and

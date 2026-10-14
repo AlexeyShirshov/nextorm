@@ -80,11 +80,13 @@ The generated SQL has the same shape on every provider; only the placeholder and
 
 ```sql
 -- PostgreSQL / MySQL / MariaDB: @p0 carries a native duration
-select id, estimate from tasks
+select id, estimate
+ from tasks
  where (estimate > @p0);   -- @p0 = interval '00:05:00' / time '00:05:00'
 
 -- SQL Server / SQLite / ClickHouse: @p0 carries the integer storage value
-select id, estimate from tasks
+select id, estimate
+ from tasks
  where (estimate > @p0);   -- @p0 = 300 (seconds, from [Duration(DurationUnit.Seconds)])
 ```
 

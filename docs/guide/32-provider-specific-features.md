@@ -96,13 +96,15 @@ var rows = await dataContext.From<SimpleEntity>(o => o.ForUpdate())
 
 ```sql
 -- PostgreSQL
-select t1.id from simple_entity as "t1"
+select t1.id
+ from simple_entity as "t1"
 join complex_entity as "t2" on cast(t1.id as bigint) = t2.id
 for update of "t1"
 for share of "t2"
 
 -- MySQL
-select t1.id from simple_entity as `t1`
+select t1.id
+ from simple_entity as `t1`
 join complex_entity as `t2` on cast(t1.id as signed) = t2.id
 for update of `t1`
 for share of `t2`

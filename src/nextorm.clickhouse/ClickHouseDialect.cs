@@ -462,13 +462,13 @@ public class ClickHouseDialect : SqlDialectBase
     public override string WrapTableFunction(string name, string call)
     {
         if (name is "numbers" or "numbers_mt")
-            return $"(select toInt64(number) as number from {call})";
+            return $"(select toInt64(number) as number\n from {call})";
 
         if (name == "generateRandom")
         {
             var inner = call["generateRandom(".Length..^1];
             var args = inner.Length == 0 ? GenerateRandomStructure : $"{GenerateRandomStructure}, {inner}";
-            return $"(select toInt64(id) as id, value, name from generateRandom({args}))";
+            return $"(select toInt64(id) as id, value, name\n from generateRandom({args}))";
         }
 
         return call;

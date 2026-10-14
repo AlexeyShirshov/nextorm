@@ -18,7 +18,8 @@ var rows = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Output:
@@ -49,7 +50,8 @@ var rows = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select (id + 1) as 'Id' from simple_entity
+select (id + 1) as 'Id'
+ from simple_entity
 ```
 
 Output:
@@ -77,7 +79,8 @@ var rows = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id, (id + 1) as 'Calc' from complex_entity
+select id, (id + 1) as 'Calc'
+ from complex_entity
 ```
 
 String members concatenate with the provider's concat operator (`||` on SQLite and PostgreSQL, `+` on
@@ -91,7 +94,8 @@ var rows = await dataContext.From<ComplexEntity>()
 
 ```sql
 -- SQLite
-select id, ((somestring || '/') || requiredstring) as 'Display' from complex_entity
+select id, ((somestring || '/') || requiredstring) as 'Display'
+ from complex_entity
 ```
 
 Output:
@@ -116,7 +120,8 @@ var rows = await dataContext.From<SimpleEntity>()
 
 ```sql
 -- SQLite
-select region_id as 'Region' from simple_entity
+select region_id as 'Region'
+ from simple_entity
 ```
 
 The first argument must be the query lambda parameter (a source), and the name is matched against the
@@ -155,7 +160,8 @@ var rows = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Output:
@@ -186,7 +192,8 @@ var rows = await dataContext.From("simple_entity")
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Output:
@@ -216,7 +223,8 @@ var rows = await dataContext.From("simple_entity")
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Output:
@@ -245,7 +253,8 @@ var rows = await dataContext.From<SimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Output:
@@ -325,14 +334,18 @@ var rows = await dataContext.From(inner)
 
 ```sql
 -- SQLite: no derived-table alias is required
-select id, Calc from (select id, (somestring || somestring) as 'Calc' from complex_entity)
+select id, Calc
+ from (select id, (somestring || somestring) as 'Calc'
+ from complex_entity)
 ```
 
 SQL Server requires the derived table to be aliased, and PostgreSQL likewise:
 
 ```sql
 -- SQL Server
-select id, Calc from (select id, (somestring + somestring) as [Calc] from complex_entity) as [t1]
+select id, Calc
+ from (select id, (somestring + somestring) as [Calc]
+ from complex_entity) as [t1]
 ```
 
 ## Named join aliases

@@ -124,7 +124,8 @@ var json = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select jsonb_agg(somestring) from complex_entity
+select jsonb_agg(somestring)
+ from complex_entity
 ```
 
 See [JSON and JSONB (PostgreSQL)](../../scalar-functions/index.md) and
@@ -169,7 +170,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id, ts_rank(to_tsvector(somestring), to_tsquery('cat')) from complex_entity
+select id, ts_rank(to_tsvector(somestring), to_tsquery('cat'))
+ from complex_entity
  where (to_tsvector(somestring) @@ websearch_to_tsquery('cat & dog'))
 ```
 
@@ -249,7 +251,8 @@ var rows = dataContext.From<ISimpleEntity>(o => o.TableSample(10, TableSampleMet
 ```
 
 ```sql
-select id from simple_entity tablesample system (10) repeatable (42)
+select id
+ from simple_entity tablesample system (10) repeatable (42)
 ```
 
 [`TableSampleMethod.System`](xref:NextORM.Core.TableSampleMethod.System) renders
@@ -311,7 +314,8 @@ var rows = dataContext
 ```
 
 ```sql
-with ins as (insert into orders (customer_id) values (@p0) returning id, total) select id from ins as "t1"
+with ins as (insert into orders (customer_id) values (@p0) returning id, total) select id
+ from ins as "t1"
  where (t1.total > 0)
 ```
 
@@ -357,7 +361,8 @@ declared by the caller's row type and rendered as the alias column-definition li
 **requires** that column definition list, for example `AS x(a int, b text)`:
 
 ```sql
-select a, b from jsonb_to_recordset(@json) as "t1"(a integer, b text)
+select a, b
+ from jsonb_to_recordset(@json) as "t1"(a integer, b text)
 ```
 
 A free/partial column list **without** a caller-declared `TRow` is not supported for these two

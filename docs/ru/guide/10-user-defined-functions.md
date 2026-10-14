@@ -61,11 +61,14 @@ var value = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQLite
-select upper(somestring) as 'V' from complex_entity
+select upper(somestring) as 'V'
+ from complex_entity
 -- SQL Server
-select upper(somestring) as [V] from complex_entity
+select upper(somestring) as [V]
+ from complex_entity
 -- PostgreSQL
-select upper(somestring) as "V" from complex_entity
+select upper(somestring) as "V"
+ from complex_entity
 ```
 
 Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -93,7 +96,8 @@ var value = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select dbo.my_fn(id) as 'V' from complex_entity
+select dbo.my_fn(id) as 'V'
+ from complex_entity
 ```
 
 ## Атрибут на объявляющем типе
@@ -114,7 +118,8 @@ var value = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select Lower(somestring) as 'V' from complex_entity
+select Lower(somestring) as 'V'
+ from complex_entity
 ```
 
 ## Захваченный аргумент становится параметром
@@ -131,7 +136,8 @@ var prepared = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQLite placeholder; SQL Server/PostgreSQL use @start
-select substr(somestring, $start) as 'V' from complex_entity
+select substr(somestring, $start) as 'V'
+ from complex_entity
 ```
 
 с сопоставленным методом:

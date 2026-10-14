@@ -126,8 +126,8 @@ public class EntityItemProjectionTests
                 .ToCommand());
 
             // Item columns are expanded in a deterministic order: the parent item first, then the child.
-            sql.Should().Be("select t1.id, t1.name, t2.id, t2.parent_id as 'ParentId', t2.name, t2.state " +
-                            "from entity_parent as 't1' left join entity_child as 't2' on t1.id = t2.parent_id");
+            sql.Should().Be("select t1.id, t1.name, t2.id, t2.parent_id as 'ParentId', t2.name, t2.state\n" +
+                            " from entity_parent as 't1'\n left join entity_child as 't2' on t1.id = t2.parent_id");
 
             var rows = ctx.From<EntityItemParent>()
                 .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
@@ -156,7 +156,7 @@ public class EntityItemProjectionTests
                 .Join(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
                 .Select(p => p.Item2));
 
-            sql.Should().StartWith("select t2.id, t2.parent_id as 'ParentId', t2.name, t2.state from");
+            sql.Should().StartWith("select t2.id, t2.parent_id as 'ParentId', t2.name, t2.state\n from");
             sql.Should().NotContain("*", "explicit mapped columns are the agreed form of the projection");
 
             var children = ctx.From<EntityItemParent>()
@@ -200,7 +200,7 @@ public class EntityItemProjectionTests
                 .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
                 .Select(p => p.Item1));
 
-            sql.Should().StartWith("select t1.id, t1.name from");
+            sql.Should().StartWith("select t1.id, t1.name\n from");
             sql.Should().NotContain("*");
 
             var parents = ctx.From<EntityItemParent>()

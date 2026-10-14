@@ -63,7 +63,8 @@ var rows = await ctx.From<ISimpleEntity>()
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Because the cache key is structural, two calls with a *different lambda instance* but the same shape are a cache hit. That is what makes the cache useful for queries written inline in a loop:

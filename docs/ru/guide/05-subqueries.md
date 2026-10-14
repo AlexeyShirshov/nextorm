@@ -35,12 +35,16 @@ var rows = dataContext.From(nested).Select(t => new { t.Id }).ToList();
 
 ```sql
 -- SQLite (derived tables do not require an alias)
-select id from (select id from complex_entity)
+select id
+ from (select id
+ from complex_entity)
 ```
 
 ```sql
 -- SQL Server / PostgreSQL (the derived table is aliased)
-select id from (select id from complex_entity) as [t1]
+select id
+ from (select id
+ from complex_entity) as [t1]
 ```
 
 Производную таблицу можно так же проецировать, фильтровать и соединять, как любой источник.
@@ -186,8 +190,11 @@ var rows = await dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select t1.id, (select top(1) t3.id from complex_entity as [t3]
- where t3.id = cast(t1.id as bigint)) as [cid] from simple_entity as [t1] join complex_entity as [t2] on cast(t1.id as bigint) = t2.id
+select t1.id, (select top(1) t3.id
+ from complex_entity as [t3]
+ where t3.id = cast(t1.id as bigint)) as [cid]
+ from simple_entity as [t1]
+ join complex_entity as [t2] on cast(t1.id as bigint) = t2.id
 ```
 
 Подзапрос может также стоять в `HAVING`, где он может ссылаться на ключ группировки. Он
@@ -217,9 +224,11 @@ var rows = await dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select t1.id, (select count(*) from complex_entity as 't2'
+select t1.id, (select count(*)
+ from complex_entity as 't2'
  where cast(t2.id as bigint) = t1.id
-limit 1) as 'cnt' from complex_entity as 't1'
+limit 1) as 'cnt'
+ from complex_entity as 't1'
 ```
 
 Корреляция вкладывается произвольно: коррелированный подзапрос может сам содержать коррелированный

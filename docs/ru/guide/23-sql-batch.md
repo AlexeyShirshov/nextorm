@@ -39,9 +39,11 @@ var orders = ctx.CreateBatchBuilder()
 
 ```sql
 -- PostgreSQL
-create temporary table recent_orders as select id, total from orders
+create temporary table recent_orders as select id, total
+ from orders
  where (total > @b0_minTotal);
-select id, total from recent_orders
+select id, total
+ from recent_orders
 ```
 
 `Query<TResult>` возвращает терминал `BatchQuery<TResult>`:
@@ -73,9 +75,11 @@ var orders = ctx.From(source)   // DROP + CREATE TEMP + чтение, один �
 ```sql
 -- PostgreSQL
 drop table if exists __nextorm_temp_xxxxxxxx;
-create temporary table __nextorm_temp_xxxxxxxx as select id, total from orders
+create temporary table __nextorm_temp_xxxxxxxx as select id, total
+ from orders
  where (total > @b0_minTotal);
-select id, total from __nextorm_temp_xxxxxxxx
+select id, total
+ from __nextorm_temp_xxxxxxxx
 ```
 
 `ToBatchSql()` рендерит этот батч без выполнения, а каждый терминал (`ToList`, `First`, `Single`, `Count`, `Any`, `ToAsyncEnumerable`, …) выполняет его. Ленивый источник может сам читать другой ленивый источник; тогда таблицы материализуются в порядке зависимостей до чтения. Команда чтения рендерится заново на каждое выполнение, поэтому в plan cache она не попадает (как и любой план батча), а захваченные переменные становятся параметрами как обычно.
@@ -98,10 +102,13 @@ var rows = ctx.CreateBatchBuilder()
 
 ```sql
 -- PostgreSQL
-create temporary table recent_orders as select id, total from orders
+create temporary table recent_orders as select id, total
+ from orders
  where (total > @b0_minTotal);
-create temporary table recent_ids as select id from recent_orders;
-select id from recent_ids
+create temporary table recent_ids as select id
+ from recent_orders;
+select id
+ from recent_ids
 ```
 
 Замена постоянной таблицы — `CreateTable` с `DropExisting` сначала удаляет её, поэтому шаг можно выполнять повторно, а не падать на втором прогоне:
@@ -117,8 +124,10 @@ var rows = ctx.CreateBatchBuilder()
 ```sql
 -- PostgreSQL
 drop table if exists order_archive;
-create table order_archive as select id, total from orders;
-select id from order_archive
+create table order_archive as select id, total
+ from orders;
+select id
+ from order_archive
 ```
 
 `DropExisting` допустим только для постоянного `CreateTable` (у `CreateTempTable` таблица живёт в сессии, и опция отклоняется) и несовместим с `IfNotExists`.
@@ -135,7 +144,8 @@ var updated = ctx.CreateBatchBuilder()
 ```sql
 -- PostgreSQL
 update orders set status = @p0 where (id = @b0_id);
-select id, status from orders
+select id, status
+ from orders
  where (id = @b1_id)
 ```
 
@@ -147,13 +157,15 @@ select id, status from orders
 
 Параметры нумеруются по всему батчу, а захваченная переменная, используемая более чем одним утверждением, получает префикс на утверждение (`b0_`, `b1_`, …), поэтому имена placeholders не конфликтуют — в том числе в `;`-склеенной форме. Захваченная переменная, использованная в одном утверждении дважды, даёт одну запись параметра.
 
-Блоки SQL выше — рендер PostgreSQL. По умолчанию `ToSql()` печатает утверждения одной строкой через `; `; чтобы получить разбивку по строкам, как в примерах, включите `DataContextBuilder.UseMultilineBatchSql()`. На SQL Server та же связка выглядит иначе: `CREATE TEMPORARY TABLE ... AS SELECT` там нет, `CreateTempTable` бросает `NotSupportedException`, поэтому временная цель задаётся `CreateTable` с именем, начинающимся с `#`:
+Блоки SQL выше — рендер PostgreSQL. По умолчанию `ToSql()` печатает утверждения одной строкой через `; `; чтобы получить разбивку по строкам, как в примерах, включите `DataContextBuilder.UseMultilineBatchSql()`. `UseMultilineBatchSql()` управляет только **разделением между утверждениями** — это не переключатель раскладки предложений: перевод строки перед `FROM`/`JOIN` внутри каждого утверждения писатель SQL выдаёт безусловно (см. [Ограничения](../advanced/limitations.md)). На SQL Server та же связка выглядит иначе: `CREATE TEMPORARY TABLE ... AS SELECT` там нет, `CreateTempTable` бросает `NotSupportedException`, поэтому временная цель задаётся `CreateTable` с именем, начинающимся с `#`:
 
 ```sql
 -- SQL Server
-select id, total into #recent_orders from orders
+select id, total into #recent_orders
+ from orders
  where (total > @b0_minTotal);
-select id, total from #recent_orders
+select id, total
+ from #recent_orders
 ```
 
 ## Сырые шаги
@@ -204,9 +216,11 @@ foreach (var set in result)
 
 ```sql
 -- PostgreSQL
-select id, total from orders
+select id, total
+ from orders
  where (status = @b0_status);
-select id, status from orders
+select id, status
+ from orders
  where (status = @b1_status)
 ```
 

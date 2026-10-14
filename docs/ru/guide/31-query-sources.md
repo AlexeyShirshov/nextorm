@@ -56,7 +56,8 @@ var elements = dataContext
 ```
 
 ```sql
-select unnest as "Value" from unnest(@norm_p0) as "t1"
+select unnest as "Value"
+ from unnest(@norm_p0) as "t1"
 ```
 
 Если полные имена `SqlFunctions.*` кажутся слишком громоздкими, импортируйте поверхность через
@@ -93,10 +94,12 @@ var rows = await dataContext.From<SimpleEntity>(o => o.TableSample(10, TableSamp
 
 ```sql
 -- PostgreSQL
-select id from simple_entity tablesample system (10) repeatable (42)
+select id
+ from simple_entity tablesample system (10) repeatable (42)
 
 -- SQL Server
-select id from simple_entity tablesample (10 percent) repeatable (42)
+select id
+ from simple_entity tablesample (10 percent) repeatable (42)
 ```
 
 PostgreSQL поддерживает и `System`, и [`Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli);
@@ -128,7 +131,8 @@ var rows = await dataContext.From<IOrder>()
 
 ```sql
 -- SQL Server / PostgreSQL
-select id from sales.orders
+select id
+ from sales.orders
 ```
 
 Квалификаторы schema/database/server зависят от провайдера; недоступные провайдеру уровни
@@ -162,7 +166,8 @@ var rows = await dataContext.From<IOrder>()
 
 ```sql
 -- PostgreSQL
-select id from (select id from orders_2025 union all select id from orders_2026) as "t1"
+select id
+ from (select id from orders_2025 union all select id from orders_2026) as "t1"
 ```
 
 Переопределение входит в ключ кэша планов, поэтому два запроса, различающиеся только им, не делят

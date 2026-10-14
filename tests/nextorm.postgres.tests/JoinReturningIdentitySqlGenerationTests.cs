@@ -135,7 +135,7 @@ public class JoinReturningIdentitySqlGenerationTests
 
         sql.Should().Contain("update merge_entity as \"t1\"");
         sql.Should().Contain("returning t1.id as \"__s1_id\"");
-        sql.Should().Contain("select \"__s1_id\", \"__s2_id\" from upd as \"t1\"");
+        sql.Should().Contain("select \"__s1_id\", \"__s2_id\"\n from upd as \"t1\"");
     }
 
     [Fact]
@@ -148,7 +148,7 @@ public class JoinReturningIdentitySqlGenerationTests
 
         sql.Should().Contain("delete from merge_entity as \"t1\"");
         sql.Should().Contain("returning t1.id as \"__s1_id\"");
-        sql.Should().Contain("select \"__s1_id\", \"__s2_id\" from del as \"t1\"");
+        sql.Should().Contain("select \"__s1_id\", \"__s2_id\"\n from del as \"t1\"");
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public class JoinReturningIdentitySqlGenerationTests
             .Returning());
         var read = SqlOf(ctx, scope.From("upd").Select(r => new { A = r.Item1.Id, B = r.Item2.Id }));
 
-        read.Should().Contain("select \"__s1_id\", \"__s2_id\" from upd as \"t1\"");
+        read.Should().Contain("select \"__s1_id\", \"__s2_id\"\n from upd as \"t1\"");
     }
 
     [Fact]
@@ -235,7 +235,7 @@ public class JoinReturningIdentitySqlGenerationTests
             .Returning());
         var read = SqlOf(ctx, scope.From("upd").Select(r => r));
 
-        read.Should().Contain("select \"__s1_id\", \"__s1_name\", \"__s2_Id\", \"__s2_Name\" from upd as \"t1\"");
+        read.Should().Contain("select \"__s1_id\", \"__s1_name\", \"__s2_Id\", \"__s2_Name\"\n from upd as \"t1\"");
     }
 
     [Fact]
@@ -261,7 +261,7 @@ public class JoinReturningIdentitySqlGenerationTests
             .Returning());
         var read = SqlOf(ctx, scope.From("del").Select(r => r));
 
-        read.Should().Contain("select \"__s1_id\", \"__s1_name\", \"__s2_Id\", \"__s2_Name\" from del as \"t1\"");
+        read.Should().Contain("select \"__s1_id\", \"__s1_name\", \"__s2_Id\", \"__s2_Name\"\n from del as \"t1\"");
     }
 
     [Fact]

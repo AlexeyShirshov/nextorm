@@ -89,7 +89,8 @@ var overlapping = ctx.From<Reservation>()
 Константный диапазон сворачивается в параметры (SQLite рендерит приведённый запрос так):
 
 ```sql
-select id from reservation
+select id
+ from reservation
  where (((during_lower is null) or during_lower < $p1)
     and ((during_upper is null) or $p0 < during_upper));
 -- $p0 = 5, $p1 = 15

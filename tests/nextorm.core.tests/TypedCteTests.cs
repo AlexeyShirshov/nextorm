@@ -307,7 +307,7 @@ public class TypedCteTests
         // The filter is applied once, inside the defining CTE body; the outer read of the CTE must not
         // treat the whole-entity projection as a mapped source and inject the filter again.
         sql.Should().Contain("typed_cte_filtered");
-        sql.Should().Contain("select Id, TenantId from typed_cte_filtered");
+        sql.Should().Contain("select Id, TenantId\n from typed_cte_filtered");
         sql.Should().Contain("where TenantId = 7");
         sql.Should().NotContain("where t1.TenantId = 7");
     }
@@ -729,8 +729,8 @@ public class TypedCteTests
 
         // Same CLR projection type on both sides must bind by source slot: each CTE body keeps its own
         // predicate and the outer projection reads the matching ItemN column.
-        sql.Should().Contain("with l as (select Id, Total from typed_cte_entity");
-        sql.Should().Contain("), r as (select Id, Total from typed_cte_entity");
+        sql.Should().Contain("with l as (select Id, Total\n from typed_cte_entity");
+        sql.Should().Contain("), r as (select Id, Total\n from typed_cte_entity");
         sql.Should().Contain("join r as 't2' on t1.Id = t2.Id");
         sql.Should().Contain("select t1.Total, t2.Total");
     }
@@ -1514,7 +1514,7 @@ public class TypedCteTests
 
         var sql = SqlOf(ctx, ctx.From(cte).Select(x => x.Id));
 
-        sql.Should().Contain("(select id from typed_cte_nested)");
+        sql.Should().Contain("(select id\n from typed_cte_nested)");
         sql.Should().NotContain("id as 'Id'");
         sql.Should().Contain("from nested");
     }

@@ -17,7 +17,7 @@ public class CreateTableAsSqlGenerationTests
 
         ctx.From<ISimpleEntity>()
             .ToTableSql("archive_ids")
-            .Should().Be("create table archive_ids engine = MergeTree order by tuple() as select id from simple_entity");
+            .Should().Be("create table archive_ids engine = MergeTree order by tuple() as select id\n from simple_entity");
     }
 
     [Fact]
@@ -27,7 +27,7 @@ public class CreateTableAsSqlGenerationTests
 
         ctx.From<ISimpleEntity>()
             .ToTableSql("archive_ids", new CreateTableOptions { IfNotExists = true })
-            .Should().Be("create table if not exists archive_ids engine = MergeTree order by tuple() as select id from simple_entity");
+            .Should().Be("create table if not exists archive_ids engine = MergeTree order by tuple() as select id\n from simple_entity");
     }
 
     [Fact]

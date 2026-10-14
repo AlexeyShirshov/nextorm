@@ -221,7 +221,7 @@ public class TypedCteTests
                 .AsCte("shaped");
 
             var sql = SqlOf(ctx, ctx.From(shaped).Select(r => new { r.Identifier, r.Doubled }));
-            sql.Should().Contain("select id as 'Identifier', (total * 2) as 'Doubled' from typed_cte_person");
+            sql.Should().Contain("select id as 'Identifier', (total * 2) as 'Doubled'\n from typed_cte_person");
             sql.Should().Contain("from shaped");
 
             var rows = ctx.From(shaped).Select(r => new { r.Identifier, r.Doubled }).ToList();
@@ -370,8 +370,8 @@ public class TypedCteTests
         // CTE body aliases its columns to the projection property names (case-exactly), and the consumer
         // references that output name — the agreement PostgreSQL requires for its case-sensitive quoted
         // identifiers.
-        sql.Should().Contain("with i as (select id as 'Id', total as 'Total' from typed_cte_person");
-        sql.Should().Contain("), o as (select Id from i as 't1')");
+        sql.Should().Contain("with i as (select id as 'Id', total as 'Total'\n from typed_cte_person");
+        sql.Should().Contain("), o as (select Id\n from i as 't1')");
         sql.Should().Contain("from o as 't1'");
     }
 
@@ -558,8 +558,8 @@ public class TypedCteTests
 
             // The producer body aliases its columns to the projection property names and the consumer
             // body references that exact output name (no physical `id` leaking across the boundary).
-            sql.Should().Contain("with i as (select id as 'Id', total as 'Total' from typed_cte_person");
-            sql.Should().Contain(", o as (select Id from i as 't1')");
+            sql.Should().Contain("with i as (select id as 'Id', total as 'Total'\n from typed_cte_person");
+            sql.Should().Contain(", o as (select Id\n from i as 't1')");
             sql.Should().Contain("from o as 't1'");
 
             var rows = ctx.From(outer).Select(x => x.Id).ToList();
@@ -598,9 +598,9 @@ public class TypedCteTests
                 .Select(p => new { p.Item1.Id });
 
             var sql = SqlOf(ctx, command);
-            sql.Should().Contain("dep as (select id as 'Id', total as 'Total' from typed_cte_person");
-            sql.Should().Contain("consumer as (select Id from dep as 't1')");
-            sql.Should().Contain("other as (select id as 'Id', total as 'Total' from typed_cte_person");
+            sql.Should().Contain("dep as (select id as 'Id', total as 'Total'\n from typed_cte_person");
+            sql.Should().Contain("consumer as (select Id\n from dep as 't1')");
+            sql.Should().Contain("other as (select id as 'Id', total as 'Total'\n from typed_cte_person");
 
             var rows = ctx.From(consumer)
                 .Join(ctx.From(other), (a, b) => a.Id == b.Id)

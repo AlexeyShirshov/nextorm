@@ -330,7 +330,7 @@ public class RawSourceBindingColdRegistrationTests
             .BindEntity<IComplexEntity>(["id", "somestring"])
             .Select(t => t.Id));
 
-        sql.Should().Contain("select id from (select id, somestring from complex_entity)");
+        sql.Should().Contain("select id\n from (select id, somestring from complex_entity)");
         DataContextCache.Metadata.ContainsKey(typeof(IComplexEntity)).Should().BeTrue(
             "binding registers the mapping without a prior From<T>()");
     }

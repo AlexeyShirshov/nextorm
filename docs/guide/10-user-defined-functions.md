@@ -60,11 +60,14 @@ var value = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQLite
-select upper(somestring) as 'V' from complex_entity
+select upper(somestring) as 'V'
+ from complex_entity
 -- SQL Server
-select upper(somestring) as [V] from complex_entity
+select upper(somestring) as [V]
+ from complex_entity
 -- PostgreSQL
-select upper(somestring) as "V" from complex_entity
+select upper(somestring) as "V"
+ from complex_entity
 ```
 
 The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -92,7 +95,8 @@ var value = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select dbo.my_fn(id) as 'V' from complex_entity
+select dbo.my_fn(id) as 'V'
+ from complex_entity
 ```
 
 ## Attribute on the declaring type
@@ -113,7 +117,8 @@ var value = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select Lower(somestring) as 'V' from complex_entity
+select Lower(somestring) as 'V'
+ from complex_entity
 ```
 
 ## Captured argument becomes a parameter
@@ -130,7 +135,8 @@ var prepared = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQLite placeholder; SQL Server/PostgreSQL use @start
-select substr(somestring, $start) as 'V' from complex_entity
+select substr(somestring, $start) as 'V'
+ from complex_entity
 ```
 
 with the mapped method:

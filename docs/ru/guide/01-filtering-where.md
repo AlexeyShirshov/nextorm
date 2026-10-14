@@ -187,7 +187,8 @@ var rows = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id, case when (id > 1) then 'big' else 'small' end as 'Size' from complex_entity
+select id, case when (id > 1) then 'big' else 'small' end as 'Size'
+ from complex_entity
 ```
 
 Условное выражение может появляться внутри предиката:
@@ -211,7 +212,8 @@ var rows = await dataContext.From<ComplexEntity>()
 ```
 
 ```sql
-select id, case when id = 1 then 'one' when id = 2 then 'two' else 'other' end as 'Label' from complex_entity
+select id, case when id = 1 then 'one' when id = 2 then 'two' else 'other' end as 'Label'
+ from complex_entity
 ```
 
 switch, в котором сравнение является вызовом метода (например, перегрузка сравнения строк, которую
@@ -385,7 +387,8 @@ var due = await dataContext.From<Schedule>()
 
 ```sql
 -- SQLite
-select id from schedule
+select id
+ from schedule
  where (case when tenant_registry_id = $p0 then $p1 when tenant_registry_id = $p2 then $p3 end > schedule_date)
 ```
 

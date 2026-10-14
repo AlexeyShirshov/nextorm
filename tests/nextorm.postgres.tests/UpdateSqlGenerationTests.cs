@@ -189,7 +189,7 @@ public class UpdateSqlGenerationTests
                 .Returning(x => new { x.Id, x.Name }))
             .From("upd")
             .Select(r => new { r.Id, r.Name }))
-            .Should().Be("with upd as (update merge_entity set name = @p0 where id = 1 returning id, name) select id, name from upd as \"t1\"");
+            .Should().Be("with upd as (update merge_entity set name = @p0 where id = 1 returning id, name) select id, name\n from upd as \"t1\"");
     }
 
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");

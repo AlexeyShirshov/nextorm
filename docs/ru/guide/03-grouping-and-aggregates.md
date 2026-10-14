@@ -245,7 +245,8 @@ var avg   = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.avg(e
 ```
 
 ```sql
-select count(*) from simple_entity
+select count(*)
+ from simple_entity
 ```
 
 Вывод:
@@ -255,7 +256,8 @@ select count(*) from simple_entity
 | 10 |
 
 ```sql
-select sum(id) from simple_entity
+select sum(id)
+ from simple_entity
 ```
 
 Вывод:
@@ -291,9 +293,12 @@ var bigDist   = dataContext.From<IComplexEntity>().Select(e => SqlFunctions.Sql.
 ```
 
 ```sql
-select count(*) from simple_entity
-select count(nullableint) from complex_entity
-select count(distinct nullableint) from complex_entity
+select count(*)
+ from simple_entity
+select count(nullableint)
+ from complex_entity
+select count(distinct nullableint)
+ from complex_entity
 ```
 
 Вывод:
@@ -338,10 +343,14 @@ var sum = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.sum(e.I
 ```
 
 ```sql
-select min(id) from simple_entity
-select max(id) from simple_entity
-select avg(id) from simple_entity
-select sum(id) from simple_entity
+select min(id)
+ from simple_entity
+select max(id)
+ from simple_entity
+select avg(id)
+ from simple_entity
+select sum(id)
+ from simple_entity
 ```
 
 Вывод:
@@ -376,8 +385,10 @@ var sumDistinct = dataContext.From<IComplexEntity>().Select(e => SqlFunctions.Sq
 ```
 
 ```sql
-select avg(distinct nullableint) from complex_entity
-select sum(distinct nullableint) from complex_entity
+select avg(distinct nullableint)
+ from complex_entity
+select sum(distinct nullableint)
+ from complex_entity
 ```
 
 ## stdev / stdevp / var / varp
@@ -390,10 +401,14 @@ var varp   = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.varp
 ```
 
 ```sql
-select stdev(id) from simple_entity
-select stdevp(id) from simple_entity
-select var(id) from simple_entity
-select varp(id) from simple_entity
+select stdev(id)
+ from simple_entity
+select stdevp(id)
+ from simple_entity
+select var(id)
+ from simple_entity
+select varp(id)
+ from simple_entity
 ```
 
 Вывод:
@@ -482,7 +497,8 @@ var stats = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select bool_and(b), bit_xor(id), corr(id, nullableint), percentile_cont(0.5) within group (order by id) from complex_entity
+select bool_and(b), bit_xor(id), corr(id, nullableint), percentile_cont(0.5) within group (order by id)
+ from complex_entity
 ```
 
 В ClickHouse те же семейства рендерятся по-своему — `groupBitAnd`, `covarPop`, `argMin`/`argMax` — а
@@ -502,7 +518,8 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- ClickHouse
-select groupBitAnd(id), covarPop(id, nullableint), argMax(somestring, id) from complex_entity
+select groupBitAnd(id), covarPop(id, nullableint), argMax(somestring, id)
+ from complex_entity
 ```
 
 Упорядоченные агрегаты принимают ключ сортировки как цитируемую лямбду, которая замыкается на параметр

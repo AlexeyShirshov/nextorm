@@ -30,7 +30,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.WithTag("app.list").Select(x => new { x.Id }))
-            .Should().Be("select /* app.list */ id from simple_entity");
+            .Should().Be("select /* app.list */ id\n from simple_entity");
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => new { x.Id }).WithTag("a*/b/*c\r\nd"))
-            .Should().Be("select /* a* /b/ *c d */ id from simple_entity");
+            .Should().Be("select /* a* /b/ *c d */ id\n from simple_entity");
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.From<DynamicColumnsEntity>();
 
-        SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+        SqlOf(ctx, e.ToCommand()).Should().Be("select id, *\n from dynamic_entity");
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.From<DynamicColumnsEntity>();
 
-        SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+        SqlOf(ctx, e.ToCommand()).Should().Be("select id, *\n from dynamic_entity");
     }
 
     private static DynamicColumnsEntity DynamicWriteEntity()
@@ -151,7 +151,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>(o => o.WithIndex("idx_id"));
 
         SqlOf(ctx, e.Select(x => new { x.Id }))
-            .Should().Be("select id from simple_entity with (index(idx_id))");
+            .Should().Be("select id\n from simple_entity with (index(idx_id))");
     }
 
     [Fact]
@@ -161,7 +161,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>(o => o.WithTableHint("nolock").WithIndex("idx_id"));
 
         SqlOf(ctx, e.Select(x => new { x.Id }))
-            .Should().Be("select id from simple_entity with (nolock, index(idx_id))");
+            .Should().Be("select id\n from simple_entity with (nolock, index(idx_id))");
     }
 
     [Fact]
@@ -182,7 +182,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Limit(3).Select(x => new { X = x.Id }));
 
-        sql.Should().Contain("SELECT TOP(3) id AS [X] FROM simple_entity");
+        sql.Should().Contain("SELECT TOP(3) id AS [X]\n FROM simple_entity");
     }
 
     [Fact]
@@ -191,7 +191,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.Distinct().Select(x => new { x.Id })).Should().Be("select distinct id from simple_entity");
+        SqlOf(ctx, e.Distinct().Select(x => new { x.Id })).Should().Be("select distinct id\n from simple_entity");
     }
 
     [Fact]
@@ -200,7 +200,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.CreateQuoted();
         var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select [id] from [simple_entity]");
+        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select [id]\n from [simple_entity]");
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.CreateQuoted();
         var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.Select(x => new { x.Id }).WithQuotedIdentifiers(false)).Should().Be("select id from simple_entity");
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithQuotedIdentifiers(false)).Should().Be("select id\n from simple_entity");
     }
 
     [Fact]
@@ -359,9 +359,9 @@ public class SqlGenerationTests
         var cmd = e.Select(x => x.Id).Distinct().UnionAll(e.Select(x => x.Id));
         var sql = SqlOf(ctx, cmd);
 
-        sql.Should().Contain("select distinct id from simple_entity");
+        sql.Should().Contain("select distinct id\n from simple_entity");
         sql.Should().Contain(" union all ");
-        sql.Should().Contain("select id from simple_entity");
+        sql.Should().Contain("select id\n from simple_entity");
     }
 
     [Fact]
@@ -371,7 +371,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => x.Id).Union(e.Select(x => x.Id)))
-            .Should().Be("select id from simple_entity\n union \nselect id from simple_entity");
+            .Should().Be("select id\n from simple_entity\n union \nselect id\n from simple_entity");
     }
 
     [Fact]
@@ -381,7 +381,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => x.Id).UnionAll(e.Select(x => x.Id)))
-            .Should().Be("select id from simple_entity\n union all \nselect id from simple_entity");
+            .Should().Be("select id\n from simple_entity\n union all \nselect id\n from simple_entity");
     }
 
     [Fact]
@@ -391,7 +391,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => x.Id).Intersect(e.Select(x => x.Id)))
-            .Should().Be("select id from simple_entity\n intersect \nselect id from simple_entity");
+            .Should().Be("select id\n from simple_entity\n intersect \nselect id\n from simple_entity");
     }
 
     [Fact]
@@ -401,7 +401,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => x.Id).Except(e.Select(x => x.Id)))
-            .Should().Be("select id from simple_entity\n except \nselect id from simple_entity");
+            .Should().Be("select id\n from simple_entity\n except \nselect id\n from simple_entity");
     }
 
     [Fact]
@@ -432,7 +432,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select id from simple_entity");
+        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select id\n from simple_entity");
     }
 
     [Fact]
@@ -760,7 +760,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, simple.CrossApply(subQuery).Select(p => new { p.Item1.Id, p.Item2.String }));
 
-        sql.Should().Contain("cross apply (select id, somestring as [String] from complex_entity");
+        sql.Should().Contain("cross apply (select id, somestring as [String]\n from complex_entity");
         sql.Should().Contain(") as [t2]");
     }
 
@@ -773,7 +773,7 @@ public class SqlGenerationTests
             .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
             .Select(p => new { p.Item1.Id, p.Item2.String }));
 
-        sql.Should().Be("select t1.id, t3.[String] from simple_entity as [t1] cross apply (select t2.id, t2.somestring as [String] from complex_entity as [t2]\n"
+        sql.Should().Be("select t1.id, t3.[String]\n from simple_entity as [t1]\n cross apply (select t2.id, t2.somestring as [String]\n from complex_entity as [t2]\n"
             + " where t2.id = cast(t1.id as bigint)) as [t3]");
     }
 
@@ -786,7 +786,7 @@ public class SqlGenerationTests
             .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
             .Select(p => new { p.Item1.Id, p.Item2.String }));
 
-        sql.Should().Be("select t1.id, t3.[String] from simple_entity as [t1] outer apply (select t2.id, t2.somestring as [String] from complex_entity as [t2]\n"
+        sql.Should().Be("select t1.id, t3.[String]\n from simple_entity as [t1]\n outer apply (select t2.id, t2.somestring as [String]\n from complex_entity as [t2]\n"
             + " where t2.id = cast(t1.id as bigint)) as [t3]");
     }
 
@@ -801,7 +801,7 @@ public class SqlGenerationTests
 
         sql.Should().Contain("cross apply (select t2.id, t2.nullableint as [Int], t2.somestring as [String]");
         sql.Should().Contain("where t2.id = cast(t1.id as bigint)) as [t3]");
-        sql.Should().Contain("select t1.id, t3.[String] from");
+        sql.Should().Contain("select t1.id, t3.[String]\n from");
         sql.Should().NotContain("t3.somestring");
     }
 
@@ -1058,7 +1058,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = Udf.ToUpper(x.String!) }))
-            .Should().Be("select upper(somestring) as [V] from complex_entity");
+            .Should().Be("select upper(somestring) as [V]\n from complex_entity");
     }
 
     [Fact]
@@ -1070,7 +1070,7 @@ public class SqlGenerationTests
 
         var command = Prepare(ctx, e.Select(x => new { V = Udf.Slice(x.String!, start) }));
 
-        Normalize(command.DbCommand.CommandText).Should().Be("select substr(somestring, @start) as [V] from complex_entity");
+        Normalize(command.DbCommand.CommandText).Should().Be("select substr(somestring, @start) as [V]\n from complex_entity");
         command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
             .Which.ParameterName.Should().Be("start");
     }
@@ -1082,7 +1082,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = Udf.WithSchema(x.Id) }))
-            .Should().Be("select dbo.my_fn(id) as [V] from complex_entity");
+            .Should().Be("select dbo.my_fn(id) as [V]\n from complex_entity");
     }
 
     [Fact]
@@ -1092,7 +1092,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { M = Udf.FormatDate(x.Datetime, "yyyy-MM") }))
-            .Should().Be("select format(dt, 'yyyy-MM') as [M] from complex_entity");
+            .Should().Be("select format(dt, 'yyyy-MM') as [M]\n from complex_entity");
     }
 
     private static class Udf
@@ -1555,9 +1555,9 @@ public class SqlGenerationTests
         var cte = e.Where(x => x.Id > 1).Select(x => new { x.Id });
         var sql = SqlOf(ctx, ctx.With("recent", cte).From("recent").Select(t => new { id = t["id"].AsInt }));
 
-        sql.Should().StartWith("with recent as (select id from complex_entity");
+        sql.Should().StartWith("with recent as (select id\n from complex_entity");
         sql.Should().Contain("where (id > 1))");
-        sql.Should().EndWith("select id from recent");
+        sql.Should().EndWith("select id\n from recent");
     }
 
     [Fact]
@@ -1570,9 +1570,9 @@ public class SqlGenerationTests
         var second = ctx.From("first").Select(t => new { id = t["id"].AsInt });
         var sql = SqlOf(ctx, ctx.With("first", first).With("second", second).From("second").Select(t => new { id = t["id"].AsInt }));
 
-        sql.Should().StartWith("with first as (select id from complex_entity");
-        sql.Should().Contain("), second as (select id from first)");
-        sql.Should().EndWith("select id from second");
+        sql.Should().StartWith("with first as (select id\n from complex_entity");
+        sql.Should().Contain("), second as (select id\n from first)");
+        sql.Should().EndWith("select id\n from second");
     }
 
     [Fact]
@@ -1606,9 +1606,9 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
 
-        sql.Should().StartWith("with i as (select id from complex_entity");
-        sql.Should().Contain("), o as (select id from i)");
-        sql.Should().EndWith("select id from o");
+        sql.Should().StartWith("with i as (select id\n from complex_entity");
+        sql.Should().Contain("), o as (select id\n from i)");
+        sql.Should().EndWith("select id\n from o");
         sql.Should().NotContain("with i as (with");
     }
 
@@ -1629,7 +1629,7 @@ public class SqlGenerationTests
         // T-SQL declares a recursive CTE with `with` alone, even after the nested declaration is hoisted.
         sql.Should().StartWith("with nums as (");
         sql.Should().NotContain("with recursive");
-        sql.Should().Contain("), o as (select n from nums)");
+        sql.Should().Contain("), o as (select n\n from nums)");
     }
 
     [Fact]
@@ -1649,7 +1649,7 @@ public class SqlGenerationTests
         // The recursion-depth option belongs to the hoisted recursive declaration and stays on the
         // flattened statement.
         sql.Should().StartWith("with nums as (");
-        sql.Should().Contain("), o as (select n from nums)");
+        sql.Should().Contain("), o as (select n\n from nums)");
         sql.Should().EndWith("option (maxrecursion 75)");
         sql.Should().NotContain("with recursive");
     }
@@ -1666,7 +1666,7 @@ public class SqlGenerationTests
             rn = SqlFunctions.Sql.row_number().Over(partitionBy: () => x.Int, orderBy: () => x.Id)
         }));
 
-        sql.Should().Be("select id, row_number() over (partition by nullableint order by id) as [rn] from complex_entity");
+        sql.Should().Be("select id, row_number() over (partition by nullableint order by id) as [rn]\n from complex_entity");
     }
 
     [Fact]
@@ -1682,7 +1682,7 @@ public class SqlGenerationTests
             dr = SqlFunctions.Sql.dense_rank().Over(SqlFunctions.Sql.asc(() => x.Id))
         }));
 
-        sql.Should().Be("select id, rank() over (order by id) as [r], dense_rank() over (order by id) as [dr] from complex_entity");
+        sql.Should().Be("select id, rank() over (order by id) as [r], dense_rank() over (order by id) as [dr]\n from complex_entity");
     }
 
     [Fact]
@@ -1698,7 +1698,7 @@ public class SqlGenerationTests
             cd = SqlFunctions.Sql.cume_dist().Over(SqlFunctions.Sql.asc(() => x.Id))
         }));
 
-        sql.Should().Be("select id, percent_rank() over (order by id) as [pr], cume_dist() over (order by id) as [cd] from complex_entity");
+        sql.Should().Be("select id, percent_rank() over (order by id) as [pr], cume_dist() over (order by id) as [cd]\n from complex_entity");
     }
 
     [Fact]
@@ -1715,7 +1715,7 @@ public class SqlGenerationTests
                 orderBy: new[] { SqlFunctions.Sql.desc(() => x.Id) })
         }));
 
-        sql.Should().Be("select id, row_number() over (partition by nullableint order by id desc) as [r] from complex_entity");
+        sql.Should().Be("select id, row_number() over (partition by nullableint order by id desc) as [r]\n from complex_entity");
     }
 
     [Fact]
@@ -1731,7 +1731,7 @@ public class SqlGenerationTests
             next = SqlFunctions.Sql.lead(x.Int, 2, 0).Over(SqlFunctions.Sql.asc(() => x.Id))
         }));
 
-        sql.Should().Be("select id, lag(id, 1, 0) over (order by id) as [prev], lead(nullableint, 2, 0) over (order by id) as [next] from complex_entity");
+        sql.Should().Be("select id, lag(id, 1, 0) over (order by id) as [prev], lead(nullableint, 2, 0) over (order by id) as [next]\n from complex_entity");
     }
 
     [Fact]
@@ -1747,7 +1747,7 @@ public class SqlGenerationTests
             n = SqlFunctions.Sql.count_over().Over(partitionBy: () => x.Int)
         }));
 
-        sql.Should().Be("select id, sum(id) over (partition by nullableint) as [total], count(*) over (partition by nullableint) as [n] from complex_entity");
+        sql.Should().Be("select id, sum(id) over (partition by nullableint) as [total], count(*) over (partition by nullableint) as [n]\n from complex_entity");
     }
 
     [Fact]
@@ -1767,7 +1767,7 @@ public class SqlGenerationTests
                 WindowFrame.Rows(1, 1))
         }));
 
-        sql.Should().Be("select id, sum(id) over (order by id rows between unbounded preceding and current row) as [running], sum(id) over (order by id rows between 1 preceding and 1 following) as [sliding] from complex_entity");
+        sql.Should().Be("select id, sum(id) over (order by id rows between unbounded preceding and current row) as [running], sum(id) over (order by id rows between 1 preceding and 1 following) as [sliding]\n from complex_entity");
     }
 
     [Fact]
@@ -1784,7 +1784,7 @@ public class SqlGenerationTests
             last = SqlFunctions.Sql.last_value(x.Int).Over(partitionBy: () => x.Int, orderBy: () => x.Id)
         }));
 
-        sql.Should().Be("select id, ntile(2) over (order by id) as [bucket], first_value(nullableint) over (partition by nullableint order by id) as [first], last_value(nullableint) over (partition by nullableint order by id) as [last] from complex_entity");
+        sql.Should().Be("select id, ntile(2) over (order by id) as [bucket], first_value(nullableint) over (partition by nullableint order by id) as [first], last_value(nullableint) over (partition by nullableint order by id) as [last]\n from complex_entity");
     }
 
     [Fact]
@@ -1856,7 +1856,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         SqlOf(ctx, ctx.FromTableFunction(() => Tvf.AllRows()).Select(r => new { r.Id }))
-            .Should().Be("select id from all_rows() as [t1]");
+            .Should().Be("select id\n from all_rows() as [t1]");
     }
 
     [Fact]
@@ -1867,7 +1867,7 @@ public class SqlGenerationTests
 
         var command = Prepare(ctx, ctx.FromTableFunction(() => Tvf.ById(id)).Select(r => new { r.Id }));
 
-        Normalize(command.DbCommand.CommandText).Should().Be("select id from rows_by_id(@id) as [t1]");
+        Normalize(command.DbCommand.CommandText).Should().Be("select id\n from rows_by_id(@id) as [t1]");
         command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
             .Which.ParameterName.Should().Be("id");
     }
@@ -1881,7 +1881,7 @@ public class SqlGenerationTests
 
         var command = Prepare(ctx, ctx.FromTableFunction(() => Tvf.Between(lo, hi)).Select(r => new { r.Id }));
 
-        Normalize(command.DbCommand.CommandText).Should().Be("select id from app.rows_between(@lo, @hi) as [t1]");
+        Normalize(command.DbCommand.CommandText).Should().Be("select id\n from app.rows_between(@lo, @hi) as [t1]");
         command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
             .Should().Equal("lo", "hi");
     }
@@ -1897,7 +1897,7 @@ public class SqlGenerationTests
             .Join(complex, (r, c) => r.Id == c.Id)
             .Select(p => new { p.Item1.Value, p.Item2.String }));
 
-        sql.Should().Be("select t1.value, t2.somestring as [String] from all_rows() as [t1] join complex_entity as [t2] on t1.id = t2.id");
+        sql.Should().Be("select t1.value, t2.somestring as [String]\n from all_rows() as [t1]\n join complex_entity as [t2] on t1.id = t2.id");
     }
 
     [Fact]
@@ -1910,7 +1910,7 @@ public class SqlGenerationTests
             .Join(ctx.FromTableFunction(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
-        sql.Should().Be("select t1.id, t2.value from simple_entity as [t1] join all_rows() as [t2] on t2.id = cast(t1.id as bigint)");
+        sql.Should().Be("select t1.id, t2.value\n from simple_entity as [t1]\n join all_rows() as [t2] on t2.id = cast(t1.id as bigint)");
     }
 
     [Fact]
@@ -1923,7 +1923,7 @@ public class SqlGenerationTests
             .CrossApply(ctx.FromTableFunction(() => Tvf.AllRows()))
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
-        sql.Should().Be("select t1.id, t2.value from simple_entity as [t1] cross apply all_rows() as [t2]");
+        sql.Should().Be("select t1.id, t2.value\n from simple_entity as [t1]\n cross apply all_rows() as [t2]");
     }
 
     [Fact]
@@ -1936,7 +1936,7 @@ public class SqlGenerationTests
             .CrossApply(s => ctx.FromTableFunction(() => Tvf.ById(s.Id)))
             .Select(p => new { p.Item1.Id, p.Item2.Value }));
 
-        sql.Should().Be("select t1.id, t3.value from simple_entity as [t1] cross apply (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]");
+        sql.Should().Be("select t1.id, t3.value\n from simple_entity as [t1]\n cross apply (select t2.id, t2.value\n from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]");
     }
 
     [Fact]
@@ -1950,7 +1950,7 @@ public class SqlGenerationTests
             .FromTableFunction(() => SqlFunctions.SqlServer.string_split(csv, separator))
             .Select(r => new { r.Value }));
 
-        Normalize(command.DbCommand.CommandText).Should().Be("select value from string_split(@csv, @separator) as [t1]");
+        Normalize(command.DbCommand.CommandText).Should().Be("select value\n from string_split(@csv, @separator) as [t1]");
         command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
             .Should().Equal("csv", "separator");
     }
@@ -1966,7 +1966,7 @@ public class SqlGenerationTests
             .Select(r => new { r.Key, r.Value, r.Type }));
 
         Normalize(command.DbCommand.CommandText).Should()
-            .Be("select [key] as [Key], value, type from openjson(@json) as [t1]");
+            .Be("select [key] as [Key], value, type\n from openjson(@json) as [t1]");
         command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
             .Should().Equal("json");
     }
@@ -1983,7 +1983,7 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.Rank, p.Item2.Id }));
 
         Normalize(command.DbCommand.CommandText).Should()
-            .Be("select t1.[rank] as [Rank], t2.id from containstable(complex_entity, somestring, @search) as [t1] join complex_entity as [t2] on cast(t1.[key] as bigint) = t2.id");
+            .Be("select t1.[rank] as [Rank], t2.id\n from containstable(complex_entity, somestring, @search) as [t1]\n join complex_entity as [t2] on cast(t1.[key] as bigint) = t2.id");
         command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
             .Should().Equal("search");
     }
@@ -1999,7 +1999,7 @@ public class SqlGenerationTests
             .Select(r => new { r.Key, r.Rank }));
 
         Normalize(command.DbCommand.CommandText).Should()
-            .Be("select [key] as [Key], [rank] as [Rank] from freetexttable(complex_entity, somestring, @search) as [t1]");
+            .Be("select [key] as [Key], [rank] as [Rank]\n from freetexttable(complex_entity, somestring, @search) as [t1]");
         command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
             .Should().Equal("search");
     }
@@ -2026,10 +2026,10 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithTableHint("nolock")).Select(x => new { x.Id }))
-            .Should().Be("select id from complex_entity with (nolock)");
+            .Should().Be("select id\n from complex_entity with (nolock)");
 
         SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithTableHint("nolock", "index(ix_id)")).Select(x => new { x.Id }))
-            .Should().Be("select id from complex_entity with (nolock, index(ix_id))");
+            .Should().Be("select id\n from complex_entity with (nolock, index(ix_id))");
     }
 
     [Fact]
@@ -2039,7 +2039,7 @@ public class SqlGenerationTests
 
         // A blank name must be a no-op; a later blank call must not clear the hint set earlier.
         SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithTableHint("nolock").WithTableHint(" ")).Select(x => new { x.Id }))
-            .Should().Be("select id from complex_entity with (nolock)");
+            .Should().Be("select id\n from complex_entity with (nolock)");
     }
 
     [Fact]
@@ -2048,7 +2048,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithTableHint(" ")).Select(x => new { x.Id }))
-            .Should().Be("select id from complex_entity");
+            .Should().Be("select id\n from complex_entity");
     }
 
     [Fact]
@@ -2060,7 +2060,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id).Select(p => new { p.Item1.Id }));
 
-        sql.Should().Contain("from simple_entity as [t1] with (nolock) join complex_entity as [t2]");
+        sql.Should().Contain("from simple_entity as [t1] with (nolock)\n join complex_entity as [t2]");
     }
 
     [Fact]
@@ -2109,7 +2109,7 @@ public class SqlGenerationTests
             .WithTablesInScopeHint("nolock")
             .Select(p => new { p.Item1.Id }));
 
-        sql.Should().Contain("from simple_entity as [t1] with (nolock) join complex_entity as [t2] with (nolock)");
+        sql.Should().Contain("from simple_entity as [t1] with (nolock)\n join complex_entity as [t2] with (nolock)");
     }
 
     [Fact]
@@ -2265,7 +2265,7 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.Id })
             .Hint("recompile"));
 
-        sql.Should().Contain("from simple_entity as [t1] with (nolock) inner hash join complex_entity as [t2]");
+        sql.Should().Contain("from simple_entity as [t1] with (nolock)\n inner hash join complex_entity as [t2]");
         sql.Should().EndWith("option (recompile)");    }
 
     [Fact]
@@ -2636,7 +2636,7 @@ public class SqlGenerationTests
             c = inner.Where(s => s.Id == it.Id).Count()
         }));
 
-        sql.Should().Contain("count(*) from simple_entity");
+        sql.Should().Contain("count(*)\n from simple_entity");
         sql.Should().Contain("= t1.id");
     }
 
@@ -2736,7 +2736,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.ForUpdate().Select(x => x.Id))
-            .Should().Be("select id from simple_entity with (updlock)");
+            .Should().Be("select id\n from simple_entity with (updlock)");
     }
 
     [Fact]
@@ -2746,7 +2746,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.ForShare().Select(x => x.Id))
-            .Should().Be("select id from simple_entity with (holdlock)");
+            .Should().Be("select id\n from simple_entity with (holdlock)");
     }
 
     [Fact]
@@ -2756,7 +2756,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.ForUpdate(LockWaitMode.NoWait).Select(x => x.Id))
-            .Should().Be("select id from simple_entity with (updlock, nowait)");
+            .Should().Be("select id\n from simple_entity with (updlock, nowait)");
     }
 
     [Fact]
@@ -2766,7 +2766,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id))
-            .Should().Be("select id from simple_entity with (updlock, readpast)");
+            .Should().Be("select id\n from simple_entity with (updlock, readpast)");
     }
 
     [Fact]
@@ -2776,7 +2776,7 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.ForShare(LockWaitMode.NoWait).Select(x => x.Id))
-            .Should().Be("select id from simple_entity with (holdlock, nowait)");
+            .Should().Be("select id\n from simple_entity with (holdlock, nowait)");
     }
 
     [Fact]
@@ -2785,7 +2785,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("rowlock")).ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id))
-            .Should().Be("select id from simple_entity with (rowlock, updlock, readpast)");
+            .Should().Be("select id\n from simple_entity with (rowlock, updlock, readpast)");
     }
 
     [Fact]
@@ -2827,7 +2827,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("rowlock")).ForUpdate().Select(x => x.Id))
-            .Should().Be("select id from simple_entity with (rowlock, updlock)");
+            .Should().Be("select id\n from simple_entity with (rowlock, updlock)");
     }
 
     // D-01 red regression (T216, scenario label: whole/all-sources, V-11): a whole-query
@@ -2870,7 +2870,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.ForUpdate()).Select(x => x.Id));
 
-        sql.Should().Be("select t1.id from simple_entity as [t1] with (updlock)");
+        sql.Should().Be("select t1.id\n from simple_entity as [t1] with (updlock)");
     }
 
     [Fact]
@@ -3010,9 +3010,9 @@ public class SqlGenerationTests
                 Value = p.Item2.Value
             }));
 
-        sql.Should().Contain("from complex_entity as [t1] cross apply t1.somestring.nodes('/root/item') as [t2](value)");
+        sql.Should().Contain("from complex_entity as [t1]\n cross apply t1.somestring.nodes('/root/item') as [t2](value)");
         sql.Should().Contain("t2.value.value('(.)[1]/@id', 'int') as [Id]");
-        sql.Should().Contain("t2.value from complex_entity");
+        sql.Should().Contain("t2.value\n from complex_entity");
     }
 
     [Fact]
@@ -3071,7 +3071,7 @@ public class SqlGenerationTests
                 Q1 = t.GetNullableDecimal("[1]"),
                 Q2 = t.GetNullableDecimal("[2]")
             }))
-            .Should().Be("select category, [1], [2] from sales pivot (sum(margin) for quarter in ([1], [2])) as [t1]");
+            .Should().Be("select category, [1], [2]\n from sales pivot (sum(margin) for quarter in ([1], [2])) as [t1]");
     }
 
     [Fact]
@@ -3128,7 +3128,7 @@ public class SqlGenerationTests
             .Select(t => new { Category = t.GetString("category"), Q1 = t.GetNullableDecimal("[1]") }));
 
         second.Should().Be(first);
-        second.Should().Contain("from (select category, quarter, margin from sales");
+        second.Should().Contain("from (select category, quarter, margin\n from sales");
         second.Should().Contain("pivot (sum(margin) for quarter in ([1]))");
     }
 
@@ -3146,7 +3146,7 @@ public class SqlGenerationTests
                 Qtr = t.GetString("qtr"),
                 Val = t.GetNullableDecimal("val")
             }))
-            .Should().Be("select category, qtr, val from quarterly unpivot ([val] for [qtr] in ([q1], [q2])) as [t1]");
+            .Should().Be("select category, qtr, val\n from quarterly unpivot ([val] for [qtr] in ([q1], [q2])) as [t1]");
     }
 
     [Fact]
@@ -3160,7 +3160,7 @@ public class SqlGenerationTests
         SqlOf(ctx, ctx.From(derived)
             .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.Quarter, PivotValue.Create("1"), PivotValue.Create("2"))
             .Select(t => new { Category = t.GetString("category"), Q1 = t.GetNullableDecimal("[1]") }))
-            .Should().Be("select category, [1] from (select category, quarter, margin from sales\n where (margin > cast(0 as decimal(38, 10)))) as [t1] pivot (sum(margin) for quarter in ([1], [2])) as [t2]");
+            .Should().Be("select category, [1]\n from (select category, quarter, margin\n from sales\n where (margin > cast(0 as decimal(38, 10)))) as [t1] pivot (sum(margin) for quarter in ([1], [2])) as [t2]");
     }
 
     [Fact]
@@ -3179,7 +3179,7 @@ public class SqlGenerationTests
         SqlOf(ctx, ctx.From(derived)
             .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.QuarterNum, PivotValue.Create("Q1"))
             .Select(t => new { Category = t.GetString("CategoryName"), Q1 = t.GetNullableDecimal("[Q1]") }))
-            .Should().Be("select CategoryName, [Q1] from (select category as [CategoryName], ('Q'+quarter) as [QuarterNum], (margin * cast(2 as decimal(38, 10))) as [Margin] from sales\n where (margin > cast(0 as decimal(38, 10)))) as [t1] pivot (sum([Margin]) for [QuarterNum] in ([Q1])) as [t2]");
+            .Should().Be("select CategoryName, [Q1]\n from (select category as [CategoryName], ('Q'+quarter) as [QuarterNum], (margin * cast(2 as decimal(38, 10))) as [Margin]\n from sales\n where (margin > cast(0 as decimal(38, 10)))) as [t1] pivot (sum([Margin]) for [QuarterNum] in ([Q1])) as [t2]");
     }
 
     [Fact]
@@ -3192,7 +3192,7 @@ public class SqlGenerationTests
         SqlOf(ctx, ctx.From(derived)
             .Unpivot("val", "qtr", UnpivotColumn.Create("q1"), UnpivotColumn.Create("q2"))
             .Select(t => new { Category = t.GetString("category"), Val = t.GetNullableDecimal("val") }))
-            .Should().Be("select category, val from (select category, q1, q2 from quarterly) as [t1] unpivot ([val] for [qtr] in ([q1], [q2])) as [t2]");
+            .Should().Be("select category, val\n from (select category, q1, q2\n from quarterly) as [t1] unpivot ([val] for [qtr] in ([q1], [q2])) as [t2]");
     }
 
     [Fact]
@@ -3299,7 +3299,7 @@ public class SqlGenerationTests
             .Join(ctx.From<ISimpleEntity>(), (d, s) => d.Id == s.Id)
             .Select(p => new { p.Item1.Id, SId = p.Item2.Id, p.Item1.String }));
 
-        sql.Should().Be("select t1.id, t2.id as [SId], t1.[String] from (select id, somestring as [String] from complex_entity\n where (id > 0)) as [t1] join simple_entity as [t2] on t1.id = cast(t2.id as bigint)");
+        sql.Should().Be("select t1.id, t2.id as [SId], t1.[String]\n from (select id, somestring as [String]\n from complex_entity\n where (id > 0)) as [t1]\n join simple_entity as [t2] on t1.id = cast(t2.id as bigint)");
     }
 
     [Fact]
@@ -3314,7 +3314,7 @@ public class SqlGenerationTests
             .Join(ctx.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
             .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id }));
 
-        sql.Should().Be("select t3.[OrderId], t3.[CustomerName], t4.id as [Third] from (select t1.id as [OrderId], t2.somestring as [CustomerName] from simple_entity as [t1] join complex_entity as [t2] on cast(t1.id as bigint) = t2.id) as [t3] join complex_entity as [t4] on cast(t3.[OrderId] as bigint) = t4.id");
+        sql.Should().Be("select t3.[OrderId], t3.[CustomerName], t4.id as [Third]\n from (select t1.id as [OrderId], t2.somestring as [CustomerName]\n from simple_entity as [t1]\n join complex_entity as [t2] on cast(t1.id as bigint) = t2.id) as [t3]\n join complex_entity as [t4] on cast(t3.[OrderId] as bigint) = t4.id");
     }
 
     [Fact]
@@ -3329,7 +3329,7 @@ public class SqlGenerationTests
             .Join(ctx.From<ISimpleEntity>(), (d, s) => d.Id == s.Id)
             .Select(p => new { p.Item1.Id, SId = p.Item2.Id }));
 
-        sql.Should().Be("select t1.id, t2.id as [SId] from (select id, somestring as [String] from complex_entity) as [t1] join simple_entity as [t2] on t1.id = cast(t2.id as bigint)\n where (t1.id > 5)");
+        sql.Should().Be("select t1.id, t2.id as [SId]\n from (select id, somestring as [String]\n from complex_entity) as [t1]\n join simple_entity as [t2] on t1.id = cast(t2.id as bigint)\n where (t1.id > 5)");
     }
 
     [Fact]
@@ -3343,7 +3343,7 @@ public class SqlGenerationTests
             .Join(ctx.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
             .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id }));
 
-        sql.Should().Be("select t3.[OrderId], t3.[CustomerName], t4.id as [Third] from (select t1.id as [OrderId], t2.somestring as [CustomerName] from simple_entity as [t1] join complex_entity as [t2] on cast(t1.id as bigint) = t2.id) as [t3] join complex_entity as [t4] on cast(t3.[OrderId] as bigint) = t4.id");
+        sql.Should().Be("select t3.[OrderId], t3.[CustomerName], t4.id as [Third]\n from (select t1.id as [OrderId], t2.somestring as [CustomerName]\n from simple_entity as [t1]\n join complex_entity as [t2] on cast(t1.id as bigint) = t2.id) as [t3]\n join complex_entity as [t4] on cast(t3.[OrderId] as bigint) = t4.id");
     }
 
     [Fact]
@@ -3374,7 +3374,7 @@ public class SqlGenerationTests
             .Join(ctx.From<ISimpleEntity>(), (d, s3) => d.B == s3.Id)
             .Select(p => new { p.Item1.A, p.Item1.B, Third = p.Item2.Id }));
 
-        sql.Should().Be("select t3.[A], t3.[B], t4.id as [Third] from (select t1.id as [A], t2.id as [B] from simple_entity as [t1] join simple_entity as [t2] on t1.id = t2.id) as [t3] join simple_entity as [t4] on t3.[B] = t4.id");
+        sql.Should().Be("select t3.[A], t3.[B], t4.id as [Third]\n from (select t1.id as [A], t2.id as [B]\n from simple_entity as [t1]\n join simple_entity as [t2] on t1.id = t2.id) as [t3]\n join simple_entity as [t4] on t3.[B] = t4.id");
     }
 
     [Fact]

@@ -1,0 +1,74 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.integration.tests
+  Discovered:  nextorm.integration.tests
+  Starting:    nextorm.integration.tests
+[testcontainers.org 00:00:00.32] Connected to Docker:
+  Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+  Server Version: 5.8.6
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.44
+  Operating System: fedora
+  Total Memory: 11.68 GB
+[testcontainers.org 00:00:00.32] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.39] Reusable resource found
+[testcontainers.org 00:00:00.47] Start Docker container ff3bb6dd042f
+[testcontainers.org 00:00:01.86] Wait for Docker container ff3bb6dd042f to complete readiness checks
+[testcontainers.org 00:00:01.87] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container ff3bb6dd042f
+[testcontainers.org 00:00:03.03] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container ff3bb6dd042f
+[testcontainers.org 00:00:03.11] Docker container ff3bb6dd042f ready
+    NextORM.Integration.Tests.PostgresIntegrationTests.LobDataReader_UnsupportedProvider_ShouldThrowNotSupported [SKIP]
+      This provider implements the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStreamAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.TempTableSource_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider materialises a query into a temporary table.
+    NextORM.Integration.Tests.PostgresIntegrationTests.ExceptAll_WhenUnsupported_ShouldThrow [SKIP]
+      This provider supports EXCEPT ALL.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Insert_Returning_ShouldThrow_WhenProviderCannot [SKIP]
+      This provider can return inserted rows.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_RowStream_UnsupportedProvider_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.IntersectAll_WhenUnsupported_ShouldThrow [SKIP]
+      This provider supports INTERSECT ALL.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Contains_TupleIn_OnProviderWithoutRowConstructor_ShouldReject [SKIP]
+      This provider supports tuple IN/Contains.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToTextReaderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToStreamAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.ExecuteProcedureAsync_UnsupportedProvider_ThrowsNotSupported [SKIP]
+      This provider supports stored procedures.
+    NextORM.Integration.Tests.PostgresIntegrationTests.LobDataReader_UnsupportedProviderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReaderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.ExecuteProcedure_UnsupportedProvider_ThrowsNotSupported [SKIP]
+      This provider supports stored procedures.
+    NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_JsonEach_ShouldReturnRows [SKIP]
+      The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_WhereAndOrderBy_ShouldFilterAndSort [SKIP]
+      The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Batch_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider supports batches.
+    NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_GroupBy_ShouldAggregate [SKIP]
+      The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
+    NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_JoinedToTable_ShouldReturnRows [SKIP]
+      The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
+    NextORM.Integration.Tests.PostgresIntegrationTests.CreateTableAs_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider materialises a query into a temporary table.
+[testcontainers.org 00:00:10.34] Stop Docker container ff3bb6dd042f
+  Finished:    nextorm.integration.tests (ID = 'b4ece81caced377475cbe4ebc5ceca7103a9595a1230fab7f41a6fb60ce4340a')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.integration.tests  Total: 711, Errors: 0, Failed: 0, Skipped: 26, Not Run: 0, Time: 10.552s

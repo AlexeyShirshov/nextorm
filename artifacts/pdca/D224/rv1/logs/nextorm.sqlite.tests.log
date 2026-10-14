@@ -1,0 +1,147 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+failed NextORM.Sqlite.Tests.EntityItemProjectionTests.BareProjection_ShouldMaterializeProjectionOfEntitiesAndNullChild (92ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected sql to be the same string, but they differ at index 75:
+              ↓ (actual)
+    "…t2.state\n from entit…"
+    "…t2.state from entity…"
+              ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.EntityItemProjectionTests.BareProjection_ShouldMaterializeProjectionOfEntitiesAndNullChild() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/EntityItemProjectionTests.cs:129
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Sqlite.Tests.CorrelatedQueryTests.NestedCorrelationDepth2_ShouldReferenceBothOuterLevels (5ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected sql to be the same string, but they differ on line 4 and column 9 (index 129):
+                      ↓ (actual)
+    "…t1.id)\nlimit 1)\n from…"
+    "…t1.id)\nlimit 1) from…"
+                      ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.CorrelatedQueryTests.NestedCorrelationDepth2_ShouldReferenceBothOuterLevels() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/CorrelatedQueryTests.cs:352
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Sqlite.Tests.CorrelatedQueryTests.CorrelatedExistsInSelect_ShouldReferenceOuterAlias (2ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected sql to be the same string, but they differ on line 3 and column 38 (index 95):
+              ↓ (actual)
+    "…= t1.id)\n from compl…"
+    "…= t1.id) from comple…"
+              ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.CorrelatedQueryTests.CorrelatedExistsInSelect_ShouldReferenceOuterAlias() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/CorrelatedQueryTests.cs:183
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Sqlite.Tests.CorrelatedQueryTests.AggregateCountInsideSubquery_ShouldRenderAggregateSubquery (4ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected sql to be the same string, but they differ on line 4 and column 16 (index 111):
+               ↓ (actual)
+    "…1) as 'c'\n from…"
+    "…1) as 'c' from compl…"
+               ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.CorrelatedQueryTests.AggregateCountInsideSubquery_ShouldRenderAggregateSubquery() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/CorrelatedQueryTests.cs:236
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Sqlite.Tests.CorrelatedQueryTests.CorrelatedScalarOnJoinProjection_ShouldReferenceOuterAlias (3ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected sql to be the same string, but they differ on line 4 and column 16 (index 105):
+               ↓ (actual)
+    "…1) as 'x'\n from…"
+    "…1) as 'x' from compl…"
+               ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.CorrelatedQueryTests.CorrelatedScalarOnJoinProjection_ShouldReferenceOuterAlias() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/CorrelatedQueryTests.cs:122
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Sqlite.Tests.CorrelatedQueryTests.CorrelatedScalarInSelect_ShouldReferenceOuterAlias (2ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected sql to be the same string, but they differ on line 4 and column 18 (index 110):
+                 ↓ (actual)
+    "…1) as 'sid'\n from…"
+    "…1) as 'sid' from…"
+                 ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.CorrelatedQueryTests.CorrelatedScalarInSelect_ShouldReferenceOuterAlias() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/CorrelatedQueryTests.cs:64
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Sqlite.Tests.CorrelatedQueryTests.NestedNonCorrelatedSubquery_ShouldResolveItsOwnInnerCommand (3ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected sql to be the same string, but they differ on line 4 and column 9 (index 93):
+                     ↓ (actual)
+    "…t2.id\nlimit 1)\n from…"
+    "…t2.id\nlimit 1) from…"
+                     ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.CorrelatedQueryTests.NestedNonCorrelatedSubquery_ShouldResolveItsOwnInnerCommand() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/CorrelatedQueryTests.cs:324
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+skipped NextORM.Sqlite.Tests.SqliteRowIdLobProbeTests.Sqlite_RowId_Projection_Streams_Lobs_MemoryBounded
+  Set NEXTORM_LOB_SQLITE_PROBE=1 to run the SQLite rowid LOB capability probe.
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64) failed with 7 error(s) (24s 546ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 1747
+  failed: 7
+  succeeded: 1739
+  skipped: 1
+  duration: 24s 288ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

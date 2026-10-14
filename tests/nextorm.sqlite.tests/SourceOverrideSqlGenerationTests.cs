@@ -24,7 +24,7 @@ public class SourceOverrideSqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.WithSchema("main").Select(x => new { x.Id }))
-            .Should().Be("select id from main.simple_entity");
+            .Should().Be("select id\n from main.simple_entity");
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public class SourceOverrideSqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.WithDatabase("main").Select(x => new { x.Id }))
-            .Should().Be("select id from main.simple_entity");
+            .Should().Be("select id\n from main.simple_entity");
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class SourceOverrideSqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.WithTableExpression("select id from other").Select(x => new { x.Id }))
-            .Should().Be("select id from (select id from other) as 't1'");
+            .Should().Be("select id\n from (select id from other) as 't1'");
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class SourceOverrideSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select id from simple_entity");
+        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select id\n from simple_entity");
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class SourceOverrideSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
 
         SqlOf(ctx, ctx.From("simple_entity").WithSchema("main").Select(t => new { id = t["id"].AsInt }))
-            .Should().Be("select id from main.simple_entity");
+            .Should().Be("select id\n from main.simple_entity");
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class SourceOverrideSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
 
         SqlOf(ctx, ctx.From("simple_entity").WithTableExpression("select id from other").Select(t => new { id = t["id"].AsInt }))
-            .Should().Be("select t1.id from (select id from other) as 't1'");
+            .Should().Be("select t1.id\n from (select id from other) as 't1'");
     }
 
     [Fact]

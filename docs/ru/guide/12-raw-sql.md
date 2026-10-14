@@ -209,7 +209,8 @@ var rows = dataContext
 ```
 
 ```sql
-select t1.id from (select id, somestring from complex_entity where id > @min) as "t1"
+select t1.id
+ from (select id, somestring from complex_entity where id > @min) as "t1"
 ```
 
 Фрагмент может быть и **присоединяемой** стороной (рендерится как производная таблица с псевдонимом):
@@ -223,7 +224,9 @@ var rows = dataContext
 ```
 
 ```sql
-select t1.id, t2.id from simple_entity as "t1" join (select id from complex_entity) as "t2" on t1.id = t2.id
+select t1.id, t2.id
+ from simple_entity as "t1"
+ join (select id from complex_entity) as "t2" on t1.id = t2.id
 ```
 
 Фрагмент эмитится дословно (передавайте только доверенный SQL). Провайдер включается через
@@ -259,7 +262,8 @@ var rows = dataContext
 
 ```sql
 -- SQLite; остальные провайдеры квалифицируют производную таблицу как "t1" и кавычат столбцы по-своему
-select id, tenant_id as 'TenantId' from (select id, tenant_id from complex_entity where id > @min)
+select id, tenant_id as 'TenantId'
+ from (select id, tenant_id from complex_entity where id > @min)
  where (id > 10)
 ```
 

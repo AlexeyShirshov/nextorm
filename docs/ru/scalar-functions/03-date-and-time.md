@@ -213,9 +213,11 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- PostgreSQL / SQL Server 2022+
-select date_trunc('month', dt) as "Month" from complex_entity
+select date_trunc('month', dt) as "Month"
+ from complex_entity
 -- ClickHouse
-select dateTrunc('month', dt) as `Month` from complex_entity
+select dateTrunc('month', dt) as `Month`
+ from complex_entity
 ```
 
 ## Арифметика дат
@@ -252,15 +254,20 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQL Server
-select dateadd(day, 1, dt) as [NextDay], eomonth(dt) as [MonthEnd] from complex_entity
+select dateadd(day, 1, dt) as [NextDay], eomonth(dt) as [MonthEnd]
+ from complex_entity
 -- PostgreSQL
-select dt + (1 * interval '1 day') as "NextDay", (date_trunc('month', dt) + interval '1 month - 1 day') as "MonthEnd" from complex_entity
+select dt + (1 * interval '1 day') as "NextDay", (date_trunc('month', dt) + interval '1 month - 1 day') as "MonthEnd"
+ from complex_entity
 -- ClickHouse
-select addDays(dt, 1) as `NextDay`, toLastDayOfMonth(dt) as `MonthEnd` from complex_entity
+select addDays(dt, 1) as `NextDay`, toLastDayOfMonth(dt) as `MonthEnd`
+ from complex_entity
 -- MySQL/MariaDB
-select date_add(dt, interval 1 day) as `NextDay`, last_day(dt) as `MonthEnd` from complex_entity
+select date_add(dt, interval 1 day) as `NextDay`, last_day(dt) as `MonthEnd`
+ from complex_entity
 -- SQLite
-select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1 month', '-1 day') as 'MonthEnd' from complex_entity
+select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1 month', '-1 day') as 'MonthEnd'
+ from complex_entity
 ```
 
 | C# | SQL Server | PostgreSQL | ClickHouse | MySQL/MariaDB | SQLite |
@@ -353,5 +360,6 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart` from complex_entity
+select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart`
+ from complex_entity
 ```

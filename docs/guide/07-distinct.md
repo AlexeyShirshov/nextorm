@@ -39,7 +39,8 @@ var same = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select distinct nullableint as 'Int' from complex_entity
+select distinct nullableint as 'Int'
+ from complex_entity
 ```
 
 The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -65,7 +66,9 @@ var rows = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select distinct t2.b as 'Boolean' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+select distinct t2.b as 'Boolean'
+ from simple_entity as 't1'
+ join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
 A cross join produces the full Cartesian product, which [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) then reduces to the distinct
@@ -85,7 +88,9 @@ var distinct = dataContext.From<ISimpleEntity>()
 ```
 
 ```sql
-select distinct t2.id from simple_entity as 't1' cross join complex_entity as 't2'
+select distinct t2.id
+ from simple_entity as 't1'
+ cross join complex_entity as 't2'
 ```
 
 ## Distinct and paging
@@ -113,7 +118,8 @@ select distinct b as 'Boolean' from complex_entity limit 1
 
 ```sql
 -- SQL Server: DISTINCT must precede TOP
-select distinct top(1) b as 'Boolean' from complex_entity
+select distinct top(1) b as 'Boolean'
+ from complex_entity
 ```
 
 On SQL Server, `select top(1) distinct ...` is invalid T-SQL, so the dialect emits `distinct` before
@@ -135,9 +141,11 @@ var count = dataContext.From(cmd).Count(); // 2
 
 ```sql
 -- The left branch carries DISTINCT; UNION removes the remaining duplicates.
-select distinct nullableint from complex_entity
+select distinct nullableint
+ from complex_entity
  union 
-select nullableint from complex_entity
+select nullableint
+ from complex_entity
 ```
 
 With [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) the branches are concatenated without an extra deduplication, so the left branch is
@@ -153,9 +161,11 @@ var count = dataContext.From(cmd).Count();
 ```
 
 ```sql
-select distinct nullableint from complex_entity
+select distinct nullableint
+ from complex_entity
  union all 
-select nullableint from complex_entity
+select nullableint
+ from complex_entity
 ```
 
 ## `DISTINCT ON` (PostgreSQL)

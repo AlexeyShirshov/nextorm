@@ -160,7 +160,7 @@ internal readonly struct SqlBuilder
                 var fromStr = SqlSourceRenderer.MakeFrom(in fromCtx, from, new FromRenderOptions(needAlias, entityType, hasJoins, cmd.TableHints, cmd.Temporal, cmd.IndexHints, cmd.IndexHintKind, scopeHints, GlobalLock: cmd.RowLock), out fromAlias);
                 if (!_ctx.ParamMode)
                 {
-                    sqlBuilder!.Append(Kw(" from ")).Append(fromStr);
+                    sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" from ")).Append(fromStr);
 
                     if (cmd.TableSample is { } tablesample)
                     {
@@ -195,7 +195,7 @@ internal readonly struct SqlBuilder
                     for (var (idx, cnt) = (0, joins!.Length); idx < cnt; idx++)
                     {
                         var joinSql = SqlSourceRenderer.MakeJoin(in fromCtx, joins[idx], entityType!, scopeHints, cmd.RowLock);
-                        if (!_ctx.ParamMode) sqlBuilder!.Append(joinSql);
+                        if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(joinSql);
                     }
                 }
 
@@ -220,7 +220,7 @@ internal readonly struct SqlBuilder
                     }
 
                     if (!_ctx.ParamMode)
-                        sqlBuilder!.AppendLine().Append(arrayJoinClause.Render(cmd.ArrayJoinKind, renderedArrayJoins!, _ctx.KeywordCase));
+                        sqlBuilder!.Append(SqlText.NewLine).Append(arrayJoinClause.Render(cmd.ArrayJoinKind, renderedArrayJoins!, _ctx.KeywordCase));
                 }
 
                 if (cmd.PreparedPreWhere is not null)
@@ -228,12 +228,12 @@ internal readonly struct SqlBuilder
                     if (!_ctx.Dialect.SupportsPreWhere)
                         throw new NotSupportedException("The PREWHERE clause is not supported by this SQL dialect");
 
-                    if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" prewhere "));
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" prewhere "));
                     SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedPreWhere, 0, dontNeedAlias);
                 }
                 if (cmd.PreparedCondition is not null)
                 {
-                    if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" where "));
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" where "));
                     SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0, dontNeedAlias);
                 }
 
@@ -276,7 +276,7 @@ internal readonly struct SqlBuilder
                                 throw new NotSupportedException("GROUP BY ... WITH TOTALS cannot be combined with GROUPING SETS.");
                         }
 
-                        sqlBuilder!.AppendLine().Append(Kw(" group by "));
+                        sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" group by "));
 
                         string groupingSql;
                         if (cmd.GroupingType == GroupingType.GroupingSets)
@@ -316,7 +316,7 @@ internal readonly struct SqlBuilder
                     var having = cmd.PreparedHaving ?? cmd.Having;
                     if (having is not null)
                     {
-                        if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" having "));
+                        if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
                         SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0, dontNeedAlias);
                     }
                 }
@@ -339,7 +339,7 @@ internal readonly struct SqlBuilder
                     }
 
                     if (!_ctx.ParamMode)
-                        sqlBuilder!.AppendLine().Append(Kw(" window ")).Append(string.Join(", ", renderedWindows!));
+                        sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" window ")).Append(string.Join(", ", renderedWindows!));
                 }
 
                 if (cmd.UnionQuery is not null)
@@ -349,7 +349,7 @@ internal readonly struct SqlBuilder
 
                     if (!_ctx.ParamMode)
                     {
-                        sqlBuilder!.AppendLine().Append(cmd.UnionType switch
+                        sqlBuilder!.Append(SqlText.NewLine).Append(cmd.UnionType switch
                         {
                             UnionType.Distinct => Kw(" union "),
                             UnionType.All => Kw(" union all "),
@@ -358,7 +358,7 @@ internal readonly struct SqlBuilder
                             UnionType.Except => Kw(" except "),
                             UnionType.ExceptAll => Kw(" except all "),
                             _ => throw new NotSupportedException(cmd.UnionType.ToString("G"))
-                        }).AppendLine();
+                        }).Append(SqlText.NewLine);
                     }
 
                     var builder = new SqlBuilder(_ctx with { AliasProvider = new DefaultAliasProvider() });
@@ -369,7 +369,7 @@ internal readonly struct SqlBuilder
                 var sortingList = cmd.Sorting;
                 if (sortingList is not null)
                 {
-                    if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" order by "));
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" order by "));
 
                     for (var (i, cnt) = (0, sortingList.Length); i < cnt; i++)
                     {
@@ -400,7 +400,7 @@ internal readonly struct SqlBuilder
                 }
                 else if (!pageApplied && !_ctx.ParamMode && _ctx.Dialect.GetPagingOrderBy(cmd) is { } pagingOrderBy)
                 {
-                    sqlBuilder!.AppendLine().Append(Kw(" order by ")).Append(pagingOrderBy);
+                    sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" order by ")).Append(pagingOrderBy);
                 }
 
                 if (cmd.LimitBy is { } limitBy)
@@ -424,7 +424,7 @@ internal readonly struct SqlBuilder
 
                     if (!_ctx.ParamMode)
                     {
-                        sqlBuilder!.AppendLine();
+                        sqlBuilder!.Append(SqlText.NewLine);
                         sqlBuilder.Append(limitByRenderer.Render(limitBy.Limit, limitBy.Offset, renderedLimitBy!, _ctx.KeywordCase));
                     }
                 }
@@ -436,14 +436,14 @@ internal readonly struct SqlBuilder
 
                     if (!_ctx.ParamMode)
                     {
-                        sqlBuilder!.AppendLine();
+                        sqlBuilder!.Append(SqlText.NewLine);
                         sqlBuilder.Append(_ctx.Dialect.MakeSettings(settings, _ctx.KeywordCase));
                     }
                 }
 
                 if (!pageApplied && !_ctx.ParamMode && !cmd.Paging.IsEmpty)
                 {
-                    sqlBuilder!.AppendLine();
+                    sqlBuilder!.Append(SqlText.NewLine);
                     _ctx.Dialect.MakePage(cmd.Paging, sqlBuilder, _ctx.KeywordCase);
                 }
             }
@@ -457,7 +457,7 @@ internal readonly struct SqlBuilder
 
                 // Table-hint dialects already rendered the lock on every physical source.
                 if (!lockRenderer.UsesTableHints)
-                    sqlBuilder!.AppendLine().Append(lockRenderer.Render(rowLock.Mode, rowLock.Wait, _ctx.KeywordCase));
+                    sqlBuilder!.Append(SqlText.NewLine).Append(lockRenderer.Render(rowLock.Mode, rowLock.Wait, _ctx.KeywordCase));
             }
 
             // A source-level lock renders one targeted clause per locked source, after FROM/JOIN.
@@ -467,7 +467,7 @@ internal readonly struct SqlBuilder
                     throw new NotSupportedException("Source-level row locking (FOR UPDATE OF) is not supported by this SQL dialect");
 
                 foreach (var target in sourceLocks)
-                    sqlBuilder!.AppendLine().Append(sourceLockRenderer.Render(target.Lock.Mode, target.Lock.Wait, _ctx.KeywordCase, target.Alias));
+                    sqlBuilder!.Append(SqlText.NewLine).Append(sourceLockRenderer.Render(target.Lock.Mode, target.Lock.Wait, _ctx.KeywordCase, target.Alias));
             }
 
 
@@ -692,12 +692,12 @@ internal readonly struct SqlBuilder
                 var rankSql = MakePerParentRankExpression(cmd, entityType, rankColumn);
 
                 if (!_ctx.ParamMode)
-                    inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(Kw(" from ")).Append(fromSql);
+                    inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(SqlText.NewLine).Append(Kw(" from ")).Append(fromSql);
 
                 if (cmd.PreparedCondition is { } condition)
                 {
                     if (!_ctx.ParamMode)
-                        inner!.AppendLine().Append(Kw(" where "));
+                        inner!.Append(SqlText.NewLine).Append(Kw(" where "));
 
                     SqlSourceRenderer.MakeWhere(in _ctx, inner, entityType, condition, 0);
                 }
@@ -839,7 +839,7 @@ internal readonly struct SqlBuilder
                             outer.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
                     }
 
-                    outer.AppendLine().Append(Kw("from ")).Append('(').Append(innerSql).Append(')')
+                    outer.Append(SqlText.NewLine).Append(Kw(" from ")).Append('(').Append(innerSql).Append(')')
                         .Append(_ctx.Dialect.MakeTableAlias(alias!, _ctx.KeywordCase));
 
                     AppendPerParentRankFilter(cmd, outer, alias!, rankColumn);
@@ -899,12 +899,12 @@ internal readonly struct SqlBuilder
         {
             // Paging.IsEmpty would not have routed here, but keep the renderer total: with no bound the
             // ranked source is filtered to its first row's rank (never removes a partition).
-            outer.AppendLine().Append(Kw(" where ")).Append(alias).Append('.')
+            outer.Append(SqlText.NewLine).Append(Kw(" where ")).Append(alias).Append('.')
                 .Append(_ctx.Dialect.MakeColumnReference(rankColumn)).Append(" >= 1");
             return;
         }
 
-        outer.AppendLine().Append(Kw(" where "));
+        outer.Append(SqlText.NewLine).Append(Kw(" where "));
 
         if (hasLower)
         {
@@ -1006,7 +1006,7 @@ internal readonly struct SqlBuilder
                 var rankSql = MakeExtremeRowRankExpression(cmd, entityType, rankColumn);
 
                 if (!_ctx.ParamMode)
-                    inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(Kw(" from ")).Append(fromSql);
+                    inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(SqlText.NewLine).Append(Kw(" from ")).Append(fromSql);
 
                 AppendExtremeRowSourceFilter(cmd, entityType, inner);
 
@@ -1042,7 +1042,7 @@ internal readonly struct SqlBuilder
             return;
 
         if (!_ctx.ParamMode)
-            inner!.AppendLine().Append(Kw(" where "));
+            inner!.Append(SqlText.NewLine).Append(Kw(" where "));
 
         if (hasNotNullFilter)
         {
@@ -1119,7 +1119,7 @@ internal readonly struct SqlBuilder
                 var fromSql = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(false, entityType, false));
 
                 if (!_ctx.ParamMode)
-                    source!.Append(Kw("select ")).Append('*').Append(Kw(" from ")).Append(fromSql);
+                    source!.Append(Kw("select ")).Append('*').Append(SqlText.NewLine).Append(Kw(" from ")).Append(fromSql);
 
                 AppendExtremeRowSourceFilter(cmd, entityType, source);
 
@@ -1336,12 +1336,12 @@ internal readonly struct SqlBuilder
                         }
                     }
 
-                    outer.AppendLine().Append(Kw("from ")).Append('(').Append(innerSql).Append(')')
+                    outer.Append(SqlText.NewLine).Append(Kw(" from ")).Append('(').Append(innerSql).Append(')')
                         .Append(_ctx.Dialect.MakeTableAlias(alias!, _ctx.KeywordCase));
 
                     if (rankColumn is not null)
                     {
-                        outer.AppendLine().Append(Kw(" where ")).Append(alias).Append('.')
+                        outer.Append(SqlText.NewLine).Append(Kw(" where ")).Append(alias).Append('.')
                             .Append(_ctx.Dialect.MakeColumnReference(rankColumn)).Append(" = 1");
                     }
 
@@ -1391,7 +1391,7 @@ internal readonly struct SqlBuilder
         if (cmd.Sorting is not { Length: > 0 } sorting)
             return;
 
-        target.AppendLine().Append(Kw("order by "));
+        target.Append(SqlText.NewLine).Append(Kw("order by "));
         for (var i = 0; i < sorting.Length; i++)
         {
             if (i > 0) target.Append(", ");

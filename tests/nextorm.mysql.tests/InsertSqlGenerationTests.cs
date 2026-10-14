@@ -82,7 +82,7 @@ public class InsertSqlGenerationTests
         Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>().Where(s => s.Age > min), s => new { s.Name, s.Age })
             .ToSql())
-            .Should().Be("insert into insert_entity (name, age) select Name, Age from insert_source\n where (Age > @min)");
+            .Should().Be("insert into insert_entity (name, age) select Name, Age\n from insert_source\n where (Age > @min)");
     }
 
     [Fact]

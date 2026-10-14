@@ -37,7 +37,7 @@ public class UpdateJoinSqlGenerationTests
             .Set(p => p.Item1.Id, 0)
             .ToSql();
 
-        sql.Should().StartWith("with c as (select id from simple_entity");
+        sql.Should().StartWith("with c as (select id\n from simple_entity");
         sql.Should().Contain("update simple_entity as 't1' set id = $p0 from c as 't2' where t1.id = t2.id");
     }
 
@@ -56,7 +56,7 @@ public class UpdateJoinSqlGenerationTests
             .Set(p => p.Item1.Id, 0)
             .ToSql();
 
-        sql.Should().StartWith("with c as (select id from simple_entity");
+        sql.Should().StartWith("with c as (select id\n from simple_entity");
         sql.Should().Contain("from simple_entity as 't2', c as 't3'");
     }
 

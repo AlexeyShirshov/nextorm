@@ -279,7 +279,7 @@ public class MergeSqlGenerationTests
             .WhenMatched().ThenUpdate()
             .WhenNotMatched().ThenInsert()
             .ToSql()
-            .Should().Be("merge into merge_entity as target using (select id, name, age, total from merge_entity) as source on target.id = source.id when matched then update set name = source.name, age = source.age when not matched then insert (id, name, age) values (source.id, source.name, source.age)");
+            .Should().Be("merge into merge_entity as target using (select id, name, age, total\n from merge_entity) as source on target.id = source.id when matched then update set name = source.name, age = source.age when not matched then insert (id, name, age) values (source.id, source.name, source.age)");
     }
 
     [Fact]
@@ -364,7 +364,7 @@ public class MergeSqlGenerationTests
             .WhenMatched().ThenUpdate()
             .WhenNotMatched().ThenInsert()
             .ToSql()
-            .Should().Be("merge into merge_entity as target using (select id, name, age, total from merge_entity\n where (id > cast(@min as bigint))) as source on target.id = source.id when matched then update set name = source.name, age = source.age when not matched then insert (id, name, age) values (source.id, source.name, source.age)");
+            .Should().Be("merge into merge_entity as target using (select id, name, age, total\n from merge_entity\n where (id > cast(@min as bigint))) as source on target.id = source.id when matched then update set name = source.name, age = source.age when not matched then insert (id, name, age) values (source.id, source.name, source.age)");
     }
 
     [Fact]
@@ -380,7 +380,7 @@ public class MergeSqlGenerationTests
             .WhenMatched().ThenUpdate()
             .WhenNotMatched().ThenInsert()
             .ToSql()
-            .Should().Be("merge into merge_entity as target using (select id, name, age, total from merge_entity) as source on target.id = source.id when matched then update set name = source.name, age = source.age when not matched then insert (id, name, age) values (source.id, source.name, source.age)");
+            .Should().Be("merge into merge_entity as target using (select id, name, age, total\n from merge_entity) as source on target.id = source.id when matched then update set name = source.name, age = source.age when not matched then insert (id, name, age) values (source.id, source.name, source.age)");
     }
 
     [Fact]
@@ -413,6 +413,6 @@ public class MergeSqlGenerationTests
             .WhenMatched((t, s) => s.Total > 0).ThenUpdate()
             .WhenNotMatched().ThenInsert()
             .ToSql()
-            .Should().Be("merge into merge_entity as target using (select id, name, age, total from merge_entity) as source on target.id = source.id when matched and (source.total > 0) then update set name = source.name, age = source.age when not matched then insert (id, name, age) values (source.id, source.name, source.age)");
+            .Should().Be("merge into merge_entity as target using (select id, name, age, total\n from merge_entity) as source on target.id = source.id when matched and (source.total > 0) then update set name = source.name, age = source.age when not matched then insert (id, name, age) values (source.id, source.name, source.age)");
     }
 }

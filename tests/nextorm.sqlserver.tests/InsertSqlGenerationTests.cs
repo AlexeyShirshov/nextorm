@@ -82,7 +82,7 @@ public class InsertSqlGenerationTests
         Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>().Where(s => s.Age > min), s => new { s.Name, s.Age })
             .ToSql())
-            .Should().Be("insert into insert_entity (name, age) select Name, Age from insert_source\n where (Age > @min)");
+            .Should().Be("insert into insert_entity (name, age) select Name, Age\n from insert_source\n where (Age > @min)");
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public class InsertSqlGenerationTests
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age })
             .Returning(x => new { x.Id, x.Name })
             .ToSql())
-            .Should().Be("insert into insert_entity (name, age) output inserted.id, inserted.name select Name, Age from insert_source");
+            .Should().Be("insert into insert_entity (name, age) output inserted.id, inserted.name select Name, Age\n from insert_source");
     }
 
     [Fact]
@@ -440,7 +440,7 @@ public class InsertSqlGenerationTests
             .Returning(x => new { x.Id, x.Name })
             .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
             .ToSql()
-            .Should().Be("declare @t table (id bigint, name nvarchar(100)); insert into insert_entity (name) output inserted.id, inserted.name into @t (id, name) values (@p0); select id, name from @t");
+            .Should().Be("declare @t table (id bigint, name nvarchar(100)); insert into insert_entity (name) output inserted.id, inserted.name into @t (id, name) values (@p0); select id, name\n from @t");
     }
 
     [Fact]
@@ -453,7 +453,7 @@ public class InsertSqlGenerationTests
             .Returning(x => new { x.Id, x.Name })
             .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
             .ToSql()
-            .Should().Be("declare @t table (id bigint, name nvarchar(100)); insert into [insert_entity] ([name]) output inserted.[id], inserted.[name] into @t ([id], [name]) values (@p0); select [id], [name] from @t");
+            .Should().Be("declare @t table (id bigint, name nvarchar(100)); insert into [insert_entity] ([name]) output inserted.[id], inserted.[name] into @t ([id], [name]) values (@p0); select [id], [name]\n from @t");
     }
 
     [Theory]
