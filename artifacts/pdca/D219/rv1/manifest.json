@@ -480,8 +480,25 @@
         },
         {
           "kind": "crlf",
-          "path": "git ls-files --eol on all 28 committed paths",
-          "value": "every one is 'i/lf w/crlf' (CRLF preserved; index normalized by core.autocrlf=true)"
+          "path": "artifacts/pdca/D219/rv1/crlf-check.txt",
+          "value": "git ls-files --eol on all 28 committed task paths: 28/28 are 'i/lf w/crlf' (CRLF preserved in the worktree; index normalized by core.autocrlf=true); non_crlf_files=0. CHECK re-gather round 1 replaced the former command-in-path placeholder with this artifact."
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D219/rv1/check/rel/negative-boundary-evidence.json",
+          "value": "CHECK re-gather round 1: negative/boundary variants for E219-02/E219-04 (capability-false/custom-dialect fail-closed, SQL Server NULL propagation for the 6 nullable strings, ulong connection_id boundary, in-memory fail-closed) re-run filtered with exact commands, exit codes and counts; all exit 0"
+        },
+        {
+          "kind": "validator",
+          "path": "artifacts/pdca/D219/rv1/check/logs/rel-manifest-validate.log",
+          "command": [
+            "python3",
+            "scripts/validate_inner_loop.py",
+            "manifest",
+            "artifacts/pdca/D219/rv1/manifest.json"
+          ],
+          "exit": 0,
+          "value": "validate_inner_loop.py manifest => exit 0 after the E219-08 path repair"
         },
         {
           "kind": "candidates",
