@@ -1,0 +1,25 @@
+  Determining projects to restore...
+  Restored /tmp/opencode/t218-b/src/nextorm.postgres/nextorm.postgres.csproj (in 435 ms).
+  Restored /tmp/opencode/t218-b/src/nextorm.mysql/nextorm.mysql.csproj (in 435 ms).
+  Restored /tmp/opencode/t218-b/src/nextorm.core/nextorm.core.csproj (in 435 ms).
+  Restored /tmp/opencode/t218-b/src/nextorm.core.sourcegenerator/nextorm.core.sourcegenerator.csproj (in 435 ms).
+  Restored /tmp/opencode/t218-b/src/nextorm.clickhouse/nextorm.clickhouse.csproj (in 435 ms).
+  Restored /tmp/opencode/t218-b/src/nextorm.sqlite/nextorm.sqlite.csproj (in 16 ms).
+  Restored /tmp/opencode/t218-b/src/nextorm.sqlserver/nextorm.sqlserver.csproj (in 480 ms).
+  Restored /tmp/opencode/t218-b/src/nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj (in 488 ms).
+  Restored /tmp/opencode/t218-b/benchmarks/nextorm.benchmark/nextorm.benchmark.csproj (in 607 ms).
+  nextorm.core.sourcegenerator -> /tmp/opencode/t218-b/src/nextorm.core.sourcegenerator/bin/linux/Release/netstandard2.0/nextorm.core.sourcegenerator.dll
+  nextorm.core -> /tmp/opencode/t218-b/src/nextorm.core/bin/linux/Release/net10.0/nextorm.core.dll
+  nextorm.mysql -> /tmp/opencode/t218-b/src/nextorm.mysql/bin/linux/Release/net10.0/nextorm.mysql.dll
+  nextorm.sqlite -> /tmp/opencode/t218-b/src/nextorm.sqlite/bin/linux/Release/net10.0/nextorm.sqlite.dll
+  nextorm.postgres -> /tmp/opencode/t218-b/src/nextorm.postgres/bin/linux/Release/net10.0/nextorm.postgres.dll
+  nextorm.sqlserver -> /tmp/opencode/t218-b/src/nextorm.sqlserver/bin/linux/Release/net10.0/nextorm.sqlserver.dll
+  nextorm.clickhouse -> /tmp/opencode/t218-b/src/nextorm.clickhouse/bin/linux/Release/net10.0/nextorm.clickhouse.dll
+  nextorm.entityframeworkcore -> /tmp/opencode/t218-b/src/nextorm.entityframeworkcore/bin/linux/Release/net10.0/nextorm.entityframeworkcore.dll
+  nextorm.benchmark -> /tmp/opencode/t218-b/benchmarks/nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.25

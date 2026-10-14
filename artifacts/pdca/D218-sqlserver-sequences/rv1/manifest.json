@@ -331,7 +331,7 @@
     },
     {
       "id": "E08",
-      "status": "open",
+      "status": "met",
       "evidence": [
         {
           "kind": "benchmark",
@@ -443,9 +443,144 @@
           "kind": "disposition",
           "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md",
           "value": "A/B raw numbers + conclusion: allocations not equal, delta attributable to D1; outcome gap/incomplete product delta ~5 KB (escalate n=3)"
+        },
+        {
+          "kind": "benchmark-build",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/e08m-A-build.log",
+          "exit": 0,
+          "value": "matched-job re-measurement builds, all exit 0 / 0 Warning(s) / 0 Error(s): A f8caa690 (/tmp/opencode/t218-ab), B HEAD (main), B' HEAD with the identical control-only harness (/tmp/opencode/t218-b), same tree with the five-case file swapped back in; toolchain config (NextormConfig/global.json/Directory.*.props) unchanged between the revisions"
+        },
+        {
+          "kind": "benchmark-ab-matched",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/e08m-Ac1.log",
+          "command": [
+            "dotnet",
+            "run",
+            "--project",
+            "benchmarks/nextorm.benchmark",
+            "-c",
+            "Release",
+            "--",
+            "--anyCategories=t218-preparation",
+            "--filter",
+            "*Prepare_Control_Patindex*",
+            "--invocationCount",
+            "64",
+            "--unrollFactor",
+            "1",
+            "--launchCount",
+            "1",
+            "--warmupCount",
+            "3",
+            "--iterationCount",
+            "5",
+            "--strategy",
+            "Throughput"
+          ],
+          "exit": 0,
+          "value": "(a) confounded matched pairs, A pre-D1 ctrl-only file vs B HEAD five-case file, 64 op on every side/iteration: A 784.46 / 784.46 / 784.92 KB vs B 792.66 / 800.47 / 789.53 KB (means 784.61 vs 794.22, delta +9.61 KB) -> matching the op counts does NOT close the gap, so the earlier 128-vs-64 mismatch was not its cause; logs e08m-Ac{1,2,3}.log + e08m-B{1,2,3}.log"
+        },
+        {
+          "kind": "benchmark-ab-matched",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/e08m-A1.log",
+          "command": [
+            "dotnet",
+            "run",
+            "--project",
+            "benchmarks/nextorm.benchmark",
+            "-c",
+            "Release",
+            "--",
+            "--anyCategories=t218-preparation",
+            "--filter",
+            "*Prepare_Control_Patindex*",
+            "--invocationCount",
+            "64",
+            "--unrollFactor",
+            "1",
+            "--launchCount",
+            "1",
+            "--warmupCount",
+            "3",
+            "--iterationCount",
+            "5",
+            "--strategy",
+            "Throughput"
+          ],
+          "exit": 0,
+          "value": "(b) isolated matched pairs (identical control-only benchmark source on both sides; only src differs: pre-D1 f8caa690 vs HEAD 0911f850), 7 alternating pairs, 64 op each: A 784.46/795.44/795.39/784.46/784.46/787.58/784.46 KB vs B' 784.52/795.39/787.58/784.46/784.46/784.46/784.46 KB; means 788.04 vs 786.48 KB, delta -1.56 KB, mode 0.00 KB (4/7 pairs exactly equal); mean-time ratio 98.8% (<=105%); logs e08m-A{1..7}.log + e08m-Bp{1..7}.log"
+        },
+        {
+          "kind": "benchmark-ab-control",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/e08m-Bfull1.log",
+          "command": [
+            "dotnet",
+            "run",
+            "--project",
+            "benchmarks/nextorm.benchmark",
+            "-c",
+            "Release",
+            "--",
+            "--anyCategories=t218-preparation",
+            "--filter",
+            "*Prepare_Control_Patindex*",
+            "--invocationCount",
+            "64",
+            "--unrollFactor",
+            "1",
+            "--launchCount",
+            "1",
+            "--warmupCount",
+            "3",
+            "--iterationCount",
+            "5",
+            "--strategy",
+            "Throughput"
+          ],
+          "exit": 0,
+          "value": "(c) harness-swap control at unchanged product revision and unchanged path (worktree /tmp/opencode/t218-b, 0911f850): control-only benchmark file -> 784.46 / 795.44 / 795.39 KB, five-case file -> 789.53 x3 KB, 64 op each; the benchmark binary alone moves the reading by up to ~11 KB (logs e08m-Bp{1..3}.log vs e08m-Bfull{1,2,3}.log)"
+        },
+        {
+          "kind": "job-forcing",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/e08m-job-probe.log",
+          "command": [
+            "dotnet",
+            "run",
+            "--project",
+            "benchmarks/nextorm.benchmark",
+            "-c",
+            "Release",
+            "--",
+            "--anyCategories=t218-preparation",
+            "--filter",
+            "*Prepare_Control_Patindex*",
+            "--invocationCount",
+            "64",
+            "--unrollFactor",
+            "1",
+            "--launchCount",
+            "1",
+            "--warmupCount",
+            "3",
+            "--iterationCount",
+            "5",
+            "--strategy",
+            "Throughput"
+          ],
+          "exit": 0,
+          "value": "proves the forced job pins the op count: with --invocationCount 64 there is no WorkloadPilot stage and every WorkloadResult is 64 op (Job label: ShortRun ... InvocationCount=64, IterationCount=5, UnrollFactor=1, RunStrategy=Throughput)"
+        },
+        {
+          "kind": "disposition",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md",
+          "value": "Matched-job re-measurement section: earlier A/B marked INCOMPARABLE (kept for history); verdict met - with the benchmark binary held constant pre-D1 and HEAD are indistinguishable (mode 0.00 KB, mean -1.56 KB, 98.8% time), while swapping the benchmark binary at unchanged product revision moves the reading by several KB; D0 single-reading baseline (784.39 KB, control-only harness) recorded as incomparable to the five-case-harness readings"
+        },
+        {
+          "kind": "resolution",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md",
+          "value": "closes the previous E08 'open' reason (preserved verbatim): gap/incomplete, product delta ~5 KB. The A/B control (same session, alternating A B A B A B, same job and filter) shows the allocation criterion is a discriminating oracle and fails: A pre-D1 784.39/784.39/784.46 KB vs B HEAD 789.53 KB x3 (Gen0 identical 93.7500); the ~+5.14 KB (+0.66 %) delta tracks the product source state, so it is a real D1 allocation on the query-preparation path (control patindex flows through the D1-changed translator) -> routed to planner r=2 with the obligation to remove it (explicit contract supersession; preserve R1-R7; no allocation tolerance). No src change made here."
         }
-      ],
-      "reason": "gap/incomplete, product delta ~5 KB. The A/B control (same session, alternating A B A B A B, same job and filter) shows the allocation criterion is a discriminating oracle and fails: A pre-D1 784.39/784.39/784.46 KB vs B HEAD 789.53 KB x3 (Gen0 identical 93.7500); the ~+5.14 KB (+0.66 %) delta tracks the product source state, so it is a real D1 allocation on the query-preparation path (control patindex flows through the D1-changed translator) -> routed to planner r=2 with the obligation to remove it (explicit contract supersession; preserve R1-R7; no allocation tolerance). No src change made here."
+      ]
     },
     {
       "id": "E09",
@@ -577,6 +712,7 @@
     "n=3 corrective test-only: tests/nextorm.integration.tests/SqlServerSpecificTests.cs adds the multi-row distinct-consecutive-values scenario; DOCKER_HOST class run Total 97 / Failed 0 / Skipped 0 (row :87).",
     "n=3 corrective mutations (row :91): M1 gate-off, M2 corrupt render, M3 drop alias, M4 drop ]] escaping \u2014 each RED exit 2 -> restore -> GREEN exit 0; branch-mutation-map.md + logs/n3-m{1..4}-*.log.",
     "n=3 tree 16cc6b48c8da86eb464d986083ca0a72cf4980cd = HEAD^{tree} + the integration-test additive (this cycle's status file and generated artifacts excluded).",
-    "n=3 corrective revision rebound: commit d4db38231d365cd70ee1b97afebc25a62e09815d (tree 8cbd306cd0c074a8b0c121cc4f6e64bee04e7f61); the pre-commit source footprint 16cc6b48c8da86eb464d986083ca0a72cf4980cd is superseded by the real corrective commit tree (append-only)."
+    "n=3 corrective revision rebound: commit d4db38231d365cd70ee1b97afebc25a62e09815d (tree 8cbd306cd0c074a8b0c121cc4f6e64bee04e7f61); the pre-commit source footprint 16cc6b48c8da86eb464d986083ca0a72cf4980cd is superseded by the real corrective commit tree (append-only).",
+    "escalate step 2 (r=1/n=3, no replan): E08 open -> met. A matched job (--invocationCount 64 --unrollFactor 1 --launchCount 1 --warmupCount 3 --iterationCount 5 --strategy Throughput) makes the normalized op counts identical (64/64) in all 23 runs; the re-run of the earlier A/B on the matched job still shows a +9.61 KB gap, so the op-count mismatch was not the cause. The isolation (identical control-only benchmark source on both sides, only src differs) gives means 788.04 (pre-D1) vs 786.48 KB (HEAD), delta -1.56 KB, mode 0.00 KB, mean time 98.8%; the harness-swap control at unchanged revision moves the reading by several KB. The +5.14 KB is therefore a benchmark-binary / run-to-run artifact, not a product allocation; the PLAN gather found no per-call allocation mechanism in the D1 diff. The control's Allocated oracle has ~+/-8 KB run-to-run scatter (784.46-800.47 KB) and is not a pass/fail oracle at 5 KB. No src change; product byte-unchanged."
   ]
 }

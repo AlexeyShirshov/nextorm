@@ -1,0 +1,25 @@
+  Determining projects to restore...
+  Restored /tmp/opencode/t218-ab/src/nextorm.core.sourcegenerator/nextorm.core.sourcegenerator.csproj (in 359 ms).
+  Restored /tmp/opencode/t218-ab/src/nextorm.sqlserver/nextorm.sqlserver.csproj (in 359 ms).
+  Restored /tmp/opencode/t218-ab/src/nextorm.sqlite/nextorm.sqlite.csproj (in 359 ms).
+  Restored /tmp/opencode/t218-ab/src/nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj (in 359 ms).
+  Restored /tmp/opencode/t218-ab/src/nextorm.postgres/nextorm.postgres.csproj (in 360 ms).
+  Restored /tmp/opencode/t218-ab/src/nextorm.clickhouse/nextorm.clickhouse.csproj (in 360 ms).
+  Restored /tmp/opencode/t218-ab/src/nextorm.mysql/nextorm.mysql.csproj (in 359 ms).
+  Restored /tmp/opencode/t218-ab/src/nextorm.core/nextorm.core.csproj (in 3 ms).
+  Restored /tmp/opencode/t218-ab/benchmarks/nextorm.benchmark/nextorm.benchmark.csproj (in 400 ms).
+  nextorm.core.sourcegenerator -> /tmp/opencode/t218-ab/src/nextorm.core.sourcegenerator/bin/linux/Release/netstandard2.0/nextorm.core.sourcegenerator.dll
+  nextorm.core -> /tmp/opencode/t218-ab/src/nextorm.core/bin/linux/Release/net10.0/nextorm.core.dll
+  nextorm.postgres -> /tmp/opencode/t218-ab/src/nextorm.postgres/bin/linux/Release/net10.0/nextorm.postgres.dll
+  nextorm.sqlite -> /tmp/opencode/t218-ab/src/nextorm.sqlite/bin/linux/Release/net10.0/nextorm.sqlite.dll
+  nextorm.mysql -> /tmp/opencode/t218-ab/src/nextorm.mysql/bin/linux/Release/net10.0/nextorm.mysql.dll
+  nextorm.clickhouse -> /tmp/opencode/t218-ab/src/nextorm.clickhouse/bin/linux/Release/net10.0/nextorm.clickhouse.dll
+  nextorm.sqlserver -> /tmp/opencode/t218-ab/src/nextorm.sqlserver/bin/linux/Release/net10.0/nextorm.sqlserver.dll
+  nextorm.entityframeworkcore -> /tmp/opencode/t218-ab/src/nextorm.entityframeworkcore/bin/linux/Release/net10.0/nextorm.entityframeworkcore.dll
+  nextorm.benchmark -> /tmp/opencode/t218-ab/benchmarks/nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:13.45

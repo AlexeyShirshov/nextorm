@@ -1,0 +1,140 @@
+// Validating benchmarks:
+//    * Assembly nextorm.benchmark, Version=1.0.9.0, Culture=neutral, PublicKeyToken=null is located in temp. If you are running benchmarks from xUnit you need to disable shadow copy. It's not supported by design.
+
+// ***** BenchmarkRunner: Start   *****
+// ***** Found 1 benchmark(s) in total *****
+// ***** Building 1 exe(s) in Parallel: Start   *****
+// ***** Done, took 00:00:00 (0.03 sec)   *****
+// Found 1 benchmarks:
+//   T218PreparationControlBenchmark.Prepare_Control_Patindex_Uncached: ShortRun(Toolchain=InProcessEmitToolchain, InvocationCount=64, IterationCount=5, LaunchCount=1, RunStrategy=Throughput, UnrollFactor=1, WarmupCount=3)
+
+// **************************
+// Benchmark: T218PreparationControlBenchmark.Prepare_Control_Patindex_Uncached: ShortRun(Toolchain=InProcessEmitToolchain, InvocationCount=64, IterationCount=5, LaunchCount=1, RunStrategy=Throughput, UnrollFactor=1, WarmupCount=3)
+// *** Execute ***
+// Launch: 1 / 1
+// ! Failed to set up priority High for process System.Diagnostics.Process (nextorm.benchmark). Make sure you have the right permissions. Message: Permission denied
+
+// Benchmark Process Environment Information:
+// BenchmarkDotNet v0.15.8
+// Runtime=.NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+// GC=Concurrent Workstation
+// HardwareIntrinsics=AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT,X86Base+SSE+SSE2,AES+PCLMUL VectorSize=256
+// Job: Job-EAONPO(Toolchain=InProcessEmitToolchain, InvocationCount=64, IterationCount=5, LaunchCount=1, RunStrategy=Throughput, UnrollFactor=1, WarmupCount=3)
+
+OverheadJitting  1: 1 op, 225283.00 ns, 225.2830 us/op
+WorkloadJitting  1: 1 op, 6481507.00 ns, 6.4815 ms/op
+
+OverheadWarmup   1: 64 op, 3136.00 ns, 49.0000 ns/op
+OverheadWarmup   2: 64 op, 852.00 ns, 13.3125 ns/op
+OverheadWarmup   3: 64 op, 792.00 ns, 12.3750 ns/op
+OverheadWarmup   4: 64 op, 561.00 ns, 8.7656 ns/op
+OverheadWarmup   5: 64 op, 511.00 ns, 7.9844 ns/op
+OverheadWarmup   6: 64 op, 551.00 ns, 8.6094 ns/op
+OverheadWarmup   7: 64 op, 461.00 ns, 7.2031 ns/op
+OverheadWarmup   8: 64 op, 531.00 ns, 8.2969 ns/op
+OverheadWarmup   9: 64 op, 541.00 ns, 8.4531 ns/op
+OverheadWarmup  10: 64 op, 601.00 ns, 9.3906 ns/op
+
+OverheadActual   1: 64 op, 581.00 ns, 9.0781 ns/op
+OverheadActual   2: 64 op, 1052.00 ns, 16.4375 ns/op
+OverheadActual   3: 64 op, 631.00 ns, 9.8594 ns/op
+OverheadActual   4: 64 op, 591.00 ns, 9.2344 ns/op
+OverheadActual   5: 64 op, 511.00 ns, 7.9844 ns/op
+OverheadActual   6: 64 op, 541.00 ns, 8.4531 ns/op
+OverheadActual   7: 64 op, 521.00 ns, 8.1406 ns/op
+OverheadActual   8: 64 op, 571.00 ns, 8.9219 ns/op
+OverheadActual   9: 64 op, 571.00 ns, 8.9219 ns/op
+OverheadActual  10: 64 op, 641.00 ns, 10.0156 ns/op
+OverheadActual  11: 64 op, 1062.00 ns, 16.5938 ns/op
+OverheadActual  12: 64 op, 772.00 ns, 12.0625 ns/op
+OverheadActual  13: 64 op, 742.00 ns, 11.5938 ns/op
+OverheadActual  14: 64 op, 551.00 ns, 8.6094 ns/op
+OverheadActual  15: 64 op, 561.00 ns, 8.7656 ns/op
+OverheadActual  16: 64 op, 661.00 ns, 10.3281 ns/op
+OverheadActual  17: 64 op, 551.00 ns, 8.6094 ns/op
+OverheadActual  18: 64 op, 701.00 ns, 10.9531 ns/op
+OverheadActual  19: 64 op, 531.00 ns, 8.2969 ns/op
+OverheadActual  20: 64 op, 481.00 ns, 7.5156 ns/op
+
+WorkloadWarmup   1: 64 op, 331783196.00 ns, 5.1841 ms/op
+WorkloadWarmup   2: 64 op, 365401418.00 ns, 5.7094 ms/op
+WorkloadWarmup   3: 64 op, 334456809.00 ns, 5.2259 ms/op
+
+WorkloadActual   1: 64 op, 308024810.00 ns, 4.8129 ms/op
+WorkloadActual   2: 64 op, 222025769.00 ns, 3.4692 ms/op
+WorkloadActual   3: 64 op, 178091348.00 ns, 2.7827 ms/op
+WorkloadActual   4: 64 op, 106160749.00 ns, 1.6588 ms/op
+WorkloadActual   5: 64 op, 69447574.00 ns, 1.0851 ms/op
+
+WorkloadResult   1: 64 op, 308024234.00 ns, 4.8129 ms/op
+WorkloadResult   2: 64 op, 222025193.00 ns, 3.4691 ms/op
+WorkloadResult   3: 64 op, 178090772.00 ns, 2.7827 ms/op
+WorkloadResult   4: 64 op, 106160173.00 ns, 1.6588 ms/op
+WorkloadResult   5: 64 op, 69446998.00 ns, 1.0851 ms/op
+// GC:  6 0 0 51440792 64
+// Threading:  0 0 64
+
+
+Mean = 2.762 ms, StdErr = 0.661 ms (23.93%), N = 5, StdDev = 1.478 ms
+Min = 1.085 ms, Q1 = 1.659 ms, Median = 2.783 ms, Q3 = 3.469 ms, Max = 4.813 ms
+IQR = 1.810 ms, LowerFence = -1.057 ms, UpperFence = 6.185 ms
+ConfidenceInterval = [-2.929 ms; 8.452 ms] (CI 99.9%), Margin = 5.691 ms (206.05% of Mean)
+Skewness = 0.18, Kurtosis = 1.15, MValue = 2
+
+// ** Remained 0 (0.0 %) benchmark(s) to run. Estimated finish 2026-10-14 10:47 (0h 0m from now) **
+// ***** BenchmarkRunner: Finish  *****
+
+// * Export *
+  benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.csv
+  benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report-github.md
+  benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html
+
+// * Detailed results *
+T218PreparationControlBenchmark.Prepare_Control_Patindex_Uncached: ShortRun(Toolchain=InProcessEmitToolchain, InvocationCount=64, IterationCount=5, LaunchCount=1, RunStrategy=Throughput, UnrollFactor=1, WarmupCount=3)
+Runtime = ; GC = 
+Mean = 2.762 ms, StdErr = 0.661 ms (23.93%), N = 5, StdDev = 1.478 ms
+Min = 1.085 ms, Q1 = 1.659 ms, Median = 2.783 ms, Q3 = 3.469 ms, Max = 4.813 ms
+IQR = 1.810 ms, LowerFence = -1.057 ms, UpperFence = 6.185 ms
+ConfidenceInterval = [-2.929 ms; 8.452 ms] (CI 99.9%), Margin = 5.691 ms (206.05% of Mean)
+Skewness = 0.18, Kurtosis = 1.15, MValue = 2
+-------------------- Histogram --------------------
+[0.800 ms ; 3.068 ms) | @@@
+[3.068 ms ; 5.275 ms) | @@
+---------------------------------------------------
+
+// * Summary *
+
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+
+Job=ShortRun  Toolchain=InProcessEmitToolchain  InvocationCount=64  
+IterationCount=5  LaunchCount=1  RunStrategy=Throughput  
+UnrollFactor=1  WarmupCount=3  Categories=t218-preparation  
+
+| Method                            | Mean     | Error    | StdDev   | Gen0    | Allocated |
+|---------------------------------- |---------:|---------:|---------:|--------:|----------:|
+| Prepare_Control_Patindex_Uncached | 2.762 ms | 5.691 ms | 1.478 ms | 93.7500 | 784.92 KB |
+
+// * Warnings *
+MinIterationTime
+  T218PreparationControlBenchmark.Prepare_Control_Patindex_Uncached: ShortRun -> The minimum observed iteration time is 69.448ms which is very small. It's recommended to increase it to at least 100ms using more operations.
+
+// * Legends *
+  Mean      : Arithmetic mean of all measurements
+  Error     : Half of 99.9% confidence interval
+  StdDev    : Standard deviation of all measurements
+  Gen0      : GC Generation 0 collects per 1000 operations
+  Allocated : Allocated memory per single operation (managed only, inclusive, 1KB = 1024B)
+  1 ms      : 1 Millisecond (0.001 sec)
+
+// * Diagnostic Output - MemoryDiagnoser *
+
+
+// ***** BenchmarkRunner: End *****
+Run time: 00:00:02 (2.3 sec), executed benchmarks: 1
+
+Global total time: 00:00:02 (2.57 sec), executed benchmarks: 1
+// * Artifacts cleanup *
+Artifacts cleanup is finished

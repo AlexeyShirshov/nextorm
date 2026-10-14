@@ -194,3 +194,4 @@ None now (still initial PLAN). A newly proven prerequisite keeps the original D 
 
 2026-10-14T05:10:00Z | DO | revision r=1 | iteration 2/3 | CHECK FAIL r=1 n=1/3 — no product defect; mandatory test rows open (R3/R4, E04) + E08/E10 evidence; corrective DO (test-only) started, n=2/3 | artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
 2026-10-14T05:20:00Z | DO | revision r=1 | iteration 3/3 | escalate routed: E08 oracle decidable — control patindex not isolated (flows through the D1-changed translator); corrective attempt n=3 A/B + row :87/:91 closure, no src change | artifacts/pdca/D218-sqlserver-sequences/rv1/report.json
+2026-10-14T05:40:00Z | DO | revision r=1 | iteration n=3/3 | escalate step 2 completed: earlier A/B incomparable (128 vs 64 ops) — re-measuring with a MATCHED job; no per-call alloc mechanism found in the D1 diff | artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md
