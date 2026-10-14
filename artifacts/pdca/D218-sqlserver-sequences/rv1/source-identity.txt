@@ -12,3 +12,9 @@ f8caa690a32794ef6b87724f2d7cbf0f28647f9f
  M examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs
  M examples/nextorm.examples.postgres.aviasales/README.md
 ?? docs/specs/status/evidence/pivot-typed-overload/
+
+== corrective revision (CHECK->DO, test-only) ==
+cb3d5b6bddd79f6468a432eee537c8b01e85b578
+317f0078b86d8b7f53bfe86ca07178dee020e017
+product unchanged from 22b962333f04f39cb383687828a904da5f2174f1 (test-only corrective: tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs + docs/specs/status/D218-sqlserver-sequences-1.md)
+pre-existing unrelated worktree churn (not staged, not part of T218): examples/**, docs[+ru]/assets/diagrams/nextorm-command-execution.svg, docs/specs/status/D216-row-locking-1.md, docs/specs/status/evidence/pivot-typed-overload/

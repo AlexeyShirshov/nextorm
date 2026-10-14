@@ -13,7 +13,8 @@
     "files": [
       "src/nextorm.core/Query/SqlFunctions.SqlServer.cs",
       "src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs",
-      "src/nextorm.sqlserver/SqlServerDialect.cs"
+      "src/nextorm.sqlserver/SqlServerDialect.cs",
+      "tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs"
     ],
     "rebuild": "affected",
     "boundary": "before DO->CHECK: full SQL-gen sweep over all six provider test projects (tests/nextorm.{core,sqlserver,postgres,mariadb,mysql,sqlite,clickhouse}.tests, each exit 0) + SQL Server integration with DOCKER_HOST (-class nextorm.integration.tests.SqlServerSpecificTests) + acceptance benchmark + coverage collect",
@@ -37,6 +38,13 @@
         "FullyQualifiedName~NextORM.MySql.Tests",
         "FullyQualifiedName~NextORM.Sqlite.Tests",
         "FullyQualifiedName~NextORM.ClickHouse.Tests"
+      ],
+      "validated_before_run": true
+    },
+    {
+      "reason": "CHECK->DO corrective is test-only: it adds executed assertions to tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs (NUL, default(string), 'a.', '.b', '.', and a 129-char schema component in SequenceFunctions_Guards_ShouldThrow; a ']' inside the schema component ([s]]q].[t]) and a nextval alias escaping case in SequenceFunctions_ShouldEscapeClosingBracketAndNotEscapeTheIdentifier). No product file changes; scope.files gains this test file.",
+      "added_selectors": [
+        "FullyQualifiedName~SqlServerFunctionsSqlGenerationTests"
       ],
       "validated_before_run": true
     }
@@ -547,11 +555,229 @@
       "artifact_revision": "f8caa690",
       "exit_code": 0,
       "selected_count": 8519
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.sqlserver.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 0,
+      "selected_count": 859
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlserver.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsSqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 2,
+      "selected_count": 33
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.sqlserver.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 0,
+      "selected_count": 859
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlserver.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsSqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 0,
+      "selected_count": 33
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlserver.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~CrossProviderScalarSqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 0,
+      "selected_count": 2
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.postgres.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsRejectionTests"
+      ],
+      "phase": "inner",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 0,
+      "selected_count": 3
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.mysql.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsRejectionTests"
+      ],
+      "phase": "inner",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 0,
+      "selected_count": 3
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.mariadb.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsRejectionTests"
+      ],
+      "phase": "inner",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 0,
+      "selected_count": 3
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.clickhouse.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsRejectionTests"
+      ],
+      "phase": "inner",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 0,
+      "selected_count": 3
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SqlServerFunctionsSqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 0,
+      "selected_count": 8
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~InMemoryScalarFunctionsTests"
+      ],
+      "phase": "inner",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 0,
+      "selected_count": 19
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=t218-preparation"
+      ],
+      "phase": "boundary",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 0,
+      "selected_count": 5
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=t218-preparation"
+      ],
+      "phase": "boundary",
+      "source_revision": "cb3d5b6b",
+      "artifact_revision": "cb3d5b6b",
+      "exit_code": 0,
+      "selected_count": 5
     }
   ],
   "notes": [
     "Baseline benchmark executions carry the pre-change revision marker (f8caa690-pre-d1); all post-change executions carry f8caa690.",
     "Inner test executions are the affected, filtered subset; the boundary is the serialised per-project SQL-gen sweep (namespace-scoped filters, amendment 2) plus the solution build, the DOCKER_HOST SQL Server integration class, the acceptance/preparation benchmark runs and the coverage collect.",
-    "Full command output: artifacts/pdca/D218-sqlserver-sequences/rv1/logs/*.log"
+    "Full command output: artifacts/pdca/D218-sqlserver-sequences/rv1/logs/*.log",
+    "Corrective revision cb3d5b6bddd79f6468a432eee537c8b01e85b578 (tree 317f0078b86d8b7f53bfe86ca07178dee020e017), appended by CHECK->DO (r=1, n=2/3, test-only): no product byte changed vs 22b96233. The corrective solution build `dotnet build nextorm.slnx -c Debug` (exit 0, 0 Warning(s)/0 Error(s), logs/corrective-build.log) is recorded in NOTES and in manifest E10, not as a boundary execution: the frozen report already carries one boundary solution build and the validator caps boundary solution builds at one. Its pre-test role (fresh artifacts for the --no-build corrective reruns) is covered by the two inner `dotnet build tests/nextorm.sqlserver.tests -c Debug` executions that precede them.",
+    "Mutation #4 (drop the `]]` escaping in SqlServerDialect.QuoteIdentifier, :171): RED exit 2 (logs/mutation4-red.log, the new schema-']' case fails at SqlServerFunctionsSqlGenerationTests.cs:677), reverted via `git checkout -- src/nextorm.sqlserver/SqlServerDialect.cs`, rebuild exit 0, GREEN exit 0 (logs/mutation4-green.log, 33/33). No product change was committed.",
+    "E08 disposition: artifacts/pdca/D218-sqlserver-sequences/rv1/E08-disposition.md (control time <=105% in all four post runs; the +0.65% allocation delta is reproducible but appears on byte-unchanged control code, so it is stated as incomparable, not accepted as a regression)."
   ]
 }

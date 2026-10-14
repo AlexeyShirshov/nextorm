@@ -1,6 +1,6 @@
 {
   "task": "T218 (#218) SQL Server sequences (NEXT VALUE FOR) \u2014 cross-provider",
-  "tree": "b5dc7eb833db291490c872fc9e20cdf352ee8030",
+  "tree": "317f0078b86d8b7f53bfe86ca07178dee020e017",
   "contract_rv": 1,
   "status_file": "docs/specs/status/D218-sqlserver-sequences-1.md",
   "required_rows": [
@@ -41,6 +41,11 @@
           "kind": "footprint",
           "path": "docs/specs/status/D53-public-api-freeze-1.md",
           "value": "#218 T53 freeze candidates registered, freeze HELD"
+        },
+        {
+          "kind": "source-identity",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/source-identity.txt",
+          "value": "corrective revision cb3d5b6bddd79f6468a432eee537c8b01e85b578 (tree 317f0078b86d8b7f53bfe86ca07178dee020e017); product unchanged from 22b962333f04f39cb383687828a904da5f2174f1 (test-only corrective; status file iteration n=2)"
         }
       ]
     },
@@ -180,6 +185,27 @@
           "kind": "assertion",
           "path": "tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs",
           "value": "null/''/'a..b'/'s.a.b'/129-char rejected; 128-char accepted; 'x]; drop table t; --' => 'next value for [x]]; drop table t; --]'; captured local + x.String! rejected; no '@p' parameter"
+        },
+        {
+          "kind": "test",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/corrective-inner-test-sqlserver-scalargen.log",
+          "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsSqlGenerationTests",
+          "exit": 0,
+          "value": "33 succeeded / 0 failed / 0 skipped with the new assertions: NUL ('a\\u0000b'), default(string), 'a.', '.b', '.', 129-char schema component -> guards; ']' in the schema component 's]q.t' -> 'next value for [s]]q].[t]' and a nextval escaping case 'x]; drop table t; --' -> 'next value for [x]]; drop table t; --]'"
+        },
+        {
+          "kind": "mutation",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/mutation4-red.log",
+          "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsSqlGenerationTests",
+          "exit": 2,
+          "value": "mutation #4 drops the ']]' escaping in SqlServerDialect.QuoteIdentifier (:171): RED - the new schema-']' case fails (expected '[s]]q].[t]', got '[s]q].[t]') at SqlServerFunctionsSqlGenerationTests.cs:677, total 33 / failed 1, exit 2"
+        },
+        {
+          "kind": "mutation-restore",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/mutation4-green.log",
+          "command": "dotnet test tests/nextorm.sqlserver.tests -c Debug --no-build --filter FullyQualifiedName~SqlServerFunctionsSqlGenerationTests",
+          "exit": 0,
+          "value": "git checkout -- src/nextorm.sqlserver/SqlServerDialect.cs; rebuild exit 0; GREEN 33/33 exit 0"
         }
       ]
     },
@@ -309,6 +335,32 @@
           "kind": "notice",
           "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/d0-acceptance-baseline.log",
           "value": "NOTICE 1: 8 [BenchmarkCategory(\"acceptance\")] attributes exist in source, but the runtime category yields exactly 7 cases (the #168 SqlServerBufferedNumericAcceptanceBenchmark is compiled only with -p:AcceptanceBenchmark=true) \u2014 the plan's '7' holds; the new t218-preparation cases are NOT in the acceptance category"
+        },
+        {
+          "kind": "disposition",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-disposition.md",
+          "value": "control time <=105% of the 879.498 us baseline in all four post runs (DO POST 72.8%, CHECK POST 103.4%, corrective run1 95.4%, run2 98.3%); the +0.65% allocation delta (789.47 KB vs 784.39 KB) is reproducible across four post runs on byte-unchanged control code, therefore not attributable and stated as incomparable, not a regression"
+        },
+        {
+          "kind": "benchmark",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/corrective-bench-run1.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=t218-preparation",
+          "exit": 0,
+          "value": "reproducibility run 1: control 838.724 us (Min 640.739 / Max 999.202 / StdDev 182.151) / 789.47 KB; 5 cases"
+        },
+        {
+          "kind": "benchmark",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/corrective-bench-run2.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=t218-preparation",
+          "exit": 0,
+          "value": "reproducibility run 2: control 864.161 us (Min 650.544 / Max 1038.407 / StdDev 196.906) / 789.47 KB; 5 cases"
+        },
+        {
+          "kind": "benchmark",
+          "path": "/tmp/opencode/t218/bench.log",
+          "command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=t218-preparation",
+          "exit": 0,
+          "value": "CHECK POST (22b96233-era HEAD): control 909.197 us (Min 644.836 / Max 1315.473 / StdDev 357.132) / 789.47 KB; 5 cases"
         }
       ]
     },
@@ -377,6 +429,31 @@
           "kind": "boundary-sweep",
           "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs",
           "value": "per-project namespace-scoped SQL-gen sweep, all exit 0: core 2493, sqlserver 859, postgres 940, mariadb 300, mysql 418, sqlite 1703 (1 pre-existing opt-in LOB probe skip), clickhouse 697; solution build 0/0"
+        },
+        {
+          "kind": "binding",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/source-identity.txt",
+          "value": "corrective commit cb3d5b6bddd79f6468a432eee537c8b01e85b578; tree 317f0078b86d8b7f53bfe86ca07178dee020e017 (= HEAD^{tree} of the corrective commit; the DO freeze b5dc7eb833db291490c872fc9e20cdf352ee8030 stays as historical evidence). Product byte-unchanged from 22b96233"
+        },
+        {
+          "kind": "report",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
+          "command": "python3 scripts/validate_inner_loop.py report artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
+          "exit": 0,
+          "value": "44 executions (25 inner / 19 boundary) after the corrective append; corrective executions carry revision cb3d5b6b; the test-only corrective amendment + scope.files update are recorded"
+        },
+        {
+          "kind": "manifest",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
+          "command": "python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
+          "exit": 0
+        },
+        {
+          "kind": "build",
+          "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/corrective-build.log",
+          "command": "dotnet build nextorm.slnx -c Debug",
+          "exit": 0,
+          "value": "0 Warning(s), 0 Error(s); recorded here rather than as a boundary report execution because the frozen report already carries one boundary solution build (cap = 1)"
         }
       ]
     }
@@ -384,6 +461,10 @@
   "notes": [
     "Frozen at DO->CHECK; append-only during CHECK.",
     "tree = git write-tree over read-tree HEAD + the product/test/docs footprint (status file and generated artifacts excluded).",
-    "Evidence revisions: baseline benchmarks f8caa690-pre-d1; all post-change runs f8caa690 (HEAD f8caa690a32794ef6b87724f2d7cbf0f28647f9f)."
+    "Evidence revisions: baseline benchmarks f8caa690-pre-d1; all post-change runs f8caa690 (HEAD f8caa690a32794ef6b87724f2d7cbf0f28647f9f).",
+    "Corrective revision cb3d5b6bddd79f6468a432eee537c8b01e85b578 (tree 317f0078b86d8b7f53bfe86ca07178dee020e017); tree rebound from the DO freeze to the corrective commit. DO freeze b5dc7eb remains as historical evidence (append-only).",
+    "E04 met by the corrective executed assertions (NUL/default(string)/'a.'/'.b'/'.'/oversized schema; schema-']' and nextval escaping) plus mutation #4 RED exit 2 -> revert -> GREEN exit 0.",
+    "E08 met by E08-disposition.md (control <=105% of baseline in every post run; reproducible +0.65% allocation delta on unchanged code stated as incomparable).",
+    "E10 met by the corrective binding (commit cb3d5b6b / tree 317f0078) + report and manifest validators exit 0."
   ]
 }
