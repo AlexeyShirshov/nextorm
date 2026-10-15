@@ -6,7 +6,7 @@
 - selected_variant: pdca-dotnet
 - cycle_id: N=1
 - plan_revision: r=2
-- phase: P
+- phase: DO (D201-1)
 - plan_state: ready
 - date: 2026-10-11
 - evidence_contract: rv1
@@ -943,6 +943,61 @@ as detailed-plan approval.
 If the new review fails, return a new specific P task. Only actual changed
 actions justify another plan revision.
 
+## DO — D201-1 (ownership/state/inventory report)
+
+- DO started for the cycle: N=1, plan revision r=2, attempt n=1, evidence contract rv1.
+- Unit boundary: D201-1 is a **discovery** unit — a read-only ownership/state/inventory report.
+  **No production `.cs` edit is authorized or made**; the single tracked write is this status file.
+  Dependency P201-READY is satisfied; no worktree/branch/merge (single group, current tree).
+- Method: Roslyn only for C# symbols (`roslynq` = the `roslyn` tool, solution `nextorm.slnx`), batched
+  per action; `read` for line-anchored bodies; `rg --glob '*.cs'` (ignore-aware) only for non-symbol
+  text. Raw Roslyn output captured verbatim under `discovery/raw/`.
+
+- Produced artifacts (all under `artifacts/pdca/T201/rv1/`, gitignored = evidence only):
+  - `discovery/ownership-state.md` — preparation-before-key confirmation; `QueryPlanStore`
+    ownership/invalidation invariants; the full recipe-applied field → producer → consumer map
+    (incl. `ResultPlanHash` and the three `InvalidatePlanKey` reset sites); design-vs-HEAD line drift.
+  - `discovery/shared-route.md` — the actual shared `AnyCommand` instance and every route
+    (route/instance identity, not shape), `ReplaceCommand`, and the `_dontCache`/`Cache` mutation audit.
+  - `discovery/m9-inventory.md` — M9 regression symbols, plan-key/shared/whole-graph/lifecycle suites,
+    native coverage workflow commands, and container prerequisites.
+  - `discovery/siblings.md` — accepted upstream T209/T211/T212/T213 outcomes and the tested baseline identity.
+  - `discovery/inner-loop/{brief,report}.json` — docs/evidence-only inner-loop scope (rebuild=none).
+  - `discovery/raw/**` — raw Roslyn `structure`/`types`/`members`/`refs`/`callers` output.
+  - `oracle/b-arms.json` (55 `B_*` arms, 12 categories, exact ten-arm map),
+    `oracle/acceptance.json` (7 active cases + excluded eighth),
+    `oracle/iteration14-inventory.json` (28 rows: 3 zero, 24 budget, 1 no_growth).
+
+- Commands / exits (full argument arrays in `discovery/inner-loop/report.json`):
+  - `git status --porcelain` → 0 (68 entries; ~39 foreign to this collection, preserved, never staged);
+  - `git log --oneline -8` → 0; `git rev-parse --abbrev-ref HEAD` → 0 (`1.0.9-rc3`);
+    `git rev-parse HEAD` → 0 (`71e29b197b4ca0d88acb217a9f930d0cdf3c848d`);
+  - `roslynq nextorm.slnx structure` → 0; `members`/`refs`/`callers` for the recipe/storage/shared/test
+    symbols → 0 (raw under `discovery/raw/`);
+  - `python3` oracle generator → 0; `python3 scripts/validate_inner_loop.py brief …` → 0;
+    `python3 scripts/validate_inner_loop.py report …` → 0. The docs/evidence-only scope was
+    **accepted** (not rejected as empty/zero-selector); no fictitious rebuild was used.
+
+- Boundary answers:
+  - (a) `QueryPlanner.cs` still prepares before the normalized key at the cited lines — **yes**
+    (`:574`/`:575` before `:614`/`:615`; the file is unchanged since the design commit `bd4af157`).
+  - (b) Inventories confirmed by source: 55 `B_*` arms / 12 categories / exact ten-arm map; 7 active
+    acceptance cases (+1 excluded eighth, build-excluded by `nextorm.benchmark.csproj:47`); **28
+    rows** × 2 toolchains (3 zero, 24 budget, 1 `no_growth`), with `InAtIn_Inline_Warm_Reused = 840 B/op`
+    as a **budget** row (not a fourth zero row). Mismatches found (drift, not mechanism):
+    the design's `EntityBuilderExtensions.cs:1378-1406` (`GetAnyCommand`) is now `:1404-1432`;
+    `QueryCommand.cs:888-897` (`ReplaceCommand`) is now `:933-951`;
+    `scripts/iteration15_evidence.py:48-56` is now `:49-57`;
+    `nextorm.benchmark.csproj:44-46` is now `:47`;
+    the `QueryCommand.QueryPreparer.cs` anchors moved (file +220/−10 after the design) — the
+    HEAD-based map in `discovery/ownership-state.md` supersedes them.
+  - (c) No invariant proved un-implementable; no DO→PLAN candidate raised by this unit. Staged-field
+    completeness must be re-derived from HEAD, not from the design's stale line numbers.
+
+- Remaining obligation: the production recipe (raw candidate index, live-owner/generation validation,
+  transactional staged application) is **D201-3** and is not implemented here; D201-2 (evidence
+  runner, negative self-tests, baseline) is the next dependent unit.
+
 ## Progress log
 
 - 2026-10-11, history: owner confirmed trigger and authorized conversational
@@ -978,3 +1033,8 @@ actions justify another plan revision.
 - 2026-10-11: both ordered approvals obtained; `plan_state` set to ready and
   rv1 frozen before first DO.
 - Next allowed step: DO — starts D201-1 at n=1; not started.
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | DO started: D201-1 discovery (ownership/state/inventory) | artifacts/pdca/T201/rv1/discovery/inner-loop/report.json
+- 2026-10-15, DO D201-1 (n=1, r=2, rv1): discovery unit delivered — field→producer→consumer
+  ownership map, shared `AnyCommand` route/mutation audit, M9/test/coverage/container inventory,
+  upstream sibling outcomes and tested baseline identity, and the source-backed oracle inventories;
+  inner-loop brief/report validators exit 0; no production `.cs` change; D201-2 is next.
