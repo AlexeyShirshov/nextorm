@@ -55,7 +55,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T226 | #226 | G1 | 14 | done | done (r=2, rv=2, n=2/3) — CHECK PASS; 11/11 rows met | pdca-dotnet | N=1 | r=2 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
 | T224 | #224 | G1 | 15 | done | done (r=1, rv=1, n=1) — CHECK PASS r=1/rv=1; R1–R7 met; DO `4e6a2abd` | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
 | T225 | #225 | G1 | 16 | done | done (r=4, rv=3, n=1/3) — CHECK PASS r=4/rv=3; E01–E07 met, C1–C8 met | pdca-dotnet | N=1 | r=4 | 7cbbab3b | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
-| T236 | #236 | G1 | pre-T232 | done | done (r=5, rv=4, n=1/3) — CHECK FAIL (evidence/closure gate only) → ACT-only closure; product `c554d5e8`, closure `CLOSURE_SHA` | pdca-dotnet | N=1 | r=5 | c554d5e8 | docs/specs/status/D236-build-advisories-1.md |
+| T236 | #236 | G1 | pre-T232 | done | done (r=5, rv=4, n=1/3) — CHECK FAIL (evidence/closure gate only) → ACT-only closure; product `c554d5e8`, closure `2a348dcc` | pdca-dotnet | N=1 | r=5 | c554d5e8 | docs/specs/status/D236-build-advisories-1.md |
 | T232 | #232 | G1 | 17 | pending | ready | pdca-dotnet | N=1 | r=1 | 4f1e1282 | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md |
 | T233 | #233 | G1 | 18 | pending | ready | pdca-dotnet | N=1 | r=1 | 82da47a9 | docs/specs/status/D233-window-over-overload-1.md |
 | T201 | #201 | G1 | 19 (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
@@ -92,7 +92,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 
 - (1) Fix the **#236** build blocker **in-lane** (NU1902/NU1903 advisories: transitive `System.Security.Cryptography.Pkcs 9.0.11` via `Microsoft.Data.SqlClient 6.1.7`), then continue. → added as lane task **T236** (pre-T232).
 - (2) **Authorize retention** of the foreign #160 hunks inside T232's mixed commit `001f9c9c` (keep as-is; do not rewrite history) → T232's `AC-12` owner-authorization blocker is **lifted**.
-- (1) **CLOSED — T236 done** (product `c554d5e8`, closure `CLOSURE_SHA`; r=5/rv=4): **T232 build gate unblocked by T236; T232 query ownership and E232-13 packaging evidence remain with T232.**
+- (1) **CLOSED — T236 done** (product `c554d5e8`, closure `2a348dcc`; r=5/rv=4; ACT record `ffbce4ed`): **T232 build gate unblocked by T236; T232 query ownership and E232-13 packaging evidence remain with T232.**
 
 ## Owner constraint — T216 (#216) — RESOLVED (2026-10-13)
 
