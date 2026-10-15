@@ -5,7 +5,7 @@
 - base: branch `1.0.9` @ `58025147` (merge of #214 `1.0.9-rc2`); the branch was later **renamed to `1.0.9-rc3`** by a concurrent actor (the collection's commits rode along); HEAD advanced by PLAN/DO commits.
 - mode: autonomous; auto-commit authorized (task/collection status files and task paths only, explicit paths, never `-A`, message prefix `#<issue>`); push **never**
 - skills: `pdca-collection` + `pdca-dotnet` + `nextorm-pdca`
-- phase: **D — lane G1 FAIL-STOP (T233 closed as `incomplete (product green; evidence residual: EC233-REGISTRY, R233-5, EC233-MANIFEST)`)** — the definitive task `incomplete` stops group G1: **T201 (#201) marked `incomplete` («группа остановлена» / group stopped) and never executed**; T233 product green, residual registry certification → follow-up **#239**; earlier: T232 `incomplete (product green; evidence residual #238)` (→ **#238**), identifier-safety → **#237**, **T236 done — #236 build blocker cleared (issue left OPEN)**; **#53 HELD**; single group → current worktree/branch `1.0.9-rc3`, no worktree/branches/merge
+- phase: **D — G1 active (fail-stop lifted)**; **T233 (#233) `done`** via corrective r=3 registry/manifest repair (CHECK PASS, 22/22 rows met; **#239 resolved-by-repair**); **T201 (#201) restored to `pending`** (was `incomplete` «группа остановлена» / group stopped). Prior state: lane G1 FAIL-STOP (T233 terminal `incomplete (product green; evidence residual: EC233-REGISTRY, R233-5, EC233-MANIFEST)` stopped G1, T201 never executed); earlier: T232 `incomplete (product green; evidence residual #238)` (→ **#238**), identifier-safety → **#237**, **T236 done — #236 build blocker cleared (issue left OPEN)**; **#53 HELD**; single group → current worktree/branch `1.0.9-rc3`, no worktree/branches/merge
 
 ## Input task list
 
@@ -17,23 +17,25 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 | T211 | #211 | eager-load per-parent Take/Skip (absorbs #210) | pdca-dotnet | done (r=4, rv=4) |
 | T212 | #212 | eager-load nested — level 2+ LoadWith | pdca-dotnet | done (r=1) |
 | T213 | #213 | JoinInto — composite keys / M:N single-query | pdca-dotnet | ready (r=1) |
-| T201 | #201 | Perf: M12 #3 — cached-path parity with LINQ to DB | pdca-dotnet | incomplete (группа остановлена / group stopped — not started) |
+| T201 | #201 | Perf: M12 #3 — cached-path parity with LINQ to DB | pdca-dotnet | pending |
 | T215 | #215 | убрать зависимость OneOf | pdca-dotnet | ready (r=1) |
 | T216 | #216 | row locking — FOR UPDATE vs FOR UPDATE OF | pdca-dotnet | done (r=2, rv=2, n=3/3) — done-with-constraint → resolved: owner decision (i) 2026-10-13 (MariaDB source-level lock unsupported by design); #216 narrowed & CLOSED; D-07 resolved |
 | T217 | #217 | DateTimeOffset — SQL-трансляция Now/UtcNow и частей даты | pdca-dotnet | done-with-caveat (r=5, rv=5; R217-01..07 met, R217-08 → #234) |
 | T218 | #218 | SQL Server sequences (NEXT VALUE FOR), кросс-провайдерно | pdca-dotnet | done-with-caveat (r=1, rv=1; E07/E08/E10 → #235) |
 | T53 | #53 | IF6: public API freeze (PublicApiAnalyzers + PublicAPI.*) | pdca-dotnet | ready (r=1) — **HELD by owner** |
 | T232 | #232 | SQL Server PIVOT/UNPIVOT — типизированная проекция результата (вместо TableAlias по имени) | pdca-dotnet | done-with-caveat (r=5, rv=5; product green; residual evidence-provenance → #238; #237 accepted risk) |
-| T233 | #233 | Window functions — перегрузка `Over` (один partitionBy + один WindowOrder) | pdca-dotnet | incomplete (product green; evidence residual: EC233-REGISTRY, R233-5, EC233-MANIFEST) — follow-up #239 |
+| T233 | #233 | Window functions — перегрузка `Over` (один partitionBy + один WindowOrder) | pdca-dotnet | done (r=3, rv=1, n=1/3; registry/manifest repair; CHECK PASS; #239 resolved-by-repair) |
 | T236 | #236 | Build blocker: NU1902/NU1903 (transitive System.Security.Cryptography.Pkcs) | pdca-dotnet | **done** (r=5, rv=4) — CHECK `FAIL — evidence/closure gate only` (AC236-01…05 met, AC236-06 unverified pre-ACT) → ACT-only closure; evidence `artifacts/pdca/D236-build-advisories/rv4/` |
 
 ## Groups
 
 | id | tasks (order) | worktree | branch/ref | status |
 |---|---|---|---|---|
-| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 (done) → T236 (done) → T232 (done-with-caveat) → T233 → T201 (perf) | no (single group) | current branch `1.0.9-rc3` | **stopped (fail-stop)** — T233 terminal `incomplete (product green; evidence residual: EC233-REGISTRY, R233-5, EC233-MANIFEST)` → the definitive task `incomplete` stops group G1; **T201 (#201) never executed** (`incomplete`, «группа остановлена» / group stopped); commits `1429fd21`, `d5823ffb`, `e65b601e` retained (never pushed). |
+| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 (done) → T236 (done) → T232 (done-with-caveat) → T233 (done) → T201 (perf) | no (single group) | current branch `1.0.9-rc3` | **in-progress** — G1 fail-stop **lifted** (collection-owner-authorized corrective ACT): **T233 (#233) `done`** via corrective r=3 registry/manifest repair (CHECK PASS, 22/22 rows met; **#239 resolved-by-repair**); **T201 (#201) restored to `pending`**. Prior: T233 terminal `incomplete (product green; evidence residual: EC233-REGISTRY, R233-5, EC233-MANIFEST)` stopped G1 and **T201 (#201) was never executed** («группа остановлена» / group stopped); commits `1429fd21`, `d5823ffb`, `e65b601e` retained (never pushed). |
 
 Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/docs force one writer). T224 (SQL-format blast radius, ~697 exact-string asserts) sits late, after all functional changes; T225 (docs-only) after T223+T224; T201 (perf) measures the final composition; T53 held last. Addendum contract `cluster-1`/`cluster-2`; task contracts unchanged.
+
+**ACT note (2026-10-15):** `#233 T233 done via corrective r=3 registry/manifest repair (CHECK PASS); #239 resolved-by-repair; G1 fail-stop lifted; T201 restored to pending.`
 
 ## Tasks
 
@@ -57,8 +59,8 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T225 | #225 | G1 | 16 | done | done (r=4, rv=3, n=1/3) — CHECK PASS r=4/rv=3; E01–E07 met, C1–C8 met | pdca-dotnet | N=1 | r=4 | 7cbbab3b | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
 | T236 | #236 | G1 | pre-T232 | done | done (r=5, rv=4, n=1/3) — CHECK FAIL (evidence/closure gate only) → ACT-only closure; product `c554d5e8`, closure `2a348dcc` | pdca-dotnet | N=1 | r=5 | c554d5e8 | docs/specs/status/D236-build-advisories-1.md |
 | T232 | #232 | G1 | 17 | done-with-caveat | done (r=5, rv=5) — product green; residual evidence-provenance → #238; #237 accepted risk | pdca-dotnet | N=1 | r=5 | 4f1e1282 | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md |
-| T233 | #233 | G1 | 18 | incomplete (product green; evidence residual: EC233-REGISTRY, R233-5, EC233-MANIFEST) — follow-up #239 | r=2 (rv=1, n=3/3; terminal) | pdca-dotnet | N=1 | r=2 | 82da47a9 | docs/specs/status/D233-window-over-overload-1.md |
-| T201 | #201 | G1 | 19 (perf) | incomplete (группа остановлена / group stopped — not executed) | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
+| T233 | #233 | G1 | 18 | done | r=3 (rv=1, n=1/3; done) | pdca-dotnet | N=1 | r=2 | 82da47a9 | docs/specs/status/D233-window-over-overload-1.md |
+| T201 | #201 | G1 | 19 (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
 | T53  | #53  | — | out of rc3 scope (held) | held | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
 
 - Evidence contract (per task, frozen at that task's DO→CHECK): T209 rv=2 (done), T211 rv=2, T213 rv=5 (done), T216 rv=2, T226 rv=2 (done, 11/11 rows met), others rv=1. Manifests `artifacts/pdca/<task>/rv*/manifest.json`.
@@ -111,10 +113,10 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 
 - Verification state (C): not reached — collection mid-flight (re-scope/re-cluster).
 - Last collection `C` result: —
-- Blocker: **T233 (#233) terminal `incomplete` — group G1 fail-stop (residual: EC233-REGISTRY, R233-5, EC233-MANIFEST; → #239); T201 (#201) not executed**. Earlier: lane G1 moved on; **T219 (#219) done** (CHECK PASS r=1/rv=1/n=1/3; no fail-stop, no escalation). (Prior history: T218 CHECK/escalate in-cycle STOP → owner accepted `done-with-caveat`, E07/E08/E10 → #235; earlier T217 terminal `incomplete` `D217-EVIDENCE-BINDING` → owner accepted `done-with-caveat` → #234.)
+- Blocker: **none — cleared by the corrective r=3 ACT** (prior: **T233 (#233) terminal `incomplete` — group G1 fail-stop (residual: EC233-REGISTRY, R233-5, EC233-MANIFEST; → #239); T201 (#201) not executed** → resolved: T233 `done` via r=3 registry/manifest repair, CHECK PASS, #239 resolved-by-repair, G1 fail-stop lifted, T201 restored to `pending`). Earlier: lane G1 moved on; **T219 (#219) done** (CHECK PASS r=1/rv=1/n=1/3; no fail-stop, no escalation). (Prior history: T218 CHECK/escalate in-cycle STOP → owner accepted `done-with-caveat`, E07/E08/E10 → #235; earlier T217 terminal `incomplete` `D217-EVIDENCE-BINDING` → owner accepted `done-with-caveat` → #234.)
 - Defect id / history: `D217-EVIDENCE-BINDING` — r=2/n=3 → r=3/n=1 → r=4/n=1 → r=5/n=1, each a CHECK FAIL at the evidence gate (evidence-only regeneration / hash replacement); terminal `incomplete`.
 - Corrective-task status file: — (none created; the remedy is an **outside-T217** proposal, a human decision)
-- Next allowed step: **(none in group G1 — fail-stop)** T233 (#233) terminated `incomplete (product green; evidence residual: EC233-REGISTRY, R233-5, EC233-MANIFEST)`; group G1 stopped; **T201 (#201) not executed** («группа остановлена» / group stopped). The residual registry defect (stale `file:line` references in `docs/specs/design/API-NAMING-REVIEW.md`) is tracked by follow-up **#239** (https://github.com/AlexeyShirshov/nextorm/issues/239). **T232 accepted done-with-caveat** by the owner (product green: build 0W/0E; eight suites 0 failures; integration 3924/0 failed/0 provider skips; coverage 88.44/80.47; residual evidence-provenance → **#238**; identifier safety → **#237** accepted risk). **T236 done** (#236 build blocker cleared). **#53 HELD** (out of rc3 scope).
+- Next allowed step: **T201 (#201), restored to `pending`** — the corrective r=3 ACT closed **T233 (#233)** as `done` and **lifted the G1 fail-stop**, so G1 is active again (T213-ordered perf task last). Prior: **(none in group G1 — fail-stop)** T233 (#233) terminated `incomplete (product green; evidence residual: EC233-REGISTRY, R233-5, EC233-MANIFEST)`; group G1 stopped; **T201 (#201) not executed** («группа остановлена» / group stopped). The residual registry defect (stale `file:line` references in `docs/specs/design/API-NAMING-REVIEW.md`) tracked by follow-up **#239** (https://github.com/AlexeyShirshov/nextorm/issues/239) is now **resolved-by-repair**. **T232 accepted done-with-caveat** by the owner (product green: build 0W/0E; eight suites 0 failures; integration 3924/0 failed/0 provider skips; coverage 88.44/80.47; residual evidence-provenance → **#238**; identifier safety → **#237** accepted risk). **T236 done** (#236 build blocker cleared). **#53 HELD** (out of rc3 scope).
 - Pre-existing collection/T232 reconciliation item — **resolved by the T232 closure**: the tasks-table row above now carries `status: incomplete (product green; evidence residual #238)` / `plan_revision: r=5`, matching the T232 status file (`plan r=5 / rv=5 / n=2/3`); the historical `r=1` row was the pre-DO value and the r=3 DO section remains in the status file as history. Done in this lane: T209/T211/T212/T213/T215/T216/T219/T221/T222/T223/T224/T226/T227; done-with-caveat: T217 (→#234), T218 (→#235). #53 (freeze) is **out of rc3 scope** and held. #216 CLOSED (owner decision (i)).
 
 ## Done / Verified / Incomplete
