@@ -1,0 +1,3 @@
+$ gh issue view 238 --json number,title,state,milestone,url
+{"milestone":{"number":4,"title":"1.0.9-rc3","description":"","dueOn":null},"number":238,"state":"OPEN","title":"T232 follow-up: transitive evidence-provenance inventory for rv1–rv4 historical artifacts and execution-time digest linkage (committed == tested)","url":"https://github.com/AlexeyShirshov/nextorm/issues/238"}
+# exit=0

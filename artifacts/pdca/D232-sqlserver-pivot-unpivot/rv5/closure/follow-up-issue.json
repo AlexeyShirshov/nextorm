@@ -1,0 +1,112 @@
+{
+ "task": "#232 T232",
+ "cycle": "N=1",
+ "plan_revision": "r=5",
+ "evidence_contract": "rv=5",
+ "iteration": "n=2/3",
+ "closure": "done-with-caveat",
+ "escalate_route": "route (2) - close as done-with-caveat; no re-plan, no r=6, no fourth attempt",
+ "created_utc": "2026-10-15T08:56:54Z",
+ "follow_up_issue": {
+  "number": 238,
+  "url": "https://github.com/AlexeyShirshov/nextorm/issues/238",
+  "title": "T232 follow-up: transitive evidence-provenance inventory for rv1–rv4 historical artifacts and execution-time digest linkage (committed == tested)",
+  "state": "OPEN",
+  "milestone": {
+   "number": 4,
+   "title": "1.0.9-rc3"
+  },
+  "verified_with": "gh issue view 238 --json number,title,state,milestone,url (exit 0)",
+  "body_file": "/tmp/opencode/t232-followup-body.md"
+ },
+ "duplicate_search": {
+  "outcome": "no duplicate - new issue created",
+  "gh_issue_list_search": [
+   {
+    "query": "evidence provenance",
+    "exit": 0,
+    "result": "234, 187, 217, 157, 206, 201"
+   },
+   {
+    "query": "hash ledger",
+    "exit": 0,
+    "result": "191"
+   },
+   {
+    "query": "provenance",
+    "exit": 0,
+    "result": "234, 187, 217, 157, 206, 201"
+   },
+   {
+    "query": "T232",
+    "exit": 0,
+    "result": "237"
+   },
+   {
+    "query": "committed tested",
+    "exit": 0,
+    "result": "(none)"
+   },
+   {
+    "query": "rv1 rv3 rv4 evidence",
+    "exit": 0,
+    "result": "(none)"
+   }
+  ],
+  "gh_search_issues_author_me": {
+   "exit": 0,
+   "count": 60,
+   "result": "no issue about the T232 evidence-provenance residual"
+  },
+  "inspected": [
+   {
+    "number": 234,
+    "title": "Evidence pipeline hardening: atomic evidence generator + stale-hash lint (from T217 r=5 STOP)",
+    "closest_match": true,
+    "why_not_duplicate": "different task/artifacts (T217) and a different mechanism scope: #234 asks for an atomic generator + stale-hash lint going forward; T232's residual is a retroactive transitive inventory of the rv1-rv4 historical references plus the execution-time committed==tested linkage, which no generator can reconstruct after the fact"
+   },
+   {
+    "number": 237,
+    "title": "Identifier safety: SQL Server bracket escaping and raw UNPIVOT/Column<T> names",
+    "why_not_duplicate": "inherited identifier-safety findings; unrelated to evidence provenance"
+   },
+   {
+    "number": 232,
+    "title": "SQL Server PIVOT/UNPIVOT: typed result projection",
+    "why_not_duplicate": "the parent task issue"
+   }
+  ],
+  "log_dir": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/closure/gh-search/"
+ },
+ "residual": {
+  "item_1": {
+   "summary": "transitive closure of the historical rv1-rv4 evidence references is incomplete",
+   "omissions": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/mutation.json:20,27 -> rv1/logs/C09-mutant-M1-remove-alias-metadata.out, rv1/mutants/M1-remove-alias-metadata/patch.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/build/api-review.json:20 -> rv3/logs/C25-build-core.out",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/predicate-change.json:12-15 -> rv4/build/solution-build.out, rv4/security/gh-search, rv4/security/advisory-capture-prepin.json, rv4/security/advisories.json, rv4/security/issue.json, rv4/logs/security.out"
+   ]
+  },
+  "item_2": {
+   "summary": "execution-time per-path digests proving \"committed == tested\" were never recorded at run time and are retroactively unprovable",
+   "proven": "current worktree bytes == committed HEAD bytes (rv5 handoff.json per-path sha256)",
+   "unproven": "that the bytes exercised by the run are the bytes later committed (the execution-time linkage)"
+  },
+  "expected_durability": "documentation/evidence only; no product defect established by either r=5 CHECK",
+  "durable_caveat": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md"
+ },
+ "related": [
+  {
+   "number": 232,
+   "relation": "parent task"
+  },
+  {
+   "number": 237,
+   "relation": "inherited security findings, accepted risk not a blocker"
+  },
+  {
+   "number": 234,
+   "relation": "related evidence-pipeline hardening (T217)"
+  }
+ ]
+}
