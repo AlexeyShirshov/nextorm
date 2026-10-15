@@ -138,6 +138,7 @@ mirror is unavailable; this status file is the only progress record.
 | 2026-10-15T07:22Z | DO | r=5 | n=1/3 | D8 **R236-07 GREEN**: clean tree `/tmp/opencode/T236-clean` (archive HEAD + only the 3 task files; 6115 files, 0 bin/obj) — restore 0, build 0 W/0 E, `--no-incremental` 0 W/0 E, audit 0, 0 vulnerable | `artifacts/pdca/D236-build-advisories/rv4/clean-source/{manifest.json,overlay.diff,*.log,*.exit}` |
 | 2026-10-15T07:25Z | DO | r=5 | n=1/3 | DO→CHECK gate: report-mode inner-loop evidence written and validated (12 executions: 8 inner + 4 boundary; one comprehensive solution build recorded, budget respected) | `artifacts/pdca/D236-build-advisories/rv4/evidence.json` (`validate_inner_loop.py report` exit 0) |
 | 2026-10-15T07:26Z | DO | r=5 | n=1/3 | rv4 contract row statuses updated to observed: R236-05/06/07 met; R236-08/09 remain open (ACT/CHECK); manifest re-validated | `artifacts/pdca/D236-build-advisories/rv4/evidence-contract.json` (exit 0) |
+| 2026-10-15T07:52Z | ACT | r=5 | n=1/3 | Closure commit `2a348dcc` (exit 0; staged paths = exactly the 2 status files) + SHA round-trip completed; R236-08/R236-09 closed → `met`; manifest re-validated. **Nothing pushed.** No DO, no PLAN, no escalate | `artifacts/pdca/D236-build-advisories/rv4/act/commits.log` |
 | 2026-10-15T07:45Z | ACT | r=5 | n=1/3 | ACT (D10) under the collection auto-commit authorization: routed evidence corrections applied (R236-05 artifacts, R236-06 erratum, graph-instrument label, `check/verdict.json` preserved as non-passing) and the 4 deferred-risk rows recorded; product commit `c554d5e8` (exit 0; staged paths = exactly the 3 authorized files); closure commit follows | `artifacts/pdca/D236-build-advisories/rv4/{check/verdict.json,act/commits.log,evidence-contract.json}` |
 
 ## Defect history
@@ -325,7 +326,7 @@ status entry.
 - **Authorized product paths (3, one added line each):**
   `Directory.Packages.props`, `src/nextorm.sqlserver/nextorm.sqlserver.csproj`,
   `examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj`.
-- **Commits:** product `c554d5e8`, closure `CLOSURE_SHA` (recorded by the follow-up ACT record commit). Both taken with explicit paths
+- **Commits:** product `c554d5e8`, closure `2a348dcc` (round-trip completed by the explicit-path ACT record commit). Both taken with explicit paths
   (`--only`, never `git add -A`), message prefix `#236`; argv/exit/SHA/path lists in
   `artifacts/pdca/D236-build-advisories/rv4/act/commits.log`. **Nothing was pushed** (`git push` never
   run).
