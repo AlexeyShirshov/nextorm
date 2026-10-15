@@ -6,7 +6,7 @@
 - selected_variant: pdca-dotnet
 - cycle_id: N=1
 - plan_revision: r=2
-- phase: DO (D201-3 — STOP, DO→PLAN candidate: plan contract gap)
+- phase: DO (D201-3 completed — adjudicated classification (b), plan unchanged)
 - plan_state: ready
 - date: 2026-10-11
 - evidence_contract: rv1
@@ -1158,6 +1158,85 @@ actions justify another plan revision.
   EC201-09/10/11/13/14 core portions are **not** closed by this unit; only the audit portions of
   EC201-10/EC201-14 are delivered). D201-4 stays blocked.
 
+### D201-3 adjudication (DO→PLAN candidate → planner classification (b))
+
+- event: the D201-3 STOP/DO→PLAN candidate was adjudicated by `planner` as **classification (b) —
+  acceptable assumption/risk**. The plan is **unchanged**: plan_revision **r=2**, evidence contract
+  **rv1**, iteration **n=1** (no attempt reset, no new `P:` task, no escalation, no spike). The three
+  flagged items are **implementation obligations**, not a contract gap.
+- D201-3 resumed as active immediately; the STOP record above is retained as history.
+- Approved design revision 2 was **not** edited; no new evidence-contract rows were added (the added
+  obligations were mapped into the existing rv1 rows).
+
+### D201-3 completed-unit boundary
+
+- Outcome: **implemented and green**. Production edits confined to the three authorized files plus the
+  authorized core test file; `dotnet build nextorm.slnx -c Debug` **0 Warning(s) 0 Error(s)**; full core
+  suite **2562/2562** (2549 + 13 new recipe facts). CRLF preserved on every edited file. No package,
+  benchmark, gate, public-API or native-budget change. Integration tests and benchmarks **not** run
+  (D201-4/D201-5).
+- Mechanism actually implemented: raw candidate index inside the thread-local `QueryPlanStore`, reset under
+  the **same** `_cacheGeneration` transition as the normalized dictionary (so `Clear()` leaves no usable
+  alias); `QueryCommand.RawShape` = immutable value-free pre-preparation snapshot with a full raw
+  structural differential (types/identity, clauses/flags/ordering/limits, the seven raw settings **and
+  their effective `override ?? context` forms**, joins/sorting/windows/from/CTE-by-name/union,
+  literal-vs-parameter and IN/PreWhere shape) plus a captured-value scan that makes closure/captured-command
+  shapes ineligible; capture **before** ordinary preparation; publication only after successful
+  preparation + normalized-key construction + cacheable `Set` **and** only for a value-independent plan;
+  lookup via fingerprint bucket → raw verification → historical normalized Key still owned by the **same
+  holder instance** in the live dictionary → generation recheck; transactional apply through the canonical
+  clone copy path validated against the staged normalized key, with full discard (raw `from`/`joins`/`ctes`/
+  `union` restored, every staged member cleared) and ordinary preparation on any mismatch; shared
+  `AnyCommand` excluded by **actual instance** identity (`QueryCache.AnyCommand` of the applicable context).
+  No `Cache=false`/sticky `_dontCache` write exists or is needed; the original fallback, execution branch
+  and public API are unchanged; no second owner/abstraction was introduced.
+- Proof obligations (observations, CHECK owns the verdict):
+  - **RawDescriptorDifferential — met.** `Recipe_RawDescriptor_DistinguishesTheSevenSettingsAndRawClauses`,
+    `Recipe_PreparedFormEqualityCannotMaskARawDifference` (the required negative case: prepared-form
+    equality does not mask a differing raw input), `Recipe_DifferentNamedSourcesAreDistinguished`,
+    `Recipe_SetOperationKindIsPartOfTheRawGraph`.
+  - **CurrentGraphBinding — met.** `Recipe_WholeGraphCte_ReusesAndMatchesOrdinaryPreparation` (differential
+    vs ordinary preparation), `Recipe_RecursiveCte_ReusesAndMatchesOrdinaryPreparation`,
+    `Recipe_ClearDropsTheRawIndex`, `Recipe_SubquerySourceAndForeignNestedCommandsFallBackWithoutEffects`;
+    CTE bodies paired by name (never by position), non-flat declaration trees ineligible, an explicit raw
+    `from` compared and never silently overwritten, a rejected fast path leaves no partial effect.
+  - **FreshClosureValues — met.** `Recipe_ChangedClosureValuesAreFresh_NoStaleCapture` (closure shape
+    ineligible → ordinary route → fresh value 10→99 observed; no stale capture; no user expression
+    evaluated during staging; no closure over the cache-populating command retained).
+  - **All five Category B arm shapes eligible and reusing — met (core-level).**
+    `Recipe_AllFiveCategoryBArmShapesAreEligibleAndReuse` asserts eligibility + exactly one publish + one
+    reuse + SQL identity per arm (Cte with the entity join, RecursiveCte, Except, Intersect, Distinct); the
+    *actual* SQLite benchmark arms execute in D201-5.
+- Defects found and fixed red→green inside this unit (real, evidence-backed):
+  1. context-default settings leak — `CommandTimeoutTests.ContextsWithDifferentTimeouts_ShouldNotShareCachedPlan`,
+     `SqlGenerationTests.QuotedIdentifiers/NamingConvention_PlanCache_ShouldNotLeakBetweenContextDefaults`
+     were RED (`tests/nextorm.sqlite.tests`, run exit 2, 5 failed) because the descriptor carried only the
+     per-command overrides; fixed by adding the effective `override ?? context` settings → that suite is now
+     exit 0, 1749 total, 0 failed, 1 pre-existing skip.
+  2. raw `from` identity — `RawSourceBindingDiagnosticsTests.Lifecycle_EachOwningMissEmitsOnce_HitsNeverReplay`
+     and `DisabledMiss_ThenEnabledHitAndUncachedCall_DoesNotReplay` were RED; fixed by comparing the raw
+     source table/binding explicitly instead of relying on the from comparer alone.
+  3. preparation-derived `OneColumn` did not travel with the applied state
+     (`QueryPreparationException: Cannot get ctor from System.Int32`); fixed by copying it in the apply.
+- Boundary evidence: `artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-3.md` (§8 completion, §1-§7 kept
+  as history) and `artifacts/pdca/T201/rv1/tests/unit-boundaries/D201-3/**` (brief, report, per-step and
+  boundary logs). `validate_inner_loop.py brief` exit 0 and `validate_inner_loop.py report` exit 0.
+- Supplementary (not mandated) verification, all exit 0: `tests/nextorm.sqlite.tests` 1749 (1 pre-existing
+  skip), `tests/nextorm.postgres.tests` 978, `tests/nextorm.sqlserver.tests` 970 (8 skipped),
+  `tests/nextorm.mysql.tests` 456, `tests/nextorm.clickhouse.tests` 735. Logs under the same directory.
+- `api/baseline.json` sha256 — **record correction (confirmed)**: the file is unmodified by D201-3 (mtime
+  `2026-10-15 17:55:29`, `capture` block present, on-disk sha256 `a9f60e83d7505e3c…`, inventory sha
+  `c4c217f1b56f3e8e…`); the D201-2 progress entry's recorded `3a85c92d091c5416…` is **wrong** for the
+  on-disk file. The historical entry is not rewritten; this record is the correction. The baseline file
+  itself was not touched; each bare export run in this unit wrote only `api/baseline-unconfigured-run.json`,
+  so the D201-2 red→green fix is re-verified green.
+- Remaining obligations for downstream units (not closed here): provider/integration behaviour over real
+  databases, SQL Server temp-table/TVP branch execution, streaming/disposal/cancellation lifecycle,
+  coverage thresholds and the public-API inventory diff → **D201-4**; the actual five Category B arm
+  measurements and all parity/allocation decisions → **D201-5**. Performance parity is **not** claimed.
+- Next: D201-3 boundary acceptance closes its assigned portion only; D201-4 is unblocked once CHECK accepts
+  this boundary. No performance, provider or API row is closed by this unit.
+
 ## Progress log
 
 - 2026-10-11, history: owner confirmed trigger and authorized conversational
@@ -1219,3 +1298,7 @@ actions justify another plan revision.
 
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-3: mandatory test scope validated BEFORE any edit (`validate_inner_loop.py brief` exit 0); preflight green on the unchanged tree (`dotnet build tests/nextorm.core.tests -c Debug` exit 0 0W/0E; filtered runs exit 0 with 3/19/183 tests selected, 0 failed) | artifacts/pdca/T201/rv1/tests/unit-boundaries/D201-3/preflight-build.log
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-3 STOP before production edit: DO→PLAN candidate (`plan contract gap`) — the audit proves the post-apply `QueryPlan` validation compares prepared forms only (QueryPlanEqualityComparer.cs:129,183,185,196) so a complete raw descriptor is mandatory, and the descriptor surface / nested-command apply for CTE+union shapes / closure-value policy are not fixed by design revision 2; no store invariant failed; the three authorized `src` files are byte-identical (git status + git diff --stat empty); no `D:` unit completion claimed — D201-3 stays blocked, D201-4 not unblocked | artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-3.md
+
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-3 adjudicated: DO→PLAN candidate classified (b) acceptable assumption/risk by `planner`; plan unchanged (r=2/rv1/n=1, no reset, no new P task, no escalation); D201-3 resumed as active | artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-3.md
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-3 completed: raw candidate index + raw descriptor + live-owner/generation validation + transactional apply implemented in the three authorized src files; `dotnet build nextorm.slnx -c Debug` 0W/0E; core suite 2562/2562; recipe tests 16/16; supplementary dialect suites sqlite 1749 / postgres 978 / sqlserver 970 / mysql 456 / clickhouse 735 all exit 0; 3 real defects found and fixed red→green (context-default settings leak, raw-from identity, prepared OneColumn); `validate_inner_loop.py` brief/report exit 0 | artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-3.md
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-3 record correction (confirmed): `api/baseline.json` on-disk sha256 is `a9f60e83d7505e3c…` (file unmodified since 17:55:29, `capture` block present); the D201-2 progress entry's recorded `3a85c92d091c5416…` is wrong; baseline file untouched, bare export runs wrote only `api/baseline-unconfigured-run.json` | artifacts/pdca/T201/rv1/api/baseline.json

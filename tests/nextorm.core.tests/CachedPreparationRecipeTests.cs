@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using FluentAssertions;
+using NextORM.SqlServer;
 
 namespace NextORM.Core.Tests;
 
@@ -361,6 +362,369 @@ public sealed class CachedPreparationRecipeTests
         {
             names.Should().ContainKey(expected);
             names[expected].Should().BeTrue($"the test project compiles against {expected}");
+        }
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // T201 D201-3 — specialized top-level preparation reuse (differential + cache-lifetime cases)
+    // -------------------------------------------------------------------------------------------
+
+    private const string SqlServerPlaceholder =
+        "Server=localhost,1433;Database=nextorm;User Id=sa;Password=nextorm!Passw0rd;TrustServerCertificate=True";
+
+    private static SqlServerDataContext CreateSqlServerContext()
+        => new(SqlServerPlaceholder, new DataContextBuilder());
+
+    /// <summary>Builds a placeholder-connection context. No connection is ever opened.</summary>
+    private static string PrepareSql<T>(IDataContext ctx, QueryCommand<T> command, bool storeInCache = true)
+        => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None))
+            .DbCommand.CommandText.Replace("\r\n", "\n");
+
+    private static DbPreparedQueryCommand<T> PrepareCommand<T>(IDataContext ctx, QueryCommand<T> command, bool storeInCache = true)
+        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(command, false, storeInCache, CancellationToken.None);
+
+    private static void ResetRecipeCache()
+    {
+        QueryPlanStore.Clear();
+        QueryPlanner.ResetCounters();
+    }
+
+    // --- shape builders (runtime-equivalent forms of the five approved Category B arms) -------------
+
+    private static QueryCommand<int> SimpleShape(IDataContext ctx)
+        => ctx.From<SimpleEntity>().Where(x => x.Id > 10).Select(x => x.Id);
+
+    /// <summary>B_Cte arm shape: a CTE read by name joined to an entity.</summary>
+    private static QueryCommand<int> CteShape(IDataContext ctx)
+    {
+        var recent = ctx.From<SimpleEntity>().Where(c => c.Id > 1).Select(c => new { c.Id });
+        return ctx.With("recent", recent)
+            .From("recent")
+            .Join(ctx.From<SimpleEntity>(), (r, s) => r["id"].AsInt == s.Id)
+            .Select(p => p.Item1["id"].AsInt);
+    }
+
+    /// <summary>B_RecursiveCte arm shape: a recursive CTE over anchor UNION ALL step.</summary>
+    private static QueryCommand<int> RecursiveCteShape(IDataContext ctx)
+    {
+        var anchor = ctx.From<SimpleEntity>().Where(s => s.Id == 1).Select(s => s.Id);
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => t["n"].AsInt + 1);
+        return ctx.WithRecursive("nums", anchor.UnionAll(step)).From("nums").Select(t => t["n"].AsInt);
+    }
+
+    private static QueryCommand<int> SetOperationShape(IDataContext ctx, bool except)
+    {
+        var left = ctx.From<SimpleEntity>().Where(x => x.Id > 0).Select(x => x.Id);
+        var right = ctx.From<SimpleEntity>().Where(x => x.Id > 5).Select(x => x.Id);
+        return except ? left.Except(right) : left.Intersect(right);
+    }
+
+    private static QueryCommand<int> DistinctShape(IDataContext ctx)
+        => ctx.From<SimpleEntity>().Where(x => x.Id > 0).Select(x => x.Id).Distinct();
+
+    // --- 1. RawDescriptorDifferential ----------------------------------------------------------------
+
+    [Fact]
+    public void Recipe_RawDescriptor_DistinguishesTheSevenSettingsAndRawClauses()
+    {
+        using var ctx = CreateSqlServerContext();
+
+        var baseline = QueryCommand.CaptureRawShape(SimpleShape(ctx));
+        baseline.Should().NotBeNull();
+
+        QueryCommand.CaptureRawShape(SimpleShape(ctx))!.Matches(baseline!, SimpleShape(ctx)).Should().BeTrue();
+
+        // Each of the seven raw settings whose Resolved* counterpart an apply overwrites must be part
+        // of the descriptor; the post-apply key check cannot see them.
+        QueryCommand.CaptureRawShape(SimpleShape(ctx).WithCommandTimeout(42))!
+            .Matches(baseline!, SimpleShape(ctx)).Should().BeFalse();
+        QueryCommand.CaptureRawShape(SimpleShape(ctx).WithQuotedIdentifiers())!
+            .Matches(baseline!, SimpleShape(ctx)).Should().BeFalse();
+        QueryCommand.CaptureRawShape(SimpleShape(ctx).WithKeywordCase(KeywordCase.Lower))!
+            .Matches(baseline!, SimpleShape(ctx)).Should().BeFalse();
+        QueryCommand.CaptureRawShape(SimpleShape(ctx).WithNamingConvention(new SnakeCaseNamingConvention()))!
+            .Matches(baseline!, SimpleShape(ctx)).Should().BeFalse();
+
+        // SQL-affecting raw clauses: a different literal is a different raw graph.
+        QueryCommand.CaptureRawShape(ctx.From<SimpleEntity>().Where(x => x.Id > 11).Select(x => x.Id))!
+            .Matches(baseline!, SimpleShape(ctx)).Should().BeFalse();
+        QueryCommand.CaptureRawShape(DistinctShape(ctx))!
+            .Matches(baseline!, SimpleShape(ctx)).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// The negative case for <see cref="QueryPlanEqualityComparer"/>: it compares only the prepared
+    /// projection/condition/grouping forms, so prepared-form equality can never substitute for raw
+    /// verification. Here the raw descriptor decides, and the recipe must not reuse across a raw
+    /// difference even though the two commands differ only in a raw lambda.
+    /// </summary>
+    [Fact]
+    public void Recipe_PreparedFormEqualityCannotMaskARawDifference()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var first = PrepareSql(ctx, SimpleShape(ctx));
+        QueryPlanner.RecipePublishes.Should().Be(1);
+        QueryPlanner.RecipeReuses.Should().Be(0);
+
+        // Same prepared shape (same projection/columns), different raw predicate: no hit, and the SQL differs.
+        var other = ctx.From<SimpleEntity>().Where(x => x.Id > 11).Select(x => x.Id);
+        var second = PrepareSql(ctx, other);
+
+        QueryPlanner.RecipeReuses.Should().Be(0);
+        second.Should().NotBe(first);
+        second.Should().Contain("11");
+    }
+
+    [Fact]
+    public void Recipe_MissThenHit_ReusesPreparationForAnEquivalentFreshCommand()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var first = PrepareSql(ctx, SimpleShape(ctx));
+        QueryPlanner.RecipePublishes.Should().Be(1);
+        QueryPlanner.RecipeReuses.Should().Be(0);
+
+        var probeShape = SimpleShape(ctx);
+        var storedShape = QueryCommand.CaptureRawShape(SimpleShape(ctx));
+        var probedShape = QueryCommand.CaptureRawShape(probeShape);
+        probedShape!.Fingerprint.Should().Be(storedShape!.Fingerprint);
+        probedShape.Matches(storedShape, probeShape).Should().BeTrue();
+
+        var second = PrepareSql(ctx, SimpleShape(ctx));
+        QueryPlanner.RecipeApplyMismatches.Should().Be(0);
+        QueryPlanner.RecipeReuses.Should().Be(1);
+        second.Should().Be(first);
+    }
+
+    /// <summary>
+    /// Two same-shaped commands over DIFFERENT named raw sources must never share a plan through the
+    /// raw index: the source identity is part of the descriptor and the source binding/table must be
+    /// compared explicitly, not inferred from the (overwritten) prepared state.
+    /// </summary>
+    [Fact]
+    public void Recipe_DifferentNamedSourcesAreDistinguished()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var a1 = PrepareSql(ctx, ctx.From("t201_recipe_a").Select(x => x["id"].AsInt));
+        QueryPlanner.RecipePublishes.Should().Be(1);
+
+        var b1 = PrepareSql(ctx, ctx.From("t201_recipe_b").Select(x => x["id"].AsInt));
+        QueryPlanner.RecipeReuses.Should().Be(0, "a different named source is a different raw graph");
+        b1.Should().NotBe(a1);
+        b1.Should().Contain("t201_recipe_b");
+        a1.Should().Contain("t201_recipe_a");
+
+        // ...and the same source still reuses.
+        PrepareSql(ctx, ctx.From("t201_recipe_a").Select(x => x["id"].AsInt));
+        QueryPlanner.RecipeReuses.Should().Be(1);
+    }
+
+    // --- 2. CurrentGraphBinding ----------------------------------------------------------------------
+
+    [Fact]
+    public void Recipe_WholeGraphCte_ReusesAndMatchesOrdinaryPreparation()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var first = PrepareSql(ctx, CteShape(ctx));
+        QueryPlanner.RecipePublishes.Should().Be(1);
+
+        var second = PrepareSql(ctx, CteShape(ctx));
+        QueryPlanner.RecipeReuses.Should().Be(1);
+        second.Should().Be(first);
+        second.Should().Contain("recent");
+        second.Should().StartWith("with");
+
+        // Differential against ordinary preparation of the same shape (no cache).
+        using var fresh = CreateSqlServerContext();
+        var ordinary = PrepareSql(fresh, CteShape(fresh), storeInCache: false);
+        ordinary.Should().Be(second);
+    }
+
+    [Fact]
+    public void Recipe_RecursiveCte_ReusesAndMatchesOrdinaryPreparation()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var first = PrepareSql(ctx, RecursiveCteShape(ctx));
+        QueryPlanner.RecipePublishes.Should().Be(1);
+
+        var second = PrepareSql(ctx, RecursiveCteShape(ctx));
+        QueryPlanner.RecipeReuses.Should().Be(1);
+        second.Should().Be(first);
+        first.Should().Contain("nums");
+    }
+
+    [Fact]
+    public void Recipe_SetOperationKindIsPartOfTheRawGraph()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var except = PrepareSql(ctx, SetOperationShape(ctx, except: true));
+        QueryPlanner.RecipePublishes.Should().Be(1);
+
+        // Same operands, same order, different set-operation kind: no reuse, different SQL.
+        var intersect = PrepareSql(ctx, SetOperationShape(ctx, except: false));
+        QueryPlanner.RecipeReuses.Should().Be(0);
+        intersect.Should().NotBe(except);
+
+        // Operand order matters too.
+        var reversed = PrepareSql(ctx, ReverseSetOperation(ctx));
+        QueryPlanner.RecipeReuses.Should().Be(0);
+        reversed.Should().NotBe(except);
+    }
+
+    private static QueryCommand<int> ReverseSetOperation(IDataContext ctx)
+    {
+        var left = ctx.From<SimpleEntity>().Where(x => x.Id > 5).Select(x => x.Id);
+        var right = ctx.From<SimpleEntity>().Where(x => x.Id > 0).Select(x => x.Id);
+        return left.Except(right);
+    }
+
+    [Fact]
+    public void Recipe_SubquerySourceAndForeignNestedCommandsFallBackWithoutEffects()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var inner = ctx.From<SimpleEntity>().Where(x => x.Id > 0).Select(x => new { x.Id });
+        var fromSubquery = ctx.From(inner).Select(t => t.Id);
+
+        var sql = PrepareSql(ctx, fromSubquery);
+        sql.Should().NotBeNullOrWhiteSpace();
+        QueryCommand.CaptureRawShape(fromSubquery).Should().BeNull("a derived-table source has no provable raw identity");
+        QueryPlanner.RecipePublishes.Should().Be(0);
+        QueryPlanner.RecipeReuses.Should().Be(0);
+    }
+
+    // --- 3. FreshClosureValues -----------------------------------------------------------------------
+
+    [Fact]
+    public void Recipe_ChangedClosureValuesAreFresh_NoStaleCapture()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var threshold = 10;
+        var first = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id));
+        first.DbCommand.Parameters[0].Value.Should().Be(10);
+
+        // A closure-bearing shape is ineligible: the captured value can never be served from a
+        // value-independent descriptor, so it keeps the ordinary route and binds the fresh value.
+        QueryPlanner.RecipePublishes.Should().Be(0);
+        QueryPlanner.RecipeReuses.Should().Be(0);
+        QueryCommand.CaptureRawShape(ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id))
+            .Should().BeNull("a captured member access is not a provable raw identity");
+
+        threshold = 99;
+        var second = PrepareCommand(ctx, ctx.From<SimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id));
+        second.DbCommand.Parameters[0].Value.Should().Be(99);
+        QueryPlanner.RecipeReuses.Should().Be(0);
+    }
+
+    // --- 4. lifetime: Clear and thread separation -----------------------------------------------------
+
+    [Fact]
+    public void Recipe_ClearDropsTheRawIndex()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var first = PrepareSql(ctx, SimpleShape(ctx));
+        QueryPlanner.RecipePublishes.Should().Be(1);
+        PrepareSql(ctx, SimpleShape(ctx));
+        QueryPlanner.RecipeReuses.Should().Be(1, "the second equivalent command reuses");
+
+        // Clear must drop both dictionaries under the one generation transition: no usable alias remains.
+        QueryPlanStore.Clear();
+        QueryPlanner.ResetCounters();
+
+        var afterClear = PrepareSql(ctx, SimpleShape(ctx));
+        QueryPlanner.RecipeReuses.Should().Be(0);
+        afterClear.Should().Be(first);
+    }
+
+    [Fact]
+    public void Recipe_ThreadSeparation_NoCrossThreadReuse()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var onThisThread = PrepareSql(ctx, SimpleShape(ctx));
+        QueryPlanner.RecipePublishes.Should().Be(1);
+
+        string? onOtherThread = null;
+        var thread = new Thread(() => onOtherThread = PrepareSql(ctx, SimpleShape(ctx)));
+        thread.Start();
+        thread.Join();
+
+        onOtherThread.Should().Be(onThisThread);
+        QueryPlanner.RecipeReuses.Should().Be(0, "the raw index is thread-local");
+        QueryPlanner.RecipePublishes.Should().Be(2, "the other thread published in its own domain");
+    }
+
+    // --- shared AnyCommand route + later cacheable hits ----------------------------------------------
+
+    [Fact]
+    public void Recipe_SharedAnyCommandInstanceIsExcluded_AndLaterCacheableQueriesStillHit()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        var predicate = ctx.From<SimpleEntity>().Where(x => x.Id > 1).Select(x => x.Id);
+        var shared = EntityBuilderExtensions.GetAnyCommand(ctx, predicate);
+        shared.Should().NotBeNull();
+
+        PrepareSql(ctx, shared);
+        QueryPlanner.RecipePublishes.Should().Be(0, "the actual shared instance is excluded by identity");
+        QueryPlanner.RecipeReuses.Should().Be(0);
+
+        // A later ordinary cacheable query is unaffected.
+        var first = PrepareSql(ctx, SimpleShape(ctx));
+        QueryPlanner.RecipePublishes.Should().Be(1);
+        var second = PrepareSql(ctx, SimpleShape(ctx));
+        QueryPlanner.RecipeReuses.Should().Be(1);
+        second.Should().Be(first);
+    }
+
+    // --- 5. the five Category B arm families are eligible and reuse -----------------------------------
+
+    [Fact]
+    public void Recipe_AllFiveCategoryBArmShapesAreEligibleAndReuse()
+    {
+        ResetRecipeCache();
+        using var ctx = CreateSqlServerContext();
+
+        (string Name, Func<IDataContext, QueryCommand<int>> Build)[] arms =
+        [
+            ("Cte", CteShape),
+            ("RecursiveCte", RecursiveCteShape),
+            ("Except", c => SetOperationShape(c, except: true)),
+            ("Intersect", c => SetOperationShape(c, except: false)),
+            ("Distinct", DistinctShape),
+        ];
+
+        foreach (var (name, build) in arms)
+        {
+            ResetRecipeCache();
+            using var armContext = CreateSqlServerContext();
+
+            QueryCommand.CaptureRawShape(build(armContext)).Should().NotBeNull($"{name} must be an eligible raw graph");
+
+            var first = PrepareSql(armContext, build(armContext));
+            QueryPlanner.RecipePublishes.Should().Be(1, $"{name} publishes a candidate");
+
+            var second = PrepareSql(armContext, build(armContext));
+            QueryPlanner.RecipeReuses.Should().Be(1, $"{name} actually uses the mechanism");
+            second.Should().Be(first, $"{name} is differential-equal to its ordinary preparation");
         }
     }
 

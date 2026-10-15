@@ -38,11 +38,38 @@ internal sealed class QueryPlanner : IQueryPlanner
     // so the increment path is lock-free and allocation-free.
     private static int _fallbackRefreshes;
 
+    // D201-3 recipe diagnostics: how many pre-preparation candidates were published after a successful
+    // cacheable Set, how many fresh commands actually reused one (staged apply passed validation), and
+    // how many eligible probes were rejected (capture ineligible or staged-key/owner mismatch).
+    private static int _recipePublishes;
+    private static int _recipeReuses;
+    private static int _recipeRejections;
+    private static int _recipeApplyMismatches;
+
     /// <summary>Number of cached-hit parameter refreshes that used the original <c>ExtractParams</c> path.</summary>
     internal static int FallbackRefreshes => Volatile.Read(ref _fallbackRefreshes);
 
+    /// <summary>Number of published pre-preparation recipe candidates. Diagnostic only.</summary>
+    internal static int RecipePublishes => Volatile.Read(ref _recipePublishes);
+
+    /// <summary>Number of fresh commands that reused a recipe candidate. Diagnostic only.</summary>
+    internal static int RecipeReuses => Volatile.Read(ref _recipeReuses);
+
+    /// <summary>Number of eligible probes rejected (ineligible capture or staged mismatch). Diagnostic only.</summary>
+    internal static int RecipeRejections => Volatile.Read(ref _recipeRejections);
+
+    /// <summary>Number of staged applies rejected by the normalized-key/owner validation. Diagnostic only.</summary>
+    internal static int RecipeApplyMismatches => Volatile.Read(ref _recipeApplyMismatches);
+
     /// <summary>Resets the planner's cached-path diagnostic counters to zero. Test seam.</summary>
-    internal static void ResetCounters() => Volatile.Write(ref _fallbackRefreshes, 0);
+    internal static void ResetCounters()
+    {
+        Volatile.Write(ref _fallbackRefreshes, 0);
+        Volatile.Write(ref _recipePublishes, 0);
+        Volatile.Write(ref _recipeReuses, 0);
+        Volatile.Write(ref _recipeRejections, 0);
+        Volatile.Write(ref _recipeApplyMismatches, 0);
+    }
 
     internal QueryPlanner(
         IDataContext context,
@@ -571,6 +598,49 @@ internal sealed class QueryPlanner : IQueryPlanner
         QueryPlan? queryPlan = null;
         IDbCommandHolder? planCache = null;
 
+        var ext = queryCommand.CustomData as RawSqlOverride;
+
+        // D201-3 pre-preparation reuse. The raw descriptor must be captured BEFORE ordinary
+        // preparation mutates the command. The candidate is only probed for a fresh, cacheable,
+        // non-shared, effect-free command whose raw graph is describable; anything unproved keeps its
+        // ordinary route. The shared terminal command is excluded by ACTUAL INSTANCE identity of the
+        // context's QueryCache.AnyCommand — never by IsPrepared, TResult or command shape.
+        QueryCommand.RawShape? recipeShape = null;
+        if (!queryCommand.IsPrepared
+            && queryCommand.Cache
+            && storeInCache
+            && ext is null
+            && !streamingRowsRequested
+            && !queryCommand.HasDataModifyingCte
+            && !queryCommand.HasTemporaryTableSource()
+            && !IsSharedAnyCommand(queryCommand))
+        {
+            recipeShape = QueryCommand.CaptureRawShape(queryCommand);
+            if (recipeShape is null)
+                Interlocked.Increment(ref _recipeRejections);
+
+            if (recipeShape is not null
+                && QueryPlanStore.TryGetRaw(_contextType, recipeShape, queryCommand, out var recipePlan))
+            {
+                // Transactional apply: stage the owner's preparation data into this command, validate
+                // the staged normalized key through the existing normalized store, and on any key or
+                // owner mismatch discard the staged state and run ordinary preparation of the input.
+                var rawGraph = queryCommand.CaptureRawGraph();
+                queryCommand.ApplyPreparationFrom(recipePlan!.QueryCommand);
+                var stagedKey = queryCommand.GetOrCreatePlanKey(null);
+                if (recipePlan.Equals(stagedKey) || stagedKey.Equals(recipePlan))
+                {
+                    Interlocked.Increment(ref _recipeReuses);
+                }
+                else
+                {
+                    Interlocked.Increment(ref _recipeRejections);
+                    Interlocked.Increment(ref _recipeApplyMismatches);
+                    queryCommand.DiscardStagedPreparation(rawGraph);
+                }
+            }
+        }
+
         if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(!storeInCache, cancellationToken);
         else queryCommand.RefreshInValuesShape();
 
@@ -606,8 +676,6 @@ internal sealed class QueryPlanner : IQueryPlanner
             sequentialAccess = true;
             storeInCache = false;
         }
-
-        var ext = queryCommand.CustomData as RawSqlOverride;
 
         if (queryCommand.Cache && storeInCache)
         {
@@ -732,6 +800,23 @@ internal sealed class QueryPlanner : IQueryPlanner
             if (storeInCache && queryCommand.Cache)
             {
                 QueryPlanStore.Set(_contextType, queryPlan!.GetCacheVersion(), compiledQuery);
+
+                // Publication happens ONLY after ordinary preparation succeeded, the normalized key
+                // was constructed and the cacheable holder was stored through Set — and only for a
+                // value-independent plan (no refreshed parameter, no captured-collection shape), so
+                // the applied preparation data can never carry a per-call value.
+                if (recipeShape is not null
+                    && !needsParamRefresh
+                    && queryCommand.InValuesShapeHash == 0
+                    && queryCommand.PreWhereShapeHash == 0
+                    && !queryCommand.HasTopLevelInValues
+                    && !queryCommand.HasPreWhereInValues
+                    && !queryCommand.HasUnkeyedTupleInValues
+                    && !queryCommand.HasUnkeyedScalarInValues)
+                {
+                    QueryPlanStore.SetRaw(_contextType, queryPlan!, compiledQuery, recipeShape, queryCommand);
+                    Interlocked.Increment(ref _recipePublishes);
+                }
             }
 
             return compiledQuery;
@@ -814,6 +899,20 @@ internal sealed class QueryPlanner : IQueryPlanner
     public void ResetPreparation(QueryCommand queryCommand)
     {
         //_clearCache = true;
+    }
+
+    // The shared terminal route (Any/AnyAsync/Count/...) reuses ONE command instance per DataContext
+    // (QueryCache.AnyCommand) and mutates it in place via ReplaceCommand between executions. The
+    // recipe must exclude that ACTUAL instance by identity, never by IsPrepared, TResult, command
+    // shape or a guessed ownership flag. The Lazy value is not forced: if the shared command was
+    // never created it cannot be this command.
+    private bool IsSharedAnyCommand(QueryCommand command)
+    {
+        var anyCommand = _context.AnyCommand;
+        if (anyCommand is null || !anyCommand.IsValueCreated)
+            return false;
+
+        return ReferenceEquals(anyCommand.Value, command);
     }
 
     // A table source is immutable, so one instance can be shared by every query (and cached plan)
