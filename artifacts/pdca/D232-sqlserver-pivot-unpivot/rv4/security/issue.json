@@ -1,0 +1,79 @@
+{
+ "task": "T232 (#232) D-13 / blocker B232-AUDIT-DEPENDENCY — tracking issue opened",
+ "captured": "2026-10-15T00:02:14Z",
+ "cwd": "/home/alex/sources/nextorm",
+ "branch": "1.0.9-rc3",
+ "head": "266b38b3",
+ "duplicate_search": {
+  "commands": [
+   "gh issue list --repo AlexeyShirshov/nextorm --state all --search NU1902",
+   "gh issue list --repo AlexeyShirshov/nextorm --state all --search NU1903",
+   "gh issue list --repo AlexeyShirshov/nextorm --state all --search System.Security.Cryptography.Pkcs",
+   "gh issue list --repo AlexeyShirshov/nextorm --state all --search Microsoft.Data.SqlClient",
+   "gh search issues --author @me --repo AlexeyShirshov/nextorm"
+  ],
+  "result": "no match — all four keyword searches (open and closed) empty, exit 0; --author @me returned no advisory issue",
+  "match_found": false,
+  "artifacts": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/gh-search/"
+ },
+ "issue": {
+  "number": 236,
+  "url": "https://github.com/AlexeyShirshov/nextorm/issues/236",
+  "title": "Build blocker: NU1902/NU1903 — transitive System.Security.Cryptography.Pkcs 9.0.11 via Microsoft.Data.SqlClient 6.1.7 (blocks #232 acceptance)",
+  "repo": "AlexeyShirshov/nextorm",
+  "milestone": "1.0.9-rc3",
+  "milestone_number": 4,
+  "state": "OPEN",
+  "labels": [],
+  "refs": "#232",
+  "blocker_key": "B232-AUDIT-DEPENDENCY"
+ },
+ "failing_commands": [
+  {
+   "argv": ["dotnet", "restore", "nextorm.slnx"],
+   "exit_code": 1,
+   "summary": "advisory-only; every failure is NU1902/NU1903",
+   "log": "/tmp/opencode/t232/restore.log"
+  },
+  {
+   "argv": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+   "exit_code": 1,
+   "errors": 26,
+   "summary": "26 errors, all NU1902/NU1903 (0 warnings / 26 errors)",
+   "log": "/tmp/opencode/t232/build.log"
+  },
+  {
+   "argv": ["dotnet", "build", "examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj", "-c", "Debug"],
+   "exit_code": 1,
+   "errors": 4,
+   "summary": "4 errors, all NU1902/NU1903 (no CS/packaging error)",
+   "log": "/tmp/opencode/t232/exbuild.log"
+  }
+ ],
+ "advisories": [
+  {
+   "code": "NU1902",
+   "package": "System.Security.Cryptography.Pkcs",
+   "version": "9.0.11",
+   "severity": "moderate",
+   "ghsa": "GHSA-2fmv-rv2c-59x7"
+  },
+  {
+   "code": "NU1903",
+   "package": "System.Security.Cryptography.Pkcs",
+   "version": "9.0.11",
+   "severity": "high",
+   "ghsa": "GHSA-846f-f764-76mx"
+  }
+ ],
+ "dependency_chain": "Microsoft.Data.SqlClient 6.1.7 -> System.Security.Cryptography.Pkcs 9.0.11 (transitive)",
+ "anchors": [
+  "Directory.Packages.props:17",
+  "src/nextorm.sqlserver/nextorm.sqlserver.csproj:8"
+ ],
+ "warnings_as_errors": "Directory.Build.props:40 (TreatWarningsAsErrors=true promotes NU1902/NU1903 to build errors)",
+ "ci": ".github/workflows/dotnet.yml:37 (dotnet restore), :39 (dotnet build --no-restore) — ordinary audited restore+build",
+ "override_note": "-p:NuGetAudit=false is a diagnostic override, not remediation; masking does not make the ordinary audited CI restore/build green",
+ "prerequisite": "hard prerequisite blocker for #232 acceptance (owned by issue #236)",
+ "fix_claimed": false
+}
