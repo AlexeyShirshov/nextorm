@@ -6,12 +6,14 @@
 - title: «Window functions: перегрузка `Over` с одним `partitionBy` и одним `WindowOrder` (без массивов)»
 - selected_variant: pdca-dotnet
 - cycle: `N=1`
-- plan_revision: `r=1`
-- iteration: `n=1/3` (not started)
+- plan_revision: `r=2` (**current**; r=1 superseded by the DO→PLAN loop-back — r=1 text retained below as history)
+- iteration: `n=3/3` (r=2 attempt 3 — corrective DO after CHECK attempt 2 FAIL; the r=1 `n=1/3` probe FAIL, the r=2 `n=1/3` DO→CHECK boundary and the r=2 `n=2/3` corrective are recorded history; no real replan → plan revision stays `r=2`)
 - plan_state: `ready`
-- evidence_contract: `rv=1` (frozen)
+- evidence_contract: `rv=1` (frozen, **unchanged** — r=2 does not revise the evidence contract)
 - milestone: `1.0.9-rc3`; collection run: `1.0.9-todo`; group: `G1` (single group — no worktree, no branches, no merge, current worktree/branch)
-- phase: `PLAN` complete → awaiting DO
+- defect: key `EC233-COMPAT-overload-ambiguity` (observed in r=1; fixes applied after the r=1 FAIL: 0 → r=2 applied fix #1, the priority attribute; r=2 probe **PASS**)
+- phase: `ACT` — **terminal `incomplete (product green; evidence residual: EC233-REGISTRY, R233-5, EC233-MANIFEST)`** (verifier `check`, medium tier, after the `escalate`-authorized bounded CHECK n=3 re-gather). Product/build/docs rows are certified `met`; the registry rows (`EC233-REGISTRY`, `R233-5`) stay open and `EC233-MANIFEST` is recorded open/unmet because the touched registry entries still carry stale `file:line` references and registry repair was forbidden in the re-gather pass. Definitive `incomplete` → collection group G1 **fail-stop** (T201 never executed). See the ACT section below.
+- act_state: `terminal incomplete` — no replan (plan stays `r=2`, `rv=1`, `n=3/3`); retained commits `1429fd21`, `d5823ffb`, `e65b601e`; new public `Over` overload registered as a **T53 freeze candidate** (freeze **HELD**); follow-up issue **#239** for the stale registry references.
 - mode: autonomous collection with authorized auto-commit (explicit paths, `#233` prefix, never `git add -A`, never push)
 - status file: `docs/specs/status/D233-window-over-overload-1.md`
 
@@ -19,11 +21,121 @@
 
 2026-10-14T17:41:57Z | PLAN | r1 | n1/3 | PLAN r=1 persisted by coder (PLAN-only step); evidence contract rv=1 frozen; DO not started (PLAN→DO boundary). | docs/specs/status/D233-window-over-overload-1.md
 
-## Collection handoff
+2026-10-15T09:22:47Z | DO | r1 | n1/3 | EC233-GATE: implementation approval recorded — collection owner authorized continuing the lane (directive 2026-10-15) | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T09:22:47Z | DO | r1 | n1/3 | DO started (unit D:233.1 gate + blocking compiler compatibility probe, then D:233.2 API addition); test scope validated: `python3 scripts/validate_inner_loop.py brief /tmp/nextorm-D233-compat/scope-code.json` exit 0 | /tmp/nextorm-D233-compat/scope-code.json
+
+2026-10-15T09:27:02Z | DO | r1 | n1/3 | EC233-COMPAT probe FAIL (blocking). Disposable baseline/candidate trees `/tmp/nextorm-D233-compat/tree-{baseline,candidate}` (only `src/nextorm.core/Query/WindowFunctions.cs` differs); argv+exit: baseline probe-existing `dotnet build tree-baseline/probe-existing/probe-existing.csproj -c Debug -v:m` exit 1 (2 warnings / 6 errors, all pre-existing), candidate probe-existing exit 1 (2 warnings / 12 errors), baseline probe-new (new call form) exit 1 (4 errors CS1503x3+CS0123), candidate probe-new exit 0 (0/0) | /tmp/nextorm-D233-compat/logs/{baseline-existing,candidate-existing,baseline-new,candidate-new}.log
+
+2026-10-15T09:27:02Z | DO | r1 | n1/3 | EC233-COMPAT diagnostic diff candidate−baseline = 6 NEW CS0121 (baseline-success → candidate-ambiguous, all ambiguity between the old `Over(Expression?,Expression?,WindowFrame?)` and the planned `Over(Expression?,WindowOrder,WindowFrame?)`): `Over(partitionBy: e, orderBy: default)` (mandated corpus shape), `Over(partitionBy: en, orderBy: null)`, `Over(partitionBy: () => 1, orderBy: default)`, `Over(partitionBy: () => 1, orderBy: null)`, `Over(() => 1, orderBy: default)`, `Over(() => 1, orderBy: null)`. No other new/removed diagnostics, no changed resolution: all 5 existing signatures still bind (method-group pins) and the new 3-arg form binds to the new overload. defect key: `EC233-COMPAT-overload-ambiguity`; fixes applied: 0 | /tmp/nextorm-D233-compat/PROBE-SUMMARY.md
+
+2026-10-15T09:27:02Z | DO | r1 | n1/3 | Real-call-site check: roslyn refs on `NextORM.Core.WindowFunction<T>.Over` = 50 references; every real call site uses typed lambdas / `WindowOrder` / `asc|desc` / arrays / `"w"` — no real call site passes an untyped `null`/`default`. The 6 new CS0121 are confined to the synthetic corner shapes (R233-2 upheld, not weakened). | /tmp/nextorm-D233-compat/PROBE-SUMMARY.md
+
+2026-10-15T09:27:02Z | DO | r1 | n1/3 | STOP per plan r=1 §4/§12 ("любая новая ошибка старого успешного вызова блокирует выбранный дизайн") and the DO brief ("if any new diagnostic appears ⇒ STOP, report as probe FAIL, do not edit the repo"): **no product edit** (D:233.2 not applied), no registry change (D:233.7), no `dotnet build nextorm.slnx`, no inner-loop test run, no commit. DO→PLAN loop-back: candidate design invalidated; needs a new `P:` from the planner (real replan → r+1, n resets to 1). | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T09:31:36Z | PLAN | r2 | n1/3 | Replanned: r=1 probe FAIL (6 new CS0121 on untyped default/null) -> r=2 adds [OverloadResolutionPriority(-1)] to the new overload. Real replan: plan revision `r=1`→`r=2`, iteration reset to `n=1/3`; `rv=1` unchanged; R233-1..5 unchanged and **no criterion weakened, no ambiguity accepted**; escalation rule: if any supported-consumer case is still ambiguous after the attribute ⇒ STOP, return to PLAN, do not relax R233-2. | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T09:31:36Z | PLAN | r2 | n1/3 | P0 prerequisite (compiler/language floor for the priority attribute) resolved and satisfiable: `Directory.Build.props:29` `<TargetFramework>net10.0</TargetFramework>`, `:31` `<LangVersion>latest</LangVersion>`, `:40` `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`; `global.json` pins no SDK; public docs state only "A project targeting `net10.0`" (`docs/getting-started/01-installation.md:5`); the attribute is already used 6× in `src/nextorm.core` (e.g. `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs:794` `[OverloadResolutionPriority(-1)]`, `src/nextorm.core/Builders/MergeBuilder.cs:201` `[OverloadResolutionPriority(1)]`) ⇒ already resolvable under `net10.0`/TreatWarningsAsErrors, **no silent new minimum**. | src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs:794, src/nextorm.core/Builders/MergeBuilder.cs:201, Directory.Build.props:29
+
+2026-10-15T09:31:36Z | DO | r2 | n1/3 | EC233-GATE: implementation approval recorded — collection owner authorized continuing the lane (directive 2026-10-15) | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T09:31:36Z | DO | r2 | n1/3 | DO r=2 started (D:233.1 extended differential probe with the attribute before any product edit; then D:233.2 API addition, D:233.7 registry). Test scope re-validated before any edit: `python3 scripts/validate_inner_loop.py brief /tmp/nextorm-D233-compat/scope-code.json` exit 0 | /tmp/nextorm-D233-compat/scope-code.json
+
+2026-10-15T09:36:14Z | DO | r2 | n1/3 | EC233-COMPAT r=2 **PASS**. Disposable trees keep r=1 artifacts: `tree-baseline` (unmodified), `tree-candidate` (r=1 candidate, kept), new `tree-attr` = tree-candidate + `using System.Runtime.CompilerServices;` + `[OverloadResolutionPriority(-1)]` on the new overload only. argv+exit: `dotnet build tree-baseline/probe-existing/probe-existing.csproj -c Debug -v:m` exit 1 (8 unique diagnostics, all pre-existing) · `dotnet build tree-attr/probe-existing/probe-existing.csproj -c Debug -v:m` exit 1 (same 8 unique) · `dotnet build tree-{baseline,attr}/probe-bind/probe-bind.csproj` exit 0 both · `dotnet build tree-baseline/probe-bind-new/...` exit 1 (7 unique: CS1503x5+CS0123) vs `tree-attr` exit 0 · `dotnet build tree-baseline/probe-new/...` exit 1 (4 unique) vs `tree-attr` exit 0. Zero new diagnostics: `logs-r2/tree-baseline-probe-existing.diags` == `logs-r2/tree-attr-probe-existing.diags` == r=1 `logs/baseline-existing.diags`; `comm -23 logs/candidate-existing.diags logs-r2/tree-attr-probe-existing.diags` = exactly the six r=1 CS0121 (Corpus.cs :57,67,70,71,72,73) — removed. | /tmp/nextorm-D233-compat/PROBE-SUMMARY-r2.md
+
+2026-10-15T09:36:14Z | DO | r2 | n1/3 | EC233-COMPAT r=2 per-expression **binding** proof (not exit status): `dotnet run --project tree-{baseline,attr}/probe-bind/probe-bind.csproj -c Debug` exit 0 both, output byte-identical on all 15 probes → the six formerly-ambiguous corners (`Over(partitionBy: e, orderBy: default[, frame: null])`, `…en, null…`, `…() => 1, default…`, `…() => 1, null…`, `…() => 1, orderBy: default…`, `…, null…`) resolve to `WindowFunction<T>.Over(Expression<Func<Object>>, Expression<Func<Object>>, WindowFrame)` (prio none) in BOTH trees; all five existing signatures resolve to themselves (sig2 `Over(WindowOrder, WindowFrame)`, sig3 `Over(String)`, sig4 `Over(WindowOrder[], WindowFrame)`, sig5 `Over(Expression<Func<Object>>[], WindowOrder[], WindowFrame)`); typed defaults + typed-null also on the original. `dotnet run --project tree-attr/probe-bind-new/probe-bind-new.csproj -c Debug` exit 0 → all three new forms resolve to `Over(Expression<Func<Object>>, WindowOrder, WindowFrame)` **prio=-1** (the new overload); intended 2-arg forms + new method-group pin compile on tree-attr and fail on tree-baseline. Method: the call is compiled inside an expression tree and the recorded `MethodInfo` is read at run time. | /tmp/nextorm-D233-compat/logs-r2/*.run.log
+
+2026-10-15T09:36:14Z | DO | r2 | n1/3 | D:233.2 **applied** (product edit, r=2). `src/nextorm.core/Query/WindowFunctions.cs`: +`using System.Runtime.CompilerServices;` and the new overload `[OverloadResolutionPriority(-1)] public T Over(Expression<Func<object?>>? partitionBy, WindowOrder orderBy, WindowFrame? frame = null) => default!;` placed after the existing expression overload, with `<summary>`/3x`<param>` XML docs stating the scalar shape and the source-compat rationale. Five existing overloads untouched: `git diff --stat` = 23 insertions, 0 deletions; CRLF preserved (`file` → CRLF). | src/nextorm.core/Query/WindowFunctions.cs
+
+2026-10-15T09:36:14Z | DO | r2 | n1/3 | D:233.7 **applied** (registry). `docs/specs/design/API-NAMING-REVIEW.md`: new per-audit section `## Аудит 15.10.2026 — issue #233 …` (`**Область.**` + bullets with `src/...:line`, additive/no-renames/existing-overloads-untouched, the `[OverloadResolutionPriority(-1)]` source-compat rationale with pointers to the 6 existing usages + both probe summaries, `N233-1` P2/Шаг 5 candidate row, ℹ️ `N233-2` compiler floor C# 13+/net10.0); stale `10-window-functions.md` → `09-window-functions.md` fixed only at the 7 planned lines (12 occurrences: :204-207,1078,1134,2242); CRLF preserved. | docs/specs/design/API-NAMING-REVIEW.md
+
+2026-10-15T09:36:14Z | DO | r2 | n1/3 | Build gate PASS: `dotnet build nextorm.slnx -c Debug` exit 0, `0 Warning(s) 0 Error(s)` — this also re-compiles all 39 real `Over` call sites unchanged (no CS0121). Inner loop: `dotnet test tests/nextorm.core.tests -c Debug --filter "FullyQualifiedName~WindowFunctionMarkerTests"` (phase inner, filtered) exit 0, total 12 / succeeded 12 / failed 0 / skipped 0. No commit in this task; tree left dirty for the single explicit-path autocommit at the DO→CHECK boundary. | /tmp/nextorm-D233-compat/logs-r2/{solution-build,inner-loop-marker}.log
+
+2026-10-15T09:36:14Z | DO | r2 | n1/3 | Defect history: `EC233-COMPAT-overload-ambiguity` — observed r=1 n1/3 (6 new CS0121, evidence `/tmp/nextorm-D233-compat/PROBE-SUMMARY.md`), fixes applied: 0 → r=2 applies fix #1 (`[OverloadResolutionPriority(-1)]`); re-observed r=2 n1/3: **no** (zero new diagnostics, all six corners on their original overloads, evidence `/tmp/nextorm-D233-compat/PROBE-SUMMARY-r2.md`); escalation not triggered. Re-injected-change triggers per r=2 escalation rule: any further change to the overload set or to consumer compilation ⇒ re-run EC233-COMPAT, and if a supported-consumer case is still ambiguous ⇒ STOP → PLAN. | /tmp/nextorm-D233-compat/PROBE-SUMMARY-r2.md
+
+2026-10-15T09:48:54Z | DO | r2 | n1/3 | DO→CHECK boundary build: `["dotnet","build","nextorm.slnx","-c","Debug"]` exit 0, **0 Warning(s) / 0 Error(s)** (all 39 real `Over` call sites re-compiled, no CS0121) | /tmp/opencode/t233-boundary/logs/build.log
+
+2026-10-15T09:48:54Z | DO | r2 | n1/3 | Boundary filtered project suites (serial, `--no-build` after the single build): `~WindowFunctionMarkerTests` 16/16 pass (core.tests); dialect `~Window` — sqlite 12, postgres 27, sqlserver 12, mysql 7, mariadb 5, clickhouse 27 (all exit 0, 0 failed, 0 skipped); exact new test `~WindowScalarOverload` **1 selected / 1 passed** on each of the six dialect projects | /tmp/opencode/t233-boundary/logs/{core,sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}{,.scalar}.log
+
+2026-10-15T09:48:54Z | DO | r2 | n1/3 | Container-backed integration (mandatory; `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`, single OR filter over the 9 window method names, `--no-build`, one run) exit 0: total 30 / succeeded 30 / failed 0 / **skipped 0**. Per-provider window tests (xunit `-list` discovery): sqlite 7, postgres 7, sqlserver 7, mysql 7, clickhouse 2 = 30 → PostgreSQL/SQL Server/MySQL/ClickHouse **ran, not skipped** (incl. `ScalarOverload_ShouldMatchTheArrayOverloadResult` on SQLite/PostgreSQL/SQL Server/MySQL). MariaDB has no CommonTestSuite-derived integration class (dialect-only per the variant matrix) | /tmp/opencode/t233-boundary/logs/integration-window.log, /tmp/opencode/t233-boundary/logs/discover-*.log
+
+2026-10-15T09:48:54Z | DO | r2 | n1/3 | Coverage — CI path of `.github/workflows/dotnet.yml` reproduced (no `DOCKER_HOST`, as in CI): `dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o <out> "dotnet test --no-build --verbosity normal"` exit 0 (total 12007 / succeeded 8875 / failed 0 / skipped 3132) then `dotnet tool run reportgenerator -reporttypes:'JsonSummary;TextSummary;Cobertura'` exit 0 → **line 87.4 % ≥ 85, branch 80 % ≥ 75** (4 assemblies per coverage.settings.xml) | /tmp/opencode/t233-test/coverage/report/Summary.txt, /tmp/opencode/t233-test/coverage/coverage.cobertura.xml
+
+2026-10-15T09:48:54Z | DO | r2 | n1/3 | Docs reconciliation (item 4): the new samples in `docs/guide/09-window-functions.md` (EN) and `docs/ru/guide/09-window-functions.md` (RU) match the final signature `Over(partitionBy, orderBy: <WindowOrder>, frame:)` (2-/3-arg, positional + `frame:`), contain **no attribute**, the generated SQL is stated identical to the one-element array form, EN/RU are structurally in sync and both files are CRLF (`file` → CRLF). No genuine mismatch found → no edit. Manifest path is gitignored (`git check-ignore` → `.gitignore:7 artifacts/`), so it is excluded from the commit | docs/guide/09-window-functions.md, docs/ru/guide/09-window-functions.md
+
+2026-10-15T09:48:54Z | DO | r2 | n1/3 | Frozen evidence manifest `rv=1` written at `artifacts/pdca/D233/rv1/manifest.json` (contract carried verbatim from r=2; 22 required rows = 17 `EC233-*` + `R233-1..5`; supplied r=2 probe/test-stream observations distinguished from newly verified boundary results). `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D233/rv1/manifest.json` exit 0; `... report /tmp/opencode/t233-test/evidence.json` exit 0 and `... report /tmp/opencode/t233-boundary/evidence.json` exit 0. `EC233-REGISTRY`, `EC233-CAPABILITY`, `R233-5` recorded **`open`** — their obligations require independent CHECK certification (`certifications/EC233-{REGISTRY,CAPABILITY}.json`), so DO cannot self-certify them | artifacts/pdca/D233/rv1/manifest.json
+
+2026-10-15T09:48:54Z | DO | r2 | n1/3 | Defect history at the boundary: `EC233-COMPAT-overload-ambiguity` — re-observed r=2 n1/3 = **no** (zero new diagnostics; six untyped `default`/`null` corners on their original overloads); fixes applied: 1 (priority attribute); escalation not triggered. No new defect keys observed in the boundary sweep (build, 13 filtered project runs, integration, coverage all exit 0) | /tmp/nextorm-D233-compat/PROBE-SUMMARY-r2.md
+
+2026-10-15T09:48:54Z | DO | r2 | n1/3 | Single autocommit of task paths (explicit paths only, no `git add -A`, no push): `1429fd21f2201ed350c362387421a7dd4e3a5519` — 12 files / +597 −7 (`WindowFunctions.cs`, 6× dialect `SqlGenerationTests.cs`, `WindowFunctionMarkerTests.cs`, `CommonTestSuite.Window.cs`, 2 guide pages, `API-NAMING-REVIEW.md`). Manifest path skipped from the commit (gitignored). Cycle status file and other tasks' status/docs not committed | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T10:02:28Z | DO | r2 | n2/3 | CHECK attempt 1 (r=2 n=1/3) **FAILED** (verifier `check`, medium tier) → corrective DO `n=2/3`. Failures: Major/P1 `D:233.5` (ClickHouse integration case not executed); missing CHECK-side evidence (DocFX never run; coverage run omitted `DOCKER_HOST`); `EC233-GATE` evidence package incomplete; minor registry defect (`Directory.Build.props` LangVersion line). No criterion was changed and no action-set change → no real replan: plan revision stays `r=2`, iteration advances to `n=2/3`. | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T10:02:28Z | DO | r2 | n2/3 | `D:233.5` corrected — ClickHouse gap cause established from the tree: `CommonTestSuite` derives `ProviderTestSuite` (`tests/nextorm.integration.tests/CommonTestSuite.cs:7`), but `ClickHouseIntegrationTests` derives `ProviderTestSuite` **directly** and not `CommonTestSuite` (`tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:18`); `SqliteIntegrationTests.cs:5`, `PostgresIntegrationTests.cs:8`, `SqlServerIntegrationTests.cs:8`, `MySqlIntegrationTests.cs:8` all derive `CommonTestSuite`. So the shared `Window` suite is **not inherited** on ClickHouse — a **wiring omission in the T233 change, not a capability guard** (the ClickHouse dialect already pins the identical SQL shape: `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:720-762`). Corrective edit (minimal, same class/style): two mirrored facts added to `ClickHouseIntegrationTests.cs` — `WindowScalarOverload_ShouldMatchTheArrayOverloadResult` (scalar-vs-array parity incl. the NULL partition of `complex_entity.nullableint`) and `WindowScalarOverload_WithRowsFrame_ShouldMatchTheArrayOverloadResult` (`WindowFrame.Rows(1,1)` parity). No non-Integration-Tests project touched. Route-to-PLAN: none. | tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs
+
+2026-10-15T10:02:28Z | DO | r2 | n2/3 | Corrective build gate: `["dotnet","build","nextorm.slnx","-c","Debug"]` exit 0, **0 Warning(s) / 0 Error(s)**. ClickHouse integration (ONE `DOCKER_HOST` run, `--no-build`): `["dotnet","test","tests/nextorm.integration.tests","-c","Debug","--no-build","--filter","FullyQualifiedName~ClickHouseIntegrationTests.WindowScalarOverload|FullyQualifiedName~ClickHouseIntegrationTests.InFrameWindowFunctions|FullyQualifiedName~ClickHouseIntegrationTests.WindowFunnel"]` exit 0 → total 4 / succeeded 4 / failed 0 / **skipped 0**. Discovery confirms exactly the 4 CH window tests: `WindowFunnel_ShouldCountConsecutiveConditions`, `InFrameWindowFunctions_ShouldRespectFrame`, `WindowScalarOverload_ShouldMatchTheArrayOverloadResult`, `WindowScalarOverload_WithRowsFrame_ShouldMatchTheArrayOverloadResult`. | artifacts/pdca/D233/rv1/logs/{build,clickhouse-window,clickhouse-window.discovery}.log
+
+2026-10-15T10:02:28Z | DO | r2 | n2/3 | `EC233-DOCS` corrective: `["dotnet","docfx","docs/docfx.json"]` exit 0 — **2 warning(s) / 0 error(s)**; both warnings are pre-existing `Duplicate source file .../src/nextorm.core.sourcegenerator/AnalyzerReleases.{Shipped,Unshipped}.md` and are unrelated to the window change (no new broken references). | artifacts/pdca/D233/rv1/logs/docfx.log
+
+2026-10-15T10:02:28Z | DO | r2 | n2/3 | `EC233-COVERAGE` corrective — the plan's frozen invocation re-run **with** `DOCKER_HOST` (frozen C-COVERAGE/C-REPORT; local tools via `dotnet tool run`): `dotnet-coverage collect --settings coverage.settings.xml --output-format cobertura --output artifacts/pdca/D233/rv1/coverage/coverage.cobertura.xml "dotnet test nextorm.slnx -c Debug"` exit 0 (total 12009 / succeeded 11802 / failed 0 / skipped 207 — container providers actually executed) then `reportgenerator -reports:… -targetdir:… -reporttypes:JsonSummary;TextSummary` exit 0 → **line 88.9 % (53515/60194) ≥ 85, branch 80.9 % (28995/35805) ≥ 75** (4 assemblies per `coverage.settings.xml`). | artifacts/pdca/D233/rv1/coverage/report/Summary.txt, artifacts/pdca/D233/rv1/logs/{coverage-collect-docker,coverage-report-docker}.log
+
+2026-10-15T10:02:28Z | DO | r2 | n2/3 | `EC233-GATE` evidence package assembled. (a) Authorization lines (recorded approval, in this file): line 23 `2026-10-15T09:22:47Z | DO | r1 | n1/3 | EC233-GATE: implementation approval recorded — collection owner authorized continuing the lane (directive 2026-10-15)` and line 39 `2026-10-15T09:31:36Z | DO | r2 | n1/3 | EC233-GATE: implementation approval recorded …`. (b) T232 handoff: collection status `docs/specs/status/collection-1.0.9-todo.md:26` row `| T232 | #232 | … done-with-caveat (r=5, rv=5; product green; residual evidence-provenance → #238; #237 accepted risk) |` and `:34` `… T232 (done-with-caveat) → T233 …`; handoff/group-stop-lift commit `7bdea6567828073d1ae56efb31ebed686e54430a` (`%cI = 2026-10-15T14:15:01+05:00`, subject `collection 1.0.9-todo: T232 accepted done-with-caveat …; group-stop lifted; next T233`). (c) Edit chronology: `git merge-base --is-ancestor 7bdea656 1429fd21` → **exit 0** (handoff is an ancestor of the code commit; `git log --oneline 7bdea656..1429fd21` = only `1429fd21`); DO code commit `1429fd21f2201ed350c362387421a7dd4e3a5519` `%cI = 2026-10-15T14:48:51+05:00` (= `09:48:51Z`) is **after** both recorded authorization lines (`09:22:47Z` / `09:31:36Z`) ⇒ the recorded approval precedes the product edit. | docs/specs/status/collection-1.0.9-todo.md:26,34; git 7bdea656, 1429fd21
+
+2026-10-15T10:02:28Z | DO | r2 | n2/3 | `D:233.7` corrective (registry): `docs/specs/design/API-NAMING-REVIEW.md:5799` — `Directory.Build.props:29,31` → **`:29,32`** (verified `Directory.Build.props:32` is `<LangVersion>latest</LangVersion>`; `:31` is `<Nullable>enable</Nullable>`). `N233-2` rewritten as an **accepted documented limitation with a trigger**: `[OverloadResolutionPriority]` is honoured by the compiler that builds the consumer; a consumer compiled with a compiler predating the attribute sees the pre-existing untyped-`default`/`null` ambiguity (CS0121); **trigger** = re-probe on a compiler-policy change or an `Over` overload-set change; supported consumer floor recorded (`net10.0` + `LangVersion latest`, public docs `docs/getting-started/01-installation.md:5`). **No** older-consumer-compatibility claim. CRLF preserved. | docs/specs/design/API-NAMING-REVIEW.md
+
+2026-10-15T10:02:28Z | DO | r2 | n2/3 | Certification records written **open / not certified** (no positive certificate): `artifacts/pdca/D233/rv1/certifications/EC233-REGISTRY.json` and `.../EC233-CAPABILITY.json` — verifier `check` (medium tier), `rv=1`, concrete blockers listed, `certified:false`, `is_a_certificate:false`. Manifest rows `EC233-REGISTRY`/`EC233-CAPABILITY`/`R233-5` left **`open`** (not flipped by DO). Manifest rows `EC233-INTEGRATION` (CH evidence), `EC233-COVERAGE` (DOCKER_HOST evidence) and `EC233-DOCS` (DocFX evidence) augmented **additively**; `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D233/rv1/manifest.json` exit 0. | artifacts/pdca/D233/rv1/manifest.json, artifacts/pdca/D233/rv1/certifications/EC233-{REGISTRY,CAPABILITY}.json
+
+2026-10-15T10:02:28Z | DO | r2 | n2/3 | Defect history: `EC233-COMPAT-overload-ambiguity` (r=1 → r=2, fix #1 `[OverloadResolutionPriority(-1)]`; re-observed r=2 = no). New CHECK-attempt-1 defect keys and outcome: `EC233-CH-CAPABILITY-GAP` (ClickHouse integration case not executed → **closed**, fixes applied: 1, evidence `tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs` + `clickhouse-window.log`); `EC233-EVIDENCE-COVERAGE-DOCKER` (coverage omitted `DOCKER_HOST` → **closed**, frozen invocation re-run with `DOCKER_HOST`); `EC233-EVIDENCE-DOCFX` (DocFX never run → **closed**, exit 0 / 2W / 0E); `EC233-GATE-PACKAGE` (incomplete → **closed** in this file); `EC233-REGISTRY-LANGVERSION-LINE` (minor registry ref → **fixed**). No criterion weakened; no escalation triggered. | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T10:05:00Z | DO | r2 | n2/3 | Corrective autocommit (explicit paths only, no `git add -A`, no push): `d5823ffbcade2765210f04041e233fa7f6db4a47` — 2 files / +73 −5 (`tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs`, `docs/specs/design/API-NAMING-REVIEW.md`). `artifacts/**` skipped (gitignored, `.gitignore:7`, verified with `git check-ignore -v`); this status file and other tasks' status/docs not committed; `examples/**`, `benchmarks/**`, diagrams not touched. | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T10:15:45Z | DO | r2 | n3/3 | CHECK attempt 2 (r=2 n=2/3) **FAILED** (verifier `check`, medium tier) → corrective DO `n=3/3`. Root finding `EC233-NULL-PARTITION-VARIANT`: the frozen variant-matrix row "`partitionBy: null` × single order" had **no test location** (the plan requires the explicit scalar-vs-array SQL parity asserting the absence of `PARTITION BY` across the six dialects). Secondary open items: `EC233-REGISTRY` / `EC233-CAPABILITY` / `R233-5` (no audit artifacts), `EC233-DOCS` / `EC233-BOUNDARY` (unverified for lack of frozen audits), `EC233-MANIFEST` (frozen canonical manifest locator did not exist on disk). No criterion changed and no action-set change → **no real replan**: plan revision stays `r=2`, iteration advances to `n=3/3`. Already met and not re-litigated: `EC233-GATE`, `EC233-COMPAT`, `EC233-MARKER`, `EC233-SQL-*`, `EC233-INTEGRATION`, `EC233-BUILD`, `EC233-COVERAGE`, `R233-1..4` except the null-partition clause of R233-1. | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T10:15:45Z | DO | r2 | n3/3 | **Null-partition variant closure.** Mapper decision (from code, not guessed): `WindowSql.SplitWindowArguments` (`src/nextorm.core/Visitors/WindowSql.cs:163-164`) forwards the `partitionBy` argument untouched, and `ParseWindowPartitions` (`src/nextorm.core/Visitors/WindowSql.cs:65-66`) returns an **empty** list for a `null`/`ConstantExpression{null}` expression and for an empty array (`:68-72`); a single null element inside the array is dropped by `AddWindowLambda` → `UnwrapWindowLambda` returns `null` (`:79-83,126-132`). The translator emits `partition by` **only** when the list is non-empty (`src/nextorm.core/Visitors/WindowFunctionTranslator.cs:152-154`). Therefore `Over(partitionBy: null, orderBy: o)` is byte-identical to the null array, the empty array (`new Expression<Func<object?>>[0]`) and the order-only overload. New tests added: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:2394`, `tests/nextorm.postgres.tests/SqlGenerationTests.cs:2629`, `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1783`, `tests/nextorm.mysql.tests/SqlGenerationTests.cs:515`, `tests/nextorm.mariadb.tests/SqlGenerationTests.cs:406`, `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:765`, `tests/nextorm.core.tests/WindowFunctionMarkerTests.cs:118` — each asserts scalar-null == array-null == empty-array == order-only and `NotContainEquivalentOf("partition by")` (case-insensitive). No new integration case was added for this row (not required; the nullable-partition integration parity already exists at `tests/nextorm.integration.tests/CommonTestSuite.Window.cs:145`). No sub-case left uncovered. | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T10:15:45Z | DO | r2 | n3/3 | **`EC233-MANIFEST` frozen-locator repair.** The frozen contract spelled the artifact locators as `artifacts/pdca/D233-window-over-overload/rv1/**` (original frozen path); the artifacts live under `artifacts/pdca/D233/rv1/**` (real path — overlay default slug directory = task slug `D233`). Locators only were repaired (11 occurrences: `:360,373,387-403,584`) with an explicit `Notice:` at `:361` recording the original path, the real path and the reason (plan-text typo, not a missing artifact); nothing was weakened. Disk check (`test -d`) confirms `artifacts/pdca/D233/rv1/` + `coverage/` + `certifications/` + `logs/` resolve. Two planned artifacts named in the frozen catalog were never materialised and are not obligations: the per-row package dir `artifacts/pdca/D233/rv1/rows/` (the manifest carries evidence inline in `rows[]`) and the disposable helpers `audit.py`/`compat_probe.py` (self-declared planned helpers). Path sweep over the manifest + frozen rows: 82 distinct `artifacts/…`/`tests/…`/`src/…`/`/tmp/…` paths — all resolve except the original-typo string, the two never-materialised helpers, the unused `rows/` dir and the brace-truncated false positive `AnalyzerReleases.{Shipped` (the real `.Shipped.md`/`.Unshipped.md` exist). | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T10:15:45Z | DO | r2 | n3/3 | **Data-only certification audits written** (author = DO, not the certifier; all `certified:false`, `rv=1`, `is_a_certificate:false`): `artifacts/pdca/D233/rv1/certifications/EC233-REGISTRY-audit.json` (new signature `src/nextorm.core/Query/WindowFunctions.cs:51-54` + attribute `:50`; the five unchanged overloads `:29,:57,:65,:72,:80`; EN guide `docs/guide/09-window-functions.md:125-148` / RU `docs/ru/guide/09-window-functions.md:126-149`; W1–W4/NW2 reconciliation vs code; link check 7+7 EN/RU relative links resolve, 0 public→spec), `…/EC233-DOCS-audit.json` (EN/RU parity, `frame` optionality, no stale `10-window-functions.md` in public docs, DocFX exit 0 / 2 pre-existing warnings proven unrelated, no public→`docs/specs/**` link), `…/EC233-BOUNDARY-audit.json` (changed-path scope + deliberately-untouched list + perf non-applicability argument), `…/EC233-CAPABILITY-audit.json` (capability flags + the provider×variant table). Manifest rows `EC233-REGISTRY`/`EC233-CAPABILITY` remain **`open`**; the audit paths and the n=3/3 logs were added to the manifest **additively**. `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D233/rv1/manifest.json` → **exit 0**. | artifacts/pdca/D233/rv1/certifications/
+
+2026-10-15T10:15:45Z | DO | r2 | n3/3 | **Verification (n=3/3).** `["dotnet","build","nextorm.slnx","-c","Debug"]` → exit 0, **0 Warning(s) / 0 Error(s)**. Filtered suites (each project once, `--no-build`): core `--filter "FullyQualifiedName~WindowFunctionMarkerTests"` exit 0 → 17/17 (was 16); sqlite `~Window` exit 0 → 13/13; postgres exit 0 → 28/28; sqlserver exit 0 → 13/13; mysql exit 0 → 8/8; mariadb exit 0 → 6/6; clickhouse exit 0 → 28/28 (each +1 = the new null-partition test; 0 failed, 0 skipped). `python3 scripts/validate_inner_loop.py report /tmp/opencode/t233-n3/evidence.json` → **exit 0**. Raw logs: `artifacts/pdca/D233/rv1/logs/{build,core-marker,sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}-n3.log`. | artifacts/pdca/D233/rv1/logs/
+
+2026-10-15T10:15:45Z | DO | r2 | n3/3 | **Defect history.** `EC233-COMPAT-overload-ambiguity` — r=1 → r=2, fix #1 (`[OverloadResolutionPriority(-1)]`), re-observed r=2 = no (fixes applied: 1). `EC233-CH-CAPABILITY-GAP`, `EC233-EVIDENCE-COVERAGE-DOCKER`, `EC233-EVIDENCE-DOCFX`, `EC233-GATE-PACKAGE`, `EC233-REGISTRY-LANGVERSION-LINE` — closed at n=2/3. **New (CHECK attempt 2):** `EC233-NULL-PARTITION-VARIANT` (null-partition parity row had no location) → **closed**, fixes applied: 1, evidence the 7 new tests above (each executed, 1 selected per dialect, all green) and this file; `EC233-MANIFEST-LOCATOR` (frozen locator `artifacts/pdca/D233-window-over-overload/rv1/manifest.json` absent) → **closed**, fixes applied: 1, evidence the `Notice:` at `:361` + validator exit 0; `EC233-REGISTRY`/`EC233-CAPABILITY`/`R233-5` (no audit artifacts) → **audit data produced**, still **open** pending independent CHECK certification (author≠certifier). No criterion weakened; no escalation triggered. | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T10:15:45Z | DO | r2 | n3/3 | Autocommit (explicit paths only, no `git add -A`, no push): `e65b601e0df26ddbf66ee643a2d38f93a6a26f35` — 7 files / +322 −0 (the 6 dialect `SqlGenerationTests.cs` + `tests/nextorm.core.tests/WindowFunctionMarkerTests.cs`). No public-docs file was edited this attempt; the cycle status file and other tasks' status/docs are not committed (established convention for this cycle); `artifacts/**` skipped (gitignored, `.gitignore:7`); `examples/**`, `benchmarks/**`, diagrams not touched. | docs/specs/status/D233-window-over-overload-1.md
+
+2026-10-15T10:45:00Z | CHECK | r2 | n3/3 | CHECK (independent certifier, medium tier) after the `escalate`-authorized bounded re-gather: certified `met` — `R233-1..4`, `EC233-GATE`, `EC233-COMPAT`, `EC233-MARKER`, `EC233-SQL-{SQLITE,POSTGRES,SQLSERVER,MYSQL,MARIADB,CLICKHOUSE}`, `EC233-INTEGRATION`, `EC233-BUILD`, `EC233-COVERAGE`, `EC233-DOCS`, `EC233-BOUNDARY`, `EC233-CAPABILITY`. Kept **open (blocker)**: `EC233-REGISTRY` and `R233-5` — the touched registry entries still carry stale references (W2 `:205,1138` → sample text instead of the footer; W4 `:207,1136` → Frames section and flag `:64` instead of `:274`; NW2 `:2242` → `WindowFunctions.cs:64` instead of `:87`); registry repair was forbidden in the authorized pass, so it cannot be fixed here. `EC233-MANIFEST` recorded open/unmet (three mandatory rows open; the r=2/n=3 validator log was 0 bytes). | artifacts/pdca/D233/rv1/certifications/, artifacts/pdca/D233/rv1/manifest.json
+
+2026-10-15T10:45:00Z | CHECK | r2 | n3/3 | Bounded re-gather journal (`escalate`-authorized, NOT a DO iteration; request 1 of 2): `artifacts/pdca/D233/rv1/certifications/CHECK-n3-regather-request1.json` — raw extracts (scope diff, EN/RU docs sections, DocFX lines, capability refs, 39 citation existence checks, 7 guard exact-name runs, W4 correction, manifest row states); `previous_sha 7bdea656`, `head_sha e65b601e`. No `src`/`tests`/public-docs/registry edited; no big suites rerun; no certificates created by the re-gather. | artifacts/pdca/D233/rv1/certifications/CHECK-n3-regather-request1.json
+
+2026-10-15T11:05:00Z | ACT | r2 | n3/3 | ACT outcome (single writer of this file): **terminal `incomplete (product green; evidence residual: EC233-REGISTRY, R233-5, EC233-MANIFEST)`**; no replan (plan stays `r=2`, `rv=1`, `n=3/3`). Positive certificates written: `EC233-CAPABILITY.json` (certified:true), `EC233-DOCS.json`, `EC233-BOUNDARY.json`; open/not-certified records retained: `EC233-REGISTRY.json`, new `EC233-R233-5.json`. Manifest reconciled **additively** (`EC233-CAPABILITY`→`met`; `EC233-DOCS`/`EC233-BOUNDARY` carry their certificate paths; `EC233-REGISTRY`/`R233-5` stay `open` naming the registry blocker; `EC233-MANIFEST`→`open`/unmet). Live manifest validation (request 2 of 2): `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D233/rv1/manifest.json` → **exit 0**, log `artifacts/pdca/D233/rv1/logs/manifest-validate-n3.log` (non-empty, 16 bytes). Follow-up issue **#239** (https://github.com/AlexeyShirshov/nextorm/issues/239) tracks the four stale registry `file:line` pairs. Retained commits `1429fd21`, `d5823ffb`, `e65b601e` (never pushed). | artifacts/pdca/D233/rv1/manifest.json, artifacts/pdca/D233/rv1/logs/manifest-validate-n3.log
+
+2026-10-15T11:05:00Z | ACT | r2 | n3/3 | Collection fail-stop executed: definitive task `incomplete` stops group G1 — the remaining pending task **T201 (#201)** is marked `incomplete` («группа остановлена» / group stopped) and **not executed**; new public `Over` overload registered as a T53 freeze candidate (freeze **HELD**). Recorded in `docs/specs/status/collection-1.0.9-todo.md`. | docs/specs/status/collection-1.0.9-todo.md
+
+**Provider × variant → test/guard map (r=2 n=3/3; full data in `artifacts/pdca/D233/rv1/certifications/EC233-CAPABILITY-audit.json`).** CHECK attempt-2 row (7) = "`partitionBy: null` × single order" is now **placed** (`тест`):
+
+| Variant | Closure | Test/guard locations |
+|---|---|---|
+| single partition × single `asc`/`desc` × no frame | test | sqlite:2333, postgres:2568, sqlserver:1722, mysql:470, mariadb:361, clickhouse:720, integration `CommonTestSuite.Window.cs:145` |
+| **`partitionBy: null` × single order** (CHECK row 7) | **test** | sqlite:2394, postgres:2629, sqlserver:1783, mysql:515, mariadb:406, clickhouse:765, core `WindowFunctionMarkerTests.cs:118` |
+| nullable value/reference partition | test | `CommonTestSuite.Window.cs:145` |
+| `T`: value/nullable/reference | test | `WindowFunctionMarkerTests.cs:60` |
+| `frame: WindowFrame.Rows(...)` | test | sqlite:2333, postgres:2568, clickhouse:720, `ClickHouseIntegrationTests.cs:782` |
+| `Groups`/exclusion, capability=true | test | sqlite:2559, postgres:2776/2793, clickhouse:703, postgres:2841 |
+| `Groups`/exclusion, capability=false | guard | sqlserver:263/280, mysql:578/595, mariadb:469/486, clickhouse:828 |
+| old expression/array/order-only/optional forms | test | `WindowFunctionMarkerTests.cs:29,41,164,185` + full build |
+| named-window | test+guard | core:52, sqlite:2576, mysql:561, mariadb:452, clickhouse:811, postgres:2822 |
+| untyped `default`/`null`, typed defaults | test | `WindowFunctionMarkerTests.cs:164` + EC233-COMPAT probe |
+| six dialects | test | each dialect project `~Window`, exit 0 |
+| SQLite + 4 container providers | test | `CommonTestSuite.Window.cs:145`, `ClickHouseIntegrationTests.cs:750,782` |
+| separate MariaDB container integration | deferred + trigger | trigger: a MariaDB integration fixture (T232) or a provider-specific change → replan in the same milestone |
+| `NULLS FIRST/LAST`, new functions/flags | deferred | separate agreed task in the milestone |
+| global API-analyzer config | deferred | separate PublicAPI-baseline task; manual registry + certification remain mandatory |
+
+**Capability flags (unchanged by T233):** `SupportsWindowFrameGroups` — interface `ISqlDialect.cs:365`, base `SqlDialectBase.cs:118 (false)`, opt-in `SqliteDialect.cs:165` / `PostgresDialect.cs:372` / `ClickHouseDialect.cs:300`; `SupportsWindowFrameExclusion` — `ISqlDialect.cs:372`, base `SqlDialectBase.cs:120 (false)`, opt-in `SqliteDialect.cs:168` / `PostgresDialect.cs:375`; gate sites `WindowFunctionTranslator.cs:92,95`.
 
 - `plan_state: ready`
-- `plan_revision: r1`
-- `evidence_contract_revision: rv1`
+- `plan_revision: r2` (r1 superseded by the DO→PLAN loop-back)
+- `evidence_contract_revision: rv1` (unchanged)
 - `planned_writes_public_api: src/nextorm.core/Query/WindowFunctions.cs (PUBLIC API addition — add one overload)`
 - `planned_writes_other`: `tests/nextorm.core.tests/WindowFunctionMarkerTests.cs`; `tests/nextorm.sqlite.tests/SqlGenerationTests.cs`; `tests/nextorm.postgres.tests/SqlGenerationTests.cs`; `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs`; `tests/nextorm.mysql.tests/SqlGenerationTests.cs`; `tests/nextorm.mariadb.tests/SqlGenerationTests.cs`; `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs`; `tests/nextorm.integration.tests/CommonTestSuite.Window.cs`; `docs/guide/09-window-functions.md`; `docs/ru/guide/09-window-functions.md`; `docs/specs/design/API-NAMING-REVIEW.md`; `docs/specs/status/D233-window-over-overload-1.md`
 - `prerequisites`: (1) existing user approval covers **only the plan** — a separate recorded approval is required before any implementation edit; (2) T233 runs **after** T232 within G1 — requires the T232 handoff (final diff + public-API/worker/capability changes), no parallel edits to `Query/WindowFunctions.cs` / `Builders/**` / `Dialect/**`; (3) mandatory compiler compatibility probe (baseline→candidate) for untyped `default`/`null` at the old call sites must pass before the public API edit; (4) required containers/toolchain must be available (integration + coverage).
@@ -31,7 +143,96 @@
 - `all_barrier_contribution`: T233 PLAN complete = plan_state ready; the task's contribution to the collection ALL-barrier for the PLAN phase is satisfied (this run does not execute DO).
 - `next_allowed_step`: `DO (in a later, separately authorized run) — unit D:233.1 (gate + compatibility probe); no implementation before recorded approval`
 
-## PLAN r=1
+## ACT — terminal `incomplete (product green; evidence residual: EC233-REGISTRY, R233-5, EC233-MANIFEST)`
+
+ACT outcome (single writer of this file). **No replan** — `plan_revision` stays `r=2`, `evidence_contract` stays `rv=1`, `iteration` stays `n=3/3`. The cycle terminates **definitively `incomplete`** (route: the independent CHECK certification after the `escalate`-authorized bounded re-gather). The product/build/docs work is green; only registry-manifest residuals remain.
+
+### Certification matrix (verifier `check`, medium tier, `rv=1`)
+
+**Certified `met`** (positive certificates under `artifacts/pdca/D233/rv1/certifications/`):
+
+- `R233-1`, `R233-2`, `R233-3`, `R233-4`
+- `EC233-GATE`, `EC233-COMPAT`, `EC233-MARKER`
+- `EC233-SQL-SQLITE`, `EC233-SQL-POSTGRES`, `EC233-SQL-SQLSERVER`, `EC233-SQL-MYSQL`, `EC233-SQL-MARIADB`, `EC233-SQL-CLICKHOUSE`
+- `EC233-INTEGRATION`, `EC233-BUILD`, `EC233-COVERAGE`
+- `EC233-DOCS` → `EC233-DOCS.json` (`certified:true`)
+- `EC233-BOUNDARY` → `EC233-BOUNDARY.json` (`certified:true`)
+- `EC233-CAPABILITY` → `EC233-CAPABILITY.json` (`certified:true`)
+
+**Open / `not_certified`** (blocker; uncertifiable in-cycle):
+
+- `EC233-REGISTRY` → `EC233-REGISTRY.json` (`open` / `not_certified`) — stale `file:line` references in the touched registry entries.
+- `R233-5` → `EC233-R233-5.json` (`open` / `not_certified`) — depends on the registry certification.
+- `EC233-MANIFEST` → recorded `open` / unmet (three mandatory rows open; the r=2/n=3 validator log was 0 bytes).
+
+### Registry blocker (why the cycle cannot close green)
+
+The touched registry entries in `docs/specs/design/API-NAMING-REVIEW.md` still carry stale references: **W2** `:205,1138` points to sample text instead of the `Source:` footer; **W4** `:207,1136` cites the Frames section rather than the intended section and the flag `:64` instead of `:274`; **NW2** `:2242` cites `WindowFunctions.cs:64` instead of `:87`. Registry repair was forbidden in the escalation-authorized pass, so the defect cannot be fixed in-cycle. Follow-up issue **#239** — https://github.com/AlexeyShirshov/nextorm/issues/239 — tracks the four stale pairs.
+
+### Escalate decision + bounded re-gather journal
+
+- `escalate` (strong tier) authorized a CHECK `n=3` **bounded re-gather** (journaled step, **NOT** a DO iteration; no fourth attempt, no `r=3`). Hard constraints respected: no `src`/`tests`/public-docs/registry edits; no big-suite reruns; no certificates created by the re-gather.
+- **Request 1 of 2** — `artifacts/pdca/D233/rv1/certifications/CHECK-n3-regather-request1.json`: raw extracts (scope diff, EN/RU docs sections, DocFX lines, capability refs, 39 citation existence checks, 7 guard exact-name runs, W4 correction, manifest row states); `previous_sha 7bdea656`, `head_sha e65b601e`.
+- **Request 2 of 2** — this ACT: live manifest validation `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D233/rv1/manifest.json` → **exit 0**, log `artifacts/pdca/D233/rv1/logs/manifest-validate-n3.log` (non-empty, 16 bytes, `MANIFEST_EXIT=0`), after the additive manifest reconciliation.
+
+### Retained commits (branch `1.0.9-rc3`, never pushed)
+
+- `1429fd21` — 12 files (product overload + 6 dialect `SqlGenerationTests.cs` + core marker + integration `CommonTestSuite.Window.cs` + 2 guide pages + registry).
+- `d5823ffb` — 2 files (ClickHouse integration mirror + registry N233-2 limitation / LangVersion line).
+- `e65b601e` — 7 files (null-partition no-`PARTITION BY` parity: 6 dialects + core marker).
+
+### Product/test/build evidence (final, retained)
+
+- build `dotnet build nextorm.slnx -c Debug` → **0W / 0E**; six dialect window suites + core marker **17/17**; integration **30/30** + ClickHouse **4/4**, **0 skipped**; coverage line **88.9 %** / branch **80.9 %** (≥ 85 / 75); DocFX **exit 0** (2 pre-existing unrelated warnings).
+
+### Deferred / trigger rows carried to live tracking (unchanged)
+
+- separate MariaDB container integration — `deferred + trigger` (a MariaDB integration fixture appears as a result of T232, or a provider-specific change lands) — no separate task created.
+- `NULLS FIRST/LAST`, new functions/flags — `deferred` (only a separately agreed milestone task introduces them).
+- global API-analyzer configuration (PublicAPI baseline) — `deferred`; the manual registry + independent certification remain mandatory now.
+- new public `Over` overload registered as a **T53 freeze candidate** — **freeze remains HELD** (not activated).
+
+### Per-row evidence pointers
+
+- `artifacts/pdca/D233/rv1/manifest.json` (rv=1 contract, 22 rows: 19 `met`, `EC233-REGISTRY` / `R233-5` / `EC233-MANIFEST` `open`).
+- certificates `artifacts/pdca/D233/rv1/certifications/{EC233-CAPABILITY,EC233-DOCS,EC233-BOUNDARY,EC233-REGISTRY,EC233-R233-5}.json`; audits `…-audit.json`; re-gather `CHECK-n3-regather-request1.json`.
+- logs `artifacts/pdca/D233/rv1/logs/{build,core-marker,sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}-n3.log`, `exact-nullpart-*-n3.log`, `guard-*-n3.log`, `integration-window.log`, `clickhouse-window.log`, `coverage-*`, `docfx.log`, `manifest-validate-n3.log`.
+
+---
+
+## PLAN r=2 (current) — revision delta over r=1
+
+`planner` revised plan, issued after the r=1 probe FAIL (`EC233-COMPAT-overload-ambiguity`). Only the disambiguation mechanism changed; the goal, scope, non-goals, design signature, variant matrix, evidence contract and R233-1..5 are carried over from r=1 **verbatim**.
+
+### Change (r=1 → r=2)
+
+1. **Signature unchanged.** The planned overload stays exactly
+
+   ```csharp
+   [System.Runtime.CompilerServices.OverloadResolutionPriority(-1)]
+   public T Over(
+       Expression<Func<object?>>? partitionBy,
+       WindowOrder orderBy,
+       WindowFrame? frame = null) => default!;
+   ```
+
+   The only addition versus r=1 is the `[OverloadResolutionPriority(-1)]` attribute **on that new overload only**. The five existing overloads keep priority 0 and **must win** whenever they are applicable.
+
+2. **Source-compatibility rule (r=1 §4/§12, tightened):** the six r=1 baseline-success → candidate-ambiguous call shapes (`Over(partitionBy: e, orderBy: default)`, `Over(partitionBy: en, orderBy: null)`, `Over(partitionBy: () => 1, orderBy: default)`, `Over(partitionBy: () => 1, orderBy: null)`, `Over(() => 1, orderBy: default)`, `Over(() => 1, orderBy: null)`) must **compile and select their original overload**. R233-2 is **not weakened**; **no ambiguity is accepted**; no existing call site may be "repaired".
+
+3. **Escalation rule.** If any supported-consumer case is still ambiguous after the attribute ⇒ **STOP and report** (return to PLAN). Do not relax R233-2.
+
+4. **Probe prerequisite (P0), satisfied** — see the progress-log entry `P0 prerequisite (compiler/language floor …)`: `net10.0` + `LangVersion latest` + `TreatWarningsAsErrors`, `global.json` pinning no SDK, and the attribute already used 6× in `src/nextorm.core` (`DataContext/Meta/EntityMetadataBuilder.cs:794`, `Builders/MergeBuilder.cs:201`) ⇒ no silent new minimum for consumers.
+
+5. **Extended differential probe requirement.** Before any product edit, re-run the r=1 differential probe with the attribute and prove **binding** (not just exit status) per expression: which overload each of the six shapes selects, the complete r=1 variant matrix, typed defaults, the five existing signature pins, and the intended new 2-/3-argument forms. PASS = zero new diagnostics + six shapes on the original overloads + new forms on the new overload. Otherwise STOP (no repo edit).
+
+### Carried over verbatim from r=1
+
+Goal/scope/non-goals (§1), acceptance criteria **R233-1..5** (§2), chosen design signature and XML-doc obligation (§3), variant matrix (§4), test strategy and structured `test scope` (§5), documentation plan (§6), evidence contract **rv=1** (§7, unchanged), performance decision (§8), reconnaissance decision (§9), execution mode (§10), design checklist (§11), risks/prerequisites (§12), ordered task list (§13), write-footprint (§14), self-check (§15) — all as written in the r=1 block below, with the r=2 changes above layered on top.
+
+---
+
+## PLAN r=1 (superseded by r=2 — retained as history)
 
 ---
 # T233 — PLAN r=1
@@ -132,7 +333,7 @@ public T Over(
 | Вариант | Закрытие |
 |---|---|
 | Single partition × single `asc`/`desc` × frame omitted/null | **Тест:** точное SQL parity на шести dialect-проектах; integration parity. |
-| `partitionBy: null` × single order | **Тест:** отсутствие `PARTITION BY`; parity с array-null/order-only формой. |
+| `partitionBy: null` × single order | **Тест:** отсутствие `PARTITION BY`; parity с array-null/order-only формой. **Закрыто (corrective r=2 n=3/3):** `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:2394`, `tests/nextorm.postgres.tests/SqlGenerationTests.cs:2629`, `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1783`, `tests/nextorm.mysql.tests/SqlGenerationTests.cs:515`, `tests/nextorm.mariadb.tests/SqlGenerationTests.cs:406`, `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:765`, `tests/nextorm.core.tests/WindowFunctionMarkerTests.cs:118`. |
 | Nullable value/reference partition expression | **Тест:** SQL parity и NULL-partition semantics в общей integration-проверке. |
 | `T`: value, nullable value, reference | **Тест:** marker возвращает соответствующий `default`, expressions не исполняются. |
 | `frame: WindowFrame.Rows(...)` | **Тест:** positional/named binding, SQL parity и исполняемый результат. |
@@ -258,7 +459,8 @@ public T Over(
 
 - Task slug: `D233-window-over-overload`.
 - Status: `docs/specs/status/D233-window-over-overload-1.md`.
-- Frozen manifest: `artifacts/pdca/D233-window-over-overload/rv1/manifest.json`.
+- Frozen manifest: `artifacts/pdca/D233/rv1/manifest.json`.
+- **Notice — locator repair (corrective DO r=2 n=3/3, 2026-10-15).** The r=1/r=2 frozen contract text spelled every artifact locator as `artifacts/pdca/D233-window-over-overload/rv1/**` (the **original frozen path**; e.g. the canonical manifest locator was `artifacts/pdca/D233-window-over-overload/rv1/manifest.json`). The artifacts were actually written under the **real path** `artifacts/pdca/D233/rv1/**` — the overlay's default slug directory is the task slug `D233`, not `D233-window-over-overload` — so the frozen string was a plan-text typo, not a missing artifact. **Only the locators were repaired**; no obligation, required-row, exit requirement or acceptance criterion was weakened, dropped or renamed. The directories named now all resolve on disk (`test -d`): `artifacts/pdca/D233/rv1/` (manifest.json, boundary-evidence.json, logs/, coverage/, certifications/, probe/, test-stream/), `artifacts/pdca/D233/rv1/coverage/`, `artifacts/pdca/D233/rv1/certifications/`, `artifacts/pdca/D233/rv1/logs/`. Two planned artifacts named in the frozen catalog were never materialised and are **not** obligations: the per-row package directory `artifacts/pdca/D233/rv1/rows/` (the manifest carries each row's evidence by reference inline in `rows[]`, with raw logs under `artifacts/pdca/D233/rv1/logs/`) and the disposable helpers `audit.py`/`compat_probe.py` (self-declared as "планируемые evidence helpers, не production tooling"); their *checks* were performed by the documented commands and manual inspection recorded in the rows.
 - Все перечисленные ниже источники и артефакты **планируемые**, не существующие доказательства.
 - `r=1`, `rv=1`; supersession отсутствует.
 - Любая обоснованная ревизия должна явно supersede rv=1, сохранить ID и обязательства строк, добавить новые variant IDs. Отсутствующий отчёт не основание для ревизии.
@@ -271,7 +473,7 @@ public T Over(
 - сценарий, ожидаемые evidence kinds/sources;
 - точная команда/вызов через каталог ниже;
 - требуемые exit/result/log;
-- `path = artifacts/pdca/D233-window-over-overload/rv1/rows/<row_id>.json`;
+- `path = artifacts/pdca/D233/rv1/rows/<row_id>.json`;
 - ожидаемые raw logs/artifacts в соседнем каталоге `<row_id>/`;
 - поток-владелец, applicability predicate, приоритет.
 
@@ -285,8 +487,8 @@ public T Over(
 
 | Cmd | Точная команда/вызов |
 |---|---|
-| **C-GATE** | `python3 artifacts/pdca/D233-window-over-overload/rv1/audit.py gate` |
-| **C-COMPAT** | `python3 artifacts/pdca/D233-window-over-overload/rv1/compat_probe.py` |
+| **C-GATE** | `python3 artifacts/pdca/D233/rv1/audit.py gate` |
+| **C-COMPAT** | `python3 artifacts/pdca/D233/rv1/compat_probe.py` |
 | **C-MARKER** | `dotnet test tests/nextorm.core.tests -c Debug --filter "FullyQualifiedName~WindowFunctionMarkerTests"` |
 | **C-SQLITE** | `dotnet test tests/nextorm.sqlite.tests -c Debug` |
 | **C-POSTGRES** | `dotnet test tests/nextorm.postgres.tests -c Debug` |
@@ -296,12 +498,12 @@ public T Over(
 | **C-CLICKHOUSE** | `dotnet test tests/nextorm.clickhouse.tests -c Debug` |
 | **C-INTEGRATION** | `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor` |
 | **C-BUILD** | `dotnet build nextorm.slnx -c Debug` |
-| **C-COVERAGE** | `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet-coverage collect --settings coverage.settings.xml --output-format cobertura --output artifacts/pdca/D233-window-over-overload/rv1/coverage/coverage.cobertura.xml "dotnet test nextorm.slnx -c Debug"` |
-| **C-REPORT** | `reportgenerator "-reports:artifacts/pdca/D233-window-over-overload/rv1/coverage/coverage.cobertura.xml" "-targetdir:artifacts/pdca/D233-window-over-overload/rv1/coverage/report" "-reporttypes:JsonSummary;TextSummary"` |
-| **C-COVERAGE-GATE** | `python3 artifacts/pdca/D233-window-over-overload/rv1/audit.py coverage` |
-| **C-DOCS** | `python3 artifacts/pdca/D233-window-over-overload/rv1/audit.py docs` затем `dotnet docfx docs/docfx.json` |
-| **C-BOUNDARY** | `python3 artifacts/pdca/D233-window-over-overload/rv1/audit.py boundary` |
-| **C-MANIFEST** | `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D233-window-over-overload/rv1/manifest.json` |
+| **C-COVERAGE** | `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet-coverage collect --settings coverage.settings.xml --output-format cobertura --output artifacts/pdca/D233/rv1/coverage/coverage.cobertura.xml "dotnet test nextorm.slnx -c Debug"` |
+| **C-REPORT** | `reportgenerator "-reports:artifacts/pdca/D233/rv1/coverage/coverage.cobertura.xml" "-targetdir:artifacts/pdca/D233/rv1/coverage/report" "-reporttypes:JsonSummary;TextSummary"` |
+| **C-COVERAGE-GATE** | `python3 artifacts/pdca/D233/rv1/audit.py coverage` |
+| **C-DOCS** | `python3 artifacts/pdca/D233/rv1/audit.py docs` затем `dotnet docfx docs/docfx.json` |
+| **C-BOUNDARY** | `python3 artifacts/pdca/D233/rv1/audit.py boundary` |
+| **C-MANIFEST** | `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D233/rv1/manifest.json` |
 | **I-REGISTRY** | `Task(check): "Открой manifest rv=1 первым. Независимо сертифицируй EC233-REGISTRY: точную Over-сигнатуру, EN/RU ссылки, W1–W4/NW2, compatibility evidence и author≠certifier. Сохрани certificate по контракту; отсутствие доказательства не pass."` |
 | **I-CAPABILITY** | `Task(check): "Открой manifest rv=1 первым. Проверь EC233-CAPABILITY: неизменность capability flags и worker, матрицу шести dialects, nullable/frame guards. Используй Roslyn для C# symbols. Сохрани independent certificate; неподтверждённый guard не pass."` |
 
@@ -482,7 +684,7 @@ T233 выполняется **после T232**. Ожидается:
 
 Generated/uncommitted evidence:
 
-- `artifacts/pdca/D233-window-over-overload/rv1/**`
+- `artifacts/pdca/D233/rv1/**`
 - `/tmp/nextorm-D233-compat/**`
 - test-runner outputs under approved `TestResults/**`.
 
