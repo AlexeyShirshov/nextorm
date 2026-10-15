@@ -6,7 +6,7 @@
 - selected_variant: pdca-dotnet
 - cycle_id: N=1
 - plan_revision: r=2
-- phase: DO (D201-2)
+- phase: DO (D201-3 — STOP, DO→PLAN candidate: plan contract gap)
 - plan_state: ready
 - date: 2026-10-11
 - evidence_contract: rv1
@@ -1094,6 +1094,70 @@ actions justify another plan revision.
   the sixteen-row manifest stay with D201-4/D201-5. D201-2 closes only its instrumentation,
   negative-validation and baseline portions.
 
+## DO — D201-3 (specialized top-level preparation reuse) — STOP before production edit
+
+- Unit boundary: D201-3 is the only unit authorized to edit production `src/**`. Outcome: **STOP before
+  any production edit — DO→PLAN candidate (`plan contract gap`)**. The three authorized `src` files are
+  byte-identical (`git status --porcelain` and `git diff --stat` for them are empty) and the tree is green.
+  D201-4 is **not** unblocked. **No `D:`-unit completion is claimed**; D201-3 stays `blocked`.
+- Cycle N=1, plan revision **r=2**, attempt **n=1/3**, contract **rv1** — unchanged. Single group, current
+  tree, no worktree/branch/merge. Dependencies D201-1 (`bff40da2`) and D201-2 (`da9b8100`) satisfied.
+- Preflight (mandatory test scope validated **before** any edit; `validate_inner_loop.py brief` exit 0):
+  - `dotnet build tests/nextorm.core.tests -c Debug` exit 0, **0 Warning(s) 0 Error(s)**;
+  - `dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~CachedPreparationRecipeTests`
+    exit 0 (**3/3**);
+  - `--filter FullyQualifiedName~PlanKeyStructureTests` exit 0 (**19/19**) — **scope amendment**: the given
+    `FullyQualifiedName~QueryPlanStore` matches only one xunit method name
+    (`PlanKeyStructureTests.QueryPlanStore_ForcedHashCollision_ShouldFallBackToStructuralEquality`,
+    `tests/nextorm.core.tests/PlanKeyStructureTests.cs:291`); the owner/collision/staged-key suite the plan
+    assigns to the EC201-13 core portion is the class itself, so the class-level selector is added (a
+    narrowing-to-the-real-symbol amendment, not a widening to a whole-project/all-selecting filter);
+  - `--filter FullyQualifiedName~InMemoryTests` exit 0 (**183/183**).
+- Audit delivered (source-anchored at HEAD; full text in the boundary report §2-§3):
+  - writer→consumer→apply map of the complete prepared-state surface (`_selectList`/`_groupingList`/the
+    prepared clause arrays, `Prepared*`, all `*PlanHash`, `_whereBasePlanHash`, `InValuesShapeHash`,
+    `PreWhereShapeHash`, `ResultPlanHash`, `_isPrepared`, `_from`, `_ctes`, `_referencedQueries`,
+    `_outerRefs`, `Resolved*`, `NavigationPaths`, `JsonShape*`) with the single production consumer and the
+    writer sites;
+  - **the post-apply `QueryPlan` validation cannot substitute for raw verification**: `EqualsCore`
+    compares only the prepared forms (`QueryPlanEqualityComparer.cs:129,183,185,196`) and never the raw
+    `_exp`/`_condition`/`_groupExp`/`_preWhere`/`_arrayJoins`, so applied owner data makes a *different*
+    fresh raw graph still match → wrong-result false hit. A complete raw descriptor is mandatory.
+  - the existing expression comparer is value-independent for closures
+    (`ExpressionPlanEqualityComparer.cs:444-447`), while `ParamRefreshRecipe` rebinds from the **current**
+    command's `PreparedCondition` (`ParamRefreshRecipe.cs:110-121,184-207`) → a copied condition yields
+    stale parameters (the design's "changed closure values" negative).
+- DO→PLAN candidate — three mechanism-defining decisions the approved design revision 2 does **not** fix
+  (each a wrong-result-or-no-benefit fork; resolving them inside D201-3 would invent the mechanism):
+  1. the complete raw-descriptor surface: `QueryDefinition` carries 23 raw shape fields but **not**
+     `QuoteIdentifiers`/`NamingConvention`/`KeywordCase`/`CommandTimeout`/`EagerLoadMode`/`EagerLoadShape`/
+     `HasPerParentEagerTopN`, i.e. exactly the inputs whose `Resolved*` outputs any apply overwrites and
+     the key check then compares;
+  2. nested-command pairing/apply for the CTE / recursive-CTE / set-operation shapes the five Category B
+     scenarios require (`PrepareCtes` reassigns `_ctes` via `CteHoister.Hoist`, so pre- and post-prepare
+     declaration shapes differ; `_referencedQueries`/`_outerRefs` are *created* by preparation and cannot
+     be paired; a copied `_from` must not silently overwrite an explicitly-set raw one);
+  3. the closure/value policy (closure-bearing commands ineligible, vs. path/indices-based substitution
+     into the fresh graph).
+  **No store-contract invariant failed**: the `QueryPlanStore` raw-index contract (thread-locality, the one
+  generation transition, `Clear` leaving no usable alias, single caller) is implementable exactly as D201-1
+  recorded; the gap is in the recipe's descriptor/apply contract, above the store.
+- Guard/mutation audit (unchanged, re-confirmed): the shared-`AnyCommand` guard must use route/instance
+  identity (`discovery/shared-route.md`); **no** `Cache`/`_dontCache` write exists or is needed; the
+  bypass/prepared/`storeInCache:false` routes keep their original behaviour. `api/baseline.json` was not
+  modified by D201-3 (mtime `17:55:29`, still carries the `capture` block, on-disk sha256
+  `a9f60e83d7505e3c…`); the D201-3 preflight bare run wrote only `api/baseline-unconfigured-run.json`
+  (no `capture`, same inventory `sha256 c4c217f1b56f3e8e…`), so the D201-2 red→green export fix is
+  **re-verified green in D201-3**. Recorded discrepancy for CHECK: the D201-2 progress entry's
+  `api/baseline.json` sha256 `3a85c92d091c5416…` does not match the on-disk file (pre-existing D201-2
+  record; the file has not changed since the D201-2 capture).
+- Boundary evidence: `artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-3.md` and
+  `artifacts/pdca/T201/rv1/tests/unit-boundaries/D201-3/**` (brief, report, four preflight logs).
+  `validate_inner_loop.py brief` exit 0 and `validate_inner_loop.py report` exit 0.
+- Remaining obligation: D201-3's mechanism contract must return to PLAN (acceptance-table rows
+  EC201-09/10/11/13/14 core portions are **not** closed by this unit; only the audit portions of
+  EC201-10/EC201-14 are delivered). D201-4 stays blocked.
+
 ## Progress log
 
 - 2026-10-11, history: owner confirmed trigger and authorized conversational
@@ -1152,3 +1216,6 @@ actions justify another plan revision.
   captured inventory. Same bare command exit 0 (3/3): RED dropped the capture, GREEN preserves
   `api/baseline.json` byte-identically (sha256 `3a85c92d091c5416…`). No production `src/**` change; the
   baseline stage, the native gate and the committed registry commands are unaffected.
+
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-3: mandatory test scope validated BEFORE any edit (`validate_inner_loop.py brief` exit 0); preflight green on the unchanged tree (`dotnet build tests/nextorm.core.tests -c Debug` exit 0 0W/0E; filtered runs exit 0 with 3/19/183 tests selected, 0 failed) | artifacts/pdca/T201/rv1/tests/unit-boundaries/D201-3/preflight-build.log
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-3 STOP before production edit: DO→PLAN candidate (`plan contract gap`) — the audit proves the post-apply `QueryPlan` validation compares prepared forms only (QueryPlanEqualityComparer.cs:129,183,185,196) so a complete raw descriptor is mandatory, and the descriptor surface / nested-command apply for CTE+union shapes / closure-value policy are not fixed by design revision 2; no store invariant failed; the three authorized `src` files are byte-identical (git status + git diff --stat empty); no `D:` unit completion claimed — D201-3 stays blocked, D201-4 not unblocked | artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-3.md
