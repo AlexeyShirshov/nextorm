@@ -1237,6 +1237,61 @@ actions justify another plan revision.
 - Next: D201-3 boundary acceptance closes its assigned portion only; D201-4 is unblocked once CHECK accepts
   this boundary. No performance, provider or API row is closed by this unit.
 
+## DO — D201-4 (correctness, providers, branches, quality and API)
+
+- Unit boundary: D201-4 is test-and-evidence only. **No production `src/**` edit** was made (none was
+  needed). Tracked writes: `tests/nextorm.integration.tests/CommonTestSuite.CachedPreparation.cs` (new),
+  `tests/nextorm.integration.tests/SqlServerCachedPreparationSpecificTests.cs` (new) and this status file.
+  `tests/nextorm.core.tests/CachedPreparationRecipeTests.cs` was used unchanged for the candidate export.
+  Cycle N=1, plan revision **r=2**, attempt **n=1**, contract **rv1** — unchanged; single group, current tree.
+- Preflight (mandatory test scope validated **before** any edit): `validate_inner_loop.py brief` exit 0.
+- Builds: `dotnet build tests/nextorm.integration.tests -c Debug` exit 0 (0 Warning(s)/0 Error(s),
+  `tests/unit-boundaries/D201-4/inner-build.log`); `dotnet build nextorm.slnx -c Debug` exit 0
+  (**0 Warning(s) 0 Error(s)**, `artifacts/pdca/T201/rv1/build.log`).
+- Inner loop: `dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter FullyQualifiedName~CachedPreparation`
+  exit 0, **48 selected** (4 `CommonTestSuite` providers x 11 shared + 4 SQL Server-specific),
+  11 passed / 0 failed / 37 skipped without Docker (SQLite only) — `inner-cachedpreparation.log`.
+- Boundary suites (each exit 0): core `dotnet test tests/nextorm.core.tests -c Debug --no-build`
+  **2562/2562** (0 failed, 0 skipped); container integration
+  `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -noColor`
+  **3978 total / 0 failed / 0 errors / 198 capability skips / 0 provider skips**, with **0** container-start
+  failures -> PostgreSQL, SQL Server, MySQL and ClickHouse all executed; supplementary dialect sweep
+  `dotnet test tests/nextorm.sqlite.tests -c Debug --no-build` **1749** (1748 pass, 1 pre-existing opt-in skip).
+- All **48** `CachedPreparation` tests ran (0 skips): 11 shared per provider for SQLite/PostgreSQL/SQL Server/MySQL
+  (publish+reuse, raw-graph non-aliasing, results equivalence, streaming/non-streaming, cancellation,
+  partial enumeration + disposal, later cache hit after the shared terminal route, and the whole-graph
+  CTE/recursive-CTE/EXCEPT+INTERSECT/Distinct differentials), plus 4 SQL Server-only cases (lazy temp-source
+  guard, `#temp` read on the ordinary path, TVP binding never entering the recipe, TVP metadata
+  auto/configured-precedence/`Clear`). The SQL Server temp-source case observed the guard (`CaptureRawShape`
+  null, `NotSupportedException` from the ordinary render, unchanged plan-holder count).
+- Coverage (native repository workflow, once, CI-faithful): `dotnet-coverage collect -s coverage.settings.xml
+  -f cobertura -o artifacts/pdca/T201/rv1/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"`
+  exit 0; `reportgenerator` exit 0 -> **Line 87.5%** (threshold 85), **Branch 79.2% (29785/37571)** (threshold 75),
+  Method 78.7% — **warning-only on `1.0.9-rc3`**, both met. Recipe files: `QueryPlanStore.cs` 97.2/93.8,
+  `QueryPlanner.cs` 96.9/90.9, `QueryCommand.QueryPreparer.cs` (QueryCommand) 96.5/82.5, `RawShape` 76.6/51.7.
+  **Six touched-branch families have no directly targeted test** and are enumerated in `reports/quality.md`
+  (`QueryPlanStore.cs:141`/`:145`, `QueryPlanner.cs:673-674`, per-field `RawShape.Matches` arms, the
+  `CapturedValueScan` rejection arm, debug-only log/`Debug.Fail`).
+- API: candidate public-surface export via the D201-2 in-test mechanism exit 0, 16/16 ->
+  `api/candidate.json` (sha256 `9d2e3e35...`, `pre_production: false`) against `api/baseline.json`
+  (sha256 `a9f60e83...`, `pre_production: true`, `head da9b8100`); `api/diff.json` **equal = true**
+  (added/removed/changed = 0) -> identical public surface, `Prepare()` unchanged, no new required public
+  preparation. Recorded evidence-tooling observation: `t201_evidence.py --stage api --phase candidate` was
+  not invoked directly — its candidate capture block hard-codes `pre_production: true` /
+  `source_revision: T201-D201-2-r2rv1`, and `--phase auto` emits a diff only once the benchmark `candidate/`
+  directory exists (D201-5); the required result was produced with the same in-test export plus the wrapper's
+  `api_diff`. This does not affect the measured verdict.
+- Reports: `reports/{correctness,shared-command,temp-tvp,cache-contract,recipe-consumers,quality}.md`,
+  `reports/unit-boundaries/D201-4.md`; evidence bundle `tests/unit-boundaries/D201-4/{brief,report}.json`
+  with `validate_inner_loop.py brief` exit 0 and `report` exit 0.
+- Boundary observations (CHECK owns the verdict): EC201-09/10/13/14, EC201-11, EC201-12 and EC201-15 each have
+  observed evidence as tabulated in `reports/unit-boundaries/D201-4.md`. Open for CHECK: the
+  MariaDB/ClickHouse recipe-differential coverage gap (neither derives from `CommonTestSuite`, so the shared
+  differential does not run on them) and the six untargeted branch families.
+- Remaining obligation: **D201-5** — the five Category B arm measurements, all parity/allocation decisions,
+  the unchanged native iteration14 gate (28 rows x 2 toolchains) and the sixteen-row DO->CHECK manifest.
+  Performance parity is **not** claimed by D201-4.
+
 ## Progress log
 
 - 2026-10-11, history: owner confirmed trigger and authorized conversational
@@ -1302,3 +1357,9 @@ actions justify another plan revision.
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-3 adjudicated: DO→PLAN candidate classified (b) acceptable assumption/risk by `planner`; plan unchanged (r=2/rv1/n=1, no reset, no new P task, no escalation); D201-3 resumed as active | artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-3.md
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-3 completed: raw candidate index + raw descriptor + live-owner/generation validation + transactional apply implemented in the three authorized src files; `dotnet build nextorm.slnx -c Debug` 0W/0E; core suite 2562/2562; recipe tests 16/16; supplementary dialect suites sqlite 1749 / postgres 978 / sqlserver 970 / mysql 456 / clickhouse 735 all exit 0; 3 real defects found and fixed red→green (context-default settings leak, raw-from identity, prepared OneColumn); `validate_inner_loop.py` brief/report exit 0 | artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-3.md
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-3 record correction (confirmed): `api/baseline.json` on-disk sha256 is `a9f60e83d7505e3c…` (file unmodified since 17:55:29, `capture` block present); the D201-2 progress entry's recorded `3a85c92d091c5416…` is wrong; baseline file untouched, bare export runs wrote only `api/baseline-unconfigured-run.json` | artifacts/pdca/T201/rv1/api/baseline.json
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-4 scope validated before any edit (`validate_inner_loop.py brief` exit 0); inner build `dotnet build tests/nextorm.integration.tests -c Debug` exit 0 0W/0E | artifacts/pdca/T201/rv1/tests/unit-boundaries/D201-4/inner-build.log
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-4 inner loop: filtered integration run exit 0 — 48 selected / 11 passed / 0 failed / 37 skipped (no Docker) | artifacts/pdca/T201/rv1/tests/unit-boundaries/D201-4/inner-cachedpreparation.log
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-4 boundary: solution build 0W/0E; core 2562/2562; container integration 3978 total / 0 failed / 0 provider skips (all 48 CachedPreparation executed); supplementary sqlite dialect sweep 1749 (1 pre-existing opt-in skip) | artifacts/pdca/T201/rv1/tests/unit-boundaries/D201-4/boundary-integration.log
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-4 coverage once: line 87.5% >= 85, branch 79.2% (29785/37571) >= 75 — warning-only on 1.0.9-rc3; 6 recipe branch families without a directly targeted test enumerated | artifacts/pdca/T201/rv1/coverage/report/Summary.txt
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-4 API: candidate (16/16 export, post-edit) vs baseline diff equal=true (added/removed/changed=0) — identical public surface | artifacts/pdca/T201/rv1/api/diff.json
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-4 unit boundary reported as an observation only (satisfaction is CHECK's verdict; D201-5 remains); `validate_inner_loop.py` brief/report exit 0 | artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-4.md
