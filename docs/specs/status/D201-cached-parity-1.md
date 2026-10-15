@@ -1458,3 +1458,42 @@ actions justify another plan revision.
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-5 defect `T201-D5-MANIFEST-TRUTH` fixed red->green (1 fix): pre-fix `stage_manifest` projected a FAILed parity row as `met` (EC201-02 undetected); regression check RED exit 1 -> GREEN exit 0; plus phase-aware API capture provenance and the EC201-15 self-test path fix | artifacts/pdca/T201/rv1/tests/unit-boundaries/D201-5/manifest_truthfulness_check.py
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-5 W-M exit 1 with a truthful diagnostic manifest: 16 IDs once each, contract_rv 1, no na, eleven met rows, five open parity rows (EC201-02..06); schema validator exit 0, wrapper local check exit 1 by design; `manifest.boundary.json` preserved | artifacts/pdca/T201/rv1/manifest.boundary.json
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-5 DO->PLAN candidate: measured mechanism miss on the five Category B allocation decisions; R201-B-CTE/RECURSIVE/EXCEPT/INTERSECT/DISTINCT unsatisfiable by the current implementation -> requires a real replan by `planner` (never a tolerance/body/oracle change); no D:-unit completion claimed, EC201-02..06 stay open | docs/specs/performance/m12-3-prepare-command-results.md
+
+## Diagnostic gather — cached-path allocation attribution (planner-ordered, classification (d))
+
+- Event: targeted **diagnostic gather** ordered by `planner` (DO→PLAN classification (d) insufficient
+  evidence) so a new `P:` task can be written with correct per-phase numbers. **Diagnostics only — NOT
+  acceptance evidence; consumed ZERO additional full-job measurement rounds** (W-C / W-P / W-A / W-W
+  were not re-run; no parity decision, row status, tolerance, oracle or budget was touched).
+- Cycle state **unchanged**: N=1, plan_revision **r=2**, evidence contract **rv1**, attempt **n=1/3**;
+  single group, current tree, no worktree/branch/merge.
+- Method: bounded **out-of-tree replay probe** under `/tmp/nextorm-t201-probe/` (verbatim copies of the
+  five `SqliteBenchmarkFeaturesFairCached.B_Nextorm_Cached_*` shapes against the same `test.db`, with
+  `GC.GetTotalAllocatedBytes` phase deltas and expression-compiled delegates onto the internal
+  `QueryCommand.CaptureRawShape`, `QueryCommand.Fingerprint` and `QueryPlanStore.TryGetRaw`). Validated
+  against the frozen rounds: the probe's 10-iteration arm reproduces the BDN candidate B/op within
+  +0.32…+3.53 %. The preferred profiler method was **not** used: `dotnet-trace` IS installed globally,
+  but attaching it to the real BDN workload child would require re-running a full Category B job, and no
+  shipped tool converts GC allocation ticks into attribution (`report topN` is CPU/time based; the
+  `gc-verbose` speedscope export has 0 samples/0 weights; `dotnet-gcdump`/`dotnet-counters` are absent;
+  nothing was installed) → type/stack-level attribution is recorded as an evidence gap.
+- Result (diagnostic, per single cached call; ×10 = B/op basis): the D201-3 recipe block is 20 409 /
+  36 706 / 21 567 / 21 630 / 9 587 B/op for Cte / RecursiveCte / Except / Intersect / Distinct, i.e.
+  91.4 / 64.7 / 109.1 / 107.7 / 285.3 % of the required gap (22 328 / 56 721 / 19 763 / 20 083 /
+  3 360 B/op). Within the block, raw-descriptor capture (incl. the first lazily created per-command
+  comparer) and `RawShape.Matches` (≈ three lazily created comparers) dominate; `apply`
+  (`CaptureRawGraph` + `ApplyPreparationFrom`/`CopyTo` + staged `GetOrCreatePlanKey`) is ≤ 1 396 B/op and
+  copies references only. **Verdict: Except / Intersect / Distinct are closable by removing the per-call
+  descriptor + verification allocations; Cte is NOT closable by that alone (best case +2.3 % over
+  LINQ to DB); RecursiveCte is NOT closable (best case +24.4 % — its fresh fluent command construction
+  alone, 105 163 B/op, already exceeds LINQ to DB's entire 87 522 B/op).**
+- Arithmetic reconciliation: the D201-5 “+64.8 %” for RecursiveCte is **correct** and needs no
+  correction (`144 243 / 87 522 − 1 = 64.81 %`, same-round denominator as the frozen rule); the
+  “≈ 67.9 %” variant would mix in the baseline-phase competitor value 85 922. The brief's RecursiveCte
+  required gap 58 321 has the same mix-up; the same-round gap is 56 721. No parity outcome changes.
+- Evidence: `artifacts/pdca/T201/rv1/diagnostics/{attribution.md,commands.json,probe-results.json,
+  probe-results-run2.json,probe-run1.log,probe-run2.log,probe-gc-verbose.nettrace,
+  probe-gc-verbose.speedscope.json,trace-collect.log,probe-Program.cs.txt,probe.csproj.txt}`.
+  No `src/**`, benchmark body, prepared-status semantic, gate, budget or oracle change; the probe and
+  its outputs live out of tree / under `artifacts/**`.
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | T201 diagnostic gather (planner order, classification (d)): phase attribution of the D201-3 cached path per scenario via an out-of-tree GC replay probe (validated against BDN within +0.32..+3.53%); recipe block = 91.4/64.7/109.1/107.7/285.3% of the required gap -> Except/Intersect/Distinct closable, Cte marginal (+2.3%), RecursiveCte not closable (+24.4%); D201-5 +64.8% confirmed correct; zero measurement rounds consumed, r=2/rv1/n=1 unchanged; profiler present but no allocation-stack analyser (type/stack attribution = evidence gap) | artifacts/pdca/T201/rv1/diagnostics/attribution.md
