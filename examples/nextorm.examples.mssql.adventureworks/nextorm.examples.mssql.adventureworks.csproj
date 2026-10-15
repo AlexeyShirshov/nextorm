@@ -20,6 +20,7 @@
     -->
     <ProjectReference Include="../../src/nextorm.core/nextorm.core.csproj" />
     <ProjectReference Include="../../src/nextorm.sqlserver/nextorm.sqlserver.csproj" />
+    <ProjectReference Include="../../src/nextorm.core.sourcegenerator/nextorm.core.sourcegenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
