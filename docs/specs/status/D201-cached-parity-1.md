@@ -6,8 +6,8 @@
 - selected_variant: pdca-dotnet
 - cycle_id: N=1
 - plan_revision: r=2
-- phase: DO (D201-3 completed — adjudicated classification (b), plan unchanged)
-- plan_state: ready
+- phase: STOP — terminal `incomplete` (escalate decision; cause = **allocations only**, time MET; no r=3)
+- plan_state: incomplete (terminal, per `escalate`; owner to accept or revise)
 - date: 2026-10-11
 - evidence_contract: rv1
 
@@ -1497,3 +1497,55 @@ actions justify another plan revision.
   No `src/**`, benchmark body, prepared-status semantic, gate, budget or oracle change; the probe and
   its outputs live out of tree / under `artifacts/**`.
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | T201 diagnostic gather (planner order, classification (d)): phase attribution of the D201-3 cached path per scenario via an out-of-tree GC replay probe (validated against BDN within +0.32..+3.53%); recipe block = 91.4/64.7/109.1/107.7/285.3% of the required gap -> Except/Intersect/Distinct closable, Cte marginal (+2.3%), RecursiveCte not closable (+24.4%); D201-5 +64.8% confirmed correct; zero measurement rounds consumed, r=2/rv1/n=1 unchanged; profiler present but no allocation-stack analyser (type/stack attribution = evidence gap) | artifacts/pdca/T201/rv1/diagnostics/attribution.md
+
+## STOP — escalate decision (terminal incomplete)
+
+- **Outcome: T201 terminates as terminal `incomplete`.** The binding `escalate` decision is routed here
+  and is **not re-litigated, softened or upgraded**; **no remediation is implemented, no revision r=3 is
+  created, `done-with-caveat` is not used, and the remainder is NOT moved to a later milestone.**
+  Lane **G1 and the collection stop**. Whether to accept or revise belongs to the owner.
+- **Cause = allocations only; the time verdict stays MET.** All five Category B allocation decisions are
+  unreachable within the approved design revision 2; the time parity bound is met on every scenario in
+  both valid rounds.
+- Cycle state **unchanged**: N=1, plan_revision **r=2**, evidence contract **rv1**, attempt **n=1/3**.
+  **Deliberately 0 of the at-most-2 extra full-job rounds were consumed** (no additional W-C/W-P/W-A/W-W
+  round was run). **No rv3**, no revision-version reset, no attempt reset.
+- **The sixteen rv1 evidence rows are left exactly as they are: EC201-02..EC201-06 (the five allocation
+  decisions) = FAIL; every other row as already recorded.** Nothing was rewritten or re-graded, and no
+  tolerance, benchmark body, prepared-status semantic, gate budget or oracle was changed.
+- **Bound arithmetic that decided it:**
+  - **RecursiveCte stays ≈ +24.4 % over LINQ to DB even at `recipe = 0`** — its fresh fluent command
+    construction alone is **105 163 B/op vs LINQ to DB's entire 87 522 B/op**, so removing the whole
+    recipe block cannot reach allocation parity.
+  - **Cte stays ≈ +2.3 % after removing the entire recipe block** — the recipe `capture+verify` cost
+    **19 748 B/op < the required gap 22 328 B/op**, so deleting all descriptor/verification work is still
+    insufficient.
+  - **Except / Intersect / Distinct were only *theoretically* within the recipe budget and unproven**, so
+    they do not rescue the contract — **all five decisions are required.**
+- **Measured candidate state (rv1, unchanged):** time **MET on all five** scenarios in both rounds;
+  allocations **FAIL on all five** in both rounds — Cte **+24.06 %**, RecursiveCte **+64.81 %**,
+  Except **+38.19 %**, Intersect **+39.16 %**, Distinct **+8.38 %** over LINQ to DB. Native gate
+  **56/56 (28 rows × 2 toolchains)**, both exits **0**, three zero rows exactly **0 B**, 840-budget row
+  **744.00 / 744.01 B/op**; acceptance **7/7**, no noise; API **identical** (`diff equal = true`);
+  coverage **line 87.5 % / branch 79.2 %**; integration **3978 total / 0 failed / 0 provider skips**.
+  DO commits `bff40da2`, `da9b8100`, `6f7ad459`, `a21e5d89`, `d9a05234`, `2a6a8cee` are **retained on the
+  branch and never pushed**.
+- **Owner request (both branches):**
+  - (a) a **separate new scope** for the *fluent-command construction* allocation cost — its own design
+    and, per the project rule, its **own milestone**; this is **never** a silent move of this remainder;
+  - (b) an **owner decision about the allocation tolerance** for Cte / RecursiveCte.
+- **Routing record:** `planner` → classification **trigger-5** → `escalate` → decision **terminal
+  `incomplete`**. `escalate` itself recorded the caveat that its confidence rests on the brief's numbers
+  and on an assumption that the fluent command construction cannot be trimmed without leaving design
+  revision 2 — checked **against the numbers, not against the `Builders/` code**.
+
+### STOP progress log
+
+- 2026-10-15 | STOP | revision r=2 | iteration n=1/3 | T201 terminates terminal `incomplete` per binding `escalate` decision — cause = allocations only, time MET; no r=3, no `done-with-caveat`, no milestone move; lane G1 and collection stop; 0 of at-most-2 extra full-job rounds consumed, no rv3, no version reset | docs/specs/status/D201-cached-parity-1.md
+- 2026-10-15 | STOP | revision r=2 | iteration n=1/3 | rv1 rows unchanged: EC201-02..06 (five allocation decisions) FAIL, all others as recorded; nothing rewritten/re-graded | artifacts/pdca/T201/rv1/manifest.boundary.json
+- 2026-10-15 | STOP | revision r=2 | iteration n=1/3 | bound arithmetic: RecursiveCte ~ +24.4% at recipe=0 (fresh fluent construction 105 163 B/op > LINQ's whole 87 522 B/op); Cte ~ +2.3% after removing the recipe block (capture+verify 19 748 < gap 22 328); Except/Intersect/Distinct only theoretically in budget and unproven -> no rescue (all five required) | artifacts/pdca/T201/rv1/diagnostics/attribution.md
+- 2026-10-15 | STOP | revision r=2 | iteration n=1/3 | measured candidate: time MET all five both rounds; allocations FAIL all five both rounds (Cte +24.06%, RecursiveCte +64.81%, Except +38.19%, Intersect +39.16%, Distinct +8.38%); native gate 56/56 both exits 0, zero rows 0 B, 840-budget row 744.00/744.01; acceptance 7/7 no noise; API identical; coverage 87.5/79.2; integration 3978/0 failed/0 provider skips | artifacts/pdca/T201/rv1/reports/parity.json
+- 2026-10-15 | STOP | revision r=2 | iteration n=1/3 | DO commits bff40da2, da9b8100, 6f7ad459, a21e5d89, d9a05234, 2a6a8cee retained on branch 1.0.9-rc3, never pushed | git log
+- 2026-10-15 | STOP | revision r=2 | iteration n=1/3 | owner request: (a) separate new scope + own milestone for the fluent-command construction allocation cost (never a silent move of this remainder); (b) owner decision on the allocation tolerance for Cte/RecursiveCte | docs/specs/status/D201-cached-parity-1.md
+- 2026-10-15 | STOP | revision r=2 | iteration n=1/3 | routing: planner -> classification trigger-5 -> escalate -> decision terminal `incomplete`; escalate caveat: confidence rests on the brief's numbers and an assumption that fluent construction cannot be trimmed without leaving design revision 2 (checked against the numbers, not the Builders/ code) | docs/specs/status/D201-cached-parity-1.md
+- 2026-10-15 | STOP | revision r=2 | iteration n=1/3 | outcome posted as a comment on issue #201 (no existing tracking comment found; issue left OPEN): https://github.com/AlexeyShirshov/nextorm/issues/201#issuecomment-6195428316 | docs/specs/status/D201-cached-parity-1.md
