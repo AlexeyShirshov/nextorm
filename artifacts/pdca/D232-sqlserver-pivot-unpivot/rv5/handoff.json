@@ -23,7 +23,7 @@
      "lf": 0
     },
     "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md": {
-     "crlf": 998,
+     "crlf": 1000,
      "ending": "CRLF",
      "lf": 0
     },
@@ -165,7 +165,7 @@
    "untracked_checked": 3
   },
   "green_committed_implementation": {
-   "commit_count": 18,
+   "commit_count": 19,
    "commits": [
     {
      "ref": "9b4bf5d4",
@@ -220,7 +220,7 @@
    "committed_tested_proof": {
     "all_paths_committed_and_clean": true,
     "branch": "1.0.9-rc3",
-    "commit_count": 17,
+    "commit_count": 18,
     "commits_carrying_tested_paths": [
      "001f9c9c",
      "04d2289d",
@@ -312,8 +312,8 @@
      "e9121976"
     ],
     "green_evidence_attached": true,
-    "head_full": "521e8f800d53c5e1030c5c80b9ac9f031a1aadd4",
-    "head_short": "521e8f80",
+    "head_full": "d00b04c36bb40ba66fabd45c4fd82fcffbc18179",
+    "head_short": "d00b04c3",
     "line_ending_note": "core.autocrlf=true: HEAD blobs are LF, the checkout is CRLF - equality is checked on LF-normalised content plus git diff/status against HEAD",
     "paths": [
      {
@@ -1053,14 +1053,16 @@
     "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json",
     "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json",
     "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv4.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv5.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
     "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-ledger.json",
     "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-verification.json",
-    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
     "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal-reconciliation.json",
     "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal.json",
     "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/source-snapshot.json",
     "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tool-selftests.json",
-    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tools/rv5_evidence.py"
+    "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md"
    ],
    "untracked_dirty_paths": []
   },
@@ -1110,12 +1112,12 @@
   }
  },
  "branch": "1.0.9-rc3",
- "captured": "2026-10-15T08:43:52Z",
+ "captured": "2026-10-15T08:51:15Z",
  "case": "handoff",
  "committed_tested_proof": {
   "all_paths_committed_and_clean": true,
   "branch": "1.0.9-rc3",
-  "commit_count": 17,
+  "commit_count": 18,
   "commits_carrying_tested_paths": [
    "001f9c9c",
    "04d2289d",
@@ -1207,8 +1209,8 @@
    "e9121976"
   ],
   "green_evidence_attached": true,
-  "head_full": "521e8f800d53c5e1030c5c80b9ac9f031a1aadd4",
-  "head_short": "521e8f80",
+  "head_full": "d00b04c36bb40ba66fabd45c4fd82fcffbc18179",
+  "head_short": "d00b04c3",
   "line_ending_note": "core.autocrlf=true: HEAD blobs are LF, the checkout is CRLF - equality is checked on LF-normalised content plus git diff/status against HEAD",
   "paths": [
    {
@@ -1820,20 +1822,20 @@
   "source": "rv4/handoff.json"
  },
  "failed_elements": [],
- "head_full": "521e8f800d53c5e1030c5c80b9ac9f031a1aadd4",
- "head_short": "521e8f80",
+ "head_full": "d00b04c36bb40ba66fabd45c4fd82fcffbc18179",
+ "head_short": "d00b04c3",
  "reason": null,
  "retention_is_not_commit_authorization": true,
  "satisfied": true,
  "source_snapshot": {
   "branch": "1.0.9-rc3",
-  "captured_at": "2026-10-15T08:43:51Z",
+  "captured_at": "2026-10-15T08:51:14Z",
   "git_ok": true,
-  "head_full": "521e8f800d53c5e1030c5c80b9ac9f031a1aadd4",
-  "head_short": "521e8f80",
+  "head_full": "d00b04c36bb40ba66fabd45c4fd82fcffbc18179",
+  "head_short": "d00b04c3",
   "repo_root": "/home/alex/sources/nextorm",
-  "status_short_count": 75,
-  "status_short_digest": "46a36523d58715120f2515248113d3fca145c41109543c54889b6acaa8519943",
+  "status_short_count": 77,
+  "status_short_digest": "039dd41eaf461f965be2b096dc5eb5999d7b1fb7ab081edd9d7ac54d74031ea3",
   "status_short_paths": [
    ".opencode/agents/nextorm-code-auditor.md",
    ".opencode/agents/nextorm-db-perf-analyst.md",
@@ -1870,14 +1872,15 @@
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv4.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv5.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-ledger.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-verification.json",
-   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal-reconciliation.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/source-snapshot.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tool-selftests.json",
-   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tools/rv5_evidence.py",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html",
@@ -1902,6 +1905,7 @@
    "docs/specs/status/D218-sqlserver-sequences-1.md",
    "docs/specs/status/D222-join-overloads-by-type-1.md",
    "docs/specs/status/D226-records-affected-1.md",
+   "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
    "examples/Directory.Packages.props",
    "examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs",
    "examples/nextorm.examples.clickhouse.analytics/README.md",
