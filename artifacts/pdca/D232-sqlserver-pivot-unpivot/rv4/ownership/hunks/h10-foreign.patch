@@ -1,0 +1,83 @@
+diff --git a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+index 3fe2ddd0..a54a2c5f 100644
+--- a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
++++ b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+@@ -191,48 +198,48 @@ public static class AdventureWorksQueries
+                 SalesQuarter = SqlFunctions.Sql.date_trunc("quarter", p.Item2.OrderDate),
+                 QuarterlyRevenue = SqlFunctions.Sql.sum(p.Item1.LineTotal),
+                 QuarterlyQty = SqlFunctions.Sql.sum(p.Item1.OrderQty)
+-            });
++            })
++            .AsCte("ProductQuarterlySales");
+ 
+         // CTE ProductAggregates.
+-        var aggregates = ctx.From("ProductQuarterlySales")
+-            .GroupBy(q => new { ProductID = q.GetInt32("ProductID"), ProductName = q.GetString("ProductName") })
++        var aggregates = ctx.From(quarterly)
++            .GroupBy(q => new { q.ProductID, q.ProductName })
+             .Select(q => new
+             {
+-                ProductID = q.GetInt32("ProductID"),
+-                ProductName = q.GetString("ProductName"),
+-                TotalRevenue = SqlFunctions.Sql.sum(q.GetDecimal("QuarterlyRevenue")),
+-                AvgQty = SqlFunctions.Sql.avg((double)q.GetInt32("QuarterlyQty")),
+-                StdevQty = SqlFunctions.Sql.stdev((double)q.GetInt32("QuarterlyQty"))
+-            });
++                q.ProductID,
++                q.ProductName,
++                TotalRevenue = SqlFunctions.Sql.sum(q.QuarterlyRevenue),
++                AvgQty = (double?)SqlFunctions.Sql.avg((double)q.QuarterlyQty),
++                StdevQty = (double?)SqlFunctions.Sql.stdev((double)q.QuarterlyQty)
++            })
++            .AsCte("ProductAggregates");
+ 
+         // CTE AbcRanking.
+-        var abc = ctx.From("ProductAggregates")
++        var abc = ctx.From(aggregates)
+             .Select(a => new
+             {
+-                ProductName = a.GetString("ProductName"),
+-                TotalRevenue = a.GetDecimal("TotalRevenue"),
+-                AvgQty = a.GetNullableDouble("AvgQty"),
+-                StdevQty = a.GetNullableDouble("StdevQty"),
+-                RunningPercent = SqlFunctions.Sql.sum_over(a.GetDecimal("TotalRevenue"))
+-                                      .Over(SqlFunctions.Sql.desc(() => (object?)a.GetDecimal("TotalRevenue")))
+-                                  / SqlFunctions.Sql.sum_over(a.GetDecimal("TotalRevenue")).Over()
+-            });
++                a.ProductName,
++                a.TotalRevenue,
++                a.AvgQty,
++                a.StdevQty,
++                RunningPercent = SqlFunctions.Sql.sum_over(a.TotalRevenue)
++                                      .Over(SqlFunctions.Sql.desc(() => a.TotalRevenue))
++                                  / SqlFunctions.Sql.sum_over(a.TotalRevenue).Over()
++            })
++            .AsCte("AbcRanking");
+ 
+-        var rows = await ctx.With("ProductQuarterlySales", quarterly)
+-            .With("ProductAggregates", aggregates)
+-            .With("AbcRanking", abc)
+-            .From("AbcRanking")
+-            .OrderByDescending(a => a.GetDecimal("TotalRevenue"))
++        var rows = await ctx.From(abc)
++            .OrderByDescending(a => a.TotalRevenue)
+             .Select(a => new
+             {
+-                ProductName = a.GetString("ProductName"),
+-                TotalRevenue = Math.Round(a.GetDecimal("TotalRevenue"), 2),
+-                Abc = a.GetDecimal("RunningPercent") <= 0.80m ? "A"
+-                    : a.GetDecimal("RunningPercent") <= 0.95m ? "B"
++                a.ProductName,
++                TotalRevenue = Math.Round(a.TotalRevenue, 2),
++                Abc = a.RunningPercent <= 0.80m ? "A"
++                    : a.RunningPercent <= 0.95m ? "B"
+                     : "C",
+-                Xyz = a.GetNullableDouble("AvgQty") == 0 || a.GetNullableDouble("StdevQty") == null ? "Z"
+-                    : a.GetNullableDouble("StdevQty") / a.GetNullableDouble("AvgQty") < 0.15 ? "X"
+-                    : a.GetNullableDouble("StdevQty") / a.GetNullableDouble("AvgQty") <= 0.30 ? "Y"
++                Xyz = a.AvgQty == 0 || a.StdevQty == null ? "Z"
++                    : a.StdevQty / a.AvgQty < 0.15 ? "X"
++                    : a.StdevQty / a.AvgQty <= 0.30 ? "Y"
+                     : "Z"
+             })
+             .ToListAsync(ct);

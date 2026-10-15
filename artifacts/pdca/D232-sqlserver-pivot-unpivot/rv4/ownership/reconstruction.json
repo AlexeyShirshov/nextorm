@@ -1,0 +1,78 @@
+{
+ "attempts": [
+  {
+   "apply_exit": 0,
+   "apply_stderr": "",
+   "apply_stdout": "",
+   "blob": "01055fb666b4251b60c71173e34bdc58605f5e33",
+   "bytes": 23626,
+   "check_exit": 0,
+   "check_stderr": "",
+   "label": "t232-first",
+   "sha256": "f61ca0dcec8b82bc9dce041a2327c470c62d9d0a1fdff395711a4fea72ad3a1a"
+  },
+  {
+   "apply_exit": 0,
+   "apply_stderr": "",
+   "apply_stdout": "",
+   "blob": "a54a2c5fcfba8e8c3fa4f34fa38ea505aace1099",
+   "bytes": 24058,
+   "check_exit": 0,
+   "check_stderr": "",
+   "label": "t232-then-foreign",
+   "sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d"
+  },
+  {
+   "apply_exit": 0,
+   "apply_stderr": "",
+   "apply_stdout": "",
+   "blob": "0bdd0ee627681dd35334628578536f67360e0f5a",
+   "bytes": 23898,
+   "check_exit": 0,
+   "check_stderr": "",
+   "label": "foreign-first",
+   "sha256": "36dcd8dcd59dc093bb302733334cf536d3c5c7f00ebf7e3b8f9b57ea8e9b5ba2"
+  },
+  {
+   "apply_exit": 0,
+   "apply_stderr": "",
+   "apply_stdout": "",
+   "blob": "a54a2c5fcfba8e8c3fa4f34fa38ea505aace1099",
+   "bytes": 24058,
+   "check_exit": 0,
+   "check_stderr": "",
+   "label": "foreign-then-t232",
+   "sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d"
+  },
+  {
+   "apply_exit": 0,
+   "apply_stderr": "",
+   "apply_stdout": "",
+   "blob": "a54a2c5fcfba8e8c3fa4f34fa38ea505aace1099",
+   "bytes": 24058,
+   "check_exit": 0,
+   "check_stderr": "",
+   "label": "full-patch",
+   "sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d"
+  }
+ ],
+ "full_patch_sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d",
+ "hunk_count_foreign": 11,
+ "hunk_count_t232": 2,
+ "hunk_count_total": 13,
+ "new_ranges_disjoint": true,
+ "old_ranges_disjoint": true,
+ "order_foreign_then_t232_sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d",
+ "order_t232_then_foreign_sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d",
+ "parent": {
+  "blob": "3fe2ddd057912d653ec392daec1588869adc337e",
+  "rev": "887de2cfeca50b4093a8beda6e477257b8864a4d",
+  "sha256": "85f93c4d10e424baf05c05fd7e4dacf6cc8f1c8464f11dbafba9f6f119298a81"
+ },
+ "target": {
+  "blob": "a54a2c5fcfba8e8c3fa4f34fa38ea505aace1099",
+  "rev": "001f9c9cc55c0bc6aa41a9a796c3db5f3a5c21c1",
+  "sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d"
+ },
+ "verified": true
+}

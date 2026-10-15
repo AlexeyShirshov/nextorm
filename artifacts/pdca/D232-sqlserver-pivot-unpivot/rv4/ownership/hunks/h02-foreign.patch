@@ -1,0 +1,21 @@
+diff --git a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+index 3fe2ddd0..a54a2c5f 100644
+--- a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
++++ b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+@@ -14,11 +16,13 @@ namespace NextORM.Examples.SqlServer.AdventureWorks;
+ public static class AdventureWorksQueries
+ {
+     // 1. Sql/mssql_vip_churn.sql
+-    // WORKING: two CTEs (CustomerOrders, CustomerMetrics) expressed as CTEs; CustomerMetrics groups
+-    // CustomerOrders by name; the outer query LEFT JOINs it to SalesPerson/Person. FORMAT uses DemoUdf.
++    // WORKING: two typed CTEs (`AsCte`); the outer query names the root (`WithAlias(Alias.Root)`) and both
++    // LEFT JOINs (`Alias.SalesPerson` / `Alias.Manager`). The root projects the named `CustomerMetricRow`
++    // DTO because the alias surface cannot render the chain's anonymous type. FORMAT uses DemoUdf.
+     public static async Task VipChurn(IDataContext ctx, CancellationToken ct)
+     {
+-        // CTE CustomerOrders; the manager join stays in the outer SELECT.
++        // CTE CustomerOrders; the manager join stays in the outer SELECT. AsCte makes it a typed
++        // descriptor (member access) instead of reading it by name through TableAlias.
+         var customerOrders = ctx.From<ISalesOrderHeader>()
+             .Join(ctx.From<ICustomer>(), (soh, c) => soh.CustomerId == c.CustomerId)
+             .Join(ctx.From<IPerson>(), (p, per) => p.Item2.PersonId == per.BusinessEntityId)

@@ -1,0 +1,14 @@
+diff --git a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+index 3fe2ddd0..a54a2c5f 100644
+--- a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
++++ b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+@@ -137,7 +142,8 @@ public static class AdventureWorksQueries
+                 VendorID = p.Item2.VendorId,
+                 VendorName = p.Item3.Name,
+                 DelayDays = SqlFunctions.Sql.date_diff("day", p.Item1.DueDate, p.Item1.ModifiedDate)
+-            });
++            })
++            .AsCte("SupplierDelays");
+ 
+         // CTE ProductionImpact
+         var productionImpact = ctx.From<IWorkOrder>()

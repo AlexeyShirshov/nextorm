@@ -549,6 +549,24 @@ required_acceptance: advisory captured with complete identifiers/package paths/e
 escalation: if the required external authority/resource is unavailable, escalate rather than mask the failure with NuGetAudit=false
 ```
 
+### D-11 escalate decision (r=4) — ownership/handoff (binding)
+
+The D-11 ownership/handoff blocker (`D232-D06-foreign-hunks-in-handoff`, AC-12) was routed to `escalate`. The ruling is **binding**; verbatim-summarised here.
+
+- **Route 2+3.** T232 does **not** remove, revert or re-commit the foreign #160 hunks, and history is **never rewritten**: `001f9c9c` stays as-is and is recorded as a **mixed** commit (T232 typed-`QuarterlyPivot` work + pre-existing foreign #160 working-tree work in the same file). `commit_001f9c9c_rewritten: false`.
+- **AC-12 stays blocked** on the missing authorization. Exact blocker wording:
+
+  > AC-12 open: foreign #160 hunks in 001f9c9c have no identified owner and no explicit retention authorization from the collection owner
+
+- **The parent collection mandate is not authorization.** It forbade touching `examples/**` beyond the example footprint; disclosure is not authorization, so it is not cited as one.
+- **Verbatim request to the collection owner** (pending; not yet answered):
+
+  > Подтвердите явно: сохранить ≈30 чужих хунков #160 в `001f9c9c` (файл `AdventureWorksQueries.cs`) с атрибуцией #160 и без переписи истории, да/нет, кто и когда
+
+- **#160 record (facts only):** issue #160 — author `AlexeyShirshov`, state **CLOSED**, milestone **1.0.9-rc2** (#20), no assignees, no labels, url `https://github.com/AlexeyShirshov/nextorm/issues/160`. The issue author is **not** inferred to be the working-tree author — `sibling_owner: "unidentified"`. **No comment is posted on #160 pending the owner's explicit consent** (`comment_status: "pending owner consent"`).
+- **Unblocked, continue independently:** D-09 (variant closure), D-10 (coverage/perf) and D-12 (evidence reconciliation/seal) are **not** gated by this ruling and continue; D-11's handoff half and AC-12 stay open.
+- **Evidence:** `rv4/ownership.json`; split patches `rv4/ownership/{t232.patch,foreign.patch,001f9c9c.full.patch,hunks/*.patch}`; `rv4/ownership/{hunk-inventory.json,reconstruction.json}`; measurement: 2 T232 hunks vs 11 foreign hunks (30 discrete foreign edits, 117 added / 97 removed foreign lines). Verification: `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership/split_hunks.py` → **exit 0**, both application orders reconstruct `blob(001f9c9c)` = `a54a2c5f`.
+
 ### D-07 final state (r=3) — handoff to CHECK
 
 - **Units:** D-01…D-07 done; the two additive units `D232-PREREQ-typed-derived` and `D232-AMEND-unpivot-null-oracle` are done. No unit is superseded.
@@ -697,7 +715,7 @@ Stable **defect key** → observed revisions/attempts, number of fixes applied, 
 | `D232-D06-example-package-mismatch` | r=3 / n=2 | 0 | `rv4/security/c13-example-build.out`; `rv4/packaging/packaging.json` | **open** (D-08 packaging remediation) |
 | `P232-variant-closure-incomplete` | r=3 / n=2 | 0 | `rv4/variants/` (planned) | **open** (D-09 variant remediation) |
 | `D232-D07-touched-coverage-regression` | r=3 / n=2 | 0 | `rv1/branch-delta.json`; `rv4/coverage/` (planned) | **open** (D-10 coverage remediation) |
-| `D232-D06-foreign-hunks-in-handoff` | r=3 / n=2 | 0 | `rv1/d07-footprint.json`; `rv4/ownership.json`/`rv4/handoff.json` (planned) | **open** (D-11 ownership/handoff remediation) |
+| `D232-D06-foreign-hunks-in-handoff` | r=3 / n=2 → r=4 / n=1 | 0 | `rv4/ownership.json`; `rv4/ownership/hunk-inventory.json`; `rv4/ownership/reconstruction.json`; `rv1/d07-footprint.json`; `rv4/handoff.json` (pending) | **open / AC-12 blocked** — escalate ruling route 2+3: retain the foreign #160 hunks, never rewrite history, `001f9c9c` recorded as a **mixed** commit; awaiting the collection owner's explicit retention authorization |
 | `E232-seal-incomplete` | r=3 / n=2 | 0 | `rv3/check/summary.json`; `rv4/manifest.json` | **open** (D-12 evidence reconciliation/seal) |
 | `B232-AUDIT-DEPENDENCY` | r=3 / n=2 | 0 | `rv4/security/advisories.json`; `rv4/security/gh-search/`; tracking issue #236 (`rv4/security/issue.json`) | **blocker** (D-13 security prerequisite coordination; remedy owned by #236) |
 
@@ -852,4 +870,8 @@ closed_by: C24 exit 0 (exactly one changed key `null_count_expectations.unpivot_
 2026-10-14 23:57Z | DO | revision r=4 | iteration n=1/3 | D-13 duplicate search (gh permission **granted**, exit 0): `gh issue list --state all --search NU1902` / `NU1903` / `System.Security.Cryptography.Pkcs` / `Microsoft.Data.SqlClient` = **no results**; `gh search issues --author @me` = 30 issues, none about the advisory → **no duplicate**; no issue created (blind creation forbidden) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/gh-search/
 2026-10-14 23:58Z | DO | revision r=4 | iteration n=1/3 | **BLOCKER `B232-AUDIT-DEPENDENCY` (P1, D-13):** the ordinary restore/build is red on the transitive `System.Security.Cryptography.Pkcs` 9.0.11 advisory promoted to errors; remedy ownership must be tracked by a separate issue (not created here); escalate if the required external authority/resource is unavailable rather than masking with `NuGetAudit=false`. D-09/D-10/D-11/D-12 not started; cycle not closed | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/advisories.json
 2026-10-15 00:02Z | DO | revision r=4 | iteration n=1/3 | B232-AUDIT-DEPENDENCY tracking issue opened/linked: duplicate search re-verified (four keywords + `--author @me`, open+closed) = no match, exit 0; issue **#236** created (milestone 1.0.9-rc3, `Refs #232`) with exact commands/exits (`dotnet restore nextorm.slnx` = 1; `dotnet build nextorm.slnx -c Debug` = 1, 26 errors; example build = 1, 4 errors — all NU1902/NU1903), advisories NU1902 GHSA-2fmv-rv2c-59x7 (moderate) / NU1903 GHSA-846f-f764-76mx (high) on `Microsoft.Data.SqlClient 6.1.7 → System.Security.Cryptography.Pkcs 9.0.11` (`Directory.Packages.props:17`, `src/nextorm.sqlserver/nextorm.sqlserver.csproj:8`), `TreatWarningsAsErrors` (`Directory.Build.props:40`) + CI (`.github/workflows/dotnet.yml:37,39`); no fix claimed | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/issue.json
+2026-10-15 00:07Z | DO | revision r=4 | iteration n=1/3 | **D-11 escalate decision (binding, route 2+3):** foreign #160 hunks in `001f9c9c` are never removed/reverted and history is never rewritten; `001f9c9c` recorded as a **mixed** commit; **AC-12 stays blocked**: `AC-12 open: foreign #160 hunks in 001f9c9c have no identified owner and no explicit retention authorization from the collection owner`; the parent collection mandate is **not** authorization (it forbade touching `examples/**` beyond the example footprint; disclosure ≠ authorization); verbatim request to the collection owner recorded (pending answer); D-09/D-10/D-12 unblocked and continue | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
+2026-10-15 00:07Z | DO | revision r=4 | iteration n=1/3 | D-11 ownership evidence written: `commit 001f9c9c`, file `examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs`, `classification: mixed`; hunk split **2 T232 / 11 foreign** (`@@ -1,6 +1,8` … `@@ -519,3 +534,16`), CRLF throughout; foreign = 30 discrete pre-existing #160 edit sites (8 `AsCte`, 1 `WithAlias(Alias.Metrics)`, 3 `Alias.*`, 12 alias-member reads, 2 `CustomerMetricRow`, 2 usings, 2 `#160` comments) over 117 added / 97 removed lines; `sibling_owner: "unidentified"` (not guessed); `retention_authorization.status: pending` | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json
+2026-10-15 00:07Z | DO | revision r=4 | iteration n=1/3 | D-11 hunk-disjointness + reconstruction proof: `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership/split_hunks.py` **exit 0** — old/new hunk ranges disjoint; `blob(001f9c9c^)` (`3fe2ddd0`, 23466 B) + `t232.patch` + `foreign.patch` == `blob(001f9c9c)` (`a54a2c5f`, 24058 B) in **both** orders (and the full patch), sha256 `26409ccd…a07155d` | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership/reconstruction.json
+2026-10-15 00:07Z | DO | revision r=4 | iteration n=1/3 | #160 facts recorded (read-only, no new issue): issue **#160** `CLOSED`, milestone **1.0.9-rc2** (#20), author `AlexeyShirshov`, no assignees/labels; **no comment posted — pending the owner's explicit consent**; `sibling_owner` remains unidentified | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json
 ```

@@ -1,0 +1,21 @@
+diff --git a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+index 3fe2ddd0..a54a2c5f 100644
+--- a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
++++ b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+@@ -519,3 +534,16 @@ public static class AdventureWorksQueries
+         Console.WriteLine();
+     }
+ }
++
++// A named projection for the CustomerMetrics CTE. The named join-alias surface (#160) generates an
++// extension whose receiver is the chain's concrete type, which cannot be rendered for an anonymous
++// type, so the aliased chain must be rooted at a named type.
++public sealed class CustomerMetricRow
++{
++    public int CustomerID { get; init; }
++    public string CustomerName { get; init; } = "";
++    public int? SalesPersonID { get; init; }
++    public decimal LifetimeValue { get; init; }
++    public DateTime LastPurchaseDate { get; init; }
++    public int? DaysSinceLastOrder { get; init; }
++}

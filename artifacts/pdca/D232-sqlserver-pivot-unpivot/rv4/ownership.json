@@ -1,12 +1,576 @@
 {
- "captured": "2026-10-14T23:56:57Z",
+ "blob_commit": "a54a2c5fcfba8e8c3fa4f34fa38ea505aace1099",
+ "blob_parent": "3fe2ddd057912d653ec392daec1588869adc337e",
+ "blocker": {
+  "key": "D232-AC12-foreign-hunks-owner",
+  "row": "AC-12",
+  "wording": "AC-12 open: foreign #160 hunks in 001f9c9c have no identified owner and no explicit retention authorization from the collection owner"
+ },
+ "branch": "1.0.9-rc3",
+ "captured": "2026-10-15T00:06:43Z",
  "case": "ownership",
+ "classification": "mixed",
+ "commit": "001f9c9c",
+ "commit_001f9c9c_rewritten": false,
+ "commit_full": "001f9c9cc55c0bc6aa41a9a796c3db5f3a5c21c1",
+ "commit_parent": "887de2cfeca50b4093a8beda6e477257b8864a4d",
  "cwd": "/home/alex/sources/nextorm",
- "missing_inputs": [
-  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json"
+ "disjointness": {
+  "new_ranges_disjoint": true,
+  "old_ranges_disjoint": true
+ },
+ "file": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+ "foreign_changed_lines": {
+  "added": 117,
+  "removed": 97
+ },
+ "foreign_comment_lines": 21,
+ "foreign_discrete_changes": 26,
+ "foreign_estimate_note": "the D-11 brief estimated ~30 foreign hunks; measured at edit-site granularity: 11 diff hunks containing 30 discrete foreign edits (8 AsCte calls, 1 WithAlias(Alias.Metrics), 3 Alias.* refs, 12 alias-member reads, 2 CustomerMetricRow sites, 2 using imports, 2 '#160' comments) over 117 added / 97 removed foreign lines",
+ "foreign_hunk_count": 11,
+ "foreign_hunks": [
+  {
+   "after_bytes": 218,
+   "after_hash": "4ce25d39ac3cbe3f41ffd5d1d80afddb4ac024c1df62d7376ef527765bb5f454",
+   "baseline_source": [
+    "docs/specs/status/collection-1.0.9-todo.md \u00a7Working-tree note (uncommitted entries not produced by this collection)",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json:31-34 (removed_foreign / removed_foreign_explained)"
+   ],
+   "before_bytes": 130,
+   "before_hash": "3b24a72be226d3d16b6ea2ef32b5afed3650df1d97718b49b71c75022faf4cf7",
+   "change_count": 0,
+   "changes": [],
+   "comment_lines": 0,
+   "hunk_header": "@@ -1,6 +1,8 @@",
+   "line_endings": "CRLF",
+   "new_range": "1,8",
+   "old_range": "1,6",
+   "origin": "pre-existing working-tree work, not authored by T232",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+   "supporting": [
+    {
+     "category": "using-import",
+     "line": "using NextORM.Generated.nextorm_examples_mssql_adventureworks;",
+     "token": "using NextORM.Generated"
+    },
+    {
+     "category": "using-import",
+     "line": "using NextORM.SqlServer;",
+     "token": "using NextORM.SqlServer"
+    }
+   ],
+   "supporting_count": 2
+  },
+  {
+   "after_bytes": 900,
+   "after_hash": "bc0b2c857726bd96289220622efc4f05ecc56ba273f609a3e5fc35cf2ed48a3f",
+   "baseline_source": [
+    "docs/specs/status/collection-1.0.9-todo.md \u00a7Working-tree note (uncommitted entries not produced by this collection)",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json:31-34 (removed_foreign / removed_foreign_explained)"
+   ],
+   "before_bytes": 680,
+   "before_hash": "7a644a58ec9e91784f09eb32bfd1acff3dad5f01916e56d54306b3b43a41996d",
+   "change_count": 0,
+   "changes": [],
+   "comment_lines": 5,
+   "hunk_header": "@@ -14,11 +16,13 @@ namespace NextORM.Examples.SqlServer.AdventureWorks;",
+   "line_endings": "CRLF",
+   "new_range": "16,13",
+   "old_range": "14,11",
+   "origin": "pre-existing working-tree work, not authored by T232",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+   "supporting": [],
+   "supporting_count": 0
+  },
+  {
+   "after_bytes": 2421,
+   "after_hash": "d64777b15e334b180da9fc9621b5179cb060681765801d18da5913312be340af",
+   "baseline_source": [
+    "docs/specs/status/collection-1.0.9-todo.md \u00a7Working-tree note (uncommitted entries not produced by this collection)",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json:31-34 (removed_foreign / removed_foreign_explained)"
+   ],
+   "before_bytes": 2331,
+   "before_hash": "2d9ee4b75f923c6d83dbde969aa1d422246adaeb226b1e16caa5c2777d968878",
+   "change_count": 19,
+   "changes": [
+    {
+     "category": "AsCte-call",
+     "line": ".AsCte(\"CustomerOrders\");",
+     "token": ".AsCte("
+    },
+    {
+     "category": "CustomerMetricRow",
+     "line": ".Select(c => new CustomerMetricRow",
+     "token": "CustomerMetricRow"
+    },
+    {
+     "category": "AsCte-call",
+     "line": ".AsCte(\"CustomerMetrics\");",
+     "token": ".AsCte("
+    },
+    {
+     "category": "WithAlias-call",
+     "line": "var rows = await ctx.From(metrics).WithAlias(Alias.Metrics)",
+     "token": ".WithAlias("
+    },
+    {
+     "category": "Alias-ref",
+     "line": "var rows = await ctx.From(metrics).WithAlias(Alias.Metrics)",
+     "token": "Alias.Metrics"
+    },
+    {
+     "category": "Alias-ref",
+     "line": ".LeftJoin<ISalesPerson>(ctx.From<ISalesPerson>(), (m, sp) => m.Metrics.SalesPersonID == sp.BusinessEntityId, Alias.SalesPerson)",
+     "token": "Alias.SalesPerson"
+    },
+    {
+     "category": "alias-member-read",
+     "line": ".LeftJoin<ISalesPerson>(ctx.From<ISalesPerson>(), (m, sp) => m.Metrics.SalesPersonID == sp.BusinessEntityId, Alias.SalesPerson)",
+     "token": ".Metrics.SalesPersonID"
+    },
+    {
+     "category": "Alias-ref",
+     "line": ".LeftJoin<IPerson>(ctx.From<IPerson>(), (p, per) => p.SalesPerson.BusinessEntityId == per.BusinessEntityId, Alias.Manager)",
+     "token": "Alias.Manager"
+    },
+    {
+     "category": "alias-member-read",
+     "line": ".LeftJoin<IPerson>(ctx.From<IPerson>(), (p, per) => p.SalesPerson.BusinessEntityId == per.BusinessEntityId, Alias.Manager)",
+     "token": ".SalesPerson.BusinessEntityId"
+    },
+    {
+     "category": "alias-member-read",
+     "line": ".Where(p => p.Metrics.LifetimeValue > 50000 && p.Metrics.DaysSinceLastOrder > 180)",
+     "token": ".Metrics.LifetimeValue"
+    },
+    {
+     "category": "alias-member-read",
+     "line": ".Where(p => p.Metrics.LifetimeValue > 50000 && p.Metrics.DaysSinceLastOrder > 180)",
+     "token": ".Metrics.DaysSinceLastOrder"
+    },
+    {
+     "category": "alias-member-read",
+     "line": ".OrderByDescending(p => p.Metrics.LifetimeValue)",
+     "token": ".Metrics.LifetimeValue"
+    },
+    {
+     "category": "alias-member-read",
+     "line": "p.Metrics.CustomerID,",
+     "token": ".Metrics.CustomerID"
+    },
+    {
+     "category": "alias-member-read",
+     "line": "p.Metrics.CustomerName,",
+     "token": ".Metrics.CustomerName"
+    },
+    {
+     "category": "alias-member-read",
+     "line": "Ltv = Math.Round(p.Metrics.LifetimeValue, 2),",
+     "token": ".Metrics.LifetimeValue"
+    },
+    {
+     "category": "alias-member-read",
+     "line": "LastPurchase = DemoUdf.Format(p.Metrics.LastPurchaseDate, \"yyyy-MM-dd\"),",
+     "token": ".Metrics.LastPurchaseDate"
+    },
+    {
+     "category": "alias-member-read",
+     "line": "p.Metrics.DaysSinceLastOrder,",
+     "token": ".Metrics.DaysSinceLastOrder"
+    },
+    {
+     "category": "alias-member-read",
+     "line": "Manager = p.Manager.FirstName + \" \" + p.Manager.LastName",
+     "token": ".Manager.FirstName"
+    },
+    {
+     "category": "alias-member-read",
+     "line": "Manager = p.Manager.FirstName + \" \" + p.Manager.LastName",
+     "token": ".Manager.LastName"
+    }
+   ],
+   "comment_lines": 5,
+   "hunk_header": "@@ -33,42 +37,42 @@ public static class AdventureWorksQueries",
+   "line_endings": "CRLF",
+   "new_range": "37,42",
+   "old_range": "33,42",
+   "origin": "pre-existing working-tree work, not authored by T232",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+   "supporting": [
+    {
+     "category": "issue160-comment",
+     "line": "// Named slots (#160): the root is Alias.Metrics (named after the CTE passed to From), the two",
+     "token": "#160"
+    }
+   ],
+   "supporting_count": 1
+  },
+  {
+   "after_bytes": 584,
+   "after_hash": "1b79494a665ce9fd160d9fdc2aa73880f043d76b9379d2144883889e9a7c70a9",
+   "baseline_source": [
+    "docs/specs/status/collection-1.0.9-todo.md \u00a7Working-tree note (uncommitted entries not produced by this collection)",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json:31-34 (removed_foreign / removed_foreign_explained)"
+   ],
+   "before_bytes": 476,
+   "before_hash": "7f2e74d65b02cd1ad805c9f489b87af1c416ab557f4dcb04f9c98d344052d9f7",
+   "change_count": 0,
+   "changes": [],
+   "comment_lines": 3,
+   "hunk_header": "@@ -76,11 +80,11 @@ public static class AdventureWorksQueries",
+   "line_endings": "CRLF",
+   "new_range": "80,11",
+   "old_range": "76,11",
+   "origin": "pre-existing working-tree work, not authored by T232",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+   "supporting": [],
+   "supporting_count": 0
+  },
+  {
+   "after_bytes": 1293,
+   "after_hash": "645091afabbfd0f7a4bee980ef70929eca7089ccaf6a3c6b53a06cb76cc808dd",
+   "baseline_source": [
+    "docs/specs/status/collection-1.0.9-todo.md \u00a7Working-tree note (uncommitted entries not produced by this collection)",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json:31-34 (removed_foreign / removed_foreign_explained)"
+   ],
+   "before_bytes": 1462,
+   "before_hash": "279d448ce47ce3fd29a2a368cae9de039f474926d791de950c2cc8193035cddc",
+   "change_count": 1,
+   "changes": [
+    {
+     "category": "AsCte-call",
+     "line": ".AsCte(\"MonthlySales\");",
+     "token": ".AsCte("
+    }
+   ],
+   "comment_lines": 0,
+   "hunk_header": "@@ -93,27 +97,27 @@ public static class AdventureWorksQueries",
+   "line_endings": "CRLF",
+   "new_range": "97,27",
+   "old_range": "93,27",
+   "origin": "pre-existing working-tree work, not authored by T232",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+   "supporting": [],
+   "supporting_count": 0
+  },
+  {
+   "after_bytes": 311,
+   "after_hash": "605e634e3327e78828973832b69168eb14851a535b28a38e868e65c50e1cb280",
+   "baseline_source": [
+    "docs/specs/status/collection-1.0.9-todo.md \u00a7Working-tree note (uncommitted entries not produced by this collection)",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json:31-34 (removed_foreign / removed_foreign_explained)"
+   ],
+   "before_bytes": 258,
+   "before_hash": "d9b764fc769789e305d285a041cefb7c88f39ea346753b5799b0cab0a0d08ac4",
+   "change_count": 0,
+   "changes": [],
+   "comment_lines": 2,
+   "hunk_header": "@@ -123,7 +127,8 @@ public static class AdventureWorksQueries",
+   "line_endings": "CRLF",
+   "new_range": "127,8",
+   "old_range": "123,7",
+   "origin": "pre-existing working-tree work, not authored by T232",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+   "supporting": [],
+   "supporting_count": 0
+  },
+  {
+   "after_bytes": 329,
+   "after_hash": "203de5948d62d418b3e8d13f94d867a180558b8c2b2de9ed878b5a41836098e4",
+   "baseline_source": [
+    "docs/specs/status/collection-1.0.9-todo.md \u00a7Working-tree note (uncommitted entries not produced by this collection)",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json:31-34 (removed_foreign / removed_foreign_explained)"
+   ],
+   "before_bytes": 292,
+   "before_hash": "68600fc745be5450914101ab9f34ea260b0162b12362ead78a31e0f1680f753f",
+   "change_count": 1,
+   "changes": [
+    {
+     "category": "AsCte-call",
+     "line": ".AsCte(\"SupplierDelays\");",
+     "token": ".AsCte("
+    }
+   ],
+   "comment_lines": 0,
+   "hunk_header": "@@ -137,7 +142,8 @@ public static class AdventureWorksQueries",
+   "line_endings": "CRLF",
+   "new_range": "142,8",
+   "old_range": "137,7",
+   "origin": "pre-existing working-tree work, not authored by T232",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+   "supporting": [],
+   "supporting_count": 0
+  },
+  {
+   "after_bytes": 833,
+   "after_hash": "9f4aac14cdab1f05cbe0ab24ea4acce2b2a75aff63f88f548a23a00f4f88d9f3",
+   "baseline_source": [
+    "docs/specs/status/collection-1.0.9-todo.md \u00a7Working-tree note (uncommitted entries not produced by this collection)",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json:31-34 (removed_foreign / removed_foreign_explained)"
+   ],
+   "before_bytes": 1003,
+   "before_hash": "ae902956ae032d3c9b7b63e8206c03f49a534bb170864c260d8effc3dc452626",
+   "change_count": 1,
+   "changes": [
+    {
+     "category": "AsCte-call",
+     "line": ".AsCte(\"ProductionImpact\");",
+     "token": ".AsCte("
+    }
+   ],
+   "comment_lines": 0,
+   "hunk_header": "@@ -149,20 +155,20 @@ public static class AdventureWorksQueries",
+   "line_endings": "CRLF",
+   "new_range": "155,20",
+   "old_range": "149,20",
+   "origin": "pre-existing working-tree work, not authored by T232",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+   "supporting": [],
+   "supporting_count": 0
+  },
+  {
+   "after_bytes": 496,
+   "after_hash": "d9d05891ee79ecb303132a1772673f05b78ef4b6f16421244637bbc7c99fba21",
+   "baseline_source": [
+    "docs/specs/status/collection-1.0.9-todo.md \u00a7Working-tree note (uncommitted entries not produced by this collection)",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json:31-34 (removed_foreign / removed_foreign_explained)"
+   ],
+   "before_bytes": 357,
+   "before_hash": "f93d6ed9a85a433464179619348900a80fb80b91f01e0c2137c0d67f8c008242",
+   "change_count": 0,
+   "changes": [],
+   "comment_lines": 3,
+   "hunk_header": "@@ -170,8 +176,9 @@ public static class AdventureWorksQueries",
+   "line_endings": "CRLF",
+   "new_range": "176,9",
+   "old_range": "170,8",
+   "origin": "pre-existing working-tree work, not authored by T232",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+   "supporting": [],
+   "supporting_count": 0
+  },
+  {
+   "after_bytes": 1971,
+   "after_hash": "8b657df1d2101e6b5ed079fe935842eae3fcd751ffb49ef4c20eb5fc21c96c38",
+   "baseline_source": [
+    "docs/specs/status/collection-1.0.9-todo.md \u00a7Working-tree note (uncommitted entries not produced by this collection)",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json:31-34 (removed_foreign / removed_foreign_explained)"
+   ],
+   "before_bytes": 2528,
+   "before_hash": "6c507ddcf8981a067a54ac9632aa4f995ac72035b4abd2663713e7182cbe1974",
+   "change_count": 3,
+   "changes": [
+    {
+     "category": "AsCte-call",
+     "line": ".AsCte(\"ProductQuarterlySales\");",
+     "token": ".AsCte("
+    },
+    {
+     "category": "AsCte-call",
+     "line": ".AsCte(\"ProductAggregates\");",
+     "token": ".AsCte("
+    },
+    {
+     "category": "AsCte-call",
+     "line": ".AsCte(\"AbcRanking\");",
+     "token": ".AsCte("
+    }
+   ],
+   "comment_lines": 0,
+   "hunk_header": "@@ -191,48 +198,48 @@ public static class AdventureWorksQueries",
+   "line_endings": "CRLF",
+   "new_range": "198,48",
+   "old_range": "191,48",
+   "origin": "pre-existing working-tree work, not authored by T232",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+   "supporting": [],
+   "supporting_count": 0
+  },
+  {
+   "after_bytes": 630,
+   "after_hash": "1dc0a85ee6f7bbeda71f5dea0a0337845e8bbf5e1a0fb9e4a72892d442b1da26",
+   "baseline_source": [
+    "docs/specs/status/collection-1.0.9-todo.md \u00a7Working-tree note (uncommitted entries not produced by this collection)",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json:31-34 (removed_foreign / removed_foreign_explained)"
+   ],
+   "before_bytes": 37,
+   "before_hash": "be572e0ae257d29d44936ca6daa296f73ccdfcaac24784c5fdb53f722c39743f",
+   "change_count": 1,
+   "changes": [
+    {
+     "category": "CustomerMetricRow",
+     "line": "public sealed class CustomerMetricRow",
+     "token": "CustomerMetricRow"
+    }
+   ],
+   "comment_lines": 3,
+   "hunk_header": "@@ -519,3 +534,16 @@ public static class AdventureWorksQueries",
+   "line_endings": "CRLF",
+   "new_range": "534,16",
+   "old_range": "519,3",
+   "origin": "pre-existing working-tree work, not authored by T232",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+   "supporting": [
+    {
+     "category": "issue160-comment",
+     "line": "// A named projection for the CustomerMetrics CTE. The named join-alias surface (#160) generates an",
+     "token": "#160"
+    }
+   ],
+   "supporting_count": 1
+  }
  ],
- "reason": "required input not present (planned future unit); fail-closed",
- "row": "EC232-RV4-OWNERSHIP",
- "status": "blocked",
- "unit": "D-11"
+ "foreign_supporting_changes": 4,
+ "foreign_total_edits": 30,
+ "head_at_capture": "bde1bd845dc14fc93b4df3639e0c877ff682ef24",
+ "history_rewritten": false,
+ "hunk_count_total": 13,
+ "issue_160": {
+  "assignees": [],
+  "author": "AlexeyShirshov",
+  "comment_status": "pending owner consent",
+  "labels": [],
+  "milestone": "1.0.9-rc2",
+  "milestone_number": 20,
+  "number": 160,
+  "state": "CLOSED",
+  "url": "https://github.com/AlexeyShirshov/nextorm/issues/160"
+ },
+ "line_endings": "CRLF",
+ "parent_collection_mandate_is_not_authorization": "the parent collection mandate forbade touching examples/** beyond the example footprint; disclosure is not authorization and is not cited as one",
+ "patches": {
+  "foreign": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership/foreign.patch",
+  "full": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership/001f9c9c.full.patch",
+  "per_hunk_dir": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership/hunks",
+  "t232": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership/t232.patch"
+ },
+ "reconstruction": {
+  "attempts": [
+   {
+    "apply_exit": 0,
+    "apply_stderr": "",
+    "apply_stdout": "",
+    "blob": "01055fb666b4251b60c71173e34bdc58605f5e33",
+    "bytes": 23626,
+    "check_exit": 0,
+    "check_stderr": "",
+    "label": "t232-first",
+    "sha256": "f61ca0dcec8b82bc9dce041a2327c470c62d9d0a1fdff395711a4fea72ad3a1a"
+   },
+   {
+    "apply_exit": 0,
+    "apply_stderr": "",
+    "apply_stdout": "",
+    "blob": "a54a2c5fcfba8e8c3fa4f34fa38ea505aace1099",
+    "bytes": 24058,
+    "check_exit": 0,
+    "check_stderr": "",
+    "label": "t232-then-foreign",
+    "sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d"
+   },
+   {
+    "apply_exit": 0,
+    "apply_stderr": "",
+    "apply_stdout": "",
+    "blob": "0bdd0ee627681dd35334628578536f67360e0f5a",
+    "bytes": 23898,
+    "check_exit": 0,
+    "check_stderr": "",
+    "label": "foreign-first",
+    "sha256": "36dcd8dcd59dc093bb302733334cf536d3c5c7f00ebf7e3b8f9b57ea8e9b5ba2"
+   },
+   {
+    "apply_exit": 0,
+    "apply_stderr": "",
+    "apply_stdout": "",
+    "blob": "a54a2c5fcfba8e8c3fa4f34fa38ea505aace1099",
+    "bytes": 24058,
+    "check_exit": 0,
+    "check_stderr": "",
+    "label": "foreign-then-t232",
+    "sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d"
+   },
+   {
+    "apply_exit": 0,
+    "apply_stderr": "",
+    "apply_stdout": "",
+    "blob": "a54a2c5fcfba8e8c3fa4f34fa38ea505aace1099",
+    "bytes": 24058,
+    "check_exit": 0,
+    "check_stderr": "",
+    "label": "full-patch",
+    "sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d"
+   }
+  ],
+  "full_patch_sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d",
+  "hunk_count_foreign": 11,
+  "hunk_count_t232": 2,
+  "hunk_count_total": 13,
+  "new_ranges_disjoint": true,
+  "old_ranges_disjoint": true,
+  "order_foreign_then_t232_sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d",
+  "order_t232_then_foreign_sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d",
+  "parent": {
+   "blob": "3fe2ddd057912d653ec392daec1588869adc337e",
+   "rev": "887de2cfeca50b4093a8beda6e477257b8864a4d",
+   "sha256": "85f93c4d10e424baf05c05fd7e4dacf6cc8f1c8464f11dbafba9f6f119298a81"
+  },
+  "target": {
+   "blob": "a54a2c5fcfba8e8c3fa4f34fa38ea505aace1099",
+   "rev": "001f9c9cc55c0bc6aa41a9a796c3db5f3a5c21c1",
+   "sha256": "26409ccd0e62829a1b4d4b2fec7d2c98744e49d0a019caa125e34c0a9a07155d"
+  },
+  "verified": true
+ },
+ "retention_authorization": {
+  "authorizer": null,
+  "channel": null,
+  "quote": null,
+  "role": "collection owner/user",
+  "status": "pending",
+  "text": "retain the listed foreign hunks in 001f9c9c; attribute them to #160; T232 does not claim authorship",
+  "timestamp": null,
+  "timing": "post-discovery"
+ },
+ "sibling_owner": "unidentified",
+ "sibling_owner_note": "no verified #160 owner identity in the evidence set; not guessed. Issue #160 is authored by AlexeyShirshov and CLOSED (milestone 1.0.9-rc2), which is not an identification of the working-tree author.",
+ "t232_hunk_count": 2,
+ "t232_hunks": [
+  {
+   "after_bytes": 484,
+   "after_hash": "dd928897ef4aa35be886d44cd818847d9343e59f1806e20bd29c5b3e2de7b53a",
+   "before_bytes": 392,
+   "before_hash": "c7ee32536a3b5e200fc56a2a57e05736243ef2bc07276e13aa28180b1616ebbe",
+   "hunk_header": "@@ -242,7 +249,8 @@ public static class AdventureWorksQueries",
+   "kind": "typed QuarterlyPivot projection (T232 D-06 authored surface)",
+   "line_endings": "CRLF",
+   "new_range": "249,8",
+   "old_range": "242,7",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs"
+  },
+  {
+   "after_bytes": 681,
+   "after_hash": "3b7770be7d6031ec75340e9f54a6a0de5ca71be8a11794938a5fa6e32f1f39b5",
+   "before_bytes": 613,
+   "before_hash": "fc1d491103012882a5d88a3a206807113728afd55464fc34f90606e303ce36c7",
+   "hunk_header": "@@ -263,15 +271,22 @@ public static class AdventureWorksQueries",
+   "kind": "typed QuarterlyPivot projection (T232 D-06 authored surface)",
+   "line_endings": "CRLF",
+   "new_range": "271,22",
+   "old_range": "263,15",
+   "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs"
+  }
+ ],
+ "task": "T232 (#232)",
+ "unit": "D-11",
+ "verification": {
+  "claim": "blob(001f9c9c^) + t232.patch + foreign.patch == blob(001f9c9c) (both orders), plus hunk-range disjointness",
+  "command": [
+   "python3",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership/split_hunks.py"
+  ],
+  "cwd": "/home/alex/sources/nextorm",
+  "exit": 0,
+  "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership/split_hunks.out"
+ }
 }

@@ -1,0 +1,46 @@
+diff --git a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+index 3fe2ddd0..a54a2c5f 100644
+--- a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
++++ b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+@@ -93,27 +97,27 @@ public static class AdventureWorksQueries
+                 RegionName = p.Item2.Name,
+                 SalesMonth = SqlFunctions.Sql.date_trunc("month", p.Item1.OrderDate),
+                 MonthlyRevenue = SqlFunctions.Sql.sum(p.Item1.TotalDue)
+-            });
++            })
++            .AsCte("MonthlySales");
+ 
+-        var rows = await ctx.With("MonthlySales", monthly)
+-            .From("MonthlySales")
+-            .OrderBy(m => m.GetString("RegionName"))
+-            .OrderByDescending(m => m.GetDateTime("SalesMonth"))
++        var rows = await ctx.From(monthly)
++            .OrderBy(m => m.RegionName)
++            .OrderByDescending(m => m.SalesMonth)
+             .Select(m => new
+             {
+-                Region = m.GetString("RegionName"),
+-                Month = DemoUdf.Format(m.GetDateTime("SalesMonth"), "yyyy-MM"),
+-                MonthlyRevenue = Math.Round(m.GetDecimal("MonthlyRevenue"), 2),
++                Region = m.RegionName,
++                Month = DemoUdf.Format(m.SalesMonth, "yyyy-MM"),
++                MonthlyRevenue = Math.Round(m.MonthlyRevenue, 2),
+                 Cumulative = Math.Round(
+-                    SqlFunctions.Sql.sum_over(m.GetDecimal("MonthlyRevenue")).Over(
+-                        partitionBy: () => m.GetString("RegionName"),
+-                        orderBy: () => m.GetDateTime("SalesMonth"),
++                    SqlFunctions.Sql.sum_over(m.MonthlyRevenue).Over(
++                        partitionBy: () => m.RegionName,
++                        orderBy: () => m.SalesMonth,
+                         frame: WindowFrame.RowsUnboundedPrecedingToCurrentRow),
+                     2),
+                 MovingAvg3 = Math.Round(
+-                    SqlFunctions.Sql.avg_over(m.GetDecimal("MonthlyRevenue")).Over(
+-                        partitionBy: () => m.GetString("RegionName"),
+-                        orderBy: () => m.GetDateTime("SalesMonth"),
++                    SqlFunctions.Sql.avg_over(m.MonthlyRevenue).Over(
++                        partitionBy: () => m.RegionName,
++                        orderBy: () => m.SalesMonth,
+                         frame: WindowFrame.Rows(WindowFrameBound.Preceding(2), WindowFrameBound.CurrentRow)),
+                     2)
+             })

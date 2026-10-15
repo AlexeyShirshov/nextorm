@@ -1,0 +1,13 @@
+diff --git a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+index 3fe2ddd0..a54a2c5f 100644
+--- a/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
++++ b/examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs
+@@ -1,6 +1,8 @@
+ using System.Linq.Expressions;
+ using System.Text.Json;
+ using NextORM.Core;
++using NextORM.Generated.nextorm_examples_mssql_adventureworks;
++using NextORM.SqlServer;
+ 
+ namespace NextORM.Examples.SqlServer.AdventureWorks;
+ 
