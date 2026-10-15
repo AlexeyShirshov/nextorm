@@ -25,13 +25,13 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 | T53 | #53 | IF6: public API freeze (PublicApiAnalyzers + PublicAPI.*) | pdca-dotnet | ready (r=1) — **HELD by owner** |
 | T232 | #232 | SQL Server PIVOT/UNPIVOT — типизированная проекция результата (вместо TableAlias по имени) | pdca-dotnet | pending (new, rc3 scope) |
 | T233 | #233 | Window functions — перегрузка `Over` (один partitionBy + один WindowOrder) | pdca-dotnet | pending (new, rc3 scope) |
-| T236 | #236 | Build blocker: NU1902/NU1903 (transitive System.Security.Cryptography.Pkcs) | pdca-dotnet | pending (new, rc3 scope; lane blocker fix) |
+| T236 | #236 | Build blocker: NU1902/NU1903 (transitive System.Security.Cryptography.Pkcs) | pdca-dotnet | **done** (r=5, rv=4) — CHECK `FAIL — evidence/closure gate only` (AC236-01…05 met, AC236-06 unverified pre-ACT) → ACT-only closure; evidence `artifacts/pdca/D236-build-advisories/rv4/` |
 
 ## Groups
 
 | id | tasks (order) | worktree | branch/ref | status |
 |---|---|---|---|---|
-| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 (done) → T236 (build fix) → T232 → T233 → T201 (perf) | no (single group) | current branch `1.0.9-rc3` | in-progress (T225 done; T232 blocked on #236 + #160-auth — both resolved by owner 2026-10-15) |
+| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 (done) → T236 (build fix) → T232 → T233 → T201 (perf) | no (single group) | current branch `1.0.9-rc3` | in_progress — T236 done; T232 build gate unblocked; G1 is not complete. |
 
 Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/docs force one writer). T224 (SQL-format blast radius, ~697 exact-string asserts) sits late, after all functional changes; T225 (docs-only) after T223+T224; T201 (perf) measures the final composition; T53 held last. Addendum contract `cluster-1`/`cluster-2`; task contracts unchanged.
 
@@ -55,7 +55,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T226 | #226 | G1 | 14 | done | done (r=2, rv=2, n=2/3) — CHECK PASS; 11/11 rows met | pdca-dotnet | N=1 | r=2 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
 | T224 | #224 | G1 | 15 | done | done (r=1, rv=1, n=1) — CHECK PASS r=1/rv=1; R1–R7 met; DO `4e6a2abd` | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
 | T225 | #225 | G1 | 16 | done | done (r=4, rv=3, n=1/3) — CHECK PASS r=4/rv=3; E01–E07 met, C1–C8 met | pdca-dotnet | N=1 | r=4 | 7cbbab3b | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
-| T236 | #236 | G1 | pre-T232 | pending | pending | pdca-dotnet | N=1 | — | — | docs/specs/status/D236-build-advisories-1.md |
+| T236 | #236 | G1 | pre-T232 | done | done (r=5, rv=4, n=1/3) — CHECK FAIL (evidence/closure gate only) → ACT-only closure; product `c554d5e8`, closure `CLOSURE_SHA` | pdca-dotnet | N=1 | r=5 | c554d5e8 | docs/specs/status/D236-build-advisories-1.md |
 | T232 | #232 | G1 | 17 | pending | ready | pdca-dotnet | N=1 | r=1 | 4f1e1282 | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md |
 | T233 | #233 | G1 | 18 | pending | ready | pdca-dotnet | N=1 | r=1 | 82da47a9 | docs/specs/status/D233-window-over-overload-1.md |
 | T201 | #201 | G1 | 19 (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
@@ -92,6 +92,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 
 - (1) Fix the **#236** build blocker **in-lane** (NU1902/NU1903 advisories: transitive `System.Security.Cryptography.Pkcs 9.0.11` via `Microsoft.Data.SqlClient 6.1.7`), then continue. → added as lane task **T236** (pre-T232).
 - (2) **Authorize retention** of the foreign #160 hunks inside T232's mixed commit `001f9c9c` (keep as-is; do not rewrite history) → T232's `AC-12` owner-authorization blocker is **lifted**.
+- (1) **CLOSED — T236 done** (product `c554d5e8`, closure `CLOSURE_SHA`; r=5/rv=4): **T232 build gate unblocked by T236; T232 query ownership and E232-13 packaging evidence remain with T232.**
 
 ## Owner constraint — T216 (#216) — RESOLVED (2026-10-13)
 
@@ -112,7 +113,8 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Blocker: **none** — lane G1 moved on; **T219 (#219) done** (CHECK PASS r=1/rv=1/n=1/3; no fail-stop, no escalation). (Prior history: T218 CHECK/escalate in-cycle STOP → owner accepted `done-with-caveat`, E07/E08/E10 → #235; earlier T217 terminal `incomplete` `D217-EVIDENCE-BINDING` → owner accepted `done-with-caveat` → #234.)
 - Defect id / history: `D217-EVIDENCE-BINDING` — r=2/n=3 → r=3/n=1 → r=4/n=1 → r=5/n=1, each a CHECK FAIL at the evidence gate (evidence-only regeneration / hash replacement); terminal `incomplete`.
 - Corrective-task status file: — (none created; the remedy is an **outside-T217** proposal, a human decision)
-- Next allowed step: (1) own PLANs for the new rc3-scope tasks **T232 (#232)** and **T233 (#233)**; (2) resume lane G1: **T225 → T232 → T233 → T201 (perf last)**. Done in this lane: T209/T211/T212/T213/T215/T216/T219/T221/T222/T223/T224/T226/T227; done-with-caveat: T217 (→#234), T218 (→#235). #53 (freeze) is **out of rc3 scope** and held. #216 CLOSED (owner decision (i)).
+- Next allowed step: **T232 build gate is unblocked by T236** (done; #236 blocker cleared) → resume T232's own outstanding work (its query ownership and its unresolved `E232-13` packaging evidence stay with T232); then **T233 → T201 (perf last)**.
+- Pre-existing collection/T232 reconciliation item (NOT fixed by inference; left as-is): the T232 tasks-table row above says `plan_revision: r=1`, while the appended T232 section in this file reports `plan r=3 / rv=3 / n=2/3`. Flagged for T232 or the collection owner. Done in this lane: T209/T211/T212/T213/T215/T216/T219/T221/T222/T223/T224/T226/T227; done-with-caveat: T217 (→#234), T218 (→#235). #53 (freeze) is **out of rc3 scope** and held. #216 CLOSED (owner decision (i)).
 
 ## Done / Verified / Incomplete
 
