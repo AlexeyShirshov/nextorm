@@ -1,0 +1,16 @@
+$ gh issue view 161 --repo AlexeyShirshov/nextorm --comments
+author:	AlexeyShirshov
+association:	owner
+edited:	false
+status:	none
+--
+Решение (2026-10-06): исправляем сейчас, в текущем цикле (milestone 1.0.9-rc1). Упоминание 1.0.9-rc2 как места отложения в теле — superseded.
+--
+author:	AlexeyShirshov
+association:	owner
+edited:	false
+status:	none
+--
+Реализовано в коллекции `1.0.9-rc1-tail`, задача D161, коммит `b06784c8` (ClickHouse `QuoteIdentifier` экранирует `\` перед backtick; реальный CH-probe 529/529). Коллекция завершена: gate C PASS. Статус: docs/specs/status/rc1-tail-161-ch-escape-1.md.
+--
+EXIT=0

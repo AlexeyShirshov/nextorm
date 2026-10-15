@@ -1,0 +1,60 @@
+$ gh issue view 58 --repo AlexeyShirshov/nextorm
+title:	Типизированный доступ к колонке по имени — SqlFunctions.Column<T>
+state:	CLOSED
+author:	AlexeyShirshov (Alexey)
+labels:	
+comments:	0
+assignees:	
+projects:	
+milestone:	1.0-a.4
+issue-type:	
+parent:	
+sub-issues:	
+sub-issues-completed:	
+blocked-by:	
+blocking:	
+number:	58
+--
+# Типизированный доступ к колонке по имени на mapped-сущности — `SqlFunctions.Column<T>`
+
+Закрыт пункт ClickHouse-воркстрима из `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 (п.10). Работа в рабочем дереве `1.0.4-alpha`, изменения пока не закоммичены.
+
+## Проблема
+
+У mapped-сущности доступны только объявленные свойства; колонки без свойства (широкие таблицы вроде `hits_v1`, ~105 колонок) были достижимы только через `WithSql`. By-name-поверхность существовала лишь в untyped-режиме (`From("table")` → `TableAlias`/`TableColumn`).
+
+## API
+
+```csharp
+public static T Column<T>(object entity, string columnName)
+```
+
+```csharp
+ctx.From<IHit>().Select(h => new { h.Url, Region = SqlFunctions.Column<ulong>(h, "RegionID") });
+```
+
+Маркер (как `SqlFunctions.Parameter<T>`). Первый аргумент — параметр лямбды-источника; имя сверяется с колонкой дословно, значение материализуется как `T`. Работает в `Select`, `Where` и на join-проекции (`p.ItemN`), `renameAware` даёт `... as <PropertyName>`; не-source-аргумент даёт `BuildSqlCommandException`.
+
+## Провайдеры
+
+| Провайдер | Нативный вид | Поддержка |
+|---|---|---|
+| PostgreSQL | `t."region_id"` | ✅ |
+| SQL Server | `t.[region_id]` | ✅ |
+| MySQL / MariaDB | `` t.`region_id` `` | ✅ |
+| ClickHouse | `` t.`region_id` `` | ✅ (origin) |
+| SQLite | `t."region_id"` | ✅ |
+| InMemory | — | ❌ `NotSupportedException` |
+
+Новые `Supports*`-гейты не нужны: рендер `alias.column` уже есть в каждом SQL-диалекте.
+
+## Тесты
+- Unit: `nextorm.clickhouse.tests` **247/247** (проекция+rename, join-проекция, quoted, не-source → throw), `nextorm.postgres.tests` **273/273**, `nextorm.sqlite.tests` **272/272**, `nextorm.core.tests` **198/198** (in-memory rejection); sqlserver/mysql/mariadb — зелёные.
+- Интеграция (реальный ClickHouse): `wide_entity` без свойства `regionid` — `ColumnByName_ShouldReadUnmappedColumn`, `ColumnByName_InWhere_ShouldFilterByUnmappedColumn`.
+- Полный прогон: **2360 passed / 30 skipped / 0 failed**; покрытие **line 85.5% / branch 74.6%** (без падения); build Release 0/0; docfx 0 errors без новых warnings.
+- Аудит `nextorm-code-auditor`: находки 72 (P2) и 73 (P2) применены, CHCB1 (P1 doc) и CHCB3 (P2) закрыты, CHCB2 (PublicAPI-freeze) отложен.
+
+## Документация
+`docs/guide/01-querying-and-projections.md` (+RU) — раздел «Columns by name / Колонки по имени», `docs/providers/clickhouse.md` (+RU), `docs/advanced/api-reference.md` (+RU); `sql-capabilities-gap-analysis.md` §4 п.10 → shipped; `todo_clickhouse_columns_by_name.md` → «готово».
+
+EXIT=0

@@ -1,0 +1,2 @@
+$ gh issue view 232 --repo AlexeyShirshov/nextorm --comments
+EXIT=0

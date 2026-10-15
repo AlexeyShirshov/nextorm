@@ -1,6 +1,6 @@
 # Examples verification report
 
-> **Last verified: 2026-09-23** (examples switched to the published `nextorm` **1.0.4-alpha** NuGet
+> **Last verified: 2026-10-13** (examples switched to the published `nextorm` **1.0.9-rc2** NuGet
 > packages; ClickHouse queries re-validated against `clickhouse/clickhouse-server:25.8-alpine`).
 > Re-run the examples whenever the engine gains features and update the tables below. This file is the
 > source of truth for "what works / what does not and why"; the topics are owned by the roadmap backlog
@@ -49,7 +49,7 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   are unchanged.
 
 * **Examples moved to the published packages.** The three projects now reference the `nextorm.*` NuGet
-  packages (`NextOrmVersion = 1.0.4-alpha` in [`Directory.Packages.props`](../Directory.Packages.props))
+  packages (`NextOrmVersion = 1.0.9-rc2` in [`Directory.Packages.props`](../Directory.Packages.props))
   instead of `src/`, so they build against what ships on nuget.org. Re-run against Testcontainers after
   the switch: postgres `11/11`, mssql `11/11`, clickhouse `10/11` (`Incremental` only).
 * **Databases are cached in named Docker volumes (the examples are read-only).** Each `DemoDatabase`
@@ -83,6 +83,22 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   none of which correlation or `APPLY` addresses. Query comments and failure messages stay accurate.
 * **Re-verified after a derived query could become the primary `FROM` source of a join** (`ctx.From(derivedQuery).Join(...)`, `ResolveJoinBase`): results were unchanged (11/11, 10/11, 8/11). No example query uses derived-primary joins; the `QuarterlyPivot` blocker stayed open then and is now resolved (next bullet). The stale `todo_mssql_derived_from_join.md` link was repointed to `todo_mssql_pivot_derived.md` after it was retired.
 * **Re-verified after `PIVOT`/`UNPIVOT` accepted a derived source** (`ResolvePivotInner`, `ctx.From(derivedQuery).Pivot(...)`): MSSQL moved **10/11 → 11/11** — `QuarterlyPivot` now pivots a 5-table join through a derived query (numeric `FOR QuarterNum IN (1,2,3,4)`; the string form needs an explicit T-SQL `CAST`). The other two examples are unchanged. The work plan `docs/specs/roadmap/todo_mssql_pivot_derived.md` was folded into the docs and retired.
+
+* **Re-verified against the `1.0.9-rc2` packages (2026-10-13).** `NextOrmVersion` bumped `1.0.8-b →
+  1.0.9-rc2`; results unchanged: postgres `11/11`, mssql `11/11`, clickhouse `10/11` (`Incremental`
+  only). One example fix was required: the MSSQL `AdventureWorksQueries.cs` needed
+  `using NextORM.SqlServer;`, because the provider-specific fluent extensions were relocated out of core
+  into the provider packages (`#191`, `1.0.9`), so `Pivot`/`Unpivot`/`DistinctOn` no longer come from
+  `NextORM.Core`.
+
+* **All demo CTEs are now typed (`AsCte`).** The remaining string-name CTE reads
+  (`ctx.With(name, query)` / `ctx.From(name)` + `GetInt32("col")`) were converted to typed descriptors
+  (`query.AsCte(name)` + `ctx.From(cte)` with member access) in postgres (queries 1–5), mssql
+  (queries 2–4) and clickhouse (queries 4, 5); the final projections stay anonymous. `avg`/`stdev`, which
+  return a **non-nullable** value type for a value-type argument, are projected as `(double?)`/`(decimal?)`
+  so the one-row-per-group case stays distinguishable from zero — matching the previous `GetNullable*`
+  reads. The only remaining by-name reads are the MSSQL `Pivot` result columns, which are dynamic. Re-run
+  unchanged: postgres `11/11`, mssql `11/11`, clickhouse `10/11` (`Incremental` only).
 
 ## Known environment pitfalls (do not mistake for product failures)
 

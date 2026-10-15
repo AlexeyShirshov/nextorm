@@ -1,0 +1,918 @@
+{
+ "contract_rv": 5,
+ "issue": "#232",
+ "manifest": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
+ "milestone": "1.0.9-rc3",
+ "plan_revision": 5,
+ "required_rows": [
+  "E232-01",
+  "E232-02",
+  "E232-03",
+  "E232-04",
+  "E232-05",
+  "E232-06",
+  "E232-07",
+  "E232-08",
+  "E232-09",
+  "E232-10",
+  "E232-11",
+  "E232-12",
+  "E232-13",
+  "E232-14",
+  "E232-15",
+  "E232-16",
+  "E232-17",
+  "EC232-REPRO",
+  "EC232-DERIVED-UNIT",
+  "EC232-DERIVED-EXEC",
+  "EC232-SHARED-REGRESSION",
+  "EC232-ORACLE-AMEND",
+  "EC232-BUILD",
+  "EC232-DERIVED-BUILDER",
+  "EC232-DERIVED-COMMAND",
+  "EC232-PIVOTFREE-PROBE",
+  "EC232-CASE-SENSITIVE-ALIAS",
+  "EC232-CACHE-LOCALITY",
+  "EC232-PREREQ-MUTATION",
+  "EC232-RV3-SEAL",
+  "EC232-RV4-PACKAGING",
+  "EC232-RV4-V05",
+  "EC232-RV4-V18",
+  "EC232-RV4-V19",
+  "EC232-RV4-V21",
+  "EC232-RV4-COVERAGE",
+  "EC232-RV4-OWNERSHIP",
+  "EC232-RV4-HANDOFF",
+  "EC232-RV4-SECURITY",
+  "EC232-RV4-PERF",
+  "EC232-RV4-SEAL",
+  "EC232-RV5-SEAL-RECONCILIATION",
+  "EC232-RV5-FULFILLMENT",
+  "EC232-RV5-HASH-LEDGER",
+  "EC232-RV5-V18-EXECUTION",
+  "EC232-RV5-V23-AMBIGUITY",
+  "EC232-RV5-HANDOFF",
+  "EC232-RV5-SECURITY-DISPOSITION",
+  "EC232-RV5-V05-MAPPING",
+  "EC232-RV5-DOCS-EXAMPLES",
+  "EC232-RV5-CONTRADICTIONS",
+  "EC232-RV5-REGRESSION",
+  "EC232-RV5-COVERAGE",
+  "EC232-RV5-PERF"
+ ],
+ "rows": [
+  {
+   "applicability": "always",
+   "criterion": [
+    "AC-08",
+    "AC-12"
+   ],
+   "id": "E232-01",
+   "invocation": "C01",
+   "obligation": "preparation/name lifecycle: a concrete safe name-resolution route is proven",
+   "owner": "scout/coder-preparation",
+   "unit": "D-01"
+  },
+  {
+   "applicability": "always, per unit",
+   "criterion": [
+    "AC-11"
+   ],
+   "id": "E232-02",
+   "invocation": "C02,C03,C19",
+   "obligation": "scope/inner-loop gate: schema-valid briefs/reports and real execution records; each test execution selects >=1",
+   "owner": "coder",
+   "unit": "D-01..D-07"
+  },
+  {
+   "applicability": "APIs introduced",
+   "criterion": [
+    "AC-01",
+    "AC-05",
+    "AC-07"
+   ],
+   "id": "E232-03",
+   "invocation": "C04",
+   "obligation": "public API/build/XML: C04 exit 0, no warnings/errors, approved signatures",
+   "owner": "coder-build",
+   "unit": "D-04,D-06"
+  },
+  {
+   "applicability": "typed APIs introduced",
+   "criterion": [
+    "AC-01",
+    "AC-02",
+    "AC-07",
+    "AC-08"
+   ],
+   "id": "E232-04",
+   "invocation": "C05",
+   "obligation": "typed SQL/shapes/composition: exact SQL tests run without skips",
+   "owner": "coder-sql-tests",
+   "unit": "D-04"
+  },
+  {
+   "applicability": "typed APIs introduced",
+   "criterion": [
+    "AC-04"
+   ],
+   "id": "E232-05",
+   "invocation": "C05",
+   "obligation": "fail-closed validations: every guard row represented",
+   "owner": "coder-sql-tests",
+   "unit": "D-04"
+  },
+  {
+   "applicability": "always",
+   "criterion": [
+    "AC-03",
+    "AC-09"
+   ],
+   "id": "E232-06",
+   "invocation": "C06",
+   "obligation": "legacy/eager preservation: all original 14 plus eager guards executed at verified anchors",
+   "owner": "coder-regression",
+   "unit": "D-01,D-04"
+  },
+  {
+   "applicability": "always",
+   "criterion": [
+    "AC-09"
+   ],
+   "id": "E232-07",
+   "invocation": "C07",
+   "obligation": "per-provider capability: all six providers executed, five reject both typed operators",
+   "owner": "coder-provider-tests",
+   "unit": "D-05"
+  },
+  {
+   "applicability": "always",
+   "criterion": [
+    "AC-02",
+    "AC-07",
+    "AC-08"
+   ],
+   "id": "E232-08",
+   "invocation": "C08",
+   "obligation": "SQL Server rows/ordinals/sources: no SQL Server container skips",
+   "owner": "coder-integration",
+   "unit": "D-05"
+  },
+  {
+   "applicability": "always",
+   "criterion": [
+    "AC-09"
+   ],
+   "id": "E232-09",
+   "invocation": "C05,C08",
+   "obligation": "cache/eager/join/source-binding: V21..V25 covered",
+   "owner": "coder-core-tests",
+   "unit": "D-05"
+  },
+  {
+   "applicability": "new rewrite/guard/translation code present",
+   "criterion": [
+    "AC-11"
+   ],
+   "id": "E232-10",
+   "invocation": "C09",
+   "obligation": "targeted mutation/red arms: every mandated mutant killed and the tree restored",
+   "owner": "coder-mutation",
+   "unit": "D-05"
+  },
+  {
+   "applicability": "always",
+   "criterion": [
+    "AC-06"
+   ],
+   "id": "E232-11",
+   "invocation": "C10,C12",
+   "obligation": "coverage/branch delta: final >=85/75, comparable area does not decrease",
+   "owner": "coder-coverage",
+   "unit": "D-01,D-07"
+  },
+  {
+   "applicability": "implementation units complete",
+   "criterion": [
+    "AC-03",
+    "AC-09",
+    "AC-11"
+   ],
+   "id": "E232-12",
+   "invocation": "C11",
+   "obligation": "final boundary: required cases/providers present, zero skips",
+   "owner": "coder-boundary",
+   "unit": "D-07"
+  },
+  {
+   "applicability": "always",
+   "criterion": [
+    "AC-10"
+   ],
+   "id": "E232-13",
+   "invocation": "C13",
+   "obligation": "example: C13 exit 0 and the C14 example audit passes",
+   "owner": "coder-example",
+   "unit": "D-06"
+  },
+  {
+   "applicability": "always",
+   "criterion": [
+    "AC-04",
+    "AC-05"
+   ],
+   "id": "E232-14",
+   "invocation": "C14",
+   "obligation": "bilingual/XML docs: semantic EN/RU match, no public specs links",
+   "owner": "coder-docs",
+   "unit": "D-06"
+  },
+  {
+   "applicability": "query translation/preparation changes",
+   "criterion": [
+    "AC-11"
+   ],
+   "id": "E232-15",
+   "invocation": "C15",
+   "obligation": "acceptance performance: seven cases, no unexplained material regression",
+   "owner": "coder-perf",
+   "unit": "D-01,D-07"
+  },
+  {
+   "applicability": "always",
+   "criterion": [
+    "AC-12"
+   ],
+   "id": "E232-16",
+   "invocation": "C16",
+   "obligation": "scope/CRLF/handoff: foreign bytes preserved, shared implementation clean at handoff",
+   "owner": "coder-handoff",
+   "unit": "D-01,D-07"
+  },
+  {
+   "applicability": "always",
+   "criterion": [
+    "AC-01",
+    "AC-02",
+    "AC-03",
+    "AC-04",
+    "AC-05",
+    "AC-06",
+    "AC-07",
+    "AC-08",
+    "AC-09",
+    "AC-10",
+    "AC-11",
+    "AC-12"
+   ],
+   "id": "E232-17",
+   "invocation": "C17,C18",
+   "obligation": "schema/fulfillment/sealing: manifest, provenance and counters valid",
+   "owner": "CHECK",
+   "unit": "D-07"
+  },
+  {
+   "applicability": "Always (before production edits)",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/baseline.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/production-before.json"
+   ],
+   "criterion": [
+    "AC-08",
+    "AC-11",
+    "V26",
+    "V27",
+    "V28"
+   ],
+   "id": "EC232-REPRO",
+   "invocation": "C20",
+   "obligation": "isolated repro children, production hashes, frozen oracles; C20 exit 0 only after a genuine builder red",
+   "owner": "coder-prerequisite",
+   "unit": "D232-PREREQ-typed-derived"
+  },
+  {
+   "applicability": "Typed derived surface present",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/unit.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/case-inventory.json"
+   ],
+   "criterion": [
+    "AC-01",
+    "AC-03",
+    "AC-08"
+   ],
+   "id": "EC232-DERIVED-UNIT",
+   "invocation": "C21",
+   "obligation": "derived builder/command unit tests; every typed derived cell/route case selected",
+   "owner": "coder-sql-tests",
+   "unit": "D232-PREREQ-typed-derived"
+  },
+  {
+   "applicability": "Typed derived surface present",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/execution.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/provider-matrix.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/container-state.json"
+   ],
+   "criterion": [
+    "AC-02",
+    "AC-07",
+    "AC-08",
+    "AC-09"
+   ],
+   "id": "EC232-DERIVED-EXEC",
+   "invocation": "C22",
+   "obligation": "SQL Server executed; per-provider state recorded",
+   "owner": "coder-integration",
+   "unit": "D232-PREREQ-typed-derived"
+  },
+  {
+   "applicability": "Always",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/regression/inventory.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/regression/oracle-comparison.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/regression/protected-files.json"
+   ],
+   "criterion": [
+    "AC-03",
+    "AC-08",
+    "AC-09",
+    "AC-11"
+   ],
+   "id": "EC232-SHARED-REGRESSION",
+   "invocation": "C23",
+   "obligation": "eight project suites + container boundary; no protected file changed",
+   "owner": "coder-regression",
+   "unit": "D232-PREREQ-typed-derived"
+  },
+  {
+   "applicability": "Independent amendment unit",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/before.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/after.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/amendment.json"
+   ],
+   "criterion": [
+    "AC-02",
+    "AC-11"
+   ],
+   "id": "EC232-ORACLE-AMEND",
+   "invocation": "C24",
+   "obligation": "exactly one key amended; before/after hashes and history verified",
+   "owner": "coder-oracle",
+   "unit": "D232-AMEND-unpivot-null-oracle"
+  },
+  {
+   "applicability": "Always",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/build/api-review.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/build/gate-review.json"
+   ],
+   "criterion": [
+    "AC-01",
+    "AC-05",
+    "AC-12"
+   ],
+   "id": "EC232-BUILD",
+   "invocation": "C25",
+   "obligation": "core + provider builds: 0 warnings / 0 errors",
+   "owner": "coder-build",
+   "unit": "D232-PREREQ-typed-derived"
+  },
+  {
+   "applicability": "Builder route changed",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/derived-builder.json"
+   ],
+   "criterion": [
+    "AC-08",
+    "AC-09",
+    "V26"
+   ],
+   "id": "EC232-DERIVED-BUILDER",
+   "invocation": "C26",
+   "obligation": "preserved projection/SQL/data and guarded controls",
+   "owner": "coder-sql-tests",
+   "unit": "D232-PREREQ-typed-derived"
+  },
+  {
+   "applicability": "Command route changed",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/derived-command.json"
+   ],
+   "criterion": [
+    "AC-08",
+    "V27"
+   ],
+   "id": "EC232-DERIVED-COMMAND",
+   "invocation": "C27",
+   "obligation": "equivalent emitted names, qualification and rows",
+   "owner": "coder-sql-tests",
+   "unit": "D232-PREREQ-typed-derived"
+  },
+  {
+   "applicability": "Always",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/pivot-free.json"
+   ],
+   "criterion": [
+    "AC-08",
+    "AC-11",
+    "V28"
+   ],
+   "id": "EC232-PIVOTFREE-PROBE",
+   "invocation": "C28",
+   "obligation": "pivot-free diagnostic with the actual outcome and source provenance",
+   "owner": "coder-prerequisite",
+   "unit": "D232-PREREQ-typed-derived"
+  },
+  {
+   "applicability": "Derived surface present",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/case-sensitive-alias.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/database-collation.json"
+   ],
+   "criterion": [
+    "AC-08",
+    "V29"
+   ],
+   "id": "EC232-CASE-SENSITIVE-ALIAS",
+   "invocation": "C29",
+   "obligation": "case-sensitive database resolution for the bare and aliased identifiers",
+   "owner": "coder-integration",
+   "unit": "D232-PREREQ-typed-derived"
+  },
+  {
+   "applicability": "Always",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/cache/locality.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/cache/source-review.json"
+   ],
+   "criterion": [
+    "AC-09",
+    "V24",
+    "V26"
+   ],
+   "id": "EC232-CACHE-LOCALITY",
+   "invocation": "C30",
+   "obligation": "no sticky command/plan-cache state",
+   "owner": "coder-core-tests",
+   "unit": "D232-PREREQ-typed-derived"
+  },
+  {
+   "applicability": "New prerequisite code present",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/prerequisite.json"
+   ],
+   "criterion": [
+    "AC-11",
+    "V26",
+    "V29"
+   ],
+   "id": "EC232-PREREQ-MUTATION",
+   "invocation": "C31",
+   "obligation": "every mandated mutant killed and the tree restored",
+   "owner": "coder-mutation",
+   "unit": "D232-PREREQ-typed-derived"
+  },
+  {
+   "applicability": "Always",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/manifest.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/contract.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/provenance.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/counters.json"
+   ],
+   "criterion": [
+    "AC-01",
+    "AC-02",
+    "AC-03",
+    "AC-04",
+    "AC-05",
+    "AC-06",
+    "AC-07",
+    "AC-08",
+    "AC-09",
+    "AC-10",
+    "AC-11",
+    "AC-12"
+   ],
+   "id": "EC232-RV3-SEAL",
+   "invocation": "C32,C33",
+   "obligation": "The historical rv3 seal gap is explicitly reconciled, without manufacturing a retrospective rv3 PASS or changing historical artifacts. The current rv5 seal records the rv3 gap and its disposition, validates the current contract and evidence closure, and has zero applicable open required rows. This row is required and cannot be discharged as `na`.",
+   "owner": "CHECK",
+   "unit": "D-07"
+  },
+  {
+   "applicability": "Always",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/c13-example-build.out"
+   ],
+   "criterion": [
+    "AC-10"
+   ],
+   "id": "EC232-RV4-PACKAGING",
+   "invocation": "python3 \"$R/verify.py\" --case packaging",
+   "obligation": "D-08: the AdventureWorks example consumes the current checkout (ProjectReference to nextorm.core/nextorm.sqlserver); the literal C13 build exits 0 with no CS/packaging error and no version override or feed masking",
+   "owner": "coder-example",
+   "unit": "D-08"
+  },
+  {
+   "applicability": "Typed surface present",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/variants/v05.json"
+   ],
+   "criterion": [
+    "AC-02",
+    "AC-08"
+   ],
+   "id": "EC232-RV4-V05",
+   "invocation": "python3 \"$R/verify.py\" --case v05",
+   "obligation": "D-09: V05 TVF inner executable closure (deterministic SQL Server TVF + typed projection)",
+   "owner": "coder-sql-tests",
+   "unit": "D-09"
+  },
+  {
+   "applicability": "Typed surface present",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/variants/v18.json"
+   ],
+   "criterion": [
+    "AC-04",
+    "AC-08"
+   ],
+   "id": "EC232-RV4-V18",
+   "invocation": "python3 \"$R/verify.py\" --case v18",
+   "obligation": "D-09: V18 typo/absent data value executable closure (emitted identifier / missing-cell behaviour)",
+   "owner": "coder-sql-tests",
+   "unit": "D-09"
+  },
+  {
+   "applicability": "Typed surface present",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/variants/v19.json"
+   ],
+   "criterion": [
+    "AC-04",
+    "AC-08"
+   ],
+   "id": "EC232-RV4-V19",
+   "invocation": "python3 \"$R/verify.py\" --case v19",
+   "obligation": "D-09: V19 dynamic PIVOT guard / documented API boundary (legacy path retained)",
+   "owner": "coder-sql-tests",
+   "unit": "D-09"
+  },
+  {
+   "applicability": "Typed surface present",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/variants/v21.json"
+   ],
+   "criterion": [
+    "AC-09"
+   ],
+   "id": "EC232-RV4-V21",
+   "invocation": "python3 \"$R/verify.py\" --case v21",
+   "obligation": "D-09: V21 eager-load / single-query state executable closure; V14/V22 preserved",
+   "owner": "coder-sql-tests",
+   "unit": "D-09"
+  },
+  {
+   "applicability": "Always",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage/summary.json"
+   ],
+   "criterion": [
+    "AC-06"
+   ],
+   "id": "EC232-RV4-COVERAGE",
+   "invocation": "python3 \"$R/verify.py\" --case coverage",
+   "obligation": "D-10: candidate coverage meets MIN_LINE_COVERAGE/MIN_BRANCH_COVERAGE AND the comparable touched-scope coverage does not decrease; denominators/exclusions unchanged",
+   "owner": "coder-coverage",
+   "unit": "D-10"
+  },
+  {
+   "applicability": "Always",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json"
+   ],
+   "criterion": [
+    "AC-12"
+   ],
+   "id": "EC232-RV4-OWNERSHIP",
+   "invocation": "python3 \"$R/verify.py\" --case ownership",
+   "obligation": "D-11: rv4/ownership.json records the verified #160 sibling-owner identity and explicit post-discovery authorization; the T232 footprint is T232-only",
+   "owner": "coder-handoff",
+   "unit": "D-11"
+  },
+  {
+   "applicability": "Always",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/handoff.json"
+   ],
+   "criterion": [
+    "AC-12"
+   ],
+   "id": "EC232-RV4-HANDOFF",
+   "invocation": "python3 \"$R/verify.py\" --case handoff",
+   "obligation": "D-11: rv4/handoff.json records per-hunk byte hashes, clean paths and CRLF for the corrected handoff",
+   "owner": "coder-handoff",
+   "unit": "D-11"
+  },
+  {
+   "applicability": "Always",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/advisories.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/gh-search/"
+   ],
+   "criterion": [
+    "AC-01",
+    "AC-12"
+   ],
+   "id": "EC232-RV4-SECURITY",
+   "invocation": "python3 \"$R/verify.py\" --case security",
+   "obligation": "D-13: complete ordinary-restore advisory capture (identifiers/package paths/exit codes) plus a duplicate search; separate issue/remedy ownership is recorded",
+   "owner": "coder-security",
+   "unit": "D-13"
+  },
+  {
+   "applicability": "Query translation/preparation changes",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/perf/comparison.json"
+   ],
+   "criterion": [
+    "AC-11"
+   ],
+   "id": "EC232-RV4-PERF",
+   "invocation": "python3 \"$R/verify.py\" --case perf",
+   "obligation": "Acceptance perf re-confirmation on the rv4 tree; no unexplained material regression",
+   "owner": "coder-perf",
+   "unit": "D-10"
+  },
+  {
+   "applicability": "Always",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/contract.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/provenance.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/counters.json"
+   ],
+   "criterion": [
+    "AC-01",
+    "AC-02",
+    "AC-03",
+    "AC-04",
+    "AC-05",
+    "AC-06",
+    "AC-07",
+    "AC-08",
+    "AC-09",
+    "AC-10",
+    "AC-11",
+    "AC-12"
+   ],
+   "id": "EC232-RV4-SEAL",
+   "invocation": "python3 \"$R/verify.py\" --case seal",
+   "obligation": "rv4 evidence reconciliation/seal: manifest/contract/provenance/counters valid; zero applicable open rows; unsupported `met` claims retracted; sealed only after the substantive gates",
+   "owner": "CHECK",
+   "unit": "D-12"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal-reconciliation.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal.json"
+   ],
+   "criterion": [
+    "AC-11"
+   ],
+   "id": "EC232-RV5-SEAL-RECONCILIATION",
+   "invocation": "python3 \"$V\" seal --root \"$R\" --historical-root \"$B\"",
+   "obligation": "AC-11: reconcile the historical rv3 seal gap explicitly, without manufacturing a retrospective rv3 PASS or changing historical artifacts; the current rv5 seal records the rv3 gap and its disposition, validates the current contract and evidence closure, and has zero applicable open required rows; exit 0 only with current closure + explicit rv3 gap + zero applicable open rows. Negative acceptance: reject `na` substitution or a retrospective rv3 PASS.",
+   "owner": "coder->check",
+   "unit": "D232-RV5-09"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv4.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv5.json"
+   ],
+   "criterion": [
+    "AC-11"
+   ],
+   "id": "EC232-RV5-FULFILLMENT",
+   "invocation": "python3 \"$V\" fulfillment --rv4 \"$B\" --rv5 \"$R\"",
+   "obligation": "AC-11: exit 0 implies the rv4 defects are explicitly accounted for and the actual rv5 requirements are fulfilled; rv4 keeps its historical-invalid disposition. Negative acceptance: reject the rv1 entry/root, a wrong `rv` or status-only validation.",
+   "owner": "coder->check",
+   "unit": "D232-RV5-08"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-ledger.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-verification.json"
+   ],
+   "criterion": [
+    "AC-11"
+   ],
+   "id": "EC232-RV5-HASH-LEDGER",
+   "invocation": "python3 \"$V\" hashes --root \"$R\" --verify",
+   "obligation": "AC-11: exit 0 with a complete transitive inventory and every expected file present and hash-valid. Negative acceptance: reject missing/stale/substituted/unaccounted evidence.",
+   "owner": "coder->check",
+   "unit": "D232-RV5-08"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v18/assertion-execution.json"
+   ],
+   "criterion": [
+    "AC-04"
+   ],
+   "id": "EC232-RV5-V18-EXECUTION",
+   "invocation": "python3 \"$V\" run --case v18 --root \"$R\"",
+   "obligation": "AC-04: execute the SQL Server integration selector; `v18/assertion-execution.json` plus raw logs must show SQL Server execution and the NULL assertion. Negative acceptance: reject fixture-only/render-only proof, skipped execution or zero selected tests.",
+   "owner": "coder",
+   "unit": "D232-RV5-04"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v23/assertion-execution.json"
+   ],
+   "criterion": [
+    "AC-04",
+    "AC-07"
+   ],
+   "id": "EC232-RV5-V23-AMBIGUITY",
+   "invocation": "python3 \"$V\" run --case v23 --root \"$R\"",
+   "obligation": "AC-04, AC-07: probe + positive/negative tests + mutation evidence; exit 0 requires actual ambiguous ordinary-marker rejection AND valid single/aliased behaviour. Negative acceptance: reject first-match binding or blanket rejection.",
+   "owner": "coder",
+   "unit": "D232-RV5-03"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json"
+   ],
+   "criterion": [
+    "AC-12"
+   ],
+   "id": "EC232-RV5-HANDOFF",
+   "invocation": "python3 \"$V\" handoff --root \"$R\" --status docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+   "obligation": "AC-12: `handoff.json`; exit 0 only for the rewritten AC-12. Negative acceptance: reject unsupported ownership, foreign changes, dirty overlap or a missing green committed implementation.",
+   "owner": "coder->check",
+   "unit": "D232-RV5-09"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/security/"
+   ],
+   "criterion": [
+    "inherited security findings"
+   ],
+   "id": "EC232-RV5-SECURITY-DISPOSITION",
+   "invocation": "python3 \"$V\" security --root \"$R\" --milestone 1.0.9-rc3",
+   "obligation": "Inherited security findings: search logs + verified issue JSON/URL; both High findings explicitly \"accepted risk, not a blocker\". Negative acceptance: reject a missing duplicate search, an unverifiable issue/milestone or production fixes.",
+   "owner": "scout/coder",
+   "unit": "D232-RV5-06"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v05/assertion-execution.json"
+   ],
+   "criterion": [
+    "AC-11"
+   ],
+   "id": "EC232-RV5-V05-MAPPING",
+   "invocation": "python3 \"$V\" mapping --variant V05 --root \"$R\"",
+   "obligation": "AC-11: `v05/assertion-execution.json`; exit 0 only when every applicable assertion maps to observed execution or a justified guard. Negative acceptance: reject test-name-only mappings.",
+   "owner": "scout/coder",
+   "unit": "D232-RV5-05"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/reports/D-09.json"
+   ],
+   "criterion": [
+    "AC-04",
+    "AC-05",
+    "AC-10",
+    "AC-11"
+   ],
+   "id": "EC232-RV5-DOCS-EXAMPLES",
+   "invocation": "python3 \"$V\" docs-examples --root \"$R\"",
+   "obligation": "AC-04/05/10/11: current bilingual/XML-doc/example audits + CS1591 invocation/result + `reports/D-09.json`. Negative acceptance: reject stale-only audits, an omitted language/example or a silently repaired historical report.",
+   "owner": "scout/coder",
+   "unit": "D232-RV5-05"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/reconciliation.json"
+   ],
+   "criterion": [
+    "AC-11"
+   ],
+   "id": "EC232-RV5-CONTRADICTIONS",
+   "invocation": "python3 \"$V\" reconcile --rv4 \"$B\" --rv5 \"$R\"",
+   "obligation": "AC-11: `reconciliation.json`; both the SECURITY-state and HEAD contradictions identified, dated and resolved for current acceptance; history unchanged. Negative acceptance: reject unexplained conflicts or modified rv4 artifacts.",
+   "owner": "coder->check",
+   "unit": "D232-RV5-08"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/regression/"
+   ],
+   "criterion": [
+    "AC-01",
+    "AC-02",
+    "AC-03",
+    "AC-04",
+    "AC-05",
+    "AC-06",
+    "AC-07",
+    "AC-08",
+    "AC-09",
+    "AC-10",
+    "AC-11"
+   ],
+   "id": "EC232-RV5-REGRESSION",
+   "invocation": "python3 \"$V\" run --case regression --root \"$R\"",
+   "obligation": "AC-01..11: exact build/test commands, branch inventory, scope diff, frozen-test comparison, targeted mutation logs; exit 0 with nonempty selected tests. Negative acceptance: reject provider skips, a changed frozen oracle or a forbidden footprint.",
+   "owner": "coder",
+   "unit": "D232-RV5-07"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/candidate.cobertura.xml"
+   ],
+   "criterion": [
+    "AC-06"
+   ],
+   "id": "EC232-RV5-COVERAGE",
+   "invocation": "python3 \"$V\" coverage --baseline-root \"$B/coverage\" --candidate \"$R/coverage/candidate.cobertura.xml\" --root \"$R\"",
+   "obligation": "AC-06: comparable coverage/branch-delta; line >=85, branch >=75, no comparable touched-area decrease. Negative acceptance: reject incomparable denominators or aggregate-only substitution.",
+   "owner": "coder",
+   "unit": "D232-RV5-07"
+  },
+  {
+   "applicability": "Always: T232 rv5 acceptance is requested",
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/perf/"
+   ],
+   "criterion": [
+    "AC-11"
+   ],
+   "id": "EC232-RV5-PERF",
+   "invocation": "python3 \"$V\" replay-perf --recorded-root \"$B\" --root \"$R\" --expected-cases 7",
+   "obligation": "AC-11: resolves and executes the recorded seven-case harness commands; raw results + comparison, zero failed cases / no material regression. Negative acceptance: reject missing commands, a changed methodology or report-only replay.",
+   "owner": "coder",
+   "unit": "D232-RV5-07"
+  }
+ ],
+ "rv5_delta": {
+  "assertion_tool_status": "rv5_evidence.py is a planned evidence tool, not an existing repository capability; it must log every underlying command, exit, artifact source and source-snapshot identity; empty test selections, absent source evidence and wrong-revision roots must fail; its negative self-tests (wrong revision/root, tampered file, missing evidence, open required row, empty test selection, provider skip) go to tool-selftests.json and are required for fulfillment",
+  "carried_verbatim": "all 41 inherited row IDs (E232-01..E232-17, EC232-REPRO..EC232-RV4-SEAL) and their historical artifact paths are unchanged",
+  "check_regather_budget": "exactly two targeted batches (1: V05/D-09/current bilingual+example assertions; 2: handoff ownership/overlap and evidence/provenance contradictions); missing reports first consume the applicable batch and alone do not justify another DO iteration or revision; persistent low confidence after the budget -> escalate trigger 5",
+  "delta_rows": [
+   "EC232-RV5-SEAL-RECONCILIATION",
+   "EC232-RV5-FULFILLMENT",
+   "EC232-RV5-HASH-LEDGER",
+   "EC232-RV5-V18-EXECUTION",
+   "EC232-RV5-V23-AMBIGUITY",
+   "EC232-RV5-HANDOFF",
+   "EC232-RV5-SECURITY-DISPOSITION",
+   "EC232-RV5-V05-MAPPING",
+   "EC232-RV5-DOCS-EXAMPLES",
+   "EC232-RV5-CONTRADICTIONS",
+   "EC232-RV5-REGRESSION",
+   "EC232-RV5-COVERAGE",
+   "EC232-RV5-PERF"
+  ],
+  "delta_rows_applicability": "Always: T232 rv5 acceptance is requested",
+  "legal_statuses": [
+   "met",
+   "open",
+   "na"
+  ],
+  "no_pass_with_open_rows": "no PASS while any required row is `open`",
+  "no_superseded_status": "no `superseded` status exists in scripts/validate_inner_loop.py",
+  "rewritten_items": [
+   "AC-12",
+   "EC232-RV3-SEAL obligation"
+  ],
+  "schema_invocation": "python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json (expected exit 0; schema success alone is not acceptance)",
+  "seal_dependency_order": "payload reports + manifest -> hash the complete payload -> seal hashes the payload ledger -> independent CHECK receipt hashes manifest + ledger + seal; envelope files are explicitly identified",
+  "seal_row_obligation": "The historical rv3 seal gap is explicitly reconciled, without manufacturing a retrospective rv3 PASS or changing historical artifacts. The current rv5 seal records the rv3 gap and its disposition, validates the current contract and evidence closure, and has zero applicable open required rows. This row is required and cannot be discharged as `na`.",
+  "supersedes": "rv=4 for current acceptance only; all 41 inherited row IDs, historical artifact paths and still-required obligations are preserved; historical manifests are never rewritten."
+ },
+ "status_file": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+ "task": "T232 (#232) SQL Server typed PIVOT/UNPIVOT projection"
+}

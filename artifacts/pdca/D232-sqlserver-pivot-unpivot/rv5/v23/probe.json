@@ -1,0 +1,84 @@
+{
+  "unit": "D232-RV5-02",
+  "defect_key": "V23",
+  "defect": "An ordinary-marker query with two or more matching TableAlias-bound sources silently binds the first source.",
+  "task": "#232 rv=5",
+  "binding_site": {
+    "file": "src/nextorm.core/Visitors/NormSqlTranslator.cs",
+    "lines": "96-106",
+    "expression": "var index = visitor.ColumnsProvider.FindAlias(typeof(TableAlias), null, false) ?? throw new BuildSqlCommandException(...)",
+    "note": "NextORM.Core.NormSqlTranslator is an internal static class; TryTranslateMarker (:83) is called exactly once, from TryTranslateColumnReference (:55)."
+  },
+  "probe_api": {
+    "interface": "NextORM.Core.IColumnsProvider.FindAlias(System.Type, int?, bool)",
+    "interface_file": "src/nextorm.core/Query/IColumnsProvider.cs:74",
+    "implementation": "src/nextorm.core/Query/DefaultColumnsProvider.cs:219",
+    "core_lookup": "src/nextorm.core/Query/DefaultColumnsProvider.cs:235-256 (FindAliasInScope)",
+    "semantics": "paramIdx is the zero-based ordinal among same-typed, same-fromProjection sources inside the current source scope; paramIdx == null returns the first match with no ambiguity check.",
+    "public": true,
+    "from_core_translator": "reachable through BaseExpressionVisitor.ColumnsProvider (internal accessor, src/nextorm.core/Visitors/BaseExpressionVisitor.cs:305)"
+  },
+  "experiment": {
+    "kind": "bounded, SQL-generation only (placeholder connection string, no database opened)",
+    "scratch_test": "tests/nextorm.sqlserver.tests/Rv5ScratchProbeTests.cs (temporary; deleted after the experiment)",
+    "argv": [
+      "dotnet",
+      "test",
+      "tests/nextorm.sqlserver.tests",
+      "-c",
+      "Debug",
+      "--no-build",
+      "--filter",
+      "FullyQualifiedName~Rv5ScratchProbeTests"
+    ],
+    "exit_code": 0,
+    "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5-v23-probe.out",
+    "raw_output_log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5-v23-probe.txt",
+    "probes": [
+      {
+        "setup": "DefaultColumnsProvider with one Add(typeof(TableAlias), false)",
+        "FindAlias(TableAlias, null, false)": "0",
+        "FindAlias(TableAlias, 0, false)": "0",
+        "FindAlias(TableAlias, 1, false)": "null"
+      },
+      {
+        "setup": "DefaultColumnsProvider with two Add(typeof(TableAlias), false)",
+        "FindAlias(TableAlias, null, false)": "0",
+        "FindAlias(TableAlias, 0, false)": "0",
+        "FindAlias(TableAlias, 1, false)": "1",
+        "FindAlias(TableAlias, 2, false)": "null"
+      }
+    ],
+    "end_to_end": {
+      "query": "ctx.From(\"t232_sales\").Pivot(Sum, margin, quarter, PivotValue.Create(\"1\")).Join(ctx.From(\"t232_other\"), (x,y) => SqlFunctions.Column<int>(x,\"quarter\") == SqlFunctions.Column<int>(y,\"quarter\")).Select(p => new { V = capturedPivotValues.Value<decimal?>(\"[1]\") })",
+      "two_distinguishable_tablealias_sources": true,
+      "emitted_sql": "select t1.[1] as [V]\n from t232_sales pivot (sum(margin) for quarter in ([1])) as [t1]\n join t232_other as [t2] on t1.quarter = t2.quarter",
+      "observed": "the ordinary marker silently bound the FIRST TableAlias source (t1) although two (t1, t2) are in scope; the marker carries no source argument and never rejects the ambiguity."
+    }
+  },
+  "discriminator_candidates": [
+    {
+      "candidate": "visitor.ColumnsProvider.FindAlias(typeof(TableAlias), 1, false) is not null",
+      "single_source": "null",
+      "two_sources": "1",
+      "distinguishes": true,
+      "verdict": "VALID LOCAL DISCRIMINATOR - chosen for the D232-RV5-03 guard",
+      "rationale": "It is the public interface probe (no new API, no DefaultColumnsProvider change) and asks the same lookup the binding site uses, with the ordinal 1 so a non-null answer proves a second same-typed source is visible in exactly the same scope."
+    },
+    {
+      "candidate": "visitor.ColumnsProvider.FindAlias(typeof(TableAlias), null, false)",
+      "single_source": "0",
+      "two_sources": "0",
+      "distinguishes": false,
+      "verdict": "rejected - this is the defect itself (first-match, no ambiguity check)"
+    },
+    {
+      "candidate": "visitor.ColumnsProvider.HasAliases",
+      "single_source": "true",
+      "two_sources": "true",
+      "distinguishes": false,
+      "verdict": "rejected - counts any registered source, not same-typed TableAlias sources"
+    }
+  ],
+  "conclusion": "A valid local discriminator exists: FindAlias(typeof(TableAlias), 1, false) is null when exactly one TableAlias source is in scope and non-null when a second one is. No production change to DefaultColumnsProvider is required (it stays untouched); the guard belongs in NormSqlTranslator.TryTranslateMarker."
+}

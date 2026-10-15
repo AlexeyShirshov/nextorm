@@ -1,0 +1,559 @@
+{
+ "branch": "1.0.9-rc3",
+ "captured_at": "2026-10-15 07:02Z",
+ "contract_rv": 5,
+ "foreign": {
+  "tracked_dirty": [
+   ".opencode/agents/nextorm-code-auditor.md",
+   ".opencode/agents/nextorm-db-perf-analyst.md",
+   ".opencode/agents/nextorm-design-engineer.md",
+   ".opencode/agents/nextorm-inmemory-perf-analyst.md",
+   ".opencode/agents/nextorm-performance-analyst.md",
+   ".opencode/agents/nextorm-scout.md",
+   ".opencode/skills/implementing-todo-features/SKILL.md",
+   ".opencode/skills/nextorm-pdca/SKILL.md",
+   "AGENTS.md",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.html",
+   "docs/assets/diagrams/nextorm-command-execution.svg",
+   "docs/ru/assets/diagrams/nextorm-command-execution.svg",
+   "docs/specs/status/D211-eager-perparent-topn-1.md",
+   "docs/specs/status/D213-joininto-remainder-1.md",
+   "docs/specs/status/D215-oneof-removal-1.md",
+   "docs/specs/status/D216-row-locking-1.md",
+   "docs/specs/status/D218-sqlserver-sequences-1.md",
+   "docs/specs/status/D222-join-overloads-by-type-1.md",
+   "docs/specs/status/D226-records-affected-1.md",
+   "examples/Directory.Packages.props",
+   "examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs",
+   "examples/nextorm.examples.clickhouse.analytics/README.md",
+   "examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs",
+   "examples/nextorm.examples.postgres.aviasales/README.md"
+  ],
+  "untracked": [
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html"
+  ]
+ },
+ "git_diff_stat_head": " .opencode/agents/nextorm-code-auditor.md           |  322 +-\n .opencode/agents/nextorm-db-perf-analyst.md        |  298 +-\n .opencode/agents/nextorm-design-engineer.md        |  318 +-\n .opencode/agents/nextorm-inmemory-perf-analyst.md  |  262 +-\n .opencode/agents/nextorm-performance-analyst.md    |  110 +-\n .opencode/agents/nextorm-scout.md                  |  115 +-\n .../skills/implementing-todo-features/SKILL.md     |  625 ++--\n .opencode/skills/nextorm-pdca/SKILL.md             |  635 ++--\n AGENTS.md                                          |  172 +-\n .../pdca/D218-sqlserver-sequences/rv1/E08-ab.md    |  345 +-\n .../rv1/branch-mutation-map.md                     |  127 +-\n .../rv1/logs/docs-check.log                        |    4 +\n .../D218-sqlserver-sequences/rv1/manifest.json     | 1571 ++++-----\n .../pdca/D218-sqlserver-sequences/rv1/report.json  | 3392 ++++++++++----------\n .../rv1/fulfillment.json                           |    2 +-\n .../rv3/fulfillment.json                           |    2 +-\n .../rv4/logs/packaging.cmd.json                    |    2 +-\n .../rv4/logs/packaging.exit                        |    2 +-\n .../rv4/logs/packaging.out                         |   23 +-\n .../rv4/logs/seal.cmd.json                         |    2 +-\n .../D232-sqlserver-pivot-unpivot/rv4/logs/seal.out |    1 +\n .../rv4/logs/security.cmd.json                     |    2 +-\n .../rv4/logs/security.exit                         |    2 +-\n .../rv4/logs/security.out                          |   41 +-\n .../rv4/logs/v05.cmd.json                          |    3 +-\n .../D232-sqlserver-pivot-unpivot/rv4/logs/v05.exit |    2 +-\n .../D232-sqlserver-pivot-unpivot/rv4/logs/v05.out  |   14 +-\n .../D232-sqlserver-pivot-unpivot/rv4/manifest.json | 1781 +++++-----\n .../rv4/ownership.json                             | 2177 +++++++++----\n .../rv4/packaging.json                             |   10 +-\n .../rv4/packaging/packaging.json                   |   10 +-\n .../D232-sqlserver-pivot-unpivot/rv4/seal.json     |  236 +-\n .../D232-sqlserver-pivot-unpivot/rv4/security.json |  139 +-\n .../pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json |    8 +-\n .../D232-sqlserver-pivot-unpivot/rv4/verify.py     |  734 +++--\n ...rk.InMemoryBenchmarkAggregates-report-github.md |    2 +-\n ...enchmark.InMemoryBenchmarkAggregates-report.csv |    2 +-\n ...nchmark.InMemoryBenchmarkAggregates-report.html |    4 +-\n ...hmark.InMemoryBenchmarkGroupBy-report-github.md |    2 +-\n ...M.Benchmark.InMemoryBenchmarkGroupBy-report.csv |    2 +-\n ....Benchmark.InMemoryBenchmarkGroupBy-report.html |    4 +-\n ...M.Benchmark.SqliteBenchmarkAny-report-github.md |    6 +-\n ...NextORM.Benchmark.SqliteBenchmarkAny-report.csv |    2 +-\n ...extORM.Benchmark.SqliteBenchmarkAny-report.html |    4 +-\n ...mark.SqliteBenchmarkCachedPlan-report-github.md |   10 +-\n ....Benchmark.SqliteBenchmarkCachedPlan-report.csv |    8 +-\n ...Benchmark.SqliteBenchmarkCachedPlan-report.html |    8 +-\n ...Benchmark.SqliteBenchmarkWhere-report-github.md |    4 +-\n ...xtORM.Benchmark.SqliteBenchmarkWhere-report.csv |    2 +-\n ...tORM.Benchmark.SqliteBenchmarkWhere-report.html |    6 +-\n docs/assets/diagrams/nextorm-command-execution.svg |   16 +-\n docs/guide/provider-specific-sql/sqlserver.md      |  881 ++---\n .../assets/diagrams/nextorm-command-execution.svg  |   16 +-\n docs/ru/guide/provider-specific-sql/sqlserver.md   |  894 +++---\n docs/specs/status/D211-eager-perparent-topn-1.md   | 1850 +++++------\n docs/specs/status/D213-joininto-remainder-1.md     |  475 +--\n docs/specs/status/D215-oneof-removal-1.md          |  578 ++--\n docs/specs/status/D216-row-locking-1.md            |  972 +++---\n docs/specs/status/D218-sqlserver-sequences-1.md    |  407 +--\n docs/specs/status/D222-join-overloads-by-type-1.md |  734 ++---\n docs/specs/status/D226-records-affected-1.md       |  758 ++---\n examples/Directory.Packages.props                  |   50 +-\n examples/README.md                                 |  267 +-\n examples/VERIFICATION.md                           |  214 +-\n .../ClickHouseQueries.cs                           |  822 ++---\n .../README.md                                      |  226 +-\n .../README.md                                      |  240 +-\n .../AviasalesQueries.cs                            | 1101 +++----\n .../nextorm.examples.postgres.aviasales/README.md  |  220 +-\n 69 files changed, 13214 insertions(+), 11062 deletions(-)\n",
+ "git_status_short_total": 76,
+ "head_full": "e9121976d9356375b906225bfe04704d298d8d13",
+ "head_short": "e9121976",
+ "inventory": [
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": ".opencode/agents/nextorm-code-auditor.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": ".opencode/agents/nextorm-db-perf-analyst.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": ".opencode/agents/nextorm-design-engineer.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": ".opencode/agents/nextorm-inmemory-perf-analyst.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": ".opencode/agents/nextorm-performance-analyst.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": ".opencode/agents/nextorm-scout.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": ".opencode/skills/implementing-todo-features/SKILL.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": ".opencode/skills/nextorm-pdca/SKILL.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "AGENTS.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "artifacts/pdca/D218-sqlserver-sequences/rv1/report.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/fulfillment.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/fulfillment.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.cmd.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.exit"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.out"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.cmd.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.out"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.cmd.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.exit"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.out"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.cmd.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.exit"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.out"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/seal.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-github.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.csv"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.html"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.csv"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.html"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.csv"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.html"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.csv"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.html"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "docs/assets/diagrams/nextorm-command-execution.svg"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "docs/guide/provider-specific-sql/sqlserver.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "docs/ru/assets/diagrams/nextorm-command-execution.svg"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "docs/ru/guide/provider-specific-sql/sqlserver.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "docs/specs/status/D211-eager-perparent-topn-1.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "docs/specs/status/D213-joininto-remainder-1.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "docs/specs/status/D215-oneof-removal-1.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "docs/specs/status/D216-row-locking-1.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "docs/specs/status/D218-sqlserver-sequences-1.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "docs/specs/status/D222-join-overloads-by-type-1.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "docs/specs/status/D226-records-affected-1.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "examples/Directory.Packages.props"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "examples/README.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "examples/VERIFICATION.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "examples/nextorm.examples.clickhouse.analytics/README.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "t232",
+   "path": "examples/nextorm.examples.mssql.adventureworks/README.md"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs"
+  },
+  {
+   "code": " M",
+   "kind": "tracked",
+   "owner": "foreign",
+   "path": "examples/nextorm.examples.postgres.aviasales/README.md"
+  },
+  {
+   "code": "??",
+   "kind": "untracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report-github.md"
+  },
+  {
+   "code": "??",
+   "kind": "untracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.csv"
+  },
+  {
+   "code": "??",
+   "kind": "untracked",
+   "owner": "foreign",
+   "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html"
+  },
+  {
+   "code": "??",
+   "kind": "untracked",
+   "owner": "t232",
+   "path": "docs/specs/status/evidence/pivot-typed-overload/"
+  },
+  {
+   "code": "??",
+   "kind": "untracked",
+   "owner": "t232",
+   "path": "tests/nextorm.core.tests/T232CoverageClosureTests.cs"
+  },
+  {
+   "code": "??",
+   "kind": "untracked",
+   "owner": "t232",
+   "path": "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs"
+  },
+  {
+   "code": "??",
+   "kind": "untracked",
+   "owner": "t232",
+   "path": "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
+  }
+ ],
+ "note": "snapshot taken before the rv5 evidence root was created; the rv5 root is T232-owned and newly created, not part of this baseline",
+ "t232_owned": {
+  "tracked_dirty": [
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/fulfillment.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/fulfillment.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.exit",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.exit",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.exit",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/seal.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py",
+   "docs/guide/provider-specific-sql/sqlserver.md",
+   "docs/ru/guide/provider-specific-sql/sqlserver.md",
+   "examples/README.md",
+   "examples/VERIFICATION.md",
+   "examples/nextorm.examples.mssql.adventureworks/README.md"
+  ],
+  "untracked": [
+   "docs/specs/status/evidence/pivot-typed-overload/",
+   "tests/nextorm.core.tests/T232CoverageClosureTests.cs",
+   "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs",
+   "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
+  ]
+ },
+ "task": "T232",
+ "tracked_dirty_total": 69,
+ "untracked_total": 7
+}

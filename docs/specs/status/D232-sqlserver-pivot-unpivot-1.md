@@ -4,11 +4,12 @@
 - issue: [#232](https://github.com/AlexeyShirshov/nextorm/issues/232) — OPEN, label `enhancement`, milestone **1.0.9-rc3**
 - collection: `1.0.9-todo` (single group; current worktree/branch `1.0.9-rc3`; no worktree/branch/merge)
 - selected_variant: `pdca-dotnet` (+ overlay `nextorm-pdca`)
-- current cycle `N=1`; plan_revision: `r=4`; attempt: `n=1`; evidence_contract: `rv=4`
+- current cycle `N=1`; plan_revision: `r=5`; attempt: `n=1`; evidence_contract: `rv=5`
 - **Authoritative CHECK at `r=3` / `n=2` / `rv=3` FAILED** (build/security/unsealed evidence); primary route **CHECK → PLAN**. The material `planner` replan accepted the correction and **supersedes rv3 as the current contract (`rv3 → rv4`)**; `r=4` / `n=1` is the next DO attempt. The earlier `n=3` prohibition applied only *inside* the r=3 branch and does not bind r=4.
-- current_plan: `P232-r4-sourcebound-variant-coverage-handoff`
-- **plan_state: `ready`** (gate 1 satisfied; r=4 material replan — D-06/D-07 reopened for acceptance, D-08…D-13 are new active remediation units)
-- starting HEAD: `3e49fe0c`
+- r=4 CHECK FAILED (authoritative) → binding escalate decision: new revision r=5 (product scope unchanged; contract changed only per rv5 delta). r=4 history preserved.
+- current_plan: `P232-r5-assertion-binding-and-evidence-closure`
+- **plan_state: `ready`** (gate 1 satisfied; r=5 corrective replan — D-06/D-07 remain reopened for acceptance, D-08…D-13 remain active, and D232-RV5-01…09 are the new active corrective units)
+- starting HEAD: `e9121976` (r=5 source HEAD; the prior r=1 starting HEAD `3e49fe0c` is retained for history)
 - committed units: D-01 `9b4bf5d4`, D-02 `04d2289d`, D-03 `8f0d8309`, D-04 `706dd7b7`
 - r=3 commits: `3e894f1f`, `9d9c9380` (D-05 partial, historical/provisional), `4674ffde` (repro checkpoint), `b05e94ba` (additive fallback), `001f9c9c` (D-06 docs/example, historical/provisional), `4dc0f6b3` (D-07 boundary/handoff, historical/provisional)
 - **D-01…D-05 + `D232-PREREQ-typed-derived` + `D232-AMEND-unpivot-null-oracle`: `done`** (commits preserved).
@@ -97,6 +98,7 @@ r=3 / rv=3: additive typed-derived prerequisite and independent oracle amendment
 (b) verdict: the r=3 CHECK FAILED on build/security/unsealed evidence; the primary route is CHECK -> PLAN.
 (c) material replan: `planner` accepted the correction and explicitly superseded the current contract rv3 -> rv4 (rv3 history preserved, never rewritten). The 30 existing row IDs/obligations are carried forward.
 (d) r=4 / n=1: the next DO attempt; plan `P232-r4-sourcebound-variant-coverage-handoff` (D-06/D-07 reopened, D-08..D-13 new active remediation units). r reset to 4 and n reset to 1 because the work and footprint materially changed.
+r=5 / rv=5: transparent correction revision. The r=4 CHECK FAILED; a material `planner` replan (accepted from the binding escalate decision) created the rv5 contract. Product scope unchanged; only two contract items are re-worded (AC-12 and the `EC232-RV3-SEAL` obligation). r=4/rv=4 preserved verbatim, never rewritten. n reset to 1 because the revision changed.
 ```
 
 ## Acceptance criteria
@@ -114,7 +116,9 @@ r=3 / rv=3: additive typed-derived prerequisite and independent oracle amendment
 | AC-09 | SQL Server-only capability, eager/single-query guards and plan-cache locality remain unchanged. | Other providers must reject both typed operators; interleaved queries must not reuse stale shape/value state. |
 | AC-10 | The AdventureWorks quarterly example uses typed members and declares quarter values only once. | Retained `PivotValue.Create` duplication or by-name cell reads remain detectable. |
 | AC-11 | Scope evidence, branch inventory, targeted mutation and the acceptance benchmark are complete and valid. | Missing exits, zero selected cases, a surviving mandated mutant, skipped providers or an unexplained material regression fails. |
-| AC-12 | Foreign changes/CRLF preserved; the sibling handoff contains a green committed task implementation under the collection authorization. | Foreign staging/overwriting or dirty overlapping implementation files fails the handoff. |
+| AC-12 | Foreign changes and CRLF are preserved. The sibling handoff contains the green, committed T232 task implementation under the recorded collection authorization. No foreign paths are staged or overwritten, and no dirty implementation paths overlap the sibling handoff footprint. A globally clean worktree is not required. Explicitly retention-authorized, non-overlapping residual paths are inventoried; retention authorization is not commit authorization. | Foreign staging/overwriting, dirty overlapping implementation paths, an unverified retention claim, or absence of the required green committed task implementation fails the handoff. |
+
+AC-12 r=5 clarification: `strict_clean` is a **derived diagnostic** defined as "no foreign dirty paths and no untracked dirty paths"; its value alone is not AC-12. Acceptance separately evaluates ownership, recorded retention authority, overlap, CRLF, foreign staging/overwriting, and the committed green implementation. A globally clean worktree is not required and no commit is authorized on this branch.
 
 ## Variant matrix
 
@@ -351,6 +355,107 @@ Load the running-integration-tests skill before any container execution. A missi
 No new guard/rewriter branch may remain untested. Unchanged general translator branches are outside the mutation denominator; discovered uncovered new branches remain active work.
 
 Counters: selected/executed/passed/failed/skipped per provider; guards covered/required; branch delta; mutants killed/attempted; applicable evidence complete/required; sealed hash-valid artifacts/required. Applicable P1/evidence-sealing ratios must be **100%**.
+
+## Evidence contract `rv=5` (supersedes rv4 for current acceptance)
+
+Frozen manifest path: **`artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json`**; `rv=5` supersedes `rv=4` **for current acceptance only** — rv4 stays the historical record and is never rewritten. Below, `R` denotes `artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5` and `B` denotes `artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4`.
+
+- **Carried verbatim:** all 41 inherited row IDs (`E232-01…E232-17`, `EC232-REPRO`…`EC232-RV4-SEAL`), their historical artifact paths and still-required obligations are preserved; historical manifests are never rewritten.
+- **Legal statuses:** the only legal statuses are `met` / `open` / `na` — no `superseded` status exists in `scripts/validate_inner_loop.py`. No PASS while any required row is `open`.
+- **`EC232-RV3-SEAL` obligation (re-worded):**
+
+  > The historical rv3 seal gap is explicitly reconciled, without manufacturing a retrospective rv3 PASS or changing historical artifacts. The current rv5 seal records the rv3 gap and its disposition, validates the current contract and evidence closure, and has zero applicable open required rows. This row is required and cannot be discharged as `na`.
+
+**rv5 delta rows (13; every new row is P1; applicability `Always: T232 rv5 acceptance is requested`).** For every row, `V="$R/tools/rv5_evidence.py"`, `R=artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5`, `B=artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4`.
+
+| ID / rv | Requirement; AC | Owner | Unit | Exact invocation | Required evidence/result | Negative acceptance |
+|---|---|---|---|---|---|---|
+| `EC232-RV5-SEAL-RECONCILIATION` / 5 | sealed rv3-gap reconciliation | coder→check | D232-RV5-09 | `python3 "$V" seal --root "$R" --historical-root "$B"` | `seal-reconciliation.json` + `seal.json`; exit 0 only with current closure + explicit rv3 gap + zero applicable open rows | reject `na` substitution or a retrospective rv3 PASS |
+| `EC232-RV5-FULFILLMENT` / 5 | rv4-defect accounting + rv5 fulfillment | coder→check | D232-RV5-08 | `python3 "$V" fulfillment --rv4 "$B" --rv5 "$R"` | `fulfillment-rv4.json` + `fulfillment-rv5.json`; exit 0 ⇒ rv4 defects explicitly accounted for and actual rv5 requirements fulfilled, rv4 keeps its historical-invalid disposition | reject the rv1 entry/root, a wrong `rv`, or status-only validation |
+| `EC232-RV5-HASH-LEDGER` / 5 | transitive hash inventory | coder→check | D232-RV5-08 | `python3 "$V" hashes --root "$R" --verify` | `hash-ledger.json` + `hash-verification.json`; exit 0, complete transitive inventory, every expected file present/hash-valid | reject missing/stale/substituted/unaccounted evidence |
+| `EC232-RV5-V18-EXECUTION` / 5 | V18 declared-but-absent value on SQL Server | coder | D232-RV5-04 | `python3 "$V" run --case v18 --root "$R"` | executes the SQL Server integration selector; `v18/assertion-execution.json` + raw logs show SQL Server execution and the NULL assertion | reject fixture-only/render-only proof, skipped execution or zero selected tests |
+| `EC232-RV5-V23-AMBIGUITY` / 5 | V23 ordinary-marker ambiguity guard | coder | D232-RV5-03 | `python3 "$V" run --case v23 --root "$R"` | probe + positive/negative tests + mutation evidence; exit 0 requires actual ambiguous ordinary-marker rejection AND valid single/aliased behaviour | reject first-match binding or blanket rejection |
+| `EC232-RV5-HANDOFF` / 5 | rewritten AC-12 handoff | coder→check | D232-RV5-09 | `python3 "$V" handoff --root "$R" --status docs/specs/status/D232-sqlserver-pivot-unpivot-1.md` | `handoff.json`; exit 0 only for the rewritten AC-12 | reject unsupported ownership, foreign changes, dirty overlap or a missing green committed implementation |
+| `EC232-RV5-SECURITY-DISPOSITION` / 5 | two inherited identifier-safety High findings | scout/coder | D232-RV5-06 | `python3 "$V" security --root "$R" --milestone 1.0.9-rc3` | search logs + verified issue JSON/URL; both High findings explicitly "accepted risk, not a blocker" | reject a missing duplicate search, an unverifiable issue/milestone or production fixes |
+| `EC232-RV5-V05-MAPPING` / 5 | V05 assertion→execution mapping | scout/coder | D232-RV5-05 | `python3 "$V" mapping --variant V05 --root "$R"` | `v05/assertion-execution.json`; exit 0 only when every applicable assertion maps to observed execution or a justified guard | reject test-name-only mappings |
+| `EC232-RV5-DOCS-EXAMPLES` / 5 | current bilingual/XML-doc/example audits | scout/coder | D232-RV5-05 | `python3 "$V" docs-examples --root "$R"` | current bilingual/XML-doc/example audits + CS1591 invocation/result + `reports/D-09.json` | reject stale-only audits, an omitted language/example or a silently repaired historical report |
+| `EC232-RV5-CONTRADICTIONS` / 5 | historical-contradiction reconciliation | coder→check | D232-RV5-08 | `python3 "$V" reconcile --rv4 "$B" --rv5 "$R"` | `reconciliation.json`; both the SECURITY-state and HEAD contradictions identified, dated and resolved for current acceptance; history unchanged | reject unexplained conflicts or modified rv4 artifacts |
+| `EC232-RV5-REGRESSION` / 5 | regression / branch / frozen-oracle / mutation | coder | D232-RV5-07 | `python3 "$V" run --case regression --root "$R"` | exact build/test commands, branch inventory, scope diff, frozen-test comparison, targeted mutation logs; exit 0 with nonempty selected tests | reject provider skips, a changed frozen oracle or a forbidden footprint |
+| `EC232-RV5-COVERAGE` / 5 | thresholds + comparable touched-area non-decrease | coder | D232-RV5-07 | `python3 "$V" coverage --baseline-root "$B/coverage" --candidate "$R/coverage/candidate.cobertura.xml" --root "$R"` | comparable coverage/branch-delta; line ≥85, branch ≥75, no comparable touched-area decrease | reject incomparable denominators or aggregate-only substitution |
+| `EC232-RV5-PERF` / 5 | seven-case acceptance replay | coder | D232-RV5-07 | `python3 "$V" replay-perf --recorded-root "$B" --root "$R" --expected-cases 7` | resolves and executes the recorded seven-case harness commands; raw results + comparison, zero failed cases / no material regression | reject missing commands, a changed methodology or report-only replay |
+
+- **`rv5_evidence.py` is a planned evidence tool (not an existing repository capability).** It must log every underlying command, exit, artifact source and source-snapshot identity; empty test selections, absent source evidence and wrong-revision roots must fail. Its negative self-tests (wrong revision/root, tampered file, missing evidence, open required row, empty test selection, provider skip) go to `tool-selftests.json` and are **required for fulfillment**.
+- **Hash/seal dependency order:** payload reports + manifest → hash the complete payload → seal hashes the payload ledger → the independent CHECK receipt hashes manifest + ledger + seal; envelope files are explicitly identified.
+- **Final schema invocation:** `python3 scripts/validate_inner_loop.py manifest "$R/manifest.json"` — expected exit 0. **Schema success alone is not acceptance.**
+- **CHECK re-gather budget:** exactly **two targeted batches** (1: V05/D-09/current bilingual+example assertions; 2: handoff ownership/overlap and evidence/provenance contradictions); missing reports first consume the applicable batch and alone do not justify another DO iteration or revision; persistent low confidence after the budget → `escalate` trigger 5.
+
+## DO units (r=5)
+
+Scouts gather facts read-only; every listed unit is coder-owned except where a fact stream is named. Each unit lists owner, write footprint, dependency and the evidence it must produce.
+
+| Unit | Owner | Write footprint | Dependency | Evidence it must produce |
+|---|---|---|---|---|
+| `D232-RV5-01` contract/source-evidence identities | coder | status file + rv5 root | none | `contract.json`, initial `manifest.json`, `source-snapshot.json`, `foreign-baseline.json`, `tools/rv5_evidence.py`, `tool-selftests.json` |
+| `D232-RV5-02` prove the local V23 rejection condition | scout (facts), coder (experiment) | rv5 experiment artifacts; planned `tests/nextorm.sqlserver.tests/T232Rv5AmbiguityTests.cs` | D232-RV5-01 | rv5 experiment artifacts + `v23/probe.json`; **STOP if no valid local discriminator** — never touch `DefaultColumnsProvider.cs` |
+| `D232-RV5-03` implement/test the V23 ambiguity guard | coder | `src/nextorm.core/Visitors/NormSqlTranslator.cs:96-106` + local helper | D232-RV5-02 | `v23/assertion-execution.json` + a mutation showing the guard's removal reddens the negative test |
+| `D232-RV5-04` V18 SQL Server execution | coder | `tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs:91,113` + planned `tests/nextorm.integration.tests/T232SqlServerTestsRv5.cs` | D232-RV5-01 | execute a typed PIVOT declaring a valid value absent from the fixture, keep a group present through another value, assert the database result is NULL; keep the emission test as complementary |
+| `D232-RV5-05` V05 mapping + current docs/example audits + `reports/D-09.json` | scout (audits), coder (transcription) | `docs/**` audits (no guide/example content change planned) | D232-RV5-01 | current V05 mapping audit + bilingual/XML-doc/example audits + `reports/D-09.json` |
+| `D232-RV5-06` both inherited security dispositions | scout (duplicate search), coder (issue/evidence) | issue milestone `1.0.9-rc3`; rv5 security artifacts | D232-RV5-01 | issue titled exactly `Identifier safety: SQL Server bracket escaping and raw UNPIVOT/Column<T> names`; both High findings recorded with the exact verdict text `accepted risk, not a blocker`; no production fix, no allowlist extension |
+| `D232-RV5-07` regression/coverage/mutation/perf | coder | rv5 regression/coverage/perf artifacts | D232-RV5-03, D232-RV5-04 | regression + comparable coverage (line ≥85 / branch ≥75, no touched-area decrease) + targeted mutation + the seven-case perf replay |
+| `D232-RV5-08` reconcile historical contradictions + current fulfillment | coder | rv5 reconciliation/fulfillment artifacts | D232-RV5-07 | `reconciliation.json`, `fulfillment-rv4.json`, `fulfillment-rv5.json`, hash ledger; no rv4 rewrites |
+| `D232-RV5-09` finalize AC-12 + seal | coder (gathers), check (decides) | rv5 handoff/seal artifacts | D232-RV5-08 | `handoff.json`, `seal-reconciliation.json`, `seal.json`, `check-receipt.json` |
+
+### r=5 unit ledger
+
+| Unit | State (r=5) | Dependency |
+|---|---|---|
+| `D232-RV5-01` | active/pending | none |
+| `D232-RV5-02` | active/pending | D232-RV5-01 |
+| `D232-RV5-03` | active/pending | D232-RV5-02 |
+| `D232-RV5-04` | active/pending | D232-RV5-01 |
+| `D232-RV5-05` | active/pending | D232-RV5-01 |
+| `D232-RV5-06` | active/pending | D232-RV5-01 |
+| `D232-RV5-07` | active/pending | D232-RV5-03, D232-RV5-04 |
+| `D232-RV5-08` | active/pending | D232-RV5-07 |
+| `D232-RV5-09` | active/pending | D232-RV5-08 |
+
+Existing unfinished original `D` units remain active with unchanged criteria/remainder, blocked on these corrective dependencies where applicable; none is silently superseded or completed.
+
+**Gate 1.** Execution mode: `Sequential, current tree, one group. No worktree, branch, merge, commit or push.`
+
+Exact test invocations:
+- Build: `dotnet build nextorm.slnx -c Debug`
+- `tests/nextorm.sqlserver.tests` filter: `dotnet test tests/nextorm.sqlserver.tests -c Debug --filter "FullyQualifiedName~T232VariantClosureTests|FullyQualifiedName~T232CoverageClosureTests|FullyQualifiedName~T232TypedPivotTests|FullyQualifiedName~T232MarkerTests|FullyQualifiedName~T232ProjectionContractTests|FullyQualifiedName~T232PreparationProbeTests|FullyQualifiedName~T232DerivedSourceReproTests|FullyQualifiedName~T232Rv5AmbiguityTests"`
+- `tests/nextorm.core.tests` filter: `dotnet test tests/nextorm.core.tests -c Debug --filter "FullyQualifiedName~T232CoverageClosureTests"`
+- container filter: `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet test tests/nextorm.integration.tests -c Debug --filter "FullyQualifiedName~T232SqlServerTests|FullyQualifiedName~T232CaseSensitiveAliasTests|FullyQualifiedName~T232TypedOperators_RespectCapability"`
+
+Variant delta:
+- V18 declared-but-absent value → SQL Server execution + NULL.
+- V23 single source → positive; V23 explicit alias → positive; V23 multiple matching sources with an ordinary marker → demonstrated ambiguity + fail-closed guard; unrelated same-named method → unrecognized.
+- Plus the carried rows (V01…V17, V19…V22, V24…V29), unchanged.
+
+Coverage: line ≥85 / branch ≥75, comparable touched-area non-decrease, original baseline methodology; the rv4 88.4/80.4 vs 88.3/80.3 observation is **not** a substitute for fresh evidence.
+
+Docs plan: current XML-doc/CS1591 + EN/RU semantic review + example audits; no public→specs links; any newly found docs defect needs an explicit authorized correction.
+
+Perf: **Required** — `NormSqlTranslator.cs:96-106` is on the query preparation/translation path; rerun all seven acceptance cases with the recorded harness/baseline methodology.
+
+Reconnaissance: **Required, bounded** — D232-RV5-02 proves the ambiguity witness and the probe discriminator.
+
+### Allowlist + STOP rules (r=5)
+
+**No extension is granted for r=5.** The retained r=4 authorized set is unchanged, and the planned rv5 code change uses only `NormSqlTranslator.cs` and T232-owned tests.
+
+Retained r=4 authorized set:
+- the public marker file (`src/nextorm.core/Query/PivotValues.cs`) and the internal `src/nextorm.core/Visitors/NormSqlTranslator.cs`;
+- the authorized example csproj (`examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj`);
+- the three `examples/**` README/VERIFICATION docs (`examples/README.md`, `examples/VERIFICATION.md`, `examples/nextorm.examples.mssql.adventureworks/README.md`);
+- T232-owned tests (`tests/nextorm.sqlserver.tests/T232*`, `tests/nextorm.core.tests/T232*`, `tests/nextorm.integration.tests/T232*`);
+- the cycle status file and the cycle evidence artifacts (`docs/specs/status/D232-sqlserver-pivot-unpivot-1.md`, `docs/specs/status/evidence/pivot-typed-overload/**`, `artifacts/pdca/D232-sqlserver-pivot-unpivot/**`).
+
+Forbidden set: `DefaultColumnsProvider.cs`, `SqlSourceRenderer.cs`, `SqlBuilder.cs`, `Dialect/**`, `PivotExpression.cs`, `BaseExpressionVisitor.cs`, `TableAliasAccessors.cs`, `SqlFunctions.cs`, other `Builders/**`, other project/package/version files, the frozen 14 legacy tests.
+
+**STOP rules (unchanged, binding):** a fix needing `SqlSourceRenderer.cs` / `SqlBuilder.cs` / `Dialect/**`, a frozen oracle change, or a general derived/projection-ownership change STOPS the unit and reports; it does not silently widen the footprint.
 
 ## Docs plan
 
@@ -650,6 +755,8 @@ On continuation (collection lane resumes this same cycle from DO): execute D-01�
 
 **r=4 continuation:** the r=3 CHECK failed, so the next DO runs the rv4 remediation units **sequentially**: D-08 (packaging), D-09 (variant closure), D-10 (coverage/perf), D-11 (ownership/handoff), D-13 (security prerequisite coordination, blocker `B232-AUDIT-DEPENDENCY`), then D-12 (evidence reconciliation/seal). Each delta row's exact invocation is `python3 "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py" --case <case>`. Do not seal rv4 while any applicable row is open or an unsupported `met` claim stands.
 
+**r=5 continuation:** execute D232-RV5-01…09 sequentially in the current tree. After rv5 genuinely seals, update the collection ledger and proceed to T233, then T201. If the handoff remains open, retain T232's active remainder and its explicit dependency; do not mark T232 sealed or advance its acceptance state.
+
 If a probe reveals a prerequisite, keep the original `D` active and blocked on the added dependency — not done or superseded. A genuine scope replacement requires an explicit mapping and preserved criteria.
 
 CHECK→PLAN creates a new `P:` task with the actual correction. Only materially changed work increments `r` and resets `n`; absent reports/renaming do not. Apply the no-fourth-attempt and persistent-low-confidence escalation rules.
@@ -718,6 +825,16 @@ Stable **defect key** → observed revisions/attempts, number of fixes applied, 
 | `D232-D06-foreign-hunks-in-handoff` | r=3 / n=2 → r=4 / n=1 | 0 | `rv4/ownership.json`; `rv4/ownership/hunk-inventory.json`; `rv4/ownership/reconstruction.json`; `rv1/d07-footprint.json`; `rv4/handoff.json` (pending) | **open / AC-12 blocked** — escalate ruling route 2+3: retain the foreign #160 hunks, never rewrite history, `001f9c9c` recorded as a **mixed** commit; awaiting the collection owner's explicit retention authorization |
 | `E232-seal-incomplete` | r=3 / n=2 | 0 | `rv3/check/summary.json`; `rv4/manifest.json` | **open** (D-12 evidence reconciliation/seal) |
 | `B232-AUDIT-DEPENDENCY` | r=3 / n=2 | 0 | `rv4/security/advisories.json`; `rv4/security/gh-search/`; tracking issue #236 (`rv4/security/issue.json`) | **blocker** (D-13 security prerequisite coordination; remedy owned by #236) |
+| `T232.V18.ASSERTION-STRENGTH` | r=4 | 0 (r5 completed fixes = 0) | rv5 unit D232-RV5-04 (planned) | **open** → D232-RV5-04 |
+| `T232.V23.AMBIGUITY-GUARD` | r=4 | 0 (r5 completed fixes = 0) | rv5 units D232-RV5-02–03 (planned) | **open** → D232-RV5-02–03 |
+| `T232.RV3-SEAL.RECONCILIATION` | r=4 | 0 (r5 completed fixes = 0) | rv5 units D232-RV5-08–09 (planned) | **open** → D232-RV5-08–09 |
+| `T232.RV4.FULFILLMENT-PROVENANCE` | r=4 | 0 (r5 completed fixes = 0) | rv5 unit D232-RV5-08 (planned) | **open** → D232-RV5-08 |
+| `T232.COUNTERS.HASH-VALIDITY` | r=4 | 0 (r5 completed fixes = 0) | rv5 units D232-RV5-08–09 (planned) | **open** → D232-RV5-08–09 |
+| `T232.HANDOFF.STRICT-CLEAN` | r=4 | 0 (r5 completed fixes = 0) | rv5 unit D232-RV5-09 (planned) | **open** → D232-RV5-09 |
+| `T232.V05.ASSERTION-EXECUTION` | r=4 | 0 (r5 completed fixes = 0) | rv5 unit D232-RV5-05 (planned) | **open** → D232-RV5-05 |
+| `T232.RV4.CONTRADICTORY-ARTIFACTS` | r=4 | 0 (r5 completed fixes = 0) | rv5 unit D232-RV5-08 (planned) | **open** → D232-RV5-08 |
+| `T232.SECURITY.BRACKET-ESCAPING` | inherited code | 0 (r5 completed fixes = 0; no code fix) | rv5 unit D232-RV5-06 disposition (planned) | **open disposition** → D232-RV5-06 |
+| `T232.SECURITY.RAW-IDENTIFIERS` | inherited code | 0 (r5 completed fixes = 0; no code fix) | rv5 unit D232-RV5-06 disposition (planned) | **open disposition** → D232-RV5-06 |
 
 ### Open defect blocks (r=3)
 
@@ -874,4 +991,8 @@ closed_by: C24 exit 0 (exactly one changed key `null_count_expectations.unpivot_
 2026-10-15 00:07Z | DO | revision r=4 | iteration n=1/3 | D-11 ownership evidence written: `commit 001f9c9c`, file `examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs`, `classification: mixed`; hunk split **2 T232 / 11 foreign** (`@@ -1,6 +1,8` … `@@ -519,3 +534,16`), CRLF throughout; foreign = 30 discrete pre-existing #160 edit sites (8 `AsCte`, 1 `WithAlias(Alias.Metrics)`, 3 `Alias.*`, 12 alias-member reads, 2 `CustomerMetricRow`, 2 usings, 2 `#160` comments) over 117 added / 97 removed lines; `sibling_owner: "unidentified"` (not guessed); `retention_authorization.status: pending` | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json
 2026-10-15 00:07Z | DO | revision r=4 | iteration n=1/3 | D-11 hunk-disjointness + reconstruction proof: `python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership/split_hunks.py` **exit 0** — old/new hunk ranges disjoint; `blob(001f9c9c^)` (`3fe2ddd0`, 23466 B) + `t232.patch` + `foreign.patch` == `blob(001f9c9c)` (`a54a2c5f`, 24058 B) in **both** orders (and the full patch), sha256 `26409ccd…a07155d` | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership/reconstruction.json
 2026-10-15 00:07Z | DO | revision r=4 | iteration n=1/3 | #160 facts recorded (read-only, no new issue): issue **#160** `CLOSED`, milestone **1.0.9-rc2** (#20), author `AlexeyShirshov`, no assignees/labels; **no comment posted — pending the owner's explicit consent**; `sibling_owner` remains unidentified | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json
+2026-10-15 06:58Z | CHECK | revision r=4 | iteration n=1/3 | r=4 CHECK FAILED (authoritative): V18 assertion strength, V23 ambiguity guard, EC232-RV3-SEAL na disposition, rv4 fulfillment provenance/counters hash-validity, handoff strict_clean, missing rv4 D-09 report, V05 mapping, contradictory rv4 artifacts; two inherited identifier-safety findings dispositioned out of scope | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/
+2026-10-15 06:59Z | ESCALATE | revision r=4 | iteration n=1/3 | binding decision: new revision r=5 (product scope unchanged; contract changed only in AC-12 and the EC232-RV3-SEAL obligation); two inherited security High findings → follow-up issue in 1.0.9-rc3, not fixed in T232; no allowlist extension | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
+2026-10-15 07:00Z | PLAN | revision r=5 | iteration n=1/3 | r=5/rv=5 transcribed: corrective revision for assertion/binding/evidence closure; D232-RV5-01..09 active; rv5 delta rows EC232-RV5-* created; r=4 history preserved verbatim | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
+2026-10-15 08:38Z | DO | revision r=5 | iteration n=2/3 | corrective (r=5 CHECK FAIL → DO, back to D232-RV5-08/09 — evidence-only, no product change): `tools/rv5_evidence.py` repaired so `hashes` inventories the complete transitive closure of every manifest/counters reference (raw execution logs + every `logs/*.cmd.json`/`.exit`, the tool + its selftests, the referenced `$B` files; 0 required references absent) and the ordered chain is payload/reports → `hash-ledger.json` (payload_digest) → `seal.json` (`ledger_sha256` + `payload_digest`, ledger→seal binding) → `hash-verification.json` (`seal_binding` verified); `handoff.json` now carries the committed-tested proof (per-path worktree sha256 == HEAD blob sha256, no diff vs HEAD) instead of asserting "path exists in HEAD"; selftests 8/8 (new guard `tampered-ledger-digest`); the superseded r=5 ledger is recorded in `rebaseline_history`, never hidden | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-ledger.json
 ```

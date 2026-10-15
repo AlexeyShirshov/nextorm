@@ -1,0 +1,537 @@
+{
+ "ac12": {
+  "crlf_preserved": {
+   "checked": {
+    "docs/guide/provider-specific-sql/sqlserver.md": {
+     "crlf": 446,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "docs/ru/guide/provider-specific-sql/sqlserver.md": {
+     "crlf": 453,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "docs/specs/design/API-NAMING-REVIEW.md": {
+     "crlf": 5746,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "docs/specs/roadmap/todo_sqlserver_typed_pivot_unpivot.md": {
+     "crlf": 67,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md": {
+     "crlf": 997,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "examples/README.md": {
+     "crlf": 134,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "examples/VERIFICATION.md": {
+     "crlf": 115,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs": {
+     "crlf": 549,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "examples/nextorm.examples.mssql.adventureworks/README.md": {
+     "crlf": 122,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "examples/nextorm.examples.mssql.adventureworks/Sql/mssql_quarterly_pivot.sql": {
+     "crlf": 25,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj": {
+     "crlf": 26,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "src/nextorm.core/Query/PivotValues.cs": {
+     "crlf": 111,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs": {
+     "crlf": 3583,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "src/nextorm.core/Visitors/NormSqlTranslator.cs": {
+     "crlf": 604,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs": {
+     "crlf": 356,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs": {
+     "crlf": 316,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.core.tests/T232CoverageClosureTests.cs": {
+     "crlf": 270,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.integration.tests/CommonTestSuite.T232Pivot.cs": {
+     "crlf": 24,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.integration.tests/T232PivotFixture.cs": {
+     "crlf": 345,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.integration.tests/T232SqlServerTests.cs": {
+     "crlf": 344,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.integration.tests/T232SqlServerTestsRv5.cs": {
+     "crlf": 80,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs": {
+     "crlf": 170,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs": {
+     "crlf": 215,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.sqlserver.tests/T232MarkerTests.cs": {
+     "crlf": 116,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.sqlserver.tests/T232PreparationProbeTests.cs": {
+     "crlf": 157,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.sqlserver.tests/T232ProjectionContractTests.cs": {
+     "crlf": 194,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.sqlserver.tests/T232Rv5AmbiguityTests.cs": {
+     "crlf": 133,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs": {
+     "crlf": 579,
+     "ending": "CRLF",
+     "lf": 0
+    },
+    "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs": {
+     "crlf": 270,
+     "ending": "CRLF",
+     "lf": 0
+    }
+   },
+   "checked_count": 29,
+   "note": "T232-authored evidence under artifacts/pdca/** is written by the harness with LF and is excluded from the source-text CRLF set",
+   "ok": true,
+   "policy": "CRLF for every T232-authored text file",
+   "violations": []
+  },
+  "foreign_changes_preserved": {
+   "baseline": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/foreign-baseline.json",
+   "changed": [],
+   "checked": 46,
+   "missing": [],
+   "ok": true,
+   "policy": "foreign paths are preserved read-only: never staged, overwritten, deleted or committed by T232; a foreign byte change fails AC-12",
+   "tracked_checked": 43,
+   "untracked_checked": 3
+  },
+  "green_committed_implementation": {
+   "commit_count": 16,
+   "commits": [
+    {
+     "ref": "9b4bf5d4",
+     "resolves": true,
+     "sha": "9b4bf5d48f703018237f4db103d4bd82e2b2eb04",
+     "subject": "#232 D-01: baseline evidence and preparation probes for typed SQL Server PIVOT/UNPIVOT"
+    },
+    {
+     "ref": "04d2289d",
+     "resolves": true,
+     "sha": "04d2289d46e00aee41076c2f9a3798e09b20852d",
+     "subject": "#232 D-02: freeze legacy-vs-typed-column PIVOT/UNPIVOT projection contract"
+    },
+    {
+     "ref": "8f0d8309",
+     "resolves": true,
+     "sha": "8f0d830906a0e7b3e37a15ccae58b3b5901962b9",
+     "subject": "#232 D-03: core PIVOT/UNPIVOT markers + narrow exact-definition recognition"
+    },
+    {
+     "ref": "706dd7b7",
+     "resolves": true,
+     "sha": "706dd7b7d3b24c444c8c6e7b0c5302430d12bc27",
+     "subject": "#232 D-04: typed SQL Server PIVOT/UNPIVOT provider overloads + provider-local projection rewriter"
+    },
+    {
+     "ref": "266b38b3",
+     "resolves": true,
+     "sha": "266b38b378052370b7c065503cf53ca92fdcb6c0",
+     "subject": "#232 T232 r=4/n=1 DO (D-08 + D-13 capture): rv4 evidence contract transcribed, AdventureWorks example → ProjectReference, advisory capture + duplicate search"
+    },
+    {
+     "ref": "001f9c9c",
+     "resolves": true,
+     "sha": "001f9c9cc55c0bc6aa41a9a796c3db5f3a5c21c1",
+     "subject": "#232 D-06 (r=3) docs/example: XML-doc on the typed surface, EN/RU guides, typed AdventureWorks example, PIV-TYP1 + T53 candidates; rv3 D-06 brief/report + scopes harness"
+    },
+    {
+     "ref": "4dc0f6b3",
+     "resolves": true,
+     "sha": "4dc0f6b3c03590803f5dbb6dcfddc8a8485ba90d",
+     "subject": "#232 D-07 (r=3) boundary/handoff: C11 boundary green (seven suites + six-provider container run, 0 provider skips), C12 candidate coverage 88.3/80.2 (thresholds met; E232-11 touched-area left open), C15 acceptance perf within noise, C16 footprint clean, C17/C18/C19 exit 0; rv3 manifest 27 met / 3 open; rv3 D-07 brief/report + verify.py delegate paths"
+    },
+    {
+     "ref": "e9121976",
+     "resolves": true,
+     "sha": "e9121976d9356375b906225bfe04704d298d8d13",
+     "subject": "#236 Fill ACT closure SHAs in collection status"
+    }
+   ],
+   "committed_files_currently_dirty": [
+    "docs/guide/provider-specific-sql/sqlserver.md",
+    "docs/ru/guide/provider-specific-sql/sqlserver.md",
+    "src/nextorm.core/Visitors/NormSqlTranslator.cs"
+   ],
+   "green_evidence": [
+    {
+     "detail": "build 0 warnings/0 errors; eight project suites exit 0 with 0 failures; container integration 3924 selected / 3726 passed / 0 failed / 198 capability skips / 0 provider skips; frozen oracle intact",
+     "exit_code": null,
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/regression/regression.json",
+     "present": true
+    },
+    {
+     "detail": "rv5 regression verdict",
+     "exit_code": 0,
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/verdicts/regression.json",
+     "present": true
+    },
+    {
+     "detail": "rv4 solution build: Build succeeded, 0 Warning(s) / 0 Error(s)",
+     "exit_code": 0,
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/build/solution-build.out",
+     "present": true
+    }
+   ],
+   "implementation_in_head": {
+    "docs/guide/provider-specific-sql/sqlserver.md": true,
+    "docs/ru/guide/provider-specific-sql/sqlserver.md": true,
+    "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs": true,
+    "examples/nextorm.examples.mssql.adventureworks/Sql/mssql_quarterly_pivot.sql": true,
+    "examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj": true,
+    "src/nextorm.core/Query/PivotValues.cs": true,
+    "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs": true,
+    "src/nextorm.core/Visitors/NormSqlTranslator.cs": true,
+    "src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs": true,
+    "src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs": true,
+    "tests/nextorm.integration.tests/CommonTestSuite.T232Pivot.cs": true,
+    "tests/nextorm.integration.tests/T232PivotFixture.cs": true,
+    "tests/nextorm.integration.tests/T232SqlServerTests.cs": true,
+    "tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs": true,
+    "tests/nextorm.sqlserver.tests/T232MarkerTests.cs": true,
+    "tests/nextorm.sqlserver.tests/T232PreparationProbeTests.cs": true,
+    "tests/nextorm.sqlserver.tests/T232ProjectionContractTests.cs": true,
+    "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs": true
+   },
+   "in_flight_paths": [
+    "examples/README.md",
+    "examples/VERIFICATION.md",
+    "examples/nextorm.examples.mssql.adventureworks/README.md",
+    "tests/nextorm.core.tests/T232CoverageClosureTests.cs",
+    "tests/nextorm.integration.tests/T232SqlServerTestsRv5.cs",
+    "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs",
+    "tests/nextorm.sqlserver.tests/T232Rv5AmbiguityTests.cs",
+    "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
+   ],
+   "note": "the T232 implementation is committed and green; the in-flight r=5 delta paths are the authorized remainder, not a claim that the work is uncommitted",
+   "ok": true,
+   "unexpected_modifications": []
+  },
+  "no_dirty_impl_overlap": {
+   "committed_t232_paths_also_in_rv4_foreign_set": [
+    "examples/README.md",
+    "examples/VERIFICATION.md",
+    "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs",
+    "examples/nextorm.examples.mssql.adventureworks/README.md"
+   ],
+   "foreign_paths": [
+    ".opencode/agents/nextorm-code-auditor.md",
+    ".opencode/agents/nextorm-db-perf-analyst.md",
+    ".opencode/agents/nextorm-design-engineer.md",
+    ".opencode/agents/nextorm-inmemory-perf-analyst.md",
+    ".opencode/agents/nextorm-performance-analyst.md",
+    ".opencode/agents/nextorm-scout.md",
+    ".opencode/skills/implementing-todo-features/SKILL.md",
+    ".opencode/skills/nextorm-pdca/SKILL.md",
+    "AGENTS.md",
+    "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md",
+    "artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md",
+    "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log",
+    "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
+    "artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-github.md",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.csv",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.html",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.csv",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.html",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.csv",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.html",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.csv",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.html",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report-github.md",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.csv",
+    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html",
+    "docs/assets/diagrams/nextorm-command-execution.svg",
+    "docs/ru/assets/diagrams/nextorm-command-execution.svg",
+    "docs/specs/status/D211-eager-perparent-topn-1.md",
+    "docs/specs/status/D213-joininto-remainder-1.md",
+    "docs/specs/status/D215-oneof-removal-1.md",
+    "docs/specs/status/D216-row-locking-1.md",
+    "docs/specs/status/D218-sqlserver-sequences-1.md",
+    "docs/specs/status/D222-join-overloads-by-type-1.md",
+    "docs/specs/status/D226-records-affected-1.md",
+    "examples/Directory.Packages.props",
+    "examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs",
+    "examples/nextorm.examples.clickhouse.analytics/README.md",
+    "examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs",
+    "examples/nextorm.examples.postgres.aviasales/README.md"
+   ],
+   "note": "no T232-owned dirty/untracked path overlaps the sibling (#160) foreign footprint",
+   "ok": true,
+   "overlap": [],
+   "t232_dirty_paths": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/fulfillment.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/fulfillment.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.cmd.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.exit",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.out",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.cmd.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.out",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.cmd.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.exit",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.out",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.cmd.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.exit",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.out",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/seal.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py",
+    "docs/guide/provider-specific-sql/sqlserver.md",
+    "docs/ru/guide/provider-specific-sql/sqlserver.md",
+    "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+    "docs/specs/status/evidence/pivot-typed-overload/evidence-01-recon.md",
+    "examples/README.md",
+    "examples/VERIFICATION.md",
+    "examples/nextorm.examples.mssql.adventureworks/README.md",
+    "src/nextorm.core/Visitors/NormSqlTranslator.cs",
+    "tests/nextorm.core.tests/T232CoverageClosureTests.cs",
+    "tests/nextorm.integration.tests/T232SqlServerTestsRv5.cs",
+    "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs",
+    "tests/nextorm.sqlserver.tests/T232Rv5AmbiguityTests.cs",
+    "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
+   ],
+   "untracked_dirty_paths": [
+    "docs/specs/status/evidence/pivot-typed-overload/evidence-01-recon.md",
+    "tests/nextorm.core.tests/T232CoverageClosureTests.cs",
+    "tests/nextorm.integration.tests/T232SqlServerTestsRv5.cs",
+    "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs",
+    "tests/nextorm.sqlserver.tests/T232Rv5AmbiguityTests.cs",
+    "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
+   ]
+  },
+  "no_foreign_path_staged": {
+   "command": [
+    "git",
+    "diff",
+    "--cached",
+    "--name-only"
+   ],
+   "cwd": "/home/alex/sources/nextorm",
+   "exit_code": 0,
+   "ok": true,
+   "staged": []
+  },
+  "retention_authority_verified": {
+   "authority": {
+    "attribution": "#160 (foreign); T232 does not claim authorship",
+    "commit": "001f9c9c",
+    "commit_authorization_scope": "retention only — the ACT commit is a separate, later step",
+    "date": "2026-10-15",
+    "granter": "collection owner",
+    "history_rewritten": false,
+    "keeps_as_is": true,
+    "names_foreign_160": true,
+    "names_mixed_commit": true,
+    "no_history_rewrite": true,
+    "quote": "- (2) **Authorize retention** of the foreign #160 hunks inside T232's mixed commit `001f9c9c` (keep as-is; do not rewrite history) → T232's `AC-12` owner-authorization blocker is **lifted**.",
+    "removed_or_reverted": false,
+    "retained_as_is": true,
+    "role": "collection owner/user",
+    "source_item": "(2)",
+    "source_path": "docs/specs/status/collection-1.0.9-todo.md",
+    "source_section": "Owner authorizations — 2026-10-15 (collection rc3)",
+    "statement": "retention authorization is not commit authorization"
+   },
+   "ok": true,
+   "statement": "retention authorization is not commit authorization; no commit is authorized on this branch by this task",
+   "verified_against": "the actual retained path examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs (committed as a mixed commit)"
+  },
+  "strict_clean": {
+   "definition": "no foreign dirty paths and no untracked dirty paths",
+   "is_derived_diagnostic": true,
+   "not_ac12": "its value alone is not AC-12; ownership, recorded retention authority, overlap, CRLF, foreign staging/overwriting and the committed green implementation are evaluated separately",
+   "reason": "46 pre-existing foreign dirty path(s) (rv5 foreign baseline); 6 untracked T232 in-flight path(s) (docs/specs/status/evidence/pivot-typed-overload/evidence-01-recon.md, tests/nextorm.core.tests/T232CoverageClosureTests.cs, tests/nextorm.integration.tests/T232SqlServerTestsRv5.cs) - the ACT commit follows under the same collection authorization",
+   "value": false
+  }
+ },
+ "branch": "1.0.9-rc3",
+ "captured": "2026-10-15T08:15:06Z",
+ "case": "handoff",
+ "delegation": {
+  "executed": false,
+  "note": "the rv4 reconstruction proof / per-hunk byte hashes are reread read-only; rv4 is historical and never rewritten",
+  "source": "rv4/handoff.json"
+ },
+ "failed_elements": [],
+ "head_full": "e9121976d9356375b906225bfe04704d298d8d13",
+ "head_short": "e9121976",
+ "reason": null,
+ "retention_is_not_commit_authorization": true,
+ "satisfied": true,
+ "source_snapshot": {
+  "branch": "1.0.9-rc3",
+  "captured_at": "2026-10-15T08:15:05Z",
+  "git_ok": true,
+  "head_full": "e9121976d9356375b906225bfe04704d298d8d13",
+  "head_short": "e9121976",
+  "repo_root": "/home/alex/sources/nextorm",
+  "status_short_count": 80,
+  "status_short_digest": "e50a99e9895d35a284f1b2fa56d132a9c183e90d50c1c9f711876816e8b54f50",
+  "status_short_paths": [
+   ".opencode/agents/nextorm-code-auditor.md",
+   ".opencode/agents/nextorm-db-perf-analyst.md",
+   ".opencode/agents/nextorm-design-engineer.md",
+   ".opencode/agents/nextorm-inmemory-perf-analyst.md",
+   ".opencode/agents/nextorm-performance-analyst.md",
+   ".opencode/agents/nextorm-scout.md",
+   ".opencode/skills/implementing-todo-features/SKILL.md",
+   ".opencode/skills/nextorm-pdca/SKILL.md",
+   "AGENTS.md",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/fulfillment.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/fulfillment.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.exit",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.exit",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.exit",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/seal.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.html",
+   "docs/assets/diagrams/nextorm-command-execution.svg",
+   "docs/guide/provider-specific-sql/sqlserver.md",
+   "docs/ru/assets/diagrams/nextorm-command-execution.svg",
+   "docs/ru/guide/provider-specific-sql/sqlserver.md",
+   "docs/specs/status/D211-eager-perparent-topn-1.md",
+   "docs/specs/status/D213-joininto-remainder-1.md",
+   "docs/specs/status/D215-oneof-removal-1.md",
+   "docs/specs/status/D216-row-locking-1.md",
+   "docs/specs/status/D218-sqlserver-sequences-1.md",
+   "docs/specs/status/D222-join-overloads-by-type-1.md",
+   "docs/specs/status/D226-records-affected-1.md",
+   "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+   "examples/Directory.Packages.props",
+   "examples/README.md",
+   "examples/VERIFICATION.md",
+   "examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs",
+   "examples/nextorm.examples.clickhouse.analytics/README.md",
+   "examples/nextorm.examples.mssql.adventureworks/README.md",
+   "examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs",
+   "examples/nextorm.examples.postgres.aviasales/README.md",
+   "src/nextorm.core/Visitors/NormSqlTranslator.cs",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html",
+   "docs/specs/status/evidence/pivot-typed-overload/",
+   "tests/nextorm.core.tests/T232CoverageClosureTests.cs",
+   "tests/nextorm.integration.tests/T232SqlServerTestsRv5.cs",
+   "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs",
+   "tests/nextorm.sqlserver.tests/T232Rv5AmbiguityTests.cs",
+   "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
+  ]
+ },
+ "status_file": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+ "strict_clean": false,
+ "strict_clean_is_derived_diagnostic": true,
+ "task": "T232 (#232)",
+ "unit": "D232-RV5-09"
+}

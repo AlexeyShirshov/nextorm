@@ -1,0 +1,316 @@
+{
+ "baseline": {
+  "branch_coverage": 80.3,
+  "line_coverage": 88.3,
+  "provenance": {
+   "coverage_xml": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline/coverage.xml",
+   "coverage_xml_bytes": 10389018,
+   "coverage_xml_sha256": "cd4e50de4d1826afe1f2d2b826c6cd68993f706f4b5244b0d7f87de6ed4a862f",
+   "note": "recorded rv1 baseline reused as-is; the tree was not rewritten to re-collect it",
+   "source": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline",
+   "summary": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/coverage/baseline/report/Summary.json",
+   "summary_sha256": "6c229eccbb205ea91f3535cabd73f6f12373262100337a0bd895407ed25649c1"
+  },
+  "source": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage/harness.json"
+ },
+ "build_exits": {
+  "tests/nextorm.core.tests": 0,
+  "tests/nextorm.integration.tests": 0,
+  "tests/nextorm.postgres.tests": 0,
+  "tests/nextorm.sqlite.tests": 0,
+  "tests/nextorm.sqlserver.tests": 0
+ },
+ "candidate": {
+  "branch_coverage": 80.47,
+  "bytes": 9958862,
+  "line_coverage": 88.44,
+  "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/candidate.cobertura.xml",
+  "sha256": "0d394a35c984c47c76053541cac986f8280ada28f5422d6a2f7ab38508a863a7"
+ },
+ "captured": "2026-10-15T07:58:27Z",
+ "case": "coverage",
+ "collect_exit": 0,
+ "collect_log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5ev-coverage-collect.out",
+ "delegation": {
+  "baseline_root": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage",
+  "collection_route": "canonical dotnet-coverage collect -> reportgenerator (same collector/reporter/settings/suites as the recorded baseline)",
+  "note": "the rv4 coverage driver is not re-run; rv4 stays historical"
+ },
+ "deltas": {
+  "summary_json_vs_baseline": {
+   "branch": 0.1,
+   "line": 0.1
+  },
+  "summary_json_vs_rv4": {
+   "branch": 0.0,
+   "line": 0.0
+  },
+  "vs_baseline": {
+   "branch": 0.17,
+   "line": 0.14
+  },
+  "vs_rv4": {
+   "branch": 0.07,
+   "line": 0.04
+  }
+ },
+ "exclusions": {
+  "checked": [
+   "coverage.settings.xml",
+   "Directory.Build.props",
+   "*.runsettings"
+  ],
+  "note": "coverage.settings.xml, Directory.Build.props, *.runsettings, suite selection and exclusions are unchanged",
+  "state": "unchanged"
+ },
+ "reason": null,
+ "report_exit": 0,
+ "report_log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5ev-coverage-report.out",
+ "reportgenerator_summary": {
+  "branch_coverage": 80.4,
+  "coverablelines": 60193,
+  "coveredbranches": 28812,
+  "coveredlines": 53237,
+  "line_coverage": 88.4,
+  "note": "same reporter output as the recorded baseline; line/branch are the 1-decimal summary figures directly comparable to 88.3/80.3 and 88.4/80.4",
+  "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/report/Summary.json",
+  "totalbranches": 35805
+ },
+ "rv4_candidate": {
+  "branch_coverage": 80.4,
+  "line_coverage": 88.4,
+  "note": "the rv4 candidate figures recorded in the rv4 coverage harness (baseline 88.3/80.3, rv4 candidate 88.4/80.4)",
+  "source": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage/harness.json"
+ },
+ "source_snapshot": {
+  "branch": "1.0.9-rc3",
+  "captured_at": "2026-10-15T07:56:19Z",
+  "git_ok": true,
+  "head_full": "e9121976d9356375b906225bfe04704d298d8d13",
+  "head_short": "e9121976",
+  "repo_root": "/home/alex/sources/nextorm",
+  "status_short_count": 80,
+  "status_short_digest": "e50a99e9895d35a284f1b2fa56d132a9c183e90d50c1c9f711876816e8b54f50",
+  "status_short_paths": [
+   ".opencode/agents/nextorm-code-auditor.md",
+   ".opencode/agents/nextorm-db-perf-analyst.md",
+   ".opencode/agents/nextorm-design-engineer.md",
+   ".opencode/agents/nextorm-inmemory-perf-analyst.md",
+   ".opencode/agents/nextorm-performance-analyst.md",
+   ".opencode/agents/nextorm-scout.md",
+   ".opencode/skills/implementing-todo-features/SKILL.md",
+   ".opencode/skills/nextorm-pdca/SKILL.md",
+   "AGENTS.md",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/fulfillment.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/fulfillment.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.exit",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.exit",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.exit",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/seal.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.html",
+   "docs/assets/diagrams/nextorm-command-execution.svg",
+   "docs/guide/provider-specific-sql/sqlserver.md",
+   "docs/ru/assets/diagrams/nextorm-command-execution.svg",
+   "docs/ru/guide/provider-specific-sql/sqlserver.md",
+   "docs/specs/status/D211-eager-perparent-topn-1.md",
+   "docs/specs/status/D213-joininto-remainder-1.md",
+   "docs/specs/status/D215-oneof-removal-1.md",
+   "docs/specs/status/D216-row-locking-1.md",
+   "docs/specs/status/D218-sqlserver-sequences-1.md",
+   "docs/specs/status/D222-join-overloads-by-type-1.md",
+   "docs/specs/status/D226-records-affected-1.md",
+   "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+   "examples/Directory.Packages.props",
+   "examples/README.md",
+   "examples/VERIFICATION.md",
+   "examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs",
+   "examples/nextorm.examples.clickhouse.analytics/README.md",
+   "examples/nextorm.examples.mssql.adventureworks/README.md",
+   "examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs",
+   "examples/nextorm.examples.postgres.aviasales/README.md",
+   "src/nextorm.core/Visitors/NormSqlTranslator.cs",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html",
+   "docs/specs/status/evidence/pivot-typed-overload/",
+   "tests/nextorm.core.tests/T232CoverageClosureTests.cs",
+   "tests/nextorm.integration.tests/T232SqlServerTestsRv5.cs",
+   "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs",
+   "tests/nextorm.sqlserver.tests/T232Rv5AmbiguityTests.cs",
+   "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
+  ]
+ },
+ "suite": "tests/nextorm.core.tests + tests/nextorm.sqlite.tests + tests/nextorm.postgres.tests + tests/nextorm.sqlserver.tests + tests/nextorm.integration.tests",
+ "thresholds": {
+  "branch": 75.0,
+  "line": 85.0
+ },
+ "thresholds_met": true,
+ "tool_versions": {
+  "dotnet_coverage": "18.11.2",
+  "dotnet_sdk": "10.0.401",
+  "expanded_argv": {
+   "build": {
+    "tests/nextorm.core.tests": [
+     "dotnet",
+     "build",
+     "tests/nextorm.core.tests",
+     "-c",
+     "Debug"
+    ],
+    "tests/nextorm.integration.tests": [
+     "dotnet",
+     "build",
+     "tests/nextorm.integration.tests",
+     "-c",
+     "Debug"
+    ],
+    "tests/nextorm.postgres.tests": [
+     "dotnet",
+     "build",
+     "tests/nextorm.postgres.tests",
+     "-c",
+     "Debug"
+    ],
+    "tests/nextorm.sqlite.tests": [
+     "dotnet",
+     "build",
+     "tests/nextorm.sqlite.tests",
+     "-c",
+     "Debug"
+    ],
+    "tests/nextorm.sqlserver.tests": [
+     "dotnet",
+     "build",
+     "tests/nextorm.sqlserver.tests",
+     "-c",
+     "Debug"
+    ]
+   },
+   "collect": [
+    "dotnet",
+    "tool",
+    "run",
+    "dotnet-coverage",
+    "collect",
+    "-f",
+    "cobertura",
+    "-s",
+    "coverage.settings.xml",
+    "-o",
+    "/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/raw.cobertura.xml",
+    "/usr/bin/python3 /home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tools/rv5_evidence.py coverage --inner --root /home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5"
+   ],
+   "inner": "/usr/bin/python3 /home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tools/rv5_evidence.py coverage --inner --root /home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5",
+   "report": [
+    "dotnet",
+    "tool",
+    "run",
+    "reportgenerator",
+    "-reports:/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/raw.cobertura.xml",
+    "-targetdir:/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/report",
+    "-reporttypes:JsonSummary;Cobertura"
+   ]
+  },
+  "manifest": ".config/dotnet-tools.json",
+  "manifest_reinstalled": false,
+  "note": "central manifest only; no duplicate tool manifest installed",
+  "reportgenerator": "5.5.11"
+ },
+ "touched_area": [
+  {
+   "baseline": {
+    "branch_coverage": 80.5,
+    "line_coverage": 97.4
+   },
+   "branch_delta_vs_baseline": 2.83,
+   "branch_delta_vs_rv4": 0.03,
+   "candidate": {
+    "branch_coverage": 83.33,
+    "line_coverage": 98.21
+   },
+   "class_": "NextORM.SqlServer.SqlServerEntityBuilderExtensions",
+   "line_delta_vs_baseline": 0.81,
+   "line_delta_vs_rv4": 0.01,
+   "rv4_candidate": {
+    "branch_coverage": 83.3,
+    "line_coverage": 98.2
+   }
+  },
+  {
+   "baseline": {
+    "branch_coverage": 89.6,
+    "line_coverage": 90.4
+   },
+   "branch_delta_vs_baseline": 0.28,
+   "branch_delta_vs_rv4": 0.08,
+   "candidate": {
+    "branch_coverage": 89.88,
+    "line_coverage": 91.32
+   },
+   "class_": "NextORM.Core.NormSqlTranslator",
+   "line_delta_vs_baseline": 0.92,
+   "line_delta_vs_rv4": 0.22,
+   "rv4_candidate": {
+    "branch_coverage": 89.8,
+    "line_coverage": 91.1
+   }
+  },
+  {
+   "baseline": {
+    "branch_coverage": 85.3,
+    "line_coverage": 91.2
+   },
+   "branch_delta_vs_baseline": 0.29,
+   "branch_delta_vs_rv4": 0.09,
+   "candidate": {
+    "branch_coverage": 85.59,
+    "line_coverage": 91.44
+   },
+   "class_": "NextORM.Core.QueryCommand.QueryPreparer",
+   "line_delta_vs_baseline": 0.24,
+   "line_delta_vs_rv4": 0.04,
+   "rv4_candidate": {
+    "branch_coverage": 85.5,
+    "line_coverage": 91.4
+   }
+  }
+ ],
+ "touched_pct_decreased": false,
+ "touched_pct_decreased_vs_rv4": false,
+ "unit": "D232-RV5-07"
+}

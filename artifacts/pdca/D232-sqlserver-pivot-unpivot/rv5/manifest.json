@@ -1,0 +1,1509 @@
+{
+ "contract_rv": 5,
+ "manifest_revision": "rv=5 (manifest reconciled 2026-10-15 by D232-RV5-08/09: 13 EC232-RV5-* delta rows and EC232-RV3-SEAL closed on executed evidence; 0 open)",
+ "required_rows": [
+  "E232-01",
+  "E232-02",
+  "E232-03",
+  "E232-04",
+  "E232-05",
+  "E232-06",
+  "E232-07",
+  "E232-08",
+  "E232-09",
+  "E232-10",
+  "E232-11",
+  "E232-12",
+  "E232-13",
+  "E232-14",
+  "E232-15",
+  "E232-16",
+  "E232-17",
+  "EC232-REPRO",
+  "EC232-DERIVED-UNIT",
+  "EC232-DERIVED-EXEC",
+  "EC232-SHARED-REGRESSION",
+  "EC232-ORACLE-AMEND",
+  "EC232-BUILD",
+  "EC232-DERIVED-BUILDER",
+  "EC232-DERIVED-COMMAND",
+  "EC232-PIVOTFREE-PROBE",
+  "EC232-CASE-SENSITIVE-ALIAS",
+  "EC232-CACHE-LOCALITY",
+  "EC232-PREREQ-MUTATION",
+  "EC232-RV3-SEAL",
+  "EC232-RV4-PACKAGING",
+  "EC232-RV4-V05",
+  "EC232-RV4-V18",
+  "EC232-RV4-V19",
+  "EC232-RV4-V21",
+  "EC232-RV4-COVERAGE",
+  "EC232-RV4-OWNERSHIP",
+  "EC232-RV4-HANDOFF",
+  "EC232-RV4-SECURITY",
+  "EC232-RV4-PERF",
+  "EC232-RV4-SEAL",
+  "EC232-RV5-SEAL-RECONCILIATION",
+  "EC232-RV5-FULFILLMENT",
+  "EC232-RV5-HASH-LEDGER",
+  "EC232-RV5-V18-EXECUTION",
+  "EC232-RV5-V23-AMBIGUITY",
+  "EC232-RV5-HANDOFF",
+  "EC232-RV5-SECURITY-DISPOSITION",
+  "EC232-RV5-V05-MAPPING",
+  "EC232-RV5-DOCS-EXAMPLES",
+  "EC232-RV5-CONTRADICTIONS",
+  "EC232-RV5-REGRESSION",
+  "EC232-RV5-COVERAGE",
+  "EC232-RV5-PERF"
+ ],
+ "rows": [
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "preparation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/preparation.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C01-preparation.out"
+    },
+    {
+     "kind": "scout",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/scout.md"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232PreparationProbeTests.cs"
+    }
+   ],
+   "id": "E232-01",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "brief",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/briefs/D-01.json"
+    },
+    {
+     "exit": 0,
+     "kind": "report",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-01.json"
+    },
+    {
+     "kind": "scope-map",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/scope-map.json"
+    }
+   ],
+   "id": "E232-02",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "build-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C04-build-sqlserver.out"
+    },
+    {
+     "exit": 0,
+     "kind": "api-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/build/api-review.json"
+    },
+    {
+     "kind": "gate-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/build/gate-review.json"
+    },
+    {
+     "exit": 0,
+     "kind": "build-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C25-build-sqlserver.out"
+    },
+    {
+     "exit": 0,
+     "kind": "docs-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/docs-review.json"
+    }
+   ],
+   "id": "E232-03",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "report",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-05.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C05-t232-sqlserver.out"
+    },
+    {
+     "exit": 0,
+     "kind": "derived-unit",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/unit.json"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs"
+    }
+   ],
+   "id": "E232-04",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "derived-unit",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/unit.json"
+    },
+    {
+     "kind": "branch-closure",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/branch-closure.json"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs"
+    }
+   ],
+   "id": "E232-05",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "legacy-inventory",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/legacy-inventory.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C06-legacy.out"
+    }
+   ],
+   "id": "E232-06",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "kind": "provider-matrix",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/provider-matrix.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C07-capability-six-provider.out"
+    },
+    {
+     "kind": "provider-matrix",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/provider-matrix.json"
+    },
+    {
+     "kind": "boundary-summary",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary-summary.json"
+    }
+   ],
+   "id": "E232-07",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "kind": "integration-cases",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/integration-cases.json"
+    },
+    {
+     "exit": 0,
+     "kind": "derived-exec",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/execution.json"
+    },
+    {
+     "kind": "container-state",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/container-state.json"
+    },
+    {
+     "kind": "boundary-summary",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary-summary.json"
+    }
+   ],
+   "id": "E232-08",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/cache/reopen-evidence.json"
+    },
+    {
+     "exit": 0,
+     "kind": "summary-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/cache/c05.log"
+    },
+    {
+     "exit": 0,
+     "kind": "summary-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/cache/c08.log"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/E232-09-unit.out"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/E232-09-integration.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-regression",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/regression/regression.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-regression",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/regression/regression.json"
+    }
+   ],
+   "id": "E232-09",
+   "note": "C05/C08 re-run at the rv4 boundary with an ordinary (unmasked) restore: unit FullyQualifiedName~T232 = 67 selected / 59 passed / 0 failed / 8 skipped; integration T232SqlServerTests = 11 selected / 11 passed / 0 failed / 0 skipped.",
+   "rv3_reopen_reason": "rv3 CHECK rejected the seal (build/security/unsealed evidence). Claimed `met` via C05/C08, but those runs required -p:NuGetAudit=false; the ordinary restore fails (NU1902/NU1903), so the environment is not reproducible. Re-verify on the rv4 boundary after D-13.",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "kind": "mutation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/mutation.json"
+    },
+    {
+     "kind": "mutation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/prerequisite.json"
+    },
+    {
+     "exit": 0,
+     "kind": "restore-gate-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/logs/C31-restore-gate.out"
+    }
+   ],
+   "id": "E232-10",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage.json"
+    },
+    {
+     "exit": 0,
+     "kind": "delta",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage/branch-delta.json"
+    },
+    {
+     "kind": "coverage-xml",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage/candidate/coverage.xml"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/coverage.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-coverage",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/coverage.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-coverage",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/coverage.json"
+    }
+   ],
+   "id": "E232-11",
+   "note": "thresholds met (line 88.4 >= 85, branch 80.4 >= 75) AND comparable touched-scope non-decrease (touched_pct_decreased=false; line 88.3->88.4, branch 80.3->80.4); denominators/exclusions unchanged (coverage.settings.xml untouched).",
+   "rv3_reopen_reason": "Carried forward `open` from rv3: thresholds met (line 88.3 / branch 80.2) but the comparable touched-area percentage decreased; the rv3 seal was rejected, so this obligates the rv4 coverage remediation (D-10: thresholds AND comparable touched-scope non-decrease).",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "boundary",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary.json"
+    },
+    {
+     "kind": "boundary-summary",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary-summary.json"
+    },
+    {
+     "kind": "boundary-transients",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/boundary-transients.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/boundary-integration.out"
+    }
+   ],
+   "id": "E232-12",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/example-review-reopen.json"
+    },
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-docs-examples",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/verdicts/docs-examples.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-docs-examples",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/verdicts/docs-examples.json"
+    }
+   ],
+   "id": "E232-13",
+   "note": "the AdventureWorks example consumes the current checkout via ProjectReference; literal C13 exits 0 with no CS/packaging error and no version override / local feed / NuGetAudit=false masking (packaging_caveat removed).",
+   "rv3_reopen_reason": "rv3 CHECK rejected the example evidence: C13 was green only against a locally packed feed with NuGetAudit=false, and the literal C13 build fails. Reopen (D-08 packaging obligation + D-13).",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "docs-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/docs-review.json"
+    },
+    {
+     "exit": 0,
+     "kind": "build-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-xml-build.out"
+    },
+    {
+     "kind": "spec-link-scan",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C14-specs-link-scan.out"
+    },
+    {
+     "kind": "docs",
+     "path": "docs/guide/provider-specific-sql/sqlserver.md"
+    },
+    {
+     "kind": "docs",
+     "path": "docs/ru/guide/provider-specific-sql/sqlserver.md"
+    },
+    {
+     "kind": "registry",
+     "path": "docs/specs/design/API-NAMING-REVIEW.md"
+    }
+   ],
+   "id": "E232-14",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "acceptance-perf",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf/acceptance-candidate.json"
+    },
+    {
+     "kind": "perf-comparison",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf-comparison.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/logs/C15-acceptance-candidate.out"
+    }
+   ],
+   "id": "E232-15",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "kind": "handoff",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/handoff.json"
+    },
+    {
+     "kind": "ownership",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json"
+    },
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/handoff-case.json"
+    },
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership-case.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-handoff",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-handoff",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json"
+    }
+   ],
+   "id": "E232-16",
+   "note": "rv4/handoff.json: status=ok, per-hunk byte hashes, CRLF, foreign_bytes_changed=false; rv4/ownership.json: retention_authorization.status=authorized (explicit dated collection-owner retention), T232-only footprint.",
+   "rv3_reopen_reason": "rv3 CHECK rejected the handoff evidence: the #232 D-06 commit (001f9c9c) folded pre-existing foreign #160 hunks into AdventureWorksQueries.cs without explicit authorization. Reopen (D-11).",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json"
+    },
+    {
+     "kind": "counters",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/counters.json"
+    },
+    {
+     "kind": "provenance",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/provenance.json"
+    },
+    {
+     "kind": "provenance",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/provenance.json"
+    },
+    {
+     "exit": 0,
+     "kind": "provenance",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/provenance.json"
+    },
+    {
+     "exit": 0,
+     "kind": "validator-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/manifest-validate.out"
+    },
+    {
+     "exit": 0,
+     "kind": "validator-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/fulfill.out"
+    },
+    {
+     "exit": 0,
+     "kind": "validator-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.out"
+    },
+    {
+     "kind": "rv5-counters",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/counters.json"
+    }
+   ],
+   "id": "E232-17",
+   "note": "schema/fulfillment/sealing: manifest schema valid and fulfillment valid; the provenance obligation is backed by the carried rv1/rv3 provenance records that the rv4 contract carries verbatim; set met only after the Step-3 validators returned exit 0 on the reconciled rows.",
+   "rv3_evidence": [],
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "repro-baseline",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/baseline.json"
+    },
+    {
+     "kind": "production-before",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/production-before.json"
+    },
+    {
+     "exit": 2,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/logs/C20-R01-typed-builder-projection.out"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/logs/C20-R05-pivot-free-control.out"
+    },
+    {
+     "exit": 0,
+     "kind": "acceptance-baseline",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/repro/logs/C20-acceptance-baseline.out"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs"
+    }
+   ],
+   "id": "EC232-REPRO",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "derived-unit",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/unit.json"
+    },
+    {
+     "kind": "case-inventory",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/case-inventory.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C21-derived-unit.out"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs"
+    }
+   ],
+   "id": "EC232-DERIVED-UNIT",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "derived-exec",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/execution.json"
+    },
+    {
+     "kind": "provider-matrix",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/provider-matrix.json"
+    },
+    {
+     "kind": "container-state",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/container-state.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C22-derived-exec.out"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.integration.tests/T232SqlServerTests.cs"
+    }
+   ],
+   "id": "EC232-DERIVED-EXEC",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "regression-inventory",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/regression/inventory.json"
+    },
+    {
+     "kind": "oracle-comparison",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/regression/oracle-comparison.json"
+    },
+    {
+     "kind": "protected-files",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/regression/protected-files.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C23-integration.out"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C23-integration-list.out"
+    }
+   ],
+   "id": "EC232-SHARED-REGRESSION",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "oracle-amendment",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/amendment.json"
+    },
+    {
+     "kind": "oracle-before",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/before.json"
+    },
+    {
+     "kind": "oracle-after",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/after.json"
+    },
+    {
+     "kind": "oracle-before-contract",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/oracle/before-contract.json"
+    }
+   ],
+   "id": "EC232-ORACLE-AMEND",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "build-out",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/build/solution-build.out"
+    },
+    {
+     "kind": "build-exit",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/build/solution-build.exit"
+    },
+    {
+     "kind": "build-err",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/build/solution-build.err"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-build",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5ev-regression-build.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-build",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5ev-regression-build.out"
+    }
+   ],
+   "id": "EC232-BUILD",
+   "note": "ordinary `dotnet build nextorm.slnx -c Debug` -> Build succeeded, 0 Warning(s) / 0 Error(s); the rv3 26 NU1902/NU1903 errors are gone after the D-13 pin.",
+   "rv3_reopen_reason": "Reopened: the current ordinary build is not green — `dotnet build nextorm.slnx -c Debug` exits 1 with 26 NU1902/NU1903 errors (D-13 prerequisite). Re-verify after D-13.",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "variant",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/derived-builder.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C-variant-derived-builder.out"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs"
+    }
+   ],
+   "id": "EC232-DERIVED-BUILDER",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "variant",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/derived-command.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C-variant-derived-command.out"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs"
+    }
+   ],
+   "id": "EC232-DERIVED-COMMAND",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "variant",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/pivot-free.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C-variant-pivot-free.out"
+    }
+   ],
+   "id": "EC232-PIVOTFREE-PROBE",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "variant",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/case-sensitive-alias.json"
+    },
+    {
+     "kind": "database-collation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/variants/database-collation.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C-variant-case-sensitive-alias.out"
+    },
+    {
+     "kind": "test",
+     "path": "tests/nextorm.integration.tests/T232PivotFixture.cs"
+    }
+   ],
+   "id": "EC232-CASE-SENSITIVE-ALIAS",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "cache-locality",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/cache/locality.json"
+    },
+    {
+     "kind": "source-review",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/cache/source-review.json"
+    },
+    {
+     "exit": 0,
+     "kind": "test-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C30-cache-locality.out"
+    }
+   ],
+   "id": "EC232-CACHE-LOCALITY",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "kind": "mutation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/prerequisite.json"
+    },
+    {
+     "exit": 2,
+     "kind": "mutant-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/logs/C31-mutant-PP1-revert-pass-through.out"
+    },
+    {
+     "exit": 2,
+     "kind": "mutant-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/logs/C31-mutant-PP1-revert-pass-through-arm.out"
+    },
+    {
+     "exit": 0,
+     "kind": "restore-gate-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/mutation/logs/C31-restore-gate.out"
+    }
+   ],
+   "id": "EC232-PREREQ-MUTATION",
+   "status": "met"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "seal-reconciliation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal-reconciliation.json"
+    },
+    {
+     "exit": 0,
+     "kind": "seal",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal.json"
+    },
+    {
+     "exit": 0,
+     "kind": "contract",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/contract.json"
+    },
+    {
+     "kind": "report",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/reports/D-09.json"
+    }
+   ],
+   "id": "EC232-RV3-SEAL",
+   "reason": null,
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging.json"
+    },
+    {
+     "kind": "artifact",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-docs-examples",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/verdicts/docs-examples.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-docs-examples",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/verdicts/docs-examples.json"
+    }
+   ],
+   "id": "EC232-RV4-PACKAGING",
+   "note": "python3 $R/verify.py --case packaging -> exit 0; assertions project_reference_core/sqlserver=true, no_nextorm_packageref=true, literal C13 exit 0, advisory_only=false.",
+   "rv3_reopen_reason": "D-08: the AdventureWorks example consumes the current checkout (ProjectReference to nextorm.core/nextorm.sqlserver); the literal C13 build exits 0 with no CS/packaging error and no version override or feed masking (planned; python3 \"$R/verify.py\" --case packaging not yet run at r=4/n=1)",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-mapping",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v05/assertion-execution.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-mapping",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v05/assertion-execution.json"
+    }
+   ],
+   "id": "EC232-RV4-V05",
+   "note": "V05 TVF inner closure: `--case v05` exit 0.",
+   "rv3_reopen_reason": "D-09: V05 TVF inner executable closure (deterministic SQL Server TVF + typed projection) (planned; python3 \"$R/verify.py\" --case v05 not yet run at r=4/n=1)",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v18.json"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v18.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-v18",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v18/assertion-execution.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-v18",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v18/assertion-execution.json"
+    }
+   ],
+   "id": "EC232-RV4-V18",
+   "note": "V18 typo/absent data value closure: `--case v18` exit 0.",
+   "rv3_reopen_reason": "D-09: V18 typo/absent data value executable closure (emitted identifier / missing-cell behaviour) (planned; python3 \"$R/verify.py\" --case v18 not yet run at r=4/n=1)",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v19.json"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v19.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-regression",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/regression/regression.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-regression",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/regression/regression.json"
+    }
+   ],
+   "id": "EC232-RV4-V19",
+   "note": "V19 dynamic PIVOT guard / documented API boundary: `--case v19` exit 0.",
+   "rv3_reopen_reason": "D-09: V19 dynamic PIVOT guard / documented API boundary (legacy path retained) (planned; python3 \"$R/verify.py\" --case v19 not yet run at r=4/n=1)",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v21.json"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v21.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-regression",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/regression/regression.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-regression",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/regression/regression.json"
+    }
+   ],
+   "id": "EC232-RV4-V21",
+   "note": "V21 eager/single-query state closure (V14/V22 preserved): `--case v21` exit 0.",
+   "rv3_reopen_reason": "D-09: V21 eager-load / single-query state executable closure; V14/V22 preserved (planned; python3 \"$R/verify.py\" --case v21 not yet run at r=4/n=1)",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage.json"
+    },
+    {
+     "exit": 0,
+     "kind": "delta",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage/branch-delta.json"
+    },
+    {
+     "kind": "coverage-xml",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage/candidate/coverage.xml"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/coverage.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-coverage",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/coverage.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-coverage",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/coverage.json"
+    }
+   ],
+   "id": "EC232-RV4-COVERAGE",
+   "note": "D-10: thresholds met AND comparable touched-scope non-decrease (thresholds_met=true, touched_pct_decreased=false).",
+   "rv3_reopen_reason": "D-10: candidate coverage meets MIN_LINE_COVERAGE/MIN_BRANCH_COVERAGE AND the comparable touched-scope coverage does not decrease; denominators/exclusions unchanged (planned; python3 \"$R/verify.py\" --case coverage not yet run at r=4/n=1)",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership-case.json"
+    },
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/ownership.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-handoff",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-handoff",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json"
+    }
+   ],
+   "id": "EC232-RV4-OWNERSHIP",
+   "note": "`--case ownership` exit 0: verified #160 sibling-owner identity + explicit post-discovery authorization; T232-only footprint.",
+   "rv3_reopen_reason": "D-11: rv4/ownership.json records the verified #160 sibling-owner identity and explicit post-discovery authorization; the T232 footprint is T232-only (planned; python3 \"$R/verify.py\" --case ownership not yet run at r=4/n=1)",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/handoff-case.json"
+    },
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/handoff.json"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/handoff.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-handoff",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-handoff",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json"
+    }
+   ],
+   "id": "EC232-RV4-HANDOFF",
+   "note": "`--case handoff` exit 0: per-hunk byte hashes, clean paths, CRLF; handoff.json holds the detailed record (status=ok, foreign_bytes_changed=false).",
+   "rv3_reopen_reason": "D-11: rv4/handoff.json records per-hunk byte hashes, clean paths and CRLF for the corrected handoff (planned; python3 \"$R/verify.py\" --case handoff not yet run at r=4/n=1)",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json"
+    },
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/reopen-security.json"
+    },
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/predicate-change.json"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-disposition",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/security/rv5-evidence-verification.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-disposition",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/security/rv5-evidence-verification.json"
+    }
+   ],
+   "id": "EC232-RV4-SECURITY",
+   "note": "`--case security` exit 0: complete pre-fix advisory capture (NU1902/GHSA-2fmv-rv2c-59x7, NU1903/GHSA-846f-f764-76mx, Microsoft.Data.SqlClient -> System.Security.Cryptography.Pkcs, exit codes) retained; duplicate search; remedy ownership #236; ordinary unmasked restore exit 0 / 0 NU19 and green build; predicate repaired without weakening.",
+   "rv3_reopen_reason": "D-13: complete ordinary-restore advisory capture (identifiers/package paths/exit codes) plus a duplicate search; separate issue/remedy ownership is recorded (planned; python3 \"$R/verify.py\" --case security not yet run at r=4/n=1)",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/perf.json"
+    },
+    {
+     "kind": "comparison",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/perf/perf-comparison.json"
+    },
+    {
+     "exit": 0,
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/perf.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-perf",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/perf/perf-comparison.json"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-perf",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/perf/perf-comparison.json"
+    }
+   ],
+   "id": "EC232-RV4-PERF",
+   "note": "D-10 perf re-confirmation: 7/7 acceptance cases, 0 failures, no material regression (material_regression=false), audit_masking=false.",
+   "rv3_reopen_reason": "Acceptance perf re-confirmation on the rv4 tree; no unexplained material regression (planned; python3 \"$R/verify.py\" --case perf not yet run at r=4/n=1)",
+   "status": "met"
+  },
+  {
+   "carried_freshness_review": "carried from rv4 as `met`; subject to applicability/freshness review",
+   "evidence": [
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json"
+    },
+    {
+     "kind": "counters",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/counters.json"
+    },
+    {
+     "kind": "provenance",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/provenance.json"
+    },
+    {
+     "kind": "provenance",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/provenance.json"
+    },
+    {
+     "exit": 0,
+     "kind": "provenance",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/provenance.json"
+    },
+    {
+     "exit": 0,
+     "kind": "validator-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/manifest-validate.out"
+    },
+    {
+     "exit": 0,
+     "kind": "validator-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/fulfill.out"
+    },
+    {
+     "exit": 0,
+     "kind": "validator-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.out"
+    },
+    {
+     "exit": 0,
+     "kind": "rv5-seal",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal.json"
+    }
+   ],
+   "id": "EC232-RV4-SEAL",
+   "note": "rv4 seal: zero applicable open rows (40 met / 1 na / 0 open); the final seal verdict is CHECK's, this row carries the DO reconciliation evidence.",
+   "status": "met"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "seal-reconciliation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal-reconciliation.json"
+    },
+    {
+     "exit": 0,
+     "kind": "seal",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal.json"
+    }
+   ],
+   "id": "EC232-RV5-SEAL-RECONCILIATION",
+   "owner": "coder->check",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-09"
+  },
+  {
+   "evidence": [
+    {
+     "kind": "fulfillment-rv4",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv4.json"
+    },
+    {
+     "exit": 0,
+     "kind": "fulfillment-rv5",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv5.json"
+    },
+    {
+     "exit": 0,
+     "kind": "selftest-guards",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tool-selftests.json"
+    }
+   ],
+   "id": "EC232-RV5-FULFILLMENT",
+   "owner": "coder->check",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-08"
+  },
+  {
+   "evidence": [
+    {
+     "kind": "hash-ledger",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-ledger.json"
+    },
+    {
+     "exit": 0,
+     "kind": "hash-verification",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-verification.json"
+    }
+   ],
+   "id": "EC232-RV5-HASH-LEDGER",
+   "owner": "coder->check",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-08"
+  },
+  {
+   "evidence": [
+    {
+     "kind": "assertion-execution",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v18/assertion-execution.json"
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5-v18-sqlserver-container.out"
+    }
+   ],
+   "id": "EC232-RV5-V18-EXECUTION",
+   "owner": "coder",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-04"
+  },
+  {
+   "evidence": [
+    {
+     "kind": "probe",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v23/probe.json"
+    },
+    {
+     "kind": "assertion-execution",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v23/assertion-execution.json"
+    },
+    {
+     "kind": "mutation-red",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5-v23-mutation-red.out"
+    },
+    {
+     "kind": "mutation-green",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5-v23-mutation-green.out"
+    }
+   ],
+   "id": "EC232-RV5-V23-AMBIGUITY",
+   "owner": "coder",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-03"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "handoff",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json"
+    }
+   ],
+   "id": "EC232-RV5-HANDOFF",
+   "owner": "coder->check",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-09"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "security-verification",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/security/rv5-evidence-verification.json"
+    },
+    {
+     "kind": "issue",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/security/issue.json"
+    },
+    {
+     "kind": "duplicate-search",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/security/gh-search"
+    }
+   ],
+   "id": "EC232-RV5-SECURITY-DISPOSITION",
+   "owner": "scout/coder",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-06"
+  },
+  {
+   "evidence": [
+    {
+     "kind": "assertion-execution",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v05/assertion-execution.json"
+    },
+    {
+     "exit": 0,
+     "kind": "mapping-verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/verdicts/mapping.json"
+    }
+   ],
+   "id": "EC232-RV5-V05-MAPPING",
+   "owner": "scout/coder",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-05"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "audits",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/docs-examples.json"
+    },
+    {
+     "kind": "report",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/reports/D-09.json"
+    },
+    {
+     "exit": 0,
+     "kind": "docs-examples-verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/verdicts/docs-examples.json"
+    }
+   ],
+   "id": "EC232-RV5-DOCS-EXAMPLES",
+   "owner": "scout/coder",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-05"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "reconciliation",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/reconciliation.json"
+    }
+   ],
+   "id": "EC232-RV5-CONTRADICTIONS",
+   "owner": "coder->check",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-08"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "regression",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/regression/regression.json"
+    },
+    {
+     "kind": "transients",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/regression/transients.json"
+    }
+   ],
+   "id": "EC232-RV5-REGRESSION",
+   "owner": "coder",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-07"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "coverage",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/coverage.json"
+    },
+    {
+     "kind": "coverage-xml",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/candidate.cobertura.xml"
+    },
+    {
+     "kind": "branch-delta",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/branch-delta.json"
+    }
+   ],
+   "id": "EC232-RV5-COVERAGE",
+   "owner": "coder",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-07"
+  },
+  {
+   "evidence": [
+    {
+     "exit": 0,
+     "kind": "comparison",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/perf/perf-comparison.json"
+    },
+    {
+     "kind": "replay",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/perf/replay.json"
+    }
+   ],
+   "id": "EC232-RV5-PERF",
+   "owner": "coder",
+   "reason": null,
+   "status": "met",
+   "unit": "D232-RV5-07"
+  }
+ ],
+ "status_file": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+ "task": "T232 (#232) SQL Server typed PIVOT/UNPIVOT projection",
+ "tree": "e9121976",
+ "tree_semantics": "source HEAD short sha of the 1.0.9-rc3 worktree at rv5 transcription (git rev-parse --short HEAD = e9121976; full e9121976d9356375b906225bfe04704d298d8d13); the frozen source snapshot is artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/source-snapshot.json"
+}

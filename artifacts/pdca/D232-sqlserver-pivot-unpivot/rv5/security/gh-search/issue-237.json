@@ -1,0 +1,1 @@
+{"labels":[],"milestone":{"number":4,"title":"1.0.9-rc3","description":"","dueOn":null},"number":237,"state":"OPEN","title":"Identifier safety: SQL Server bracket escaping and raw UNPIVOT/Column<T> names","url":"https://github.com/AlexeyShirshov/nextorm/issues/237"}

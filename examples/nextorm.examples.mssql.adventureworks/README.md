@@ -44,7 +44,7 @@ SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Se
 | SQL (T-SQL) | nextorm |
 |---|---|
 | `FROM t` | `ctx.From<IT>()`, where `IT` is an interface marked `[SqlTable("Schema.t")]` |
-| `WITH x AS (SELECT …)` | declare it as a CTE: `ctx.With("x", query).From("x")`; a later CTE reads an earlier one by name (`ctx.From("x")`). CTE columns are read by name (`t.GetInt32("id")`) because the CTE source is untyped |
+| `WITH x AS (SELECT …)` | declare it as a CTE: string API `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt32("id")`, because the name carries no type) or the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference); a later CTE reads an earlier one the same way |
 | `SELECT a AS x` | `.Select(t => new { x = t.A })` (anonymous type = result row) |
 | `JOIN u ON a = b` / `LEFT JOIN` | `.Join(ctx.From<IU>(), (t, u) => …)` / `.LeftJoin(...)`; joined items are `p.Item1`, `p.Item2`, … |
 | `WHERE c` | `.Where(t => c)` |
@@ -54,7 +54,7 @@ SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Se
 | `TOP n` / `LIMIT n` | `.Limit(n)` |
 | `COUNT(*)`, `SUM(x)`, `AVG`, `MIN`, `MAX`, `STDEV`, `COUNT(DISTINCT x)` | `SqlFunctions.Sql.count()`, `.sum(x)`, `.avg(x)`, `.min(x)`, `.max(x)`, `.stdev(x)`, `.count_distinct(x)` |
 | `CASE WHEN c THEN a ELSE b END` | ternary `c ? a : b` |
-| `PIVOT (…)` | `EntityBuilder.Pivot(...)` emits native T-SQL `PIVOT` and accepts a derived query as the source (query 5 pivots a 5-table join with a computed `Margin`/`FOR` column) |
+| `PIVOT (…)` | `EntityBuilder.Pivot(...)` (SQL Server provider extension in `NextORM.SqlServer` — add `using NextORM.SqlServer;`) emits native T-SQL `PIVOT` and accepts a derived query as the source (query 5 pivots a 5-table join with a computed `Margin`/`FOR` column) |
 | `LAG(x) OVER (PARTITION BY p ORDER BY o)` | `SqlFunctions.Sql.lag(x).Over(partitionBy: () => p, orderBy: () => o)` |
 | `MAX(x) OVER()` | `SqlFunctions.Sql.max_over(x).Over()` |
 | `ROW_NUMBER()` / `RANK()` / `NTILE(n) OVER (…)` | `SqlFunctions.Sql.row_number()` / `.rank()` / `.ntile(n)` `.Over(…)` |
@@ -78,9 +78,13 @@ Two nextorm-specific rules that trip people up:
 * **Derived queries as a `FROM` source and as a join side** — `ctx.From(derived).Join(...)` works, and a
   `QueryCommand<T>` can be joined directly; a `Where` may precede the join (it is pushed onto the derived
   query), while other modifiers must stay inside the derived query. The reference queries declare their
-  subqueries as CTEs, so the example uses `ctx.With(name, query)` / `ctx.From(name)` (see rule 1);
-  queries 1, 3 and 4 are expressed this way and are **WORKING**.
-* **Native `PIVOT` over a derived source** — `EntityBuilder.Pivot(...)` emits native T-SQL `PIVOT` and
+  subqueries as CTEs, all through the typed `query.AsCte(name)` / `ctx.From(Cte<T>)` API (rule 1):
+  queries 1, 3 and 4 chain typed descriptors, and query 1 names its slots (`WithAlias(Alias.Root)`,
+  `Alias.SalesPerson`, `Alias.Manager`); all are **WORKING**. The alias chain
+  must be rooted at a **named** projection (`CustomerMetricRow`), not an anonymous type: the alias
+  generator renders the chain's concrete type and cannot emit an anonymous one.
+* **Native `PIVOT` over a derived source** — `EntityBuilder.Pivot(...)` (the SQL Server provider extension
+  in `NextORM.SqlServer`; add `using NextORM.SqlServer;`) emits native T-SQL `PIVOT` and
   accepts a derived query as the source, so query 5 pivots the 5-table join with its computed `Margin`
   and `FOR` column directly (`FOR QuarterNum IN (1,2,3,4)` over the numeric `datepart(quarter, …)`; the
   string `'Q' + datepart(...)` form needs an explicit T-SQL `CAST`). Every method carries a `WORKING`
@@ -93,10 +97,10 @@ Markers: **OK** — expressed with the regular LINQ API; **≡** — same result
 
 | # | SQL | Method | Coverage | Notes |
 |---|---|---|---|---|
-| 1 | [`mssql_vip_churn.sql`](Sql/mssql_vip_churn.sql) | `AdventureWorksQueries.VipChurn` | OK | two CTEs (`CustomerOrders`, `CustomerMetrics` grouping the first); `MAX(OrderDate) OVER()` → `max_over(...).Over()`; `LAG(…) OVER(…)` → `lag(...).Over(...)`; `DATEDIFF(day,…)` → `date_diff("day",…)`; `FORMAT(…)` → `DemoUdf.Format`; manager `LEFT JOIN` on the CTE |
-| 2 | [`mssql_rolling_kpi.sql`](Sql/mssql_rolling_kpi.sql) | `AdventureWorksQueries.RollingKpi` | OK | CTE `MonthlySales`; `DATEADD(month, DATEDIFF(month,0,…),0)` → `date_trunc("month",…)`; cumulative/3-month `AVG` frames → `sum_over`/`avg_over` with `WindowFrame`; `FORMAT(…)` → `DemoUdf.Format` |
-| 3 | [`mssql_supply_chain.sql`](Sql/mssql_supply_chain.sql) | `AdventureWorksQueries.SupplyChain` | OK | two CTEs (`SupplierDelays`, `ProductionImpact`) joined by name; `DATEADD(day,5,…)` → `date_add("day",5,…)`; `DATEDIFF(day,…)` → `date_diff("day",…)` |
-| 4 | [`mssql_product_abc_xyz.sql`](Sql/mssql_product_abc_xyz.sql) | `AdventureWorksQueries.ProductAbcXyz` | OK | three chained CTEs; `DATEADD(quarter,…)` → `date_trunc("quarter",…)`; `STDEV` → `stdev`; `AVG(CAST(qty AS FLOAT))` → `avg((double)qty)`; `SUM(...) OVER(ORDER BY … DESC)/SUM(...) OVER()` → `sum_over(...).Over(desc(...)) / sum_over(...).Over()` |
+| 1 | [`mssql_vip_churn.sql`](Sql/mssql_vip_churn.sql) | `AdventureWorksQueries.VipChurn` | OK | two **typed** CTEs (`AsCte`), the second grouped into the named `CustomerMetricRow`; joined slots are named (`WithAlias(Alias.Root)`, `Alias.SalesPerson`, `Alias.Manager`, addressed as `p.Root`/`p.SalesPerson`/`p.Manager`); `MAX(OrderDate) OVER()` → `max_over(...).Over()`; `LAG(…) OVER(…)` → `lag(...).Over(...)`; `DATEDIFF(day,…)` → `date_diff("day",…)`; `FORMAT(…)` → `DemoUdf.Format`; manager `LEFT JOIN` on the CTE |
+| 2 | [`mssql_rolling_kpi.sql`](Sql/mssql_rolling_kpi.sql) | `AdventureWorksQueries.RollingKpi` | OK | typed CTE `MonthlySales` (`AsCte`); `DATEADD(month, DATEDIFF(month,0,…),0)` → `date_trunc("month",…)`; cumulative/3-month `AVG` frames → `sum_over`/`avg_over` with `WindowFrame`; `FORMAT(…)` → `DemoUdf.Format` |
+| 3 | [`mssql_supply_chain.sql`](Sql/mssql_supply_chain.sql) | `AdventureWorksQueries.SupplyChain` | OK | two typed CTEs (`AsCte`: `SupplierDelays`, `ProductionImpact`) joined by member; `DATEADD(day,5,…)` → `date_add("day",5,…)`; `DATEDIFF(day,…)` → `date_diff("day",…)` |
+| 4 | [`mssql_product_abc_xyz.sql`](Sql/mssql_product_abc_xyz.sql) | `AdventureWorksQueries.ProductAbcXyz` | OK | three chained **typed** CTEs (`AsCte`); `DATEADD(quarter,…)` → `date_trunc("quarter",…)`; `STDEV` → `stdev` (projected `(double?)`, so the one-quarter-per-product case stays distinct from zero); `AVG(CAST(qty AS FLOAT))` → `avg((double)qty)`; `SUM(...) OVER(ORDER BY … DESC)/SUM(...) OVER()` → `sum_over(...).Over(desc(...)) / sum_over(...).Over()` |
 | 5 | [`mssql_quarterly_pivot.sql`](Sql/mssql_quarterly_pivot.sql) | `AdventureWorksQueries.QuarterlyPivot` | OK | native `Pivot` over a **derived query**: the join 5 tables and the computed `Margin`/`FOR` column live in the derived query, `PIVOT ... FOR QuarterNum IN (1,2,3,4)` over the numeric `datepart(quarter, …)` (string `'Q'+datepart` needs an explicit T-SQL `CAST`, so the numeric quarter is pivoted); pivot cells stay nullable |
 
 ## Course exercises (6–11)

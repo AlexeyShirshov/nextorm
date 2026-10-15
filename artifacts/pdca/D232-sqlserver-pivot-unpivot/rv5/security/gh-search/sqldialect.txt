@@ -1,0 +1,10 @@
+$ gh issue list --repo AlexeyShirshov/nextorm --state all --search SqlServerDialect
+219	OPEN	Session/server-identity функции: SERVER_NAME, HOST_ID/HOST_NAME, APP_NAME, SUSER_NAME и аналоги по провайдерам		2026-10-12T04:22:04Z
+232	OPEN	SQL Server PIVOT/UNPIVOT: типизированная проекция результата (вместо TableAlias по имени)	enhancement	2026-10-13T17:14:56Z
+217	CLOSED	Полноценная поддержка DateTimeOffset: SQL-трансляция Now/UtcNow и частей даты		2026-10-14T15:42:10Z
+127	CLOSED	OUTPUT INTO в табличную переменную (DECLARE @t TABLE) на SQL Server	enhancement	2026-10-06T02:11:10Z
+218	CLOSED	Последовательности SQL Server (NEXT VALUE FOR): недостающая кросс-провайдерная поддержка		2026-10-14T15:42:14Z
+83	CLOSED	TODO: Пробелы функций SQL Server (`PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `TRANSLATE`, `FORMAT`, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, JSON-агрегаты, …)		2026-09-24T17:44:15Z
+224	CLOSED	SQL: форматирование — `from`/`join` с новой строки	enhancement	2026-10-14T17:22:28Z
+14	CLOSED	TODO: Table hints	enhancement	2026-09-21T11:43:54Z
+EXIT=0

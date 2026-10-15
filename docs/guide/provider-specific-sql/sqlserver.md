@@ -287,6 +287,17 @@ aggregate or `FOR` column, an empty UNPIVOT column list, a missing UNPIVOT role 
 identifiers all throw `ArgumentException` (or `NotSupportedException` for reading the inner source as a
 whole) instead of emitting wrong SQL.
 
+**Variants and boundaries.** The typed operators cover the same inner sources as the untyped ones — a
+plain table/entity, a **table-valued function** or a derived query, so
+`ctx.FromTableFunction(() => Db.MyTvf()).Pivot(...)` reshapes the function call exactly like a table.
+The declared value strings stay **runtime identifiers**: a typo or an absent value is not validated at
+compile time, so its column is still rendered and a cell that no source row matches materializes as SQL
+`NULL` (declare the cell nullable). A genuinely **dynamic PIVOT** — a value list known only at runtime —
+has no typed form and stays on the untyped [`TableAlias`](xref:NextORM.Core.TableAlias) overload, which
+is unchanged. Both operators keep the eager-load guard: calling them on a builder that carries
+`LoadWith`/single-query state throws `NotSupportedException` (the composition cannot survive it), and
+interleaved typed queries share no sticky command or plan-cache state.
+
 ## `TABLESAMPLE`
 
 [`FromOptions.TableSample`](xref:NextORM.Core.FromOptions.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) adds a `TABLESAMPLE` modifier to the

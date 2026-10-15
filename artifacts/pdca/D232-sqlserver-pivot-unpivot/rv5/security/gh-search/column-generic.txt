@@ -1,0 +1,21 @@
+$ gh issue list --repo AlexeyShirshov/nextorm --state all --search Column<T>
+232	OPEN	SQL Server PIVOT/UNPIVOT: типизированная проекция результата (вместо TableAlias по имени)	enhancement	2026-10-13T17:14:56Z
+185	CLOSED	BindEntity<T> does not register the entity mapping: typed projections emit empty column names unless From<T> ran first		2026-10-09T03:12:59Z
+58	CLOSED	Типизированный доступ к колонке по имени — SqlFunctions.Column<T>		2026-09-22T16:02:53Z
+208	CLOSED	SQL Server native JSON: projected SqlFunctions.Parameter<T> is admitted native-eligible but rendered without a required alias		2026-10-09T20:11:32Z
+110	CLOSED	TODO: dynamic columns — MySQL/MariaDB read rejects unqualified select star (<mapped>, *)		2026-09-28T18:38:07Z
+86	CLOSED	TODO: Портативный range как пара колонок ([RangeColumns])		2026-09-25T17:47:50Z
+104	CLOSED	TODO: dynamic columns — write side (INSERT/UPDATE/MERGE render dict keys as columns)		2026-09-28T17:09:18Z
+118	CLOSED	Стриминг нескольких result set'ов в ProcedureResult (гетерогенный курсор на набор)	enhancement	2026-10-01T06:22:52Z
+20	OPEN	TODO: LINQ support	enhancement	2026-10-04T17:51:37Z
+186	CLOSED	Unify result-set traversal: make BatchResult and ProcedureResult directly enumerable, drop ReadSets		2026-10-04T15:11:19Z
+163	CLOSED	ClickHouse: reference->collection navigation is an accepted provider limitation (explicit gate)		2026-10-06T02:20:45Z
+56	CLOSED	ClickHouse: массивы Array(T)/Tuple — row reader, array-агрегаты и higher-order (lambda) функции		2026-09-22T16:02:52Z
+109	CLOSED	TODO: dynamic columns — value-type (struct) entity and missing parameterless ctor are untested		2026-09-28T19:03:35Z
+61	CLOSED	TODO: Интеграция с EF Core (nextorm.entityframeworkcore)		2026-09-27T15:23:25Z
+60	CLOSED	TODO: CREATE TABLE ... AS SELECT (CTAS) и временные таблицы		2026-09-24T07:21:19Z
+3	CLOSED	TODO: Insert	enhancement	2026-09-23T12:46:05Z
+4	CLOSED	TODO: Update	enhancement	2026-09-23T17:49:00Z
+15	CLOSED	TODO: `OUTPUT INTO`, несколько result-set'ов, upsert-with-output	enhancement	2026-09-25T12:42:48Z
+19	CLOSED	Новые возможности SQL-генерации в nextorm	enhancement	2026-09-18T14:52:03Z
+EXIT=0

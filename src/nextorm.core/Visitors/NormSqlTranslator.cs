@@ -98,6 +98,17 @@ internal static class NormSqlTranslator
                 $"The {marker} marker requires a bound PIVOT/UNPIVOT result source; no TableAlias source is in scope, " +
                 $"so the column '{columnName}' cannot be resolved.");
 
+        // The marker carries no source argument, so it cannot choose between two distinguishable
+        // TableAlias-bound sources in scope (for example a PIVOT result joined with a raw TableAlias
+        // source): the lookup below would silently bind the first one and emit a wrong identifier.
+        // Fail closed instead; the source-naming SqlFunctions.Column<T>(source, "name") route stays
+        // available for a query that really has more than one such source.
+        if (HasAmbiguousTableAliasSource(visitor))
+            throw new BuildSqlCommandException(
+                $"The {marker} marker matches more than one TableAlias source in scope, so the column '{columnName}' " +
+                $"is ambiguous: the marker does not name its PIVOT/UNPIVOT result source. Reference the intended " +
+                $"source explicitly with SqlFunctions.Column<T>(source, \"{columnName}\").");
+
         if (!visitor.DontNeedAlias && visitor.ColumnsProvider.HasAliases && visitor.AliasProvider is { } aliases)
             visitor.Builder!.Append(aliases.FindAlias(index)).Append('.');
 
@@ -105,6 +116,15 @@ internal static class NormSqlTranslator
         visitor.ColumnName = columnName;
         return true;
     }
+
+    /// <summary>
+    /// Whether the marker's alias lookup is ambiguous: a second same-typed (<see cref="TableAlias"/>)
+    /// source is visible in the very scope <see cref="TryTranslateMarker"/> searched. The probe asks
+    /// the public lookup for the (zero-based) second matching source, so a non-null answer proves the
+    /// marker cannot select its PIVOT/UNPIVOT result source by itself.
+    /// </summary>
+    private static bool HasAmbiguousTableAliasSource(BaseExpressionVisitor visitor)
+        => visitor.ColumnsProvider.FindAlias(typeof(TableAlias), 1, false) is not null;
 
     /// <summary>The marker type name for an exactly recognised accessor, or <c>null</c>.</summary>
     private static string? MarkerOf(MethodInfo method)

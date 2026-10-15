@@ -1,0 +1,122 @@
+{
+ "unit": "D232-RV5-05",
+ "defect_key": "T232.V05.ASSERTION-EXECUTION",
+ "task": "#232 rv=5",
+ "obligation": "AC-11: every applicable V05 (TVF inner) assertion maps to an observed test execution (class/method + real command + exit + selected count) or to an explicit justified guard; test-name-only mappings are rejected.",
+ "variant": "V05",
+ "variant_statement": "V05 TVF inner: the typed PIVOT accepts a deterministic SQL Server table-valued function as its inner source and applies the typed projection to it.",
+ "source_revision": "e9121976",
+ "artifact_revision": "e9121976",
+ "selector": {
+  "filter": "FullyQualifiedName~T232VariantV05",
+  "matches": "exactly T232VariantV05Tests (2 test methods); confirmed by `-list methods` on the current assembly"
+ },
+ "applicable_assertion_source": "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs (class T232VariantV05Tests, lines 15-76)",
+ "assertion_to_executed_test": [
+  {
+   "assertion": "A typed PIVOT over a table-valued-function inner emits the declared projection: the inner source renders as the aliased TVF call `t232_sales_tvf() as [t1]`, the PIVOT pivots it, and the typed members `[1] as [Q1]`, `[2] as [Q2]` are the frozen rename/order contract applied to that source.",
+   "test": "T232VariantV05Tests.TypedPivot_OverTvfInner_EmitsTheDeclaredProjection",
+   "file_line": "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs:47-62",
+   "route": "ctx.FromTableFunction(() => SalesTvf.Sales()) -> Pivot(PivotAggregate.Sum, r => r.Margin, r => r.Quarter, (r,pv) => new { r.Category, Q1 = pv.Value<decimal?>(\"1\"), Q2 = pv.Value<decimal?>(\"2\") }) -> Select(...) -> GetPreparedQueryCommand -> DbCommand.CommandText",
+   "observed_output": "the run passed, which asserts the emitted SQL equals exactly: \"select category, [Q1], [Q2]\\n from (select category, [1] as [Q1], [2] as [Q2]\\n from t232_sales_tvf() as [t1] pivot (sum(margin) for quarter in ([1], [2])) as [t2]) as [t3]\" (assertion at T232VariantClosureTests.cs:58-61)",
+   "observed_run": "dotnet run --project tests/nextorm.sqlserver.tests -c Debug --no-build -- -method NextORM.SqlServer.Tests.T232VariantV05Tests.TypedPivot_OverTvfInner_EmitsTheDeclaredProjection -> Total: 1, Failed: 0, exit 0",
+   "evidence": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/v05-method-emits.out"
+   ]
+  },
+  {
+   "assertion": "A typed PIVOT over a TVF inner composes with a subsequent Where/Select: the statement still carries `from t232_sales_tvf() as [t1] pivot (sum(margin) for quarter in ([1])) as [t2]` and the outer filter renders `where (t3.[Q1] > cast(0 as decimal(38, 10)))`.",
+   "test": "T232VariantV05Tests.TypedPivot_OverTvfInner_ComposesWithWhereAndSelect",
+   "file_line": "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs:64-75",
+   "route": "same TVF inner + single-value typed projection -> Where(x => x.Q1 > 0) -> Select(...) -> GetPreparedQueryCommand -> DbCommand.CommandText",
+   "observed_output": "the run passed, which asserts the emitted SQL contains \"from t232_sales_tvf() as [t1] pivot (sum(margin) for quarter in ([1])) as [t2]\" and \"where (t3.[Q1] > cast(0 as decimal(38, 10)))\" (assertions at T232VariantClosureTests.cs:73-74)",
+   "observed_run": "dotnet run --project tests/nextorm.sqlserver.tests -c Debug --no-build -- -method NextORM.SqlServer.Tests.T232VariantV05Tests.TypedPivot_OverTvfInner_ComposesWithWhereAndSelect -> Total: 1, Failed: 0, exit 0",
+   "evidence": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/v05-method-composes.out"
+   ]
+  }
+ ],
+ "justified_guards": [],
+ "gap_summary": {
+  "applicable_assertions": 2,
+  "mapped_to_execution": 2,
+  "justified_guards": 0,
+  "explicit_gaps": 0
+ },
+ "runs": [
+  {
+   "argv": [
+    "dotnet",
+    "build",
+    "tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj",
+    "-c",
+    "Debug"
+   ],
+   "exit_code": 0,
+   "warnings": 0,
+   "errors": 0,
+   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/v05-mapping-build.out"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--filter",
+    "FullyQualifiedName~T232VariantV05"
+   ],
+   "exit_code": 0,
+   "total": 2,
+   "succeeded": 2,
+   "failed": 0,
+   "skipped": 0,
+   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/v05-mapping-test.out"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "run",
+    "--project",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--",
+    "-class",
+    "NextORM.SqlServer.Tests.T232VariantV05Tests",
+    "-list",
+    "methods",
+    "-noColor"
+   ],
+   "exit_code": 0,
+   "listed": [
+    "NextORM.SqlServer.Tests.T232VariantV05Tests.TypedPivot_OverTvfInner_ComposesWithWhereAndSelect",
+    "NextORM.SqlServer.Tests.T232VariantV05Tests.TypedPivot_OverTvfInner_EmitsTheDeclaredProjection"
+   ],
+   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/v05-native-list.out"
+  },
+  {
+   "argv": [
+    "dotnet",
+    "run",
+    "--project",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--",
+    "-class",
+    "NextORM.SqlServer.Tests.T232VariantV05Tests",
+    "-noColor"
+   ],
+   "exit_code": 0,
+   "total": 2,
+   "failed": 0,
+   "skipped": 0,
+   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/v05-native-run.out"
+  }
+ ]
+}

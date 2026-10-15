@@ -1,0 +1,138 @@
+{
+ "unit": "D232-RV5-06",
+ "task": "#232 rv=5",
+ "purpose": "duplicate search before filing the identifier-safety follow-up",
+ "cwd": "/home/alex/sources/nextorm",
+ "repo": "AlexeyShirshov/nextorm",
+ "head": "e9121976",
+ "commands": [
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search \"identifier escaping\"",
+   "file": "identifier-escaping.txt",
+   "exit": 0,
+   "result": "#161 only (ClickHouse backslash escaping, CLOSED) - not this finding"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search SqlServerDialect",
+   "file": "sqldialect.txt",
+   "exit": 0,
+   "result": "#219,#232,#217,#127,#218,#83,#224,#14 - none about identifier escaping; #232 is the parent task"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search UNPIVOT",
+   "file": "unpivot.txt",
+   "exit": 0,
+   "result": "#232 (parent), #191 (methods->extensions, CLOSED) - no identifier-safety issue"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search \"Column<T>\"",
+   "file": "column-generic.txt",
+   "exit": 0,
+   "result": "#232,#185,#58,#208,... - #58 is the CLOSED Column<T> origin; none about escaping"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search BaseExpressionVisitor",
+   "file": "baseexpressionvisitor.txt",
+   "exit": 0,
+   "result": "#232,#56 - no match"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search \"bracket escaping\"",
+   "file": "bracket-escaping.txt",
+   "exit": 0,
+   "result": "empty - no match"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search \"bracket doubling\"",
+   "file": "bracket-doubling.txt",
+   "exit": 0,
+   "result": "empty - no match"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search \"PIVOT identifier\"",
+   "file": "pivot-identifier.txt",
+   "exit": 0,
+   "result": "empty - no match"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search \"Escape identifier\"",
+   "file": "escape.txt",
+   "exit": 0,
+   "result": "#161 only - not this finding"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search \"identifier safety\"",
+   "file": "identifier-safety.txt",
+   "exit": 0,
+   "result": "empty - no match"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search QuoteIdentifier",
+   "file": "quoteidentifier.txt",
+   "exit": 0,
+   "result": "#161,#104,#60 - none about SQL Server bracket doubling"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search \"SQL injection\"",
+   "file": "sql-injection.txt",
+   "exit": 0,
+   "result": "#112 (unrelated CSV) - no match"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --search escaping",
+   "file": "escaping.txt",
+   "exit": 0,
+   "result": "#161 only - not this finding"
+  },
+  {
+   "argv": "gh search issues --author @me --repo AlexeyShirshov/nextorm --limit 100",
+   "file": "author-me.txt",
+   "exit": 0,
+   "result": "no identifier-safety issue among the author's issues"
+  },
+  {
+   "argv": "gh issue view 161 --repo AlexeyShirshov/nextorm --comments",
+   "file": "issue-161.txt",
+   "exit": 0,
+   "result": "closest thematic match: ClickHouse backslash escaping, resolved in 1.0.9-rc1 (commit b06784c8); different provider/sink, CLOSED -> NOT a duplicate"
+  },
+  {
+   "argv": "gh issue view 232 --repo AlexeyShirshov/nextorm --comments",
+   "file": "issue-232.txt",
+   "exit": 0,
+   "result": "parent task #232 has no body/comments about identifier escaping"
+  },
+  {
+   "argv": "gh issue view 58 --repo AlexeyShirshov/nextorm",
+   "file": "issue-58.txt",
+   "exit": 0,
+   "result": "SqlFunctions.Column<T> origin, CLOSED - not an escaping issue"
+  },
+  {
+   "argv": "gh api repos/AlexeyShirshov/nextorm/milestones",
+   "file": "milestones.txt",
+   "exit": 0,
+   "result": "milestone 1.0.9-rc3 exists (number 4, open)"
+  },
+  {
+   "argv": "gh issue list --repo AlexeyShirshov/nextorm --state all --milestone 1.0.9-rc3 --limit 50",
+   "file": "milestone-109rc3.txt",
+   "exit": 0,
+   "result": "milestone issues present"
+  },
+  {
+   "argv": "gh issue create --repo AlexeyShirshov/nextorm --title \"Identifier safety: SQL Server bracket escaping and raw UNPIVOT/Column<T> names\" --milestone 1.0.9-rc3 --body-file /tmp/opencode/t232-rv5-security-issue.md",
+   "file": "issue-create.out",
+   "exit": 0,
+   "result": "https://github.com/AlexeyShirshov/nextorm/issues/237"
+  },
+  {
+   "argv": "gh issue view 237 --repo AlexeyShirshov/nextorm --json number,url,title,state,milestone,labels",
+   "file": "issue-237.json",
+   "exit": 0,
+   "result": "OPEN, milestone 1.0.9-rc3 (#4)"
+  }
+ ],
+ "conclusion": "No existing open or closed issue covers the SQL Server bracket-escaping / raw UNPIVOT/Column<T> identifier-safety findings. #161 is thematically closest but ClickHouse-only and resolved; the parent #232 does not cover it. A new issue was created: #237.",
+ "artifacts_dir": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/security/gh-search"
+}

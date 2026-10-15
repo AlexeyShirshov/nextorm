@@ -84,8 +84,9 @@ instead of being masked:
 
 * **Derived query as the primary `FROM` source** — `ctx.From(derivedQuery).Join(...)` still fails during
   preparation (`QueryPreparationException: Select must return new anonymous type`). The reference
-  queries declare those subqueries as `WITH`, and the examples express them with the CTE API
-  `With(name, query).From(name)` — which supports `Join`, `GroupBy`, `Having`, `OrderBy` and `Limit` —
+  queries declare those subqueries as `WITH`, and the examples express them with the typed CTE API
+  `query.AsCte(name)` / `ctx.From(cte)` — which supports `Join`, `GroupBy`, `Having`, `OrderBy` and
+  `Limit` (the string `With(name, query).From(name)` API remains available) —
   so none of the demo queries hit this gap. Tracked in
   [`sql-capabilities-gap-analysis.md`](../docs/specs/roadmap/sql-capabilities-gap-analysis.md) (known
   gap 10); see the [CTE guide](../docs/guide/08-cte.md).

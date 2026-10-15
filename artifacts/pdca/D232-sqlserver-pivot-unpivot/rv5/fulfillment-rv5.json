@@ -1,0 +1,288 @@
+{
+ "case": "fulfillment-rv5",
+ "closure": [
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal-reconciliation.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal.json"
+   ],
+   "checks": [
+    "explicit rv3 gap + sealed verdict present"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-SEAL-RECONCILIATION"
+  },
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv4.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv5.json"
+   ],
+   "checks": [
+    "self-referential row: both reports are written by this invocation; their per-row closure record is the evidence"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-FULFILLMENT"
+  },
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-ledger.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-verification.json"
+   ],
+   "checks": [
+    "ledger/verification status ok, 263 entries"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-HASH-LEDGER"
+  },
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v18/assertion-execution.json"
+   ],
+   "checks": [
+    "container-backed SQL Server execution mapped"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-V18-EXECUTION"
+  },
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v23/assertion-execution.json"
+   ],
+   "checks": [
+    "probe discriminator + red/green mutation arms"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-V23-AMBIGUITY"
+  },
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json"
+   ],
+   "checks": [
+    "all rewritten AC-12 elements verified in handoff.json"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-HANDOFF"
+  },
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/security/"
+   ],
+   "checks": [
+    "duplicate search + issue #237 (milestone 1.0.9-rc3), accepted risk"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-SECURITY-DISPOSITION"
+  },
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v05/assertion-execution.json"
+   ],
+   "checks": [
+    "every applicable V05 assertion maps to observed execution"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-V05-MAPPING"
+  },
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/reports/D-09.json"
+   ],
+   "checks": [
+    "current bilingual/XML-doc/example audits + reports/D-09.json"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-DOCS-EXAMPLES"
+  },
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/reconciliation.json"
+   ],
+   "checks": [
+    "five historical contradictions identified, dated and resolved"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-CONTRADICTIONS"
+  },
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/regression/"
+   ],
+   "checks": [
+    "build 0 warnings/0 errors; 8 suites green; 0 provider skips; frozen oracle intact"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-REGRESSION"
+  },
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/coverage/candidate.cobertura.xml"
+   ],
+   "checks": [
+    "line 88.44 / branch 80.47, touched-area non-decrease"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-COVERAGE"
+  },
+  {
+   "artifacts": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/perf/"
+   ],
+   "checks": [
+    "seven acceptance cases replayed, no material regression"
+   ],
+   "ok": true,
+   "problems": [],
+   "row": "EC232-RV5-PERF"
+  }
+ ],
+ "contract_rv": 5,
+ "delta_open": [],
+ "delta_rows": [
+  "EC232-RV5-SEAL-RECONCILIATION",
+  "EC232-RV5-FULFILLMENT",
+  "EC232-RV5-HASH-LEDGER",
+  "EC232-RV5-V18-EXECUTION",
+  "EC232-RV5-V23-AMBIGUITY",
+  "EC232-RV5-HANDOFF",
+  "EC232-RV5-SECURITY-DISPOSITION",
+  "EC232-RV5-V05-MAPPING",
+  "EC232-RV5-DOCS-EXAMPLES",
+  "EC232-RV5-CONTRADICTIONS",
+  "EC232-RV5-REGRESSION",
+  "EC232-RV5-COVERAGE",
+  "EC232-RV5-PERF"
+ ],
+ "entry_point": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tools/rv5_evidence.py",
+ "entry_point_is_rv5": true,
+ "manifest_revision": "rv=5 (manifest reconciled 2026-10-15 by D232-RV5-08/09: 13 EC232-RV5-* delta rows and EC232-RV3-SEAL closed on executed evidence; 0 open)",
+ "open_required_rows": [],
+ "reason": null,
+ "rv1_entry_point_rejected": true,
+ "rv1_rejected": [
+  {
+   "reason": "rv1 entry point/root, not rv4/rv5-specific",
+   "rejected": "python3 artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/verify.py fulfill",
+   "source": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/seal.json#validators[id=fulfill]"
+  }
+ ],
+ "rv1_rejection_problems": [],
+ "rv4_defects_accounted": [
+  "D232-D06-example-package-mismatch",
+  "P232-variant-closure-incomplete",
+  "D232-D07-touched-coverage-regression",
+  "D232-D06-foreign-hunks-in-handoff",
+  "E232-seal-incomplete",
+  "rv4-historical-invalid-disposition"
+ ],
+ "rv4_defects_count": 6,
+ "rv5_root": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5",
+ "schema_exit": 0,
+ "schema_log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5ev-fulfillment-schema.out",
+ "source_snapshot": {
+  "branch": "1.0.9-rc3",
+  "captured_at": "2026-10-15T08:35:50Z",
+  "git_ok": true,
+  "head_full": "e9121976d9356375b906225bfe04704d298d8d13",
+  "head_short": "e9121976",
+  "repo_root": "/home/alex/sources/nextorm",
+  "status_short_count": 80,
+  "status_short_digest": "e50a99e9895d35a284f1b2fa56d132a9c183e90d50c1c9f711876816e8b54f50",
+  "status_short_paths": [
+   ".opencode/agents/nextorm-code-auditor.md",
+   ".opencode/agents/nextorm-db-perf-analyst.md",
+   ".opencode/agents/nextorm-design-engineer.md",
+   ".opencode/agents/nextorm-inmemory-perf-analyst.md",
+   ".opencode/agents/nextorm-performance-analyst.md",
+   ".opencode/agents/nextorm-scout.md",
+   ".opencode/skills/implementing-todo-features/SKILL.md",
+   ".opencode/skills/nextorm-pdca/SKILL.md",
+   "AGENTS.md",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
+   "artifacts/pdca/D218-sqlserver-sequences/rv1/report.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/fulfillment.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/fulfillment.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.exit",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.exit",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.cmd.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.exit",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.out",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/seal.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report.html",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.html",
+   "docs/assets/diagrams/nextorm-command-execution.svg",
+   "docs/guide/provider-specific-sql/sqlserver.md",
+   "docs/ru/assets/diagrams/nextorm-command-execution.svg",
+   "docs/ru/guide/provider-specific-sql/sqlserver.md",
+   "docs/specs/status/D211-eager-perparent-topn-1.md",
+   "docs/specs/status/D213-joininto-remainder-1.md",
+   "docs/specs/status/D215-oneof-removal-1.md",
+   "docs/specs/status/D216-row-locking-1.md",
+   "docs/specs/status/D218-sqlserver-sequences-1.md",
+   "docs/specs/status/D222-join-overloads-by-type-1.md",
+   "docs/specs/status/D226-records-affected-1.md",
+   "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
+   "examples/Directory.Packages.props",
+   "examples/README.md",
+   "examples/VERIFICATION.md",
+   "examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs",
+   "examples/nextorm.examples.clickhouse.analytics/README.md",
+   "examples/nextorm.examples.mssql.adventureworks/README.md",
+   "examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs",
+   "examples/nextorm.examples.postgres.aviasales/README.md",
+   "src/nextorm.core/Visitors/NormSqlTranslator.cs",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report-github.md",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.csv",
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html",
+   "docs/specs/status/evidence/pivot-typed-overload/",
+   "tests/nextorm.core.tests/T232CoverageClosureTests.cs",
+   "tests/nextorm.integration.tests/T232SqlServerTestsRv5.cs",
+   "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs",
+   "tests/nextorm.sqlserver.tests/T232Rv5AmbiguityTests.cs",
+   "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
+  ]
+ },
+ "unit": "D232-RV5-08",
+ "validation_rule": "closure is derived from executed artifacts, never from the manifest row status: rv1 roots, a wrong `rv`, missing artifacts or status-only validation fail closed"
+}

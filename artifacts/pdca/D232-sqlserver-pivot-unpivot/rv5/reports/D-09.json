@@ -1,0 +1,87 @@
+{
+ "unit": "D-09",
+ "scope": {
+  "projects": [
+   "tests/nextorm.sqlserver.tests"
+  ],
+  "selectors": [
+   "FullyQualifiedName~T232VariantV05"
+  ],
+  "files": [
+   "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
+  ],
+  "rationale": "D-09 V05 mapping on the current r=5 tree: the affected subset is the typed PIVOT-over-TVF case class, selected by its exact fully-qualified filter. The class is the only compiled input in scope; the affected project is built once, then the filtered inner test runs with --no-build.",
+  "rebuild": "affected",
+  "boundary": "This is the rv5 per-unit report for the (r=4) D-09 unit: one affected build then the filtered V05 class. The comprehensive sweep and the container boundary are recorded by the dedicated rv5 regression/coverage/perf units, not here."
+ },
+ "executions": [
+  {
+   "command": [
+    "dotnet",
+    "build",
+    "tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj",
+    "-c",
+    "Debug"
+   ],
+   "phase": "inner",
+   "source_revision": "e9121976",
+   "artifact_revision": "e9121976",
+   "exit_code": 0,
+   "selected_count": 1,
+   "note": "affected build of the V05 case class project: Build succeeded, 0 Warning(s) / 0 Error(s); artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/v05-mapping-build.out"
+  },
+  {
+   "command": [
+    "dotnet",
+    "test",
+    "tests/nextorm.sqlserver.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--filter",
+    "FullyQualifiedName~T232VariantV05"
+   ],
+   "phase": "inner",
+   "source_revision": "e9121976",
+   "artifact_revision": "e9121976",
+   "exit_code": 0,
+   "selected_count": 2,
+   "note": "V05 TVF-inner closure: 2 selected / 2 passed / 0 failed / 0 skipped; the exact filter selects only T232VariantV05Tests (both methods); artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/v05-mapping-test.out"
+  }
+ ],
+ "supporting_evidence": [
+  {
+   "kind": "test-list",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/v05-native-list.out",
+   "exit": 0,
+   "note": "-list methods on the current assembly lists exactly the two T232VariantV05Tests methods selected above"
+  },
+  {
+   "kind": "native-per-method-run",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/v05-method-emits.out",
+   "exit": 0,
+   "note": "TypedPivot_OverTvfInner_EmitsTheDeclaredProjection: Total 1, Failed 0"
+  },
+  {
+   "kind": "native-per-method-run",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/v05-method-composes.out",
+   "exit": 0,
+   "note": "TypedPivot_OverTvfInner_ComposesWithWhereAndSelect: Total 1, Failed 0"
+  },
+  {
+   "kind": "v05-mapping",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/v05/assertion-execution.json",
+   "note": "assertion->execution mapping: 2/2 applicable V05 assertions mapped, 0 gaps"
+  },
+  {
+   "kind": "docs-examples",
+   "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/docs-examples.json",
+   "note": "current CS1591/EN-RU-parity/spec-linkScan/AdventureWorks audits"
+  }
+ ],
+ "rv4_report_absence": {
+  "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/reports/D-09.json",
+  "state": "absent",
+  "note": "The rv4 D-09 report was never produced (the rv4 reports/ directory does not exist); this absence is a historical fact and is recorded as such. It was NOT retro-produced as if it had existed; this r=5 report is the current per-unit report for D-09."
+ }
+}
