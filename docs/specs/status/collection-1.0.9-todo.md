@@ -23,7 +23,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 | T217 | #217 | DateTimeOffset — SQL-трансляция Now/UtcNow и частей даты | pdca-dotnet | done-with-caveat (r=5, rv=5; R217-01..07 met, R217-08 → #234) |
 | T218 | #218 | SQL Server sequences (NEXT VALUE FOR), кросс-провайдерно | pdca-dotnet | done-with-caveat (r=1, rv=1; E07/E08/E10 → #235) |
 | T53 | #53 | IF6: public API freeze (PublicApiAnalyzers + PublicAPI.*) | pdca-dotnet | ready (r=1) — **HELD by owner** |
-| T232 | #232 | SQL Server PIVOT/UNPIVOT — типизированная проекция результата (вместо TableAlias по имени) | pdca-dotnet | incomplete (product green; evidence residual #238) (r=5, rv=5; residual → #238) |
+| T232 | #232 | SQL Server PIVOT/UNPIVOT — типизированная проекция результата (вместо TableAlias по имени) | pdca-dotnet | done-with-caveat (r=5, rv=5; product green; residual evidence-provenance → #238; #237 accepted risk) |
 | T233 | #233 | Window functions — перегрузка `Over` (один partitionBy + один WindowOrder) | pdca-dotnet | pending (new, rc3 scope) |
 | T236 | #236 | Build blocker: NU1902/NU1903 (transitive System.Security.Cryptography.Pkcs) | pdca-dotnet | **done** (r=5, rv=4) — CHECK `FAIL — evidence/closure gate only` (AC236-01…05 met, AC236-06 unverified pre-ACT) → ACT-only closure; evidence `artifacts/pdca/D236-build-advisories/rv4/` |
 
@@ -31,7 +31,7 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 
 | id | tasks (order) | worktree | branch/ref | status |
 |---|---|---|---|---|
-| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 (done) → T236 (build fix) → T232 → T233 → T201 (perf) | no (single group) | current branch `1.0.9-rc3` | in_progress — T236 done; T232 build gate unblocked; G1 is not complete. |
+| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 (done) → T236 (done) → T232 (done-with-caveat) → T233 → T201 (perf) | no (single group) | current branch `1.0.9-rc3` | in_progress — T236/T232 closed (T232 done-with-caveat, group-stop lifted); next T233. |
 
 Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/docs force one writer). T224 (SQL-format blast radius, ~697 exact-string asserts) sits late, after all functional changes; T225 (docs-only) after T223+T224; T201 (perf) measures the final composition; T53 held last. Addendum contract `cluster-1`/`cluster-2`; task contracts unchanged.
 
@@ -56,7 +56,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T224 | #224 | G1 | 15 | done | done (r=1, rv=1, n=1) — CHECK PASS r=1/rv=1; R1–R7 met; DO `4e6a2abd` | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
 | T225 | #225 | G1 | 16 | done | done (r=4, rv=3, n=1/3) — CHECK PASS r=4/rv=3; E01–E07 met, C1–C8 met | pdca-dotnet | N=1 | r=4 | 7cbbab3b | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
 | T236 | #236 | G1 | pre-T232 | done | done (r=5, rv=4, n=1/3) — CHECK FAIL (evidence/closure gate only) → ACT-only closure; product `c554d5e8`, closure `2a348dcc` | pdca-dotnet | N=1 | r=5 | c554d5e8 | docs/specs/status/D236-build-advisories-1.md |
-| T232 | #232 | G1 | 17 | incomplete (product green; evidence residual #238) | incomplete (product green; evidence residual #238) (r=5, rv=5; product green; residual evidence-provenance → #238) | pdca-dotnet | N=1 | r=5 | 4f1e1282 | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md |
+| T232 | #232 | G1 | 17 | done-with-caveat | done (r=5, rv=5) — product green; residual evidence-provenance → #238; #237 accepted risk | pdca-dotnet | N=1 | r=5 | 4f1e1282 | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md |
 | T233 | #233 | G1 | 18 | pending | ready | pdca-dotnet | N=1 | r=1 | 82da47a9 | docs/specs/status/D233-window-over-overload-1.md |
 | T201 | #201 | G1 | 19 (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
 | T53  | #53  | — | out of rc3 scope (held) | held | ready | pdca-dotnet | N=1 | r=1 | (untracked, D53 file) | docs/specs/status/D53-public-api-freeze-1.md |
@@ -113,7 +113,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Blocker: **none** — lane G1 moved on; **T219 (#219) done** (CHECK PASS r=1/rv=1/n=1/3; no fail-stop, no escalation). (Prior history: T218 CHECK/escalate in-cycle STOP → owner accepted `done-with-caveat`, E07/E08/E10 → #235; earlier T217 terminal `incomplete` `D217-EVIDENCE-BINDING` → owner accepted `done-with-caveat` → #234.)
 - Defect id / history: `D217-EVIDENCE-BINDING` — r=2/n=3 → r=3/n=1 → r=4/n=1 → r=5/n=1, each a CHECK FAIL at the evidence gate (evidence-only regeneration / hash replacement); terminal `incomplete`.
 - Corrective-task status file: — (none created; the remedy is an **outside-T217** proposal, a human decision)
-- Next allowed step: **T232 closed as `incomplete (product green; evidence residual #238)`** — product green (build 0W/0E; eight project suites 0 failures; integration 3924 total / 3726 passed / 0 failed / 198 capability skips / 0 provider skips; coverage 88.44 line / 80.47 branch; perf 7/7 acceptance cases, no material regression); residual **evidence-provenance** gap (historical rv1–rv4 transitive closure + execution-time "committed == tested" digest linkage) → follow-up **#238** (`1.0.9-rc3`); inherited identifier-safety findings → **#237**; T236 done, #236 build blocker cleared (issue left OPEN); **#53 HELD**. Next pending task: **T233**, then **T201** (perf last).
+- Next allowed step: resume lane G1 with **T233 (#233) DO** (its PLAN r=1 is `ready`; note its `EC233-GATE` precondition — a separate recorded implementation approval is required before edits; treat the owner's continuing directive as that approval and record it), then **T201 (perf last)**. **T232 accepted done-with-caveat** by the owner (product green: build 0W/0E; eight suites 0 failures; integration 3924/0 failed/0 provider skips; coverage 88.44/80.47; residual evidence-provenance → **#238**; identifier safety → **#237** accepted risk). **T236 done** (#236 build blocker cleared). **#53 HELD** (out of rc3 scope).
 - Pre-existing collection/T232 reconciliation item — **resolved by the T232 closure**: the tasks-table row above now carries `status: incomplete (product green; evidence residual #238)` / `plan_revision: r=5`, matching the T232 status file (`plan r=5 / rv=5 / n=2/3`); the historical `r=1` row was the pre-DO value and the r=3 DO section remains in the status file as history. Done in this lane: T209/T211/T212/T213/T215/T216/T219/T221/T222/T223/T224/T226/T227; done-with-caveat: T217 (→#234), T218 (→#235). #53 (freeze) is **out of rc3 scope** and held. #216 CLOSED (owner decision (i)).
 
 ## Done / Verified / Incomplete
