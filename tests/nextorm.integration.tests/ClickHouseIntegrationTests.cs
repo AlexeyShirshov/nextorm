@@ -747,6 +747,70 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void WindowScalarOverload_ShouldMatchTheArrayOverloadResult()
+    {
+        // ClickHouse does not derive CommonTestSuite, so the shared window facts are re-pinned here.
+        // The scalar (partition, WindowOrder) overload is end-to-end equivalent to the single-element
+        // array form; complex_entity's nullableint is null, 1, 1, so the NULL partition is covered too.
+        var scalar = _sut.ComplexEntity
+            .Select(e => new
+            {
+                e.Id,
+                rn = SqlFunctions.Sql.row_number().Over(
+                    partitionBy: () => e.Int,
+                    orderBy: SqlFunctions.Sql.asc(() => e.Id))
+            })
+            .OrderBy(1, OrderDirection.Asc)
+            .ToList();
+
+        var array = _sut.ComplexEntity
+            .Select(e => new
+            {
+                e.Id,
+                rn = SqlFunctions.Sql.row_number().Over(
+                    partitionBy: new System.Linq.Expressions.Expression<Func<object?>>[] { () => e.Int },
+                    orderBy: new WindowOrder[] { SqlFunctions.Sql.asc(() => e.Id) })
+            })
+            .OrderBy(1, OrderDirection.Asc)
+            .ToList();
+
+        scalar.Should().Equal(array);
+        scalar.Select(x => x.rn).Should().Equal(1, 1, 2);
+    }
+
+    [Fact]
+    public void WindowScalarOverload_WithRowsFrame_ShouldMatchTheArrayOverloadResult()
+    {
+        // The scalar overload also binds a Rows frame; the executed result must equal the array form's.
+        var scalar = _sut.ComplexEntity
+            .Select(e => new
+            {
+                e.Id,
+                total = SqlFunctions.Sql.sum_over(e.Id).Over(
+                    partitionBy: () => e.Int,
+                    orderBy: SqlFunctions.Sql.asc(() => e.Id),
+                    frame: WindowFrame.Rows(1, 1))
+            })
+            .OrderBy(1, OrderDirection.Asc)
+            .ToList();
+
+        var array = _sut.ComplexEntity
+            .Select(e => new
+            {
+                e.Id,
+                total = SqlFunctions.Sql.sum_over(e.Id).Over(
+                    partitionBy: new System.Linq.Expressions.Expression<Func<object?>>[] { () => e.Int },
+                    orderBy: new WindowOrder[] { SqlFunctions.Sql.asc(() => e.Id) },
+                    WindowFrame.Rows(1, 1))
+            })
+            .OrderBy(1, OrderDirection.Asc)
+            .ToList();
+
+        scalar.Should().Equal(array);
+        scalar.Select(x => x.total).Should().Equal(1L, 5L, 5L);
+    }
+
+    [Fact]
     public void IfAggregates_ShouldFilterBeforeAggregating()
     {
         // The arguments are cast to the ClickHouse result types (Int64 for the integer sum/min/max,
