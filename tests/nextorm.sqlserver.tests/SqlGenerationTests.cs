@@ -1780,6 +1780,52 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void WindowScalarOverload_WithNullPartition_ShouldEmitNoPartitionClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // `partitionBy: null` is the same no-partition call shape as a null partition array, an empty
+        // partition array and the order-only overload: SplitWindowArguments forwards the null argument
+        // untouched (Visitors/WindowSql.cs:163-164) and ParseWindowPartitions yields zero partitions for
+        // a null/constant-null expression and for an empty array (Visitors/WindowSql.cs:65-72), so the
+        // translator emits no `partition by` (Visitors/WindowFunctionTranslator.cs:152-154). All four
+        // shapes must render byte-identical SQL.
+        var scalar = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(
+                partitionBy: (Expression<Func<object?>>?)null,
+                orderBy: SqlFunctions.Sql.asc(() => x.Id))
+        }));
+        var arrayNull = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(
+                partitionBy: (Expression<Func<object?>>[]?)null,
+                orderBy: new WindowOrder[] { SqlFunctions.Sql.asc(() => x.Id) })
+        }));
+        var arrayEmpty = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(
+                partitionBy: new Expression<Func<object?>>[0],
+                orderBy: new WindowOrder[] { SqlFunctions.Sql.asc(() => x.Id) })
+        }));
+        var orderOnly = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(SqlFunctions.Sql.asc(() => x.Id))
+        }));
+
+        scalar.Should().Be(arrayNull);
+        scalar.Should().Be(arrayEmpty);
+        scalar.Should().Be(orderOnly);
+        scalar.Should().NotContainEquivalentOf("partition by");
+        scalar.Should().Contain("row_number() over (order by id)");
+    }
+
+    [Fact]
     public void LagAndLead_ShouldEmitOffsetAndDefault()
     {
         using var ctx = SqlServerTestContext.Create();

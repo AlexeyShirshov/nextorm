@@ -115,6 +115,52 @@ public class WindowFunctionMarkerTests
     }
 
     [Fact]
+    public void Over_ScalarWindowOrderOverload_WithNullPartition_ShouldEmitNoPartitionClause()
+    {
+        // `partitionBy: null` on the scalar overload is the same no-partition call shape as a null
+        // partition array, an empty partition array and the order-only overload: SplitWindowArguments
+        // forwards the null argument untouched (Visitors/WindowSql.cs:163-164) and ParseWindowPartitions
+        // yields zero partitions for a null/constant-null expression and for an empty array
+        // (Visitors/WindowSql.cs:65-72), so the translator emits no `partition by`
+        // (Visitors/WindowFunctionTranslator.cs:152-154). All four shapes must render identical SQL.
+        using var ctx = new PostgresDataContext("Host=localhost", new DataContextBuilder());
+        var e = ctx.From<SimpleEntity>();
+
+        var scalar = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(
+                partitionBy: (Expression<Func<object?>>?)null,
+                orderBy: SqlFunctions.Sql.asc(() => x.Id))
+        }));
+        var arrayNull = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(
+                partitionBy: (Expression<Func<object?>>[]?)null,
+                orderBy: new WindowOrder[] { SqlFunctions.Sql.asc(() => x.Id) })
+        }));
+        var arrayEmpty = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(
+                partitionBy: new Expression<Func<object?>>[0],
+                orderBy: new WindowOrder[] { SqlFunctions.Sql.asc(() => x.Id) })
+        }));
+        var orderOnly = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(SqlFunctions.Sql.asc(() => x.Id))
+        }));
+
+        scalar.Should().Be(arrayNull);
+        scalar.Should().Be(arrayEmpty);
+        scalar.Should().Be(orderOnly);
+        scalar.Should().NotContainEquivalentOf("partition by");
+        scalar.Should().ContainEquivalentOf("row_number() over (order by Id)");
+    }
+
+    [Fact]
     public void Over_DefaultOrNullOrderArgument_ShouldStillBindToTheExpressionOverload()
     {
         var function = new WindowFunction<int>();
