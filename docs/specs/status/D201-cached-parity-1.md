@@ -6,7 +6,7 @@
 - selected_variant: pdca-dotnet
 - cycle_id: N=1
 - plan_revision: r=2
-- phase: DO (D201-1)
+- phase: DO (D201-2)
 - plan_state: ready
 - date: 2026-10-11
 - evidence_contract: rv1
@@ -998,6 +998,102 @@ actions justify another plan revision.
   transactional staged application) is **D201-3** and is not implemented here; D201-2 (evidence
   runner, negative self-tests, baseline) is the next dependent unit.
 
+## DO — D201-2 (evidence runner, negative validation and baseline)
+
+- Unit boundary: D201-2 is instrumentation + measurement only. **No production `src/**` edit** was made
+  (before or after the API baseline capture). Tracked writes are this status file,
+  `eng/perf/t201_evidence.py` (new) and `tests/nextorm.core.tests/CachedPreparationRecipeTests.cs` (new).
+  Cycle N=1, plan revision r=2, attempt n=1, contract rv1 — unchanged; single group, current tree,
+  no worktree/branch/merge.
+- Dependency D201-1 is satisfied (commit `bff40da2`); D201-3 is unblocked once this boundary is green.
+
+### Deliverables
+
+1. `eng/perf/t201_evidence.py` — stages `self-test|baseline|tests|candidate|parity|warm-gate|acceptance|api|coverage|manifest`
+   under `--root artifacts/pdca/T201/rv1`, exits 0/1/2 exactly as contracted. It records exact argv,
+   env set/unset, exit code, wall time, log sha256 and run identity in `runs.json`, validates the oracle
+   inventories, runs the **unchanged** native gate, implements the frozen ratio/noise rules (point and
+   conservative CI bounds for time, raw bytes for allocations, MET/FAIL/OPEN and across-round
+   aggregation exactly as written) and assembles the evidence. No benchmark body, LINQ to DB version,
+   prepared status, data semantics, gate budget, gate script or toolchain configuration was changed.
+2. Negative self-tests (`--stage self-test`, exit **0**): **46/46** cases distinguished — the complete
+   §Manifest self-test matrix as 20 rejected fixtures plus 1 truthfully accepted fixture (with the
+   schema-only vs schema-valid-but-local-fail distinction), and 25 frozen-decision cases (Student-t
+   99% critical values against published values, the real reports' implied ≥99% confidence, MET/FAIL/OPEN
+   shapes, allocation 0→0/0→positive, round aggregation).
+3. `tests/nextorm.core.tests/CachedPreparationRecipeTests.cs` — the public-surface (compiler-metadata)
+   export mechanism only; 3 facts; exports 298 public types across 4 assemblies; asserts nothing about a
+   candidate inventory (D201-4 owns the diff).
+4. Baseline runs, exact registry commands (`NEXTORM_BENCH_FULL=1` for B/A, unset for G):
+   - build baseline `dotnet build -c Release` exit 0, 2.731 s (`baseline/build.log`);
+   - B-BASE exit 0, 779.940 s, **55** arms selected, exact ten-arm extraction OK;
+   - A-BASE exit 0, 130.320 s, **7** active cases;
+   - G-LIVE exit 0, 779.971 s; G-REPORT `--no-run` exit 0, 0.049 s; **56/56** row/jobs
+     (28 rows × Default/InProcessEmitToolchain), the three zero rows exactly 0 B,
+     `InAtIn_Inline_Warm_Reused` 744.00/744.01 B/op against the 840 budget, normalization divisor 100;
+   - pinned-class reports archived (18 files) and the historical tracked reports restored exactly
+     (302 files before/after, 0 differing; `git status` for that directory unchanged at 18 entries).
+5. Inventory validation against the real runs: `oracle/reconciliation.json` — 55 arms OK, exact ten-arm
+   map OK, 7 acceptance cases OK, 28 rows × 2 toolchains OK, no problems.
+6. Boundary report: `reports/unit-boundaries/D201-2.md`.
+7. `api/baseline.json` + `api/baseline-export.log` captured **before any production edit**, with the
+   artifact recording its own tree identity in the `capture` block (`tree.head`/`head_tree`/branch/status
+   digest, `pre_production: true`, per-assembly DLL sha256). No candidate-equality assertion is made.
+
+### Stage exits
+
+- W-S 0; W-B 0; W-A 0; W-W 0; W-API 0; inner loop exit 0 (3/3) and boundary build 0 Warning(s)/0
+  Error(s) plus core suite 2549/2549.
+- W-P (`--stage parity`) = **2 inconclusive by contract**: no candidate Category B round exists yet, so
+  no parity decision may be issued from the baseline alone (`reports/parity.json` = `status: inconclusive`).
+  This is neither a PASS nor a measured failure.
+- `--stage tests`, `--stage candidate`, `--stage coverage` and `--stage manifest` are not invoked in this
+  unit — they belong to D201-4/D201-5. Their preconditions fail closed (e.g. W-W without archives exits 2).
+
+### Boundary answers
+
+- (a) Self-tests: the local PASS check accepts a truthful manifest and rejects every specified
+  invalid/open case; schema-only and schema-valid-but-forbidden cases are distinguished.
+- (b) Baseline: all ten deciding arms carry valid baseline data, the source-backed 55-arm selection
+  reconciles, and the gate covers all 28 rows for both toolchains with the correct three zero rows, the
+  840 budget row and the native normalization. Baseline headline (informational, **not** a parity claim):
+  the cached-path time bound is already met on the baseline (point ratios 0.54–0.72), while allocations
+  fail on all five scenarios (NextORM 50 720–167 684 B vs LINQ to DB 40 080–92 802 B per B·op).
+  No parity/API/control row is closed.
+- (c) Recorded environment finding (contained, non-blocking): BDN refuses to run out-of-process while
+  three foreign stale copies of `nextorm.benchmark.csproj` exist under `artifacts/pdca/D208/**` and
+  `artifacts/pdca/D236-*/**` (`System.NotSupportedException: Found more than one matching project file`,
+  0 benchmarks executed). Containment is a fail-closed opt-in guard (`NEXTORM_T201_QUARANTINE=1`) that
+  renames those directories out of the tree for the measurement and always restores them
+  (`instrumentation/benchmark-project-quarantine-baseline.json`: restored, zero problems). The registry
+  commands stay byte-identical. D201-4/D201-5 need the same opt-in.
+- (d) Interpretation gap recorded for CHECK/PLAN (evidence-format only, non-blocking): the design's
+  "same exported confidence level, at least 99%" has no percentage field in BDN's JSON export
+  (`ConfidenceInterval.Level` is a constant opaque identifier, observed `12` for every entry regardless
+  of N). The wrapper implements the intent — both arms must export the same non-null level identifier
+  **and** the interval is arithmetically verified as at least a two-sided 99% t-interval
+  (`Margin/StandardError` = 4.14–4.32, i.e. implied confidence ≈0.999) — and records both in the
+  evidence. The 1.05 tolerance, MET/FAIL/OPEN shapes and round aggregation are unchanged.
+- (f) Baseline-capture integrity defect found at the boundary and fixed red→green: the recorded inner-loop
+  run of the export test carried no `T201_API_EXPORT_PATH`, so the test wrote its default path and
+  silently overwrote the captured `api/baseline.json` (the `capture` block was dropped; the wrapper
+  correctly refused the capture-less file and re-captured — visible as the repeated
+  `api/build-baseline`/`api/export-baseline` runs in `runs.json`). Left unfixed this would let a D201-4
+  inner-loop run drop the capture and make a later `--stage api` re-capture **after** production edits,
+  destroying the pre-production baseline. The test now falls back to
+  `artifacts/pdca/T201/rv1/api/baseline-unconfigured-run.json` whenever the default path already holds a
+  captured inventory. Evidence: same bare filtered command, exit 0 (3/3) — RED (pre-fix) dropped the
+  `capture` block; GREEN (post-fix) leaves `api/baseline.json` byte-identical
+  (sha256 `3a85c92d091c5416…`) and writes the side artefact instead. The artifact records its own tree
+  identity (`capture.tree.head` / `head_tree` / status digest / per-assembly DLL sha256) and
+  `pre_production: true`; no `src/**` edit exists before or after the capture.
+- (e) No invariant proved un-implementable; no blocking DO→PLAN candidate. Items (c), (d) and (f) are
+  recorded as explicit assumptions/risks for D201-3..D201-5 and for CHECK adjudication.
+
+- Remaining obligation: candidate measurement, correctness/provider/branch suites, coverage, API diff and
+  the sixteen-row manifest stay with D201-4/D201-5. D201-2 closes only its instrumentation,
+  negative-validation and baseline portions.
+
 ## Progress log
 
 - 2026-10-11, history: owner confirmed trigger and authorized conversational
@@ -1038,3 +1134,21 @@ actions justify another plan revision.
   ownership map, shared `AnyCommand` route/mutation audit, M9/test/coverage/container inventory,
   upstream sibling outcomes and tested baseline identity, and the source-backed oracle inventories;
   inner-loop brief/report validators exit 0; no production `.cs` change; D201-2 is next.
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-2 evidence runner + W-S negative self-tests + baseline captured | artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-2.md
+- 2026-10-15, DO D201-2 (n=1, r=2, rv1): `eng/perf/t201_evidence.py` (10 stages, exits 0/1/2), W-S
+  46/46 self-test cases distinguished (exit 0), `CachedPreparationRecipeTests.cs` public-surface export
+  (298 public types / 4 assemblies, pre-production tree identity recorded in the artifact `capture`
+  block; no `src/**` edit before or after the capture), baseline B-BASE 779.940 s /
+  A-BASE 130.320 s / G-LIVE 779.971 s / G-REPORT 0.049 s all exit 0 (`dotnet build -c Release` 2.731 s),
+  55 arms + 7 acceptance cases + 56 gate row/jobs reconciled (`oracle/reconciliation.json`), historical
+  `benchmarks/BenchmarkDotNet.Artifacts` restored exactly (302 files, 0 differing; git status 18 entries),
+  inner loop exit 0 (3/3) and boundary `dotnet build nextorm.slnx -c Debug` 0 Warning(s)/0 Error(s) with
+  core 2549/2549; W-P exit 2 inconclusive by contract (no candidate round); `validate_inner_loop.py`
+  brief/report exit 0; no production `src/**` edit. Next: D201-3 (specialized top-level preparation reuse).
+- 2026-10-15, DO D201-2 boundary fix (r=2, rv1, n=1 — no replan, no new attempt): a bare inner-loop run
+  of the export test (no `T201_API_EXPORT_PATH`) overwrote the captured `api/baseline.json` and dropped
+  its `capture` block, which would allow a post-edit re-capture in D201-4. Fixed red→green in the test
+  file: bare runs now write `api/baseline-unconfigured-run.json` when the default path already holds a
+  captured inventory. Same bare command exit 0 (3/3): RED dropped the capture, GREEN preserves
+  `api/baseline.json` byte-identically (sha256 `3a85c92d091c5416…`). No production `src/**` change; the
+  baseline stage, the native gate and the committed registry commands are unaffected.
