@@ -5,7 +5,7 @@
 - base: branch `1.0.9` @ `58025147` (merge of #214 `1.0.9-rc2`); the branch was later **renamed to `1.0.9-rc3`** by a concurrent actor (the collection's commits rode along); HEAD advanced by PLAN/DO commits.
 - mode: autonomous; auto-commit authorized (task/collection status files and task paths only, explicit paths, never `-A`, message prefix `#<issue>`); push **never**
 - skills: `pdca-collection` + `pdca-dotnet` + `nextorm-pdca`
-- phase: **C — collection CHECK: re-run PASS (2026-10-15); next A** (all G1 active tasks terminal: done/done-with-caveat; T201 perf accepted `incomplete` by the owner → follow-up #240; T53 `held`, out of rc3 scope); single group → current worktree/branch `1.0.9-rc3`, no worktree/branches/merge
+- phase: **A — collection COMPLETED (2026-10-15)** — collection CHECK (C) re-run PASS; final report in §Result (collection) — final (A); G1 terminal (16 done / 3 done-with-caveat / 1 incomplete (T201 → #240) / T53 held); single group → current branch `1.0.9-rc3`, no worktree/branches/merge; nothing removed, **not pushed**
 
 ## Input task list
 
@@ -125,7 +125,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Prior: `not reached — collection STOPPED (T201 terminal incomplete)`; before that `T233 terminal incomplete → resolved by corrective r=3 repair`.
 - Pre-existing collection/T232 reconciliation item — **resolved by the T232 closure**: the tasks-table row above now carries `status: incomplete (product green; evidence residual #238)` / `plan_revision: r=5`, matching the T232 status file (`plan r=5 / rv=5 / n=2/3`); the historical `r=1` row was the pre-DO value and the r=3 DO section remains in the status file as history. Done in this lane: T209/T211/T212/T213/T215/T216/T219/T221/T222/T223/T224/T226/T227; done-with-caveat: T217 (→#234), T218 (→#235). #53 (freeze) is **out of rc3 scope** and held. #216 CLOSED (owner decision (i)).
 
-## Done / Verified / Incomplete
+## Done / Verified / Incomplete (rolling log — the authoritative final list is in §Result (collection) — final (A))
 
 - Done: T209 (#209) — eager-load strategy (explicit strategy + auto-dispatcher); cycle N=1 r=3 n=2/3, CHECK PASS, contract rv=2.
 - Done: T212 (#212) — eager-load nested level 2+ LoadWith (graph contract + split/single orchestration + tests); cycle N=1 r=1, CHECK escalated, ACT closed, R1–R9 met.
@@ -183,3 +183,108 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - Residual (evidence/documentation only, no product defect): transitive provenance of the historical rv1–rv4 evidence (`rv1/mutation.json:20,27`; `rv3/build/api-review.json:20`; `rv4/security/predicate-change.json:12-15`) and the execution-time "committed == tested" per-path digest linkage (retroactively unprovable) → follow-up **#238** (milestone `1.0.9-rc3`); durable caveat in `docs/specs/status/D232-sqlserver-pivot-unpivot-1.md`.
 - Security: two inherited **High** findings on frozen pre-existing code dispositioned `accepted risk, not a blocker` → **#237** (`1.0.9-rc3`); no production fix, no allowlist extension.
 - Commits `2bbf0fdc`, `521e8f80`, `d00b04c3`, `6209a508` (+ this closure commit). **T53 freeze stays HELD**; the nine `#232` surfaces remain registered candidates.
+
+## Result (collection) — final (A)
+
+Phase A closed **2026-10-15** on branch `1.0.9-rc3` — single group G1, so the run used the **current** worktree/branch: no group/task worktree, no `collection/**` branch and no `merge --no-ff` were ever created (§P/§D), therefore there is nothing to remove in cleanup. The gate is the collection CHECK (C) re-run: **PASS** — the only condition that allows completion (§C). Push: **never** (the branch is 3 commits ahead of `origin/1.0.9-rc3` = `4a86e5e7`).
+
+**Scope completion and the verification verdict are two separate fields (§C):**
+
+| field | value |
+|---|---|
+| Scope completion (tasks delivered) | **16 `done` / 3 `done-with-caveat` / 1 `incomplete` / 1 `held`** — 20 of 20 active rc3 tasks terminally closed; the remaining scope is tracked by the follow-up issues below |
+| Verification verdict (integrated tree) | **PASS** — C re-run #2 on the integrated branch `1.0.9-rc3` @ `3fb2a528` (base `58025147`, 207 commits) |
+
+A PASS of the parent C **coexists** with an `incomplete` task and with `done-with-caveat` tasks: the verdict is about the integrated tree, and no task is re-marked `done` retroactively. T201 keeps `incomplete`; T217/T218/T232 keep `done-with-caveat`; T53 keeps `held` (out of rc3 scope).
+
+### Group / task roll-up
+
+| group | worktree | branch/ref (tip) | integration | status |
+|---|---|---|---|---|
+| G1 (single group; order T209…T233, T201 perf last; T53 held) | none — single group | current branch `1.0.9-rc3`, tip `f2b57ad3` | n/a — single group: no group branch, no merge barrier, no `merge --no-ff` | **done** (terminal) |
+
+| task | issue | status | outcome / reason | follow-up |
+|---|---|---|---|---|
+| T209 | #209 | done | eager-load strategy (explicit strategy + auto-dispatcher); r=3, rv=2, CHECK PASS | — |
+| T211 | #211 | done | eager-load per-parent Take/Skip (absorbs #210); r=4, rv=4, CHECK PASS after an owner-directed re-open (r1 exhausted 3/3 on the EV-11 exit-code capture gap, no product defect) | — |
+| T212 | #212 | done | eager-load nested level 2+ `LoadWith`; r=1, CHECK escalated, R1–R9 met | — |
+| T213 | #213 | done (partial — narrowed contract) | JoinInto composite-key remainder: composite keys (1:N/1:1) + in-memory composite junction + scalar M:N standalone/`SingleQuery` on six providers; r=6, rv=5, CHECK PASS; AC03/AC05 → #223, AC07 → #225 | #213 stays OPEN (slices delivered by T223/T225) |
+| T215 | #215 | done | OneOf dependency removed | — |
+| T227 | #227 | done | ClickHouse flaky grouped-float fixture-order fix (`_sut` init before the portable oracle); r=1, rv=1, E01–E09 met | — |
+| T221 | #221 | done | DI-registered interceptors (`AddInterceptor(Type)` / `AddInterceptor<T>()`); r=1, rv=1, n=2/3, CHECK PASS | #221 closed |
+| T222 | #222 | done | Join overloads by type; r=1, rv=1, n=3/3, CHECK PASS (A222-01..07) | #222 stays OPEN (3 triggered deferrals recorded in its status file) |
+| T223 | #223 | done | composite-junction M:N materializable link carrier, standalone + `SingleQuery`, six providers; r=1, rv=1, n=2/3, CHECK PASS | #223 closed |
+| T216 | #216 | done | row locking (`FOR UPDATE` vs `FOR UPDATE OF`); r=2, rv=2, n=3/3; escalation decision (A) `close in-cycle as done-with-constraint`; MariaDB source-level lock unsupported by design → owner decision (i) 2026-10-13, #216 narrowed & CLOSED; D-07 resolved | #216 closed |
+| T217 | #217 | **done-with-caveat** | product delivered/green (`94782852`: DateTimeOffset server-side translation, core + 6 dialects + tests + docs; MT:135 closed); r=5, rv=5 — R217-01..07 met, **R217-08 unmet** (evidence completeness / tree-bound provenance) | **#234** (atomic evidence generator + stale-hash lint); #217 stays OPEN |
+| T218 | #218 | **done-with-caveat** | SQL Server sequences (`NEXT VALUE FOR`) cross-provider; product `22b96233`; r=1, rv=1 — E07 (registry certification), E08 (allocation oracle), E10 (sweep-cap recording) recorded as caveats | **#235**; #218 stays OPEN |
+| T219 | #219 | done | session/server identity functions on six providers + fail-closed `NotSupportedException`; r=1, rv=1, n=1/3, CHECK PASS (R219-01..08) | #219 stays OPEN; T53 records 16 members (tag `#219`) |
+| T226 | #226 | done | records-affected; r=2, rv=2, n=2/3, CHECK PASS, 11/11 rows met | — |
+| T224 | #224 | done | SQL FROM/JOIN formatting; r=1, rv=1, n=1, CHECK PASS (R1–R7) | — |
+| T225 | #225 | done | JoinInto M:N docs delta (AC07 handoff from T213); r=4, rv=3, n=1/3, CHECK PASS (E01–E07, C1–C8) | — |
+| T236 | #236 | done | build blocker NU1902/NU1903 (transitive `System.Security.Cryptography.Pkcs`); r=5, rv=4; CHECK `FAIL — evidence/closure gate only` (AC236-01…05 met, AC236-06 unverified pre-ACT) → ACT-only closure on the owner's authorization; evidence `artifacts/pdca/D236-build-advisories/rv4/` | — (recorded caveat: ACT-only closure) |
+| T233 | #233 | done | window functions `Over` overload (one `partitionBy` + one `WindowOrder`); first attempt terminal `incomplete` at r=2/rv=1/n=3/3 on evidence-residual only (EC233-REGISTRY, R233-5, EC233-MANIFEST — stale `file:line` in `docs/specs/design/API-NAMING-REVIEW.md`), then a separate corrective cycle repaired the registry/manifest: **r=3, rv=1, n=1/3, CHECK PASS** | **#239 resolved-by-repair** (stale `file:line` in the registry) |
+| T232 | #232 | **done-with-caveat** | SQL Server PIVOT/UNPIVOT typed result projection; product green (`2bbf0fdc`, `521e8f80`, `d00b04c3`, `6209a508`); r=5, rv=5, n=2/3; final CHECK verdict route (3) `incomplete without stopping the group` — strict CHECK fail on **evidence provenance only**, no product defect; no re-plan, no `r=6`, no 4th attempt. Recorded discrepancy: that routing deviates from the collection contract's "a definitive `incomplete` stops the group" — logged for the collection owner; T233/T201 were not marked incomplete by it and both were subsequently executed | **#238** (transitive evidence provenance rv1–rv4 + execution-time "committed == tested" digest linkage); **#237** accepted risk (identifier safety; frozen pre-existing code); #232 stays OPEN |
+| T201 | #201 | **incomplete** | perf M12 #3 cached-path parity with LINQ to DB — **allocations missed, time MET**. All five Category B allocation decisions FAIL against the frozen rule (Cte +24.06 %, RecursiveCte +64.81 %, Except +38.19 %, Intersect +39.16 %, Distinct +8.38 %); wall time MET on all five in both rounds. Terminal per the binding `escalate` decision (2026-10-15); plan r=2 / rv1 / n=1 retained, 0 of the at-most-2 extra full-job rounds consumed; no r=3, no version/attempt reset; DO commits `bff40da2`, `da9b8100`, `6f7ad459`, `a21e5d89`, `d9a05234`, `2a6a8cee` retained on `1.0.9-rc3`; **owner accepted** the `incomplete` | **#240** — perf: fluent command-construction allocation cost (separate scope/design, same milestone `1.0.9-rc3`); the `Cte`/`RecursiveCte` allocation tolerance still needs an owner decision; #201 left OPEN |
+| T53 | #53 | **held** (out of rc3 scope) | IF6 public API freeze (`PublicApiAnalyzers` + `PublicAPI.Shipped/Unshipped`); plan ready (r=1), never executed — its issue is in milestone `1.0.9`, **out of rc3 scope**; registrations only, not activated | **#53** stays OPEN in `1.0.9` |
+
+Roll-up: `done` **16** (T209, T211, T212, T213, T215, T216, T219, T221, T222, T223, T224, T225, T226, T227, T233, T236) · `done-with-caveat` **3** (T217, T218, T232) · `incomplete` **1** (T201) · `held` **1** (T53). Active rc3 tasks: 20/20 terminal.
+
+### Follow-up issues (milestone `1.0.9-rc3` unless stated)
+
+| # | title | state |
+|---|---|---|
+| #234 | Evidence pipeline hardening: atomic evidence generator + stale-hash lint (from T217 r=5 STOP) | OPEN |
+| #235 | Evidence caveats from T218 (#218): E07 registry certification, E08 allocation oracle, E10 sweep-cap recording | OPEN |
+| #237 | Identifier safety: SQL Server bracket escaping and raw UNPIVOT/`Column<T>` names | OPEN — **accepted risk** (dispositioned in two cycles, no duplicate task) |
+| #238 | T232 follow-up: transitive evidence-provenance inventory for rv1–rv4 historical artifacts and execution-time digest linkage (committed == tested) | OPEN |
+| #239 | D233/T233 follow-up: stale `file:line` references in `docs/specs/design/API-NAMING-REVIEW.md` (W2 :205,1138; W4 :207,1136; NW2 :2242) | OPEN — **resolved-by-repair** in the T233 r=3 corrective cycle; kept open as the durable tracking record |
+| #240 | Perf: fluent command-construction allocation cost (separate scope/design; from T201/#201 incomplete) | OPEN — created by this collection |
+| #53 | IF6: Заморозка и трекинг публичного API (PublicApiAnalyzers + PublicAPI.Shipped/Unshipped) к 1.1 | OPEN — milestone `1.0.9`; **held**, out of rc3 scope |
+| #201 | Perf: M12 #3 — cached-path parity with LINQ to DB | OPEN — task `incomplete` (allocations); evidence retained |
+
+### Corrective task and defect history
+
+Two collection C attempts, one corrective task:
+
+1. **C attempt #1 — FAIL** (`artifacts/pdca/collection-1.0.9-todo/C/C-report.md`) @ `df2b30ca` (base `58025147`, 204 commits in range). Real defects (not report gaps): **D01 P1/High** global-filter policy reuse (`src/nextorm.core/DataContext/QueryPlanner.cs:629`, introduced by `6f7ad459` #201) and **D02 P1** cached-preparation liveness integration failure (`tests/nextorm.integration.tests/CommonTestSuite.CachedPreparation.cs:148`, new in `a21e5d89`). Coverage at that attempt: line 83.7 % (<85, warning-only off `main`) / branch 77.7 %. A third finding (T232 PIVOT/UNPIVOT identifier safety, `SqlServerEntityBuilderExtensions.cs:148,199`) was **already accepted risk under #237** — no duplicate task was opened.
+2. **Corrective task `CCORR-201`** (variant `pdca-dotnet`, own status file `docs/specs/status/D201-raw-preparation-regression-1.md`, r=1 / rv=1 / n=2/3):
+   - `CCORR-201-D01` **corrected** — fail-closed metadata guard: `src/nextorm.core/DataContext/QueryPlanner.cs:627-631` + `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs` (`HasApplicableFiltersInRawGraph` ~:4021 / `HasApplicableFilters` ~:4111; null entity type ⇒ filter-bearing / fail-closed). History: D01 fixed in DO → CHECK n=1/3 **FAIL** (fail-open guard for a null/indeterminable entity type) → DO loop-back n=2/3 with the fail-closed fix → **CHECK PASS**.
+   - `CCORR-201-D02` **corrected** — same-thread publish→assert (`tests/nextorm.integration.tests/CommonTestSuite.CachedPreparation.cs:141-149`); tests `tests/nextorm.core.tests/CachedPreparationRecipeTests.cs` (incl. the fail-closed case at `:1012`).
+   - Result: CHECK PASS r=1/rv=1/n=2/3; AC01–AC06 all met; manifest `artifacts/pdca/CCORR-201/rv1/manifest.json` **11/11 met**, validator exit 0; tree `683eb7f7c13c32af67838d8c3f63be23f7883005`; commits `e91e2f21` (D01/D02 product+tests+perf doc) and `3fb2a528` (corrective ACT, status finalized).
+3. **C attempt #2 (re-run) — PASS** @ `3fb2a528` — see the next subsection.
+
+Defect ids `CCORR-201-D01`/`D02` were new at the first collection C, with no prior revision history; the identity was preserved across the corrective cycle (no session/task-id reset) and the shared `r`/`n/3` counters were the base contract's.
+
+### C result and evidence
+
+- **Verdict: PASS** (`check`, medium) — `artifacts/pdca/collection-1.0.9-todo/C/C-report-rerun.md:5`, on `1.0.9-rc3` @ `3fb2a528` (base `58025147`, 207 commits); supersedes the FAIL report `C/C-report.md` @ `df2b30ca`.
+- Build: `0 Warning(s), 0 Error(s)`, exit 0 (`C/build.log`).
+- Unit + SQL-generation: 12086 total / 8915 passed / **0 failed** / 3171 DB skips; 12 assemblies; exit 0 (`C/unit.log`).
+- Integration: run #2 — 3978 total / 3780 passed / **0 failed** / 198 capability skips / **0 provider availability skips** / 5 providers / 5 containers, exit 0 (`C/integration-run2.log`). Run #1 exit 1 = a single transient ClickHouse `ClickHouseIntegrationTests.ArrayMap_ShouldMapElements` (`tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:1862`) 120 s `HttpClient.Timeout`; confirmed flake (3/3 isolated + class 150/150 + run #2 green) (`C/integration-run1.log`).
+- Coverage: **line 87.5 % (≥85) / branch 79.3 % (≥75)**, exits 0/0/0 (`C/coverage-Summary.txt`).
+- DocFX: exit 0, 2 pre-existing warnings, 0 errors (`C/docfx.log`).
+- Suppression/slop: **0 hard suppressions, 0 disabled tests** (`C/suppression.log`).
+- Cached-vs-prepared ratio: `C/cachedprep-repro.log` (reproduced with the corrected liveness path).
+- Tree: **no half-merge**; 53 dirty entries (50 M + 3 ??) — pre-existing external churn untouched by this collection; all group/task states terminal; no shared `QueryCommand` `Cache =` write in range; T53 freeze HELD.
+- Findings: P2 transient ClickHouse timeout (accepted, non-regression); P1 **#237** + P1 **#238** accepted-risk / pre-dispositioned, unchanged; P2 uncovered defensive arms `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:4030-4032,4055,4061-4064` (decisive guard branches 2/2 covered).
+- Corrective evidence: `artifacts/pdca/CCORR-201/rv1/manifest.json` (11/11 met, validator exit 0) + `artifacts/pdca/CCORR-201/rv1/E/**`.
+- Scratch (not committed): `/tmp/nextorm-C-recheck-20261015/{git-state.log,build.log,unit-sweep.log,integration.log,integration-run2.log,coverage-*.log,docfx.log,ch-arraymap-*.log,ch-class.log}`.
+
+### Done / Verified / Incomplete (final, authoritative)
+
+Supersedes the rolling log under §Done / Verified / Incomplete above (that log's `Incomplete: T233` entry was overtaken by the T233 r=3 corrective cycle). No historical entry is deleted.
+
+- **Done (16):** T209, T211, T212, T213 (partial — narrowed contract; slices via T223/T225), T215, T216 (done-with-constraint, resolved by owner decision (i)), T219, T221, T222, T223, T224, T225, T226, T227, T233, T236 (ACT-only closure; CHECK `FAIL — evidence/closure gate only`). Each closed by its own CHECK PASS or by an explicit recorded closure route; per-task numbers live in `docs/specs/status/D<issue>-*.md` and `artifacts/pdca/<task>/` and are unchanged here.
+- **Done-with-caveat (3):** T217 (R217-08 → #234), T218 (E07/E08/E10 → #235), T232 (evidence provenance → #238; #237 accepted risk). Product green in all three — the caveat is evidence/documentation provenance, not a product defect.
+- **Incomplete (1):** T201 (#201) — perf acceptance missed on **allocations** only (time MET); terminal per the binding `escalate` decision; owner-accepted; remainder → **#240** (same milestone). **Not** retro-marked `done`.
+- **Held (1):** T53 (#53) — out of `1.0.9-rc3` scope; plan ready, never executed; freeze stays HELD (registrations only).
+- **Verified (collection):** the integrated tree at `3fb2a528` — C re-run PASS (build 0/0; unit+sql-gen 0 failed; integration 0 failed / 0 provider skips / 5 providers; coverage 87.5/79.3; DocFX 0 errors; suppression 0 hard / 0 disabled). The verdict covers the integrated tree and coexists with T201 `incomplete` and the three caveat tasks.
+- **Corrective:** CCORR-201 done (CHECK PASS r=1/rv=1/n=2/3; D01/D02 corrected) → `docs/specs/status/D201-raw-preparation-regression-1.md`.
+
+### Cleanup, git state, push
+
+- **Nothing to remove:** single group → no group/task worktree and no `collection/**` branch was created for `1.0.9-todo`. Verified: `git worktree list` → 26 worktrees, none for this collection (only unrelated `nextorm-worktrees/*` and `nextorm-worktrees/1.0.9-b-5/group-1|2`); `git branch --list 'collection/*'` → only the unrelated `collection/1.0.9-b-5/group-1|2`. No `git worktree remove` and no branch deletion was run — there are no group/task branches of this collection to delete.
+- **No status/evidence path deleted.** `artifacts/pdca/collection-1.0.9-todo/**`, `artifacts/pdca/CCORR-201/**`, all task status files and all retained T201/T233/T232 commits remain in place as pointers to the retained results (the T201 commits before the terminal `incomplete` are deliberately retained, never reverted).
+- **Untouched churn:** the 53 dirty entries (benchmark artifacts, EN/RU docs and diagrams, examples, `.opencode/`, pre-existing `docs/specs/status/*` edits, `artifacts/pdca/D218*/D232*` evidence) belong to other work and were **not** staged, committed, reverted or cleaned.
+- **Final commit:** `collection 1.0.9-todo: A — final collection report (roll-up / follow-ups / corrective / C evidence)` — this status file only, explicit path (never `-A`), CRLF preserved.
+- **Push: never.** Branch `1.0.9-rc3` is **3 commits ahead** of `origin/1.0.9-rc3` (`4a86e5e7`) and stays local; the owner pushes manually.
