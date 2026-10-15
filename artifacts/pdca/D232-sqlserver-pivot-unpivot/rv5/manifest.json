@@ -1504,6 +1504,6 @@
  ],
  "status_file": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
  "task": "T232 (#232) SQL Server typed PIVOT/UNPIVOT projection",
- "tree": "2bbf0fdc",
- "tree_semantics": "source HEAD short sha of the 1.0.9-rc3 worktree (git rev-parse --short HEAD = 2bbf0fdc; full 2bbf0fdccb28dfd90fea25bceff234c406b132cc); it is the ACT commit that publishes the exact bytes the r=5 green runs executed on the working tree of the pre-commit generation HEAD e9121976 (full e9121976d9356375b906225bfe04704d298d8d13) - see handoff.json#committed_tested_proof; the frozen source snapshot is artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/source-snapshot.json"
+ "tree": "521e8f80",
+ "tree_semantics": "source HEAD short sha of the 1.0.9-rc3 worktree (git rev-parse --short HEAD = 521e8f80; full 521e8f800d53c5e1030c5c80b9ac9f031a1aadd4). The bytes this manifest is bound to are the ACT commit 2bbf0fdc (full 2bbf0fdccb28dfd90fea25bceff234c406b132cc), which publishes exactly the bytes the r=5 green runs executed on the pre-commit generation working tree (e9121976d9356375b906225bfe04704d298d8d13); 521e8f80 is the evidence-refresh commit that follows it (evidence only, no source/test byte). See handoff.json#committed_tested_proof; the frozen source snapshot is artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/source-snapshot.json"
 }

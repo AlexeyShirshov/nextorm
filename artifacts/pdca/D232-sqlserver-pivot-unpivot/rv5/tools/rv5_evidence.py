@@ -2414,7 +2414,9 @@ def case_hashes(root: str, opts: dict, flags: set, snap, live):
                                          "closed; a file that is new since the previous ledger is "
                                          "absorbed by an explicit --rebaseline and must stay stable "
                                          "afterwards (a point-in-time ledger, as required by the "
-                                         "payload -> hash-ledger -> seal dependency order)",
+                                         "payload -> hash-ledger -> seal dependency order); a plain "
+                                         "--verify never rewrites the ledger, so verification cannot "
+                                         "invalidate the seal -> ledger binding it just checked",
                         reason="; ".join(problems) or None)
     if problems and not rebaseline:
         verification.update(status="violation", exit_code=EXIT_VIOLATION)
@@ -2432,33 +2434,40 @@ def case_hashes(root: str, opts: dict, flags: set, snap, live):
                                "-> seal dependency order); an explicit --rebaseline was requested"))
     if history:
         verification["rebaseline_history"] = history
-    write_json(ledger_path, dict(case="hashes", root=rel(root), generated_at=now(),
-                                 source_snapshot=live, entry_count=len(current),
-                                 inventory=current, payload_digest=digest,
-                                 referenced_rv4_files=rv4_refs,
-                                 envelope_files=["%s/%s" % (root_rel, n) for n in
-                                                 list(EXCLUDED_HASH_FILES) +
-                                                 list(SEAL_ENVELOPE_FILES) +
-                                                 list(SEAL_ENVELOPE_VERDICTS)] +
-                                                ["%s/verdicts/hashes.json" % root_rel],
-                                 reference_closure=dict(
-                                     root_documents=["%s/manifest.json" % root_rel,
-                                                     "%s/counters.json" % root_rel],
-                                     documents_scanned=closure["documents_scanned"],
-                                     required_count=len(closure["required"]),
-                                     required_absent=closure["absent_required"],
-                                     recorded_absences=closure["recorded_absences"],
-                                     declared_absent=closure["declared_absent"],
-                                     envelope_references=closure["envelope_references"]),
-                                 note="complete transitive inventory of the rv5 payload ($R walk, "
-                                      "raw execution logs and cmd/exit records included) plus every "
-                                      "path the manifest/counters reference - including the raw "
-                                      "execution logs, the referenced historical ($B) files and the "
-                                      "referenced source/test bytes; `payload_digest` is the value "
-                                      "the seal binds (payload/reports -> hash-ledger.json -> "
-                                      "seal.json -> hash-verification.json); the ledger, its "
-                                      "verification record, the seal and their verdicts are envelope "
-                                      "files and are excluded"))
+    # A plain `hashes --verify` verifies the existing ledger and never rewrites it: rewriting it (a
+    # fresh `generated_at`) would change its bytes and instantly break the seal -> ledger binding,
+    # i.e. the verification would invalidate the very thing it verified.  Only the first run (no
+    # ledger yet) and an explicit --rebaseline write the ledger.
+    ledger_written = ledger is None or rebaseline
+    if ledger_written:
+        write_json(ledger_path, dict(case="hashes", root=rel(root), generated_at=now(),
+                                     source_snapshot=live, entry_count=len(current),
+                                     inventory=current, payload_digest=digest,
+                                     referenced_rv4_files=rv4_refs,
+                                     envelope_files=["%s/%s" % (root_rel, n) for n in
+                                                     list(EXCLUDED_HASH_FILES) +
+                                                     list(SEAL_ENVELOPE_FILES) +
+                                                     list(SEAL_ENVELOPE_VERDICTS)] +
+                                                    ["%s/verdicts/hashes.json" % root_rel],
+                                     reference_closure=dict(
+                                         root_documents=["%s/manifest.json" % root_rel,
+                                                         "%s/counters.json" % root_rel],
+                                         documents_scanned=closure["documents_scanned"],
+                                         required_count=len(closure["required"]),
+                                         required_absent=closure["absent_required"],
+                                         recorded_absences=closure["recorded_absences"],
+                                         declared_absent=closure["declared_absent"],
+                                         envelope_references=closure["envelope_references"]),
+                                     note="complete transitive inventory of the rv5 payload ($R walk, "
+                                          "raw execution logs and cmd/exit records included) plus every "
+                                          "path the manifest/counters reference - including the raw "
+                                          "execution logs, the referenced historical ($B) files and the "
+                                          "referenced source/test bytes; `payload_digest` is the value "
+                                          "the seal binds (payload/reports -> hash-ledger.json -> "
+                                          "seal.json -> hash-verification.json); the ledger, its "
+                                          "verification record, the seal and their verdicts are envelope "
+                                          "files and are excluded"))
+    verification["ledger_written"] = ledger_written
     verification["ledger_sha256"] = sha256_file(ledger_path)
     verification.update(status="ok", exit_code=EXIT_OK)
     if history:

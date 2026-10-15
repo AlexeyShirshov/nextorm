@@ -3,11 +3,12 @@
  "entry_count": 449,
  "exit_code": 0,
  "ledger_created": false,
- "ledger_sha256": "256bbe36b337bf6cae1210fa534485f88e6ab72448e7c2544c57698efc36caa7",
+ "ledger_sha256": "60f1b6694ea6352f3fe3fa36c0d557a68100c220c1273160d46d553d464f625b",
+ "ledger_written": false,
  "manifest_missing": [],
  "mismatches": [],
  "missing": [],
- "payload_digest": "af4ebc328dbefd2f6533f95187d76f90db9f0f7f17c28e7d04427ace07606dc1",
+ "payload_digest": "83059d9bfbe747f22e6c0e9a79add4ec267b1a8bf07b492da96eab3a62598deb",
  "reason": null,
  "rebaseline_history": [
   {
@@ -96,6 +97,25 @@
     "docs/specs/status/evidence/pivot-typed-overload/evidence-01-recon.md"
    ],
    "sha256": "7448dbe0c6aaae18e9663eeff17b47c29c828968fcec4ca4d9131c8edf4e3fe8",
+   "superseded_because": "the payload changed after the previous ledger (payload -> hash-ledger -> seal dependency order); an explicit --rebaseline was requested"
+  },
+  {
+   "entry_count": 449,
+   "mismatches": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/source-snapshot.json"
+   ],
+   "missing": [],
+   "sha256": "256bbe36b337bf6cae1210fa534485f88e6ab72448e7c2544c57698efc36caa7",
+   "superseded_because": "the payload changed after the previous ledger (payload -> hash-ledger -> seal dependency order); an explicit --rebaseline was requested"
+  },
+  {
+   "entry_count": 449,
+   "mismatches": [
+    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tools/rv5_evidence.py"
+   ],
+   "missing": [],
+   "sha256": "3ff925eeef4dd40b12a547c4cbf62fb48f41fe8f238cd2882dc09ff4d0814744",
    "superseded_because": "the payload changed after the previous ledger (payload -> hash-ledger -> seal dependency order); an explicit --rebaseline was requested"
   }
  ],
@@ -252,24 +272,24 @@
  "seal_binding": {
   "binding": "hash-ledger.json -> seal.json (the seal carries the ledger digest)",
   "ledger_path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-ledger.json",
-  "ledger_sha256": "ab321e0e7529b39c2fa53111483d30a36fb17c5169a7a8c4509d3440d243bf82",
+  "ledger_sha256": "60f1b6694ea6352f3fe3fa36c0d557a68100c220c1273160d46d553d464f625b",
   "ok": true,
-  "payload_digest": "af4ebc328dbefd2f6533f95187d76f90db9f0f7f17c28e7d04427ace07606dc1",
+  "payload_digest": "83059d9bfbe747f22e6c0e9a79add4ec267b1a8bf07b492da96eab3a62598deb",
   "problems": [],
-  "recomputed_ledger_sha256": "ab321e0e7529b39c2fa53111483d30a36fb17c5169a7a8c4509d3440d243bf82",
-  "recomputed_payload_digest": "af4ebc328dbefd2f6533f95187d76f90db9f0f7f17c28e7d04427ace07606dc1",
+  "recomputed_ledger_sha256": "60f1b6694ea6352f3fe3fa36c0d557a68100c220c1273160d46d553d464f625b",
+  "recomputed_payload_digest": "83059d9bfbe747f22e6c0e9a79add4ec267b1a8bf07b492da96eab3a62598deb",
   "seal_path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal.json",
   "status": "verified"
  },
  "source_snapshot": {
   "branch": "1.0.9-rc3",
-  "captured_at": "2026-10-15T08:39:05Z",
+  "captured_at": "2026-10-15T08:43:18Z",
   "git_ok": true,
-  "head_full": "2bbf0fdccb28dfd90fea25bceff234c406b132cc",
-  "head_short": "2bbf0fdc",
+  "head_full": "521e8f800d53c5e1030c5c80b9ac9f031a1aadd4",
+  "head_short": "521e8f80",
   "repo_root": "/home/alex/sources/nextorm",
-  "status_short_count": 77,
-  "status_short_digest": "57bbe3752fa8bf72b8bc64c696fdeb2f76a0628f06ba74b2aa90b6fd510cf6b5",
+  "status_short_count": 74,
+  "status_short_digest": "93301fb18eb096dffef1d2a82271c37e3d4c530c5948183eca6af7ff5b666d35",
   "status_short_paths": [
    ".opencode/agents/nextorm-code-auditor.md",
    ".opencode/agents/nextorm-db-perf-analyst.md",
@@ -306,16 +326,13 @@
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py",
-   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv4.json",
-   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv5.json",
-   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-ledger.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-verification.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal-reconciliation.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/source-snapshot.json",
-   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tool-selftests.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tools/rv5_evidence.py",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html",
@@ -351,6 +368,6 @@
   ]
  },
  "status": "ok",
- "unaccounted_rule": "the ledger inventories the complete transitive closure of everything the manifest/counters reference - the raw execution logs, the cmd/exit records, the tool and its selftests, the referenced historical ($B) files - plus every file under $R; a required reference that is absent fails closed; a file that is new since the previous ledger is absorbed by an explicit --rebaseline and must stay stable afterwards (a point-in-time ledger, as required by the payload -> hash-ledger -> seal dependency order)",
+ "unaccounted_rule": "the ledger inventories the complete transitive closure of everything the manifest/counters reference - the raw execution logs, the cmd/exit records, the tool and its selftests, the referenced historical ($B) files - plus every file under $R; a required reference that is absent fails closed; a file that is new since the previous ledger is absorbed by an explicit --rebaseline and must stay stable afterwards (a point-in-time ledger, as required by the payload -> hash-ledger -> seal dependency order); a plain --verify never rewrites the ledger, so verification cannot invalidate the seal -> ledger binding it just checked",
  "verified_against_ledger": true
 }
