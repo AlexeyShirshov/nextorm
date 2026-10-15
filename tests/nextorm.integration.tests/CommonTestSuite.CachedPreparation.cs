@@ -134,6 +134,13 @@ public abstract partial class CommonTestSuite
 
         var buffered = ctx.From<ISimpleEntity>().Where(x => x.Id > 7).Select(x => x.Id).ToList();
 
+        // The buffered terminal publishes the raw candidate on this thread, so its liveness is asserted
+        // synchronously here — before the first await. The raw index is thread-local
+        // (QueryPlanStore._rawIndex) and xunit v3 does not pin async continuations to one thread, so an
+        // oracle read after an await can legally observe a different thread's empty store.
+        CachedPreparationRawCandidateIsLive(ctx, ctx.From<ISimpleEntity>().Where(x => x.Id > 7).Select(x => x.Id))
+            .Should().BeTrue("the buffered terminal published a live raw candidate on this thread");
+
         var streamed = new List<int>();
         await foreach (var id in ctx.From<ISimpleEntity>().Where(x => x.Id > 7).Select(x => x.Id)
                            .ToAsyncEnumerable(TestContext.Current.CancellationToken))
@@ -143,10 +150,6 @@ public abstract partial class CommonTestSuite
 
         buffered.Should().Equal(CachedPreparationIdsAbove(7));
         streamed.Should().Equal(buffered, "the enumerator terminal observes the same rows as the buffered terminal");
-
-        // The enumering terminal may prepare the same shape; the recipe is still reachable and equal.
-        CachedPreparationRawCandidateIsLive(ctx, ctx.From<ISimpleEntity>().Where(x => x.Id > 7).Select(x => x.Id))
-            .Should().BeTrue();
     }
 
     [Fact]

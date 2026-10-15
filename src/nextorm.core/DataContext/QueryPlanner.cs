@@ -618,6 +618,17 @@ internal sealed class QueryPlanner : IQueryPlanner
             recipeShape = QueryCommand.CaptureRawShape(queryCommand);
             if (recipeShape is null)
                 Interlocked.Increment(ref _recipeRejections);
+            // A global/builder query filter is injected only during preparation and is absent from the
+            // value-free raw shape, so a fresh command whose raw graph resolves ANY applicable filter for
+            // the live context could otherwise adopt a predicate prepared under a different context (a
+            // permissive-to-restrictive transfer leaks rows; the reverse drops the filter). Such a graph is
+            // ineligible: skip the whole raw path and take the ordinary preparation route. Metadata-only —
+            // no user filter function is invoked for the probe.
+            else if (QueryCommand.HasApplicableFiltersInRawGraph(recipeShape, queryCommand.DataContext))
+            {
+                recipeShape = null;
+                Interlocked.Increment(ref _recipeRejections);
+            }
 
             if (recipeShape is not null
                 && QueryPlanStore.TryGetRaw(_contextType, recipeShape, queryCommand, out var recipePlan))

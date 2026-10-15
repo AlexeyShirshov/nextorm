@@ -705,3 +705,37 @@ so no row is reported as a regression.
 **Verdict: no regression.** Raw log:
 `benchmarks/BenchmarkDotNet.Artifacts/BenchmarkRun-20261010-191534.log`; per-class GitHub reports
 under `benchmarks/BenchmarkDotNet.Artifacts/results/` (regenerated each run, untracked).
+
+## Results 2026-10-15 — 1.0.9-rc3 CCORR-201 (raw-preparation eligibility guard)
+
+Appended measurement (the historical baseline above is unchanged). Context: corrective `CCORR-201`
+rv=1 on branch `1.0.9-rc3` — a fail-closed eligibility gate for raw pre-preparation reuse
+(`QueryPlanner.cs`, metadata-only filter probe, cold/raw-preparation path only; the cached path
+measured here is not modified by this fix).
+
+Same host/config/case set as the baseline (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401,
+.NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`,
+**7** cases, **0** failures). External shell wall clock **70 s** (includes the Release build of the
+benchmark project); BDN `Global total time` **47.23 s** — both under the 4 min budget.
+
+| Case | Mean | Error | StdDev | Allocated | Gen0 | Delta Mean vs baseline | Delta Allocated |
+|------|------|-------|--------|-----------|------|------------------------|-----------------|
+| `Nextorm_Count` | 2.217 ms | 0.4715 ms | 0.0258 ms | 382.81 KB | 42.9688 | -23.9% (high-variance row, not an assertion) | +14.2% |
+| `Nextorm_GroupByCount` | 57.58 ms | 5.350 ms | 0.293 ms | 50.11 MB | 6222.2222 | -5.5% | +0.2% |
+| `Nextorm_Cached` | 1.922 ms | 0.1962 ms | 0.0108 ms | 618.03 KB | 74.2188 | +8.5% | +15.6% |
+| `Prepared_ToList` | 888.2 us | 29.53 us | 1.62 us | 76.14 KB | 8.7891 | -3.9% | 0.0% |
+| `Cached_ToList` | 1,516.1 us | 198.16 us | 10.86 us | 455.06 KB | 54.6875 | -12.2% | -19.5% |
+| `Cached_PlanOnly_Param` | 388.6 us | 12.67 us | 0.69 us | 378.92 KB | 46.3867 | -25.0% | -22.5% |
+| `Nextorm_Cached_ToListAsync` | 2.049 ms | 0.6325 ms | 0.0347 ms | 666.28 KB | 78.1250 | -4.1% | -3.7% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`, same run) = **1.71**
+(1,516.1 us / 888.2 us = 1.707; the BDN `Ratio` column prints 1.71) — vs the documented baseline
+**1.87** (**-8.6%**), below the **20%** investigation threshold (**1.87 × 1.20 = 2.244 > 1.71**), so
+no investigation is required. The corresponding allocated ratio is **5.98** (baseline **7.42**). Both
+directions (time and allocation) are at or below the baseline, and every individual Mean delta is
+inside the ±20% ShortRun noise band, so no row is reported as a regression.
+
+**Verdict: no cached-path regression.** Evidence: `artifacts/pdca/CCORR-201/rv1/E/e09-benchmark.log`,
+`artifacts/pdca/CCORR-201/rv1/E/e09-comparison.md`; the run's BDN reports are archived under
+`artifacts/pdca/CCORR-201/rv1/E/benchmarks/` (the tracked `benchmarks/BenchmarkDotNet.Artifacts`
+files were restored to HEAD after the run).

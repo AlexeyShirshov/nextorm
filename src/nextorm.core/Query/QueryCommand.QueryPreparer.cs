@@ -4003,6 +4003,114 @@ public partial class QueryCommand
                 && from.TableFunction is null && from.TableExpressionOverride is null);
 
     /// <summary>
+    /// Whether any source of a captured raw (pre-preparation) graph resolves at least one active
+    /// global/builder query filter for the live context. Global query filters (and, in particular, the
+    /// context-dependent <c>FilterFunc</c> builder-function form) are injected only during preparation
+    /// (<c>InjectMainSourceFilters</c>/<c>InjectJoinFilters</c>) and are absent from the value-free raw
+    /// descriptor, so a fresh command whose raw graph has any applicable filter must not adopt a
+    /// predicate prepared under a different live context (a permissive-to-restrictive transfer leaks
+    /// rows; the reverse drops the filter). Such a graph is ineligible for raw pre-preparation reuse.
+    /// </summary>
+    /// <remarks>
+    /// Metadata-only: it resolves filter metadata through <see cref="QueryFilterResolver.GetFilters"/>
+    /// and <b>never</b> invokes a filter's builder function or predicate. It mirrors the injection
+    /// traversal exactly — the main source (<c>InjectMainSourceFilters</c>), each join with its unioned
+    /// child scope (<c>InjectJoinFilters</c>) and the nested union/CTE commands — and is fail-closed: a
+    /// source whose effective entity type cannot be determined is reported as filter-bearing.
+    /// </remarks>
+    internal static bool HasApplicableFiltersInRawGraph(RawShape shape, IDataContext? dataContext)
+    {
+        var commandScope = shape.FilterScope ?? QueryFilterScope.None;
+
+        // Main source: mirrors InjectMainSourceFilters — a bound raw source resolves its binding's
+        // filters under the command scope, a projection-marker source (a typed/data-modifying CTE read)
+        // resolves none, and a plain entity source resolves the (projection-adjusted) main entity type.
+        if (shape.FromBinding is { } mainBinding)
+        {
+            if (HasApplicableFilters(mainBinding.EntityType, commandScope, dataContext))
+                return true;
+        }
+        else if (shape.From?.ColumnShape is null)
+        {
+            // A fresh command carries no source type before preparation: the entity type is the main
+            // expression's first parameter (mirrors PrepareCommand's srcType resolution).
+            var mainType = shape.EntityType
+                ?? (shape.Exp?.Parameters is { Count: > 0 } parameters ? parameters[0].Type : null);
+            if (HasApplicableFilters(MainFilterEntityType(mainType), commandScope, dataContext))
+                return true;
+        }
+
+        // Joins: mirrors InjectJoinFilters — the effective scope is the union of the join's own scope and
+        // the command's, a projection-marker join resolves none, a bound join resolves its binding's
+        // filters, and a join with an ON clause resolves the right entity type.
+        if (shape.Joins is { Length: > 0 } joins)
+        {
+            for (var i = 0; i < joins.Length; i++)
+            {
+                var join = joins[i];
+                var joinFrom = join.From;
+
+                // A derived-table source is never part of an eligible raw graph; a null source cannot be
+                // proven filter-free, so it is treated as filter-bearing (fail closed).
+                if (joinFrom is null) return true;
+                if (joinFrom.SubQuery is not null) continue;
+                if (joinFrom.ColumnShape is not null && joinFrom.SourceBinding is null) continue;
+
+                var joinScope = join.FilterScope is { } childScope ? childScope.Union(commandScope) : commandScope;
+
+                if (joinFrom.SourceBinding is { } binding)
+                {
+                    if (HasApplicableFilters(binding.EntityType, joinScope, dataContext)) return true;
+                    continue;
+                }
+
+                // A join without an ON clause (an inner CROSS/APPLY with no binding) injects nothing.
+                if (join.OriginalJoinCondition is not { Parameters: { Count: >= 2 } } joinCondition)
+                    continue;
+
+                var rightType = join.EntityType ?? joinFrom.SourceType ?? joinCondition.Parameters[1].Type;
+                if (HasApplicableFilters(rightType, joinScope, dataContext)) return true;
+            }
+        }
+
+        // Nested commands: a whole-graph reuse also adopts the nested union/CTE prepared state, so their
+        // own filters must be considered with each nested command's own effective scope.
+        if (shape.Union is { } union && HasApplicableFiltersInRawGraph(union, dataContext)) return true;
+        if (shape.Ctes is { Length: > 0 } ctes)
+        {
+            for (var i = 0; i < ctes.Length; i++)
+            {
+                if (HasApplicableFiltersInRawGraph(ctes[i].Body, dataContext)) return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The entity type whose filters the main source resolves: a joined command exposes the projection
+    /// type as its lambda parameter while its physical main source is the projection's first item, so a
+    /// filter lookup keyed off the projection type would miss that entity's filters (see
+    /// <c>InjectMainSourceFilters</c>).
+    /// </summary>
+    private static Type? MainFilterEntityType(Type? srcType)
+    {
+        if (srcType is null) return null;
+        var isProjectionSource = srcType.IsAssignableTo(typeof(IProjection)) && srcType.GetGenericArguments().Length > 0;
+        return isProjectionSource ? srcType.GetGenericArguments()[0] : srcType;
+    }
+
+    /// <summary>
+    /// Metadata-only applicability probe: whether the source resolves at least one active filter. An
+    /// entity type that cannot be determined is reported as filter-bearing (fail closed): the absence of
+    /// an applicable filter cannot be proven for it, so the raw reuse path must not be taken. A synthetic
+    /// source shape (a raw <c>TableAlias</c>, a joined projection) is <b>not</b> undeterminable — it
+    /// resolves no metadata by design and therefore stays eligible.
+    /// </summary>
+    private static bool HasApplicableFilters(Type? entityType, QueryFilterScope scope, IDataContext? dataContext)
+        => entityType is null || QueryFilterResolver.GetFilters(entityType, scope, dataContext).Count != 0;
+
+    /// <summary>
     /// Scans the captured raw lambdas for a captured member access or a captured command constant.
     /// </summary>
     private static bool HasCapturedValue(RawShape shape)
