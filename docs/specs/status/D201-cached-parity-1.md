@@ -1363,3 +1363,98 @@ actions justify another plan revision.
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-4 coverage once: line 87.5% >= 85, branch 79.2% (29785/37571) >= 75 — warning-only on 1.0.9-rc3; 6 recipe branch families without a directly targeted test enumerated | artifacts/pdca/T201/rv1/coverage/report/Summary.txt
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-4 API: candidate (16/16 export, post-edit) vs baseline diff equal=true (added/removed/changed=0) — identical public surface | artifacts/pdca/T201/rv1/api/diff.json
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-4 unit boundary reported as an observation only (satisfaction is CHECK's verdict; D201-5 remains); `validate_inner_loop.py` brief/report exit 0 | artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-4.md
+
+## DO — D201-5 (candidate oracles and complete DO→CHECK manifest) — DO→PLAN candidate
+
+- Unit boundary: D201-5 is measurement/evidence/report only. **No production `src/**` edit** was made.
+  Tracked writes: `eng/perf/t201_evidence.py` (three evidence-tooling fixes), the new result report
+  `docs/specs/performance/m12-3-prepare-command-results.md` and this status file. Cycle N=1, plan
+  revision **r=2**, attempt **n=1/3**, contract **rv1** — unchanged; single group, current tree, no
+  worktree/branch/merge. Dependencies D201-1..D201-4 satisfied.
+- Preflight: mandatory test scope validated **before** any edit (`validate_inner_loop.py brief` exit 0,
+  `artifacts/pdca/T201/rv1/tests/unit-boundaries/D201-5/brief.json`); inner loop
+  `dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~CachedPreparationRecipeTests`
+  exit 0 (**16/16**, 0 failed, 0 skipped) and the D201-2 export fix re-verified (`api/baseline.json`
+  sha256 `a9f60e83d7505e3c…` unchanged by the bare run); `validate_inner_loop.py report` exit 0.
+- Tested tree: `1.0.9-rc3` @ `a21e5d89e6c22bcdb7bea7dae11458301ae729b3` (`head_tree` `3356ffb9…`),
+  porcelain digest `090f6a273541…` (69 entries). Baseline (D201-2) was `bff40da2`. Environment: .NET SDK
+  `10.0.401`, Linux WSL2 x86_64 / 8 vCPU / Ryzen 7 5800HS, LINQ to DB `6.5.0` unchanged.
+- Stage exits: **W-S 0** (46/46 self-test cases), **W-C 0** (1744 s; build 49.5 s, B-CAND 808.0 s,
+  A-CAND 119.2 s, G-LIVE 766.6 s, G-REPORT 0.05 s; 55/55 arms, 7/7 cases), **W-P 1**, **W-W 0**,
+  **W-A 0**, **W-API 0**, **W-Q 0**, **W-M 1**; `validate_inner_loop.py manifest` exit **0** (schema
+  only). The fail-closed `NEXTORM_T201_QUARANTINE=1` guard quarantined 3 foreign stale
+  `nextorm.benchmark.csproj` copies and restored them with zero problems; `benchmarks/BenchmarkDotNet.Artifacts`
+  was byte-identical before/after (302 files, 0 differing; `git status` 18 entries unchanged).
+- **Measured candidate result (Category B, `B-CAND`):** **time MET on all five pairs in both rounds**;
+  **raw-byte allocations FAIL on all five pairs in both rounds** → the frozen executable rule
+  (point + conservative CI bounds, raw bytes/op, across-round aggregation) decides **FAIL for
+  EC201-02..06**. Candidate NextORM B/op vs LINQ to DB B/op: Cte 115 130 vs 92 802 (**+24.1 %**),
+  RecursiveCte 144 243 vs 87 522 (**+64.8 %**), Except 71 523 vs 51 760 (**+38.2 %**),
+  Intersect 71 363 vs 51 280 (**+39.2 %**), Distinct 43 440 vs 40 080 (**+8.4 %**); the candidate is
+  nevertheless **−14.0…−20.7 %** versus its own baseline (145 132 / 167 684 / 84 564 / 84 404 / 50 720).
+  Time points 0.4795–0.7183 with `ratio_high` ≤ 0.7289 against the 1.05 bound. Both rounds are valid and
+  preserved; none was invalidated, no tolerance/benchmark body/prepared-status semantic/oracle was
+  changed, and no further round was run (a round can never un-FAIL a decisive across-round FAIL, and
+  re-running only the NextORM arm is forbidden).
+- **Native gate (EC201-07) unchanged and green:** `G-LIVE` exit **0**, `G-REPORT --no-run` exit **0**,
+  W-W report-only reconciliation exit 0 per phase; candidate **56/56 row/jobs = 28 rows ×
+  {Default, InProcessEmitToolchain}**, all `ok`; the three zero-kind rows (`Cte_Warm_Reused`,
+  `RecursiveCte_Warm_Reused`, `Join4_Warm_Reused`) exactly **0 B** on both toolchains;
+  `InAtIn_Inline_Warm_Reused` remains the **840 B/op budget** row at **744.00 / 744.01 B/op**;
+  normalization unchanged (divisor 100, `bdn_operations_per_invoke` 1). Only the three pinned classes
+  were archived (18 files/phase) and the **historical tracked report files were restored
+  byte-identically**.
+- **Acceptance (EC201-08):** exactly **7** active cases (the build-excluded eighth not run), none
+  substituted, **no case noisy** (`Error < Mean`, `ci_low > 0`); `Cached_ToList` improved 1 624 918 →
+  1 392 152 ns and 605 973 → 465 970 B/op. Cached/prepared ratios 1.8445 → 1.5749 (time) and
+  7.7729 → 5.9770 (allocations); both conservative growth bounds exclude growth >20 % → the control
+  investigation trigger does not fire and **no unresolved control trip remains**; `Prepared_ToList`
+  (no-regression control only) allocations exactly unchanged (77 960 B/op), time +0.34 %. Observation
+  for CHECK (no design-mandated decision): `SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync`
+  allocations +8.11 %, time +2.80 %.
+- **API (EC201-12):** candidate export 298 public types across 4 assemblies; `api/diff.json`
+  **`equal = true`** (added/removed/changed 0) — identical public surface, `Prepare()` unchanged.
+- **Coverage (W-Q):** re-collected once — **line 87.5 %** (≥85), **branch 79.2 %** (29 785/37 571) (≥75),
+  method 78.7 %; warning-only on `1.0.9-rc3`, identical to the D201-4 collect.
+- **Manifest (EC201-01..16):** `manifest.json` (+ frozen `manifest.boundary.json` snapshot) enumerates
+  all **sixteen** IDs exactly once, `contract_rv` **1** (integer), **no `na`**, valid/unique
+  `required_rows`; eleven rows `met` with existing non-empty typed evidence; **five `open` parity rows
+  (EC201-02..06) with their measured FAIL reason**. Schema validator exit **0**; the wrapper's stricter
+  local semantic check exits **1 by design** with exactly those five problems (0 for every `met` row and
+  every typed evidence item).
+- Defect key **`T201-D5-MANIFEST-TRUTH`** (evidence tooling, **1 fix applied**, red→green): the pre-fix
+  `stage_manifest` assembled row status from artifact existence instead of the row's own measured
+  decision, so a FAILed parity row could be projected `met` — EC201-02 in particular passed the local
+  semantic check with no problem at all. Regression check
+  `tests/unit-boundaries/D201-5/manifest_truthfulness_check.py`: **RED = exit 1** (five false `met`
+  claims, pre-fix projection) → **GREEN = exit 0** (post-fix projection and the real evidence root).
+  Two further evidence-tooling fixes: phase-aware API capture provenance (candidate now records
+  `pre_production: false` / `source_revision: T201-D201-5-r2rv1`, closing D201-4's recorded
+  misleading-value observation) and the EC201-15 self-test evidence path
+  (`instrumentation/self-test/self-test.json`). All three are wrapper-only; W-S still distinguishes 46/46.
+- Boundary observations carried to CHECK: (a) EC201-09/10/11/13/14 evidence is D201-4's boundary test
+  execution (core 2562/2562, container integration 3978 total / 0 failed / **0 provider skips**, all 48
+  `CachedPreparation` cases executed, `reports/correctness.md` + `tests/unit-boundaries/D201-4/**`); the
+  wrapper's own `--stage tests` (W-T) is outside this unit's stage set and its `tests/results.json` slot
+  is absent; (b) the candidate `api/candidate.json` inventory digest differs from D201-4's record because
+  the digest covers the export `label`, while `api_diff` is label-independent — the required equal public
+  surface holds.
+- **DO→PLAN candidate — measured mechanism miss.** The unit's parity goal is **not met**: under the
+  frozen rule all five Category B allocation decisions FAIL in every valid round, so R201-B-CTE /
+  RECURSIVE / EXCEPT / INTERSECT / DISTINCT are unsatisfiable by the current implementation. This is a
+  **measured performance miss**, not an interpretation gap: it requires a **real replan by `planner`**
+  (the recipe's staging/apply allocation cost must be reduced toward the LINQ to DB arm) and must **never**
+  be resolved by changing the tolerance, benchmark bodies, prepared-status semantics, gate budgets or the
+  oracles, nor by discarding an unfavourable round. No `D:`-unit completion is claimed for D201-5:
+  EC201-02..06 remain `open`. D201-5 is unsatisfied pending the replan.
+- Boundary evidence: `artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-5.md`, the result report
+  `docs/specs/performance/m12-3-prepare-command-results.md`, and
+  `artifacts/pdca/T201/rv1/tests/unit-boundaries/D201-5/**` (`brief.json` exit 0, `report.json` exit 0).
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-5 scope validated before any edit (`validate_inner_loop.py brief` exit 0); inner loop `dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~CachedPreparationRecipeTests` exit 0 (16/16, 0 failed, 0 skipped); D201-2 export fix re-verified | artifacts/pdca/T201/rv1/tests/unit-boundaries/D201-5/inner-recipe.log
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-5 W-C candidate measurement exit 0 (1744 s: B-CAND 808.0 s, A-CAND 119.2 s, G-LIVE 766.6 s, G-REPORT 0.05 s; 55/55 arms, 7/7 cases, 3 foreign project copies quarantined+restored, BDN artifacts byte-identical) | artifacts/pdca/T201/rv1/runs.json
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-5 W-P exit 1: **time MET on all five Category B pairs in both rounds, raw-byte allocations FAIL on all five in both rounds** -> frozen rule FAIL for EC201-02..06 (Cte +24.1%, RecursiveCte +64.8%, Except +38.2%, Intersect +39.2%, Distinct +8.4% over LINQ to DB; -14.0..-20.7% vs own baseline) | artifacts/pdca/T201/rv1/reports/parity.json
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-5 W-W exit 0: native gate 56/56 (28 rows x Default/InProcessEmitToolchain), both exits 0, reconciliation exits 0, three zero rows exactly 0 B, 840-budget row 744.00/744.01 B/op, normalization unchanged, historical tracked reports restored byte-identically | artifacts/pdca/T201/rv1/reports/iteration14.json
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-5 W-A exit 0: 7/7 acceptance cases, none noisy, no unresolved >20% control trip (cached/prepared time 1.8445->1.5749, alloc 7.7729->5.9770); W-API exit 0 (298 types, diff equal=true); W-Q exit 0 (line 87.5%, branch 79.2%) | artifacts/pdca/T201/rv1/reports/acceptance.json
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-5 defect `T201-D5-MANIFEST-TRUTH` fixed red->green (1 fix): pre-fix `stage_manifest` projected a FAILed parity row as `met` (EC201-02 undetected); regression check RED exit 1 -> GREEN exit 0; plus phase-aware API capture provenance and the EC201-15 self-test path fix | artifacts/pdca/T201/rv1/tests/unit-boundaries/D201-5/manifest_truthfulness_check.py
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-5 W-M exit 1 with a truthful diagnostic manifest: 16 IDs once each, contract_rv 1, no na, eleven met rows, five open parity rows (EC201-02..06); schema validator exit 0, wrapper local check exit 1 by design; `manifest.boundary.json` preserved | artifacts/pdca/T201/rv1/manifest.boundary.json
+- 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-5 DO->PLAN candidate: measured mechanism miss on the five Category B allocation decisions; R201-B-CTE/RECURSIVE/EXCEPT/INTERSECT/DISTINCT unsatisfiable by the current implementation -> requires a real replan by `planner` (never a tolerance/body/oracle change); no D:-unit completion claimed, EC201-02..06 stay open | docs/specs/performance/m12-3-prepare-command-results.md

@@ -2333,11 +2333,16 @@ def stage_api(root: Path, recorder: Recorder, phase: str, force: bool) -> int:
         if not target.exists():
             raise EvidenceError(f"{label} API export was not written to {rel(target)}")
         document = read_json(target)
+        # Phase-aware provenance: only the baseline export is captured *before* any production edit.
+        # A candidate export taken after the D201-3 edits must never claim `pre_production: true`
+        # (D201-4 recorded that the hard-coded value was misleading for `--phase candidate`).
+        pre_production = label == "baseline"
+        source_revision = "T201-D201-2-r2rv1" if pre_production else "T201-D201-5-r2rv1"
         document["capture"] = {
             "label": label,
             "captured_utc": utc_now(),
-            "source_revision": "T201-D201-2-r2rv1",
-            "pre_production": True,
+            "source_revision": source_revision,
+            "pre_production": pre_production,
             "tree": tree,
             "runs_utc": run["started_utc"],
             "wall_seconds": run["wall_seconds"],
@@ -2408,12 +2413,18 @@ def stage_manifest(root: Path, recorder: Recorder) -> int:
     for phase in ("baseline", "candidate"):
         fresh_dir = root / phase / "iteration14" / "fresh"
         if fresh_dir.exists():
-            pinned = sorted(fresh_dir.glob("*report-full-compressed.json"))
-            if pinned:
-                add("EC201-07", "gate", pinned[0])
+            for pinned in sorted(fresh_dir.glob("*report-full-compressed.json")):
+                add("EC201-07", "gate", pinned, phase)
+        add("EC201-07", "gate-evidence", root / phase / "iteration14" / "gate-evidence.json", phase)
+    add("EC201-07", "file", root / "oracle" / "iteration14-inventory.json")
+    add("EC201-07", "report", root / "reports" / "iteration14.json")
     for phase in ("baseline", "candidate"):
-        if (root / phase / "acceptance" / "results").exists():
+        results_dir = root / phase / "acceptance" / "results"
+        if results_dir.exists():
             add("EC201-08", "acceptance", root / "oracle" / "acceptance.json", phase)
+            for report in sorted(results_dir.glob("*report-full-compressed.json")):
+                add("EC201-08", "acceptance-run", report, phase)
+    add("EC201-08", "report", root / "reports" / "acceptance.json")
     add("EC201-09", "tests", root / "tests" / "results.json")
     add("EC201-09", "report", root / "reports" / "correctness.md")
     for row_id, name in (("EC201-10", "shared-command.md"), ("EC201-11", "temp-tvp.md"),
@@ -2426,21 +2437,98 @@ def stage_manifest(root: Path, recorder: Recorder) -> int:
     else:
         add("EC201-12", "api", root / "api" / "baseline.json")
     add("EC201-15", "build", root / "baseline" / "build.log")
-    add("EC201-15", "file", root / "instrumentation" / "self-test.json")
+    add("EC201-15", "file", root / "instrumentation" / "self-test" / "self-test.json")
     for name in ("ownership-state.md", "shared-route.md", "m9-inventory.md", "siblings.md"):
         add("EC201-16", "discovery", root / "discovery" / name)
     add("EC201-16", "review", root / "reviews" / "collection-reconciliation.md")
 
+    # --- measured predicates ----------------------------------------------------------------------
+    # The rv1 contract forbids an unsupported `met` claim.  A row that carries its own decision is
+    # `met` only when that decision is actually MET: the five Category B parity rows from the frozen
+    # ratio rule, the native gate row from both phases' fresh gate evidence, and the acceptance row
+    # from the seven active cases plus any unresolved control investigation.  Otherwise the row is
+    # `open` with the measured reason -- never silently `met` because a report file merely exists.
+    open_reasons: dict = {}
+
+    scenario_rows = {
+        "EC201-02": "Cte",
+        "EC201-03": "RecursiveCte",
+        "EC201-04": "Except",
+        "EC201-05": "Intersect",
+        "EC201-06": "Distinct",
+    }
+    parity_path = root / "reports" / "parity.json"
+    parity = read_json(parity_path) if parity_path.exists() else None
+    parity_scenarios = (parity or {}).get("scenarios") or {}
+    for row_id, scenario in scenario_rows.items():
+        payload = parity_scenarios.get(scenario)
+        if not isinstance(payload, dict):
+            open_reasons[row_id] = (
+                f"{scenario}: no parity decision ({rel(parity_path)} absent or missing this scenario)"
+            )
+            continue
+        decision = payload.get("decision")
+        if decision != "MET":
+            open_reasons[row_id] = (
+                f"{scenario}: frozen executable rule decides {decision} over "
+                f"{len(payload.get('rounds', []))} valid round(s) -- per-round time "
+                f"{payload.get('time_decisions')}, per-round allocations "
+                f"{payload.get('allocation_decisions')}; evidence {rel(parity_path)}"
+            )
+
+    iteration_path = root / "reports" / "iteration14.json"
+    gate_problem = None
+    if not iteration_path.exists():
+        gate_problem = f"native gate evidence missing ({rel(iteration_path)} absent)"
+    else:
+        iteration = read_json(iteration_path)
+        for phase in ("baseline", "candidate"):
+            evidence = (iteration.get("phases") or {}).get(phase)
+            if not isinstance(evidence, dict):
+                gate_problem = f"iteration14 evidence missing for {phase}"
+            elif evidence.get("problems") or not gate_evidence_ok(evidence):
+                gate_problem = f"{phase}: native gate evidence invalid {evidence.get('problems')}"
+            elif evidence.get("reconciliation_exit") != 0:
+                gate_problem = (
+                    f"{phase}: report-only gate reconciliation exited "
+                    f"{evidence.get('reconciliation_exit')}"
+                )
+    if gate_problem:
+        open_reasons["EC201-07"] = gate_problem
+
+    acceptance_path = root / "reports" / "acceptance.json"
+    acceptance_problem = None
+    if not acceptance_path.exists():
+        acceptance_problem = f"acceptance evidence missing ({rel(acceptance_path)} absent)"
+    else:
+        acceptance = read_json(acceptance_path)
+        for phase in ("baseline", "candidate"):
+            phase_payload = (acceptance.get("phases") or {}).get(phase)
+            if not isinstance(phase_payload, dict):
+                acceptance_problem = f"acceptance evidence missing for {phase}"
+            elif phase_payload.get("case_count") != 7 or phase_payload.get("missing"):
+                acceptance_problem = (
+                    f"{phase}: {phase_payload.get('case_count')}/7 active acceptance cases, "
+                    f"missing {phase_payload.get('missing')}"
+                )
+        if acceptance_problem is None:
+            unresolved = [trip for trip in acceptance.get("trips", []) if trip.get("investigate")]
+            if unresolved:
+                acceptance_problem = f"unresolved control investigation (>{ACCEPTANCE_GROWTH_THRESHOLD:.0%}): {unresolved}"
+    if acceptance_problem:
+        open_reasons["EC201-08"] = acceptance_problem
+
     manifest_rows = []
-    open_rows = []
     for row_id in REQUIRED_ROWS:
         items = rows.get(row_id, [])
-        if items:
+        if row_id in open_reasons:
+            manifest_rows.append({"id": row_id, "status": "open", "reason": open_reasons[row_id]})
+        elif items:
             manifest_rows.append({"id": row_id, "status": "met", "evidence": items})
         else:
-            open_rows.append(row_id)
             manifest_rows.append({"id": row_id, "status": "open",
                                   "reason": f"no current evidence artifact recorded for {row_id}"})
+    open_rows = [row["id"] for row in manifest_rows if row["status"] != "met"]
 
     write_json(manifest_path, {
         "task": "T201",
