@@ -1,6 +1,6 @@
 {
  "case": "hashes",
- "entry_count": 443,
+ "entry_count": 449,
  "envelope_files": [
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-ledger.json",
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-verification.json",
@@ -9,7 +9,7 @@
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/verdicts/seal.json",
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/verdicts/hashes.json"
  ],
- "generated_at": "2026-10-15T08:36:01Z",
+ "generated_at": "2026-10-15T08:39:05Z",
  "inventory": {
   "artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md": {
    "bytes": 11788,
@@ -732,16 +732,16 @@
    "sha256": "239894f974d72f93cf8ee94610e5e16e677f4cbd29a5f1c3f22e8f9a8e40bffe"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv4.json": {
-   "bytes": 10220,
-   "sha256": "3bc95199f7b00a0c56440f4fa897a06c55185c9b265d8ae7ff026cd5762fbb4c"
+   "bytes": 9793,
+   "sha256": "d69d5568b0459c2b1b9c105447e9b91d0a4835a5a95c769d64deac4c4f11e62a"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv5.json": {
-   "bytes": 11780,
-   "sha256": "65995ae998ee1eb6d574d4b50e9e961b66d81df0ce7ab23b73151a873aa94bc6"
+   "bytes": 11524,
+   "sha256": "fa9c8da08b758aa7f5ba8aa346372b4b39c056003eac3ce351a480c71568b726"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json": {
-   "bytes": 25679,
-   "sha256": "2c24c566c22df19c944d47c1b547ae9d199befa2b0ae36cbca78066624b6aa68"
+   "bytes": 72634,
+   "sha256": "0898375d7f9156f1bf50b6cd80a007a68cbc5a8fdba5fd30fa819ec34a07048a"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/d09-report-validate.out": {
    "bytes": 121,
@@ -836,8 +836,8 @@
    "sha256": "36db920755801ff74c6749a2c683e5f2748ced6cfc069f61e5d2a1060c35c45a"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5ev-commands.jsonl": {
-   "bytes": 608393,
-   "sha256": "8121f8bc54e2370b355b0f9a8e5de20cbf4b5f19f18d829270332df5ba266bb6"
+   "bytes": 614629,
+   "sha256": "2c33cd7c201cb4a6e45610b5c7088d43ed09dd415fef26800bd140a80c0c3878"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5ev-coverage-build-nextorm.core.tests.cmd.json": {
    "bytes": 6848,
@@ -1064,8 +1064,8 @@
    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5ev-fulfillment-schema.cmd.json": {
-   "bytes": 7035,
-   "sha256": "20e663f55c8853a5b929cd6165384a289d6542dd4c85f2326c077513db45d95d"
+   "bytes": 6608,
+   "sha256": "07ea3b3ec5714fb8f867282a6a4c62ed99cd5a22a1082e9e809e23e2f59c1287"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/logs/rv5ev-fulfillment-schema.err": {
    "bytes": 0,
@@ -1388,8 +1388,8 @@
    "sha256": "20d76f63c26cac34f634fac7c9d88c89316f2b38cccb382aa782db0836c3d5a3"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json": {
-   "bytes": 48446,
-   "sha256": "4f2a1da820fed1e61e3bec22c306c9930efab972d837b1084acfc26d519efb9a"
+   "bytes": 48830,
+   "sha256": "27b50d88a40f964f7f01565c411755f4f389d6244244765e614cea7bff33b435"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/perf/baseline.json": {
    "bytes": 8746,
@@ -1664,12 +1664,12 @@
    "sha256": "ba5fbfb34951995c5436e417f06c1dc6f3a6197c59680ba15d1a951bb02a9868"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/source-snapshot.json": {
-   "bytes": 22326,
-   "sha256": "2ddfd4a8a8c67f76a75b0307dace4f4135892560408da167c6eea5a805dbc84b"
+   "bytes": 21022,
+   "sha256": "9332ef084f8e8dadc84a2c8b5f036986dbc8d302ad66c69e64890cb6f68a53e4"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tool-selftests.json": {
-   "bytes": 13308,
-   "sha256": "d84f036687d962d9ad7448d1554401cea466867a5263ab7db0f8f57077c9fc8c"
+   "bytes": 12738,
+   "sha256": "02a726cac55273a7ad9d0a52796ce9f23faddc0b7c2f9e760fd620429a1baa1d"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tools/rv5_evidence.py": {
    "bytes": 197977,
@@ -1704,12 +1704,12 @@
    "sha256": "e971dbf73e429ae00d99ad58d1afab1d4bbf060104040bbe80227c4b392d150b"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/verdicts/fulfillment-rv5.json": {
-   "bytes": 11883,
-   "sha256": "17218e9dcc8f8bc9dac57e48376f8ef8fe74b9113ce0eec6203fa04f6b1a40e0"
+   "bytes": 11627,
+   "sha256": "e31e4b62462ac71bb889ae0214ca943ebcf74325e1855474359ecc7673798d9c"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/verdicts/handoff.json": {
-   "bytes": 25715,
-   "sha256": "0189b7eaf7b1fb7b2d731b8da464549ede9ee99c09c9c774cc003457bc2a43c3"
+   "bytes": 72670,
+   "sha256": "9928d7cbc4ad5b81e36587c3afb0baf6ec792d36ee430bfd9956e4f86a49b591"
   },
   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/verdicts/mapping.json": {
    "bytes": 9674,
@@ -1816,19 +1816,14 @@
    "sha256": "91ba752d690da93c414a55d22b0c0f820cf72ef58e5ec370154f38c5819f0f86"
   },
   "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md": {
-   "bytes": 138784,
+   "bytes": 139774,
    "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/perf/replay.json",
-   "sha256": "39a1bb19e2c3aa5b3cf0227a944aa5a5c282499845c832ec2d6d487b4f0f19a9"
+   "sha256": "330031f4ca02df794b40bc54417272e0feab0f69e7fd19dd6359e40d52a3a8fb"
   },
   "docs/specs/status/collection-1.0.9-todo.md": {
    "bytes": 31408,
    "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
    "sha256": "3aba2610bee344d5f3a9bdd0a7523eb4fc7d75738d13f5b37c13626e0e906282"
-  },
-  "docs/specs/status/evidence/pivot-typed-overload/evidence-01-recon.md": {
-   "bytes": 35142,
-   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
-   "sha256": "06420ac1d6605cad43719c7dfe10e55dc687a35057a1d933140d24fe5f6b6463"
   },
   "examples/Directory.Packages.props": {
    "bytes": 999,
@@ -1865,9 +1860,14 @@
    "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/perf/replay.json",
    "sha256": "99b599c1e6ca774c96cafc66d908aa478db46d9280040df31be82df75c3cd8d3"
   },
+  "examples/nextorm.examples.mssql.adventureworks/Sql/mssql_quarterly_pivot.sql": {
+   "bytes": 1249,
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
+   "sha256": "62df625d808be801e8a3342115ccdb358970dfaddc141ffd462fc34617d5c7ae"
+  },
   "examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj": {
    "bytes": 1183,
-   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/docs-examples.json",
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
    "sha256": "61f876ae42f1809c4709c596e93002a9cf8c7735e5f2320750fa356867d4bb43"
   },
   "examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs": {
@@ -1880,6 +1880,16 @@
    "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/perf/replay.json",
    "sha256": "d3fb5fcd8b8f31d092864dd8b37df1e9075394ee679d9ff40a0e4dbadbe21730"
   },
+  "src/nextorm.core/Query/PivotValues.cs": {
+   "bytes": 6364,
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
+   "sha256": "893a793b83eddcc768a86be5ac1d514bc81987955262ed21f988fbbede53786b"
+  },
+  "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs": {
+   "bytes": 193814,
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
+   "sha256": "4d62380f20fb6c19c3c07f774de7d7b3dba6ed4eab68ebec3f66071ede24bb88"
+  },
   "src/nextorm.core/Visitors/BaseExpressionVisitor.cs": {
    "bytes": 42285,
    "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/security/issue.json",
@@ -1889,6 +1899,11 @@
    "bytes": 28929,
    "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/perf/replay.json",
    "sha256": "df7244d1f516fb93878819189ca289248e94d407ad71640777e12edf43aa7b50"
+  },
+  "src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs": {
+   "bytes": 17122,
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
+   "sha256": "14328cec5ff8d57b7ec6ab40f418e04664203301edf051fe250bdbadea9e563d"
   },
   "src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs": {
    "bytes": 20418,
@@ -1910,14 +1925,19 @@
    "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/perf/replay.json",
    "sha256": "a0889653b7fd5a4abccbd53ddc7b5a095ca176e52cde8311212f37a55df1973e"
   },
+  "tests/nextorm.integration.tests/CommonTestSuite.T232Pivot.cs": {
+   "bytes": 989,
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
+   "sha256": "a1497c05a91494c16fb35a6e02833def261a00dc88669aa2d1b71731bcdf2765"
+  },
   "tests/nextorm.integration.tests/T232PivotFixture.cs": {
    "bytes": 14959,
-   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
    "sha256": "4d275aa7ff34074fda23657fb25de5445e263686d77516aacea789561f2127f7"
   },
   "tests/nextorm.integration.tests/T232SqlServerTests.cs": {
    "bytes": 15188,
-   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
    "sha256": "7c96ee2aa63bd9e320d57cb9702491cceecda1eb8d01b9852c1b917ed10b8f19"
   },
   "tests/nextorm.integration.tests/T232SqlServerTestsRv5.cs": {
@@ -1937,13 +1957,23 @@
   },
   "tests/nextorm.sqlserver.tests/T232DerivedSourceReproTests.cs": {
    "bytes": 11014,
-   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
    "sha256": "d1ec32d98302e7fb3fad186843ef9f978b79f874b28298302b86e95d76e59ce6"
+  },
+  "tests/nextorm.sqlserver.tests/T232MarkerTests.cs": {
+   "bytes": 5296,
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
+   "sha256": "585b9dcdfcf04870c9f358cc83f60c43b516293a51ed4f307a59ee9a7ad712df"
   },
   "tests/nextorm.sqlserver.tests/T232PreparationProbeTests.cs": {
    "bytes": 7356,
-   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
    "sha256": "46413affc7f6d3fe5f2a5da99c12f57fcafc8e109fbc07332a21462b86cc2af7"
+  },
+  "tests/nextorm.sqlserver.tests/T232ProjectionContractTests.cs": {
+   "bytes": 9484,
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
+   "sha256": "4c049599e85dcc74c27c1a3615682f4ad15429242daf1a591c161d1394d09f96"
   },
   "tests/nextorm.sqlserver.tests/T232Rv5AmbiguityTests.cs": {
    "bytes": 6113,
@@ -1952,7 +1982,7 @@
   },
   "tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs": {
    "bytes": 27062,
-   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
+   "reference": "evidence reference from artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
    "sha256": "946da414e9cdac41b76463ed1ffd878b356c2b20870a43972ebacb6d6d983e6f"
   },
   "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs": {
@@ -1967,7 +1997,7 @@
   }
  },
  "note": "complete transitive inventory of the rv5 payload ($R walk, raw execution logs and cmd/exit records included) plus every path the manifest/counters reference - including the raw execution logs, the referenced historical ($B) files and the referenced source/test bytes; `payload_digest` is the value the seal binds (payload/reports -> hash-ledger.json -> seal.json -> hash-verification.json); the ledger, its verification record, the seal and their verdicts are envelope files and are excluded",
- "payload_digest": "e6b836833bf4c745eac7796b282bdb18ca78d60a0fa776f399285286c9fe07ee",
+ "payload_digest": "af4ebc328dbefd2f6533f95187d76f90db9f0f7f17c28e7d04427ace07606dc1",
  "reference_closure": {
   "declared_absent": [
    {
@@ -2052,7 +2082,7 @@
    }
   ],
   "required_absent": [],
-  "required_count": 268,
+  "required_count": 275,
   "root_documents": [
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/counters.json"
@@ -2118,13 +2148,13 @@
  "root": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5",
  "source_snapshot": {
   "branch": "1.0.9-rc3",
-  "captured_at": "2026-10-15T08:36:01Z",
+  "captured_at": "2026-10-15T08:39:05Z",
   "git_ok": true,
-  "head_full": "e9121976d9356375b906225bfe04704d298d8d13",
-  "head_short": "e9121976",
+  "head_full": "2bbf0fdccb28dfd90fea25bceff234c406b132cc",
+  "head_short": "2bbf0fdc",
   "repo_root": "/home/alex/sources/nextorm",
-  "status_short_count": 80,
-  "status_short_digest": "e50a99e9895d35a284f1b2fa56d132a9c183e90d50c1c9f711876816e8b54f50",
+  "status_short_count": 77,
+  "status_short_digest": "57bbe3752fa8bf72b8bc64c696fdeb2f76a0628f06ba74b2aa90b6fd510cf6b5",
   "status_short_paths": [
    ".opencode/agents/nextorm-code-auditor.md",
    ".opencode/agents/nextorm-db-perf-analyst.md",
@@ -2161,6 +2191,16 @@
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv4.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/fulfillment-rv5.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/handoff.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-ledger.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/hash-verification.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal-reconciliation.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/seal.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/source-snapshot.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/tool-selftests.json",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html",
@@ -2177,9 +2217,7 @@
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.csv",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.html",
    "docs/assets/diagrams/nextorm-command-execution.svg",
-   "docs/guide/provider-specific-sql/sqlserver.md",
    "docs/ru/assets/diagrams/nextorm-command-execution.svg",
-   "docs/ru/guide/provider-specific-sql/sqlserver.md",
    "docs/specs/status/D211-eager-perparent-topn-1.md",
    "docs/specs/status/D213-joininto-remainder-1.md",
    "docs/specs/status/D215-oneof-removal-1.md",
@@ -2187,25 +2225,14 @@
    "docs/specs/status/D218-sqlserver-sequences-1.md",
    "docs/specs/status/D222-join-overloads-by-type-1.md",
    "docs/specs/status/D226-records-affected-1.md",
-   "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
    "examples/Directory.Packages.props",
-   "examples/README.md",
-   "examples/VERIFICATION.md",
    "examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs",
    "examples/nextorm.examples.clickhouse.analytics/README.md",
-   "examples/nextorm.examples.mssql.adventureworks/README.md",
    "examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs",
    "examples/nextorm.examples.postgres.aviasales/README.md",
-   "src/nextorm.core/Visitors/NormSqlTranslator.cs",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report-github.md",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.csv",
-   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html",
-   "docs/specs/status/evidence/pivot-typed-overload/",
-   "tests/nextorm.core.tests/T232CoverageClosureTests.cs",
-   "tests/nextorm.integration.tests/T232SqlServerTestsRv5.cs",
-   "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs",
-   "tests/nextorm.sqlserver.tests/T232Rv5AmbiguityTests.cs",
-   "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html"
   ]
  }
 }

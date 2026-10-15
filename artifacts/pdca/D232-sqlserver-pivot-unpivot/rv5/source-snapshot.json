@@ -1,6 +1,6 @@
 {
  "branch": "1.0.9-rc3",
- "captured_at": "2026-10-15 07:02Z",
+ "captured_at": "2026-10-15 08:37Z",
  "contract_rv": 5,
  "foreign": {
   "tracked_dirty": [
@@ -54,10 +54,17 @@
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html"
   ]
  },
- "git_diff_stat_head": " .opencode/agents/nextorm-code-auditor.md           |  322 +-\n .opencode/agents/nextorm-db-perf-analyst.md        |  298 +-\n .opencode/agents/nextorm-design-engineer.md        |  318 +-\n .opencode/agents/nextorm-inmemory-perf-analyst.md  |  262 +-\n .opencode/agents/nextorm-performance-analyst.md    |  110 +-\n .opencode/agents/nextorm-scout.md                  |  115 +-\n .../skills/implementing-todo-features/SKILL.md     |  625 ++--\n .opencode/skills/nextorm-pdca/SKILL.md             |  635 ++--\n AGENTS.md                                          |  172 +-\n .../pdca/D218-sqlserver-sequences/rv1/E08-ab.md    |  345 +-\n .../rv1/branch-mutation-map.md                     |  127 +-\n .../rv1/logs/docs-check.log                        |    4 +\n .../D218-sqlserver-sequences/rv1/manifest.json     | 1571 ++++-----\n .../pdca/D218-sqlserver-sequences/rv1/report.json  | 3392 ++++++++++----------\n .../rv1/fulfillment.json                           |    2 +-\n .../rv3/fulfillment.json                           |    2 +-\n .../rv4/logs/packaging.cmd.json                    |    2 +-\n .../rv4/logs/packaging.exit                        |    2 +-\n .../rv4/logs/packaging.out                         |   23 +-\n .../rv4/logs/seal.cmd.json                         |    2 +-\n .../D232-sqlserver-pivot-unpivot/rv4/logs/seal.out |    1 +\n .../rv4/logs/security.cmd.json                     |    2 +-\n .../rv4/logs/security.exit                         |    2 +-\n .../rv4/logs/security.out                          |   41 +-\n .../rv4/logs/v05.cmd.json                          |    3 +-\n .../D232-sqlserver-pivot-unpivot/rv4/logs/v05.exit |    2 +-\n .../D232-sqlserver-pivot-unpivot/rv4/logs/v05.out  |   14 +-\n .../D232-sqlserver-pivot-unpivot/rv4/manifest.json | 1781 +++++-----\n .../rv4/ownership.json                             | 2177 +++++++++----\n .../rv4/packaging.json                             |   10 +-\n .../rv4/packaging/packaging.json                   |   10 +-\n .../D232-sqlserver-pivot-unpivot/rv4/seal.json     |  236 +-\n .../D232-sqlserver-pivot-unpivot/rv4/security.json |  139 +-\n .../pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json |    8 +-\n .../D232-sqlserver-pivot-unpivot/rv4/verify.py     |  734 +++--\n ...rk.InMemoryBenchmarkAggregates-report-github.md |    2 +-\n ...enchmark.InMemoryBenchmarkAggregates-report.csv |    2 +-\n ...nchmark.InMemoryBenchmarkAggregates-report.html |    4 +-\n ...hmark.InMemoryBenchmarkGroupBy-report-github.md |    2 +-\n ...M.Benchmark.InMemoryBenchmarkGroupBy-report.csv |    2 +-\n ....Benchmark.InMemoryBenchmarkGroupBy-report.html |    4 +-\n ...M.Benchmark.SqliteBenchmarkAny-report-github.md |    6 +-\n ...NextORM.Benchmark.SqliteBenchmarkAny-report.csv |    2 +-\n ...extORM.Benchmark.SqliteBenchmarkAny-report.html |    4 +-\n ...mark.SqliteBenchmarkCachedPlan-report-github.md |   10 +-\n ....Benchmark.SqliteBenchmarkCachedPlan-report.csv |    8 +-\n ...Benchmark.SqliteBenchmarkCachedPlan-report.html |    8 +-\n ...Benchmark.SqliteBenchmarkWhere-report-github.md |    4 +-\n ...xtORM.Benchmark.SqliteBenchmarkWhere-report.csv |    2 +-\n ...tORM.Benchmark.SqliteBenchmarkWhere-report.html |    6 +-\n docs/assets/diagrams/nextorm-command-execution.svg |   16 +-\n docs/guide/provider-specific-sql/sqlserver.md      |  881 ++---\n .../assets/diagrams/nextorm-command-execution.svg  |   16 +-\n docs/ru/guide/provider-specific-sql/sqlserver.md   |  894 +++---\n docs/specs/status/D211-eager-perparent-topn-1.md   | 1850 +++++------\n docs/specs/status/D213-joininto-remainder-1.md     |  475 +--\n docs/specs/status/D215-oneof-removal-1.md          |  578 ++--\n docs/specs/status/D216-row-locking-1.md            |  972 +++---\n docs/specs/status/D218-sqlserver-sequences-1.md    |  407 +--\n docs/specs/status/D222-join-overloads-by-type-1.md |  734 ++---\n docs/specs/status/D226-records-affected-1.md       |  758 ++---\n examples/Directory.Packages.props                  |   50 +-\n examples/README.md                                 |  267 +-\n examples/VERIFICATION.md                           |  214 +-\n .../ClickHouseQueries.cs                           |  822 ++---\n .../README.md                                      |  226 +-\n .../README.md                                      |  240 +-\n .../AviasalesQueries.cs                            | 1101 +++----\n .../nextorm.examples.postgres.aviasales/README.md  |  220 +-\n 69 files changed, 13214 insertions(+), 11062 deletions(-)\n",
- "git_status_short_total": 76,
- "head_full": "e9121976d9356375b906225bfe04704d298d8d13",
- "head_short": "e9121976",
+ "generation_provenance": {
+  "branch": "1.0.9-rc3",
+  "note": "the frozen identity moved from the pre-commit generation HEAD to the ACT commit that carries those exact bytes",
+  "pre_commit_generation_head": "e9121976d9356375b906225bfe04704d298d8d13",
+  "pre_commit_generation_head_short": "e9121976",
+  "source_commit": "2bbf0fdccb28dfd90fea25bceff234c406b132cc"
+ },
+ "git_diff_stat_head": " .opencode/agents/nextorm-code-auditor.md           |    4 +\n .opencode/agents/nextorm-db-perf-analyst.md        |    4 +\n .opencode/agents/nextorm-design-engineer.md        |    4 +\n .opencode/agents/nextorm-inmemory-perf-analyst.md  |    4 +\n .opencode/agents/nextorm-performance-analyst.md    |    4 +\n .opencode/agents/nextorm-scout.md                  |    7 +-\n .../skills/implementing-todo-features/SKILL.md     |    5 +-\n .opencode/skills/nextorm-pdca/SKILL.md             |    5 +-\n AGENTS.md                                          |    4 +-\n .../pdca/D218-sqlserver-sequences/rv1/E08-ab.md    |    1 +\n .../rv1/branch-mutation-map.md                     |   21 +\n .../rv1/logs/docs-check.log                        |    4 +\n .../D218-sqlserver-sequences/rv1/manifest.json     |  143 ++-\n .../pdca/D218-sqlserver-sequences/rv1/report.json  |   78 +-\n .../rv1/fulfillment.json                           |    2 +-\n .../rv3/fulfillment.json                           |    2 +-\n .../rv4/logs/packaging.cmd.json                    |    2 +-\n .../rv4/logs/packaging.exit                        |    2 +-\n .../rv4/logs/packaging.out                         |   23 +-\n .../rv4/logs/seal.cmd.json                         |    2 +-\n .../D232-sqlserver-pivot-unpivot/rv4/logs/seal.out |    1 +\n .../rv4/logs/security.cmd.json                     |    2 +-\n .../rv4/logs/security.exit                         |    2 +-\n .../rv4/logs/security.out                          |   41 +-\n .../rv4/logs/v05.cmd.json                          |    3 +-\n .../D232-sqlserver-pivot-unpivot/rv4/logs/v05.exit |    2 +-\n .../D232-sqlserver-pivot-unpivot/rv4/logs/v05.out  |   14 +-\n .../D232-sqlserver-pivot-unpivot/rv4/manifest.json |  437 ++++++--\n .../rv4/ownership.json                             | 1063 +++++++++++++++++++-\n .../rv4/packaging.json                             |   10 +-\n .../rv4/packaging/packaging.json                   |   10 +-\n .../D232-sqlserver-pivot-unpivot/rv4/seal.json     |  194 +++-\n .../D232-sqlserver-pivot-unpivot/rv4/security.json |  139 ++-\n .../pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json |    8 +-\n .../D232-sqlserver-pivot-unpivot/rv4/verify.py     |  328 +++++-\n ...rk.InMemoryBenchmarkAggregates-report-github.md |    2 +-\n ...enchmark.InMemoryBenchmarkAggregates-report.csv |    2 +-\n ...nchmark.InMemoryBenchmarkAggregates-report.html |    4 +-\n ...hmark.InMemoryBenchmarkGroupBy-report-github.md |    2 +-\n ...M.Benchmark.InMemoryBenchmarkGroupBy-report.csv |    2 +-\n ....Benchmark.InMemoryBenchmarkGroupBy-report.html |    4 +-\n ...M.Benchmark.SqliteBenchmarkAny-report-github.md |    6 +-\n ...NextORM.Benchmark.SqliteBenchmarkAny-report.csv |    2 +-\n ...extORM.Benchmark.SqliteBenchmarkAny-report.html |    4 +-\n ...mark.SqliteBenchmarkCachedPlan-report-github.md |   10 +-\n ....Benchmark.SqliteBenchmarkCachedPlan-report.csv |    8 +-\n ...Benchmark.SqliteBenchmarkCachedPlan-report.html |    8 +-\n ...Benchmark.SqliteBenchmarkWhere-report-github.md |    4 +-\n ...xtORM.Benchmark.SqliteBenchmarkWhere-report.csv |    2 +-\n ...tORM.Benchmark.SqliteBenchmarkWhere-report.html |    6 +-\n docs/assets/diagrams/nextorm-command-execution.svg |   16 +-\n .../assets/diagrams/nextorm-command-execution.svg  |   16 +-\n docs/specs/status/D211-eager-perparent-topn-1.md   |    4 +\n docs/specs/status/D213-joininto-remainder-1.md     |    5 +\n docs/specs/status/D215-oneof-removal-1.md          |    6 +\n docs/specs/status/D216-row-locking-1.md            |   28 +-\n docs/specs/status/D218-sqlserver-sequences-1.md    |   21 +-\n docs/specs/status/D222-join-overloads-by-type-1.md |    4 +\n docs/specs/status/D226-records-affected-1.md       |    4 +\n examples/Directory.Packages.props                  |    2 +-\n .../ClickHouseQueries.cs                           |  104 +-\n .../README.md                                      |    6 +-\n .../AviasalesQueries.cs                            |  233 ++---\n .../nextorm.examples.postgres.aviasales/README.md  |   12 +-\n 64 files changed, 2605 insertions(+), 497 deletions(-)\n",
+ "git_status_short_total": 67,
+ "head_full": "2bbf0fdccb28dfd90fea25bceff234c406b132cc",
+ "head_short": "2bbf0fdc",
  "inventory": [
   {
    "code": " M",
@@ -368,20 +375,8 @@
   {
    "code": " M",
    "kind": "tracked",
-   "owner": "t232",
-   "path": "docs/guide/provider-specific-sql/sqlserver.md"
-  },
-  {
-   "code": " M",
-   "kind": "tracked",
    "owner": "foreign",
    "path": "docs/ru/assets/diagrams/nextorm-command-execution.svg"
-  },
-  {
-   "code": " M",
-   "kind": "tracked",
-   "owner": "t232",
-   "path": "docs/ru/guide/provider-specific-sql/sqlserver.md"
   },
   {
    "code": " M",
@@ -434,18 +429,6 @@
   {
    "code": " M",
    "kind": "tracked",
-   "owner": "t232",
-   "path": "examples/README.md"
-  },
-  {
-   "code": " M",
-   "kind": "tracked",
-   "owner": "t232",
-   "path": "examples/VERIFICATION.md"
-  },
-  {
-   "code": " M",
-   "kind": "tracked",
    "owner": "foreign",
    "path": "examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs"
   },
@@ -454,12 +437,6 @@
    "kind": "tracked",
    "owner": "foreign",
    "path": "examples/nextorm.examples.clickhouse.analytics/README.md"
-  },
-  {
-   "code": " M",
-   "kind": "tracked",
-   "owner": "t232",
-   "path": "examples/nextorm.examples.mssql.adventureworks/README.md"
   },
   {
    "code": " M",
@@ -490,33 +467,9 @@
    "kind": "untracked",
    "owner": "foreign",
    "path": "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html"
-  },
-  {
-   "code": "??",
-   "kind": "untracked",
-   "owner": "t232",
-   "path": "docs/specs/status/evidence/pivot-typed-overload/"
-  },
-  {
-   "code": "??",
-   "kind": "untracked",
-   "owner": "t232",
-   "path": "tests/nextorm.core.tests/T232CoverageClosureTests.cs"
-  },
-  {
-   "code": "??",
-   "kind": "untracked",
-   "owner": "t232",
-   "path": "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs"
-  },
-  {
-   "code": "??",
-   "kind": "untracked",
-   "owner": "t232",
-   "path": "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
   }
  ],
- "note": "snapshot taken before the rv5 evidence root was created; the rv5 root is T232-owned and newly created, not part of this baseline",
+ "note": "refreshed after the r=5 ACT commit 2bbf0fdc (T232 source/test/docs bytes + the rv5 contract/report artifacts); this snapshot is the frozen source identity the rv5 evidence chain is bound to. The r=5 green runs (regression/coverage/perf/v18/v23/security) were executed on the working tree of the r=5 generation (pre-commit HEAD e9121976) with the then in-flight paths now committed byte-identically as 2bbf0fdc - see handoff.json#committed_tested_proof. The foreign (#160) dirty footprint is unchanged and read-only.",
  "t232_owned": {
   "tracked_dirty": [
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/fulfillment.json",
@@ -539,21 +492,11 @@
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/seal.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json",
-   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py",
-   "docs/guide/provider-specific-sql/sqlserver.md",
-   "docs/ru/guide/provider-specific-sql/sqlserver.md",
-   "examples/README.md",
-   "examples/VERIFICATION.md",
-   "examples/nextorm.examples.mssql.adventureworks/README.md"
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py"
   ],
-  "untracked": [
-   "docs/specs/status/evidence/pivot-typed-overload/",
-   "tests/nextorm.core.tests/T232CoverageClosureTests.cs",
-   "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs",
-   "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
-  ]
+  "untracked": []
  },
  "task": "T232",
- "tracked_dirty_total": 69,
- "untracked_total": 7
+ "tracked_dirty_total": 64,
+ "untracked_total": 3
 }

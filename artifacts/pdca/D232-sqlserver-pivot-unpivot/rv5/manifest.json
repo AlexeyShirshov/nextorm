@@ -1,6 +1,6 @@
 {
  "contract_rv": 5,
- "manifest_revision": "rv=5 (manifest reconciled 2026-10-15 by D232-RV5-08/09: 13 EC232-RV5-* delta rows and EC232-RV3-SEAL closed on executed evidence; 0 open)",
+ "manifest_revision": "rv=5 (manifest reconciled 2026-10-15 by D232-RV5-08/09: 13 EC232-RV5-* delta rows and EC232-RV3-SEAL closed on executed evidence; 0 open); refreshed after the r=5 ACT commit 2bbf0fdc (evidence-only: the corrective chain repair of D232-RV5-08/09; no row status changed, every row keeps its real evidence path)",
  "required_rows": [
   "E232-01",
   "E232-02",
@@ -1504,6 +1504,6 @@
  ],
  "status_file": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
  "task": "T232 (#232) SQL Server typed PIVOT/UNPIVOT projection",
- "tree": "e9121976",
- "tree_semantics": "source HEAD short sha of the 1.0.9-rc3 worktree at rv5 transcription (git rev-parse --short HEAD = e9121976; full e9121976d9356375b906225bfe04704d298d8d13); the frozen source snapshot is artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/source-snapshot.json"
+ "tree": "2bbf0fdc",
+ "tree_semantics": "source HEAD short sha of the 1.0.9-rc3 worktree (git rev-parse --short HEAD = 2bbf0fdc; full 2bbf0fdccb28dfd90fea25bceff234c406b132cc); it is the ACT commit that publishes the exact bytes the r=5 green runs executed on the working tree of the pre-commit generation HEAD e9121976 (full e9121976d9356375b906225bfe04704d298d8d13) - see handoff.json#committed_tested_proof; the frozen source snapshot is artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/source-snapshot.json"
 }

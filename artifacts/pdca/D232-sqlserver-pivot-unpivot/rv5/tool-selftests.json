@@ -1,6 +1,6 @@
 {
  "all_passed": true,
- "captured": "2026-10-15T08:35:50Z",
+ "captured": "2026-10-15T08:38:38Z",
  "case": "selftest",
  "guards_proven": 8,
  "guards_required": [
@@ -21,7 +21,7 @@
    "argv": [
     "hashes",
     "--root",
-    "/tmp/opencode/rv5-selftest-888334/rv4copy",
+    "/tmp/opencode/rv5-selftest-891159/rv4copy",
     "--verify"
    ],
    "expected_exit": 2,
@@ -38,7 +38,7 @@
    "argv": [
     "hashes",
     "--root",
-    "/tmp/opencode/rv5-selftest-888334/revision/rv5",
+    "/tmp/opencode/rv5-selftest-891159/revision/rv5",
     "--verify"
    ],
    "expected_exit": 2,
@@ -46,16 +46,16 @@
    "guard": "wrong-revision",
    "note": "live HEAD/branch are compared with the frozen source-snapshot identity",
    "passed": true,
-   "reason": "wrong revision: live HEAD e9121976d935 != frozen source-snapshot head_full 000000000000; wrong revision: live branch '1.0.9-rc3' != frozen branch 'not-1.0.9-rc3'",
+   "reason": "wrong revision: live HEAD 2bbf0fdccb28 != frozen source-snapshot head_full 000000000000; wrong revision: live branch '1.0.9-rc3' != frozen branch 'not-1.0.9-rc3'",
    "stderr_tail": "",
-   "stdout_tail": "{\"case\": \"preflight\", \"exit_code\": 2, \"reason\": \"wrong revision: live HEAD e9121976d935 != frozen source-snapshot head_full 000000000000; wrong revision: live branch '1.0.9-rc3' != frozen branch 'not-1.0.9-rc3'\", \"status\": \"violation\"}"
+   "stdout_tail": "{\"case\": \"preflight\", \"exit_code\": 2, \"reason\": \"wrong revision: live HEAD 2bbf0fdccb28 != frozen source-snapshot head_full 000000000000; wrong revision: live branch '1.0.9-rc3' != frozen branch 'not-1.0.9-rc3'\", \"status\": \"violation\"}"
   },
   {
    "actual_exit": 2,
    "argv": [
     "hashes",
     "--root",
-    "/tmp/opencode/rv5-selftest-888334/tamper/rv5",
+    "/tmp/opencode/rv5-selftest-891159/tamper/rv5",
     "--verify"
    ],
    "expected_exit": 2,
@@ -63,16 +63,16 @@
    "guard": "tampered-file",
    "note": "a hash mismatch against the ledger is a violation (ledger-creating run exit 0)",
    "passed": true,
-   "reason": "1 evidence file(s) tampered (hash mismatch): /tmp/opencode/rv5-selftest-888334/tamper/rv5/counters.json",
+   "reason": "1 evidence file(s) tampered (hash mismatch): /tmp/opencode/rv5-selftest-891159/tamper/rv5/counters.json",
    "stderr_tail": "",
-   "stdout_tail": "{\"case\": \"hashes\", \"exit_code\": 2, \"reason\": \"1 evidence file(s) tampered (hash mismatch): /tmp/opencode/rv5-selftest-888334/tamper/rv5/counters.json\", \"status\": \"violation\"}"
+   "stdout_tail": "{\"case\": \"hashes\", \"exit_code\": 2, \"reason\": \"1 evidence file(s) tampered (hash mismatch): /tmp/opencode/rv5-selftest-891159/tamper/rv5/counters.json\", \"status\": \"violation\"}"
   },
   {
    "actual_exit": 2,
    "argv": [
     "hashes",
     "--root",
-    "/tmp/opencode/rv5-selftest-888334/missing/rv5",
+    "/tmp/opencode/rv5-selftest-891159/missing/rv5",
     "--verify"
    ],
    "expected_exit": 2,
@@ -80,16 +80,16 @@
    "guard": "missing-evidence",
    "note": "a ledger-listed evidence file that disappeared is a violation (ledger-creating run exit 0)",
    "passed": true,
-   "reason": "56 ledger-listed evidence file(s) missing: /tmp/opencode/rv5-selftest-888334/missing/rv5/counters.json, artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md, artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md, artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log, artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
+   "reason": "56 ledger-listed evidence file(s) missing: /tmp/opencode/rv5-selftest-891159/missing/rv5/counters.json, artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md, artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md, artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log, artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json",
    "stderr_tail": "",
-   "stdout_tail": "{\"case\": \"hashes\", \"exit_code\": 2, \"reason\": \"56 ledger-listed evidence file(s) missing: /tmp/opencode/rv5-selftest-888334/missing/rv5/counters.json, artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md, artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md, artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log, artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json\", \"status\": \"violation\"}"
+   "stdout_tail": "{\"case\": \"hashes\", \"exit_code\": 2, \"reason\": \"56 ledger-listed evidence file(s) missing: /tmp/opencode/rv5-selftest-891159/missing/rv5/counters.json, artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md, artifacts/pdca/D218-sqlserver-sequences/rv1/branch-mutation-map.md, artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log, artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json\", \"status\": \"violation\"}"
   },
   {
    "actual_exit": 2,
    "argv": [
     "seal",
     "--root",
-    "/tmp/opencode/rv5-selftest-888334/seal/rv5",
+    "/tmp/opencode/rv5-selftest-891159/seal/rv5",
     "--historical-root",
     "/home/alex/sources/nextorm/artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4"
    ],
@@ -109,7 +109,7 @@
     "--case",
     "v23",
     "--root",
-    "/tmp/opencode/rv5-selftest-888334/empty/rv5",
+    "/tmp/opencode/rv5-selftest-891159/empty/rv5",
     "--filter",
     "FullyQualifiedName~T232NoSuchTestZZZ"
    ],
@@ -129,7 +129,7 @@
     "--case",
     "v18",
     "--root",
-    "/tmp/opencode/rv5-selftest-888334/skip/rv5"
+    "/tmp/opencode/rv5-selftest-891159/skip/rv5"
    ],
    "expected_exit": 2,
    "expected_reason_fragment": "skipped test",
@@ -145,28 +145,28 @@
    "argv": [
     "hashes",
     "--root",
-    "/tmp/opencode/rv5-selftest-888334/binding/rv5",
+    "/tmp/opencode/rv5-selftest-891159/binding/rv5",
     "--verify"
    ],
    "expected_exit": 2,
    "expected_reason_fragment": "binding",
    "guard": "tampered-ledger-digest",
-   "note": "the ledger -> seal edge is verified: a seal whose ledger_sha256 ('17a10eb1f674') does not match the ledger fails closed (ledger run exit 0, seal run exit 0)",
+   "note": "the ledger -> seal edge is verified: a seal whose ledger_sha256 ('35d614d474d7') does not match the ledger fails closed (ledger run exit 0, seal run exit 0)",
    "passed": true,
-   "reason": "ledger -> seal binding broken: seal.json ledger_sha256 000000000000 != the current ledger 17a10eb1f674 (the ledger was regenerated after the seal; re-run `seal`)",
+   "reason": "ledger -> seal binding broken: seal.json ledger_sha256 000000000000 != the current ledger 35d614d474d7 (the ledger was regenerated after the seal; re-run `seal`)",
    "stderr_tail": "",
-   "stdout_tail": "{\"case\": \"hashes\", \"exit_code\": 2, \"reason\": \"ledger -> seal binding broken: seal.json ledger_sha256 000000000000 != the current ledger 17a10eb1f674 (the ledger was regenerated after the seal; re-run `seal`)\", \"status\": \"violation\"}"
+   "stdout_tail": "{\"case\": \"hashes\", \"exit_code\": 2, \"reason\": \"ledger -> seal binding broken: seal.json ledger_sha256 000000000000 != the current ledger 35d614d474d7 (the ledger was regenerated after the seal; re-run `seal`)\", \"status\": \"violation\"}"
   }
  ],
  "source_snapshot": {
   "branch": "1.0.9-rc3",
-  "captured_at": "2026-10-15T08:35:50Z",
+  "captured_at": "2026-10-15T08:38:38Z",
   "git_ok": true,
-  "head_full": "e9121976d9356375b906225bfe04704d298d8d13",
-  "head_short": "e9121976",
+  "head_full": "2bbf0fdccb28dfd90fea25bceff234c406b132cc",
+  "head_short": "2bbf0fdc",
   "repo_root": "/home/alex/sources/nextorm",
-  "status_short_count": 80,
-  "status_short_digest": "e50a99e9895d35a284f1b2fa56d132a9c183e90d50c1c9f711876816e8b54f50",
+  "status_short_count": 69,
+  "status_short_digest": "cf3efae58643cb77cc1ace93822fed9e348bffd1a1698e35e834ebe8dc3c4b89",
   "status_short_paths": [
    ".opencode/agents/nextorm-code-auditor.md",
    ".opencode/agents/nextorm-db-perf-analyst.md",
@@ -203,6 +203,8 @@
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json",
    "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/manifest.json",
+   "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv5/source-snapshot.json",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-github.md",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.csv",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report.html",
@@ -219,9 +221,7 @@
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.csv",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report.html",
    "docs/assets/diagrams/nextorm-command-execution.svg",
-   "docs/guide/provider-specific-sql/sqlserver.md",
    "docs/ru/assets/diagrams/nextorm-command-execution.svg",
-   "docs/ru/guide/provider-specific-sql/sqlserver.md",
    "docs/specs/status/D211-eager-perparent-topn-1.md",
    "docs/specs/status/D213-joininto-remainder-1.md",
    "docs/specs/status/D215-oneof-removal-1.md",
@@ -229,25 +229,14 @@
    "docs/specs/status/D218-sqlserver-sequences-1.md",
    "docs/specs/status/D222-join-overloads-by-type-1.md",
    "docs/specs/status/D226-records-affected-1.md",
-   "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",
    "examples/Directory.Packages.props",
-   "examples/README.md",
-   "examples/VERIFICATION.md",
    "examples/nextorm.examples.clickhouse.analytics/ClickHouseQueries.cs",
    "examples/nextorm.examples.clickhouse.analytics/README.md",
-   "examples/nextorm.examples.mssql.adventureworks/README.md",
    "examples/nextorm.examples.postgres.aviasales/AviasalesQueries.cs",
    "examples/nextorm.examples.postgres.aviasales/README.md",
-   "src/nextorm.core/Visitors/NormSqlTranslator.cs",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report-github.md",
    "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.csv",
-   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html",
-   "docs/specs/status/evidence/pivot-typed-overload/",
-   "tests/nextorm.core.tests/T232CoverageClosureTests.cs",
-   "tests/nextorm.integration.tests/T232SqlServerTestsRv5.cs",
-   "tests/nextorm.sqlserver.tests/T232CoverageClosureTests.cs",
-   "tests/nextorm.sqlserver.tests/T232Rv5AmbiguityTests.cs",
-   "tests/nextorm.sqlserver.tests/T232VariantClosureTests.cs"
+   "benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.T218PreparationControlBenchmark-report.html"
   ]
  },
  "task": "T232 (#232) SQL Server typed PIVOT/UNPIVOT projection"
