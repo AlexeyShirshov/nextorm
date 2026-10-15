@@ -201,10 +201,10 @@ Build Release — 0/0.
 
 | # | Ур. | Место | Проблема | Рекомендация |
 |---|-----|-------|----------|--------------|
-| W1 | P2 | `docs/guide/10-window-functions.md:11-13`, `docs/ru/guide/10-window-functions.md:10-13` | Обзор перечисляет типы результата «`int` для ранжирующих, `T?` для значений/агрегатов» и не упоминает новое `double` у `percent_rank`/`cume_dist` | Добавить `double` для распределений |
-| W2 | P2 | `docs/guide/10-window-functions.md:244-248`, `docs/ru/guide/10-window-functions.md:247-251` | `Source:`-футер устарел: `SqlFunctions.cs:23` — это свойство `Sql`, сам `WindowFunction<T>` — `WindowFunctions.cs:16`, `SqlFunctions.cs:221` — `date_diff`, оконные методы — `:314-372`; ссылки на интеграционные тесты `:72`/`:99` сдвинуты вставкой нового теста на `:54` | Пересчитать номера строк; убрать `WindowFunction<T>` из `SqlFunctions.cs` |
-| W3 | P2 | `docs/guide/10-window-functions.md:10`, `docs/ru/guide/10-window-functions.md:10` | Пустой inline-код ``  `` — потеряна ссылка на `SqlFunctions.Sql` (пре-существующий, но файл затронут этой правкой) | Восстановить `` `SqlFunctions.Sql` `` |
-| W4 | P2 | `docs/guide/10-window-functions.md:220-234`, `docs/ru/guide/10-window-functions.md:222-237` | «every SQL provider … supports all functions» — на ClickHouse `percent_rank`/`cume_dist` проверены только SQL-gen, рантайм-проверки нет (PG/SQL Server/MySQL/SQLite покрыты) | Добавить ClickHouse в интеграционный прогон либо оговорить проверенные провайдеры |
+| W1 | P2 | `docs/guide/09-window-functions.md:11-13`, `docs/ru/guide/09-window-functions.md:10-13` | Обзор перечисляет типы результата «`int` для ранжирующих, `T?` для значений/агрегатов» и не упоминает новое `double` у `percent_rank`/`cume_dist` | Добавить `double` для распределений |
+| W2 | P2 | `docs/guide/09-window-functions.md:244-248`, `docs/ru/guide/09-window-functions.md:247-251` | `Source:`-футер устарел: `SqlFunctions.cs:23` — это свойство `Sql`, сам `WindowFunction<T>` — `WindowFunctions.cs:16`, `SqlFunctions.cs:221` — `date_diff`, оконные методы — `:314-372`; ссылки на интеграционные тесты `:72`/`:99` сдвинуты вставкой нового теста на `:54` | Пересчитать номера строк; убрать `WindowFunction<T>` из `SqlFunctions.cs` |
+| W3 | P2 | `docs/guide/09-window-functions.md:10`, `docs/ru/guide/09-window-functions.md:10` | Пустой inline-код ``  `` — потеряна ссылка на `SqlFunctions.Sql` (пре-существующий, но файл затронут этой правкой) | Восстановить `` `SqlFunctions.Sql` `` |
+| W4 | P2 | `docs/guide/09-window-functions.md:220-234`, `docs/ru/guide/09-window-functions.md:222-237` | «every SQL provider … supports all functions» — на ClickHouse `percent_rank`/`cume_dist` проверены только SQL-gen, рантайм-проверки нет (PG/SQL Server/MySQL/SQLite покрыты) | Добавить ClickHouse в интеграционный прогон либо оговорить проверенные провайдеры |
 | W5 | P2 | — | Блокер `nth_value` — именно SQL Server (функции нет) | Внести `[ ] nth_value` в бэклог |
 
 `nth_value` **не** следует добавлять только с флагом `SupportsNthValue`: одного флага мало — у
@@ -1075,7 +1075,7 @@ XML-`<summary>` есть у **7 из 8** новых публичных член�
 Build Release — **0/0**.
 
 **Пробелы документации EN/RU.** Правки затронули `docs/providers/*.md`,
-`docs/scalar-functions/index.md`, `docs/guide/10-window-functions.md`,
+`docs/scalar-functions/index.md`, `docs/guide/09-window-functions.md`,
 `docs/guide/04-grouping-and-aggregates.md`, `docs/advanced/api-reference.md` и их RU-зеркала;
 `sql-capabilities-gap-analysis.md`
 синхронизированы. Новых публичных типов нет → Приложение A (45) без изменений.
@@ -1131,7 +1131,7 @@ extend-only это breaking (RS0017+RS0016), допустимый только a
 | I6 | 🟡 частично | Закрыто: `choose(99, …)` → `null` (`tests/nextorm.integration.tests/SqlServerSpecificTests.cs:30-37`) и полный ассерт `choose(1, 'a', 'b', 'c')` (`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:48`). Осталось: `iif` проверяется разбитыми `Contain("iif(")`+`Contain("'yes', 'no')")` (`:46-47`), guard на захваченный массив не добавлен |
 | I7 | ✅ закрыта | `Iif_ShouldUseNativeForm`; SQLite-тест есть (`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1423-1425`) |
 | I8 | ♻️ заменена | `SupportsIifChoose` удалён; актуальный список заморозки — IF6 ниже |
-| W1 | ✅ закрыта | `docs/guide/10-window-functions.md:13` (+RU) — `double` для `percent_rank`/`cume_dist` |
+| W1 | ✅ закрыта | `docs/guide/09-window-functions.md:13` (+RU) — `double` для `percent_rank`/`cume_dist` |
 | W3 | ✅ закрыта | обзор снова ссылается на `` `SqlFunctions.Sql` `` |
 | W4 | ✅ закрыта | `tests/nextorm.integration.tests/CommonTestSuite.Window.cs:54`; `ClickHouseDialect.SupportsPercentRankCumeDist => true` (`:64`) |
 | W5 | ✅ закрыта | `[x]` |
@@ -2239,7 +2239,7 @@ SQL Server XML `value`/`query`/`exist` (`Query/SqlFunctions.SqlServer.cs`, `Visi
 | # | Ур. | Место | Проблема | Рекомендация |
 |---|-----|-------|----------|--------------|
 | RD2 (batch 3) | P2 | `ISqlDialect.cs:178,223,229,236,245,519,529,626,634`; `SqlDialectBase.cs:39,41,46,56,58,60,62,152,158`; `PostgresDialect.cs:91,94,97`; `SqliteDialect.cs:57,60,63`; `ClickHouseDialect.cs:97,105,163,166,169`; `SqlServerDialect.cs:48,51,54`; `MySqlDialect.cs:45`; `Query/WindowDefinition.cs:9,29`; `Query/WindowFunctions.cs:42,80,95,172,181,184,191`; `Builders/EntityBuilder.cs:530,558,565`; `Query/QueryDefinition.cs:67`; `Query/QueryCommand.cs:243`; `Query/SqlFunctions.SqlServer.cs:48,56,65`; `Query/SqlFunctions.ClickHouse.cs:441-498`; `PublicAPI.*.txt` отсутствуют | Поверхность Batch 3 не трекается (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение RD2/AR1/SQ1, не новая находка.** Новые абстрактные члены `ISqlDialect` (7 `Supports*`-флагов `SupportsXmlFunctions`/`SupportsXmlFunction`/`SupportsNamedWindows`/`SupportsWindowFrameGroups`/`SupportsWindowFrameExclusion`/`SupportsInFrameWindowFunctions`/`SupportsMultiIf` + хук `MakeXmlFunction`) ⇒ source-breaking для внешних реализаторов (в репозитории реализует только `SqlDialectBase`); `MakeMultiIf` — DIM и `virtual`, разрыва не создаёт (та же асимметрия, что SQ-DIM/AR4) | Внести подписи в `PublicAPI.Unshipped.txt` при заморозке (продолжение блока RD2; ср. AR1/SQ1/ASF1). Заодно определиться с политикой abstract-флагов (SQ-DIM): DIM `=> false` либо зафиксировать abstract как принятую норму |
-| NW2 | **Закрыто (20.09.2026)** | `Query/WindowDefinition.cs:9` vs `Query/WindowFunctions.cs:64` (ср. `Builders/EntityBuilder.cs:558,565`) | **Было (P2):** два публичных типа одного назначения — ключ `ORDER BY` окна — названы почти одинаково: `WindowOrderKey` (именованные окна: `Direction` + `LambdaExpression`, `EntityBuilder.Asc`/`Desc`) и `WindowOrder` (inline `Over`: `Direction` + `Expression<Func<object?>>`, `CommonFunctions.asc`/`desc`); имена не подсказывали разницу (named vs inline) | **Исправлено:** named-ключ переименован в `NamedWindowOrderKey` (alpha, замена на месте); `WindowOrder` остаётся inline-ключом. Обновлены код (`WindowDefinition.cs`, `EntityBuilder.cs`), XML-доки, `docs/guide/10-window-functions.md` + `docs/ru/guide/10-window-functions.md`, `docs/advanced/api-reference.md` + `docs/ru/advanced/api-reference.md`, спеки. Публичного разрыва в рамках alpha нет. Тесты не менялись (используют `e.Asc`/`e.Desc`, тип не именуют) |
+| NW2 | **Закрыто (20.09.2026)** | `Query/WindowDefinition.cs:9` vs `Query/WindowFunctions.cs:64` (ср. `Builders/EntityBuilder.cs:558,565`) | **Было (P2):** два публичных типа одного назначения — ключ `ORDER BY` окна — названы почти одинаково: `WindowOrderKey` (именованные окна: `Direction` + `LambdaExpression`, `EntityBuilder.Asc`/`Desc`) и `WindowOrder` (inline `Over`: `Direction` + `Expression<Func<object?>>`, `CommonFunctions.asc`/`desc`); имена не подсказывали разницу (named vs inline) | **Исправлено:** named-ключ переименован в `NamedWindowOrderKey` (alpha, замена на месте); `WindowOrder` остаётся inline-ключом. Обновлены код (`WindowDefinition.cs`, `EntityBuilder.cs`), XML-доки, `docs/guide/09-window-functions.md` + `docs/ru/guide/09-window-functions.md`, `docs/advanced/api-reference.md` + `docs/ru/advanced/api-reference.md`, спеки. Публичного разрыва в рамках alpha нет. Тесты не менялись (используют `e.Asc`/`e.Desc`, тип не именуют) |
 
 ℹ️ **Наблюдения (фикс не требуется):**
 - **XML-doc покрытие полное; новых публичных типов без доки нет.** `<summary>` есть у `NamedWindowOrderKey`,
@@ -5744,3 +5744,57 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
 freeze HELD, не активируется** — кандидаты зарегистрированы в `collection-1.0.9-todo.md` (tag `#232`),
 `PublicAPI.*.txt` не вводится, анализаторы не включаются. (4) Новых публичных типов вне `PIVOT`-группы
 нет → Приложение A дельта: 2 (`PivotValues`/`UnpivotValues`) до заморозки.
+
+---
+
+## Аудит 15.10.2026 — issue #233: скалярная перегрузка `WindowFunction<T>.Over(Expression<Func<object?>>?, WindowOrder, WindowFrame?)` (uncommitted working tree, ветка `1.0.9-rc3`; P0 — нет; P1 по именам — нет; P2 — N233-1 (BC/Шаг 5); ℹ️ — N233-2)
+
+**Область (uncommitted).** Добавлен **ровно один** публичный **аддитивный** overload `WindowFunction<T>.Over`
+(`src/nextorm.core/Query/WindowFunctions.cs:50-54`) — окно с **одним** partition-выражением и **одним**
+`WindowOrder` (scalar-аналог существующего array-overload'а, без пользовательских массивов). Пять
+существующих overload'ов не изменены ни байтом — `src/nextorm.core/Query/WindowFunctions.cs:29-32`
+(`Expression?, Expression?, WindowFrame?`), `:56-57` (`WindowOrder, WindowFrame?`), `:65` (`string`),
+`:72` (`WindowOrder[], WindowFrame?`), `:80-83` (`Expression[]?, WindowOrder[]?, WindowFrame?`):
+переименований нет, удалений нет, optionality сохранена. `ISqlDialect`/capability-поверхность,
+worker (`src/nextorm.core/Visitors/WindowSql.cs`, `src/nextorm.core/Visitors/WindowFunctionTranslator.cs`),
+planner и plan cache не тронуты.
+
+- **Имена.** `partitionBy`/`orderBy`/`frame` дословно повторяют имена существующего argument mapper'а
+  (`src/nextorm.core/Visitors/WindowSql.cs:139-171` распределяет аргументы по именам) — новых сущностей,
+  аббревиатур и BCL-конфликтов нет.
+- **Форма.** Первые два параметра обязательны, третий — trailing optional `WindowFrame? frame = null`
+  (CA1068 соблюдён); возврат `T`, как у остальных marker-overload'ов (тело — `=> default!`, expressions
+  не исполняются).
+- **XML-doc 100 %** (CS1591 — ошибка сборки): summary + три `<param>`, включая явное объяснение причины
+  атрибута приоритета.
+- **Source-compat — `[OverloadResolutionPriority(-1)]`** (`src/nextorm.core/Query/WindowFunctions.cs:50`).
+  Без него нетипизированные `default`/`null` во втором аргументе (`Over(partitionBy: e, orderBy: default)`,
+  `Over(partitionBy: e, orderBy: null)`) становятся ambiguous (CS0121) между новой перегрузкой и
+  существующей `Over(Expression<Func<object?>>?, Expression<Func<object?>>?, WindowFrame?)` — это
+  **фактически измерено** (baseline→candidate compiler probe: 6 новых CS0121; FAIL r=1 —
+  `/tmp/nextorm-D233-compat/PROBE-SUMMARY.md`). Поэтому новая перегрузка объявлена с priority `-1`, а
+  существующие сохраняют priority 0 и выигрывают везде, где применимы: ноль новых диагностик и те же
+  выбранные overload'ы (`/tmp/nextorm-D233-compat/PROBE-SUMMARY-r2.md`, PASS r=2 — runtime-`MethodInfo`
+  из expression-дерева для всех шести corner-форм совпал с baseline; 39 реальных call sites не затронуты).
+  Механизм не новый для репозитория: `[OverloadResolutionPriority(...)]` уже применён 6× —
+  `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs:794,817`,
+  `src/nextorm.core/Builders/MergeBuilder.cs:201,215`,
+  `src/nextorm.core/Builders/InsertBuilder.Values.cs:103,117`.
+- **Публичные доки** (соседний поток DO): EN/RU `docs/guide/09-window-functions.md` +
+  `docs/ru/guide/09-window-functions.md` — scalar-пример, array-эквивалент, `frame:` и optionality.
+  Ссылок на `docs/specs/**` нет.
+
+| # | Ур. | Место | Оценка | Рекомендация |
+|---|-----|-------|--------|--------------|
+| N233-1 | **P2 (BC/Шаг 5)** | `src/nextorm.core/Query/WindowFunctions.cs:50-54` | Новая публичная перегрузка (**1** сигнатура; порядок разрешения перегрузок задан атрибутом) — **зарегистрирована как кандидат, статус `registered / pending acceptance`**, не «implemented»: принятие выполняется в цикле (CHECK) по коммитнутому evidence. `find -name 'PublicAPI*.txt'` — **0**; `PublicApiAnalyzers` не подключён (Шаг 5, issue #53) | Внести сигнатуру в `PublicAPI.Unshipped.txt` при заморозке; точная сигнатура — `docs/specs/status/D233-window-over-overload-1.md` |
+
+ℹ️ **Наблюдения.** (1) **P0/P1 по именам — нет.** (2) **N233-2 — компиляторный пол для атрибута.**
+`OverloadResolutionPriorityAttribute` распознаёт только компилятор C# 13+; потребитель, собранный
+компилятором C# 12 или старше, атрибут игнорирует и снова получит CS0121 на нетипизированных
+`default`/`null`. Записанный минимум — `net10.0` + `LangVersion latest`
+(`Directory.Build.props:29,31`, `TreatWarningsAsErrors` — `:40`); публичные доки заявляют только
+«A project targeting `net10.0`» (`docs/getting-started/01-installation.md:5`), `global.json` SDK не пинует;
+тихого нового минимума нет — атрибут уже использовался 6× в `src/nextorm.core`. (3) Stale-ссылки на
+переименованную страницу оконного гайда (`10-window-functions.md` → `09-window-functions.md`) исправлены
+**только** в затронутых строках этого реестра (`:204-207,1078,1134,2242`); сплошной cleanup реестра не
+делался. (4) Новых публичных **типов** нет → Приложение A без изменений.

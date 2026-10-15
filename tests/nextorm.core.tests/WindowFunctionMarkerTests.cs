@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 using FluentAssertions;
+using NextORM.Postgres;
 
 namespace NextORM.Core.Tests;
 
@@ -54,6 +55,116 @@ public class WindowFunctionMarkerTests
 
         function.Over("w").Should().Be(0);
     }
+
+    [Fact]
+    public void Over_ScalarWindowOrderOverload_ShouldReturnDefaultValue()
+    {
+        // The scalar (partition, WindowOrder) overload is inert like the other Over overloads: it only
+        // records the call in an expression tree, so calling it directly yields default(T).
+        var order = CreateWindowOrder(() => 1, OrderDirection.Asc);
+
+        new WindowFunction<int>().Over(partitionBy: () => 1, orderBy: order).Should().Be(0);
+        new WindowFunction<int?>().Over(partitionBy: () => 1, orderBy: order).Should().BeNull();
+        new WindowFunction<string>().Over(partitionBy: () => 1, orderBy: order).Should().BeNull();
+    }
+
+    [Fact]
+    public void Over_ScalarWindowOrderOverload_ShouldRenderTheSameSqlAsTheArrayOverload()
+    {
+        // The new overload is a call-shape alias for the single-element array form: the rendered SQL has
+        // to be byte-identical both without a frame and with one. A single dialect is enough here; the
+        // per-dialect SqlGenerationTests suites pin the remaining five.
+        using var ctx = new PostgresDataContext("Host=localhost", new DataContextBuilder());
+        var e = ctx.From<SimpleEntity>();
+
+        var scalar = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(
+                partitionBy: () => x.Id,
+                orderBy: SqlFunctions.Sql.asc(() => x.Id))
+        }));
+        var array = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(
+                new Expression<Func<object?>>[] { () => x.Id },
+                new WindowOrder[] { SqlFunctions.Sql.asc(() => x.Id) })
+        }));
+        scalar.Should().Be(array);
+        scalar.Should().ContainEquivalentOf("row_number() over (partition by Id order by Id)");
+
+        var scalarFrame = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            v = SqlFunctions.Sql.sum_over(x.Id).Over(
+                partitionBy: () => x.Id,
+                orderBy: SqlFunctions.Sql.asc(() => x.Id),
+                frame: WindowFrame.Rows(1, 1))
+        }));
+        var arrayFrame = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            v = SqlFunctions.Sql.sum_over(x.Id).Over(
+                new Expression<Func<object?>>[] { () => x.Id },
+                new WindowOrder[] { SqlFunctions.Sql.asc(() => x.Id) },
+                WindowFrame.Rows(1, 1))
+        }));
+        scalarFrame.Should().Be(arrayFrame);
+        scalarFrame.Should().ContainEquivalentOf("over (partition by Id order by Id rows between 1 preceding and 1 following)");
+    }
+
+    [Fact]
+    public void Over_DefaultOrNullOrderArgument_ShouldStillBindToTheExpressionOverload()
+    {
+        var function = new WindowFunction<int>();
+        Expression<Func<object?>> partition = () => 1;
+
+        // A method-group conversion to a delegate whose second parameter is an expression only compiles
+        // while the original (Expression, Expression, WindowFrame) overload is the one selected: the new
+        // overload's second parameter is a WindowOrder and cannot satisfy this delegate signature.
+        Func<Expression<Func<object?>>?, Expression<Func<object?>>?, WindowFrame?, int> expressionOverload = function.Over;
+        expressionOverload(partition, null, null).Should().Be(0);
+
+        // The target-typed default / null argument is resolved at compile time, so read back the method
+        // the compiler actually bound from an expression tree and assert its parameter types.
+        Expression<Func<int>> withDefault = () => function.Over(partitionBy: partition, orderBy: default);
+        Expression<Func<int>> withNull = () => function.Over(partitionBy: () => 1, orderBy: null);
+
+        AssertOverload(withDefault, typeof(Expression<Func<object?>>), typeof(Expression<Func<object?>>), typeof(WindowFrame));
+        AssertOverload(withNull, typeof(Expression<Func<object?>>), typeof(Expression<Func<object?>>), typeof(WindowFrame));
+    }
+
+    [Fact]
+    public void Over_ScalarOrderArgument_ShouldBindToTheNewOverload()
+    {
+        var function = new WindowFunction<int>();
+        Expression<Func<object?>> partition = () => 1;
+        var order = CreateWindowOrder(() => 2, OrderDirection.Asc);
+
+        // Positive method-group conversion to the new (Expression, WindowOrder, WindowFrame) signature.
+        Func<Expression<Func<object?>>?, WindowOrder, WindowFrame?, int> scalarOverload = function.Over;
+        scalarOverload(partition, order, null).Should().Be(0);
+
+        Expression<Func<int>> twoArguments = () => function.Over(partitionBy: partition, orderBy: order);
+        Expression<Func<int>> framed = () => function.Over(partitionBy: partition, orderBy: order, frame: WindowFrame.Rows(1, 1));
+
+        AssertOverload(twoArguments, typeof(Expression<Func<object?>>), typeof(WindowOrder), typeof(WindowFrame));
+        AssertOverload(framed, typeof(Expression<Func<object?>>), typeof(WindowOrder), typeof(WindowFrame));
+    }
+
+    private static void AssertOverload(Expression<Func<int>> call, params Type[] expectedParameterTypes)
+    {
+        var method = ((MethodCallExpression)call.Body).Method;
+
+        method.Name.Should().Be(nameof(WindowFunction<int>.Over));
+        method.GetParameters().Select(p => p.ParameterType).Should().Equal(expectedParameterTypes);
+    }
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) =>
+        ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None))
+            .DbCommand.CommandText
+            .Replace("\r\n", "\n");
 
     [Fact]
     public void WindowFrame_GroupsFactory_ShouldExposeTypeAndBounds()

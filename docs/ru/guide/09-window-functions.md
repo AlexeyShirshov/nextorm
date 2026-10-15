@@ -123,6 +123,31 @@ select id, row_number() over (partition by nullableint order by id desc) as 'r'
  from complex_entity
 ```
 
+Для **одной** секции и **одного** ключа сортировки массивы не нужны: передайте выражение секции и
+`WindowOrder` напрямую первыми двумя аргументами, а рамку — необязательным третьим. Генерируемый SQL
+совпадает с формой с массивом из одного элемента выше:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        e.Id,
+        r = SqlFunctions.Sql.row_number().Over(
+            () => e.Int,
+            SqlFunctions.Sql.desc(() => e.Id)),
+        running = SqlFunctions.Sql.sum_over(e.Id).Over(
+            () => e.Int,
+            SqlFunctions.Sql.asc(() => e.Id),
+            frame: WindowFrame.RowsUnboundedPrecedingToCurrentRow)
+    })
+    .ToList();
+```
+
+```sql
+select id, row_number() over (partition by nullableint order by id desc) as 'r', sum(id) over (partition by nullableint order by id rows between unbounded preceding and current row) as 'running'
+ from complex_entity
+```
+
 ## `lag` и `lead` со смещением и значением по умолчанию
 
 `lag`/`lead` принимают необязательное смещение и значение по умолчанию. Значение по умолчанию заполняет

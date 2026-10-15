@@ -122,6 +122,31 @@ select id, row_number() over (partition by nullableint order by id desc) as 'r'
  from complex_entity
 ```
 
+For a **single** partition expression and a **single** ordering key the arrays are unnecessary: pass the
+partition expression and the `WindowOrder` directly as the first two arguments, with an optional frame as
+the third. The generated SQL is identical to the one-element array form above:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        e.Id,
+        r = SqlFunctions.Sql.row_number().Over(
+            () => e.Int,
+            SqlFunctions.Sql.desc(() => e.Id)),
+        running = SqlFunctions.Sql.sum_over(e.Id).Over(
+            () => e.Int,
+            SqlFunctions.Sql.asc(() => e.Id),
+            frame: WindowFrame.RowsUnboundedPrecedingToCurrentRow)
+    })
+    .ToList();
+```
+
+```sql
+select id, row_number() over (partition by nullableint order by id desc) as 'r', sum(id) over (partition by nullableint order by id rows between unbounded preceding and current row) as 'running'
+ from complex_entity
+```
+
 ## `lag` and `lead` with offset and default
 
 `lag`/`lead` accept an optional offset and default. The default only fills a **missing row** at the

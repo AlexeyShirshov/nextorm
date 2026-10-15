@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -138,5 +139,36 @@ public abstract partial class CommonTestSuite
         rows[0].prev.Should().Be(0);
         rows[1].prev.Should().BeNull();
         rows[2].prev.Should().Be(1);
+    }
+
+    [Fact]
+    public void ScalarOverload_ShouldMatchTheArrayOverloadResult()
+    {
+        // The scalar (partition, WindowOrder) overload is end-to-end equivalent to the single-element
+        // array form; compare the materialised rows rather than the SQL text.
+        var scalar = _sut.ComplexEntity
+            .Select(e => new
+            {
+                e.Id,
+                rn = SqlFunctions.Sql.row_number().Over(
+                    partitionBy: () => e.Int,
+                    orderBy: SqlFunctions.Sql.asc(() => e.Id))
+            })
+            .OrderBy(1, OrderDirection.Asc)
+            .ToList();
+
+        var array = _sut.ComplexEntity
+            .Select(e => new
+            {
+                e.Id,
+                rn = SqlFunctions.Sql.row_number().Over(
+                    partitionBy: new Expression<Func<object?>>[] { () => e.Int },
+                    orderBy: new WindowOrder[] { SqlFunctions.Sql.asc(() => e.Id) })
+            })
+            .OrderBy(1, OrderDirection.Asc)
+            .ToList();
+
+        scalar.Should().Equal(array);
+        scalar.Select(x => x.rn).Should().Equal(1, 1, 2);
     }
 }

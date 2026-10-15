@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
 using NextORM.SqlServer;
@@ -354,6 +355,51 @@ public class SqlGenerationTests
         }));
 
         sql.Should().Contain("nth_value(id, 2) over (order by id)");
+    }
+
+    [Fact]
+    public void WindowScalarOverload_ShouldMatchTheArrayOverloadSql()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // The scalar (partition, WindowOrder) overload is a call-shape alias for the single-element array
+        // form; both shapes must render byte-identical SQL, with and without a frame.
+        var scalar = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(
+                partitionBy: () => x.Int,
+                orderBy: SqlFunctions.Sql.asc(() => x.Id))
+        }));
+        var array = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(
+                new Expression<Func<object?>>[] { () => x.Int },
+                new WindowOrder[] { SqlFunctions.Sql.asc(() => x.Id) })
+        }));
+        scalar.Should().Be(array);
+        scalar.Should().Contain("row_number() over (partition by nullableint order by id)");
+
+        var scalarFrame = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            v = SqlFunctions.Sql.sum_over(x.Id).Over(
+                partitionBy: () => x.Int,
+                orderBy: SqlFunctions.Sql.asc(() => x.Id),
+                frame: WindowFrame.Rows(1, 1))
+        }));
+        var arrayFrame = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            v = SqlFunctions.Sql.sum_over(x.Id).Over(
+                new Expression<Func<object?>>[] { () => x.Int },
+                new WindowOrder[] { SqlFunctions.Sql.asc(() => x.Id) },
+                WindowFrame.Rows(1, 1))
+        }));
+        scalarFrame.Should().Be(arrayFrame);
+        scalarFrame.Should().Contain("over (partition by nullableint order by id rows between 1 preceding and 1 following)");
     }
 
     [Fact]
