@@ -1,0 +1,30 @@
+{
+ "captured": "2026-10-14T23:56:55Z",
+ "case": "seal",
+ "cwd": "/home/alex/sources/nextorm",
+ "open_rows": [
+  "E232-09",
+  "E232-11",
+  "E232-13",
+  "E232-16",
+  "E232-17",
+  "EC232-BUILD",
+  "EC232-RV3-SEAL",
+  "EC232-RV4-PACKAGING",
+  "EC232-RV4-V05",
+  "EC232-RV4-V18",
+  "EC232-RV4-V19",
+  "EC232-RV4-V21",
+  "EC232-RV4-COVERAGE",
+  "EC232-RV4-OWNERSHIP",
+  "EC232-RV4-HANDOFF",
+  "EC232-RV4-SECURITY",
+  "EC232-RV4-PERF",
+  "EC232-RV4-SEAL"
+ ],
+ "reason": "18 applicable rows still open",
+ "row": "EC232-RV4-SEAL",
+ "schema_exit": 0,
+ "status": "open",
+ "unit": "D-12"
+}

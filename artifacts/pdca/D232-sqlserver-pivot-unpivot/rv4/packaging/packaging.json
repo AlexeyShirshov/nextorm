@@ -1,0 +1,22 @@
+{
+ "artifact": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json",
+ "assertions": {
+  "docs_state_exception": true,
+  "no_nextorm_packageref": true,
+  "project_reference_core": true,
+  "project_reference_sqlserver": true
+ },
+ "c13": {
+  "advisory_only": true,
+  "cs_or_packaging_errors": [],
+  "exit": 1,
+  "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.out"
+ },
+ "captured": "2026-10-14T23:57:19Z",
+ "case": "packaging",
+ "cwd": "/home/alex/sources/nextorm",
+ "reason": "literal C13 exits 1 (advisory-only NU1902/NU1903 -> D-13); packaging route itself adds no CS/packaging error",
+ "row": "EC232-RV4-PACKAGING",
+ "status": "open",
+ "unit": "D-08"
+}

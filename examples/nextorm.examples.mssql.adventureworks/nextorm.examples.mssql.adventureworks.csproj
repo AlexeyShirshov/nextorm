@@ -9,9 +9,17 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" />
-    <PackageReference Include="nextorm" />
-    <PackageReference Include="nextorm.sqlserver" />
     <PackageReference Include="Testcontainers.MsSql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Intentional exception to the other examples' published-package model (#232): this example
+      demonstrates the current-checkout typed PIVOT/UNPIVOT surface, which is not in a published
+      package yet, so it references the source projects instead of the `nextorm` NuGet metapackage.
+    -->
+    <ProjectReference Include="../../src/nextorm.core/nextorm.core.csproj" />
+    <ProjectReference Include="../../src/nextorm.sqlserver/nextorm.sqlserver.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,12 @@
+{
+ "acceptance": "V05 TVF inner closure, selected > 0, exit 0",
+ "captured": "2026-10-14T23:56:57Z",
+ "case": "v05",
+ "cwd": "/home/alex/sources/nextorm",
+ "exit": 8,
+ "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.out",
+ "reason": "command exit 8",
+ "row": "EC232-RV4-V05",
+ "status": "open",
+ "unit": "D-09"
+}

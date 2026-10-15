@@ -1,0 +1,12 @@
+{
+ "captured": "2026-10-14T23:56:57Z",
+ "case": "ownership",
+ "cwd": "/home/alex/sources/nextorm",
+ "missing_inputs": [
+  "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json"
+ ],
+ "reason": "required input not present (planned future unit); fail-closed",
+ "row": "EC232-RV4-OWNERSHIP",
+ "status": "blocked",
+ "unit": "D-11"
+}

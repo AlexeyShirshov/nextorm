@@ -15,9 +15,13 @@ it — start there to understand how to translate a query.
 | [`nextorm.examples.mssql.adventureworks`](nextorm.examples.mssql.adventureworks/README.md) | `nextorm.sqlserver` | AdventureWorks 2022 | [Sql/](nextorm.examples.mssql.adventureworks/Sql) |
 | [`nextorm.examples.clickhouse.analytics`](nextorm.examples.clickhouse.analytics/README.md) | `nextorm.clickhouse` | ClickHouse `datasets.hits_v1` | [Sql/](nextorm.examples.clickhouse.analytics/Sql) |
 
-> The three projects consume the **published `nextorm.*` NuGet packages** (version pinned by
-> `NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props)) instead of referencing
-> `src/` directly, so they double as a real consumer of what ships on nuget.org.
+> The postgres and clickhouse projects consume the **published `nextorm.*` NuGet packages** (version
+> pinned by `NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props)) instead of
+> referencing `src/` directly, so they double as a real consumer of what ships on nuget.org.
+> **`nextorm.examples.mssql.adventureworks` is an explicit exception** (#232): it references
+> `nextorm.core`/`nextorm.sqlserver` from `src/` via `ProjectReference` so it can demonstrate the
+> current-checkout typed `Pivot`/`Unpivot` surface, which is not in a published package yet. Its run
+> and build commands are the same as the other examples.
 
 ## Running
 

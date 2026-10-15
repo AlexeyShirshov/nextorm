@@ -8,6 +8,11 @@ The point of this project is to show **how a real SQL query becomes nextorm code
 the method comment names it, and the tables below map each SQL construct to the nextorm construct that
 replaces it. Read a `Sql/*.sql` file next to its method and you can translate your own queries.
 
+> **Consumes the current checkout (not a published package).** Unlike the postgres and clickhouse
+> examples, this project references `nextorm.core`/`nextorm.sqlserver` from `src/` via `ProjectReference`
+> instead of the published `nextorm.*` NuGet packages, so it can demonstrate the working-tree typed
+> `Pivot`/`Unpivot` surface (#232). The run and build commands below are unchanged.
+
 ## Layout
 
 | Path | What it is |

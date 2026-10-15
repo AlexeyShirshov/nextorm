@@ -1,0 +1,12 @@
+{
+ "argv": [
+  "dotnet",
+  "restore",
+  "nextorm.slnx"
+ ],
+ "cwd": "/home/alex/sources/nextorm",
+ "env": {
+  "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+ },
+ "captured": "2026-10-14T23:56:53Z"
+}

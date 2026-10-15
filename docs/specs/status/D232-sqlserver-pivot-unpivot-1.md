@@ -4,15 +4,16 @@
 - issue: [#232](https://github.com/AlexeyShirshov/nextorm/issues/232) — OPEN, label `enhancement`, milestone **1.0.9-rc3**
 - collection: `1.0.9-todo` (single group; current worktree/branch `1.0.9-rc3`; no worktree/branch/merge)
 - selected_variant: `pdca-dotnet` (+ overlay `nextorm-pdca`)
-- current cycle `N=1`; plan_revision: `r=3`; attempt: `n=2`; evidence_contract: `rv=3`
-- attempt `n=2` is **inside the already-authorized r=3 branch**: the binding `escalate` decision authorized exactly one more fix of `D232-D05-derived-fallback-insufficient` in `QueryCommand.QueryPreparer.cs`; no `planner` r=4 and no third attempt (`n=3` for this defect is forbidden)
-- current_plan: `P232-r3-gated-typed-derived-repair`
-- **plan_state: `ready`** (gate 1 satisfied; r=3 additive amendment re-affirmed)
+- current cycle `N=1`; plan_revision: `r=4`; attempt: `n=1`; evidence_contract: `rv=4`
+- **Authoritative CHECK at `r=3` / `n=2` / `rv=3` FAILED** (build/security/unsealed evidence); primary route **CHECK → PLAN**. The material `planner` replan accepted the correction and **supersedes rv3 as the current contract (`rv3 → rv4`)**; `r=4` / `n=1` is the next DO attempt. The earlier `n=3` prohibition applied only *inside* the r=3 branch and does not bind r=4.
+- current_plan: `P232-r4-sourcebound-variant-coverage-handoff`
+- **plan_state: `ready`** (gate 1 satisfied; r=4 material replan — D-06/D-07 reopened for acceptance, D-08…D-13 are new active remediation units)
 - starting HEAD: `3e49fe0c`
 - committed units: D-01 `9b4bf5d4`, D-02 `04d2289d`, D-03 `8f0d8309`, D-04 `706dd7b7`
-- r=3 commits: `3e894f1f`, `9d9c9380` (D-05 partial, historical/provisional), `4674ffde` (repro checkpoint), `b05e94ba` (additive fallback)
-- **D-05 (r=3 delta) status: `evidence-complete`**; **D-06 (docs/example) status: `done`** — C13/C14 exit 0, narrow affected rerun 29/29, registry PIV-TYP1 + T53 `#232` candidates recorded; this is **not** a CHECK verdict (EC232-RV3-SEAL and D-07 remain open)
-- **D-07 (boundary/handoff) status: `done`** — C11 boundary green (seven per-project suites + the six-provider container run, 0 provider skips), C12 candidate coverage meets both thresholds, C15 acceptance perf within noise, C16 footprint clean, C17/C18/C19 exit 0; **E232-11 stays `open`** (touched-area percentage decreased; see below). This is **not** a CHECK verdict — `E232-17` and `EC232-RV3-SEAL` remain CHECK-owned.
+- r=3 commits: `3e894f1f`, `9d9c9380` (D-05 partial, historical/provisional), `4674ffde` (repro checkpoint), `b05e94ba` (additive fallback), `001f9c9c` (D-06 docs/example, historical/provisional), `4dc0f6b3` (D-07 boundary/handoff, historical/provisional)
+- **D-01…D-05 + `D232-PREREQ-typed-derived` + `D232-AMEND-unpivot-null-oracle`: `done`** (commits preserved).
+- **D-06 (docs/example) and D-07 (boundary/handoff): reopened for acceptance — not superseded.** Their r=3 `done` was provisional; the authoritative CHECK rejected it, so their packaging/coverage/variant/ownership/handoff/seal obligations are now active under D-08/D-09/D-10/D-11/D-12. Historical r=3 evidence is preserved in the ledger below.
+- **New active remediation units:** D-08 packaging, D-09 variant closure, D-10 coverage, D-11 ownership/handoff, D-12 evidence reconciliation/seal, D-13 security prerequisite coordination. **P1 blocker `B232-AUDIT-DEPENDENCY`** coordinates D-13.
 
 ## Task
 
@@ -92,6 +93,10 @@ Accessors: `PivotValues.Value<T>(string)`, `UnpivotValues.Name<T>(string)`, `Unp
 r=1 / rv=1: initial candidate; D-01..D-04 executed and committed (9b4bf5d4, 04d2289d, 8f0d8309, 706dd7b7).
 r=2 / rv=2: issued in-session, never transcribed or executed; no rv2 artifact directory. Superseded by r=3 / rv=3 after binding escalation authorized narrowly gated engine changes previously excluded.
 r=3 / rv=3: additive typed-derived prerequisite and independent oracle amendment; n reset to 1 because implementation actions and authorized footprint materially changed. Original acceptance criteria retained.
+(a) correction: the authoritative CHECK that FAILED belongs to r=3 / n=2 / rv=3 (NOT n=1). The r=3 branch reached n=2 via the escalate-authorized fallback fix; the CHECK ran on that sealed tree.
+(b) verdict: the r=3 CHECK FAILED on build/security/unsealed evidence; the primary route is CHECK -> PLAN.
+(c) material replan: `planner` accepted the correction and explicitly superseded the current contract rv3 -> rv4 (rv3 history preserved, never rewritten). The 30 existing row IDs/obligations are carried forward.
+(d) r=4 / n=1: the next DO attempt; plan `P232-r4-sourcebound-variant-coverage-handoff` (D-06/D-07 reopened, D-08..D-13 new active remediation units). r reset to 4 and n reset to 1 because the work and footprint materially changed.
 ```
 
 ## Acceptance criteria
@@ -268,7 +273,40 @@ Semantics: **C20** runs the isolated repro children *before* production edits; o
 
 Every new row is **P1**.
 
-## Test strategy with per-unit scope + boundary
+## Evidence contract `rv=4` (supersedes rv3 as the *current* contract)
+
+Frozen manifest path: **`artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json`**. Below, `R` denotes `artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4`.
+
+- **Supersession:** the authoritative CHECK at **r=3 / n=2 / rv=3 FAILED** (build/security/unsealed evidence; primary route CHECK → PLAN). The material `planner` replan accepted the correction and supersedes **rv3 as the current contract** (`rv3 → rv4`). **rv3 history is preserved, not rewritten** — the two rv3 artifacts (`contract.json`, `manifest.json`, `counters.json`) stay on disk.
+- **Carried verbatim:** rows **E232-01…E232-17** and **every `EC232-*`** keep their IDs and obligations and their original rv1/rv3 artifact paths.
+- **Reconciled claims (never copy the rv3 "27 `met`" figure — recompute counters from rows):**
+  - **Carried forward `open`:** `E232-11` (AC-06), `E232-17`, `EC232-RV3-SEAL`.
+  - **Reopened `met` → `open` with the CHECK reasons:**
+    - `E232-09` (cache/eager/join/source-binding) — sealed `met` via C05/C08, but those runs required `-p:NuGetAudit=false`; the ordinary restore fails, so the environment is not reproducible.
+    - `E232-13` (example) — C13 green only against a locally packed feed; the literal C13 build fails (packaging mismatch + advisory).
+    - `E232-16` (scope/CRLF/handoff) — the D-06 commit (`001f9c9c`) folded foreign #160 hunks without explicit authorization.
+    - `EC232-BUILD` — the current ordinary `dotnet build nextorm.slnx -c Debug` is **not green** (26 NU1902/NU1903 errors).
+- **Seeded accounting:** `R/manifest.json` is seeded from rows — **41 required rows** (23 `met` carried with rv3 evidence / 18 `open`), schema-validated (`validate_inner_loop.py manifest` exit 0). `R/accounting-correction.json` supersedes the stale `rv3/counters.json` `attempt` field (the CHECK ran at n=2, not n=1).
+- **Driver:** `R/verify.py` (case driver skeleton, fail-closed) — each case writes `R/<case>.json` and `R/logs/<case>.{out,err,exit,cmd.json}`; exit 0 = ok, 2 = violation, 1 = missing input/usage.
+- **CHECK re-gather budget:** unchanged — **two targeted batches total per CHECK invocation**, at most one repeat per missing/ambiguous row; exhaustion yields an explicit evidence gap.
+
+**rv4 delta rows (11; every new row is P1).** Exact invocation for each: `python3 "$R/verify.py" --case <case>`.
+
+| ID / rv | Requirement; scenario | Owner | Unit | Case (`--case`) | Expected outcome | Negative acceptance |
+|---|---|---|---|---|---|---|
+| `EC232-RV4-PACKAGING` / 4 | D-08: example consumes the current checkout (ProjectReference) | coder-example | D-08 | `packaging` | literal C13 exit 0, no CS/packaging error, no override/feed masking | override/feed-masked pass rejected |
+| `EC232-RV4-V05` / 4 | D-09: V05 TVF inner closure | coder-sql-tests | D-09 | `v05` | selected ≥ 1, exit 0 | unexecuted/zero-selected rejected |
+| `EC232-RV4-V18` / 4 | D-09: V18 typo/absent data value closure | coder-sql-tests | D-09 | `v18` | selected ≥ 1, exit 0 | unexecuted rejected |
+| `EC232-RV4-V19` / 4 | D-09: V19 dynamic PIVOT guard | coder-sql-tests | D-09 | `v19` | selected ≥ 1, exit 0 | unexecuted rejected |
+| `EC232-RV4-V21` / 4 | D-09: V21 eager/single-query state closure; V14/V22 preserved | coder-sql-tests | D-09 | `v21` | selected ≥ 1, exit 0 | unexecuted rejected |
+| `EC232-RV4-COVERAGE` / 4 | D-10: thresholds **and** comparable touched-scope non-decrease | coder-coverage | D-10 | `coverage` | ≥85 line / ≥75 branch **and** no touched-scope decrease | denominator/exclusion change rejected |
+| `EC232-RV4-OWNERSHIP` / 4 | D-11: verified #160 owner identity + explicit authorization | coder-handoff | D-11 | `ownership` | record present, T232-only footprint | implicit/blanket authorization rejected |
+| `EC232-RV4-HANDOFF` / 4 | D-11: per-hunk byte hashes, clean paths, CRLF | coder-handoff | D-11 | `handoff` | hashes match, no foreign byte changed | foreign byte change rejected |
+| `EC232-RV4-SECURITY` / 4 | D-13: advisory capture + duplicate search | coder-security | D-13 | `security` | complete identifiers/paths/exits captured | masking with `NuGetAudit=false` rejected |
+| `EC232-RV4-PERF` / 4 | perf re-confirmation on the rv4 tree | coder-perf | D-10 | `perf` | seven cases, no unexplained material regression | unexplained ≥20% regression rejected |
+| `EC232-RV4-SEAL` / 4 | D-12: rv4 reconciliation/seal | CHECK | D-12 | `seal` | manifest schema valid **and** zero applicable open rows | sealing with unsupported `met`/open rows rejected |
+
+
 
 **Planned assertions**
 - Preparation: mapped names available/resolved safely at extension time; the `TableAlias` registration precedes the relevant column use.
@@ -390,6 +428,127 @@ No parallel mutable ownership. Maintain the status/todo at every completed and n
 
 No unit is superseded. D-05's r=3 delta is evidence-complete; D-06 and D-07 are done. The whole cycle remains open until CHECK.
 
+### Unit ledger (r=4) — reconciled
+
+D-01…D-05 (incl. the r=3 delta), `D232-PREREQ-typed-derived` and `D232-AMEND-unpivot-null-oracle`: **done** (commits preserved). **D-06 and D-07 are reopened for acceptance — not superseded.**
+
+| Unit | State (r=4) | Commit / evidence |
+|---|---|---|
+| D-01 Preparation probes | done | `9b4bf5d4` |
+| D-02 Test contract | done | `04d2289d` |
+| D-03 Core markers | done | `8f0d8309` |
+| D-04 Provider overloads | done | `706dd7b7` |
+| `D232-PREREQ-typed-derived` | done (r=3 / n=2) | `b05e94ba` + pass-through fix |
+| `D232-AMEND-unpivot-null-oracle` | done | C24 exit 0 (`rv3/oracle/amendment.json`) |
+| D-05 Integration/mutation | done (r=3 delta evidence-complete) | C21/C22/C23/C29/C31/C07 sealed at rv3 |
+| D-06 Docs/example | **reopened for acceptance** | r=3 provisional `001f9c9c`; packaging/docs obligations now active under D-08 (packaging) and D-11 (foreign hunks) |
+| D-07 Boundary/handoff | **reopened for acceptance** | r=3 provisional `4dc0f6b3`; coverage/handoff/seal obligations now active under D-10/D-11/D-12 |
+| **D-08 Packaging remediation** | **active** | AdventureWorks csproj + example docs: plain build (no version override, no feed masking) and literal C13 exit 0; reject overrides/feed masking. Depends on: none. Evidence row `EC232-RV4-PACKAGING`. |
+| **D-09 Variant remediation** | **active** | V05/V18/V19/V21 executable closure (tests + EN/RU guide), V14/V22 preserved. Depends on: none. Rows `EC232-RV4-V05/V18/V19/V21`. |
+| **D-10 Coverage remediation** | **active** | thresholds **AND** comparable touched-scope non-decrease; never alter denominators/exclusions to manufacture a pass. Depends on: D-09 (final touched scope). Rows `EC232-RV4-COVERAGE`, `EC232-RV4-PERF`; `E232-11` carried open. |
+| **D-11 Ownership/handoff remediation** | **active** | `rv4/ownership.json` + `rv4/handoff.json`: verified #160 sibling-owner identity + explicit post-discovery authorization, per-hunk byte hashes, T232-only footprint, clean paths, CRLF. Depends on: none. Rows `EC232-RV4-OWNERSHIP`, `EC232-RV4-HANDOFF`; `E232-16` reopened. |
+| **D-12 Evidence reconciliation/seal** | **active** | rv4 evidence reconciliation and seal: retract unsupported `met` claims; seal rv4 only after the substantive gates. Depends on: D-08…D-11, D-13. Row `EC232-RV4-SEAL`; `E232-17`, `EC232-RV3-SEAL` carried open. |
+| **D-13 Security prerequisite coordination** | **active (blocker `B232-AUDIT-DEPENDENCY`)** | advisory capture + duplicate search + separate-issue remedy ownership. Depends on: external authority/resource. Row `EC232-RV4-SECURITY`. |
+
+### Allowlist reconciliation (r=4)
+
+The original planned files are kept. The rv3-approved additive exceptions remain allowed, and **CHECK explicitly rejected the alleged footprint violation** for them (they were the authorized additive fallback, not unapproved production scope):
+
+- `Builders/EntityBuilder.cs` — internal marker/projection-preserving handoff only.
+- `DataContext/DataContextExtensions.cs:1377` — gated builder-to-command routing only.
+- `Visitors/MemberTranslator.cs:834` — the reproduced guard + neighbouring helper only.
+- `Expressions/FromExpression.cs` — internal marker only (indispensable case only).
+- `QueryCommand.QueryPreparer.cs` — **the approved additive fallback only** (`TryGetReusableDerivedShape` + the n=2 `DerivedPassThroughColumn`/`TryGetColumnIdentifier` pass-through).
+
+**Exactly one new packaging exception is added for r=4:**
+
+- `examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj` — the authorized D-08 packaging route (ProjectReference in place of the `nextorm`/`nextorm.sqlserver` PackageReferences).
+
+**All other project/package files stay forbidden** (`examples/Directory.Packages.props`, the root version properties and every other `*.csproj`/`*.props`).
+
+### Open defect blocks (r=4)
+
+Originating CHECK: **r=3 / n=2 / rv=3** (failed build/security/unsealed evidence; primary route CHECK → PLAN).
+
+```text
+key: D232-D06-example-package-mismatch
+severity: P1
+state: open
+owner: coder-example (D-08)
+originating_check: r=3 / n=2 / rv=3
+dependent_units: D-08
+required_evidence_rows: EC232-RV4-PACKAGING
+scenario: the AdventureWorks example consumed published packages; the typed PIVOT/UNPIVOT API is absent from published 1.0.9-rc2, so C13 was green only against a locally packed feed with NuGetAudit=false (version override + feed masking)
+required_acceptance: AC-10 + the literal C13 `dotnet build examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj -c Debug` exits 0 with no version override and no local feed
+negative_acceptance: a pass manufactured by `-p:NextOrmVersion=...`, `RestoreAdditionalProjectSources`, or any feed masking does NOT satisfy this block
+authorized_route: replace the `nextorm`/`nextorm.sqlserver` PackageReferences with ProjectReferences to the current checkout (the packaging exception above)
+```
+
+```text
+key: P232-variant-closure-incomplete
+severity: P1
+state: open
+owner: coder-sql-tests (D-09)
+originating_check: r=3 / n=2 / rv=3
+dependent_units: D-09
+required_evidence_rows: EC232-RV4-V05, EC232-RV4-V18, EC232-RV4-V19, EC232-RV4-V21
+scenario: V05 (TVF inner), V18 (typo/absent data value), V19 (dynamic PIVOT guard) and V21 (eager/single-query state) were not executable-closed at rv3
+required_acceptance: each of V05/V18/V19/V21 has an executable closure (selected > 0, exit 0) with the EN/RU guide updated; V14/V22 preserved
+negative_acceptance: a variant claimed closed without an executed, selected>=1 case is not accepted
+```
+
+```text
+key: D232-D07-touched-coverage-regression
+severity: P1
+state: open
+owner: coder-coverage (D-10)
+originating_check: r=3 / n=2 / rv=3
+dependent_units: D-10
+required_evidence_rows: EC232-RV4-COVERAGE
+scenario: the rv3 candidate met the absolute thresholds (line 88.3 / branch 80.2) but the comparable touched-scope percentage decreased (SqlServerEntityBuilderExtensions, NormSqlTranslator, QueryCommand.QueryPreparer)
+required_acceptance: candidate meets MIN_LINE_COVERAGE/MIN_BRANCH_COVERAGE AND the comparable touched-scope coverage does not decrease
+negative_acceptance: never alter denominators/exclusions (coverage.settings), suites or tool versions to manufacture a pass
+```
+
+```text
+key: D232-D06-foreign-hunks-in-handoff
+severity: P1
+state: open
+owner: coder-handoff (D-11)
+originating_check: r=3 / n=2 / rv=3
+dependent_units: D-11
+required_evidence_rows: EC232-RV4-OWNERSHIP, EC232-RV4-HANDOFF
+scenario: the #232 D-06 commit (001f9c9c) folded pre-existing foreign #160 hunks (AsCte/WithAlias) into examples/.../AdventureWorksQueries.cs without explicit authorization
+required_acceptance: explicit #160-authorization record, per-hunk byte preservation, a corrected handoff, T232-only footprint and clean paths (CRLF)
+negative_acceptance: an implicit/blanket or retro-fitted authorization, or any foreign byte changed, is not accepted
+```
+
+```text
+key: E232-seal-incomplete
+severity: P1
+state: open
+owner: CHECK (D-12)
+originating_check: r=3 / n=2 / rv=3
+dependent_units: D-12
+required_evidence_rows: EC232-RV4-SEAL
+scenario: the rv3 seal carried `met` claims unsupported by the failed CHECK (build/security/unsealed evidence)
+required_acceptance: retract the unsupported `met` claims (E232-09/E232-13/E232-16 and EC232-BUILD reopened); seal rv4 only after the substantive gates (D-08…D-13) — zero applicable open rows on a valid contract
+negative_acceptance: sealing rv4 while unsupported `met` claims or any applicable open row remain is not accepted
+```
+
+```text
+key: B232-AUDIT-DEPENDENCY
+severity: P1
+state: blocker
+owner: orchestrator (coordination); remedy owner TBD by the separate issue (D-13)
+originating_check: r=3 / n=2 / rv=3
+dependent_units: D-13 (coordination), D-12 (seal depends on D-13)
+required_evidence_rows: EC232-RV4-SECURITY
+scenario: an ordinary `dotnet restore/build` fails on the transitive System.Security.Cryptography.Pkcs 9.0.11 advisory (NU1902 GHSA-2fmv-rv2c-59x7 / NU1903 GHSA-846f-f764-76mx) promoted to errors by TreatWarningsAsErrors; the audit dependency is the security prerequisite
+required_acceptance: advisory captured with complete identifiers/package paths/exit codes; duplicate search run; remedy ownership tracked by a separate issue; an ordinary audited restore/build must be green
+escalation: if the required external authority/resource is unavailable, escalate rather than mask the failure with NuGetAudit=false
+```
+
 ### D-07 final state (r=3) — handoff to CHECK
 
 - **Units:** D-01…D-07 done; the two additive units `D232-PREREQ-typed-derived` and `D232-AMEND-unpivot-null-oracle` are done. No unit is superseded.
@@ -471,6 +630,8 @@ No #232 acceptance requirement is deferred.
 
 On continuation (collection lane resumes this same cycle from DO): execute D-01…D-07 **sequentially**. Before each production unit validate its brief; afterwards validate the report with the actual counts/exits.
 
+**r=4 continuation:** the r=3 CHECK failed, so the next DO runs the rv4 remediation units **sequentially**: D-08 (packaging), D-09 (variant closure), D-10 (coverage/perf), D-11 (ownership/handoff), D-13 (security prerequisite coordination, blocker `B232-AUDIT-DEPENDENCY`), then D-12 (evidence reconciliation/seal). Each delta row's exact invocation is `python3 "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/verify.py" --case <case>`. Do not seal rv4 while any applicable row is open or an unsupported `met` claim stands.
+
 If a probe reveals a prerequisite, keep the original `D` active and blocked on the added dependency — not done or superseded. A genuine scope replacement requires an explicit mapping and preserved criteria.
 
 CHECK→PLAN creates a new `P:` task with the actual correction. Only materially changed work increments `r` and resets `n`; absent reports/renaming do not. Apply the no-fourth-attempt and persistent-low-confidence escalation rules.
@@ -499,7 +660,13 @@ CHECK→PLAN creates a new `P:` task with the actual correction. Only materially
 - plan `docs/specs/roadmap/todo_sqlserver_typed_pivot_unpivot.md`
 - status `docs/specs/status/D232-sqlserver-pivot-unpivot-1.md`
 
-Evidence plumbing/results: `artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/`; generated benchmark outputs are recorded, not indiscriminately staged.
+**rv=4 additive exception (authorized, D-08)** — exactly one new non-source path joins the allowlist:
+- example `examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj` — `nextorm`/`nextorm.sqlserver` `PackageReference` → `ProjectReference` to the current checkout.
+- docs `examples/README.md`, `examples/VERIFICATION.md`, `examples/nextorm.examples.mssql.adventureworks/README.md` — note the explicit current-checkout exception.
+
+All other project/package files stay forbidden (`examples/Directory.Packages.props`, root version properties, every other `*.csproj`/`*.props`).
+
+Evidence plumbing/results: `artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/` + `.../rv4/`; generated benchmark outputs are recorded, not indiscriminately staged.
 
 Preserve CRLF; normalize only edited text files. Collection commit only after the authorized continuation/acceptance, with explicit task paths and the `#232` prefix; never `git add -A`, merge or push.
 
@@ -527,6 +694,12 @@ Stable **defect key** → observed revisions/attempts, number of fixes applied, 
 | `D232-D04-celltype-oracle-anonymous-shape` | r=1 / n=1 | 1 | `tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs:244-274` | fixed in D-04 (test green) |
 | `D232-D04-wholesource-oracle-wrong-branch` | r=1 / n=1 | 1 | `tests/nextorm.sqlserver.tests/T232TypedPivotTests.cs:431-457`; `src/nextorm.sqlserver/Extensions/PivotProjectionRewriter.cs:54-57,329-330` | fixed in D-04 (both cases green) |
 | `D232-D05-derived-fallback-insufficient` | r=3 / n=1 | 1 (n=2, escalate-authorized; `n=3` forbidden) | `artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/derived/blocker.json`; `.../rv3/mutation/prerequisite.json`; commit `b05e94ba` (insufficient fallback) → n=2 fix in `QueryCommand.QueryPreparer.cs` | fixed at n=2 (R01–R07 + V26/V27 green; PP1 revert mutant kills the R-probes and the SQL Server derived fact) |
+| `D232-D06-example-package-mismatch` | r=3 / n=2 | 0 | `rv4/security/c13-example-build.out`; `rv4/packaging/packaging.json` | **open** (D-08 packaging remediation) |
+| `P232-variant-closure-incomplete` | r=3 / n=2 | 0 | `rv4/variants/` (planned) | **open** (D-09 variant remediation) |
+| `D232-D07-touched-coverage-regression` | r=3 / n=2 | 0 | `rv1/branch-delta.json`; `rv4/coverage/` (planned) | **open** (D-10 coverage remediation) |
+| `D232-D06-foreign-hunks-in-handoff` | r=3 / n=2 | 0 | `rv1/d07-footprint.json`; `rv4/ownership.json`/`rv4/handoff.json` (planned) | **open** (D-11 ownership/handoff remediation) |
+| `E232-seal-incomplete` | r=3 / n=2 | 0 | `rv3/check/summary.json`; `rv4/manifest.json` | **open** (D-12 evidence reconciliation/seal) |
+| `B232-AUDIT-DEPENDENCY` | r=3 / n=2 | 0 | `rv4/security/advisories.json`; `rv4/security/gh-search/` | **blocker** (D-13 security prerequisite coordination) |
 
 ### Open defect blocks (r=3)
 
@@ -670,4 +843,12 @@ closed_by: C24 exit 0 (exactly one changed key `null_count_expectations.unpivot_
 2026-10-14 23:35Z | DO | revision r=3 | iteration n=2/3 | **AC-12 sibling item (for CHECK):** the `#232` D-06 commit (`001f9c9c`) folded in pre-existing foreign edits to `examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs` (the #160 `AsCte`/`WithAlias` sibling work) — that file was in the D-01 foreign baseline and is no longer dirty because D-06 committed it; recorded, not hidden | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/d07-footprint.json
 2026-10-14 23:35Z | DO | revision r=3 | iteration n=2/3 | **D-07 done — not a CHECK verdict.** Continuous reuse note: the brief's `rv3/verify.py boundary|coverage|footprint` paths were executed as the canonical rv1-catalog invocations C11/C12/C16; `rv3/verify.py` now exposes thin delegates for those literal paths (`footprint` delegate exercised exit 0). `plan_state` unchanged; no cycle closure, no ACT | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
 2026-10-14 23:36Z | DO | revision r=3 | iteration n=2/3 | environment note: the acceptance benchmark and the example build need `NuGetAudit=false` / the local feed (NU1902/NU1903 advisory, unrelated to this task) — recorded, not a change exemption | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/perf-comparison.json
+2026-10-14 23:52Z | PLAN | revision r=4 | iteration n=1/3 | r=4/rv=4 transcribed — material replan after the authoritative **r=3/n=2** CHECK failure (build/security/unsealed evidence; CHECK → PLAN); rv3 superseded as the current contract with history preserved; D-06/D-07 reopened (not superseded); D-08…D-13 active; P1 blocker `B232-AUDIT-DEPENDENCY` | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md
+2026-10-14 23:53Z | DO | revision r=4 | iteration n=1/3 | DO resumed at r=4 (n=1): rv4 evidence plumbing + D-08 packaging remediation + D-13 capture only (D-09/D-10/D-11/D-12 NOT started) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/
+2026-10-14 23:54Z | DO | revision r=4 | iteration n=1/3 | rv4 evidence plumbing created: `contract.json`/`manifest.json` seeded with **41 required rows** (23 met / 18 open), `validate_inner_loop.py manifest` **exit 0**; `verify.py` case-driver skeleton (fail-closed, `--case`); `accounting-correction.json` supersedes the stale rv3 `attempt` field (CHECK ran at n=2, not n=1) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json
+2026-10-14 23:55Z | DO | revision r=4 | iteration n=1/3 | D-08 packaging remediation: AdventureWorks csproj `nextorm`/`nextorm.sqlserver` PackageReferences → ProjectReferences to `src/nextorm.core`/`src/nextorm.sqlserver`; docs note the explicit current-checkout exception in `examples/README.md`, `examples/VERIFICATION.md` and the AdventureWorks `README.md` | examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj
+2026-10-14 23:55Z | DO | revision r=4 | iteration n=1/3 | D-08 command evidence: `dotnet restore nextorm.slnx` **exit 1** (advisory-only), `dotnet build nextorm.slnx -c Debug` **exit 1** (26 errors, all NU1902/NU1903), literal C13 `dotnet build examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj -c Debug` **exit 1** (4 errors: 2 for the example, 2 for nextorm.sqlserver — all NU1902/NU1903; **no CS/packaging error**). D-08 packaging route itself adds no error; the remaining failure is D-13's advisory | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json
+2026-10-14 23:56Z | DO | revision r=4 | iteration n=1/3 | D-13 capture: ordinary `dotnet restore nextorm.slnx` exit 1 — `System.Security.Cryptography.Pkcs` 9.0.11 transitive via `Microsoft.Data.SqlClient`: **NU1902 GHSA-2fmv-rv2c-59x7 (moderate)** + **NU1903 GHSA-846f-f764-76mx (high)**, 13 project paths each; no local feed, no version override, NuGetAudit default | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/advisories.json
+2026-10-14 23:57Z | DO | revision r=4 | iteration n=1/3 | D-13 duplicate search (gh permission **granted**, exit 0): `gh issue list --state all --search NU1902` / `NU1903` / `System.Security.Cryptography.Pkcs` / `Microsoft.Data.SqlClient` = **no results**; `gh search issues --author @me` = 30 issues, none about the advisory → **no duplicate**; no issue created (blind creation forbidden) | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/gh-search/
+2026-10-14 23:58Z | DO | revision r=4 | iteration n=1/3 | **BLOCKER `B232-AUDIT-DEPENDENCY` (P1, D-13):** the ordinary restore/build is red on the transitive `System.Security.Cryptography.Pkcs` 9.0.11 advisory promoted to errors; remedy ownership must be tracked by a separate issue (not created here); escalate if the required external authority/resource is unavailable rather than masking with `NuGetAudit=false`. D-09/D-10/D-11/D-12 not started; cycle not closed | artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/advisories.json
 ```

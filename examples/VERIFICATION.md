@@ -41,6 +41,13 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
 
 ## Actuality changes made on this verification
 
+* **AdventureWorks consumes the current checkout instead of a published package (#232).**
+  `nextorm.examples.mssql.adventureworks` replaces its `nextorm`/`nextorm.sqlserver`
+  `PackageReference`s with `ProjectReference`s to `src/nextorm.core` and `src/nextorm.sqlserver`, so it
+  can build the typed `Pivot`/`Unpivot` example against the working tree (an explicit exception to the
+  postgres/clickhouse published-package model — see [`README.md`](README.md)). Run and build commands
+  are unchanged.
+
 * **Examples moved to the published packages.** The three projects now reference the `nextorm.*` NuGet
   packages (`NextOrmVersion = 1.0.4-alpha` in [`Directory.Packages.props`](../Directory.Packages.props))
   instead of `src/`, so they build against what ships on nuget.org. Re-run against Testcontainers after
