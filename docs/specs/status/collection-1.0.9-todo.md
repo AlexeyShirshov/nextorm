@@ -25,12 +25,13 @@ Selected variant: `pdca-dotnet` for all tasks (C#/.NET repo). Each task runs its
 | T53 | #53 | IF6: public API freeze (PublicApiAnalyzers + PublicAPI.*) | pdca-dotnet | ready (r=1) — **HELD by owner** |
 | T232 | #232 | SQL Server PIVOT/UNPIVOT — типизированная проекция результата (вместо TableAlias по имени) | pdca-dotnet | pending (new, rc3 scope) |
 | T233 | #233 | Window functions — перегрузка `Over` (один partitionBy + один WindowOrder) | pdca-dotnet | pending (new, rc3 scope) |
+| T236 | #236 | Build blocker: NU1902/NU1903 (transitive System.Security.Cryptography.Pkcs) | pdca-dotnet | pending (new, rc3 scope; lane blocker fix) |
 
 ## Groups
 
 | id | tasks (order) | worktree | branch/ref | status |
 |---|---|---|---|---|
-| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 (done) → T232 → T233 → T201 (perf) | no (single group) | current branch `1.0.9-rc3` | in-progress (scope rc3: +T232/T233; T53 out of rc3 scope, held) |
+| G1 | T209–T213 (done) → T215 → T227 → T221 → T222 → T223 → T216 → T217 → T218 → T219 → T226 → T224 (done) → T225 (done) → T236 (build fix) → T232 → T233 → T201 (perf) | no (single group) | current branch `1.0.9-rc3` | in-progress (T225 done; T232 blocked on #236 + #160-auth — both resolved by owner 2026-10-15) |
 
 Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/docs force one writer). T224 (SQL-format blast radius, ~697 exact-string asserts) sits late, after all functional changes; T225 (docs-only) after T223+T224; T201 (perf) measures the final composition; T53 held last. Addendum contract `cluster-1`/`cluster-2`; task contracts unchanged.
 
@@ -54,6 +55,7 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 | T226 | #226 | G1 | 14 | done | done (r=2, rv=2, n=2/3) — CHECK PASS; 11/11 rows met | pdca-dotnet | N=1 | r=2 | 485b1943 | docs/specs/status/D226-records-affected-1.md |
 | T224 | #224 | G1 | 15 | done | done (r=1, rv=1, n=1) — CHECK PASS r=1/rv=1; R1–R7 met; DO `4e6a2abd` | pdca-dotnet | N=1 | r=1 | 4c0a403d | docs/specs/status/D224-sql-from-join-formatting-1.md |
 | T225 | #225 | G1 | 16 | done | done (r=4, rv=3, n=1/3) — CHECK PASS r=4/rv=3; E01–E07 met, C1–C8 met | pdca-dotnet | N=1 | r=4 | 7cbbab3b | docs/specs/status/D225-joininto-mn-docs-delta-1.md |
+| T236 | #236 | G1 | pre-T232 | pending | pending | pdca-dotnet | N=1 | — | — | docs/specs/status/D236-build-advisories-1.md |
 | T232 | #232 | G1 | 17 | pending | ready | pdca-dotnet | N=1 | r=1 | 4f1e1282 | docs/specs/status/D232-sqlserver-pivot-unpivot-1.md |
 | T233 | #233 | G1 | 18 | pending | ready | pdca-dotnet | N=1 | r=1 | 82da47a9 | docs/specs/status/D233-window-over-overload-1.md |
 | T201 | #201 | G1 | 19 (perf) | pending | ready | pdca-dotnet | N=1 | r=2 | bd4af157 | docs/specs/status/D201-cached-parity-1.md |
@@ -85,6 +87,11 @@ Re-cluster finalized (`planner`): single lane (shared builders/dialects/Query/do
 - #223/#225 are the T213 slices (SQL composite-junction M:N link carrier; docs delta); #227 is the pre-existing ClickHouse flaky test.
 - Barrier re-opened: the 8 new tasks have no PLAN yet → own PLANs required before the expanded lane resumes.
 - Ordering: new tasks precede T201; T201 precedes the held T53.
+
+## Owner authorizations — 2026-10-15 (collection rc3)
+
+- (1) Fix the **#236** build blocker **in-lane** (NU1902/NU1903 advisories: transitive `System.Security.Cryptography.Pkcs 9.0.11` via `Microsoft.Data.SqlClient 6.1.7`), then continue. → added as lane task **T236** (pre-T232).
+- (2) **Authorize retention** of the foreign #160 hunks inside T232's mixed commit `001f9c9c` (keep as-is; do not rewrite history) → T232's `AC-12` owner-authorization blocker is **lifted**.
 
 ## Owner constraint — T216 (#216) — RESOLVED (2026-10-13)
 
