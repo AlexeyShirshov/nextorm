@@ -2713,8 +2713,7 @@ public partial class QueryCommand
 
                 for (var (i, cnt) = (0, cmd._sorting.Length); i < cnt; i++)
                 {
-                    if (cancellationToken.IsCancellationRequested)
-                        break;
+                    cancellationToken.ThrowIfCancellationRequested();
 
                     ref var sort = ref sortingSpan[i];
 
@@ -3486,8 +3485,7 @@ public partial class QueryCommand
 
                 for (var idx = 0; idx < argsCount; idx++)
                 {
-                    if (cancellationToken.IsCancellationRequested)
-                        return columns;
+                    cancellationToken.ThrowIfCancellationRequested();
 
                     var ctorParam = ctor.Constructor!.GetParameters()[idx];
 
@@ -3527,8 +3525,7 @@ public partial class QueryCommand
 
                 for (var idx = 0; idx < columns.Length; idx++)
                 {
-                    if (cancellationToken.IsCancellationRequested)
-                        return (groupingList, groupingPlanHash);
+                    cancellationToken.ThrowIfCancellationRequested();
 
                     var selExp = columns[idx];
                     if (!noHash)
