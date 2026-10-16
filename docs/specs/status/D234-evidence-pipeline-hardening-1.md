@@ -208,4 +208,5 @@ Evidence:
 
 2026-10-16T13:01:33Z | ACT | revision r=2 | iteration 1/3 | CHECK PASS (in-repo slice); cycle_outcome=done (in-repo slice); residual 'Global canonical evidence-gate admission + required_rows coverage fold-in' open (R234-03G/E234-08 open, D234-05 blocked); follow-up #242 (milestone 1.0.9-rc3); #234 remains open | docs/specs/status/D234-evidence-pipeline-hardening-1.md
 
-ACT commit: `3eee152ee3834e4c248dd02c387b5854c9faa475` (short `3eee152e`) — `#234 T234: atomic evidence generator + stale-hash lint (in-repo slice; R234-03G residual open)`.
+ACT commit: `7acad56d292401a28ba0e2b8d0d1cfae779f5873` (short `7acad56d`) — `#234 T234: atomic evidence generator + stale-hash lint (in-repo slice; R234-03G residual open)`.
+Citation correction: the earlier `3eee152e…` (pre-amend) reference was dangling after the amend; this correction is carried by the follow-up status-record commit, so no commit cites its own hash.
