@@ -7,16 +7,16 @@
   "project_reference_sqlserver": true
  },
  "c13": {
-  "advisory_only": true,
+  "advisory_only": false,
   "cs_or_packaging_errors": [],
-  "exit": 1,
+  "exit": 0,
   "log": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.out"
  },
- "captured": "2026-10-14T23:57:19Z",
+ "captured": "2026-10-15T06:15:47Z",
  "case": "packaging",
  "cwd": "/home/alex/sources/nextorm",
- "reason": "literal C13 exits 1 (advisory-only NU1902/NU1903 -> D-13); packaging route itself adds no CS/packaging error",
+ "reason": null,
  "row": "EC232-RV4-PACKAGING",
- "status": "open",
+ "status": "met",
  "unit": "D-08"
 }

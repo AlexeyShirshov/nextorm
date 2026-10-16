@@ -67,6 +67,7 @@ the allocation column is bit-stable within each side.
 
 **Outcome: `gap/incomplete, product delta ≈5 KB`.** The control allocation criterion is a
 **discriminating oracle** and it fails: no `src` change is made here. The obligation (remove the ≈5 KB
+> **Annotation (2026-10-14, ACT routing) — superseded:** this `discriminating oracle … and it fails` claim is superseded by `E08-ab.md:164-172` (matched-job isolation: mode 0.00 KB, mean −1.56 KB, 98.8 %) and by `E08-disposition.md:40-41` (the control oracle is **non-discriminating** at this granularity); annotation only — no number changed, nothing deleted.
 D1 allocation on the translator query-preparation path, explicit contract supersession, preserve
 R1–R7, no allocation tolerance) is handed to the planner (`r=2`). E08 stays **open**.
 

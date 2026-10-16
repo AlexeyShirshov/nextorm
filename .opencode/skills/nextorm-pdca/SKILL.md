@@ -61,7 +61,10 @@ description: "Проектный оверлей nextorm к глобальном�
    обнаружении в CHECK — **loop-back CHECK → PLAN**, а не сноска в отчёте. Слабая постановка
    **повышает** планку PLAN, а не понижает. Контракт: `pdca-dotnet` §PLAN → «PLAN owns the quality of the plan».
 10. **Поиск — ignore-aware; символы — `roslyn`.** Для C#-символов (типы/члены/`refs`/`callers`/overloads/
-    implementations/renames) — только инструмент `roslyn`, не текстовый поиск. Для текста (доки,
+    implementations/renames) — только инструмент `roslyn`, не текстовый поиск. В V2 `roslyn` не
+    top-level: вызов — **внутри `execute`** (`const r = await tools.roslyn({ action: "members",
+    target: "Ns.Type" }); return r`), батч — одним `execute` (`Promise.all`); если его нет в каталоге
+    Code Mode, сначала `search({ query: "roslyn" })`. Для текста (доки,
     комментарии, строковые литералы, имена SQL) — `rg`/`git grep` с ограничением по исходникам
      (`rg -n --glob '*.cs' "<lit>" src tests`). **Никогда `grep -r`/`grep -rn`/`find`** по дереву: они
      игнорируют `.gitignore` и читают `bin/`/`obj/`/`TestResults/` (≈1.3 GB артефактов под `src`/`tests`),

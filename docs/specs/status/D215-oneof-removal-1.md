@@ -284,3 +284,9 @@ provider/runtime diff). No row is `open`.
 - DO r=2 — **evidence-only** (без code changes): commit `768b208e` остаётся delivered change; новые артефакты в `artifacts/pdca/D215/rv2/`.
 - Task **не** редактировал `docs/specs/status/collection-1.0.9-todo.md` и не трогал `examples/**`.
 - Следующий разрешённый шаг: DO→CHECK (evidence rv=2), затем ACT.
+
+## Owner decision (2026-10-14)
+
+- **Issue #215 closed by the owner (done).** Task T215 r=2/rv=2, CHECK PASS; OneOf removed source-level (commit `768b208e`), 22 repo-owned projects clean, residual only through the published package. Record: https://github.com/AlexeyShirshov/nextorm/issues/215
+- **Closing the issue does NOT cancel `REL215-01`** — the release-time item stays carried (bump `examples/Directory.Packages.props:15` to the published OneOf-free version once that release is published; the pin currently reads `1.0.9-rc2`, published before T215).
+- Milestone note: this header records milestone `1.0.9`, while the issue was tracked in `1.0.9-rc3` — the item is release-coupled to the rc3/1.0.9 publication.

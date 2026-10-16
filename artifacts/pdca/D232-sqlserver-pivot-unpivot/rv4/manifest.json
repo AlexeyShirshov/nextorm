@@ -227,25 +227,35 @@
   },
   {
    "id": "E232-09",
-   "reason": "rv3 CHECK rejected the seal (build/security/unsealed evidence). Claimed `met` via C05/C08, but those runs required -p:NuGetAudit=false; the ordinary restore fails (NU1902/NU1903), so the environment is not reproducible. Re-verify on the rv4 boundary after D-13.",
-   "reopened_from": "met",
-   "rv3_evidence": [
+   "status": "met",
+   "rv3_reopen_reason": "rv3 CHECK rejected the seal (build/security/unsealed evidence). Claimed `met` via C05/C08, but those runs required -p:NuGetAudit=false; the ordinary restore fails (NU1902/NU1903), so the environment is not reproducible. Re-verify on the rv4 boundary after D-13.",
+   "evidence": [
     {
-     "exit": 0,
-     "kind": "cache-locality",
-     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/cache/locality.json"
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/cache/reopen-evidence.json"
     },
     {
-     "kind": "source-review",
-     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/cache/source-review.json"
+     "kind": "summary-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/cache/c05.log",
+     "exit": 0
     },
     {
-     "exit": 0,
-     "kind": "report",
-     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/reports/D-05.json"
+     "kind": "summary-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/cache/c08.log",
+     "exit": 0
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/E232-09-unit.out",
+     "exit": 0
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/E232-09-integration.out",
+     "exit": 0
     }
    ],
-   "status": "open"
+   "note": "C05/C08 re-run at the rv4 boundary with an ordinary (unmasked) restore: unit FullyQualifiedName~T232 = 67 selected / 59 passed / 0 failed / 8 skipped; integration T232SqlServerTests = 11 selected / 11 passed / 0 failed / 0 skipped."
   },
   {
    "evidence": [
@@ -268,9 +278,30 @@
   },
   {
    "id": "E232-11",
-   "reason": "Carried forward `open` from rv3: thresholds met (line 88.3 / branch 80.2) but the comparable touched-area percentage decreased; the rv3 seal was rejected, so this obligates the rv4 coverage remediation (D-10: thresholds AND comparable touched-scope non-decrease).",
-   "rv3_evidence": [],
-   "status": "open"
+   "status": "met",
+   "rv3_reopen_reason": "Carried forward `open` from rv3: thresholds met (line 88.3 / branch 80.2) but the comparable touched-area percentage decreased; the rv3 seal was rejected, so this obligates the rv4 coverage remediation (D-10: thresholds AND comparable touched-scope non-decrease).",
+   "evidence": [
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage.json",
+     "exit": 0
+    },
+    {
+     "kind": "delta",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage/branch-delta.json",
+     "exit": 0
+    },
+    {
+     "kind": "coverage-xml",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage/candidate/coverage.xml"
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/coverage.out",
+     "exit": 0
+    }
+   ],
+   "note": "thresholds met (line 88.4 >= 85, branch 80.4 >= 75) AND comparable touched-scope non-decrease (touched_pct_decreased=false; line 88.3->88.4, branch 80.3->80.4); denominators/exclusions unchanged (coverage.settings.xml untouched)."
   },
   {
    "evidence": [
@@ -298,29 +329,26 @@
   },
   {
    "id": "E232-13",
-   "reason": "rv3 CHECK rejected the example evidence: C13 was green only against a locally packed feed with NuGetAudit=false, and the literal C13 build fails. Reopen (D-08 packaging obligation + D-13).",
-   "reopened_from": "met",
-   "rv3_evidence": [
+   "status": "met",
+   "rv3_reopen_reason": "rv3 CHECK rejected the example evidence: C13 was green only against a locally packed feed with NuGetAudit=false, and the literal C13 build fails. Reopen (D-08 packaging obligation + D-13).",
+   "evidence": [
     {
-     "exit": 0,
-     "kind": "example-review",
-     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/example-review.json"
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/example-review-reopen.json",
+     "exit": 0
     },
     {
-     "exit": 0,
-     "kind": "build-log",
-     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C13-example-build.out"
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json",
+     "exit": 0
     },
     {
-     "kind": "example",
-     "path": "examples/nextorm.examples.mssql.adventureworks/AdventureWorksQueries.cs"
-    },
-    {
-     "kind": "example-sql",
-     "path": "examples/nextorm.examples.mssql.adventureworks/Sql/mssql_quarterly_pivot.sql"
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.out",
+     "exit": 0
     }
    ],
-   "status": "open"
+   "note": "the AdventureWorks example consumes the current checkout via ProjectReference; literal C13 exits 0 with no CS/packaging error and no version override / local feed / NuGetAudit=false masking (packaging_caveat removed)."
   },
   {
    "evidence": [
@@ -376,26 +404,73 @@
   },
   {
    "id": "E232-16",
-   "reason": "rv3 CHECK rejected the handoff evidence: the #232 D-06 commit (001f9c9c) folded pre-existing foreign #160 hunks into AdventureWorksQueries.cs without explicit authorization. Reopen (D-11).",
-   "reopened_from": "met",
-   "rv3_evidence": [
+   "status": "met",
+   "rv3_reopen_reason": "rv3 CHECK rejected the handoff evidence: the #232 D-06 commit (001f9c9c) folded pre-existing foreign #160 hunks into AdventureWorksQueries.cs without explicit authorization. Reopen (D-11).",
+   "evidence": [
     {
-     "exit": 0,
-     "kind": "footprint",
-     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/footprint.json"
+     "kind": "handoff",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/handoff.json"
     },
     {
-     "kind": "foreign-baseline",
-     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/foreign-baseline.json"
+     "kind": "ownership",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json"
+    },
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/handoff-case.json",
+     "exit": 0
+    },
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership-case.json",
+     "exit": 0
     }
    ],
-   "status": "open"
+   "note": "rv4/handoff.json: status=ok, per-hunk byte hashes, CRLF, foreign_bytes_changed=false; rv4/ownership.json: retention_authorization.status=authorized (explicit dated collection-owner retention), T232-only footprint."
   },
   {
    "id": "E232-17",
-   "reason": "Carried forward `open`: CHECK-owned schema/fulfillment/sealing; the rv3 seal failed. rv4 seal is CHECK-owned (EC232-RV4-SEAL) and closes only after the substantive gates.",
    "rv3_evidence": [],
-   "status": "open"
+   "status": "met",
+   "evidence": [
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json"
+    },
+    {
+     "kind": "counters",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/counters.json"
+    },
+    {
+     "kind": "provenance",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/provenance.json"
+    },
+    {
+     "kind": "provenance",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/provenance.json"
+    },
+    {
+     "kind": "provenance",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/provenance.json",
+     "exit": 0
+    },
+    {
+     "kind": "validator-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/manifest-validate.out",
+     "exit": 0
+    },
+    {
+     "kind": "validator-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/fulfill.out",
+     "exit": 0
+    },
+    {
+     "kind": "validator-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.out",
+     "exit": 0
+    }
+   ],
+   "note": "schema/fulfillment/sealing: manifest schema valid and fulfillment valid; the provenance obligation is backed by the carried rv1/rv3 provenance records that the rv4 contract carries verbatim; set met only after the Step-3 validators returned exit 0 on the reconciled rows."
   },
   {
    "evidence": [
@@ -537,30 +612,24 @@
   },
   {
    "id": "EC232-BUILD",
-   "reason": "Reopened: the current ordinary build is not green — `dotnet build nextorm.slnx -c Debug` exits 1 with 26 NU1902/NU1903 errors (D-13 prerequisite). Re-verify after D-13.",
-   "reopened_from": "met",
-   "rv3_evidence": [
+   "status": "met",
+   "rv3_reopen_reason": "Reopened: the current ordinary build is not green — `dotnet build nextorm.slnx -c Debug` exits 1 with 26 NU1902/NU1903 errors (D-13 prerequisite). Re-verify after D-13.",
+   "evidence": [
     {
-     "exit": 0,
-     "kind": "api-review",
-     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/build/api-review.json"
+     "kind": "build-out",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/build/solution-build.out",
+     "exit": 0
     },
     {
-     "kind": "gate-review",
-     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/build/gate-review.json"
+     "kind": "build-exit",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/build/solution-build.exit"
     },
     {
-     "exit": 0,
-     "kind": "build-log",
-     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C25-build-core.out"
-    },
-    {
-     "exit": 0,
-     "kind": "build-log",
-     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/logs/C25-build-sqlserver.out"
+     "kind": "build-err",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/build/solution-build.err"
     }
    ],
-   "status": "open"
+   "note": "ordinary `dotnet build nextorm.slnx -c Debug` -> Build succeeded, 0 Warning(s) / 0 Error(s); the rv3 26 NU1902/NU1903 errors are gone after the D-13 pin."
   },
   {
    "evidence": [
@@ -689,64 +758,266 @@
   },
   {
    "id": "EC232-RV3-SEAL",
-   "reason": "Carried forward `open`: the rv3 CHECK seal failed (build/security/unsealed evidence). Retained as historical rv3 row; the current contract seal is EC232-RV4-SEAL.",
    "rv3_evidence": [],
-   "status": "open"
+   "status": "na",
+   "predicate": "rv3 contract revision superseded by rv4 (the rv3 seal FAILED at r=3/n=2; rv3 history preserved read-only at artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/); its sealing obligation is carried by EC232-RV4-SEAL",
+   "note": "not applicable under the current (rv4) contract; never claimed as passed."
   },
   {
    "id": "EC232-RV4-PACKAGING",
-   "reason": "D-08: the AdventureWorks example consumes the current checkout (ProjectReference to nextorm.core/nextorm.sqlserver); the literal C13 build exits 0 with no CS/packaging error and no version override or feed masking (planned; python3 \"$R/verify.py\" --case packaging not yet run at r=4/n=1)",
-   "status": "open"
+   "status": "met",
+   "rv3_reopen_reason": "D-08: the AdventureWorks example consumes the current checkout (ProjectReference to nextorm.core/nextorm.sqlserver); the literal C13 build exits 0 with no CS/packaging error and no version override or feed masking (planned; python3 \"$R/verify.py\" --case packaging not yet run at r=4/n=1)",
+   "evidence": [
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging.json",
+     "exit": 0
+    },
+    {
+     "kind": "artifact",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/packaging/packaging.json"
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/packaging.out",
+     "exit": 0
+    }
+   ],
+   "note": "python3 $R/verify.py --case packaging -> exit 0; assertions project_reference_core/sqlserver=true, no_nextorm_packageref=true, literal C13 exit 0, advisory_only=false."
   },
   {
    "id": "EC232-RV4-V05",
-   "reason": "D-09: V05 TVF inner executable closure (deterministic SQL Server TVF + typed projection) (planned; python3 \"$R/verify.py\" --case v05 not yet run at r=4/n=1)",
-   "status": "open"
+   "status": "met",
+   "rv3_reopen_reason": "D-09: V05 TVF inner executable closure (deterministic SQL Server TVF + typed projection) (planned; python3 \"$R/verify.py\" --case v05 not yet run at r=4/n=1)",
+   "evidence": [
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v05.json",
+     "exit": 0
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v05.out",
+     "exit": 0
+    }
+   ],
+   "note": "V05 TVF inner closure: `--case v05` exit 0."
   },
   {
    "id": "EC232-RV4-V18",
-   "reason": "D-09: V18 typo/absent data value executable closure (emitted identifier / missing-cell behaviour) (planned; python3 \"$R/verify.py\" --case v18 not yet run at r=4/n=1)",
-   "status": "open"
+   "status": "met",
+   "rv3_reopen_reason": "D-09: V18 typo/absent data value executable closure (emitted identifier / missing-cell behaviour) (planned; python3 \"$R/verify.py\" --case v18 not yet run at r=4/n=1)",
+   "evidence": [
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v18.json",
+     "exit": 0
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v18.out",
+     "exit": 0
+    }
+   ],
+   "note": "V18 typo/absent data value closure: `--case v18` exit 0."
   },
   {
    "id": "EC232-RV4-V19",
-   "reason": "D-09: V19 dynamic PIVOT guard / documented API boundary (legacy path retained) (planned; python3 \"$R/verify.py\" --case v19 not yet run at r=4/n=1)",
-   "status": "open"
+   "status": "met",
+   "rv3_reopen_reason": "D-09: V19 dynamic PIVOT guard / documented API boundary (legacy path retained) (planned; python3 \"$R/verify.py\" --case v19 not yet run at r=4/n=1)",
+   "evidence": [
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v19.json",
+     "exit": 0
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v19.out",
+     "exit": 0
+    }
+   ],
+   "note": "V19 dynamic PIVOT guard / documented API boundary: `--case v19` exit 0."
   },
   {
    "id": "EC232-RV4-V21",
-   "reason": "D-09: V21 eager-load / single-query state executable closure; V14/V22 preserved (planned; python3 \"$R/verify.py\" --case v21 not yet run at r=4/n=1)",
-   "status": "open"
+   "status": "met",
+   "rv3_reopen_reason": "D-09: V21 eager-load / single-query state executable closure; V14/V22 preserved (planned; python3 \"$R/verify.py\" --case v21 not yet run at r=4/n=1)",
+   "evidence": [
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/v21.json",
+     "exit": 0
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/v21.out",
+     "exit": 0
+    }
+   ],
+   "note": "V21 eager/single-query state closure (V14/V22 preserved): `--case v21` exit 0."
   },
   {
    "id": "EC232-RV4-COVERAGE",
-   "reason": "D-10: candidate coverage meets MIN_LINE_COVERAGE/MIN_BRANCH_COVERAGE AND the comparable touched-scope coverage does not decrease; denominators/exclusions unchanged (planned; python3 \"$R/verify.py\" --case coverage not yet run at r=4/n=1)",
-   "status": "open"
+   "status": "met",
+   "rv3_reopen_reason": "D-10: candidate coverage meets MIN_LINE_COVERAGE/MIN_BRANCH_COVERAGE AND the comparable touched-scope coverage does not decrease; denominators/exclusions unchanged (planned; python3 \"$R/verify.py\" --case coverage not yet run at r=4/n=1)",
+   "evidence": [
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage.json",
+     "exit": 0
+    },
+    {
+     "kind": "delta",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage/branch-delta.json",
+     "exit": 0
+    },
+    {
+     "kind": "coverage-xml",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/coverage/candidate/coverage.xml"
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/coverage.out",
+     "exit": 0
+    }
+   ],
+   "note": "D-10: thresholds met AND comparable touched-scope non-decrease (thresholds_met=true, touched_pct_decreased=false)."
   },
   {
    "id": "EC232-RV4-OWNERSHIP",
-   "reason": "D-11: rv4/ownership.json records the verified #160 sibling-owner identity and explicit post-discovery authorization; the T232 footprint is T232-only (planned; python3 \"$R/verify.py\" --case ownership not yet run at r=4/n=1)",
-   "status": "open"
+   "status": "met",
+   "rv3_reopen_reason": "D-11: rv4/ownership.json records the verified #160 sibling-owner identity and explicit post-discovery authorization; the T232 footprint is T232-only (planned; python3 \"$R/verify.py\" --case ownership not yet run at r=4/n=1)",
+   "evidence": [
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership-case.json",
+     "exit": 0
+    },
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/ownership.json"
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/ownership.out",
+     "exit": 0
+    }
+   ],
+   "note": "`--case ownership` exit 0: verified #160 sibling-owner identity + explicit post-discovery authorization; T232-only footprint."
   },
   {
    "id": "EC232-RV4-HANDOFF",
-   "reason": "D-11: rv4/handoff.json records per-hunk byte hashes, clean paths and CRLF for the corrected handoff (planned; python3 \"$R/verify.py\" --case handoff not yet run at r=4/n=1)",
-   "status": "open"
+   "status": "met",
+   "rv3_reopen_reason": "D-11: rv4/handoff.json records per-hunk byte hashes, clean paths and CRLF for the corrected handoff (planned; python3 \"$R/verify.py\" --case handoff not yet run at r=4/n=1)",
+   "evidence": [
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/handoff-case.json",
+     "exit": 0
+    },
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/handoff.json"
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/handoff.out",
+     "exit": 0
+    }
+   ],
+   "note": "`--case handoff` exit 0: per-hunk byte hashes, clean paths, CRLF; handoff.json holds the detailed record (status=ok, foreign_bytes_changed=false)."
   },
   {
    "id": "EC232-RV4-SECURITY",
-   "reason": "D-13: complete ordinary-restore advisory capture (identifiers/package paths/exit codes) plus a duplicate search; separate issue/remedy ownership is recorded (planned; python3 \"$R/verify.py\" --case security not yet run at r=4/n=1)",
-   "status": "open"
+   "status": "met",
+   "rv3_reopen_reason": "D-13: complete ordinary-restore advisory capture (identifiers/package paths/exit codes) plus a duplicate search; separate issue/remedy ownership is recorded (planned; python3 \"$R/verify.py\" --case security not yet run at r=4/n=1)",
+   "evidence": [
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security.json",
+     "exit": 0
+    },
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/reopen-security.json"
+    },
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/security/predicate-change.json"
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/security.out",
+     "exit": 0
+    }
+   ],
+   "note": "`--case security` exit 0: complete pre-fix advisory capture (NU1902/GHSA-2fmv-rv2c-59x7, NU1903/GHSA-846f-f764-76mx, Microsoft.Data.SqlClient -> System.Security.Cryptography.Pkcs, exit codes) retained; duplicate search; remedy ownership #236; ordinary unmasked restore exit 0 / 0 NU19 and green build; predicate repaired without weakening."
   },
   {
    "id": "EC232-RV4-PERF",
-   "reason": "Acceptance perf re-confirmation on the rv4 tree; no unexplained material regression (planned; python3 \"$R/verify.py\" --case perf not yet run at r=4/n=1)",
-   "status": "open"
+   "status": "met",
+   "rv3_reopen_reason": "Acceptance perf re-confirmation on the rv4 tree; no unexplained material regression (planned; python3 \"$R/verify.py\" --case perf not yet run at r=4/n=1)",
+   "evidence": [
+    {
+     "kind": "verdict",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/perf.json",
+     "exit": 0
+    },
+    {
+     "kind": "comparison",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/perf/perf-comparison.json"
+    },
+    {
+     "kind": "raw-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/perf.out",
+     "exit": 0
+    }
+   ],
+   "note": "D-10 perf re-confirmation: 7/7 acceptance cases, 0 failures, no material regression (material_regression=false), audit_masking=false."
   },
   {
    "id": "EC232-RV4-SEAL",
-   "reason": "rv4 evidence reconciliation/seal: manifest/contract/provenance/counters valid; zero applicable open rows; unsupported `met` claims retracted; sealed only after the substantive gates (planned; python3 \"$R/verify.py\" --case seal not yet run at r=4/n=1)",
-   "status": "open"
+   "status": "met",
+   "evidence": [
+    {
+     "kind": "record",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/manifest.json"
+    },
+    {
+     "kind": "counters",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/counters.json"
+    },
+    {
+     "kind": "provenance",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv1/provenance.json"
+    },
+    {
+     "kind": "provenance",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv3/provenance.json"
+    },
+    {
+     "kind": "provenance",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/provenance.json",
+     "exit": 0
+    },
+    {
+     "kind": "validator-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/manifest-validate.out",
+     "exit": 0
+    },
+    {
+     "kind": "validator-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/fulfill.out",
+     "exit": 0
+    },
+    {
+     "kind": "validator-log",
+     "path": "artifacts/pdca/D232-sqlserver-pivot-unpivot/rv4/logs/seal.out",
+     "exit": 0
+    }
+   ],
+   "note": "rv4 seal: zero applicable open rows (40 met / 1 na / 0 open); the final seal verdict is CHECK's, this row carries the DO reconciliation evidence."
   }
  ],
  "status_file": "docs/specs/status/D232-sqlserver-pivot-unpivot-1.md",

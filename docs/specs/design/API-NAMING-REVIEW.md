@@ -202,9 +202,9 @@ Build Release — 0/0.
 | # | Ур. | Место | Проблема | Рекомендация |
 |---|-----|-------|----------|--------------|
 | W1 | P2 | `docs/guide/09-window-functions.md:11-13`, `docs/ru/guide/09-window-functions.md:10-13` | Обзор перечисляет типы результата «`int` для ранжирующих, `T?` для значений/агрегатов» и не упоминает новое `double` у `percent_rank`/`cume_dist` | Добавить `double` для распределений |
-| W2 | P2 | `docs/guide/09-window-functions.md:244-248`, `docs/ru/guide/09-window-functions.md:247-251` | `Source:`-футер устарел: `SqlFunctions.cs:23` — это свойство `Sql`, сам `WindowFunction<T>` — `WindowFunctions.cs:16`, `SqlFunctions.cs:221` — `date_diff`, оконные методы — `:314-372`; ссылки на интеграционные тесты `:72`/`:99` сдвинуты вставкой нового теста на `:54` | Пересчитать номера строк; убрать `WindowFunction<T>` из `SqlFunctions.cs` |
+| W2 | P2 | `docs/guide/09-window-functions.md:352-356`, `docs/ru/guide/09-window-functions.md:355-359` | `Source:`-футер устарел: `SqlFunctions.cs:26` — это свойство `Sql`, сам `WindowFunction<T>` — `WindowFunctions.cs:17`, `SqlFunctions.cs:739` — `date_diff`, оконные методы — `:934-980`; ссылки на интеграционные тесты `:72`/`:99` сдвинуты вставкой нового теста на `:54` | Пересчитать номера строк; убрать `WindowFunction<T>` из `SqlFunctions.cs` |
 | W3 | P2 | `docs/guide/09-window-functions.md:10`, `docs/ru/guide/09-window-functions.md:10` | Пустой inline-код ``  `` — потеряна ссылка на `SqlFunctions.Sql` (пре-существующий, но файл затронут этой правкой) | Восстановить `` `SqlFunctions.Sql` `` |
-| W4 | P2 | `docs/guide/09-window-functions.md:220-234`, `docs/ru/guide/09-window-functions.md:222-237` | «every SQL provider … supports all functions» — на ClickHouse `percent_rank`/`cume_dist` проверены только SQL-gen, рантайм-проверки нет (PG/SQL Server/MySQL/SQLite покрыты) | Добавить ClickHouse в интеграционный прогон либо оговорить проверенные провайдеры |
+| W4 | P2 | `docs/guide/09-window-functions.md:308-312`, `docs/ru/guide/09-window-functions.md:310-314` | «every SQL provider … supports all functions» — на ClickHouse `percent_rank`/`cume_dist` проверены только SQL-gen, рантайм-проверки нет (PG/SQL Server/MySQL/SQLite покрыты) | Добавить ClickHouse в интеграционный прогон либо оговорить проверенные провайдеры |
 | W5 | P2 | — | Блокер `nth_value` — именно SQL Server (функции нет) | Внести `[ ] nth_value` в бэклог |
 
 `nth_value` **не** следует добавлять только с флагом `SupportsNthValue`: одного флага мало — у
@@ -1133,9 +1133,9 @@ extend-only это breaking (RS0017+RS0016), допустимый только a
 | I8 | ♻️ заменена | `SupportsIifChoose` удалён; актуальный список заморозки — IF6 ниже |
 | W1 | ✅ закрыта | `docs/guide/09-window-functions.md:13` (+RU) — `double` для `percent_rank`/`cume_dist` |
 | W3 | ✅ закрыта | обзор снова ссылается на `` `SqlFunctions.Sql` `` |
-| W4 | ✅ закрыта | `tests/nextorm.integration.tests/CommonTestSuite.Window.cs:54`; `ClickHouseDialect.SupportsPercentRankCumeDist => true` (`:64`) |
+| W4 | ✅ закрыта | `tests/nextorm.integration.tests/CommonTestSuite.Window.cs:54`; `ClickHouseDialect.SupportsPercentRankCumeDist => true` (`src/nextorm.clickhouse/ClickHouseDialect.cs:274`) |
 | W5 | ✅ закрыта | `[x]` |
-| W2 | ⏸ не проверялась | `Source:`-футер `guide/10` — вне области этого прохода |
+| W2 | ⏸ не проверялась | `Source:`-футер `docs/guide/09-window-functions.md:352-356` (+RU `:355-359`) — вне области этого прохода |
 
 | # | Ур. | Место | Проблема | Рекомендация |
 |---|-----|-------|----------|--------------|
@@ -2238,8 +2238,8 @@ SQL Server XML `value`/`query`/`exist` (`Query/SqlFunctions.SqlServer.cs`, `Visi
 
 | # | Ур. | Место | Проблема | Рекомендация |
 |---|-----|-------|----------|--------------|
-| RD2 (batch 3) | P2 | `ISqlDialect.cs:178,223,229,236,245,519,529,626,634`; `SqlDialectBase.cs:39,41,46,56,58,60,62,152,158`; `PostgresDialect.cs:91,94,97`; `SqliteDialect.cs:57,60,63`; `ClickHouseDialect.cs:97,105,163,166,169`; `SqlServerDialect.cs:48,51,54`; `MySqlDialect.cs:45`; `Query/WindowDefinition.cs:9,29`; `Query/WindowFunctions.cs:42,80,95,172,181,184,191`; `Builders/EntityBuilder.cs:530,558,565`; `Query/QueryDefinition.cs:67`; `Query/QueryCommand.cs:243`; `Query/SqlFunctions.SqlServer.cs:48,56,65`; `Query/SqlFunctions.ClickHouse.cs:441-498`; `PublicAPI.*.txt` отсутствуют | Поверхность Batch 3 не трекается (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение RD2/AR1/SQ1, не новая находка.** Новые абстрактные члены `ISqlDialect` (7 `Supports*`-флагов `SupportsXmlFunctions`/`SupportsXmlFunction`/`SupportsNamedWindows`/`SupportsWindowFrameGroups`/`SupportsWindowFrameExclusion`/`SupportsInFrameWindowFunctions`/`SupportsMultiIf` + хук `MakeXmlFunction`) ⇒ source-breaking для внешних реализаторов (в репозитории реализует только `SqlDialectBase`); `MakeMultiIf` — DIM и `virtual`, разрыва не создаёт (та же асимметрия, что SQ-DIM/AR4) | Внести подписи в `PublicAPI.Unshipped.txt` при заморозке (продолжение блока RD2; ср. AR1/SQ1/ASF1). Заодно определиться с политикой abstract-флагов (SQ-DIM): DIM `=> false` либо зафиксировать abstract как принятую норму |
-| NW2 | **Закрыто (20.09.2026)** | `Query/WindowDefinition.cs:9` vs `Query/WindowFunctions.cs:64` (ср. `Builders/EntityBuilder.cs:558,565`) | **Было (P2):** два публичных типа одного назначения — ключ `ORDER BY` окна — названы почти одинаково: `WindowOrderKey` (именованные окна: `Direction` + `LambdaExpression`, `EntityBuilder.Asc`/`Desc`) и `WindowOrder` (inline `Over`: `Direction` + `Expression<Func<object?>>`, `CommonFunctions.asc`/`desc`); имена не подсказывали разницу (named vs inline) | **Исправлено:** named-ключ переименован в `NamedWindowOrderKey` (alpha, замена на месте); `WindowOrder` остаётся inline-ключом. Обновлены код (`WindowDefinition.cs`, `EntityBuilder.cs`), XML-доки, `docs/guide/09-window-functions.md` + `docs/ru/guide/09-window-functions.md`, `docs/advanced/api-reference.md` + `docs/ru/advanced/api-reference.md`, спеки. Публичного разрыва в рамках alpha нет. Тесты не менялись (используют `e.Asc`/`e.Desc`, тип не именуют) |
+| RD2 (batch 3) | P2 | `ISqlDialect.cs:178,223,229,236,245,519,529,626,634`; `SqlDialectBase.cs:39,41,46,56,58,60,62,152,158`; `PostgresDialect.cs:91,94,97`; `SqliteDialect.cs:57,60,63`; `ClickHouseDialect.cs:97,105,163,166,169`; `SqlServerDialect.cs:48,51,54`; `MySqlDialect.cs:45`; `Query/WindowDefinition.cs:9,29`; `Query/WindowFunctions.cs:65,103,120,205,214,217,224`; `Builders/EntityBuilder.cs:530,558,565`; `Query/QueryDefinition.cs:67`; `Query/QueryCommand.cs:243`; `Query/SqlFunctions.SqlServer.cs:48,56,65`; `Query/SqlFunctions.ClickHouse.cs:441-498`; `PublicAPI.*.txt` отсутствуют | Поверхность Batch 3 не трекается (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение RD2/AR1/SQ1, не новая находка.** Новые абстрактные члены `ISqlDialect` (7 `Supports*`-флагов `SupportsXmlFunctions`/`SupportsXmlFunction`/`SupportsNamedWindows`/`SupportsWindowFrameGroups`/`SupportsWindowFrameExclusion`/`SupportsInFrameWindowFunctions`/`SupportsMultiIf` + хук `MakeXmlFunction`) ⇒ source-breaking для внешних реализаторов (в репозитории реализует только `SqlDialectBase`); `MakeMultiIf` — DIM и `virtual`, разрыва не создаёт (та же асимметрия, что SQ-DIM/AR4) | Внести подписи в `PublicAPI.Unshipped.txt` при заморозке (продолжение блока RD2; ср. AR1/SQ1/ASF1). Заодно определиться с политикой abstract-флагов (SQ-DIM): DIM `=> false` либо зафиксировать abstract как принятую норму |
+| NW2 | **Закрыто (20.09.2026)** | `Query/WindowDefinition.cs:9` vs `Query/WindowFunctions.cs:87` (ср. `Builders/EntityBuilder.cs:2110,2117`) | **Было (P2):** два публичных типа одного назначения — ключ `ORDER BY` окна — названы почти одинаково: `WindowOrderKey` (именованные окна: `Direction` + `LambdaExpression`, `EntityBuilder.Asc`/`Desc`) и `WindowOrder` (inline `Over`: `Direction` + `Expression<Func<object?>>`, `CommonFunctions.asc`/`desc`); имена не подсказывали разницу (named vs inline) | **Исправлено:** named-ключ переименован в `NamedWindowOrderKey` (alpha, замена на месте); `WindowOrder` остаётся inline-ключом. Обновлены код (`WindowDefinition.cs`, `EntityBuilder.cs`), XML-доки, `docs/guide/09-window-functions.md` + `docs/ru/guide/09-window-functions.md`, `docs/advanced/api-reference.md` + `docs/ru/advanced/api-reference.md`, спеки. Публичного разрыва в рамках alpha нет. Тесты не менялись (используют `e.Asc`/`e.Desc`, тип не именуют) |
 
 ℹ️ **Наблюдения (фикс не требуется):**
 - **XML-doc покрытие полное; новых публичных типов без доки нет.** `<summary>` есть у `NamedWindowOrderKey`,
@@ -5802,3 +5802,21 @@ EC233-COMPAT. Действующий поддерживаемый consumer-по�
 переименованную страницу оконного гайда (`10-window-functions.md` → `09-window-functions.md`) исправлены
 **только** в затронутых строках этого реестра (`:204-207,1078,1134,2242`); сплошной cleanup реестра не
 делался. (4) Новых публичных **типов** нет → Приложение A без изменений.
+
+### Дополнение 15.10.2026 — починка устаревших локаторов (#233)
+
+Правки #233 (новый `Over`-overload `Query/WindowFunctions.cs:50-54`) и последующие изменения сдвинули
+номера строк; переуказаны на текущие `file:line` (old → new):
+
+- `:205` (W2) — `guide/09-window-functions.md:244-248` → `:352-356` (+RU `:247-251` → `:355-359`); `SqlFunctions.cs:23` (`Sql`) → `:26`; `WindowFunctions.cs:16` (`WindowFunction<T>`) → `:17`; `SqlFunctions.cs:221` (`date_diff`) → `:739`; оконные методы `:314-372` → `:934-980`.
+- `:207` (W4) — `guide/09-window-functions.md:220-234` → `:308-312` (+RU `:222-237` → `:310-314`).
+- `:1136` (W4) — `ClickHouseDialect.SupportsPercentRankCumeDist` `:64` → `src/nextorm.clickhouse/ClickHouseDialect.cs:274` (`CommonTestSuite.Window.cs:54` подтверждён, изменения не требовалось).
+- `:1138` (W2) — `guide/10` → `docs/guide/09-window-functions.md:352-356` (+RU `:355-359`).
+- `:2242` (NW2) — `Query/WindowFunctions.cs:64` (`WindowOrder`) → `:87`; `Builders/EntityBuilder.cs:558,565` (`Asc`/`Desc`) → `:2110,2117`.
+- `:2241` (RD2 batch 3) — `Query/WindowFunctions.cs:42,80,95,172,181,184,191` → `:65,103,120,205,214,217,224` (`Over(string)`, `WindowFrameType`, `WindowFrameExclusion`, `WindowFrame.Exclusion`, `WindowFrame.Groups(start,end)`, `WindowFrame.Groups(preceding,following)`, `WindowFrame.WithExclusion`); `Query/WindowDefinition.cs:9,29` (`NamedWindowOrderKey`/`WindowDefinition`) подтверждены без изменений.
+
+Проверка: `roslyn` (`members`) для C#-символов + `nl -ba` для диапазонов доков; машинный реестр правок —
+`artifacts/pdca/D233/rv1/r3/registry-ledger.json`. Строки этой #233-секции (`:5750`–`:5804`), а также
+`Directory.Build.props:29,32,40`, `global.json`, `docs/getting-started/01-installation.md:5` и шесть
+`[OverloadResolutionPriority]` (`EntityMetadataBuilder.cs:794,817`, `MergeBuilder.cs:201,215`,
+`InsertBuilder.Values.cs:103,117`) перепроверены — актуальны. Сплошной cleanup реестра не делался.

@@ -107,6 +107,10 @@ allocations) / **Verification** (exact command). Answer in Russian.
 
 ## Boundaries
 
+- **C# symbols — `roslyn` only, in V2 inside `execute`:**
+  `const r = await tools.roslyn({ action: "refs", target: "NextORM.Core.X.Y" }); return r`;
+  never symbol-grep (`rg`/`grep`/`sed`); batch calls in one `execute`; if it is not in the
+  Code Mode catalog, `search({ query: "roslyn" })` first.
 - You may modify code: keep the change minimal, scoped to the hot path, and
   build clean (`dotnet build nextorm.slnx -c Release`, warnings are errors).
 - Stay on the in-memory path; for ADO/plan-cache/SQL-builder issues defer to

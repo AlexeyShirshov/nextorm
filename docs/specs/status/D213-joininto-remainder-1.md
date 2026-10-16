@@ -233,3 +233,8 @@ CHECK re-gather budget: at most two targeted read-only rounds, owned by CHECK, f
 - The rejected r=3 D04 nested-projection direction (`T213-EC-NESTED-01`, line 159) is **not** reopened; D223 avoids those T213 terminal causes (nested/derived projection carriers) by design.
 - Docs handoff `T213-EC-DOCS` (line 168) and the AC07 docs handoff → #225 remain historical; the EN/RU support statements are updated by D223 (AC08).
 - This is an appended resolution note only: every r=1..r=6 rejected-evidence entry above is preserved unchanged.
+
+## Owner decision (2026-10-14)
+
+- **#213 stays OPEN — option (a) (owner, 2026-10-14).** The code slice is closed via **#223** (closed 2026-10-13); #213 is closed only after the documentation slice **#225** (AC07 EN+RU docs delta) lands in the same milestone. Closure trigger: T225 landing → close #213 (AC01–AC08 covered by T213 + #223 + #225).
+- Recorded on the issue: https://github.com/AlexeyShirshov/nextorm/issues/213#issuecomment-6172268595

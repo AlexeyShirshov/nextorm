@@ -23,6 +23,10 @@ the context that owns it; do not do the deep analysis yourself.
   builders/visitors, or a `SqliteBenchmark*` arm:
   **`nextorm-db-perf-analyst`**.
 
+- Routing evidence is `file:line` facts: C# symbols resolve with `roslyn` — in V2 inside
+  `execute` (`const r = await tools.roslyn({ action: "refs", target: "NextORM.Core.X.Y" }); return r`) —
+  never with symbol-grep (`rg`/`grep`/`sed`).
+
 If the symptom genuinely spans both, start with the context that appears first
 on the hot path and state the assumption.
 

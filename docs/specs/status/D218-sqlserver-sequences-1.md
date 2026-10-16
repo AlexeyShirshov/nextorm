@@ -7,9 +7,10 @@ collection: 1.0.9-todo
 group: G1 (single group; no worktree/branch/merge)
 cycle: N=1
 plan_revision: r=1
-iteration: n=2
+iteration: n=3/3
 plan_state: ready
 evidence_contract_rv: 1
+task_status: incomplete (awaiting owner: recommend done-with-caveat, ref T217/#234)
 manifest: artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
 selected_variant: pdca-dotnet
 base_commit: 58025147
@@ -123,10 +124,14 @@ Validate with `python3 scripts/validate_inner_loop.py manifest <path>`.
 - E04 / R3,R4 — name/default/row/captured/escaping matrix; executed assertions (C2+C3).
 - E05 / R5 — BIGINT values, both names/aliases, per-row semantics, boundaries; DB evidence (C5).
 - E06 / R6 — scope exclusions, prohibited position, exhaustion; review + expected-error tests (C2+C5).
-- E07 / R7 — EN/RU docs, registries, no specs links, CRLF/invariants (C6).
-- E08 / R7 — acceptance 7 cases baseline/post + preparation comparison (C7+C8 before/after D1).
+- E07 / R7 — EN/RU docs, registries, no specs links, CRLF/invariants (C6). **Round-2 status: `unresolved`** — `E07-docs-registry.md` carries only a diffstat; no cited-line reconciliation and no non-author certification.
+- E08 / R7 — acceptance 7 cases baseline/post + preparation comparison (C7+C8 before/after D1). **Round-2 status: `unresolved`** — the frozen allocation criterion (`:100`, “allocations not above baseline”) is not met by the `+5.08 KB` (`+0.65 %`) control delta; the matched A/B (`E08-ab.md:164-172`) is an oracle substitution, not the frozen criterion.
 - E09 / R7 — coverage of included assemblies + branch policy (C9a+C9b+C9c).
-- E10 / R0,R7 — source/artifact revision binding, complete report/manifest (C10).
+- E10 / R0,R7 — source/artifact revision binding, complete report/manifest (C10). **Round-2 status: `unresolved`** — 8 supplementary per-project runs (`logs/r2-summary.txt:19-26`, all exit 0) are deliberately absent from `report.json` by the sweep-cap policy ⇒ completeness not certifiable.
+
+**Round-2 row statuses (escalate decision (C), r=1 / n=3):** E07, E08, E10 marked **`unresolved`** (one-clause reasons above); PASS not recorded; `evidence_contract_rv: 1` (`rv`) **unchanged**; T218 outcome `incomplete (awaiting owner: recommend done-with-caveat, ref T217/#234)`. Neither `manifest.json` nor `report.json` is rewritten for this stop beyond the row-status correction (E07/E08/E10 `met`→`open` + `reason`) in `manifest.json`; `report.json` is untouched.
+
+`Notice:` **resource limitation** — the `check` session exposed no `skill` tool, so the four mandatory overlay audit skills (`dotnet-csharp-code-smells`, `slopwatch`, `dotnet-api-surface-validation`, `api-design`) could not be loaded by that session; the gathered results were applied nevertheless; suppression/slop ratio **0 added / 16 pre-existing = 0.00**.
 
 CHECK re-gather budget: at most **2** targeted rounds, owner **check**. Missing report → re-gather (no product FAIL / no new DO attempt). Exhausted + open → unresolved, list IDs, PASS forbidden. Completing evidence does not bump rv.
 
@@ -195,3 +200,11 @@ None now (still initial PLAN). A newly proven prerequisite keeps the original D 
 2026-10-14T05:10:00Z | DO | revision r=1 | iteration 2/3 | CHECK FAIL r=1 n=1/3 — no product defect; mandatory test rows open (R3/R4, E04) + E08/E10 evidence; corrective DO (test-only) started, n=2/3 | artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
 2026-10-14T05:20:00Z | DO | revision r=1 | iteration 3/3 | escalate routed: E08 oracle decidable — control patindex not isolated (flows through the D1-changed translator); corrective attempt n=3 A/B + row :87/:91 closure, no src change | artifacts/pdca/D218-sqlserver-sequences/rv1/report.json
 2026-10-14T05:40:00Z | DO | revision r=1 | iteration n=3/3 | escalate step 2 completed: earlier A/B incomparable (128 vs 64 ops) — re-measuring with a MATCHED job; no per-call alloc mechanism found in the D1 diff | artifacts/pdca/D218-sqlserver-sequences/rv1/E08-ab.md
+
+2026-10-14T05:56:08Z | CHECK | revision r=1 | iteration n=3/3 | CHECK re-gather round 1 (owner check, append-only): dispositioned executions[32] (deliberate mutation #4 RED run, not a failed scope run; branch-mutation-map M4, SqlServerDialect.cs:171; failing assertion SqlServerFunctionsSqlGenerationTests.cs:677; log logs/mutation4-red.log, total 33/failed 1/exit 2) with paired GREEN executions[34] (exit 0, selected_count 33, logs/mutation4-green.log); appended an E10 tree-binding entry for checked tree fc38fb89 / HEAD 5ea7e50d (src+tests diff vs frozen 8cbd306c empty, exit 0) | artifacts/pdca/D218-sqlserver-sequences/rv1/{manifest.json,report.json}
+
+2026-10-14T06:06:55Z | CHECK | revision r=1 | iteration n=3/3 | CHECK re-gather round 1 verdict (owner check): FAIL — incomplete evidence, no proven product defect; re-gather round 2 authorized (budget 2), no DO attempt/n bump. Gaps: (a) exact-command C4/C5 full container runs missing (scope shows SQL-gen sweeps + SQLServer-only integration); (b) E01 source review / E06 scope review / E07 CRLF+registry / E10 aggregate unsupported beyond author assertions; (c) overlay audit-skills application + suppression/slop counters+ratio absent; (d) variant rows 83/90 guard confirmation. | artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json
+
+2026-10-14T06:40:00Z | CHECK | revision r=1 | iteration n=3/3 | CHECK re-gather round 2 verdict (owner check): FAIL — incomplete evidence, no proven product defect; budget 2/2 exhausted; E07/E08/E10 unresolved. Facts: R1–R6 met; 0 failed assertions; 0 provider-unavailable skips; coverage line 87.3 / branch 79.9; mutation M1–M4 RED exit 2 → GREEN exit 0; C4 `dotnet test -c Debug --verbosity normal` exit 0 (11593 / 0 failed); C5 `dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor` exit 0 (3868 / 0 failed / 198 capability skips). Unresolved: E07 (only a diffstat, no cited-line reconciliation / non-author certification), E08 (frozen allocation criterion not met — +5.08 KB / +0.65 %), E10 (8 supplementary runs unrecorded). | artifacts/pdca/D218-sqlserver-sequences/rv1/check-report.md
+
+2026-10-14T06:48:00Z | ESCALATE | revision r=1 | iteration n=3/3 | decision (C) in-cycle STOP: no PASS, T218 incomplete (awaiting owner: recommend done-with-caveat, ref T217/#234); E07/E08/E10 unresolved; no 4th attempt on r=1; T53 HELD; T219 not entered. Owner question: «принять T218 как done-with-caveat с follow-up в 1.0.9 и снять fail-stop G1?». Residual risk: at (A) it is accepted that 15 changed spec registries and 8 unrecorded green runs are not independently certified, and the control allocation is formally +0.65 % above the D0 baseline, closed only by the indirect A/B evidence. | artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json

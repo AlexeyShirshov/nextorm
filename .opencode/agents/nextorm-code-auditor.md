@@ -140,6 +140,10 @@ End with the summary table and the non-determinism disclaimer.
 
 ## Boundaries
 
+- **C# symbols — `roslyn` only, in V2 inside `execute`:**
+  `const r = await tools.roslyn({ action: "refs", target: "NextORM.Core.X.Y" }); return r`;
+  never symbol-grep (`rg`/`grep`/`sed`); batch calls in one `execute`; if it is not in the
+  Code Mode catalog, `search({ query: "roslyn" })` first.
 - **Registers only** — you may edit `docs/specs/design/API-NAMING-REVIEW.md` and
   `docs/specs/design/code-smells-review.md`; every other path is denied. Never
   edit code or config.

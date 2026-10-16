@@ -18,6 +18,7 @@ prior_contract: rv=1 superseded by rv=2
 
 ## Current state
 
+- **Owner decision received (2026-10-13) — вариант (i):** MariaDB source-level lock is **unsupported by design** (fail-closed); #216 text/criteria narrowed and updated; issue **CLOSED**; D-07 `blocked` → `resolved`; заморозка публичного API (T53/#53) **переехала в майлстон `1.0.9-rc3`** (из `1.0.9`), решение по ней принимает владелец в её собственной задаче. Full record: §10 «Owner decision (received)».
 - Phase: **ACT complete — done-with-constraint** (escalation **(A)**: close in-cycle as done-with-constraint; no full PASS; no r+1; no product change). D-01…D-06 `done`, **D-07 `blocked`** (owner decision pending); **#216 remains OPEN**; T53 freeze HELD.
 - Cycle N=1, plan revision r=2, attempt n=3, evidence contract rv=2 (rv=1 superseded).
 - Selected variant: `pdca-dotnet`. Single collection group → current worktree/branch `1.0.9`, no worktree/branches/merge.
@@ -45,7 +46,7 @@ prior_contract: rv=1 superseded by rv=2
 | D-04M | done | MariaDB `SupportsSourceLocks=false` + deterministic `NotSupportedException`; whole grammar preserved; red→green `/tmp/nextorm-maria-red.log` (exit 2, selected 3, failed 2) → `/tmp/nextorm-maria-green.log` (exit 0, selected 3) |
 | D-05 | done | matrix closure: focused unit/provider matrix rows, `PlanKeyUniquenessTests` (13), two-transaction integration locking (PG/MySQL/SQL Server 2 passed each; MariaDB dedicated 3 fail-closed), capability contract 5; commit `d6891104` + `1849164e` |
 | D-06 | done | EN/RU docs (8 files; committed `3247774b`), `dotnet docfx` exit 0, DO→CHECK boundary sweep (7x `PDCA=T216` + LockRendererDefault + PlanKeyUniqueness + integration), acceptance 7/0 + T216 6/0, coverage line 88.7% / branch 80.8%; boundary evidence `artifacts/pdca/D216/rv2/boundary/evidence.json` (validator exit 0) |
-| D-07 | **blocked** | original remainder: R-03/MariaDB source-level `OF` stays provisional fail-closed — **NOT PASS**; owner decision pending (narrow MariaDB to unsupported vs defer MariaDB source lock beyond 1.0.9). Evidence: `artifacts/pdca/D216/rv2/redgreen/mariadb-*.log`, `focused-mariadb.log`. **#216 stays OPEN.** |
+| D-07 | **resolved (owner decision (i), 2026-10-13)** | original remainder: R-03/MariaDB source-level `OF` — per the owner decision MariaDB source-level locking is **unsupported by design** (fail-closed), so the original `OF` obligation is superseded by a narrowed criterion rather than met. History: was provisional fail-closed / **NOT PASS**, owner decision pending (narrow MariaDB to unsupported vs defer MariaDB source lock beyond 1.0.9). Evidence: `artifacts/pdca/D216/rv2/redgreen/mariadb-*.log`, `focused-mariadb.log`; decision — §10. **#216 CLOSED.** |
 
 ### ACT complete — done-with-constraint
 
@@ -452,6 +453,30 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 - Frozen manifest (planned): `artifacts/pdca/D216/rv2/manifest.json`
 - Superseded contract: rv=1
 
+## 10. Owner decision (received) — вариант (i)
+
+**Дата:** 2026-10-13. **Решение владельца:** (i) — признать MariaDB source-level lock (`FOR UPDATE OF`/`FOR SHARE OF`)
+**неподдерживаемым by design** и обновить текст/критерии #216. Вариант (ii) (defer за пределы 1.0.9) не выбран.
+
+Что это означает:
+
+- Реализованное поведение не меняется и не является дефектом: `ILockRenderer.SupportsSourceLocks = false` для MariaDB,
+  детерминированный `NotSupportedException` на source-level lock, без подмены whole-query локом, без игнорирования
+  таргета и без эмиссии `OF`. Требование **R-13** выполнено.
+- Исходное **R-03** (собственно `OF <alias>` на MariaDB) снимается как критерий: критерий сужен до
+  «unsupported / fail-closed». **R-14** (retain the constraint) исполнено — ограничение задокументировано явно.
+- #216: текст/критерии обновлены на GitHub, issue **закрыт** (комментарий с решением и уликами).
+- D-07: `blocked` → `resolved` — это был единственный остаток исходного #216 requirement.
+- Публичная документация правок **не требует**: EN/RU уже описывают MariaDB как unsupported/fail-closed
+  (`docs/advanced/limitations.md:27`, `docs/advanced/api-reference.md:160`, `docs/guide/32-provider-specific-features.md:111-122`
+  и RU-зеркала) — R-10 остаётся выполненным.
+- Заморозка публичного API (**T53/#53**) **переехала в майлстон `1.0.9-rc3`** (из `1.0.9`) и ведётся в её собственной задаче — решение по ней в записи T216 не требуется; 10 публичных членов с тегом #216 остаются кандидатами в её реестре.
+
+**Запись решения:** `artifacts/pdca/D216/rv2/check/owner-decision.json` (`status: received`, `chosen_option: (i)`) и
+`artifacts/pdca/D216/rv2/check/owner-constraint.md` (раздел Resolution). **Замороженный rv=2 манифест не переписывается:**
+строка EV-16 остаётся `open` как снапшот состояния цикла на момент ACT; решение — внешнее событие после ACT и фиксируется
+здесь, в `owner-decision.json` и в GitHub #216.
+
 ## Progress log
 
 ```text
@@ -470,4 +495,5 @@ Exact next allowed step: coder saves this plan verbatim in the status file befor
 2026-10-13T02:30:00Z | DO | r=2 | n=3/3 | DO complete → CHECK: pre-change baseline at 666cf9ac (ratio 1.98 vs after 2.03, +2.6%); unfiltered C-BOUNDARY all 7 provider projects 0 failed; live MariaDB whole-lock 3/3 executed, source fail-closed; manifest re-validated exit 0; EV-16 open, EV-17 met | manifest artifacts/pdca/D216/rv2/manifest.json
 2026-10-13T03:00:00Z | DO | r=2 | n=3/3 | ACT-prep: escalation (A) done-with-constraint, no product change; EV-02/EV-14 accepted reviews, EV-16 owner constraint materialized (open), EV-18 freeze persisted, EV-12 T216 baseline N/A at 666cf9ac (acceptance 1.98->2.03, +2.5%); manifest re-validated exit 0; #216 OPEN | manifest artifacts/pdca/D216/rv2/manifest.json
 2026-10-13T03:30:00Z | ACT | r=2 | n=3/3 | ACT complete — done-with-constraint: EV-15 verdict+rows persisted, manifest EV-15 met (validator exit 0); T53 candidates registered (10, #216), freeze HELD; collection T216 row pending→done; next pending T217 (order 11); #216 OPEN, D-07 blocked | artifacts/pdca/D216/rv2/check/verdict.md
+2026-10-13 | OWNER | r=2 | n=3/3 | Owner decision received — вариант (i): MariaDB source-level lock unsupported by design; #216 criteria narrowed+updated, issue CLOSED; D-07 blocked→resolved; R-03 superseded by the narrowed criterion, R-14 retained; docs unchanged (EN/RU already say unsupported); T53 freeze moved to milestone 1.0.9-rc3 (was 1.0.9) | artifacts/pdca/D216/rv2/check/owner-decision.json; https://github.com/AlexeyShirshov/nextorm/issues/216
 ```

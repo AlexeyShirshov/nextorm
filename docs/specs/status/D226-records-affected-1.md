@@ -375,3 +375,7 @@ Observable substituted quantity = the sum of materialized `IList.Count` (a genui
 **History preserved (CHECK #1 → #2 → #3).** CHECK #1: E226-05/07/08/09 open. CHECK #2: E226-09 — the executed mutants differed from the frozen five. CHECK #3, r1 n=3/3: the "row-count" patch counted columns/result sets; literal row-count evidence absent; restoration reporting, classifier and provenance corrections also required. Never run a fourth CHECK under r1. Allowed permanent changes for r2: the existing SQLite test, additive `S`, and rv2 artifacts.
 
 **Definition of done for r2.** All inherited obligations retained; five literal mutants assertion-killed; the true row-count oracle evidenced; actual restoration comparisons succeed; all six negative controls behave correctly; provenance truthful; production and rv1 bytes unchanged; audit and the installed manifest validator pass; all required rows met; **independent CHECK returns PASS**. Until then the original D stays active.
+
+## Owner decision (2026-10-14)
+
+- **Issue closed by the owner (done).** #226 CLOSED; task T226 r=2/rv=2, CHECK PASS, 11/11 rows met; `RecordsAffected` public on both result types (product commit `7cacee88`), T53 candidates registered (tag `#226`). Record: https://github.com/AlexeyShirshov/nextorm/issues/226

@@ -921,3 +921,7 @@ Rows below: `rv=4`; applicability `Always`; all 17 legacy IDs preserved with the
 ### Progress log (r=4, ACT)
 
 2026-10-12T10:28:45Z | ACT | r4 | n3/3 | PASS — CHECK PASS (21 met / 0 open); authoritative evidence root `artifacts/pdca/D211-eager-perparent-topn-1/rv4/`; commits `#211` product+tests=6da00a11 (docs+status in the follow-up commit); rv1/rv2/rv3 untouched; no push, no merge, issue #211 left open for manual closure | rv4/evidence-manifest.json; rv4/report.json; rv4/contract/rv4-contract.json
+
+## Owner decision (2026-10-14)
+
+- **Issue closed by the owner (done).** #211 and its absorbed #210 are CLOSED; task T211 is r=4/rv=4, CHECK PASS, 21/21 mandatory rows met, 0 open. The r=1 terminal `incomplete` (EV-11 evidence-capture gap, not a product defect) stays historical. Record: https://github.com/AlexeyShirshov/nextorm/issues/211

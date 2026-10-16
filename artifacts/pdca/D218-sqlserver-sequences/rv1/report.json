@@ -1639,6 +1639,80 @@
       "artifact_revision": "d218-n3-matched",
       "exit_code": 0,
       "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "-c",
+        "Debug",
+        "--verbosity",
+        "normal"
+      ],
+      "phase": "boundary",
+      "source_revision": "fc38fb89",
+      "artifact_revision": "fc38fb89",
+      "exit_code": 0,
+      "selected_count": 11593,
+      "log_path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-C4-solution-test.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--",
+        "-noColor"
+      ],
+      "phase": "boundary",
+      "source_revision": "fc38fb89",
+      "artifact_revision": "fc38fb89",
+      "exit_code": 0,
+      "selected_count": 3868,
+      "log_path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-C5-integration-all.log"
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "--",
+        "docs/scalar-functions/10-sequences.md",
+        "docs/ru/scalar-functions/10-sequences.md",
+        "docs/guide/provider-specific-sql/sqlserver.md",
+        "docs/ru/guide/provider-specific-sql/sqlserver.md",
+        "docs/specs/roadmap/sql-function-coverage-gap.md",
+        "docs/specs/roadmap/sql-capabilities-gap-analysis.md",
+        "docs/specs/comparison/evidence-01-provider-specific-features.md",
+        "src/nextorm.core/Query/SqlFunctions.SqlServer.cs",
+        "src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs",
+        "src/nextorm.sqlserver/SqlServerDialect.cs",
+        "tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs",
+        "tests/nextorm.integration.tests/SqlServerSpecificTests.cs"
+      ],
+      "phase": "boundary",
+      "source_revision": "fc38fb89",
+      "artifact_revision": "fc38fb89",
+      "exit_code": 0,
+      "selected_count": 12,
+      "log_path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/docs-check.log"
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/validate_inner_loop.py",
+        "manifest",
+        "artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json"
+      ],
+      "phase": "boundary",
+      "source_revision": "fc38fb89",
+      "artifact_revision": "fc38fb89",
+      "exit_code": 0,
+      "selected_count": 11,
+      "log_path": "artifacts/pdca/D218-sqlserver-sequences/rv1/logs/r2-validators.log"
     }
   ],
   "notes": [
@@ -1653,6 +1727,8 @@
     "n=3 corrective mutations (row :91): four byte-level product mutations, each RED (exit 2) -> restore -> GREEN (exit 0) \u2014 M1 gate-off, M2 corrupt `next value for`, M3 drop `nextval` alias, M4 drop `]]` escaping; full argument arrays and counts in branch-mutation-map.md + logs/n3-m{1..4}-*.log.",
     "n=3 corrective source footprint tree 16cc6b48c8da86eb464d986083ca0a72cf4980cd (HEAD^{tree} + the integration test additive; this cycle's status file and generated artifacts excluded); rebound from 317f0078.",
     "n=3 corrective revision rebound: commit d4db38231d365cd70ee1b97afebc25a62e09815d (tree 8cbd306cd0c074a8b0c121cc4f6e64bee04e7f61).",
-    "escalate step 2 (r=1/n=3): 23 additional boundary benchmark executions, all exit 0 / selected_count 1 / 64 op, recording the matched-job A/B re-measurement (E08-ab.md 'Matched-job re-measurement'): 3 confounded pairs (A pre-D1 ctrl-only f8caa690-pre-d1 vs B main HEAD d218-n3, five-case file), 7 isolated pairs (A pre-D1 vs B' HEAD d218-n3-matched, identical control-only benchmark source on both sides) and 3 harness-swap runs in the unchanged HEAD worktree with the five-case file restored. Op counts are identical (64) on every side/iteration. E08 met: no attributable product delta."
+    "escalate step 2 (r=1/n=3): 23 additional boundary benchmark executions, all exit 0 / selected_count 1 / 64 op, recording the matched-job A/B re-measurement (E08-ab.md 'Matched-job re-measurement'): 3 confounded pairs (A pre-D1 ctrl-only f8caa690-pre-d1 vs B main HEAD d218-n3, five-case file), 7 isolated pairs (A pre-D1 vs B' HEAD d218-n3-matched, identical control-only benchmark source on both sides) and 3 harness-swap runs in the unchanged HEAD worktree with the five-case file restored. Op counts are identical (64) on every side/iteration. E08 met: no attributable product delta.",
+    "CHECK re-gather round 1: executions[32] dispositioned by index. True cause: it is a deliberate mutation RED run, not a failed scope run -- mutation #4 of the corrective DO (same branch as map row M4: drop the `]]` escaping in SqlServerDialect.QuoteIdentifier, branch-mutation-map.md SqlServerDialect.cs:171), executing the escaping case SequenceFunctions_ShouldEscapeClosingBracketAndNotEscapeTheIdentifier, which fails at tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs:677 (total 33 / failed 1 / succeeded 32, exit 2); log artifacts/pdca/D218-sqlserver-sequences/rv1/logs/mutation4-red.log (the n=3 rerun of the same branch is logs/n3-m4-red.log; executions[32] carries source_revision cb3d5b6b, so its log is mutation4-red.log). The paired GREEN scope run for that filter is executions[34] (same command, exit 0, selected_count 33, source_revision cb3d5b6b), log artifacts/pdca/D218-sqlserver-sequences/rv1/logs/mutation4-green.log (33 succeeded / 0 failed). Product mutations are not recorded as scope executions, which is why [32] is the only nonzero exit in the report.",
+    "CHECK re-gather round 2 finalize (bookkeeping only, no test/benchmark run added; the single-comprehensive-sweep cap holds): the last two boundary executions are NON-TEST bookkeeping runs recorded because the round-2 evidence registration had been interrupted. (1) the T218-footprint-scoped `git diff --check --` over the 12 footprint paths (3 src + 2 tests + 7 docs) exits 0 for the live tree, log logs/docs-check.log (its selected_count 12 is the number of enumerated footprint paths inspected, not a test count); (2) `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D218-sqlserver-sequences/rv1/manifest.json` exits 0 (selected_count 11 = the 11 contract rows validated), log logs/r2-validators.log. Both carry source_revision = artifact_revision = fc38fb89 (the round-2 checked tree, HEAD 5ea7e50d). The 198/199 capability skips of C4/C5 are reconciled in manifest E05/E08."
   ]
 }

@@ -29,7 +29,10 @@ a coverage question, not a "who already implemented it" question. A function tha
 provider today can still have an obvious analog on the others (`current_user` / `CURRENT_USER` /
 `current_user()` / `currentUser()`). Search the engine before designing anything. Resolve C# symbols with the `roslyn` tool (e.g.
 `members NextORM.Core.Query.SqlFunctions` / `refs` / `implementations` — see `AGENTS.md` -> "C#
-semantic analysis"); use text search only for SQL/CLR names, never shell `grep -r`/`find`:
+semantic analysis"); in V2 it is not a top-level tool, so call it inside `execute`
+(`const r = await tools.roslyn({ action: "members", target: "NextORM.Core.Query.SqlFunctions" }); return r`,
+batching several calls in one `execute`; `search({ query: "roslyn" })` if it is not in the catalog — never symbol-grep);
+use text search only for SQL/CLR names, never shell `grep -r`/`find`:
 
 ```bash
 # plain-text pass (SQL/CLR token): ripgrep respects .gitignore, so it skips bin/obj/TestResults

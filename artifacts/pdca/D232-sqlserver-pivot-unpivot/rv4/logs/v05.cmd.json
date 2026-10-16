@@ -6,7 +6,6 @@
   "-c",
   "Debug",
   "--no-build",
-  "-p:NuGetAudit=false",
   "--filter",
   "FullyQualifiedName~T232VariantV05"
  ],
@@ -14,5 +13,5 @@
  "env": {
   "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
  },
- "captured": "2026-10-14T23:56:55Z"
+ "captured": "2026-10-15T06:15:58Z"
 }

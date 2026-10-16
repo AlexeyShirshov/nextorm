@@ -51,3 +51,24 @@ Test S: `["dotnet","test","tests/nextorm.sqlserver.tests","-c","Debug","--no-bui
 
 Each mutation is detected by at least one executed assertion and every mutated branch has a covering
 test; the corrected sources restore GREEN. No product change is committed.
+
+## Variant guard confirmation (CHECK re-gather round 2) — rows `:83` and `:90`
+
+Appended by the check owner; the table above is unchanged. Full artifact:
+`variant-guard-confirmation.md`.
+
+- **Row `:83` (reference-type result guard)** — the two public markers return only CLR `long`; there is
+  no reference-type overload. `roslyn members NextORM.Core.SqlServerFunctions` lists exactly one
+  `next_value_for(string)` and one `nextval(string)`; sources `SqlFunctions.SqlServer.cs:294,:301` are
+  `public long`; `SequenceFunctions_ShouldReturnLong` (`SqlServerFunctionsSqlGenerationTests.cs:761`)
+  asserts `ReturnType == typeof(long)`. Covered by the "`next_value_for(string) → long` marker" and
+  "`nextval(string) → long` alias marker" rows above.
+- **Row `:90` (cache/default preparation control)** — the T218-only source delta
+  (`git diff f8caa690..HEAD -- src`) is exactly the three files above; it contains no `QueryCommand`
+  / `_dontCache` / `Builders/**` / `Cache = false` change (`git diff f8caa690..HEAD -- src | rg
+  "QueryCommand|_dontCache|Builders/|Cache = false"` → no match), so T218 does **not** mutate shared
+  `QueryCommand` state or the sticky `_dontCache`. The `QueryCommand`/`Builders` hunks visible in the
+  wider `58025147..HEAD` range belong to T216/T217/T213 and are not T218. The preparation path through
+  the D1-changed translator is exercised by the E08 `t218-preparation` control benchmark
+  (`Prepare_Control_Patindex_Uncached`), whose matched-job A/B found no product regression (E08 `met`,
+  commit `5ea7e50d`).

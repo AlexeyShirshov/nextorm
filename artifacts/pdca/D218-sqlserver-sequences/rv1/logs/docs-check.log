@@ -2,3 +2,7 @@
 diff-check-exit=0
 == rg docs/specs in public docs ==
 rg-exit=1
+
+== CHECK re-gather round 2 finalize — T218-footprint-scoped git diff --check (12 paths) ==
+argv: git diff --check -- docs/scalar-functions/10-sequences.md docs/ru/scalar-functions/10-sequences.md docs/guide/provider-specific-sql/sqlserver.md docs/ru/guide/provider-specific-sql/sqlserver.md docs/specs/roadmap/sql-function-coverage-gap.md docs/specs/roadmap/sql-capabilities-gap-analysis.md docs/specs/comparison/evidence-01-provider-specific-features.md src/nextorm.core/Query/SqlFunctions.SqlServer.cs src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs src/nextorm.sqlserver/SqlServerDialect.cs tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs tests/nextorm.integration.tests/SqlServerSpecificTests.cs
+diff-check-exit=0
