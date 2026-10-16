@@ -124,9 +124,14 @@ select region_id as 'Region'
  from simple_entity
 ```
 
-The first argument must be the query lambda parameter (a source), and the name is matched against the
-database column verbatim, so quoting follows the provider (`` `region_id` `` on ClickHouse and MySQL,
-`"region_id"` on PostgreSQL and SQLite, `[region_id]` on SQL Server). The value is materialized as
+The first argument must be the query lambda parameter (a source), and the name is a **raw** database
+column name: it is always safely quoted by the provider, independently of the context's
+[`UseQuotedIdentifiers`](xref:NextORM.Core.DataContextBuilder.UseQuotedIdentifiers(System.Boolean)) option
+(`` `region_id` `` on ClickHouse and MySQL, `"region_id"` on PostgreSQL and SQLite, `[region_id]` on
+SQL Server). A dot is a literal name character — not a schema or alias qualifier — and the name is never
+interpreted as SQL, so manual pre-quoting is not supported: `Column(t, "[1]")` is the literal
+three-character name `[1]` (rendered `[[1]]]` on SQL Server), while the column named `1` is
+`Column(t, "1")`. The value is materialized as
 `T`, so the type must be one the row reader supports. Unlike a mapped member, the column is not
 validated against entity metadata: a misspelled name raises an error on the database side.
 

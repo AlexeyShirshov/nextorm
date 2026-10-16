@@ -279,8 +279,9 @@ public sealed class TvpRow
 - В `hits_v1` и других широких таблицах колонок намного больше, чем объявляет интерфейс сущности.
   Вместо маппинга всех колонок лишние можно спроецировать по имени через
   [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (см.
-  [Запросы и проекции](../guide/30-projections.md#колонки-по-имени)); имя сверяется
-  дословно, поэтому кавычки — по диалекту.
+  [Запросы и проекции](../guide/30-projections.md#колонки-по-имени)); имя — сырое имя,
+  всегда безопасно квотируемое диалектом (независимо от опции
+  [`UseQuotedIdentifiers`](xref:NextORM.Core.DataContextBuilder.UseQuotedIdentifiers(System.Boolean))).
 - Терминалы потокового чтения LOB (`ToStream`/`ToTextReader`) отклоняются через `NotSupportedException`:
   у `ClickHouse.Driver` нет потоковых геттеров (см.
   [Потоковое чтение больших объектов](../guide/26-large-objects.md)).

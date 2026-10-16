@@ -3085,7 +3085,7 @@ public class SqlGenerationTests
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
             .Select(x => new { Region = SqlFunctions.Column<ulong>(x, "RegionID") }));
 
-        sql.Should().Be("select RegionID as `Region`\n from simple_entity");
+        sql.Should().Be("select `RegionID` as `Region`\n from simple_entity");
     }
 
     [Fact]
@@ -3098,8 +3098,8 @@ public class SqlGenerationTests
             .Where(p => SqlFunctions.Column<string>(p.Item2, "somestring") == "x")
             .Select(p => new { p.Item1.Id, S = SqlFunctions.Column<string>(p.Item2, "somestring") }));
 
-        sql.Should().Contain("where t2.somestring = 'x'");
-        sql.Should().Contain("t2.somestring as `S`");
+        sql.Should().Contain("where t2.`somestring` = 'x'");
+        sql.Should().Contain("t2.`somestring` as `S`");
     }
 
     [Fact]

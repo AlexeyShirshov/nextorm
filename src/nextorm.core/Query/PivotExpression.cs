@@ -23,8 +23,9 @@ public enum PivotAggregate
 /// <summary>
 /// One value of the <c>PIVOT ... IN (...)</c> list. The value names the resulting column, so select
 /// it in the projection under the desired name
-/// (for example <c>.Select(t =&gt; new { Q1 = t.GetNullableDecimal("[1]") })</c> when the value is
-/// not a plain identifier).
+/// (for example <c>.Select(t =&gt; new { Q1 = SqlFunctions.Column&lt;decimal?&gt;(t, "1") })</c>: the
+/// value is a raw name and is always safely quoted, so a value that is not a plain identifier is
+/// still one identifier).
 /// </summary>
 public sealed class PivotValue
 {
@@ -36,7 +37,13 @@ public sealed class PivotValue
     /// <summary>The source value matched by this pivot column; also the resulting column's name.</summary>
     public string Value { get; }
 
-    /// <summary>Creates a pivot value.</summary>
+    /// <summary>
+    /// Creates a pivot value. The string is the raw data value matched against the <c>FOR</c> column
+    /// and the resulting column's name: it is emitted as one safely quoted identifier, independently
+    /// of the command's <c>QuoteIdentifiers</c> option, and is never normalised, trimmed or stripped.
+    /// So <c>"a]b"</c> keeps the data value <c>a]b</c> (rendered <c>[a]]b]</c> on SQL Server) and
+    /// <c>"[1]"</c> is not silently reinterpreted as <c>1</c>.
+    /// </summary>
     public static PivotValue Create(string value)
     {
         ArgumentException.ThrowIfNullOrEmpty(value);
@@ -58,7 +65,12 @@ public sealed class UnpivotColumn
     /// <summary>The source column to unpivot (rendered as an identifier).</summary>
     public string Column { get; }
 
-    /// <summary>Creates an unpivot column entry.</summary>
+    /// <summary>
+    /// Creates an unpivot column entry. The string is the raw source column name: the <c>IN (...)</c>
+    /// declaration and its projection reference both derive from it and each is emitted as one safely
+    /// quoted identifier, independently of the command's <c>QuoteIdentifiers</c> option, so the name
+    /// never reaches the SQL text as raw or unquoted text.
+    /// </summary>
     public static UnpivotColumn Create(string column)
     {
         ArgumentException.ThrowIfNullOrEmpty(column);

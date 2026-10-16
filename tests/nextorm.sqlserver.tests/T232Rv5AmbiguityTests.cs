@@ -49,7 +49,7 @@ public class T232Rv5AmbiguityTests
         using var ctx = SqlServerTestContext.Create();
         var marker = new PivotValues();
 
-        var sql = SqlOf(ctx, PivotOne(ctx).Select(t => new { Q1 = marker.Value<decimal?>("[1]") }));
+        var sql = SqlOf(ctx, PivotOne(ctx).Select(t => new { Q1 = marker.Value<decimal?>("1") }));
 
         // Unchanged positive contract: the single TableAlias PIVOT source binds and the cell is aliased
         // to its projected member (the id/name route of the frozen projection contract).
@@ -71,8 +71,8 @@ public class T232Rv5AmbiguityTests
             Right = SqlFunctions.Column<string>(p.Item2, "category")
         }));
 
-        sql.Should().Contain("t1.category as [Left]");
-        sql.Should().Contain("t2.category as [Right]");
+        sql.Should().Contain("t1.[category] as [Left]");
+        sql.Should().Contain("t2.[category] as [Right]");
     }
 
     // ------------------------------------------------------------------ (c) ambiguous ordinary marker

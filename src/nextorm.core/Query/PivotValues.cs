@@ -3,7 +3,7 @@ namespace NextORM.Core;
 /// <summary>
 /// Translation-only marker for the typed <c>PIVOT</c> result projection. An instance of this type is
 /// the second parameter of the projection passed to the typed SQL Server
-/// <c>Pivot</c> overload: <c>projection: (t, v) =&gt; ... v.Value&lt;decimal?&gt;("[1]") ...</c>.
+/// <c>Pivot</c> overload: <c>projection: (t, v) =&gt; ... v.Value&lt;decimal?&gt;("1") ...</c>.
 /// </summary>
 /// <remarks>
 /// The marker carries no runtime state. It can also be instantiated and captured directly in an
@@ -39,9 +39,14 @@ public sealed class PivotValues
     /// </summary>
     /// <typeparam name="T">The CLR type of the result column value.</typeparam>
     /// <param name="columnName">
-    /// The pivot value that names the result column. It is resolved at runtime, so an absent value or an
-    /// incompatible <typeparamref name="T"/> is not rejected by the compiler: an absent value may yield
-    /// SQL <c>NULL</c>, and an invalid name or type can fail during query preparation or materialization.
+    /// The <b>raw</b> name of the pivot result column (one of the <c>PivotValue</c> values). It is not
+    /// SQL text: it is always safely quoted by the provider, regardless of the command's
+    /// <c>QuoteIdentifiers</c> option, and is never stripped of brackets — manual pre-quoting is not
+    /// supported, so <c>Value&lt;decimal?&gt;("[1]")</c> names the literal column <c>[1]</c> (rendered
+    /// <c>[[1]]]</c> on SQL Server), not the column <c>1</c>. The name is resolved at runtime, so an
+    /// absent value or an incompatible <typeparamref name="T"/> is not rejected by the compiler: an
+    /// absent value may yield SQL <c>NULL</c>, and an invalid name or type can fail during query
+    /// preparation or materialization.
     /// </param>
     /// <returns>The cell value, materialized as <typeparamref name="T"/>.</returns>
     /// <exception cref="NotSupportedException">
@@ -88,7 +93,7 @@ public sealed class UnpivotValues
     /// source column name) with an explicit CLR type.
     /// </summary>
     /// <typeparam name="T">The CLR type of the name column value.</typeparam>
-    /// <param name="nameColumn">The name of the UNPIVOT name column (the <c>FOR</c> identifier), resolved at runtime.</param>
+    /// <param name="nameColumn">The <b>raw</b> name of the UNPIVOT name column (the <c>FOR</c> identifier). It is always safely quoted by the provider, regardless of the command's <c>QuoteIdentifiers</c> option, and is resolved at runtime.</param>
     /// <returns>The name value, materialized as <typeparamref name="T"/>.</returns>
     /// <exception cref="NotSupportedException">
     /// Always thrown: the accessor is translation-only and can only be used inside a query expression.
@@ -101,7 +106,7 @@ public sealed class UnpivotValues
     /// column values) with an explicit CLR type.
     /// </summary>
     /// <typeparam name="T">The CLR type of the value column value.</typeparam>
-    /// <param name="valueColumn">The name of the UNPIVOT value column, resolved at runtime. Source cells whose value is <c>NULL</c> are excluded by SQL Server.</param>
+    /// <param name="valueColumn">The <b>raw</b> name of the UNPIVOT value column. It is always safely quoted by the provider, regardless of the command's <c>QuoteIdentifiers</c> option, and is resolved at runtime. Source cells whose value is <c>NULL</c> are excluded by SQL Server.</param>
     /// <returns>The value, materialized as <typeparamref name="T"/>.</returns>
     /// <exception cref="NotSupportedException">
     /// Always thrown: the accessor is translation-only and can only be used inside a query expression.

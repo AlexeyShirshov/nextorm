@@ -159,8 +159,8 @@ var rows = ctx.From<Sales>()
     .Select(t => new
     {
         Category = t.GetString("category"),
-        Q1 = t.GetNullableDecimal("[1]"),
-        Q2 = t.GetNullableDecimal("[2]")
+        Q1 = SqlFunctions.Column<decimal?>(t, "1"),
+        Q2 = SqlFunctions.Column<decimal?>(t, "2")
     })
     .ToList();
 
@@ -169,6 +169,21 @@ var stacked = ctx.From<Quarterly>()
     .Select(t => new { Quarter = t.GetString("quarter"), Value = t.GetNullableDecimal("value") })
     .ToList();
 ```
+
+**Raw names, always safely quoted.** The identifier strings of these APIs are raw, unescaped names, not
+SQL: `PivotValue.Create` carries the pivot **data value**, `UnpivotColumn.Create` a source column name,
+and the pivoted/stacked result columns are read by name. Every emitted occurrence goes through exactly
+one provider quoting pass, independently of the context's
+[`UseQuotedIdentifiers`](xref:NextORM.Core.DataContextBuilder.UseQuotedIdentifiers(System.Boolean)) option
+— with quoting off a by-name accessor still emits `[1]` on SQL Server / `"1"` on
+PostgreSQL and SQLite / `` `1` `` on MySQL and ClickHouse. A dot is a literal name character (never a
+schema/alias qualifier), SQL-looking punctuation stays inside the one quoted identifier, and manual
+pre-quoting is **not** supported: `Column(t, "[1]")` is the literal three-character name `[1]` (rendered
+`[[1]]]` on SQL Server), so to reference the column named `1` write `Column(t, "1")` — which is why the
+example above reads the pivoted columns through
+[`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) and not
+`GetNullableDecimal("[1]")`. On SQL Server an embedded `]` is doubled, so the pivot value `a]b` renders
+`[a]]b]` in both the `IN (...)` list and the projection reference.
 
 A derived query can be the pivoted source, which lets the `PIVOT` input carry joins and computed
 aggregate/`FOR` columns (the equivalent of pivoting a CTE):
@@ -191,8 +206,8 @@ var byQuarter = ctx.From(orderMargins)
     .Select(t => new
     {
         Category = t.GetString("CategoryName"),
-        Q1 = t.GetNullableDecimal("[1]"),
-        Q4 = t.GetNullableDecimal("[4]")
+        Q1 = SqlFunctions.Column<decimal?>(t, "1"),
+        Q4 = SqlFunctions.Column<decimal?>(t, "4")
     })
     .ToList();
 ```
@@ -276,8 +291,13 @@ var stacked = ctx.From<Quarterly>()
     .ToList();
 ```
 
-The value and role strings are **runtime identifiers**: they are not checked against the data or the
-inner mapping at compile time. An absent PIVOT value still renders its column but yields SQL `NULL`, so
+The value and role strings are **runtime identifiers** and **raw names**: they are not checked against
+the data or the inner mapping at compile time, and each is emitted as one safely quoted identifier
+regardless of the context's
+[`UseQuotedIdentifiers`](xref:NextORM.Core.DataContextBuilder.UseQuotedIdentifiers(System.Boolean)) option
+— a dot is a literal character, and embedded brackets are not a pre-quoted form, so `Value("[1]")` names
+the column `[1]` (rendered `[[1]]]` on SQL Server), never a silent `1`. An absent PIVOT value still
+renders its column but yields SQL `NULL`, so
 a non-nullable cell would fail materialization — declare it nullable; an invalid name or an incompatible
 cell type can fail during query preparation or materialization instead of at compile time. A truly
 dynamic PIVOT whose value list is only known at runtime cannot be expressed as a typed shape and stays
@@ -290,7 +310,8 @@ whole) instead of emitting wrong SQL.
 **Variants and boundaries.** The typed operators cover the same inner sources as the untyped ones — a
 plain table/entity, a **table-valued function** or a derived query, so
 `ctx.FromTableFunction(() => Db.MyTvf()).Pivot(...)` reshapes the function call exactly like a table.
-The declared value strings stay **runtime identifiers**: a typo or an absent value is not validated at
+The declared value strings stay **runtime identifiers** (raw names, always safely quoted as above): a
+typo or an absent value is not validated at
 compile time, so its column is still rendered and a cell that no source row matches materializes as SQL
 `NULL` (declare the cell nullable). A genuinely **dynamic PIVOT** — a value list known only at runtime —
 has no typed form and stays on the untyped [`TableAlias`](xref:NextORM.Core.TableAlias) overload, which

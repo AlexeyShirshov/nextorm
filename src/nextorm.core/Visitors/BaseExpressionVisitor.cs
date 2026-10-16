@@ -332,9 +332,21 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// Appends a physical column/table identifier, quoting it through the dialect when identifier
     /// quoting is enabled for this command.
     /// </summary>
-    internal void AppendIdentifier(string name)
+    internal void AppendIdentifier(string name) => AppendIdentifier(name, _options.QuoteIdentifiers);
+
+    /// <summary>
+    /// Appends a physical identifier that is always quoted through the dialect, regardless of the
+    /// command's <c>QuoteIdentifiers</c> option. Used only by the identifier APIs whose string argument
+    /// is a raw name that must never reach the SQL text unquoted (<c>SqlFunctions.Column&lt;T&gt;</c> and
+    /// the <c>PivotValues</c>/<c>UnpivotValues</c> markers); the legacy alias/CTE raw callers keep
+    /// <see cref="AppendIdentifier(string)"/> and its option-gated behaviour.
+    /// </summary>
+    internal void AppendAlwaysQuotedIdentifier(string name) => AppendIdentifier(name, true);
+
+    /// <summary>Appends an identifier, quoting it when <paramref name="alwaysQuote"/> is set or identifier quoting is on.</summary>
+    private void AppendIdentifier(string name, bool alwaysQuote)
     {
-        if (_options.QuoteIdentifiers)
+        if (alwaysQuote)
             _builder!.Append(_dialect.QuoteIdentifier(name));
         else
             _builder!.Append(name);
@@ -471,7 +483,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         if (_columnsProvider.HasAliases && !_dontNeedAlias)
             AppendColumnAlias(unwrapped, target);
 
-        AppendIdentifier(columnName);
+        // The name is a raw identifier: quote it through the provider regardless of the command's
+        // QuoteIdentifiers option, so a name with punctuation never becomes SQL text (R237-04).
+        AppendAlwaysQuotedIdentifier(columnName);
     }
 
     /// <summary>

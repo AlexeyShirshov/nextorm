@@ -47,7 +47,7 @@ public class T232DerivedSourceReproTests
         sql.Should().Be(
             "select [category], [Q1]\n" +
             " from (select [category], [Q1]\n" +
-            " from (select category, [1] as [Q1]\n" +
+            " from (select [category], [1] as [Q1]\n" +
             " from sales pivot (sum(margin) for quarter in ([1])) as [t1]) as [t2]) as [t3]");
         sql.Should().NotContain("[1] as [Q1]\n from (select category", "the intermediate layer must not re-alias the source column");
     }
@@ -64,7 +64,7 @@ public class T232DerivedSourceReproTests
         sql.Should().Be(
             "select [category], [Q1]\n" +
             " from (select [category], [Q1]\n" +
-            " from (select category, [1] as [Q1]\n" +
+            " from (select [category], [1] as [Q1]\n" +
             " from sales pivot (sum(margin) for quarter in ([1])) as [t1]) as [t2]) as [t3]\n" +
             " where (t3.[Q1] > cast(0 as decimal(38, 10)))");
     }
@@ -83,7 +83,7 @@ public class T232DerivedSourceReproTests
         sql.Should().Be(
             "select [category], [Q1]\n" +
             " from (select [category], [Q1]\n" +
-            " from (select category, [1] as [Q1]\n" +
+            " from (select [category], [1] as [Q1]\n" +
             " from sales pivot (sum(margin) for quarter in ([1])) as [t1]) as [t2]) as [t3]");
     }
 
@@ -101,10 +101,10 @@ public class T232DerivedSourceReproTests
         sql.Should().Be(
             "select t3.[category], t6.[category]\n" +
             " from (select [category], [Q1]\n" +
-            " from (select category, [1] as [Q1]\n" +
+            " from (select [category], [1] as [Q1]\n" +
             " from sales pivot (sum(margin) for quarter in ([1])) as [t1]) as [t2]) as [t3]\n" +
             " join (select [category], [Q1]\n" +
-            " from (select category, [1] as [Q1]\n" +
+            " from (select [category], [1] as [Q1]\n" +
             " from sales pivot (sum(margin) for quarter in ([1])) as [t4]) as [t5]) as [t6] on (t3.[Q1] < t6.[Q1])");
     }
 
@@ -130,8 +130,8 @@ public class T232DerivedSourceReproTests
         var sql = SqlOf(ctx, ctx.From(inner).Select(x => new { x.Category, x.Margin }));
 
         sql.Should().Be(
-            "select category, margin\n" +
-            " from (select category, margin\n" +
+            "select [category], [margin]\n" +
+            " from (select [category], [margin]\n" +
             " from t232_sales) as [t1]");
     }
 
@@ -163,7 +163,7 @@ public class T232DerivedSourceReproTests
         sql.Should().Be(
             "select [category], [margin]\n" +
             " from (select [category], [margin]\n" +
-            " from (select category, margin\n" +
+            " from (select [category], [margin]\n" +
             " from t232_sales) as [t1]) as [t2]");
     }
 
@@ -183,7 +183,7 @@ public class T232DerivedSourceReproTests
 
         var sql = SqlOf(ctx, ctx.From(typed).Select(x => new { x.Category, x.Q1 }));
 
-        sql.Should().Contain("select [category], [Q1]\n from (select category, [1] as [Q1]");
+        sql.Should().Contain("select [category], [Q1]\n from (select [category], [1] as [Q1]");
         sql.Should().NotContain("[Category]", "the unaliased grouping column keeps the source's own spelling");
     }
 

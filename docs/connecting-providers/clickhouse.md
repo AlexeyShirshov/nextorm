@@ -273,8 +273,10 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
 - `hits_v1` and similar wide tables have far more columns than an entity interface declares. Rather
   than mapping every column, project the extra ones by name with
   [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (see
-  [Querying and projections](../guide/30-projections.md#columns-by-name)); the name is
-  matched verbatim, so quoting follows the dialect.
+  [Querying and projections](../guide/30-projections.md#columns-by-name)); the name is a raw name,
+  always safely quoted by the dialect (independently of the
+  [`UseQuotedIdentifiers`](xref:NextORM.Core.DataContextBuilder.UseQuotedIdentifiers(System.Boolean))
+  option).
 - The LOB streaming terminals (`ToStream`/`ToTextReader`) are rejected with `NotSupportedException`:
   `ClickHouse.Driver` exposes no streaming getters (see
   [Streaming large objects](../guide/26-large-objects.md)).

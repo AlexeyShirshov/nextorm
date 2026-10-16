@@ -41,10 +41,10 @@ public class T232MarkerTests
             .Select(t => new
             {
                 Category = SqlFunctions.Column<string>(t, "category"),
-                Q1 = pivot.Value<decimal?>("[1]"),
-                Q2 = pivot.Value<decimal?>("[2]")
+                Q1 = pivot.Value<decimal?>("1"),
+                Q2 = pivot.Value<decimal?>("2")
             }))
-            .Should().Be("select category, [1] as [Q1], [2] as [Q2]\n from sales pivot (sum(margin) for quarter in ([1], [2])) as [t1]");
+            .Should().Be("select [category], [1] as [Q1], [2] as [Q2]\n from sales pivot (sum(margin) for quarter in ([1], [2])) as [t1]");
     }
 
     [Fact]
@@ -62,7 +62,7 @@ public class T232MarkerTests
                 Quarter = unpivot.Name<string>("qtr"),
                 Measure = unpivot.Value<decimal?>("val")
             }))
-            .Should().Be("select category, qtr as [Quarter], val as [Measure]\n from quarterly unpivot ([val] for [qtr] in ([q1], [q2])) as [t1]");
+            .Should().Be("select [category], [qtr] as [Quarter], [val] as [Measure]\n from quarterly unpivot ([val] for [qtr] in ([q1], [q2])) as [t1]");
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class T232MarkerTests
 
         // The exact marker definition emits the Alpha column; the same-named method on another type
         // is evaluated/folded instead and never becomes the by-name column.
-        recognised.Should().Contain("Alpha as [Q1]");
+        recognised.Should().Contain("[Alpha] as [Q1]");
         unrelated.Should().NotContain("Alpha");
     }
 

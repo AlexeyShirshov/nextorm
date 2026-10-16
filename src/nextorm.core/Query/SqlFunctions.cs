@@ -86,7 +86,14 @@ public static partial class SqlFunctions
     /// </summary>
     /// <typeparam name="T">The CLR type of the column value.</typeparam>
     /// <param name="entity">The entity source the column belongs to (a query lambda parameter).</param>
-    /// <param name="columnName">The database column name.</param>
+    /// <param name="columnName">
+    /// The <b>raw</b> database column name. It is not SQL text: it is always safely quoted by the
+    /// provider, regardless of the command's <c>QuoteIdentifiers</c> option. A dot is a literal name
+    /// character (not a schema/alias qualifier), SQL-looking punctuation stays inside the one
+    /// identifier, and the name is never stripped of brackets. Manual pre-quoting is not supported, so
+    /// <c>Column(t, "[1]")</c> is the literal three-character name <c>[1]</c> (rendered <c>[[1]]]</c> on
+    /// SQL Server); to reference the column named <c>1</c> write <c>Column(t, "1")</c>.
+    /// </param>
     /// <remarks>
     /// Only valid inside a query expression. The in-memory provider has no column-name concept and
     /// rejects the query.

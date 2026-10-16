@@ -109,7 +109,7 @@ public class T232CoverageClosureTests
             .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.Quarter, (m, pv) => new { m.Category, V = pv.Value<decimal?>("1") })
             .Select(x => new { x.Category, x.V }));
 
-        sql.Should().Contain("select category, [1] as [V]");
+        sql.Should().Contain("select [category], [1] as [V]");
     }
 
     /// <summary>

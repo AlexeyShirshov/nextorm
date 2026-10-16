@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
 using NextORM.SqlServer;
@@ -340,5 +341,167 @@ public sealed class T232SqlServerTests : ProviderTestSuite
         rows[0].LeftQ1.Should().Be(5m);
         rows[0].Right.Should().Be("North");
         rows[0].RightQ1.Should().Be(10m);
+    }
+
+    // ------------------------------------------------------------------ #237 D-05: bracket-bearing names
+    //
+    // The #237 raw-name contract makes the PIVOT value / UNPIVOT role strings raw names that are always
+    // safely quoted, so a bracket-bearing name is one identifier in both the declaration and its
+    // projection reference. The facts below execute typed and untyped PIVOT/UNPIVOT over a fixture whose
+    // declared value/role/source-column names contain `]` and assert both routes agree on the rows.
+    //
+    // The injection payload 0+(SELECT COUNT(*) FROM sys.tables) cannot exist as a real SQL Server column,
+    // so its assertion stays at the SQL-generation level — see the no-DB
+    // SqlServerIdentifierSafetyTests.Column_UnquotedMode_KeepsPunctuationInsideOneIdentifier and
+    // MarkerRoute_IsAlwaysQuoted_EvenWithQuotingOff. No execution is faked for it here.
+
+    [Fact]
+    public void IdentifierSafety_TypedAndUntypedPivot_BracketBearingValue_DeclarationsAndReferencesAgree()
+    {
+        var ctx = Ctx;
+        T237IdentifierFixture.EnsureSeeded(ctx);
+
+        // Typed route: the declared value "a]b" is the raw data value and the result column name; the
+        // declaration (IN list) and the rewritten projection reference are both `[a]]b]`.
+        var typed = ctx.From<IT237PivotBracket>()
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter,
+                (m, pv) => new { m.Category, Bracket = pv.Value<decimal?>("a]b"), One = pv.Value<decimal?>("1") })
+            .Select(x => new { x.Category, x.Bracket, x.One })
+            .ToList()
+            .OrderBy(r => r.Category)
+            .ToList();
+
+        typed.Should().HaveCount(2);
+        typed.Single(r => r.Category == "North").Should()
+            .BeEquivalentTo(new { Category = "North", Bracket = (decimal?)10m, One = (decimal?)20m });
+        typed.Single(r => r.Category == "South").Should()
+            .BeEquivalentTo(new { Category = "South", Bracket = (decimal?)5m, One = (decimal?)null });
+
+        // Untyped (legacy) operator route: the same bracket-bearing columns are read through the
+        // always-quoted Column<T> sink (the pre-quoted GetNullableDecimal("[a]b]") form is removed by the
+        // #237 contract), so both routes must return the identical rows.
+        var untyped = ctx.From<IT237PivotBracket>()
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("a]b"), PivotValue.Create("1"))
+            .Select(t => new
+            {
+                Category = SqlFunctions.Column<string>(t, "category"),
+                Bracket = SqlFunctions.Column<decimal?>(t, "a]b"),
+                One = SqlFunctions.Column<decimal?>(t, "1")
+            })
+            .ToList()
+            .OrderBy(r => r.Category)
+            .ToList();
+
+        untyped.Select(r => ((string?)r.Category, r.Bracket, r.One))
+            .Should().Equal(typed.Select(r => ((string?)r.Category, r.Bracket, r.One)));
+    }
+
+    [Fact]
+    public void IdentifierSafety_TypedAndUntypedUnpivot_BracketBearingRoles_DeclarationsAndReferencesAgree()
+    {
+        var ctx = Ctx;
+        T237IdentifierFixture.EnsureSeeded(ctx);
+
+        // Typed route: the two roles and the source columns carry `]`; declaration and reference must
+        // agree (`[v]]al]`/`[n]]ame]`), otherwise the query fails to compile or returns wrong cells.
+        var typed = ctx.From<IT237UnpivotBracket>()
+            .Unpivot(
+                (m, u) => new { m.Category, Name = u.Name<string>("n]ame"), Value = u.Value<decimal?>("v]al") },
+                UnpivotColumn.Create("q]1"), UnpivotColumn.Create("q]2"))
+            .Select(x => new { x.Category, x.Name, x.Value })
+            .ToList();
+
+        // SQL Server UNPIVOT drops the NULL source cell (South/q]2), so three rows survive.
+        typed.Should().HaveCount(3);
+        typed.Single(r => r.Category == "North" && r.Name == "q]1").Value.Should().Be(10m);
+        typed.Single(r => r.Category == "North" && r.Name == "q]2").Value.Should().Be(20m);
+        typed.Single(r => r.Category == "South" && r.Name == "q]1").Value.Should().Be(5m);
+
+        var untyped = ctx.From<IT237UnpivotBracket>()
+            .Unpivot("v]al", "n]ame", UnpivotColumn.Create("q]1"), UnpivotColumn.Create("q]2"))
+            .Select(t => new
+            {
+                Category = SqlFunctions.Column<string>(t, "category"),
+                Name = SqlFunctions.Column<string>(t, "n]ame"),
+                Value = SqlFunctions.Column<decimal?>(t, "v]al")
+            })
+            .ToList();
+
+        untyped.Select(r => ((string?)r.Category, r.Name, r.Value))
+            .Should().BeEquivalentTo(typed.Select(r => ((string?)r.Category, r.Name, r.Value)));
+    }
+}
+
+/// <summary>
+/// The PIVOT source entity of the #237 bracket-bearing fixture: a string <c>quarter</c> column whose
+/// values (for example <c>a]b</c>) become the pivoted column names.
+/// </summary>
+[SqlTable(T237IdentifierFixture.PivotTable)]
+internal interface IT237PivotBracket
+{
+    [Column("category")]
+    string? Category { get; set; }
+
+    [Column("quarter")]
+    string? Quarter { get; set; }
+
+    [Column("margin")]
+    decimal? Margin { get; set; }
+}
+
+/// <summary>
+/// The UNPIVOT source entity of the #237 bracket-bearing fixture. Only the plain grouping column is
+/// mapped: the bracket-bearing source columns are named through <see cref="UnpivotColumn.Create"/> (the
+/// always-quoted raw-name path) instead of the option-gated mapped-member path.
+/// </summary>
+[SqlTable(T237IdentifierFixture.UnpivotTable)]
+internal interface IT237UnpivotBracket
+{
+    [Column("category")]
+    string? Category { get; set; }
+}
+
+/// <summary>
+/// SQL Server container fixture for the #237 D-05 bracket-bearing identifier facts. It owns two
+/// deterministic tables whose declared value/role/source-column names contain <c>]</c> and seeds them
+/// once per process; it never asserts — the assertions live in <c>T232SqlServerTests.cs</c>.
+/// </summary>
+internal static class T237IdentifierFixture
+{
+    internal const string PivotTable = "t237_pv_bracket";
+    internal const string UnpivotTable = "t237_up_bracket";
+
+    private static readonly object Gate = new();
+    private static bool _seeded;
+
+    /// <summary>Creates and seeds the fixture tables once per process (idempotent).</summary>
+    /// <param name="ctx">The SQL Server context to execute the DDL/DML through.</param>
+    internal static void EnsureSeeded(IDataContext ctx)
+    {
+        if (_seeded)
+            return;
+
+        lock (Gate)
+        {
+            if (_seeded)
+                return;
+
+            // The DDL is hand-written legacy raw SQL: `[q]]1]` is the column named `q]1` with the
+            // embedded `]` doubled (the same representation the fixed Escape/QuoteIdentifier emit).
+            Exec(ctx, $"drop table if exists {PivotTable}");
+            Exec(ctx, $"create table {PivotTable} (category nvarchar(50) not null, quarter nvarchar(50) not null, margin decimal(18,2) null)");
+            Exec(ctx, $"insert into {PivotTable} (category, quarter, margin) values (N'North', N'a]b', 10), (N'North', N'1', 20), (N'South', N'a]b', 5)");
+
+            Exec(ctx, $"drop table if exists {UnpivotTable}");
+            Exec(ctx, $"create table {UnpivotTable} (category nvarchar(50) not null, [q]]1] decimal(18,2) null, [q]]2] decimal(18,2) null)");
+            Exec(ctx, $"insert into {UnpivotTable} (category, [q]]1], [q]]2]) values (N'North', 10, 20), (N'South', 5, null)");
+
+            _seeded = true;
+        }
+    }
+
+    private static void Exec(IDataContext ctx, string sql)
+    {
+        using var _ = ctx.ExecuteRaw(sql);
     }
 }

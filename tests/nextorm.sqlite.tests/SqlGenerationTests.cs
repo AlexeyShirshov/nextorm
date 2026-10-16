@@ -629,7 +629,7 @@ public class SqlGenerationTests
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
             .Select(x => new { Region = SqlFunctions.Column<int>(x, "region_id") }));
 
-        sql.Should().Be("select region_id as 'Region'\n from simple_entity");
+        sql.Should().Be("select \"region_id\" as 'Region'\n from simple_entity");
     }
 
     [Fact]
@@ -639,7 +639,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>().Select(x => SqlFunctions.Column<int>(x, "id")));
 
-        sql.Should().Be("select id\n from simple_entity");
+        sql.Should().Be("select \"id\"\n from simple_entity");
     }
 
     [Fact]

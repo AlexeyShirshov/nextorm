@@ -16,8 +16,9 @@ public static class SqlServerEntityBuilderExtensions
     /// distinct <paramref name="forColumn"/> value in <paramref name="values"/> a result column is
     /// produced from <paramref name="aggregate"/> of <paramref name="aggregateColumn"/>. The result is
     /// an untyped source (<see cref="TableAlias"/>): select the grouping columns and the pivoted columns
-    /// by name. Each result column is named by its pivot value, so quote non-identifier values in the
-    /// projection (<c>Q1 = t.GetNullableDecimal("[1]")</c>).
+    /// by name. Each result column is named by its pivot value; the value string is a <b>raw</b> name
+    /// that is always safely quoted, so read it through <c>SqlFunctions.Column&lt;T&gt;</c> in the
+    /// projection (<c>Q1 = SqlFunctions.Column&lt;decimal?&gt;(t, "1")</c>) rather than pre-quoting it.
     /// Requires a dialect that supports it (see <c>ISqlDialect.Pivot</c>). The source may be a plain
     /// table/entity, a table-valued function or a derived query (<c>From(query)</c>); filters and other
     /// modifiers belong to the reshaped result (or, for a derived source, inside the derived query).
@@ -26,7 +27,7 @@ public static class SqlServerEntityBuilderExtensions
     /// <param name="aggregate">The aggregate applied to each cell (<c>SUM</c>/<c>COUNT</c>/<c>AVG</c>/<c>MIN</c>/<c>MAX</c>).</param>
     /// <param name="aggregateColumn">The column expression aggregated into each cell.</param>
     /// <param name="forColumn">The column whose values become the result columns.</param>
-    /// <param name="values">The pivot values; each value names its result column.</param>
+    /// <param name="values">The pivot values; each value names its result column and is a raw name, safely quoted independently of the command's <c>QuoteIdentifiers</c> option.</param>
     public static EntityBuilder<TableAlias> Pivot<TEntity>(
         this EntityBuilder<TEntity> builder,
         PivotAggregate aggregate,
@@ -53,9 +54,9 @@ public static class SqlServerEntityBuilderExtensions
     /// query (<c>From(query)</c>).
     /// </summary>
     /// <param name="builder">The query builder to extend.</param>
-    /// <param name="valueColumnName">The name of the output column that receives the values.</param>
-    /// <param name="nameColumnName">The name of the output column that receives the source column name.</param>
-    /// <param name="columns">The source columns to unpivot; each column's name becomes its name-column value.</param>
+    /// <param name="valueColumnName">The raw name of the output column that receives the values; safely quoted independently of the command's <c>QuoteIdentifiers</c> option.</param>
+    /// <param name="nameColumnName">The raw name of the output column that receives the source column name; safely quoted independently of the command's <c>QuoteIdentifiers</c> option.</param>
+    /// <param name="columns">The source columns to unpivot; each column's raw name becomes its name-column value and is safely quoted.</param>
     public static EntityBuilder<TableAlias> Unpivot<TEntity>(
         this EntityBuilder<TEntity> builder,
         string valueColumnName,
@@ -138,14 +139,17 @@ public static class SqlServerEntityBuilderExtensions
             values[i] = PivotValue.Create(declared[i]);
 
         var spec = PivotExpression.ForPivot(ResolvePivotInner(builder), typeof(TEntity), aggregate, aggregateColumn, forColumn, values);
-        var dialect = (builder.DataProvider as DataContext)?.Dialect;
 
+        // The declared value and the grouping member names stay raw. Each emitted occurrence then passes
+        // through exactly one escaping stage: the PIVOT declaration (SqlServerPivotRenderer.RenderPivot)
+        // and the always-quoted Column<T> sink in the rewritten projection references. Pre-escaping here
+        // would quote a name twice (the quoted-mode double-bracket bug of R237-02).
         return BuildTypedSource<TEntity, TShape>(
             builder,
             spec,
             projection,
             typeof(PivotValues),
-            name => dialect is null ? name : dialect.Escape(name));
+            static name => name);
     }
 
     /// <summary>

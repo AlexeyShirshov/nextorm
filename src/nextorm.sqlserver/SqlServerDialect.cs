@@ -162,10 +162,12 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override string MakeIdentityFunction(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select scope_identity()");
 
     /// <summary>
-    /// SQL Server bracket-quotes identifiers. Single quoted aliases (the base default) are accepted
-    /// for columns but produce a syntax error for table and derived table aliases.
+    /// SQL Server bracket-quotes identifiers, doubling an embedded <c>]</c> so the result is a single
+    /// safe identifier (the same bracket semantics as <see cref="QuoteIdentifier"/>). Single quoted
+    /// aliases (the base default) are accepted for columns but produce a syntax error for table and
+    /// derived table aliases.
     /// </summary>
-    public override string Escape(string keyword) => "[" + keyword + "]";
+    public override string Escape(string keyword) => QuoteIdentifier(keyword);
 
     /// <summary>SQL Server quotes a physical identifier with brackets, doubling an embedded <c>]</c>.</summary>
     public override string QuoteIdentifier(string name) => "[" + name.Replace("]", "]]") + "]";

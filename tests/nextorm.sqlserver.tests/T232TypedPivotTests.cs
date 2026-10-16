@@ -98,7 +98,7 @@ public class T232TypedPivotTests
         // every pivoted cell renamed to its projected member, and the declared value order in IN (...).
         sql.Should().Contain(FrozenTypedPivotSelect);
         sql.Should().Contain(T232ProjectionContractTests.PivotValueOrderFragment);
-        sql.Should().Be($"select category, [Q1], [Q2]\n from ({FrozenTypedPivotSelect}) as [t2]");
+        sql.Should().Be($"select [category], [Q1], [Q2]\n from ({FrozenTypedPivotSelect}) as [t2]");
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public class T232TypedPivotTests
 
         sql.Should().Contain(FrozenTypedUnpivotSelect);
         sql.Should().Contain($"unpivot ([{T232ProjectionContractTests.UnpivotValueRole}] for [{T232ProjectionContractTests.UnpivotNameRole}] in ([q1], [q2]))");
-        sql.Should().Be($"select category, [Quarter], [Measure]\n from ({FrozenTypedUnpivotSelect}) as [t2]");
+        sql.Should().Be($"select [category], [Quarter], [Measure]\n from ({FrozenTypedUnpivotSelect}) as [t2]");
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public class T232TypedPivotTests
         var sql = SqlOf(ctx, typed.Select(x => new { x.Q2, x.Category, x.Q1 }));
 
         sql.Should().Contain("for quarter in ([2], [1])", "the IN list follows the projection declaration order");
-        sql.Should().Contain("select [2] as [Q2], category, [1] as [Q1]");
+        sql.Should().Contain("select [2] as [Q2], [category], [1] as [Q1]");
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public class T232TypedPivotTests
         var sql = SqlOf(ctx, typed.Select(x => new { x.Q1, x.Category }));
 
         sql.Should().Contain("for quarter in ([1])");
-        sql.Should().Contain("select [1] as [Q1], category");
+        sql.Should().Contain("select [1] as [Q1], [category]");
     }
 
     // ------------------------------------------------------------------ V06: grouping subsets
@@ -166,7 +166,7 @@ public class T232TypedPivotTests
             .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter,
                 (m, pv) => new { m.Id, m.Category, Q1 = pv.Value<decimal?>("1") })
             .Select(x => new { x.Id, x.Category, x.Q1 }));
-        full.Should().Contain("select id, category, [1] as [Q1]\n from sales pivot (sum(margin) for quarter in ([1])) as [t1]");
+        full.Should().Contain("select [id], [category], [1] as [Q1]\n from sales pivot (sum(margin) for quarter in ([1])) as [t1]");
     }
 
     // ------------------------------------------------------------------ V03/V04: grouping names
@@ -181,7 +181,7 @@ public class T232TypedPivotTests
             .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, (m, pv) => new { m.Category, V = pv.Value<decimal?>("1") })
             .Select(x => new { x.Category, x.V }));
 
-        sql.Should().Contain("select category, [1] as [V]\n from sales pivot (sum(margin) for quarter in ([1])) as [t1]");
+        sql.Should().Contain("select [category], [1] as [V]\n from sales pivot (sum(margin) for quarter in ([1])) as [t1]");
     }
 
     [Fact]
@@ -197,7 +197,7 @@ public class T232TypedPivotTests
             .Pivot(PivotAggregate.Sum, w => w.MarginValue, w => w.Id, (m, pv) => new { m.Region, V = pv.Value<decimal?>("1") })
             .Select(x => new { x.Region, x.V }));
 
-        sql.Should().Contain("select region, [1] as [V]");
+        sql.Should().Contain("select [region], [1] as [V]");
         sql.Should().Contain("from t232_typed_widget pivot (sum(margin_value) for id in ([1])) as [t1]");
     }
 
@@ -217,7 +217,7 @@ public class T232TypedPivotTests
                 (m, pv) => new { m.CategoryName, Q1 = pv.Value<decimal?>("1"), Q2 = pv.Value<decimal?>("2") })
             .Select(x => new { x.CategoryName, x.Q1, x.Q2 }));
 
-        sql.Should().Contain("select CategoryName, [1] as [Q1], [2] as [Q2]\n from (select category as [CategoryName], quarter, margin");
+        sql.Should().Contain("select [CategoryName], [1] as [Q1], [2] as [Q2]\n from (select category as [CategoryName], quarter, margin");
         sql.Should().Contain("pivot (sum(margin) for quarter in ([1], [2])) as [t2]");
     }
 
@@ -228,7 +228,7 @@ public class T232TypedPivotTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        const string oneValueSelect = "select category, [1] as [Q1]\n from sales pivot (sum(margin) for quarter in ([1])) as [t1]";
+        const string oneValueSelect = "select [category], [1] as [Q1]\n from sales pivot (sum(margin) for quarter in ([1])) as [t1]";
 
         // record / record struct / MemberInit all project the same shape.
         SqlOf(ctx, ctx.From<ISalesEntity>()
@@ -277,7 +277,7 @@ public class T232TypedPivotTests
         SqlOf(ctx, ctx.From<ISalesEntity>()
             .Pivot(PivotAggregate.Count, s => s.Id, s => s.Quarter, (m, pv) => new { m.Category, N = pv.Value<int>("1") })
             .Select(x => new { x.Category, x.N }))
-            .Should().Contain("select category, [1] as [N]\n from sales pivot (count(id) for quarter in ([1])) as [t1]");
+            .Should().Contain("select [category], [1] as [N]\n from sales pivot (count(id) for quarter in ([1])) as [t1]");
     }
 
     /// <summary>Reads the CLR type declared for one cell member of the returned typed shape.</summary>
@@ -295,7 +295,7 @@ public class T232TypedPivotTests
             .Select(x => new { x.Quarter, x.North }));
 
         sql.Should().Contain("for category in ([North])");
-        sql.Should().Contain("[North] as [North]");
+        sql.Should().Contain("select [quarter], [North]\n from sales pivot (sum(margin) for category in ([North])) as [t1]");
     }
 
     // ------------------------------------------------------------------ V13: composition
@@ -314,7 +314,7 @@ public class T232TypedPivotTests
             .Select(x => new { x.Category, x.Q1 }));
 
         composed.Should().Contain("where (t2.[Q1] > ");
-        composed.Should().Contain("order by t2.category");
+        composed.Should().Contain("order by t2.[category]");
 
         // Ordering by a value member, and a scalar select of a value member.
         SqlOf(ctx, typed.OrderBy(x => x.Q1).Select(x => new { x.Category, x.Q1 })).Should().Contain("order by t2.[Q1]");
@@ -335,7 +335,7 @@ public class T232TypedPivotTests
             .Select(x => new { x.Category, x.N, x.A }));
 
         sql.Should().Contain("unpivot ([val] for [qtr] in ([q1], [q2]))");
-        sql.Should().Contain("select category, qtr as [N], val as [A], val as [B]");
+        sql.Should().Contain("select [category], [qtr] as [N], [val] as [A], [val] as [B]");
     }
 
     [Fact]

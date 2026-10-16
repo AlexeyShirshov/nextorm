@@ -56,8 +56,8 @@ public class T232VariantV05Tests
         // The inner source is the TVF call (aliased because SQL Server requires a subquery alias); the
         // typed projection is the frozen rename/order contract applied to that source.
         sql.Should().Be(
-            "select category, [Q1], [Q2]\n" +
-            " from (select category, [1] as [Q1], [2] as [Q2]\n" +
+            "select [category], [Q1], [Q2]\n" +
+            " from (select [category], [1] as [Q1], [2] as [Q2]\n" +
             " from t232_sales_tvf() as [t1] pivot (sum(margin) for quarter in ([1], [2])) as [t2]) as [t3]");
     }
 
@@ -107,8 +107,8 @@ public class T232VariantV18Tests
         sql.Should().Contain("[3] as [Q3]");
         sql.Should().Contain("for quarter in ([3])");
         sql.Should().Be(
-            "select category, [Q3]\n" +
-            " from (select category, [3] as [Q3]\n" +
+            "select [category], [Q3]\n" +
+            " from (select [category], [3] as [Q3]\n" +
             " from sales pivot (sum(margin) for quarter in ([3])) as [t1]) as [t2]");
     }
 

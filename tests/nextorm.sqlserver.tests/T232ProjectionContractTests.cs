@@ -47,11 +47,11 @@ public class T232ProjectionContractTests
 
     /// <summary>The by-name typed-column PIVOT SQL the typed projector must reproduce.</summary>
     internal const string TypedColumnPivotSql =
-        "select category, [1] as [Q1], [2] as [Q2]\n from sales pivot (sum(margin) for quarter in ([1], [2])) as [t1]";
+        "select [category], [1] as [Q1], [2] as [Q2]\n from sales pivot (sum(margin) for quarter in ([1], [2])) as [t1]";
 
     /// <summary>The by-name typed-column UNPIVOT SQL the typed projector must reproduce.</summary>
     internal const string TypedColumnUnpivotSql =
-        "select category, qtr as [Quarter], val as [Measure]\n from quarterly unpivot ([val] for [qtr] in ([q1], [q2])) as [t1]";
+        "select [category], [qtr] as [Quarter], [val] as [Measure]\n from quarterly unpivot ([val] for [qtr] in ([q1], [q2])) as [t1]";
 
     // ------------------------------------------------------------------ frozen fixture rows
 
@@ -116,8 +116,8 @@ public class T232ProjectionContractTests
             .Select(t => new
             {
                 Category = SqlFunctions.Column<string>(t, "category"),
-                Q1 = SqlFunctions.Column<decimal?>(t, "[1]"),
-                Q2 = SqlFunctions.Column<decimal?>(t, "[2]")
+                Q1 = SqlFunctions.Column<decimal?>(t, "1"),
+                Q2 = SqlFunctions.Column<decimal?>(t, "2")
             }))
             .Should().Be(TypedColumnPivotSql);
     }
@@ -136,8 +136,8 @@ public class T232ProjectionContractTests
             .Select(t => new
             {
                 Category = SqlFunctions.Column<string>(t, "category"),
-                Q1 = SqlFunctions.Column<decimal?>(t, "[1]"),
-                Q2 = SqlFunctions.Column<decimal?>(t, "[2]")
+                Q1 = SqlFunctions.Column<decimal?>(t, "1"),
+                Q2 = SqlFunctions.Column<decimal?>(t, "2")
             }));
 
         // Same pivot source, same ordered IN list; only the member aliases differ.
@@ -145,7 +145,7 @@ public class T232ProjectionContractTests
         typed.Should().Contain(PivotValueOrderFragment);
         typed.Should().Contain("pivot (sum(margin)");
         legacy.Should().Contain("select category, [1], [2]");
-        typed.Should().Contain("select category, [1] as [Q1], [2] as [Q2]");
+        typed.Should().Contain("select [category], [1] as [Q1], [2] as [Q2]");
     }
 
     [Fact]

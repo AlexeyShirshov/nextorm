@@ -104,13 +104,13 @@ public class T232CoverageClosureTests
 
         string Query() => SqlOfCached(ctx, ctx.From("t232_sales")
             .Pivot(PivotAggregate.Sum, t => SqlFunctions.Column<decimal?>(t, "margin"), t => SqlFunctions.Column<int>(t, "quarter"), PivotValue.Create("1"))
-            .Select(t => new { Q1 = pivot.Value<decimal?>("[1]") }));
+            .Select(t => new { Q1 = pivot.Value<decimal?>("1") }));
 
         var first = Query();
         // A second cached prepare re-renders the same command through the param-mode refresh.
         var second = Query();
 
-        first.Should().Contain("[1] as [Q1]");
+        first.Should().Be("select [1] as [Q1]\n from t232_sales pivot (sum([margin]) for [quarter] in ([1])) as [t1]");
         second.Should().Be(first);
     }
 
@@ -126,10 +126,13 @@ public class T232CoverageClosureTests
 
         var sql = SqlOf(ctx, ctx.From("t232_sales")
             .Pivot(PivotAggregate.Sum, t => SqlFunctions.Column<decimal?>(t, "margin"), t => SqlFunctions.Column<int>(t, "quarter"), PivotValue.Create("1"))
-            .Where(t => pivot.Value<decimal?>("[1]") > 0)
-            .Select(t => new { Q1 = pivot.Value<decimal?>("[1]") }));
+            .Where(t => pivot.Value<decimal?>("1") > 0)
+            .Select(t => new { Q1 = pivot.Value<decimal?>("1") }));
 
-        sql.Should().Contain("[1]");
+        sql.Should().Be(
+            "select [1] as [Q1]\n" +
+            " from t232_sales pivot (sum([margin]) for [quarter] in ([1])) as [t1]\n" +
+            " where (t1.[1] > cast(0 as decimal(38, 10)))");
     }
 
     // ------------------------------------------------------------------ QueryPreparer: pass-through

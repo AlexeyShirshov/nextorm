@@ -117,10 +117,10 @@ public class T232PreparationProbeTests
             .Select(t => new
             {
                 Category = SqlFunctions.Column<string>(t, "category"),
-                Q1 = SqlFunctions.Column<decimal?>(t, "[1]"),
-                Q2 = SqlFunctions.Column<decimal?>(t, "[2]")
+                Q1 = SqlFunctions.Column<decimal?>(t, "1"),
+                Q2 = SqlFunctions.Column<decimal?>(t, "2")
             }))
-            .Should().Be("select category, [1] as [Q1], [2] as [Q2]\n from sales pivot (sum(margin) for quarter in ([1], [2])) as [t1]");
+            .Should().Be("select [category], [1] as [Q1], [2] as [Q2]\n from sales pivot (sum(margin) for quarter in ([1], [2])) as [t1]");
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public class T232PreparationProbeTests
                 Quarter = SqlFunctions.Column<string>(t, "qtr"),
                 Measure = SqlFunctions.Column<decimal?>(t, "val")
             }))
-            .Should().Be("select category, qtr as [Quarter], val as [Measure]\n from quarterly unpivot ([val] for [qtr] in ([q1], [q2])) as [t1]");
+            .Should().Be("select [category], [qtr] as [Quarter], [val] as [Measure]\n from quarterly unpivot ([val] for [qtr] in ([q1], [q2])) as [t1]");
     }
 
     [Fact]

@@ -100,7 +100,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | Темпоральные таблицы (`FOR SYSTEM_TIME`) | бросает | `AS OF`/`BETWEEN`/`FROM … TO`/`CONTAINED IN`/`ALL` | бросает | бросает | `AS OF`/`BETWEEN`/`FROM … TO`/`ALL` (`CONTAINED IN` бросает) | бросает | бросает |
 | Модифицирующие CTE | бросает | бросает | `With(name, insert/update/delete)` (тело требует `RETURNING`) | бросает | бросает | бросает | бросает |
 | Модификаторы запроса (`DISTINCT ON`/`WITH TIES`/`TABLESAMPLE`) | бросает | `WITH TIES`; только `TABLESAMPLE SYSTEM` | `DISTINCT ON`; `WITH TIES`; `TABLESAMPLE SYSTEM`/`BERNOULLI` | бросает | бросает | бросает (есть свой `SAMPLE`) | бросает |
-| Источник `PIVOT` / `UNPIVOT` | бросает | нативные T-SQL `PIVOT`/`UNPIVOT` | бросает | бросает | бросает | бросает | бросает |
+| Источник `PIVOT` / `UNPIVOT` | бросает | нативные T-SQL `PIVOT`/`UNPIVOT` (сырые идентификаторы и значения pivot, всегда безопасно квотируемые) | бросает | бросает | бросает | бросает | бросает |
 | Клаузулы ClickHouse (`FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS`/`LIMIT n BY`/`WITH TOTALS`/`GLOBAL IN`) | бросает | бросает | бросает | бросает | бросает | `Final()`/`Sample()`/`PreWhere()`/`Settings()`/`LimitBy()`/`WithTotals()`/`global_in` | бросает |
 | Строгость соединений (`ANY`/`ALL`/`ASOF`, `SEMI`/`ANTI`/`PASTE`) / `GLOBAL` | бросает | бросает | бросает | бросает | бросает | `WithStrictness(...)` / `Global()` | бросает |
 | Словари (`dictGet`) | бросает | бросает | бросает | бросает | бросает | `dict_get`/`dict_get_or_default`/`dict_has`/… (нужен настроенный dictionary) | бросает |

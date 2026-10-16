@@ -112,7 +112,7 @@ internal static class NormSqlTranslator
         if (!visitor.DontNeedAlias && visitor.ColumnsProvider.HasAliases && visitor.AliasProvider is { } aliases)
             visitor.Builder!.Append(aliases.FindAlias(index)).Append('.');
 
-        visitor.AppendIdentifier(columnName);
+        visitor.AppendAlwaysQuotedIdentifier(columnName);
         visitor.ColumnName = columnName;
         return true;
     }
