@@ -229,6 +229,13 @@ contract» (`artifacts/pdca/<task>/rv<k>/manifest.json`, `<task>` — `D<issue>`
 evidence). Пишет его DO на границе DO→CHECK; CHECK открывает его первым и по каждой строке читает
 `path`.
 
+**Локальный provenance-гейт (nextorm).** До того как CHECK прочитает манифест, обязателен прогон
+`python3 scripts/pdca_evidence.py lint --repo . --manifest artifacts/pdca/<task>/rv<k>/manifest.json`
+с rc 0: он пересчитывает frozen-tree тем же рецептом и требует
+`manifest.tree == recomputed == tree/tree_binding каждого receipt` (включая невыбранные), ловит
+path-escape, дубли id и плейсхолдерные деревья. Каноническая приёмка этого гейта в глобальный
+контракт `pdca-dotnet` пока не выполнена (R234-03G) — локальная проводка item 3 не закрывает.
+
 **Проектные evidence-корни (nextorm).** Портативный агент `check` даёт scoped `read` только на
 generic-корни (`docs/specs/status/**`, `artifacts/**`, `TestResults/**`); nextorm-специфику
 объявляют **на стороне проекта**, а не в общем агенте/ассете:
