@@ -364,7 +364,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             Windows = _windows,
             ArrayJoinKind = _arrayJoinKind,
             BindArrayJoinElement = _bindArrayJoinElement,
-        });
+        }, ownJoins: true);
 
         cmd.From = ResolveSource();
 
@@ -480,7 +480,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             Windows = _windows,
             ArrayJoinKind = _arrayJoinKind,
             BindArrayJoinElement = _bindArrayJoinElement,
-        });
+        }, ownJoins: true);
 
         cmd.From = ResolveSource();
 
@@ -2101,7 +2101,13 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         IReadOnlyList<NamedWindowOrderKey> keys = orderBy ?? [];
 
         var b = Clone();
-        (b._windows ??= []).Add(new WindowDefinition(name, partitions, keys, frame));
+        var window = new WindowDefinition(name, partitions, keys, frame);
+        // _windows is shared with the parent/siblings after a clone; detach before the first append so the
+        // new window lands on this builder only.
+        if (b._windows is null)
+            b._windows = [window];
+        else
+            b._windows = [.. b._windows, window];
 
         return b;
     }
@@ -2244,6 +2250,14 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// Copies this builder's state onto <paramref name="dst"/>; called by <see cref="CloneImp"/>.
     /// Protected so derived builders can extend the copy with their own state.
     /// </summary>
+    /// <remarks>
+    /// Collections that no writer ever mutates in place are shared with the copy rather than duplicated:
+    /// <c>_loadSpecs</c> and <c>_joinIntos</c> are always replaced wholesale by <c>LoadWith</c>/<c>JoinInto</c>,
+    /// and <c>_windows</c> is appended to only through <c>Window</c>, which detaches the shared list
+    /// before its first write. <c>_arrayJoins</c> and <c>_joins</c> stay
+    /// copied because provider extensions (ClickHouse <c>ArrayJoin</c>/semi-anti join) append to them in
+    /// place after a clone; the copy keeps those writes off the parent and its sibling branches.
+    /// </remarks>
     /// <param name="dst">The builder that receives the state.</param>
     protected virtual void CopyTo(EntityBuilder<TEntity> dst)
     {
@@ -2252,12 +2266,12 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         dst._filterScope = _filterScope;
         dst._having = _having;
         dst._arrayJoins = _arrayJoins is null ? null : [.. _arrayJoins];
-        dst._windows = _windows is null ? null : [.. _windows];
+        dst._windows = _windows;
         dst._arrayJoinKind = _arrayJoinKind;
         dst._sourceEntityType = _sourceEntityType;
         dst._bindArrayJoinElement = _bindArrayJoinElement;
-        dst._loadSpecs = _loadSpecs is null ? null : [.. _loadSpecs];
-        dst._joinIntos = _joinIntos is null ? null : [.. _joinIntos];
+        dst._loadSpecs = _loadSpecs;
+        dst._joinIntos = _joinIntos;
         dst._joins = _joins is null ? null : [.. _joins];
         dst._eagerLoadMode = _eagerLoadMode;
     }
@@ -2271,6 +2285,8 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     {
         dst._query = _query;
         dst.Paging = Paging;
+        // The ordering list is shared with the copy; the only in-place writer (OrderBy) detaches it before
+        // appending, so a fork never gains the parent's later ordering keys.
         dst._sorting = _sorting;
         dst._group = _group;
         dst._table = _table;
@@ -2294,7 +2310,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         dst.IsFinal = IsFinal;
         dst.SampleRatio = SampleRatio;
         dst.SampleOffset = SampleOffset;
-        dst.SettingsList = _settings is null ? null : [.. _settings];
+        // The SettingsList setter already defensive-copies (and maps null to null); passing the list
+        // straight in replaces the previous [.. _settings] + setter copy with a single copy.
+        dst.SettingsList = _settings;
         dst.PreWhereCondition = _preWhere;
         dst.TableHints = TableHints;
         dst.IndexHints = IndexHints;
@@ -4041,10 +4059,10 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     public EntityBuilder<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp, OrderDirection direction)
     {
         var b = Clone();
-        if (b._sorting is null)
-            b._sorting = [new Sorting(orderExp) { Direction = direction }];
-        else
-            b._sorting.Add(new Sorting(orderExp) { Direction = direction });
+        var key = new Sorting(orderExp) { Direction = direction };
+        // _sorting is shared with the parent/siblings after a clone; detach with a new list before
+        // appending so a fork never grows the parent's ordering.
+        b._sorting = b._sorting is null ? [key] : [.. b._sorting, key];
         return b;
     }
     /// <summary>Adds an ascending ordering key by <paramref name="orderExp"/>.</summary>
@@ -4061,10 +4079,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         if (columnIdx < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIdx));
 
         var b = Clone();
-        if (b._sorting is null)
-            b._sorting = [new Sorting(columnIdx) { Direction = direction }];
-        else
-            b._sorting.Add(new Sorting(columnIdx) { Direction = direction });
+        var key = new Sorting(columnIdx) { Direction = direction };
+        // See the expression overload: detach the shared ordering list before appending.
+        b._sorting = b._sorting is null ? [key] : [.. b._sorting, key];
         return b;
     }
     /// <summary>Adds an ascending ordering key by 1-based output column index.</summary>
@@ -4162,7 +4179,7 @@ public class EntityBuilder : ICloneable
             Joins = _joins?.ToArray(),
             Sorting = _sorting?.ToArray(),
             Logger = Logger,
-        });
+        }, ownJoins: true);
 
         if (!string.IsNullOrEmpty(_table))
             cmd.From = new FromExpression(_table);

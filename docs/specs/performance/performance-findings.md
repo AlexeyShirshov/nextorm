@@ -55,6 +55,7 @@ collections-and-linq / io-and-serialization).
 | M10 | ✅ сделано (выигрыш не измерен) | 🟡 Moderate | CPU, structural | `sealed`: `ResultSetEnumerator`, `InMemoryEnumerator`, `InMemoryCompiledQuery`, `QueryCommand<TResult>`; JIT-эффект в микро-бенчмарке = 0 | `ResultSetEnumerator.cs:9`, `InMemoryEnumerator.cs:6`, `InMemoryCompiledQuery.cs:4`, `QueryCommand.cs:773` |
 | M11 | ✅ сделано | 🟡 Moderate | allocations | LINQ → циклы в plan/map-build (4 места); `Select().ToArray()` −72 B/вызов (путь холодный) | `DataContext.cs` |
 | **M12** | 🟢 закрыто (решение) | 🟠 High | allocations, CPU | **implicit-кэш проигрывает явному `Prepare()`**: 17.56 vs 11.94 µs/вызов (1.47×) и 3.76 vs 0.76 KB (4.94×); но кэш **в 2.4× лучше полного отказа от кэша** (42.06 µs, +Gen1) — рекомендация «убрать кэш» снята | `DataContext.cs` (`GetPreparedQueryCommand`), `QueryCommand.PrepareCommand`, `QueryPlanCacheKey` |
+| **M13** | ⚠️ частично (эскалация) | 🟡 Moderate | allocations, structural | строительный путь (#240): ownership-seam + COW + `QueryShape` дают −2.4…−11.5 % B/op и Cte/Distinct `<=1.20`, но same-round `<=1.20` для RecursiveCte/Except/Intersect не достигнут (незатрагиваемый рецепт D201-3 ≈36.7k из 134.6k у RecursiveCte) — эскалация владельцу (spec §8) | `QueryCommand.cs`, `EntityBuilder.cs`, `DataContextExtensions.cs` |
 | I1 | ✅ закрыто | ℹ️ Info | strings | `string.Format` убран из всех 3 «живых» сайтов (последний — `MakeTop`) | `BaseExpressionVisitor.cs`, `IParameterProvider.cs`, `SqlServerDataContext.cs` |
 | I2 | ✅ сделано | ℹ️ Info | allocations | LINQ в map-build → циклы (2 сайта в in-memory + 2 в `DataContext` из M11) | `InMemoryDataContext.cs:650,658` |
 | I3 | 🔵 закрыто (холодные) | ℹ️ Info | allocations | остаток 19 (было 27); реальные — `_joins?.ToArray()` (снапшот мутабельного списка, только при join'ах), `CloneForCache`, reflection | `src/` |
@@ -682,6 +683,39 @@ budget row** в `eng/perf/iteration14-budgets.json`, а не переоткры�
 
 `eng/perf/iteration14_gate.py` исполняет `eng/perf/iteration14-budgets.json`: `zero`-строки (warm
 CTE reuse = **0 B/op**), `budget`-строки `ceil(After × 1.25)` и no-growth для `Prepared_ToList`.
+
+---
+
+## M13 — construction-path allocation reduction and 1.20 reachability (issue #240)
+
+Статус: **структурные сокращения отгружены, но same-round цель `<=1.20` не достигнута** для трёх из пяти
+сценариев; исход эскалирован владельцу (spec §8). Порог 1.20 и рецепт D201-3 **не изменялись**; milestone
+`1.0.9-rc3`, база `044d03e2` (branch `1.0.9-rc3`). Публичный API, генерируемый SQL и результаты не менялись.
+
+**(a) Применённые структурные сокращения** (общий путь построения, все провайдеры):
+
+- D240-2 — ownership-seam в `QueryCommand` + однопроходное чтение `Definition` + удаление клона/материализации
+  на self-clone путях + фикс мутации операнда set-op (`a.Union(b).Except(c)` больше не мутирует переиспользуемый `b`);
+- D240-3 — copy-on-write builder-коллекций (`_windows` / `_loadSpecs` / `_joinIntos`) и элизия `_joins?.ToArray()`;
+- D240-4 — `internal readonly struct QueryShape` + copy-ctor `QueryCommand`, убирающий по-шаговую материализацию
+  `QueryDefinition` на внутреннем пути.
+
+**Измеренный эффект** (same-round BDN ShortRun in-process; все валидные раунды сохранены, лучший не выбирался).
+NextORM B/op `r0 -> r2`: Cte 115 927 -> 113 127 (−2.4 %), RecursiveCte 144 242 -> 134 642 (−6.7 %),
+Except 72 641 -> 64 321 (−11.5 %), Intersect 72 481 -> 64 161 (−11.5 %), Distinct 43 441 -> 38 641 (−11.0 %).
+Same-round alloc-ratio `r0 -> r1 -> r2`: Cte 1.2136 -> 1.1747 -> 1.1852 (MET), Distinct 1.0838 -> 1.0239 -> 0.9640
+(MET), RecursiveCte 1.6787 -> 1.5543 -> 1.5669 (FAIL), Except 1.4034 -> 1.2890 -> 1.2426 (FAIL),
+Intersect 1.4134 -> 1.2979 -> 1.2511 (FAIL). Временные ratio 0.44–0.62 — все MET (`<=1.05`).
+
+**(b) Достижимость `<=1.20` в рамках spec §6 — для RecursiveCte / Except / Intersect НЕ достижима.** Причина:
+незатрагиваемый рецепт D201-3 составляет ≈36.7k из остаточных 134.6k B/op у RecursiveCte (вклады рецепта:
+20 409 / 36 706 / 21 567 / 21 630 / 9 587 B/op = Cte / RecursiveCte / Except / Intersect / Distinct).
+Остаток до 1.20 из round-2: RecursiveCte 134 642 -> нужно `<=103 112` (−30.6 %), Except 64 321 -> `<=62 114`
+(−3.4 %), Intersect 64 161 -> `<=61 538` (−4.1 %). Оставшиеся рычаги отклонены: scratch-пулинг — нет устранимого
+scratch нужного размера; single-slot clone set-op — ~2-3k B/op, не влияет на RecursiveCte, риск для
+immutability; полный COW `_joins` / `_settings` / `_arrayJoins` — требует правок `src/nextorm.clickhouse`
+вне объёма T240. Терминал: `incomplete` + эскалация владельцу (spec §8: дополнительный бюджет **или**
+named release residual в `1.0.9-rc3`, без изменения порога/рецепта).
 
 ---
 

@@ -21,6 +21,25 @@ public static class DataContextExtensions
         => new(dataContext, definition);
 
     /// <summary>
+    /// Creates a typed query command from a builder-owned <see cref="QueryDefinition"/> and optionally
+    /// takes ownership of its <see cref="QueryDefinition.Joins"/> array. Used by the fluent builders,
+    /// whose <c>_joins?.ToArray()</c> produces a fresh array no other command can reach; installing it
+    /// directly avoids the defensive clone the public factory performs for caller-supplied shapes.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static QueryCommand<T> CreateCommand<T>(this IDataContext dataContext, QueryDefinition definition, bool ownJoins)
+        => new(dataContext, definition, ownJoins);
+
+    /// <summary>
+    /// Creates a typed query command from a stack-only <see cref="QueryShape"/>. Used by the
+    /// fluent builders so a builder-to-command step allocates the command but no <see cref="QueryDefinition"/>
+    /// record; the public definition overload is unchanged for external callers.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static QueryCommand<T> CreateCommand<T>(this IDataContext dataContext, QueryShape shape, bool ownJoins)
+        => new(dataContext, shape, ownJoins);
+
+    /// <summary>
     /// Creates an untyped query command whose result type is supplied at runtime, used by
     /// <c>JoinInto</c> to materialize a dynamically-built join projection.
     /// </summary>

@@ -170,13 +170,16 @@ public partial class QueryCommand
     /// <returns>A new command bound to this command's data context.</returns>
     protected virtual QueryCommand CreateSelf()
     {
-        return new QueryCommand(_dataContext, Definition);
+        // Copy-constructor path: transfers the shape field by field, so no QueryDefinition record is
+        // allocated on the per-step clone path.
+        return new QueryCommand(_dataContext, this, forCache: false);
     }
     /// <summary>Creates an empty command of the same type for a plan-cache key, detached from the data context.</summary>
     /// <returns>A new command with the mutable expressions cleared for later copying.</returns>
     protected virtual QueryCommand CreateSelfForClone()
     {
-        return new QueryCommand(null, Definition with { Exp = null, Condition = null, Joins = CloneForCache(_joins), Group = null });
+        // The cache clone deep-clones the joins and clears the raw shape, again without a shape record.
+        return new QueryCommand(null, this, forCache: true);
     }
 
     /// <summary>Deep-clones the join expressions so a cached plan cannot observe later mutations.</summary>
