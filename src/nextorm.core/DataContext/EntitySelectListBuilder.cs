@@ -17,8 +17,8 @@ internal static class EntitySelectListBuilder
     /// </summary>
     /// <param name="srcType">The entity type whose properties are projected.</param>
     /// <param name="entityMeta">The resolved metadata of <paramref name="srcType"/>.</param>
-    /// <param name="cancellationToken">Stops the loop early when preparation is cancelled.</param>
-    /// <returns>The built columns and whether the loop ran to completion; a cancelled build must not be cached by the caller.</returns>
+    /// <param name="cancellationToken">Throws <see cref="OperationCanceledException"/> when preparation is cancelled; the loop never returns a partial list.</param>
+    /// <returns>The complete ordered columns and <see langword="true"/>. Cancellation throws instead of returning a partial list, so the second element is always <see langword="true"/> (kept for signature stability across the shared consumers).</returns>
     internal static (SelectExpression[] Columns, bool Completed) Build(Type srcType, IEntityMetadata entityMeta, CancellationToken cancellationToken)
     {
         var p = Expression.Parameter(srcType);
@@ -27,8 +27,7 @@ internal static class EntitySelectListBuilder
 
         for (var idx = 0; idx < props.Count; idx++)
         {
-            if (cancellationToken.IsCancellationRequested)
-                return (columns.ToArray(), false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             var prop = props[idx];
             var pi = prop.PropertyInfo;

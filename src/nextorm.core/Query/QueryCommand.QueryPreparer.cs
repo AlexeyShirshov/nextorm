@@ -650,8 +650,7 @@ public partial class QueryCommand
                         using var outerScope = innerQueryVisitor.PushOuter(cmd._exp.Parameters[0]);
                         for (var idx = 0; idx < argsCount; idx++)
                         {
-                            if (cancellationToken.IsCancellationRequested)
-                                return (expanded.ToArray(), columnsPlanHash);
+                            cancellationToken.ThrowIfCancellationRequested();
 
                             var arg = args[idx];
                             var ctorParam = ctor.Constructor!.GetParameters()[idx];
@@ -755,8 +754,7 @@ public partial class QueryCommand
                         using var outerScope = innerQueryVisitor.PushOuter(cmd._exp.Parameters[0]);
                         for (var idx = 0; idx < bindingsCount; idx++)
                         {
-                            if (cancellationToken.IsCancellationRequested)
-                                return (selectList, columnsPlanHash);
+                            cancellationToken.ThrowIfCancellationRequested();
 
                             var binding = bindings[idx] as MemberAssignment;
                             var (bindingDurationUnit, bindingDurationPrecision) = ResolveDuration(srcMetadata, binding!.Expression);
@@ -864,12 +862,11 @@ public partial class QueryCommand
                             if (entityMeta is not null)
                             {
                                 // The projection is built by the shared helper (also used by raw-command
-                                // mapping); the per-column plan hash is folded in here so the cached column
-                                // shape stays identical to the previous inline build.
-                                var (columns, completed) = EntitySelectListBuilder.Build(srcType, entityMeta, cancellationToken);
-                                if (!completed)
-                                    return (columns, columnsPlanHash);
-
+                                // mapping); the helper throws on cancellation and never returns a partial
+                                // list, so its Completed element is always true (the former incomplete
+                                // handling here is gone). The per-column plan hash is folded in here so the
+                                // cached column shape stays identical to the previous inline build.
+                                var (columns, _) = EntitySelectListBuilder.Build(srcType, entityMeta, cancellationToken);
                                 selectList = columns;
 
                                 if (entityMeta.DynamicColumnsStore is { } dynamicStore)
@@ -1625,8 +1622,7 @@ public partial class QueryCommand
 
             for (var i = 0; i < itemTypes.Length; i++)
             {
-                if (cancellationToken.IsCancellationRequested)
-                    return false;
+                cancellationToken.ThrowIfCancellationRequested();
 
                 var memberName = $"Item{i + 1}";
                 var itemExpression = (Expression)Expression.Property(projectionParam, memberName);
@@ -1824,9 +1820,7 @@ public partial class QueryCommand
             if (!DataContextCache.Metadata.TryGetValue(itemType, out var metadata) || metadata.Properties.Count == 0)
                 return false;
 
-            var (columns, completed) = EntitySelectListBuilder.Build(itemType, metadata, cancellationToken);
-            if (!completed)
-                return false;
+            var (columns, _) = EntitySelectListBuilder.Build(itemType, metadata, cancellationToken);
 
             var group = new ProjectionEntityItem(slot, itemType, member);
 

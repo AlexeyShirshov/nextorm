@@ -387,6 +387,168 @@ public class EntityItemProjectionTests
         }
         finally { ctx.Dispose(); File.Delete(path); }
     }
+
+    /// <summary>
+    /// The three projection shapes whose cancellation handling T207 unifies. Each builds a fresh command
+    /// over the same LEFT JOIN pair; the case id is carried into the test display name so a per-shape
+    /// failure is identifiable in the run output.
+    /// </summary>
+    private static QueryCommand T207Shape(IDataContext ctx, string shape)
+    {
+        if (shape == "new-expression")
+            return ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => new T207ProbePair(p.Item2, p.Item1.Id));
+        if (shape == "member-init")
+            return ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => new T207ProbeDto { Child = p.Item2, Name = p.Item1.Name });
+        if (shape == "bare-join")
+            return ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .ToCommand();
+        throw new ArgumentOutOfRangeException(nameof(shape), shape, null);
+    }
+
+    /// <summary>Builds a fresh command of the named shape and returns its rendered SQL.</summary>
+    private static string T207Sql(IDataContext ctx, string shape)
+    {
+        if (shape == "new-expression")
+            return SqlOf(ctx, ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => new T207ProbePair(p.Item2, p.Item1.Id)));
+        if (shape == "member-init")
+            return SqlOf(ctx, ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => new T207ProbeDto { Child = p.Item2, Name = p.Item1.Name }));
+        if (shape == "bare-join")
+            return SqlOf(ctx, ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .ToCommand());
+        throw new ArgumentOutOfRangeException(nameof(shape), shape, null);
+    }
+
+    /// <summary>
+    /// T207 red regressions: a pre-cancelled preparation must surface <see cref="OperationCanceledException"/>
+    /// for every projection shape, never a partial select list (new-expression/bare-join) or a null-filled
+    /// column array (member-init, whose cancellation early-return used to hand back <c>[null, null]</c>).
+    /// </summary>
+    [Theory]
+    [InlineData("new-expression")]
+    [InlineData("member-init")]
+    [InlineData("bare-join")]
+    public void T207_PreCancelledProjection_ThrowsOperationCanceled(string shape)
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var cmd = T207Shape(ctx, shape);
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            Action act = () => cmd.PrepareCommand(dontCalculateHash: true, cts.Token);
+
+            act.Should().Throw<OperationCanceledException>(
+                $"the pre-cancelled '{shape}' projection must surface cancellation, not a partial or masking result");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    /// <summary>
+    /// Pre-fix expected values captured on the unmodified build (<c>c7ff89ca</c>), so the happy path is
+    /// pinned rather than retro-fitted: <c>new-expression</c> and <c>bare-join</c> keep their exact SQL and
+    /// column count/order; <c>member-init</c>'s entity-typed binding is not expanded by the MemberInit
+    /// branch, so the mapper refuses it with a pre-existing <see cref="NotSupportedException"/> (the
+    /// cancellation fix must not turn either into <see cref="OperationCanceledException"/>).
+    /// </summary>
+    public static IEnumerable<object[]> T207NonCancelledCases()
+    {
+        yield return
+        [
+            "new-expression",
+            "select t2.id, t2.parent_id as 'ParentId', t2.name, t2.state, t1.id as 'parentId'\n" +
+            " from entity_parent as 't1'\n left join entity_child as 't2' on t1.id = t2.parent_id",
+            5,
+            "Id,ParentId,Name,State,parentId",
+        ];
+        yield return ["member-init", null!, 2, "Child,Name"];
+        yield return
+        [
+            "bare-join",
+            "select t1.id, t1.name, t2.id, t2.parent_id as 'ParentId', t2.name, t2.state\n" +
+            " from entity_parent as 't1'\n left join entity_child as 't2' on t1.id = t2.parent_id",
+            6,
+            "Id,Name,Id,ParentId,Name,State",
+        ];
+    }
+
+    [Theory]
+    [MemberData(nameof(T207NonCancelledCases))]
+    public void T207_NonCancelledProjection_PreservesSqlAndColumns(string shape, string? expectedSql, int expectedCount, string expectedNames)
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var forColumns = T207Shape(ctx, shape);
+            Action prepare = () => forColumns.PrepareCommand(dontCalculateHash: true, CancellationToken.None);
+            prepare.Should().NotThrow<OperationCanceledException>("a non-cancelled preparation must never surface cancellation");
+
+            forColumns.SelectList!.Length.Should().Be(expectedCount);
+            string.Join(",", forColumns.SelectList.Select(s => s.PropertyName)).Should().Be(expectedNames);
+
+            if (expectedSql is null)
+            {
+                Action sql = () => T207Sql(ctx, shape);
+                sql.Should().Throw<NotSupportedException>(
+                    "the member-init entity-typed binding is a pre-existing mapper-level refusal, not a cancellation");
+            }
+            else
+            {
+                T207Sql(ctx, shape).Should().Be(expectedSql, "a non-cancelled preparation must keep its pre-fix SQL");
+            }
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    /// <summary>
+    /// A structurally unsupported entity expansion with a non-cancelled token must keep its typed
+    /// refusal and never be reported as <see cref="OperationCanceledException"/>.
+    /// </summary>
+    [Theory]
+    [InlineData("unmapped-item")]
+    [InlineData("value-entity-item")]
+    public void T207_UnsupportedEntityExpansion_PreservesStructuralRefusal(string shape)
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            Exception thrown;
+            if (shape == "unmapped-item")
+            {
+                var unmapped = ctx.From<EntityItemChild>().Select(c => new UnmappedItem { X = c.Id });
+                Action act = () => SqlOf(ctx, ctx.From<EntityItemParent>()
+                    .Join(ctx.From(unmapped), (p, s) => p.Id == s.X)
+                    .Select(p => p.Item2));
+                thrown = act.Should().Throw<Exception>().Which;
+                thrown.Should().BeOfType<NotSupportedException>().Which.Message.Should().Contain("UnmappedItem").And.Contain("not a mapped entity");
+            }
+            else
+            {
+                ctx.From<EntityItemValue>(b => b.Table("entity_value"));
+                Action act = () => ctx.From<EntityItemParent>()
+                    .Join(ctx.From<EntityItemValue>(), (p, v) => p.Id == v.Id)
+                    .Select(p => p.Item2)
+                    .ToList();
+                thrown = act.Should().Throw<Exception>().Which;
+                thrown.Should().BeOfType<QueryPreparationException>().Which.Message.Should().Contain("Cannot get ctor").And.Contain("EntityItemValue");
+            }
+
+            thrown.Should().NotBeAssignableTo<OperationCanceledException>(
+                "an unsupported shape must keep its typed refusal when no token is cancelled");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
 }
 
 /// <summary>A reference type that is deliberately not a mapped entity.</summary>
@@ -439,4 +601,26 @@ public sealed class EntityItemChild
     [Column("state")]
     [ValueConverter(typeof(EnumToStringConverter<EntityItemState>))]
     public EntityItemState State { get; set; }
+}
+
+/// <summary>A new-expression projection DTO that takes the entity item plus a scalar (T207 shape 1).</summary>
+public sealed class T207ProbePair
+{
+    public T207ProbePair(EntityItemChild child, int parentId)
+    {
+        Child = child;
+        ParentId = parentId;
+    }
+
+    public EntityItemChild Child { get; }
+
+    public int ParentId { get; }
+}
+
+/// <summary>A member-init projection DTO binding the entity item plus a scalar (T207 shape 2).</summary>
+public sealed class T207ProbeDto
+{
+    public EntityItemChild? Child { get; set; }
+
+    public string? Name { get; set; }
 }
