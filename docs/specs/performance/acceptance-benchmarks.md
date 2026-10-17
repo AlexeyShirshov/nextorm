@@ -739,3 +739,18 @@ inside the ±20% ShortRun noise band, so no row is reported as a regression.
 `artifacts/pdca/CCORR-201/rv1/E/e09-comparison.md`; the run's BDN reports are archived under
 `artifacts/pdca/CCORR-201/rv1/E/benchmarks/` (the tracked `benchmarks/BenchmarkDotNet.Artifacts`
 files were restored to HEAD after the run).
+
+## T246 status — raw reader (2026-10-17, rv2)
+
+The T246 measurement-protocol revision (rv2) ended in a **terminal GAP** and is **incomplete**: qualification
+was exhausted with **0 valid runs from 4 executions** (a harness report-precision defect consumed the attempt
+ceiling; four of seven arms per attempt; the empty stratum never started). There is **no qualified final result**
+and **no PASS** for T246.
+
+Canonical oracle correction: the empty-arm allocation multiple under the canonical out-of-process job is
+**7.86–7.94×**, not **2.31×**. The 2.31× figure is a historical in-process `ShortRun` result from a different
+measurement regime and is **not comparable**; no conversion factor between jobs exists. Because the empty stratum
+never executed in rv2, the empty arm remains **unmeasured** in this revision.
+
+The `≤1.00` time/allocation gates, the 2.7 % / 4 % precision caps and the 0 % empty tolerance stay binding; no
+production change was made. Evidence: `docs/specs/status/D246-raw-datareader-2.md` (§Terminal GAP — 2026-10-17).

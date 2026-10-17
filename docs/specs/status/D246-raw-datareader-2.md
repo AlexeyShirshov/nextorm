@@ -447,3 +447,47 @@ Autonomous mode waives only user approval. Qualification prerequisites remain ac
 ## Progress log (seed)
 
 2026-10-17 | P | revision r=2 (rv2) | iteration 1/3 | PLAN ready (bounded measurement-protocol revision) — canonical out-of-process oracle; precision before production; ≤1.00 time/allocation gates and empty tolerance 0 % unchanged.
+
+## Terminal GAP — 2026-10-17 (rv2)
+
+**Verdict:** `TERMINAL_GAP` · **Reason:** `qualification exhausted: 0/3 valid runs from 4 executions` · **Phase:** DO → GAP.
+**Counters unchanged:** `N=1` · `r=2` · `rv=2` · `n=1` · iteration `1/3`.
+**Production:** no production edit; `src/**`, `tests/**`, `benchmarks/**` untouched. Files added by this task are harness-only (`eng/perf/t246_evidence.py`, `eng/perf/t246-budgets.json`, `eng/perf/tests/test_t246_evidence.py`); no production fix is authorized.
+**Disposition artifacts:** `artifacts/pdca/T246/rv2/GAP.md`, `artifacts/pdca/T246/rv2/gap-disposition.json`, `artifacts/pdca/T246/rv2/perf/attempt-ledger.json`, `artifacts/pdca/T246/rv2/perf/baseline/TERMINAL_GAP.json`.
+
+### Qualification outcome
+
+4 executions, all protocol-invalid with `invalid-report:10k:log-json-launch-mean-mismatch:A_Nextorm_Prepared_ToDataReader:1`; each attempt ran the 10k stratum only (4/7 arms: `A`, `B`, `Dapper`, `Linq2Db`), process exit `0`, durations 99.661 / 75.537 / 76.066 / 77.393 s; shared budget used 409.64856605099885 s of 7200 s. **The empty stratum never started** — no empty-arm conclusion is available for rv2. Qualification artifact `status: REJECT` (valid-run-count `0!=3`).
+
+### Harness defects found (all fixed; checks preserved/strengthened)
+
+1. **Per-op vs iteration-total normalisation.** BDN log `WorkloadResult` reports the iteration total in ns while JSON launch means are ns/op; the comparison lacked normalisation, so every attempt was falsely rejected as a log/JSON mean mismatch. Fixed by dividing each logged total by its logged operation count before comparing, keeping the strict `relative_diff <= 1e-9` check.
+2. **Literal `Job.Default` id vs resolved job.** BDN resolves the configured default to `Job-NREBDM(InvocationCount=64, IterationCount=10, LaunchCount=3, UnrollFactor=1, WarmupCount=5)` with `Toolchain=Default` and out-of-process execution. Validation now checks resolved job semantics plus exact counts instead of the literal id, and the treatment identity string is aligned; rejection of in-process/non-Default jobs and count mismatches is retained.
+3. **Idle `VBCSCompiler` misclassified as foreign activity.** `ps` `%CPU` is a lifetime average (34–40 % lifetime, 0.00 % instantaneous), so an idle shared build server could reject a clean window. Build-server exclusion (`VBCSCompiler`, `/nodemode:N`) retained, active compiler work still detected via `csc`, `testhost`, `dotnet build|test|publish`, `dotnet-coverage` and BDN.
+
+Defect #1 was found only after all 4 attempt slots of the phase had already been consumed; the corrected parser could not be exercised on a fresh execution inside rv2. Harness self-checks pass: 46/46 unittest OK (exit 0), gate negative fixtures `PASS`.
+
+### Measured 10k evidence (protocol-invalid: evidence only, not a gate verdict)
+
+Source: `/tmp/opencode/T246/rv2/verify/run-numbers.txt`; BDN artifacts preserved under `artifacts/pdca/T246/rv2/perf/baseline/run-{1,2,3,4}/10k/**`.
+Worst `e = Error/Mean`: A **0.05161** (r1/L3), B **0.06569** (r2/L3), Dapper **0.02814** (r1/L1), Linq2Db **0.04131** (r1/L1).
+Breaches above the 2.7 % cap: **17 of 48 arm×launch cells** — A 3/12, B 9/12, Dapper 2/12, Linq2Db 3/12 (the earlier 13/48 figure is arithmetically impossible; the artifact count is authoritative).
+Max `time_upper_ratio` **1.282672** (run 1, arm B, `nL1-cL3`). Allocation: A `962840/960976 = 1.001940`, B `965432/960976 = 1.004637` — both above the `≤1.00` gate. Empty arm: **no data**.
+Caps in force: `Error/Mean ≤ 2.7 %`, spread `≤ 4 %`, `time_upper_ratio ≤ 1.00`, `allocation_ratio ≤ 1.00`, empty tolerance **0 %**.
+Canonical out-of-process empty allocation is **7.86–7.94×**, not the historical in-process `ShortRun` **2.31×** (regime-incomparable, no conversion factor). rv2 produced no qualified final result.
+
+### Contract status
+
+No contract row is claimed `met` beyond the preserved preflight/tooling checks. `open` with reason `terminal GAP — qualification exhausted`: R246-01, R246-02, R246-09, R246-10, R246-13, R246-14, R246-15, R246-16, R246-17, R246-19; R246-03..R246-08 and R246-11 were never reached; R246-18 is only partially addressed by the publication correction. Protocol-invalid launches never support a `met` row.
+
+### Required protocol change for any future approved revision
+
+- **(a)** normalise BDN log totals by the logged operation count before comparing with JSON per-op ns, and regression-test it;
+- **(b)** validate resolved job semantics (`Toolchain=Default`, out-of-process) plus exact counts instead of the literal `Job.Default` id, and align the treatment identity string;
+- **(c)** keep the build-server exclusion + active-csc detection and regression-test both;
+- **(d)** a future revision must be explicitly owner-approved with a precision-spike-justified `IterationCount > 10`, a fresh finite budget, complete seven-arm requalification (the empty stratum must actually execute) and a new freeze before production;
+- **(e)** no production change is authorized; the `≤1.00` gates, the 2.7 % / 4 % precision caps and the 0 % empty tolerance stay binding.
+
+Issue **#246 stays open**; the lane continues **T244 → T245 → T247**. rv1 remains terminal evidence, unchanged.
+
+2026-10-17 | DO | revision r=2 (rv2) | iteration 1/3 | terminal GAP — 4 executions, 0/3 valid runs; harness report-precision defect consumed the attempt ceiling; empty stratum never started | artifacts/pdca/T246/rv2/GAP.md
