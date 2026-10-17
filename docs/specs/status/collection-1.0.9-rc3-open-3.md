@@ -12,7 +12,7 @@
 | id | issue | title | variant | status | plan_state | cycle N | r | rv | status file | baseline ref | commit |
 |----|-------|-------|---------|--------|-----------|---|--|----|-------------|--------------|--------|
 | T243 | #243 | Perf: warm-path Count/Sum allocations exceed linq2db | pdca-dotnet | done | ready | 1 | 1 | 1 | docs/specs/status/D243-warm-aggregates-1.md | 957fcfe7 | b5b717cc |
-| T246 | #246 | Perf: ToDataReader raw reader is slower than linq2db | pdca-dotnet | pending (G2, rv2 plan) | ready (rv2) | 1 | 2 | 2 | docs/specs/status/D246-raw-datareader-2.md | 957fcfe7 | — |
+| T246 | #246 | Perf: ToDataReader raw reader is slower than linq2db | pdca-dotnet | incomplete (terminal rv2 GAP) | ready (rv2) | 1 | 2 | 2 | docs/specs/status/D246-raw-datareader-2.md | 957fcfe7 | 53fe6261 |
 | T244 | #244 | Perf: warm CTE/recursive CTE allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending (G2) | ready | 1 | 1 | 1 | docs/specs/status/D244-warm-cte-1.md | 957fcfe7 | — |
 | T245 | #245 | Perf: warm EXCEPT/INTERSECT allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending (G2) | ready | 1 | 1 | 1 | docs/specs/status/D245-warm-set-ops-1.md | 957fcfe7 | — |
 | T247 | #247 | Perf: JSON streaming is slower than linq2db at 10k rows | pdca-dotnet | pending (G2) | ready | 1 | 1 | 1 | docs/specs/status/D247-json-streaming-1.md | 957fcfe7 | — |
@@ -24,7 +24,7 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
 | group | tasks (topological order) | worktree | branch/ref | status |
 |-------|---------------------------|----------|------------|--------|
 | G1 | **T243 → T246 → T244 → T245 → T247** | none (single group) | current branch `1.0.9-rc3` | **incomplete** — stopped by terminal T246 GAP (T243 done; T246 incomplete; T244/T245/T247 not executed) |
-| G2 | **T246 (rv2) → T244 → T245 → T247** | none (single group) | current branch `1.0.9-rc3` | **in-progress** — owner-approved re-schedule; T243 excluded (done) |
+| G2 | **T246 (rv2) → T244 → T245 → T247** | none (single group) | current branch `1.0.9-rc3` | **in-progress** — T246 incomplete (rv2 GAP); continuing T244 → T245 → T247; T243 excluded (done) |
 
 ## Phase decisions
 
@@ -61,17 +61,19 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
 - 2026-10-17 | P.5 | owner approved «Ревизия протокола T246, затем очередь» → G2 created: T246 (rv2) → T244 → T245 → T247; acceptance gates unchanged, precision demonstrated before production work.
 - 2026-10-17 | G2 | rv2 PLAN for T246 dispatched (bounded protocol revision; r=2, rv=2, N=1).
 - 2026-10-17 | PLAN/T246 | rv2 ready — N=1; r=2; rv=2; n=1; iteration 1/3; bounded measurement-protocol revision; production blocked until precision PASS; both ≤1.00 gates and empty tolerance 0 % unchanged.
+- 2026-10-17 | G2 | T246 rv2 qualification: 4 executions, 0 valid runs (harness parser defect consumed the ceiling); 4/7 arms per attempt; empty stratum never started.
+- 2026-10-17 | G2 | T246 terminal rv2 GAP — planner adjudicated; no production change; issue #246 stays open with measured evidence; lane continues with T244.
 
 ## General verification & recovery
 
-- state: **`D — G2 in progress`** (T243 done; T246 rv2 planning; T244/T245/T247 queued).
+- state: **`D — G2 in progress`** (T243 done; T246 rv2 **terminal GAP — incomplete**, no production change; T244/T245/T247 queued).
 - last C result / evidence: **CHECK pass — T243 R243-01..R243-12 met (12/12), 0 defects**; evidence `docs/specs/status/D243-warm-aggregates-1.md` (§Done / Verified) + `docs/specs/performance/d243-warm-aggregates.md`.
-- defect id / history: `mutation-e-cache-flag-guard` — observed at r=1/n=1, survived first probe, 1 fix applied (focused `DisablingCacheAfterWarm_…` test), then **killed**; `suite-state-flake` (integration run-2, 124 failures) — not reproduced on identical binaries, 0 fixes, recorded as transient container-state, not a D243 defect. `perf-oracle-window-noise` (T246) — r=1/n=1, 0 fixes, planner terminal GAP (see D246 §GAP disposition), reopened by owner as rv2.
+- defect id / history: `mutation-e-cache-flag-guard` — observed at r=1/n=1, survived first probe, 1 fix applied (focused `DisablingCacheAfterWarm_…` test), then **killed**; `suite-state-flake` (integration run-2, 124 failures) — not reproduced on identical binaries, 0 fixes, recorded as transient container-state, not a D243 defect. `perf-oracle-window-noise` (T246) — r=1/n=1, 0 fixes, planner terminal GAP (see D246 §GAP disposition), reopened by owner as rv2. `harness-report-precision` (T246 rv2) — r=2/n=1, 4 attempts, 0/3 valid runs; 1 fix applied (BDN log per-op normalisation) but only after the attempt ceiling was consumed, plus two further harness fixes (resolved-job semantics, idle `VBCSCompiler` exclusion); 0 contract rows met, evidence `docs/specs/status/D246-raw-datareader-2.md` §Terminal GAP — 2026-10-17 (rv2) + `artifacts/pdca/T246/rv2/GAP.md`.
 - correction-task status file: none.
-- next allowed step: **D — T246 rv2 PLAN (G2), then continue G2 with T244 → T245 → T247.**
+- next allowed step: **D — T244 (G2), then T245 → T247.** T246 stays incomplete (terminal rv2 GAP); no production change is authorized.
 
 ## Done / Verified / Incomplete
 
 - **Done:** T243 (`b5b717cc`).
 - **Verified:** T243 — CHECK pass 12/12.
-- **Incomplete:** T246 (terminal GAP in rv1; reopened as rv2 by owner), T244/T245/T247 (G1 stopped; rescheduled into G2, not executed).
+- **Incomplete:** T246 (terminal GAP in rv1; rv2 also terminal **GAP — qualification exhausted, 0/3 valid runs, empty arm unmeasured, no production change**; issue #246 stays open), T244/T245/T247 (G1 stopped; rescheduled into G2, not executed).
