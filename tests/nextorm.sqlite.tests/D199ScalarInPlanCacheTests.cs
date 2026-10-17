@@ -618,4 +618,74 @@ public class D199ScalarInPlanCacheTests
             File.Delete(path);
         }
     }
+
+    // An inline array of constants is shape-stable: its length and null layout cannot change between
+    // executions of the cached plan. Warm reuse must keep the evaluated partitions and hash instead of
+    // rebuilding them (the 744 -> 0 B/op allocation fix for InAtIn_Inline_Warm_Reused).
+    [Fact]
+    public void InlineIn_WarmReuse_ShouldKeepStableShapeWithoutRefresh()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+            var command = ctx.From<IComplexEntity>()
+                .Where(x => SqlFunctions.Sql.@in(x.Id, new long[] { 1, 3 }))
+                .Select(x => x.Id);
+
+            var first = Prepare(ctx, command);
+            command.ShapeValuesStable.Should().BeTrue(
+                "an inline array of immutable values cannot change shape between executions");
+
+            var partitions = command.InValuesPartitions;
+            var shapeHash = command.InValuesShapeHash;
+            partitions.Should().NotBeNull();
+
+            var second = Prepare(ctx, command);
+
+            second.Should().BeSameAs(first, "the prepared plan must be reused");
+            command.InValuesShapeHash.Should().Be(shapeHash);
+            command.InValuesPartitions.Should().BeSameAs(
+                partitions, "a stable shape must not be re-evaluated on warm reuse");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    // A captured list can grow between executions, so the shape refresh must stay enabled: the new
+    // length has to re-key the plan instead of reusing the partitions captured at preparation time.
+    [Fact]
+    public void CapturedIn_WarmReuse_ShouldRefreshChangedShape()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+            _values = [1, 3];
+            var command = WhereFieldScalar(ctx.From<IComplexEntity>());
+
+            _ = Prepare(ctx, command);
+            command.ShapeValuesStable.Should().BeFalse(
+                "a captured list may change between executions of the cached plan");
+
+            var partitions = command.InValuesPartitions;
+            partitions.Should().NotBeNull();
+            partitions!.Values.Single().NonNull.Should().HaveCount(2);
+
+            _values.Add(5);
+            _ = Prepare(ctx, command);
+
+            command.InValuesPartitions.Should().NotBeSameAs(
+                partitions, "a changed captured shape must be re-evaluated");
+            command.InValuesPartitions!.Values.Single().NonNull.Should().HaveCount(3);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
 }

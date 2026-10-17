@@ -2157,3 +2157,310 @@ NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
   taskset -c 3 dotnet run -c Release --no-build --project benchmarks/nextorm.benchmark -- \
   --anyCategories=acceptance
 ```
+
+# Итерация 17 — регрессия после закрытия 1.0.9-rc3: prepared/cached-путь и сквозные сценарии (2026-10-17)
+
+> **Ревизия:** ветка `1.0.9-rc3`, HEAD `881bf497` (`v1.0.9-rc2-225-g881bf497`).
+> **Дата прогона:** 2026-10-17. **Повод:** после закрытия вехи 1.0.9-rc3 перепроверить prepared-путь
+> (Категория A), cached-путь против конкурентов, сквозные сценарии и аллокационный гейт Iteration 14,
+> а также обновить публичные таблицы (`readme.md`, `docs/comparisons/benchmarks.md` и RU-зеркало).
+> Первый прогон выявил регрессию cached-пути (+5–13 % аллокаций против Итерации 16); она воспроизведена,
+> локализована `git bisect` и исправлена в этой же итерации — см. раздел «Регрессия cached-пути».
+
+## Что проверялось
+
+- **Сквозные сценарии** — семь классов `SqliteBenchmark{Iteration,LargeIteration,Where,SimulateWork,Any,First,Single}`:
+  удерживает ли nextorm первое место по времени после изменений rc3.
+- **Prepared-путь (Категория A)** — `SqliteBenchmarkFeaturesFair`: те же 12 SQL-фич, nextorm через
+  `Prepare()` против ближайшей compiled-формы EF Core / linq2db и raw Dapper.
+- **Категория B (features)** — `SqliteBenchmarkFeaturesFairCached`: 12 SQL-фич (CASE WHEN, CTE, DISTINCT,
+  EXCEPT, IN-list, INTERSECT, join 4 таблиц, LEFT JOIN, recursive CTE, строковые функции, UDF, окна) в
+  cached-режиме против regular-арм'ов Dapper / linq2db / EF Core.
+- **Cached-путь ядровых классов** — арм'ы `Nextorm_Cached*` из тех же сквозных отчётов против regular-арм'ов
+  конкурентов (без compiled-арм'ов), плюс проверка регрессии против Итерации 16: allocation-probe и
+  `git bisect` по диапазону `5f5be4f..881bf497`, затем фикс и повторный замер.
+- **Аллокационный гейт Iteration 14** — 28 строк × 2 job'а (`Default` и `InProcessEmitToolchain`),
+  `eng/perf/iteration14_gate.py`.
+
+## Методика
+
+- Машина: AMD Ryzen 7 5800HS with Radeon Graphics, WSL2, **8 логических / 4 физических ядер**. В шапке
+  файла указаны 16/8 — это более ранняя конфигурация хоста; Итерации 16–17 шли на 8/4, поэтому
+  абсолютные времена между итерациями сравнивать нельзя, только отношения.
+- .NET SDK `10.0.401` (runtime `10.0.12`), BenchmarkDotNet 0.15.8.
+- `NextormConfig`: `ShortRun` (warmup 3 / iterations 3) + `InProcessEmitToolchain`. Гейт дополнительно
+  запускается с `--job short`, поэтому каждая строка измеряется дважды — на `Default` (out-of-process) и
+  на `InProcessEmitToolchain`; бюджеты проверяются по худшему из двух.
+- SQLite: seed `benchmarks/nextorm.benchmark/data/test.db` (`simple_entity` и `large_table` ≈ 10k строк);
+  гейт работает на свежей копии в `/tmp/iteration14-gate-*`.
+- Без `taskset` и без изоляции хоста: **время — вторичный, шумный сигнал** (3 итерации ShortRun),
+  **аллокации детерминированы** и являются первичным критерием.
+- Отчёты: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.*-report-{csv,md,html}`.
+
+## Prepared-путь (Категория A) — prepared против compiled и raw
+
+`SqliteBenchmarkFeaturesFair`: все nextorm-запросы подготовлены через `Prepare()`, конкуренты — ближайшая
+скомпилированная форма (`EF.CompileAsyncQuery`, `LinqToDB.CompiledQuery.Compile`) или сырой Dapper.
+В ячейке — время / аллокации на один запрос (тело — 10 запросов). `÷ лучший` — отношение
+`Nextorm (prepared)` к самому быстрому конкуренту в строке.
+
+| Фича | Nextorm (prepared) | Dapper | linq2db (compiled) | EF Core (compiled) | ÷ лучший t / a |
+|---|---|---|---|---|---|
+| `CASE WHEN` | **9.26 μs / 744 B** | 14.60 μs / 1.34 KB | 15.08 μs / 1.59 KB | 35.61 μs / 7.90 KB | 0.63× / 0.54× |
+| CTE | **9.49 μs / 793 B** | 21.43 μs / 1.57 KB | 21.52 μs / 1.77 KB | — | 0.44× / 0.49× |
+| `SELECT DISTINCT` | **11.01 μs / 744 B** | 18.55 μs / 1.56 KB | 17.41 μs / 1.59 KB | 40.60 μs / 7.66 KB | 0.63× / 0.47× |
+| `EXCEPT` | **11.07 μs / 760 B** | 17.72 μs / 1.44 KB | 20.80 μs / 1.68 KB | 43.47 μs / 8.81 KB | 0.62× / 0.52× |
+| IN-list | **12.32 μs / 1.57 KB** | 18.65 μs / 1.27 KB | 43.53 μs / 15.23 KB | 60.70 μs / 14.77 KB | 0.66× / 1.24× |
+| `INTERSECT` | **10.36 μs / 744 B** | 16.77 μs / 1.29 KB | 19.66 μs / 1.63 KB | 41.75 μs / 7.94 KB | 0.62× / 0.56× |
+| 4-table join | **12.63 μs / 1.06 KB** | 25.52 μs / 2.02 KB | 23.27 μs / 2.07 KB | 46.82 μs / 8.49 KB | 0.54× / 0.52× |
+| `LEFT JOIN` | **12.09 μs / 1.20 KB** | 19.84 μs / 2.22 KB | 20.29 μs / 2.32 KB | 41.64 μs / 9.92 KB | 0.61× / 0.54× |
+| Recursive CTE | **12.64 μs / 752 B** | 24.24 μs / 1.53 KB | 25.73 μs / 1.78 KB | — | 0.52× / 0.48× |
+| String functions | **8.96 μs / 736 B** | 13.92 μs / 1.28 KB | 15.18 μs / 1.64 KB | 35.08 μs / 7.49 KB | 0.64× / 0.56× |
+| UDF | **9.27 μs / 768 B** | 14.08 μs / 1.28 KB | 15.05 μs / 1.64 KB | 34.82 μs / 7.49 KB | 0.66× / 0.59× |
+| Window functions | **14.44 μs / 848 B** | 30.04 μs / 1.54 KB | 31.84 μs / 1.74 KB | — | 0.48× / 0.54× |
+
+Nextorm prepared первый по времени на всех 12 фичах и с наименьшей аллокацией на 11 из 12; исключение —
+IN-list (1.57 KB против 1.27 KB у Dapper). По времени это в 3.4–4.9 раза быстрее EF Core и в 1.5–2.3 раза
+быстрее Dapper; по памяти — в 1.7–2.1 раза ниже Dapper и в 8–12 раз ниже EF Core.
+
+**Относительно замера 2026-09-25** (тот шёл на 16/8, текущий — на 8/4) время упало на 3.7–43.0 %:
+сильнее всего CTE (−43.0 %), SELECT DISTINCT (−14.7 %), CASE WHEN (−11.9 %), слабее всего recursive CTE
+(−3.7 %) и EXCEPT (−4.5 %). При этом **аллокации выросли на 4.7–10.8 %** на всех 12 фичах: CASE WHEN / DISTINCT /
+INTERSECT 672 → 744 B, CTE 720 → 793 B, recursive CTE 680 → 752 B, LEFT JOIN 1.13 → 1.20 KB. Абсолютные
+значения остаются сотнями байт; это отдельный execution-path сдвиг, не связанный с подготовкой
+(prepared-команда готовится один раз), и фикс cached-пути его не меняет. По времени prepared-путь не стал
+хуже, но по памяти перестал быть «байт-в-байт» прежним.
+
+## Категория B (features) — cached против regular-конкурентов
+
+В ячейке — время на одну логическую операцию / аллокации на операцию (тело — 10 операций).
+`÷ лучший` — отношение `Nextorm (cached)` к самому быстрому regular-конкуренту в строке.
+
+| Фича | Nextorm (cached) | Dapper | linq2db | EF Core | ÷ лучший t / a |
+|---|---|---|---|---|---|
+| `CASE WHEN` | **13.04 μs / 3.22 KB** | 14.00 μs / 1.34 KB | 25.05 μs / 3.80 KB | 56.78 μs / 11.95 KB | 0.93× / 2.40× |
+| CTE | 32.72 μs / 10.89 KB | **19.83 μs / 1.57 KB** | 56.89 μs / 9.06 KB | — | 1.65× / 6.94× |
+| `SELECT DISTINCT` | **15.53 μs / 3.80 KB** | 18.41 μs / 1.56 KB | 30.44 μs / 3.91 KB | 64.19 μs / 12.20 KB | 0.84× / 2.44× |
+| `EXCEPT` | 17.15 μs / 6.38 KB | **16.96 μs / 1.44 KB** | 38.10 μs / 5.05 KB | 72.82 μs / 15.31 KB | 1.01× / 4.43× |
+| IN-list | 31.65 μs / 7.76 KB | **18.12 μs / 1.27 KB** | 69.44 μs / 18.91 KB | 112.63 μs / 22.61 KB | 1.75× / 6.13× |
+| `INTERSECT` | 16.79 μs / 6.36 KB | **15.60 μs / 1.29 KB** | 36.77 μs / 5.01 KB | 71.94 μs / 14.38 KB | 1.08× / 4.93× |
+| 4-table join | 32.96 μs / 10.67 KB | **25.03 μs / 2.02 KB** | 65.38 μs / 14.10 KB | 114.20 μs / 24.69 KB | 1.32× / 5.27× |
+| `LEFT JOIN` | 23.03 μs / 6.16 KB | **19.83 μs / 2.22 KB** | 69.12 μs / 8.60 KB | 94.80 μs / 20.27 KB | 1.16× / 2.78× |
+| Recursive CTE | 35.33 μs / 13.31 KB | **24.44 μs / 1.53 KB** | 60.41 μs / 8.39 KB | — | 1.45× / 8.70× |
+| String functions | 14.97 μs / 4.20 KB | **13.93 μs / 1.28 KB** | 30.95 μs / 4.78 KB | 66.26 μs / 13.27 KB | 1.07× / 3.28× |
+| UDF | 15.53 μs / 4.29 KB | **14.29 μs / 1.28 KB** | 48.46 μs / 6.50 KB | 66.25 μs / 13.27 KB | 1.09× / 3.35× |
+| Window functions | 31.55 μs / 5.03 KB | **29.75 μs / 1.55 KB** | 62.11 μs / 5.99 KB | — | 1.06× / 3.25× |
+
+По времени nextorm выигрывает `CASE WHEN` (0.93×) и `SELECT DISTINCT` (0.84×), идёт на равных на
+`EXCEPT` (1.01×), почти наравне на окнах (1.06×), строках (1.07×), `INTERSECT` (1.08×), UDF (1.09×) и
+`LEFT JOIN` (1.16×), отстаёт на join 4 таблиц (1.32×), CTE (1.65×), recursive CTE (1.45×) и IN-list
+(1.75×). По памяти nextorm проигрывает Dapper везде — от 2.40× (`CASE WHEN`) до 8.70× (recursive CTE):
+это стоимость материализации и подготовки, а не cache-lookup.
+
+**Относительно последнего закоммиченного отчёта** (коммит `a2dd5aca`, 2026-10-10) время упало на
+3.0–28.0 %, аллокации — на 14.9–26.3 % на всех 12 фичах. Сильнее всего: окна (−28.0 % времени), CTE
+(−26.2 %), join 4 таблиц (−25.0 %); слабее всего IN-list (−3.0 % времени, −14.9 % аллокаций).
+
+## Cached-путь ядровых классов против regular-конкурентов
+
+Арм'ы `Nextorm_Cached*` из отчётов сквозных классов против regular-арм'ов Dapper / linq2db / EF Core.
+Job — `ShortRun+InProcess`, поэтому сопоставимы **отношения**, а не абсолютные времена; колонка
+«Итерация 16» — тот же показатель из Default-прогона 2026-10-05.
+
+| Класс | Nextorm_Cached, t / a | ÷ лучший regular t / a | Итерация 16 (t / a) |
+|---|---|---|---|
+| Any | 1.84 ms / 533.6 KB | 1.31× / 3.84× | 1.18× / 3.94× |
+| First scalar | 169.0 μs / 50.8 KB | 1.15× / 3.08× | 1.06× / 3.17× |
+| First entity | 178.3 μs / 43.4 KB | 1.08× / 2.26× | 1.02× / 2.33× |
+| Single | 169.8 μs / 51.3 KB | 1.21× / 3.13× | 1.06× / 3.21× |
+| Where list | 1.90 ms / 553.8 KB | 1.39× / 3.06× | 2.16× (med 1.27×) / 3.13× |
+| Where for-loop | 980.1 μs / 114.7 KB | 0.72× / 0.63× | 0.72× / — |
+| Iteration list | 11.5 μs / 2.3 KB | 0.77× / 1.24× | 0.77× / 1.30× |
+| LargeIteration list | 8.43 ms / 2.22 MB | 0.73× / 0.93× | 0.93× / 0.78× |
+
+Абсолютные значения после фикса — в той же разбивке, что и таблица Итерации 16:
+
+| Класс | Итерация 16 (2026-10-05, Default) | После фикса (2026-10-17, ShortRun+InProcess) | Δ a |
+|---|---:|---:|---:|
+| Any | 1.615 ms / 547.69 KB | 1.84 ms / 533.6 KB | −2.6 % |
+| First scalar | 207.8 μs / 52.17 KB | 169.0 μs / 50.8 KB | −2.7 % |
+| First entity | 219.7 μs / 44.82 KB | 178.3 μs / 43.4 KB | −3.1 % |
+| Single | 199.5 μs / 52.67 KB | 169.8 μs / 51.3 KB | −2.7 % |
+| Where list | 3.836 ms (med 2.255) / 565.48 KB | 1.90 ms / 553.8 KB | −2.1 % |
+| Where for-loop | 1.280 ms / 114.94 KB | 980.1 μs / 114.7 KB | −0.2 % |
+| Iteration list | 15.58 μs / 2 488 B | 11.5 μs / 2 360 B | −5.1 % |
+| LargeIteration list | 11.53 ms / 2.22 MB | 8.43 ms / 2.22 MB | 0 % |
+
+Время в этой таблице — справочное: Итерация 16 снята в Default-прогоне на 16/8, текущий — в
+`ShortRun+InProcess` на 8/4, поэтому абсолютные времена и их разница несопоставимы. Аллокации
+детерминированы, и колонка `Δ a` — это реальный эффект фикса; `Δ t` намеренно не приводится.
+
+`Join` в этом прогоне не участвовал (его нет среди семи сквозных классов), поэтому строки нет; в
+Итерации 16 он был худшим (1.78× по времени, 6.04× по памяти).
+
+По времени nextorm быстрее лучшего regular-конкурента на `Where` for-loop (0.72×), `Iteration` (0.77×),
+`LargeIteration` (0.73×) и на уровне на `First entity` (1.08×); на точечных Any/Single/First scalar и
+`Where` list отстаёт на 1.15–1.39×. Временные отношения шумные (ShortRun), поэтому вердикт по времени —
+только «нет систематической регрессии».
+
+После фикса (см. следующий раздел) аллокации `Nextorm_Cached` вернулись к уровню Итерации 16 или ниже:
+Any 547.69 → 533.63 KB, First scalar 52.17 → 50.77, First entity 44.82 → 43.42, Single 52.67 → 51.26,
+Where list 565.48 → 553.76, Where for-loop 114.94 → 114.69, Iteration 2 488 → 2 360 B (−5.1 %).
+`LargeIteration` (2.22 MB) не изменился — все восемь арм'ов на уровне Итерации 16 или ниже.
+
+## Регрессия cached-пути после Итерации 16 — что это было и что исправлено
+
+Первый прогон Итерации 17 показывал рост аллокаций `Nextorm_Cached` на 5–13 % (Any 547.69 → 594.56 KB,
+Single 52.67 → 59.47, Where list 565.48 → 639.7, Iteration 2 488 → 2 768 B) и `RePrepare_PlanOnly_Param`
+1 464 → 2 416 B/op. Регрессия воспроизведена отдельным allocation-probe (тот же seed,
+`GC.GetAllocatedBytesForCurrentThread`, 300 итераций) на базе `5f5be4f` и HEAD `881bf497`, затем
+локализована `git bisect` по probe.
+
+**Причина 1 — #199 (`085288c9`), сканы unkeyed captured-collection.** На каждую подготовку добавился
+`ScanUnkeyedScalarInValues`: он аллоцировал `HashSet<QueryCommand>` и по `ExpressionVisitor` на каждое
+проверяемое выражение, а `ReplaceCommand` shared Any/Count-команды вызывал его на каждое исполнение.
+Вклад: `RePrepare` +424 B/op, `Any` +632, `Single` +432, `where_async` +432.
+
+**Причина 2 — #201 (`6f7ad459`), raw-shape probe.** До подготовки каждого свежего кэшируемого запроса
+строился `RawShape` (большой объект + клоны массивов) и выполнялся `TryGetRaw`. Для `RePrepare` (та же
+команда после `ResetPreparation`) это чистая цена: +528 B/op. Для async-путей — `iteration_async` +160,
+`where_async` +600; при этом `Cached_PlanOnly`/`Cached_ToList` получали −1 312 B/op, ради чего #201 и
+делался.
+
+**Фикс (4 правки, семантика кэша не меняется):**
+1. `QueryCommand.HasEverPrepared` + гейт в `QueryPlanner`: raw-shape probe выполняется только для
+   действительно свежих команд, не для повторной подготовки после `ResetPreparation`.
+2. Thread-static scratch в `QueryPreparer`/`InValues`: visited-множество сканов и probe-визиторы
+   переиспользуются на потоке (`Clear()` на входе/выходе), поэтому сканы больше не аллоцируют на каждом
+   prepare.
+3. `HasCapturedValue(QueryCommand)` — дешёвый pre-check до построения `RawShape`: запрос с captured
+   значением (типичный `Where(x => x.Id == i)` в цикле) отсекается, не аллоцируя дескриптор.
+4. `IsTrivialEntitySelect` — raw-shape probe не выполняется для bare entity-select без condition/joins/
+   sorting/grouping/CTE/union/paging: подготовка такого запроса дешевле, чем дескриптор.
+
+**Результат probe (B/op; база `5f5be4f` → HEAD до фикса → HEAD после):**
+
+| Arm | база 5f5be4f | HEAD до фикса | HEAD после |
+|---|--:|--:|--:|
+| `Any` | 5 608 | 6 328 | 5 704 |
+| `Single` | 5 304 | 5 824 | 5 400 |
+| `RePrepare_PlanOnly_Param` | 1 464 | 2 416 | 1 480 |
+| `Cached_PlanOnly_Param` | 4 760 | 3 880 | 3 904 |
+| `InAtIn_Inline_Warm_Reused` | 672 | 744 | 0 |
+| `where_async` (captured Where) | 5 858 | 6 890 | 5 978 |
+| `iteration_async` (plain entity list) | 2 536 | 3 056 | 2 648 |
+
+`Any`/`Single`/`RePrepare` вернулись к базе (+1.7 %, +1.8 %, +1.1 %); `Cached_PlanOnly` сохранил выигрыш
+#201 (−18 %); `InAtIn_Inline_Warm_Reused` обнулился; `where_async` почти вернулся (+2.0 %).
+`iteration_async` в probe остаётся +4.4 % (материализация/async-путь), но BDN-арм `Iteration` после
+фикса — 2 360 B/op, на 5.1 % ниже Итерации 16: raw-shape probe для тривиального entity-select больше не
+выполняется.
+
+## Сквозные сценарии (ShortRun, 2026-10-17)
+
+| Сценарий | Nextorm | Dapper | linq2db | EF Core | ÷ лучший |
+|---|--:|--:|--:|--:|--:|
+| Data fetch | **10.29 μs** | 14.89 μs | 15.76 μs | 36.64 μs | 0.69× |
+| Wide data fetch | **8.331 ms** | 8.680 ms | 9.366 ms | 9.771 ms | 0.96× |
+| Where | **886.7 μs** | 1 369.6 μs | 1 412.3 μs | 3 199.6 μs | 0.65× |
+| Simulate work | **7.594 ms** | 26.432 ms | 393.986 ms | 110.812 ms | 0.29× |
+| Any | **889.9 μs** | 1 399.7 μs | 1 498.9 μs | 3 620.0 μs | 0.64× |
+| FirstOrDefault | **91.35 μs** | 146.41 μs | 388.41 μs | 351.03 μs | 0.62× |
+| SingleOrDefault | **90.87 μs** | 140.79 μs | 394.50 μs | 345.20 μs | 0.65× |
+
+Nextorm первый по времени во всех семи классах; по аллокациям — первый во всех семи, на Wide data fetch
+идёт на уровне linq2db (2.14 MB против 2.14 MB). Относительно последнего закоммиченного прогона Where и
+Any ускорились примерно вдвое, Data fetch / First / Single / Wide — в пределах шума или чуть быстрее.
+
+## Аллокационный гейт Iteration 14
+
+Гейт называется «Iteration 14», потому что его бюджеты зафиксированы в Итерации 14 (issue #165):
+`ceil(post-fix × 1.25)` для budget-строк, ровно `0` для zero-allocation арм'ов и no-growth для
+`Prepared_ToList`. С тех пор бюджеты не пересматривались — в этом и смысл гейта: он ловит регрессию
+относительно зафиксированного потолка, а не относительно предыдущей итерации. Колонка «Итерация 16» —
+справочная точка, а не бюджет; если перебазировать её на 16, гейт перестанет ловить рост между 16 и 17.
+
+«Бюджет» — максимальный `B/op` на **худший** из двух job'ов (`Default` и `InProcessEmitToolchain`);
+`% от бюджета` — сколько потолка занято (`current / budget`), чем меньше, тем больше запас.
+
+`eng/perf/iteration14_gate.py`: **56/56 вердиктов в бюджете** (28 строк × 2 job'а). Ключевые строки
+(худший из двух job'ов, B/op):
+
+| Arm | 2026-10-17 | Бюджет | % от бюджета | Итерация 16 | Δ к 16 |
+|---|--:|--:|---:|--:|--:|
+| `Cte_Warm_Reused` | **0** | 0 | — | 0 | 0 % |
+| `RecursiveCte_Warm_Reused` | **0** | 0 | — | 0 | 0 % |
+| `Join4_Warm_Reused` | **0** | 0 | — | 0 | 0 % |
+| `InAtIn_Inline_Warm_Reused` | **0** | ≤ 840 | 0 % | 672 | −100 % |
+| `Cached_PlanOnly_Param` | 3 664 | ≤ 7 002 | 52.3 % | 4 760 | −23.0 % |
+| `Cached_ToList` | 4 444 | — (вне гейта) | — | 5 540 | −19.8 % |
+| `RePrepare_PlanOnly_Param` | 1 480 | ≤ 2 780 | 53.2 % | 1 464 | +1.1 % |
+| `Build_Sql` | 6 720 | ≤ 8 982 | 74.8 % | 7 048 | −4.7 % |
+| `Build_Baseline_SimpleSelect` | 6 076 | ≤ 8 202 | 74.1 % | — | — |
+| `Cte_Prepare_NoHash` | 11 065 | ≤ 15 152 | 73.0 % | 11 977 | −7.6 % |
+| `Cte_Warm_PlanOnly` | 10 409 | ≤ 16 822 | 61.9 % | 12 953 | −19.6 % |
+| `RecursiveCte_Warm_PlanOnly` | 13 136 | ≤ 18 730 | 70.1 % | 14 776 | −11.1 % |
+| `Prepared_ToList` | 779.60 / 779.65 | ≤ 780 | 99.9 % | 780 | ≈0 % |
+
+- Zero-allocation арм'ы CTE / recursive CTE / join 4 таблиц держатся: **0 B/op** в обоих job'ах; для них
+  бюджет — жёсткий `0`, поэтому `% от бюджета` не определён (`—`).
+- `Cached_PlanOnly_Param` и `Cached_ToList` заметно ниже Итерации 16 (−23.0 % и −19.8 %) — путь
+  construct + prepare действительно полегчал; при этом `Cached_PlanOnly_Param` занимает лишь 52.3 %
+  бюджета. `Cached_ToList` в манифест гейта не входит — это контекстная строка.
+- `RePrepare_PlanOnly_Param` восстановлен: 2 416 → 1 480 B/op (Итерация 16: 1 464, +1.1 %, 53.2 %
+  бюджета). Причина роста была в raw-shape probe #201, который выполнялся и для повторной подготовки
+  после `ResetPreparation`; гейт `HasEverPrepared` его убрал. `Build_Sql` и
+  `Build_Baseline_SimpleSelect` заодно упали за счёт thread-static сканов (7 144 → 6 720 и
+  6 416 → 6 076 B/op соответственно).
+- `Prepared_ToList` стоит на самой границе: 779.60 (Default) / 779.65 (InProcess) при бюджете 780 —
+  99.9 % бюджета, запас 0.35–0.40 B/op. Формально зелено, фактически — нулевой люфт.
+- `InAtIn_Inline_Warm_Reused` — **0 B/op** (было 744, бюджет 840): inline value-list стабилен, и
+  `ShapeValuesStable` пропускает пересчёт формы на warm-reuse. Это убирает и +72 к Итерации 16,
+  который давал #199 (probe: 672 на `5f5be4f` → 744 на `085288c9`). Для captured-коллекций refresh
+  остаётся: тест `CapturedIn_WarmReuse_ShouldRefreshChangedShape` проверяет, что рост списка
+  перестраивает ключ плана.
+
+## Вывод
+
+- **Сквозные сценарии:** nextorm первый по времени во всех семи классах, по памяти — первый во всех
+  семи (на Wide — на уровне linq2db); регрессии нет, Where/Any ускорились примерно вдвое против
+  последнего закоммиченного прогона.
+- **Prepared-путь (Категория A):** 12/12 первых по времени и 11/12 по памяти (IN-list уступает Dapper
+  1.24×); против 2026-09-25 время −3.7…−43.0 %, но аллокации +4.7…+10.8 % (отдельный execution-path
+  сдвиг, не связанный с подготовкой).
+- **Категория B (features):** 2 победы по времени (`CASE WHEN` 0.93×, `SELECT DISTINCT` 0.84×), 6 почти
+  наравне (`EXCEPT` 1.01×, окна 1.06×, строки 1.07×, `INTERSECT` 1.08×, UDF 1.09×, LEFT JOIN 1.16×) и
+  4 отставания (join 4 таблиц 1.32×, CTE 1.65×, recursive CTE 1.45×, IN-list 1.75×); по памяти хуже
+  Dapper в 2.40–8.70×. Относительно 2026-10-10 время −3.0…−28.0 %, аллокации −14.9…−26.3 %.
+- **Cached-путь ядровых классов:** регрессия #199/#201 воспроизведена и исправлена; после фикса все
+  8 арм'ов на уровне Итерации 16 или ниже (Any −2.6 %, Single −2.7 %, Where list −2.1 %, Iteration
+  −5.1 % по памяти).
+- **Гейт Iteration 14:** 56/56 в бюджете; zero-allocation CTE-арм'ы держатся,
+  `InAtIn_Inline_Warm_Reused` снижен 744 → 0 B/op, `Prepared_ToList` — на границе (779.60/779.65 при
+  780), `RePrepare_PlanOnly_Param` восстановлен до 1 480 B/op.
+
+## Воспроизведение
+
+```bash
+# регрессия cached-пути: standalone allocation-probe (GC.GetAllocatedBytesForCurrentThread) на базе
+# 5f5be4f и HEAD по арм'ам cached_tolist / single / any / iteration_async / where_async /
+# cached_planonly / reprepare; затем git bisect 5f5be4f..881bf497 с порогом по RePrepare/Any/Single.
+# Probe — временный harness, в репозиторий не входит.
+
+# prepared-путь (Категория A): 12 фич, nextorm через Prepare()
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter '*SqliteBenchmarkFeaturesFair.*'
+
+# features-категория B и семь сквозных классов (InProcess, ShortRun)
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- \
+  --filter '*SqliteBenchmarkFeaturesFairCached*' \
+           '*SqliteBenchmarkIteration*' '*SqliteBenchmarkLargeIteration*' \
+           '*SqliteBenchmarkWhere*' '*SqliteBenchmarkSimulateWork*' \
+           '*SqliteBenchmarkAny*' '*SqliteBenchmarkFirst*' '*SqliteBenchmarkSingle*'
+
+# аллокационный гейт (28 строк × 2 job'а)
+python3 eng/perf/iteration14_gate.py
+
+# пересобрать таблицы readme/docs из отчётов и проверить их актуальность
+python3 eng/perf/update_benchmark_tables.py
+python3 eng/perf/update_benchmark_tables.py --check
+```

@@ -607,6 +607,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         // context's QueryCache.AnyCommand — never by IsPrepared, TResult or command shape.
         QueryCommand.RawShape? recipeShape = null;
         if (!queryCommand.IsPrepared
+            && !queryCommand.HasEverPrepared
             && queryCommand.Cache
             && storeInCache
             && ext is null

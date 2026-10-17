@@ -32,6 +32,8 @@ public partial class QueryCommand
         dst.InValuesShapeHash = InValuesShapeHash;
         dst.LookupPartitions = LookupPartitions;
         dst.ShapeScanned = ShapeScanned;
+        // ShapeValuesStable is deliberately not copied: a clone's evaluated InValuesPartitions are not
+        // transferred either, so a clone must keep the pre-existing refresh path instead of skipping it.
         dst.HasUnkeyedTupleInValues = HasUnkeyedTupleInValues;
         dst.HasUnkeyedScalarInValues = HasUnkeyedScalarInValues;
         dst.ResultPlanHash = ResultPlanHash;

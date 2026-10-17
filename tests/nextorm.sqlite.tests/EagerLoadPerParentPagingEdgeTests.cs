@@ -37,6 +37,14 @@ public sealed class EagerLoadPerParentPagingEdgeTests
         }
     }
 
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "nextorm.slnx")))
+            dir = dir.Parent;
+        return dir?.FullName ?? Directory.GetCurrentDirectory();
+    }
+
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-perparent-edge-{Guid.NewGuid():N}.db");
@@ -293,7 +301,7 @@ public sealed class EagerLoadPerParentPagingEdgeTests
 
             // W-2 evidence: the single pair statement orders by the parent key, then every paged child's
             // own keys in join order, so each stitched collection enumerates in its own child order.
-            var dir = "/home/alex/sources/nextorm/artifacts/pdca/D211-eager-perparent-topn-1/rv4/check";
+            var dir = Path.Combine(RepoRoot(), "artifacts", "pdca", "D211-eager-perparent-topn-1", "rv4", "check");
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "W-2-two-nav-sql.txt"), interceptor.Statements.Single());
         }
@@ -600,7 +608,7 @@ public sealed class EagerLoadPerParentPagingEdgeTests
             _ = literal.LoadSpecs![0].ToJoinIntoSpec(ctx, QueryFilterScope.None, out var literalSource);
             string literalSql = ((dynamic)ctx.GetPreparedQueryCommand((dynamic)literalSource.SubQuery!, false, false, CancellationToken.None)).DbCommand.CommandText;
 
-            var dir = "/home/alex/sources/nextorm/artifacts/pdca/D211-eager-perparent-topn-1/rv4/check";
+            var dir = Path.Combine(RepoRoot(), "artifacts", "pdca", "D211-eager-perparent-topn-1", "rv4", "check");
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "d211-security-captured-sql.txt"), capturedSql);
             File.WriteAllText(Path.Combine(dir, "d211-security-plain-sql.txt"), plainSql);

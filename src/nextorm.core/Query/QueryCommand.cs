@@ -87,6 +87,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private IReadOnlyList<WindowDefinition>? _windows;
     /// <summary>Whether the command has been prepared and its cached plan hashes are current.</summary>
     protected bool _isPrepared;
+
+    /// <summary>
+    /// Whether this command instance has ever completed a preparation. Unlike <see cref="_isPrepared"/> it
+    /// is not cleared by <see cref="ResetPreparation"/>: it distinguishes a genuinely fresh command (which
+    /// may reuse a pre-preparation recipe) from one being re-prepared in place. Clones start <see langword="false"/>.
+    /// </summary>
+    internal bool HasEverPrepared;
     /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
     protected Type? _srcType;
     /// <summary>
@@ -181,6 +188,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// stale cached plan.
     /// </summary>
     internal bool ShapeScanned;
+    /// <summary>
+    /// Whether every value list and lookup collection matched by the shape scan is shape-stable
+    /// (an inline array of immutable values or a value-type <c>new</c> expression). A stable shape
+    /// cannot change between two executions of a cached plan, so a prepared command can skip the
+    /// per-execution refresh of <see cref="InValuesShapeHash"/> and the evaluated partitions.
+    /// </summary>
+    internal bool ShapeValuesStable;
     /// <summary>
     /// Whether a tuple-valued <c>IN</c>/<c>Contains</c> appears in a clause whose captured-collection
     /// shape is <b>not</b> folded into the plan key (HAVING, a JOIN condition, a SELECT column or a
@@ -1087,6 +1101,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         HasTopLevelInValues = false;
         LookupPartitions = null;
         ShapeScanned = false;
+        ShapeValuesStable = false;
         HasUnkeyedTupleInValues = false;
         HasUnkeyedScalarInValues = false;
         _whereBasePlanHash = 0;

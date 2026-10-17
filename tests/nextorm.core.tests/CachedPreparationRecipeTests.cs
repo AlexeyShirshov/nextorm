@@ -427,6 +427,24 @@ public sealed class CachedPreparationRecipeTests
     // --- 1. RawDescriptorDifferential ----------------------------------------------------------------
 
     [Fact]
+    public void Recipe_BareEntitySelect_IsNotProbed()
+    {
+        using var ctx = CreateSqlServerContext();
+
+        // A bare projection has no preparation work worth a raw descriptor: probing it would allocate
+        // the shape on every fresh-command execution (the Iteration-list regression) and reuse less
+        // preparation than the descriptor costs.
+        QueryCommand.CaptureRawShape(ctx.From<SimpleEntity>().ToCommand()).Should().BeNull(
+            "a bare entity select has no non-trivial preparation to reuse");
+
+        // A condition keeps the recipe: the descriptor can skip real preparation work.
+        QueryCommand.CaptureRawShape(SimpleShape(ctx)).Should().NotBeNull();
+
+        // Paging is a real clause, so the shape is not trivial.
+        QueryCommand.CaptureRawShape(ctx.From<SimpleEntity>().Page(10, 0).ToCommand()).Should().NotBeNull();
+    }
+
+    [Fact]
     public void Recipe_RawDescriptor_DistinguishesTheSevenSettingsAndRawClauses()
     {
         using var ctx = CreateSqlServerContext();

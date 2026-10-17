@@ -1597,6 +1597,14 @@ public sealed class EagerLoadPerParentPagingOracleTests
 
     private static readonly int[] ParentIds = [1, 2, 3];
 
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "nextorm.slnx")))
+            dir = dir.Parent;
+        return dir?.FullName ?? Directory.GetCurrentDirectory();
+    }
+
     private static (SqliteDataContext Ctx, string Path) CreateDb()
     {
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-perparent-oracle-{Guid.NewGuid():N}.db");
@@ -1762,7 +1770,7 @@ public sealed class EagerLoadPerParentPagingOracleTests
                 ["all_match"] = allMatch,
                 ["adversarial_case_differs"] = adversarialDiffers,
             };
-            var dir = "/home/alex/sources/nextorm/artifacts/pdca/D211-eager-perparent-topn-1/rv4/oracle";
+            var dir = Path.Combine(RepoRoot(), "artifacts", "pdca", "D211-eager-perparent-topn-1", "rv4", "oracle");
             Directory.CreateDirectory(dir);
             File.WriteAllText(
                 Path.Combine(dir, "reference-v1.json"),

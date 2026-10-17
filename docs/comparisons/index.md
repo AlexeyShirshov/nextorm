@@ -12,12 +12,14 @@ against:
 Nextorm is a **query builder and mapper without change tracking**: it covers the analytic query surface and an
 explicit write surface, generates provider-portable SQL, and is benchmarked on the shipped scenarios.
 
-The comparison has two parts:
+The comparison has three parts:
 
 - **[Capabilities](capabilities.md)** — a category-level matrix: what each library supports and where it
   does not.
 - **[Benchmarks](benchmarks.md)** — the shipped SQLite scenarios, with links to the full BenchmarkDotNet
   reports.
+- **[Feature benchmarks (2026-10-17)](feature-benchmarks-2026-10-17.md)** — a warm-path-only, tiered
+  report: no `Prepare()` arms, one table per tier, competitors as columns.
 
 ## How to read the marks
 

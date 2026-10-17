@@ -21,6 +21,11 @@ public partial class QueryCommand
     /// </remarks>
     internal static class QueryPreparer
     {
+        // The unkeyed captured-collection scans run on every preparation. Their visited set is pure
+        // scratch state: reuse one per thread instead of allocating a HashSet per scan. The scans are
+        // not reentrant (they only read the command graph), so clearing at entry/exit is enough.
+        [ThreadStatic] private static HashSet<QueryCommand>? _unkeyedScanVisited;
+
         internal static void Prepare(QueryCommand cmd, bool dontCalculateHash, CancellationToken cancellationToken)
         {
             if (cmd._dataContext is null) throw new InvalidOperationException("Cannot prepare command in cache");
@@ -52,6 +57,9 @@ public partial class QueryCommand
             // key only when the command participates in the plan cache; otherwise a lookup may be rendered
             // without a shape entry, so it must be evaluated on the fly instead of reusing a stale form.
             cmd.ShapeScanned = !dontCalculateHash && !cmd._dontCache;
+            // Provisional: the where/pre-where shape scans below AND in whether every matched value
+            // list and lookup collection is stable. A command with no such nodes keeps the stable bit.
+            cmd.ShapeValuesStable = cmd.ShapeScanned;
             cmd.LookupPartitions = null;
 
             // Raw-source filter skips are collected for this preparation only (main source + every join),
@@ -123,6 +131,7 @@ public partial class QueryCommand
             cmd.HasUnkeyedScalarInValues = ScanUnkeyedScalarInValues(cmd);
 
             cmd._isPrepared = true;
+            cmd.HasEverPrepared = true;
             cmd._selectList = selectList ?? [];
             cmd._groupingList = groupingList ?? [];
             cmd._limitByColumns = limitByColumns ?? [];
@@ -201,11 +210,13 @@ public partial class QueryCommand
                 EnsureProviderSupportsTupleInValues(cmd, cmd.PreparedPreWhere);
                 cmd.LookupPartitions = null;
                 Dictionary<Expression, InValuesPartition>? initial = null;
+                var stable = true;
 
                 if (cmd.PreparedCondition is not null)
                 {
-                    cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var wherePartitions, out var hasWhere);
+                    cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var wherePartitions, out var hasWhere, out var whereStable);
                     cmd.HasTopLevelInValues = hasWhere;
+                    stable &= whereStable;
                     initial = wherePartitions;
                     unchecked
                     {
@@ -215,8 +226,9 @@ public partial class QueryCommand
 
                 if (cmd.PreparedPreWhere is not null)
                 {
-                    cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var preWherePartitions, out var hasPreWhere);
+                    cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var preWherePartitions, out var hasPreWhere, out var preStable);
                     cmd.HasPreWhereInValues = hasPreWhere;
+                    stable &= preStable;
 
                     if (preWherePartitions is { Count: > 0 })
                     {
@@ -228,9 +240,14 @@ public partial class QueryCommand
                 }
 
                 cmd.InValuesPartitions = initial;
+                cmd.ShapeValuesStable = stable;
                 cmd.ShapeScanned = true;
                 return;
             }
+
+            // A stable shape (inline constants only) cannot change between executions, so the hash and
+            // partitions computed by the first scan stay valid and the per-execution rebuild is skipped.
+            if (cmd.ShapeValuesStable) return;
 
             // The shapes are recomputed from scratch: a captured collection or dictionary may have been
             // grown or reassigned between executions of the cached plan.
@@ -239,7 +256,7 @@ public partial class QueryCommand
 
             if (cmd.HasTopLevelInValues && cmd.PreparedCondition is not null)
             {
-                cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var wherePartitions, out _);
+                cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var wherePartitions, out _, out _);
                 merged = wherePartitions;
                 unchecked
                 {
@@ -249,7 +266,7 @@ public partial class QueryCommand
 
             if (cmd.HasPreWhereInValues && cmd.PreparedPreWhere is not null)
             {
-                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var preWherePartitions, out _);
+                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var preWherePartitions, out _, out _);
 
                 if (preWherePartitions is { Count: > 0 })
                 {
@@ -2820,8 +2837,16 @@ public partial class QueryCommand
         /// </summary>
         private static bool ScanUnkeyedTupleInValues(QueryCommand cmd)
         {
-            var visited = new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance);
-            return ScanUnkeyedTupleInValues(cmd, visited);
+            var visited = _unkeyedScanVisited ??= new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance);
+            visited.Clear();
+            try
+            {
+                return ScanUnkeyedTupleInValues(cmd, visited);
+            }
+            finally
+            {
+                visited.Clear();
+            }
         }
 
         private static bool ScanUnkeyedTupleInValues(QueryCommand cmd, HashSet<QueryCommand> visited)
@@ -3057,8 +3082,16 @@ public partial class QueryCommand
         /// </summary>
         internal static bool ScanUnkeyedScalarInValues(QueryCommand cmd)
         {
-            var visited = new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance);
-            return ScanUnkeyedScalarInValues(cmd, visited, true);
+            var visited = _unkeyedScanVisited ??= new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance);
+            visited.Clear();
+            try
+            {
+                return ScanUnkeyedScalarInValues(cmd, visited, true);
+            }
+            finally
+            {
+                visited.Clear();
+            }
         }
 
         private static bool ScanUnkeyedScalarInValues(QueryCommand cmd, HashSet<QueryCommand> visited, bool isRoot)
@@ -3305,9 +3338,10 @@ public partial class QueryCommand
                         // evaluated value-list and lookup shape in as well; otherwise a plan built for one
                         // list length (or dictionary size) would be reused for another. The renderer
                         // reuses the evaluated partitions.
-                        cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var partitions, out var hasMatch);
+                        cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var partitions, out var hasMatch, out var valuesStable);
                         cmd.InValuesPartitions = partitions;
                         cmd.HasTopLevelInValues = hasMatch;
+                        cmd.ShapeValuesStable &= valuesStable;
                         if (cmd.HasTopLevelInValues)
                             wherePlanHash = wherePlanHash * 13 + cmd.InValuesShapeHash;
                     }
@@ -3330,8 +3364,9 @@ public partial class QueryCommand
 
             if (!cmd._dontCache && !noHash)
             {
-                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var partitions, out var hasMatch);
+                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var partitions, out var hasMatch, out var valuesStable);
                 cmd.HasPreWhereInValues = hasMatch;
+                cmd.ShapeValuesStable &= valuesStable;
 
                 if (partitions is { Count: > 0 })
                 {
@@ -3858,6 +3893,14 @@ public partial class QueryCommand
         // Deep/cyclic graphs and any already-mutated command are ineligible.
         if (depth > 8 || cmd._isPrepared) return null;
         if (cmd._customData is not null) return null;
+        // A captured (closure) value makes the shape ineligible. Scan the raw expressions before
+        // materializing the RawShape: the descriptor is large and the parameterized path (a captured
+        // loop variable in WHERE) is common, so this keeps it allocation-free.
+        if (HasCapturedValue(cmd)) return null;
+        // A bare entity select has a trivial prepared plan, so the raw-descriptor probe costs more than
+        // the preparation it can skip. Only the root probe is suppressed; a nested CTE/union body still
+        // contributes its shape to the outer descriptor.
+        if (depth == 0 && IsTrivialEntitySelect(cmd)) return null;
         if (cmd._referencedQueries is { Count: > 0 } || cmd._outerRefs is { Count: > 0 }) return null;
         if (cmd.HasDataModifyingCte || cmd.HasTemporaryTableSource()) return null;
         if (cmd._union is not null && CaptureRawShape(cmd._union, depth + 1) is null) return null;
@@ -3986,6 +4029,33 @@ public partial class QueryCommand
         return shape;
     }
 
+    /// <summary>
+    /// Whether the command is a bare entity select with no clause that would make preparation worth a
+    /// raw-descriptor probe. Such a query still goes through the ordinary plan cache; only the
+    /// pre-preparation recipe attempt is skipped.
+    /// </summary>
+    private static bool IsTrivialEntitySelect(QueryCommand cmd)
+        => cmd._srcType is not null
+            && cmd._exp is null
+            && cmd._condition is null
+            && cmd._preWhere is null
+            && cmd._having is null
+            && cmd._groupExp is null
+            && cmd._union is null
+            && cmd._ctes is not { Count: > 0 }
+            && cmd._joins is not { Length: > 0 }
+            && cmd._sorting is not { Length: > 0 }
+            && cmd._arrayJoins is not { Length: > 0 }
+            && cmd._windows is not { Count: > 0 }
+            && cmd.LimitBy is null
+            && cmd.DistinctOn is null
+            && cmd.ExtremeRow is null
+            && cmd.Paging.Limit == 0
+            && cmd.Paging.Offset == 0
+            && !cmd.Paging.HasWithTies
+            && cmd.NavigationPaths is null or { Count: 0 }
+            && IsPlainTableSource(cmd._from);
+
     /// <summary>Whether a source is a plain table/CTE-name source the raw descriptor can describe.</summary>
     private static bool IsPlainTableSource(FromExpression? from)
         => from is null
@@ -4100,6 +4170,42 @@ public partial class QueryCommand
     /// </summary>
     private static bool HasApplicableFilters(Type? entityType, QueryFilterScope scope, IDataContext? dataContext)
         => entityType is null || QueryFilterResolver.GetFilters(entityType, scope, dataContext).Count != 0;
+
+    /// <summary>
+    /// Cheap pre-check for the raw-descriptor path: scans the command's raw expressions (the same set
+    /// <see cref="HasCapturedValue(RawShape)"/> inspects) before the <see cref="RawShape"/> is built.
+    /// A captured closure value makes the shape ineligible, so building the descriptor first would only
+    /// allocate it to throw it away.
+    /// </summary>
+    private static bool HasCapturedValue(QueryCommand cmd)
+    {
+        var scan = new CapturedValueScan();
+        scan.Scan(cmd._exp);
+        scan.Scan(cmd._condition);
+        scan.Scan(cmd._groupExp);
+        scan.Scan(cmd._having);
+        scan.Scan(cmd._preWhere);
+        scan.Scan(cmd.PerParentPartition);
+        if (cmd._arrayJoins is { Length: > 0 } arrayJoins)
+        {
+            for (var i = 0; i < arrayJoins.Length; i++)
+                scan.Scan(arrayJoins[i]);
+        }
+
+        if (scan.Found) return true;
+
+        if (cmd._union is not null && HasCapturedValue(cmd._union)) return true;
+
+        if (cmd._ctes is { Count: > 0 } ctes)
+        {
+            for (var i = 0; i < ctes.Count; i++)
+            {
+                if (HasCapturedValue(ctes[i].Query)) return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Scans the captured raw lambdas for a captured member access or a captured command constant.
