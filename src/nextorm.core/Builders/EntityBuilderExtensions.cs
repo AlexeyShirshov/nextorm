@@ -1433,23 +1433,156 @@ public static class EntityBuilderExtensions
 
     private static long LongCountCore<TEntity>(EntityBuilder<TEntity> builder, ReadOnlySpan<object?> @params)
     {
+        var eligible = TryGetScalarArtifactKey<TEntity, long>(builder, ScalarTerminal.LongCount, null, @params, out var key, out var context);
+        if (eligible && context!.TryExecuteScalarArtifact<long>(key, @params, out var cached))
+            return cached;
+
         var cmd = builder.SelectParent(e => SqlFunctions.Sql.count_big());
         cmd.SingleRow = true;
-        return cmd.ExecuteScalar(@params);
+        var result = cmd.ExecuteScalar(@params);
+        if (eligible)
+            context!.PublishScalarArtifact(key, cmd);
+
+        return result;
     }
 
     private static int CountCore<TEntity>(EntityBuilder<TEntity> builder, ReadOnlySpan<object?> @params)
     {
+        var eligible = TryGetScalarArtifactKey<TEntity, int>(builder, ScalarTerminal.Count, null, @params, out var key, out var context);
+        if (eligible && context!.TryExecuteScalarArtifact<int>(key, @params, out var cached))
+            return cached;
+
         var cmd = builder.SelectParent(e => SqlFunctions.Sql.count());
         cmd.SingleRow = true;
-        return cmd.ExecuteScalar(@params);
+        var result = cmd.ExecuteScalar(@params);
+        if (eligible)
+            context!.PublishScalarArtifact(key, cmd);
+
+        return result;
     }
 
     private static TResult? AggregateCore<TEntity, TResult>(EntityBuilder<TEntity> builder, MethodInfo sqlMethod, Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
     {
+        // Only the plain member Sum is normalized; Avg/Min/Max and the statistical aggregates always
+        // take the ordinary path. A fresh inline lambda and an equivalent cached lambda produce the same
+        // member identity, so both normalize to one artifact.
+        var key = default(ScalarArtifactKey);
+        DataContext? context = null;
+        var eligible = ReferenceEquals(sqlMethod, CommonFunctions.SumMI)
+            && TryGetScalarMember(exp, out var member)
+            && TryGetScalarArtifactKey<TEntity, TResult>(builder, ScalarTerminal.Sum, member, @params, out key, out context);
+
+        if (eligible && context!.TryExecuteScalarArtifact<TResult>(key, @params, out var cached))
+            return cached;
+
         var cmd = builder.SelectParent(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(CommonFunctions.SQLExpression, sqlMethod.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;
-        return cmd.ExecuteScalar(@params);
+        var result = cmd.ExecuteScalar(@params);
+        if (eligible)
+            context!.PublishScalarArtifact(key, cmd);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Recognizes the one <c>Sum</c> selector shape the scalar fast path supports: a single
+    /// <see cref="MemberExpression"/> whose instance expression is exactly the lambda parameter. A
+    /// captured closure, a nested member chain, a conversion, a conditional or any other composite body
+    /// is not proved and keeps the ordinary path.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type the selector reads.</typeparam>
+    /// <typeparam name="TResult">The selector's result type.</typeparam>
+    /// <param name="selector">The selector supplied to the terminal.</param>
+    /// <param name="member">The normalized member identity, or <see langword="null"/> when the shape is not supported.</param>
+    /// <returns><see langword="true"/> when the selector is a single parameter-rooted member read.</returns>
+    private static bool TryGetScalarMember<TEntity, TResult>(Expression<Func<TEntity, TResult>> selector, out MemberInfo? member)
+    {
+        member = null;
+        if (selector.Parameters.Count != 1)
+            return false;
+
+        if (selector.Body is not MemberExpression { Expression: { } instance } memberExpression)
+            return false;
+
+        if (!ReferenceEquals(instance, selector.Parameters[0]))
+            return false;
+
+        member = memberExpression.Member;
+        return true;
+    }
+
+    /// <summary>
+    /// Computes the normalized key of a supported scalar terminal, or reports that the invocation must
+    /// use the ordinary path. Everything here is a metadata check on the current builder/context — no
+    /// user filter function runs, no command is built and no value is read.
+    /// </summary>
+    /// <typeparam name="TEntity">The aggregated entity type.</typeparam>
+    /// <typeparam name="TResult">The terminal's result type.</typeparam>
+    /// <param name="builder">The receiving builder; it must carry no SQL-affecting modifier.</param>
+    /// <param name="terminal">The terminal being executed.</param>
+    /// <param name="member">The normalized <c>Sum</c> member, or <see langword="null"/> for the count terminals.</param>
+    /// <param name="params">The positional arguments of the invocation; any argument keeps the ordinary path.</param>
+    /// <param name="key">The normalized key when the invocation is supported.</param>
+    /// <param name="context">The SQL context that owns the artifact cache when the invocation is supported.</param>
+    /// <returns><see langword="true"/> when the invocation is a proved plain scalar shape.</returns>
+    private static bool TryGetScalarArtifactKey<TEntity, TResult>(
+        EntityBuilder<TEntity> builder,
+        ScalarTerminal terminal,
+        MemberInfo? member,
+        ReadOnlySpan<object?> @params,
+        out ScalarArtifactKey key,
+        out DataContext? context)
+    {
+        key = default;
+        context = null;
+
+        // Explicit arguments are never part of the static artifact: the ordinary path binds them.
+        if (!@params.IsEmpty)
+            return false;
+
+        // In-memory and any non-SQL context stay on their own executor; the SQL contexts own the cache.
+        if (builder.DataProvider is not DataContext sqlContext || !sqlContext.QueryCacheEnabled)
+            return false;
+
+        // The builder must prove that nothing besides the entity source and the terminal projection can
+        // shape the statement.
+        if (!builder.IsPlainScalarScope)
+            return false;
+
+        // Metadata-only applicability probe: a global/builder filter injects a predicate during
+        // preparation, so a filtered entity must never reuse the plain scalar plan. GetFilters never
+        // invokes a user filter function and mirrors the injection's own resolver.
+        if (QueryFilterResolver.GetFilters(typeof(TEntity), builder.FilterScope, sqlContext).Count != 0)
+            return false;
+
+        // The sum member must be one mapped scalar column (nullable included); a navigation, a
+        // range-column pair or an unmapped member keeps the ordinary path and its diagnostics.
+        if (member is not null && !IsMappedScalarMember(sqlContext, typeof(TEntity), member))
+            return false;
+
+        key = new ScalarArtifactKey(typeof(TEntity), typeof(TResult), terminal, member);
+        context = sqlContext;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="member"/> is mapped to exactly one scalar column of <paramref name="entityType"/>.
+    /// </summary>
+    /// <param name="context">The executing context (resolves a configured mapping).</param>
+    /// <param name="entityType">The mapped entity type.</param>
+    /// <param name="member">The member the selector reads.</param>
+    /// <returns><see langword="true"/> when the member is a mapped single-column property.</returns>
+    private static bool IsMappedScalarMember(IDataContext context, Type entityType, MemberInfo member)
+    {
+        var properties = DataContextExtensions.ResolveMetadata(context, entityType).Properties;
+        for (var i = 0; i < properties.Count; i++)
+        {
+            var property = properties[i];
+            if (member.Equals(property.PropertyInfo))
+                return property.RangeColumns is null;
+        }
+
+        return false;
     }
 
     private static Task<TResult?> AggregateAsyncCore<TEntity, TResult>(EntityBuilder<TEntity> builder, MethodInfo sqlMethod, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, object[] @params)

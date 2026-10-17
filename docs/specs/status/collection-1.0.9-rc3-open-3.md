@@ -9,13 +9,13 @@
 
 ## Tasks
 
-| id | issue | title | variant | status | plan_state | cycle N | r | rv | status file | baseline ref |
-|----|-------|-------|---------|--------|-----------|---|--|----|-------------|--------------|
-| T243 | #243 | Perf: warm-path Count/Sum allocations exceed linq2db | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D243-warm-aggregates-1.md | 957fcfe7 |
-| T246 | #246 | Perf: ToDataReader raw reader is slower than linq2db | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D246-raw-datareader-1.md | 957fcfe7 |
-| T244 | #244 | Perf: warm CTE/recursive CTE allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D244-warm-cte-1.md | 957fcfe7 |
-| T245 | #245 | Perf: warm EXCEPT/INTERSECT allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D245-warm-set-ops-1.md | 957fcfe7 |
-| T247 | #247 | Perf: JSON streaming is slower than linq2db at 10k rows | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D247-json-streaming-1.md | 957fcfe7 |
+| id | issue | title | variant | status | plan_state | cycle N | r | rv | status file | baseline ref | commit |
+|----|-------|-------|---------|--------|-----------|---|--|----|-------------|--------------|--------|
+| T243 | #243 | Perf: warm-path Count/Sum allocations exceed linq2db | pdca-dotnet | done | ready | 1 | 1 | 1 | docs/specs/status/D243-warm-aggregates-1.md | 957fcfe7 | c4351b0a |
+| T246 | #246 | Perf: ToDataReader raw reader is slower than linq2db | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D246-raw-datareader-1.md | 957fcfe7 | — |
+| T244 | #244 | Perf: warm CTE/recursive CTE allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D244-warm-cte-1.md | 957fcfe7 | — |
+| T245 | #245 | Perf: warm EXCEPT/INTERSECT allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D245-warm-set-ops-1.md | 957fcfe7 | — |
+| T247 | #247 | Perf: JSON streaming is slower than linq2db at 10k rows | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D247-json-streaming-1.md | 957fcfe7 | — |
 
 Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 604 / 208 lines, all CRLF, all persisted by their own PLAN step (no code, no benchmarks, no commits).
 
@@ -53,14 +53,15 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
 - 2026-10-17 | P | five own PLANs persisted (`D243`, `D246`, `D244`, `D245`, `D247`); ALL-barrier passed; single group G1; schedule rv=1 bound.
 - 2026-10-17 | prereq | benchmark DB `benchmarks/nextorm.benchmark/data/test.db` OK (`large_table` = 10,000 rows); Podman socket started and present; `flock` available; `/tmp/nextorm-bench/` absent (T246 owns bootstrap).
 - 2026-10-17 | G1 | lane started on `1.0.9-rc3` (single tree, sequential queue).
+- 2026-10-17 | G1 | T243 done — Count 2979.84→408 B/op, Sum 3389.44→970 B/op; gate green; 6/6 mutations killed; commit c4351b0a. Next: T246.
 
 ## General verification & recovery
 
-- state: **`unverified`** (no C yet).
-- last C result / evidence: none.
-- defect id / history: none.
+- state: **`D — lane G1 in progress`** (T243 verified; T246 current).
+- last C result / evidence: **CHECK pass — T243 R243-01..R243-12 met (12/12), 0 defects**; evidence `docs/specs/status/D243-warm-aggregates-1.md` (§Done / Verified) + `docs/specs/performance/d243-warm-aggregates.md`.
+- defect id / history: `mutation-e-cache-flag-guard` — observed at r=1/n=1, survived first probe, 1 fix applied (focused `DisablingCacheAfterWarm_…` test), then **killed**; `suite-state-flake` (integration run-2, 124 failures) — not reproduced on identical binaries, 0 fixes, recorded as transient container-state, not a D243 defect.
 - correction-task status file: none.
-- next allowed step: **D — continue G1 queue from the first `pending` task.**
+- next allowed step: **D — continue G1 from T246.**
 
 ## Done / Verified / Incomplete
 

@@ -1615,6 +1615,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     private void DisposeStaff()
     {
+        // The disposable context also drops its owned scalar artifacts: they retain plan-cache keys, and
+        // a disposed context must not keep anything alive through the fast path.
+        _queryCache.ClearScalarArtifacts();
         _connectionManager.DisposeConnection();
         Disposed?.Invoke(this, EventArgs.Empty);
     }
@@ -1749,6 +1752,48 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     /// <summary>Clears all cached query plans held by this context.</summary>
     public void PurgeQueryCache() => _queryCache.PurgeQueryCache();
+
+    /// <summary>
+    /// Executes a supported scalar terminal (T243/D243 fast path) from the context-owned immutable
+    /// artifact, when the normalized plan is still owned by the plan store. The current invocation's
+    /// arguments are bound to the cached plan here; the artifact itself is never mutated and neither the
+    /// command nor the plan key is prepared or executed on its behalf.
+    /// </summary>
+    /// <typeparam name="TResult">The terminal's result type.</typeparam>
+    /// <param name="key">The normalized terminal key of the current invocation.</param>
+    /// <param name="params">The current invocation's positional arguments (empty on the fast path).</param>
+    /// <param name="result">The executed scalar value when the fast path ran.</param>
+    /// <returns><see langword="true"/> when a warm plan was found and executed.</returns>
+    internal bool TryExecuteScalarArtifact<TResult>(in ScalarArtifactKey key, ReadOnlySpan<object?> @params, out TResult? result)
+    {
+        var artifact = _queryCache.FindScalarArtifact(key);
+        if (artifact?.PlanKey is { } planKey
+            && QueryPlanStore.TryGet(GetType(), planKey, out var holder, out _)
+            && holder is IPreparedQueryCommand<TResult> prepared)
+        {
+            result = ExecuteScalar(prepared, @params, false);
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Records the plan key a supported scalar terminal prepared under, so a later equivalent invocation
+    /// can execute the plan without rebuilding the command, the raw descriptor or the normalized key.
+    /// The artifact is published only when the plan store really owns that key; an uncacheable
+    /// preparation leaves the artifact inert and every call keeps the ordinary path.
+    /// </summary>
+    /// <typeparam name="TResult">The terminal's result type.</typeparam>
+    /// <param name="key">The normalized terminal key of the invocation.</param>
+    /// <param name="command">The command the ordinary path just executed (not retained).</param>
+    internal void PublishScalarArtifact<TResult>(in ScalarArtifactKey key, QueryCommand<TResult> command)
+    {
+        var planKey = command.GetOrCreatePlanKey(null);
+        if (QueryPlanStore.TryGet(GetType(), planKey, out _, out _))
+            _queryCache.GetOrAddScalarArtifact(key).PlanKey = planKey;
+    }
 }
 
 /// <summary>

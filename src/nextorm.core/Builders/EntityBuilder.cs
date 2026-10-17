@@ -1283,6 +1283,69 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         return shapes;
     }
     /// <summary>
+    /// Whether this builder carries no SQL-affecting modifier at all, i.e. it is a plain entity source
+    /// with no predicate, filter scope, join (including <c>JoinInto</c>) or eager-load state, grouping,
+    /// ordering, paging, distinct/final/sample, provider clause (settings, prewhere, array join, window,
+    /// limit-by, distinct-on, extreme row, table sample, temporal, row/source lock), derived or overridden
+    /// source, CTE, table/index/in-scope hint or identifier/keyword/tag/timeout override.
+    /// <para>
+    /// The context-owned immutable scalar fast path executes a warm plan directly from the invocation's
+    /// terminal identity, so it must prove that nothing else can change the statement. This predicate is
+    /// that proof: it mirrors <c>CopyTo</c>/<c>SelectCore</c>/<c>ApplyCommandOptions</c> field by field and
+    /// is deliberately exact (a modifier that only normalizes to the same SQL still falls back). Any new
+    /// SQL-affecting builder state must be added here; an unproved state means the ordinary path.
+    /// </para>
+    /// </summary>
+    internal bool IsPlainScalarScope
+        => _query is null
+            && _condition is null
+            && _filterScope.IsEmpty
+            && _group is null
+            && _limitBy is null
+            && _distinctOn is null
+            && _extremeRow is null
+            && _tablesample is null
+            && _temporal is null
+            && _rowLock is null
+            && _sourceLock is null
+            && _preWhere is null
+            && _arrayJoins is not { Count: > 0 }
+            && ArrayJoinKind == NextORM.Core.ArrayJoinKind.Inner
+            && _windows is not { Count: > 0 }
+            && _sourceEntityType is null
+            && !_bindArrayJoinElement
+            && _settings is not { Count: > 0 }
+            && _having is null
+            && _sorting is not { Count: > 0 }
+            && _loadSpecs is not { Count: > 0 }
+            && _joinIntos is not { Count: > 0 }
+            && _eagerLoadMode == NextORM.Core.EagerLoadMode.Default
+            && _joins is not { Count: > 0 }
+            && _table is null
+            && _from is null
+            && _subQueryHint is null
+            && !HasSourceOverride
+            && Paging.IsEmpty
+            && !Paging.HasWithTies
+            && !IsDistinct
+            && GroupingType == NextORM.Core.GroupingType.None
+            && GroupingSets is null
+            && !GroupByWithTotals
+            && !IsFinal
+            && SampleRatio is null
+            && SampleOffset == 0
+            && TableHints is null
+            && IndexHints is null
+            && IndexHintKind == NextORM.Core.IndexHintKind.Use
+            && TablesInScopeHints is null
+            && QuoteIdentifiers is null
+            && NamingConvention is null
+            && KeywordCase is null
+            && Tag is null
+            && CommandTimeout is null
+            && Ctes is null;
+
+    /// <summary>
     /// Returns a copy of this builder without the <c>JoinInto</c> joins (and their stitching metadata),
     /// so the non-list terminals evaluate the parent only. The source builder is unchanged.
     /// </summary>
