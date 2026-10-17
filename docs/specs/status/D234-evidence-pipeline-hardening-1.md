@@ -11,7 +11,7 @@ cycle_id: N=1
 attempt: n=1
 plan_revision: r=2
 plan_state: ready
-evidence_contract_rv: 2
+evidence_contract_rv: 3   (rv2 = in-repo slice; rv3 = follow-up #242 closure, supersedes rv2/kept)
 supersedes: rv1 (plan-level only; no rv1 artifacts generated)
 spec_version: T234-plan-v1
 baseline_ref: c7ff89ca8ae339c920cc6cb0c6b6ef4558aa6481  (short c7ff89ca; collection baseline)
@@ -210,3 +210,56 @@ Evidence:
 
 ACT commit: `7acad56d292401a28ba0e2b8d0d1cfae779f5873` (short `7acad56d`) — `#234 T234: atomic evidence generator + stale-hash lint (in-repo slice; R234-03G residual open)`.
 Citation correction: the earlier `3eee152e…` (pre-amend) reference was dangling after the amend; this correction is carried by the follow-up status-record commit, so no commit cites its own hash.
+
+## Closure — canonical admission + coverage fold-in (follow-up #242, rv=3)
+
+Authorized follow-up after ACT. The residual recorded above is **closed**; the r=2 / rv=2 block
+stays as the historical record of the in-repo slice.
+
+### Obligation A — canonical global admission (done)
+
+`scripts/pdca_evidence.py` (`generate` + `lint`) and its harness/tests/fixtures are now part of the
+canonical skill `~/.config/opencode/skills/pdca-dotnet/**` (source snapshot
+`opencode-config/config/skills/pdca-dotnet/**`, commit `063dffa`); the deployed copy is
+byte-identical (`diff -rq --exclude=__pycache__` rc 0). `SKILL.md` gained §Versioned evidence
+contract → **Mechanical evidence pipeline** (generate at the DO→CHECK boundary, lint in CHECK,
+contract fields, exit codes) and a mandatory mechanical gate in §CHECK completeness gate that
+requires **both** `scripts/validate_inner_loop.py manifest` and `scripts/pdca_evidence.py lint`.
+
+### Obligation B — `required_rows` ↔ `rows` coverage folded into lint (done)
+
+`pdca_evidence.py lint` now fails (rc 2) when a required row has no manifest row **or** a manifest
+row is not declared in `required_rows`. Covered by 7 new unit tests, 2 new negative fixtures and a
+dedicated mutation (killed). Measured on the canonical skill: **63/63** unit, **18/18** negatives,
+coverage **95.29 %**, **6/6** mutants killed.
+
+### State
+
+- `R234-03G` / `E234-08`: **met** in rv=3 (evidence:
+  `artifacts/pdca/T234/rv3/logs/global-admission.log`).
+- rv=2 artefacts are kept unchanged; rv=3 explicitly supersedes them
+  (`supersedes: {rv: 2, artifacts: "kept"}`) and preserves every row ID. The rv=2 frozen tree no
+  longer reconciles because this follow-up edited `.opencode/skills/nextorm-pdca/SKILL.md`, which is
+  inside the rv2 footprint — normal drift, not a lost verdict: rv2 recorded the state it was frozen
+  against.
+- Overlay `.opencode/skills/nextorm-pdca/SKILL.md`: the "canonical acceptance pending (R234-03G)"
+  note is replaced by the accepted-gate statement; both project gates stay mandatory.
+- Issue #242 carries the closure comment; #234's request 3 (wire the gate into the pdca evidence
+  contract so CHECK validates provenance mechanically) is satisfied by this admission.
+- No product change; the nextorm in-repo copy of `scripts/pdca_evidence.py` is intentionally
+  unchanged (it is bound by the rv2 frozen tree) — the canonical gate is the skill's script.
+
+Evidence:
+
+- `artifacts/pdca/T234/rv3/manifest.json` — contract_rv 3, frozen tree
+  `a5bd02518d667639334dcffa335b81c93d83148d`, manifest sha256
+  `e77750df2e8c1418822337092e31116979b3fca5e09abf727dff2e58b9f228b9` (second generate
+  byte-identical; both project gates rc 0)
+- `artifacts/pdca/T234/rv3/logs/global-admission.log`
+- `artifacts/pdca/T234/rv3/logs/{unit,negative,coverage,mutation,generate,generate-idempotent,lint,validate-manifest}.log`
+- `artifacts/pdca/T234/rv3/inputs/contract.json`
+- `opencode-config` commit `063dffa` (pushed to `origin/main`)
+
+### Progress log (closure)
+
+2026-10-17 | ACT | revision r=2 | follow-up #242 | residual closed: canonical pdca-dotnet admission (Obligation A) + required_rows coverage folded into lint (Obligation B); rv=3 generated, both project gates rc 0, E234-08/R234-03G met; rv2 kept historical; #242 commented | artifacts/pdca/T234/rv3/manifest.json

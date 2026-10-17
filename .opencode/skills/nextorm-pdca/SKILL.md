@@ -233,8 +233,12 @@ evidence). Пишет его DO на границе DO→CHECK; CHECK откры
 `python3 scripts/pdca_evidence.py lint --repo . --manifest artifacts/pdca/<task>/rv<k>/manifest.json`
 с rc 0: он пересчитывает frozen-tree тем же рецептом и требует
 `manifest.tree == recomputed == tree/tree_binding каждого receipt` (включая невыбранные), ловит
-path-escape, дубли id и плейсхолдерные деревья. Каноническая приёмка этого гейта в глобальный
-контракт `pdca-dotnet` пока не выполнена (R234-03G) — локальная проводка item 3 не закрывает.
+path-escape, дубли id и плейсхолдерные деревья. Гейт **принят в канонический контракт**
+`pdca-dotnet` (R234-03G закрыт): `scripts/pdca_evidence.py` вместе с harness/tests/fixtures лежит
+в глобальном скилле, а §«Versioned evidence contract» / §«CHECK completeness gate» требуют **обе**
+команды. Сам `lint` теперь проверяет и двустороннее покрытие `required_rows` ↔ `rows`;
+`validate_inner_loop.py manifest` остаётся обязательным для формы строк
+(status/evidence/reason/predicate).
 
 **Проектные evidence-корни (nextorm).** Портативный агент `check` даёт scoped `read` только на
 generic-корни (`docs/specs/status/**`, `artifacts/**`, `TestResults/**`); nextorm-специфику
