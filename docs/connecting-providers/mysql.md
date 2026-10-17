@@ -119,4 +119,4 @@ MySQL 8.0.31 and later support `INTERSECT`/`EXCEPT`; the dialect rejects the `*A
 
 Source: `src/nextorm.mysql/MySqlDialect.cs`, `src/nextorm.mysql/MySqlDataContext.cs`,
 `src/nextorm.mysql/DI/MySqlDataContextOptionsBuilderExtensions.cs`,
-`tests/nextorm.mysql.tests/MySqlDialectTests.cs`, `tests/nextorm.mysql.tests/SqlGenerationTests.cs`.
+`tests/nextorm.mysql.tests/Dialect/MySqlDialectTests.cs`, `tests/nextorm.mysql.tests/SqlGeneration/SqlGenerationTests.cs`.

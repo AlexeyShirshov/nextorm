@@ -168,7 +168,7 @@ result can be projected like a scalar column.
 > ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)): a single `ROW(...)` (arity 1..7) or a
 > caller-registered named composite result column materialises into the matching
 > `System.Tuple<...>`/named type (see
-> [Raw SQL](../guide/12-raw-sql.md#postgresql-raw-rows-and-composites)); `ValueTuple`, arity ≥8, a
+> [Raw SQL](../guide/14-raw-sql.md#postgresql-raw-rows-and-composites)); `ValueTuple`, arity ≥8, a
 > nested/empty `ROW`, several or mixed record columns, an unregistered named composite and a composite
 > declared as `System.Tuple` remain guarded with `NotSupportedException`. `untuple` is not supported
 > because it changes the result column set rather than producing a scalar.

@@ -1,6 +1,6 @@
 # How the engine works
 
-> A high-level tour of what sits between a fluent `From<T>()...Select(...)` call and the rows you get back: the query command, the pipeline that turns it into SQL, the plan cache, execution and row materialization. For step-by-step usage see the [Guide](../guide/01-filtering-where.md); for the caching rules see [Plan cache and reuse](03-plan-cache-and-reuse.md).
+> A high-level tour of what sits between a fluent `From<T>()...Select(...)` call and the rows you get back: the query command, the pipeline that turns it into SQL, the plan cache, execution and row materialization. For step-by-step usage see the [Guide](../guide/03-filtering-where.md); for the caching rules see [Plan cache and reuse](03-plan-cache-and-reuse.md).
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md).
 
@@ -8,15 +8,15 @@
 
 Every query follows the same shape:
 
-- `ctx.From<TEntity>()` returns an [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); the fluent operators (`Where`, `Join`, `Select`, ...) accumulate into a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1).
+- A **builder factory** on the context creates the fluent builder: `ctx.From<TEntity>()` returns an [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); the fluent operators (`Where`, `Join`, `Select`, ...) accumulate into a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1). `From` starts a query — the other statement shapes have their own factories (see [builder entry points](#builder-entry-points)).
 - A terminal (`ToListAsync`, `FirstAsync`, `AnyAsync`, ...) drives **preparation**: the command is turned into a structural `QueryPlan` key and looked up in the plan cache.
 - On a cache **miss** the query is prepared, translated to SQL text plus parameters, and paired with a compiled row mapper and a `DbCommand`; the plan is stored back in the cache.
 - The command is executed against the database, and the `DbDataReader` is turned into result rows by the row mapper or streamed straight through.
 
 | Piece | Responsibility |
 |---|---|
-| [`IDataContext`](xref:NextORM.Core.IDataContext) / provider `DataContext` | Connection, metadata, dialect, command creation, and the entry point for builders. |
-| [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) | Fluent LINQ surface (`From<T>()`, `Where`, `Join`, `Select`, ...). |
+| [`IDataContext`](xref:NextORM.Core.IDataContext) / provider `DataContext` | Connection, metadata, dialect, command creation, and the **builder factories** — `From*` for queries, `Create*Builder` for DML, batch and CTAS. |
+| [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) | The query builder: fluent LINQ surface (`Where`, `Join`, `Select`, ...), created by a `From*` factory. |
 | [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) | The built query — source, projection, filters, joins, sorting, hints — and its terminals. |
 | `QueryPreparer` | Turns the expression tree into prepared clause pieces and plan hashes (via expression visitors). |
 | `QueryPlan` / `QueryPlanStore` | The structural plan key and the per-thread implicit plan cache. |
@@ -25,7 +25,24 @@ Every query follows the same shape:
 | `DbCommand` (via `DataContext.CreateCommand`) | The provider command carrying the SQL text and the bound parameters. |
 | `QueryExecutor` | Runs the command and owns the ADO.NET reader. |
 | `DbDataReader` | The ADO.NET reader over the result set. |
-| Terminals | Buffered, streamed, JSON/CSV, or raw-reader outputs. |
+| Terminals | Every output shape: buffered collections, single rows, aggregates and scalars, streamed rows, JSON/CSV, and raw readers/streams. |
+
+## Builder entry points
+
+Every statement starts at a factory on [`IDataContext`](xref:NextORM.Core.IDataContext) that returns the builder for that statement shape. `From` is the **query** factory, not the only one:
+
+| Entry point | Returns | Builds |
+|---|---|---|
+| `ctx.From<T>()`, `ctx.From<T>(o => ...)` | `EntityBuilder<T>` | `SELECT` over a mapped entity, with per-source [options](../guide/01-query-sources.md) |
+| `ctx.From("table")` | `EntityBuilder<TableAlias>` | `SELECT` over a raw table or CTE name |
+| `ctx.FromSql(sql, parameters)` | `EntityBuilder<TableAlias>` | `SELECT` over a derived-table SQL |
+| `ctx.FromTableFunction(() => Db.MyTvf(...))` | `EntityBuilder<T>` | `SELECT` over a table-valued function |
+| `ctx.From(query)` / `ctx.From(cte)` / `ctx.From(tempTable)` / `ctx.From(builder)` | `EntityBuilder<TResult>` (`EntityBuilder<TableAlias>` for a temporary table) | `SELECT` over a subquery, a CTE, a lazy temporary table, or another builder |
+| `ctx.CreateInsertBuilder<T>()`, `CreateBulkInsertBuilder<T>()`, `CreateUpdateBuilder<T>()`, `CreateDeleteBuilder<T>()`, `CreateMergeBuilder<T>()`, `CreateTruncateBuilder<T>()` | `InsertBuilder<T>`, `BulkInsertBuilder<T>`, `UpdateBuilder<T>`, `DeleteBuilder<T>`, `MergeBuilder<T>`, `TruncateBuilder<T>` | DML statements |
+| `ctx.CreateBatchBuilder()` | `BatchBuilder` | several statements in one round trip |
+| `builder.ToTable(name)` / `.ToTempTable(name)` / `.AsTempTable()` | CTAS command / `TempTableSource<T>` | materialising a query into a table |
+
+`CreateQueryBuilder<T>()` is an explicit alias of `From<T>()` and returns the same builder. The DML, batch and CTAS surfaces are shown in the Guide: [INSERT](../guide/17-insert-statement.md), [UPDATE](../guide/19-update-statement.md), [DELETE](../guide/18-delete-statement.md), [MERGE](../guide/21-merge-statement.md), [bulk insert](../guide/22-bulk-insert.md), [SQL batch](../guide/25-sql-batch.md), [CREATE TABLE AS](../guide/20-create-table-as.md). The rest of this section follows the query (`From`) path.
 
 ## Command execution path
 
@@ -47,7 +64,7 @@ The second diagram shows the explicit reuse path, where the query is compiled on
 
 ## See also
 
-* [Filtering (WHERE)](../guide/01-filtering-where.md)
+* [Filtering (WHERE)](../guide/03-filtering-where.md)
 * [Connections](../infrastructure/01-connections.md)
 * [Provider overview](../connecting-providers/overview.md)
 * [In-memory provider](../connecting-providers/in-memory.md)

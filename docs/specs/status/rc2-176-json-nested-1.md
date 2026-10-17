@@ -391,7 +391,7 @@ D176.5 (ACT-committed, CRLF):
 
 D176.6 (ACT-committed, CRLF):
 
-- `benchmarks/nextorm.benchmark/SqliteBenchmarkJsonStreamPhase2.cs` — new C08 `json-stream-phase2` category: SQLite flat/nested/conditional-null/joined-slot/`byte[]` streaming vs materialize+STJ, plus writer-level native `int[]`/jagged workloads over a fake `IDataRecord`.
+- `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkJsonStreamPhase2.cs` — new C08 `json-stream-phase2` category: SQLite flat/nested/conditional-null/joined-slot/`byte[]` streaming vs materialize+STJ, plus writer-level native `int[]`/jagged workloads over a fake `IDataRecord`.
 - `src/nextorm.core/nextorm.core.csproj` — `InternalsVisibleTo("nextorm.benchmark")` (benchmark-only; lets C08 drive the internal recursive writer's array path without a provider container).
 - `docs/guide/30-streaming-data.md`, `docs/ru/guide/30-streaming-data.md` — public JSON-streaming guide (EN + RU): nested shapes, `Item1`/`Item2`, native/jagged arrays, Base64, null semantics, conditional construction, explicit exclusions/deferrals.
 - `docs/specs/roadmap/todo_json_streaming.md` — phase-2 implemented interpretation and remaining issue boundaries.

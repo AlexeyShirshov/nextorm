@@ -36,7 +36,7 @@ select choose(2, 'a', 'b', 'c') as [Label]
 рендерит завершающую клаузу `OPTION (...)`, например `OPTION (RECOMPILE)`
 ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints)); параметр CTE
 `maxRecursion` отображается в `option (maxrecursion n)`. См.
-[Хинты запросов](../13-query-hints.md).
+[Хинты запросов](../15-query-hints.md).
 
 ## Блокировка строк
 
@@ -59,7 +59,7 @@ select id
 (разделяемая блокировка). Хинт блокировки комбинируется с
 [`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])): `dataContext.From<ISimpleEntity>(o => o.WithTableHint("rowlock")).ForUpdate()` даёт
 `with (rowlock, updlock)`. См.
-[Блокировку строк](../../guide/32-provider-specific-features.md#блокировка-строк-for-update--for-share).
+[Блокировку строк](../../guide/31-provider-specific-features.md#блокировка-строк-for-update--for-share).
 
 ## `FOR JSON` и `FOR XML`
 
@@ -67,7 +67,7 @@ select id
 XML-документом
 ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)/[`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml));
 `WithForJson`/`WithForXml` присоединяют предложение без выполнения; два вида предложений
-взаимоисключающи. См. [Поддержка JSON в разных провайдерах](../14-json.md).
+взаимоисключающи. См. [Поддержка JSON в разных провайдерах](../16-json.md).
 
 ## Методы типа XML
 
@@ -117,8 +117,8 @@ select t2.value.value('(.)[1]/@id', 'int') as [Id]
 
 `string_split(...)` и `openjson(...)` доступны через
 [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). См.
-[Табличные функции](../11-table-valued-functions.md) и
-[Поддержка JSON в разных провайдерах](../14-json.md).
+[Табличные функции](../13-table-valued-functions.md) и
+[Поддержка JSON в разных провайдерах](../16-json.md).
 
 ## Temporal-таблицы
 
@@ -345,14 +345,14 @@ select id
 SQL Server поддерживает только метод `System`
 (`TableSample`); `Bernoulli`
 выбрасывает `NotSupportedException`. См.
-[Сэмплирование таблицы](../../guide/31-query-sources.md#сэмплирование-таблицы-tablesample).
+[Сэмплирование таблицы](../../guide/01-query-sources.md#сэмплирование-таблицы-tablesample).
 
 ## Полнотекстовый поиск
 
 Кросс-провайдерные boolean-предикаты `contains`/`freetext` рендерят `CONTAINS`/`FREETEXT`. Для
 ранжирования `SqlFunctions.SqlServer.containstable`/`freetexttable` отдают ключ совпавшей строки и
 оценку `RANK` через `SqlFunctions.IKeyRankRow<TKey>`; см.
-[Табличные функции](../11-table-valued-functions.md#встроенные-табличные-функции).
+[Табличные функции](../13-table-valued-functions.md#встроенные-табличные-функции).
 
 ## Последовательности
 
@@ -451,10 +451,12 @@ select patindex('%a%', somestring) as [Pos],
   `json_path_exists(json, path)` (SQL Server 2022+) и `json_contains(json, searchValue, path)`
   (SQL Server 2025+). Два предиката материализуются в `bit`, как `isjson`.
 
-Десять имён области соединения/сессии/инструкции намеренно **не** открыты: `CURRENT_REQUEST_ID`,
-`CURRENT_TRANSACTION_ID`, `XACT_STATE`, `APP_NAME`, `HOST_ID`, `HOST_NAME`, `IDENT_CURRENT`,
-`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` и `SCOPE_IDENTITY`; используйте сырой SQL или обёртку
-`[SqlFunction]` при появлении конкретного построчного применения.
+Семь имён, сообщающих живое изменяемое состояние соединения, сессии или инструкции, намеренно **не**
+открыты: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
+`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` и `SCOPE_IDENTITY`; стабильные конфигурационные константы и
+константы идентичности той же области (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`,
+`HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) открыты. Используйте сырой SQL или
+обёртку `[SqlFunction]` при появлении конкретного построчного применения.
 
 ## Пока не поддерживается
 
@@ -469,4 +471,4 @@ select patindex('%a%', somestring) as [Pos],
 ---
 
 Source: `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.core/Query/SqlFunctions.SqlServer.cs`,
-`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs`.
+`tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs`.

@@ -35,7 +35,7 @@ See [Scalar functions](../../scalar-functions/04-conditionals-and-conversion.md#
 ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)), and a query hint renders the
 trailing `OPTION (...)` clause, for example `OPTION (RECOMPILE)`
 ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints)); the CTE `maxRecursion`
-option maps to `option (maxrecursion n)`. See [Query hints](../13-query-hints.md).
+option maps to `option (maxrecursion n)`. See [Query hints](../15-query-hints.md).
 
 ## Row locking
 
@@ -58,7 +58,7 @@ select id
 `holdlock` (shared lock). The lock hint combines with
 [`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])), so `dataContext.From<ISimpleEntity>(o => o.WithTableHint("rowlock")).ForUpdate()`
 renders `with (rowlock, updlock)`. See
-[Row locking](../../guide/32-provider-specific-features.md#row-locking-for-update--for-share).
+[Row locking](../../guide/31-provider-specific-features.md#row-locking-for-update--for-share).
 
 ## `FOR JSON` and `FOR XML`
 
@@ -66,7 +66,7 @@ renders `with (rowlock, updlock)`. See
 XML document
 ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)/[`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml));
 `WithForJson`/`WithForXml` attach the clause without executing; the two clause kinds are mutually
-exclusive. See [JSON support across providers](../14-json.md).
+exclusive. See [JSON support across providers](../16-json.md).
 
 ## XML data-type methods
 
@@ -116,8 +116,8 @@ See [Scalar functions](../../scalar-functions/07-json-and-xml.md#xml-data-type-m
 
 `string_split(...)` and `openjson(...)` are exposed through
 [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). See
-[Table-valued functions](../11-table-valued-functions.md) and
-[JSON support across providers](../14-json.md).
+[Table-valued functions](../13-table-valued-functions.md) and
+[JSON support across providers](../16-json.md).
 
 ## Temporal tables
 
@@ -341,14 +341,14 @@ select id
 SQL Server supports only the `System` method
 (`TableSample`); `Bernoulli`
 throws `NotSupportedException`. See
-[Table sampling](../../guide/31-query-sources.md#table-sampling-tablesample).
+[Table sampling](../../guide/01-query-sources.md#table-sampling-tablesample).
 
 ## Full-text search
 
 The cross-provider boolean predicates `contains`/`freetext` render `CONTAINS`/`FREETEXT`. For ranking,
 `SqlFunctions.SqlServer.containstable`/`freetexttable` expose the matched key and `RANK` score through
 `SqlFunctions.IKeyRankRow<TKey>`; see
-[Table-valued functions](../11-table-valued-functions.md#built-in-table-functions).
+[Table-valued functions](../13-table-valued-functions.md#built-in-table-functions).
 
 ## Sequences
 
@@ -446,10 +446,12 @@ select patindex('%a%', somestring) as [Pos],
   `json_path_exists(json, path)` (SQL Server 2022+) and `json_contains(json, searchValue, path)`
   (SQL Server 2025+). The two predicates are materialised as `bit` values, mirroring `isjson`.
 
-Ten connection/session/statement-scope names are intentionally **not** exposed: `CURRENT_REQUEST_ID`,
-`CURRENT_TRANSACTION_ID`, `XACT_STATE`, `APP_NAME`, `HOST_ID`, `HOST_NAME`, `IDENT_CURRENT`,
-`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`; use raw SQL or a `[SqlFunction]`
-wrapper when a concrete per-row use appears.
+Seven names that report live, mutable connection-, session- or statement-scope state are intentionally
+**not** exposed: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
+`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`; the stable configuration/identity constants
+of the same scope (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`,
+`APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) are shipped. Use raw SQL or a `[SqlFunction]` wrapper when a
+concrete per-row use appears.
 
 ## Not yet supported
 
@@ -464,4 +466,4 @@ No SQL Server-specific surface remains open. See
 ---
 
 Source: `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.core/Query/SqlFunctions.SqlServer.cs`,
-`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs`.
+`tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs`.

@@ -143,8 +143,8 @@ Branch: `1.0.9-rc2`.
 
 ## 11. Ссылки
 
-- `benchmarks/nextorm.benchmark/SqliteBenchmarkProjection.cs`, `...Aggregates.cs`, `...Paging.cs`, `...Streaming.cs`, `...WriteJson.cs`, `...Csv.cs`
-- `benchmarks/nextorm.benchmark/BenchmarkRowSink.cs`, `BenchmarkSerializationSink.cs`, `BenchmarkComparisonValidation.cs`
-- `benchmarks/nextorm.benchmark/Linq2DbDataContext.cs`, `EFDataContext.cs`, `TestDataContext.cs`, `BenchDb.cs`, `NextormConfig.cs`
+- `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkProjection.cs`, `...Aggregates.cs`, `...Paging.cs`, `...Streaming.cs`, `...WriteJson.cs`, `...Csv.cs`
+- `benchmarks/nextorm.benchmark/Infrastructure/BenchmarkRowSink.cs`, `BenchmarkSerializationSink.cs`, `BenchmarkComparisonValidation.cs`
+- `benchmarks/nextorm.benchmark/Infrastructure/Linq2DbDataContext.cs`, `EFDataContext.cs`, `TestDataContext.cs`, `BenchDb.cs`, `NextormConfig.cs`
 - `docs/comparisons/benchmarks.md`, `docs/specs/performance/benchmark-report.md`, `docs/specs/performance/acceptance-benchmarks.md`
 - `docs/specs/comparison/linq2db-comparison.md` (раздел «Benchmarked performance»), `docs/specs/ru/comparison/linq2db-comparison.md`

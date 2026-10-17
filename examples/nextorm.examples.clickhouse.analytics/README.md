@@ -1,27 +1,31 @@
 # nextorm.examples.clickhouse.analytics
 
-Runnable nextorm port of ClickHouse's official «anonymized web analytics» sample
-(`datasets.hits_v1`) plus a stand-specific `AggregatingMergeTree` materialized view. Provider:
-`nextorm.clickhouse`.
+Comparison project for ClickHouse's official «anonymized web analytics» sample (`datasets.hits_v1`) plus
+a stand-specific `AggregatingMergeTree` materialized view. Every query is implemented **twice** — with
+nextorm and with [linq2db](https://github.com/linq2db/linq2db) — then both arms are executed against the
+same dataset and benchmarked.
 
-The point of this project is to show **how a real SQL query becomes nextorm code** — and where the
-portable LINQ surface stops. Every method in [`ClickHouseQueries.cs`](ClickHouseQueries.cs) models
-exactly one query file in [`Sql/`](Sql); the method comment names it, states whether it is `WORKING`,
-and — when it is `NOT WORKING` — why (with the roadmap document that tracks the gap). Missing capabilities
-are **not** worked around: the affected method throws `NotSupportedException` instead of falling back to
-raw SQL. Only `Incremental` (`uniqMerge` over an `AggregateFunction` state) still throws; the array,
-higher-order-lambda and `groupArray`/tuple surfaces are expressed in LINQ. The tables below map each SQL
-construct to the nextorm construct that replaces it.
+The project shows **how a real SQL query becomes nextorm code — and where the portable LINQ surface
+stops**. Every method pair models exactly one query file in [`Sql/`](Sql); the method comment names it.
+Missing capabilities are **not** worked around on the nextorm side: the affected method throws
+`NotSupportedException` instead of falling back to raw SQL. Only `Incremental` (`uniqMerge` over an
+`AggregateFunction` state) still throws — its linq2db counterpart works through `FromSql`, which makes
+the gap visible side by side. The tables below map each SQL construct to the nextorm construct that
+replaces it.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| [`Sql/*.sql`](Sql) | Original model queries — the reference the C# is verified against |
+| [`Sql/*.sql`](Sql) | Original model queries — the reference both arms are verified against |
 | [`ClickHouseQueries.cs`](ClickHouseQueries.cs) | nextorm implementation of the 5 demo queries + 6 course-style exercises |
-| [`Entities.cs`](Entities.cs) | `[SqlTable]` / `[Column]` entity interfaces for `hits_v1` and the materialized view |
+| [`Entities.cs`](Entities.cs) | nextorm `[SqlTable]` / `[Column]` entity interfaces |
+| [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of the same eleven queries |
+| [`Linq2DbEntities.cs`](Linq2DbEntities.cs) | linq2db `[Table]` / `[Column]` POCOs for `hits_v1` and the materialized view |
+| [`Comparison.cs`](Comparison.cs) | Runs both arms, prints `[ OK ]`/`[FAIL]`/`[DIFF]`, compares row counts |
+| [`Benchmarks.cs`](Benchmarks.cs) | BenchmarkDotNet class: one `[Benchmark]` per arm and query |
 | [`DemoDatabase.cs`](DemoDatabase.cs) | Testcontainers provisioning and `hits_v1` load |
-| [`Program.cs`](Program.cs) | Entry point; runs every query, catching per-query failures, and prints a summary |
+| [`Program.cs`](Program.cs) | Entry point: comparison run, or `--benchmark` |
 
 ## Running
 
@@ -31,10 +35,42 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
 ```
 
 Pass `--connection "<cs>"` (or set `CLICKHOUSE_ANALYTICS_CONNECTION`) to skip the container and load.
-The first run pulls `clickhouse/clickhouse-server:25.8-alpine` and several GB of data. The program runs
-every query, prints `[ OK ]`/`[FAIL]` per query, and ends with an `n/m succeeded` summary — a `FAIL` is a
-documented engine gap (`NotSupportedException`/`QueryPreparationException`); any other error still
-aborts the run. See [`../README.md`](../README.md) for details.
+The first run pulls `clickhouse/clickhouse-server:25.8-alpine` and several GB of data. Add
+`--only Name1,Name2` to run a subset and `--benchmark` to run the BenchmarkDotNet comparison.
+
+The plain run executes both arms per query, prints the first rows of each and a per-query verdict, then
+an `n/m queries matched in both arms` summary. `[ OK ]` means both arms returned the same number of
+rows; `[FAIL]` means one arm hit a documented engine gap; `[DIFF]` means the row counts differ. Any
+other exception still aborts the run. See [`../README.md`](../README.md) for the shared run notes.
+
+### Benchmarks
+
+`--benchmark` reuses the loaded dataset and runs BenchmarkDotNet in-process (`Job.ShortRun` +
+`InProcessEmitToolchain`, `[MemoryDiagnoser]`). Every query has a `Nextorm_*` baseline and a
+`Linq2Db_*` arm (`Incremental` is linq2db-only); a filtered run:
+
+```bash
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.clickhouse.analytics -c Release -- \
+  --benchmark --filter '*DailyTraffic*'
+```
+
+Set `NEXTORM_EXAMPLES_BENCH_FULL=1` for the full out-of-process BenchmarkDotNet job.
+
+### The linq2db arm
+
+`windowFunnel`, `groupArray`/tuples, `uniqMerge` and the `quantile` threshold are delivered through
+linq2db's raw terminals (`FromSql` / `Sql.Expr`) where its LINQ surface has no raw-aggregate API; the
+rest is regular linq2db LINQ (`Sql.Window`, `Count(DISTINCT)` in place of the approximate `uniq`,
+`Sql.Expr` for `multiIf`/array functions). ClickHouse calls the schema a *database*, so the tables are
+attached with `DatabaseName("datasets")`. Every deviation is annotated in
+[`Linq2DbQueries.cs`](Linq2DbQueries.cs).
+
+Two representation differences are intentional: `uniq` is **approximate** by design, so the linq2db arm
+uses `COUNT(DISTINCT)` (exact) and the `Users` column can differ by a small amount (for example
+`DeviceSplit` desktop: 86 944 vs 86 317 on the current dataset); and the retention matrix is projected
+with `toString(groupArray(...))` on the linq2db arm because CLR has no tuple-array type for it, while
+nextorm materialises `Tuple<…>[]` and formats it in C#.
 
 ## SQL → nextorm: general rules
 

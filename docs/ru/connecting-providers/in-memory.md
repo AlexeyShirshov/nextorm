@@ -97,7 +97,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 
 ## Потоковое чтение LOB
 
-Скалярные LOB-терминалы работают на провайдере in-memory. [`ToStream`](xref:NextORM.Core.QueryCommandExtensions.ToStream(NextORM.Core.QueryCommand{System.Byte[]},System.ReadOnlySpan{System.Object}))/`ToStreamAsync` возвращают `MemoryStream` над единственной спроецированной колонкой `byte[]`, а [`ToTextReader`](xref:NextORM.Core.QueryCommandExtensions.ToTextReader(NextORM.Core.QueryCommand{System.String},System.ReadOnlySpan{System.Object}))/`ToTextReaderAsync` — `StringReader` над единственной спроецированной `string`. Проекция должна быть ровно одной колонкой `byte[]`/`string`. Читается только первая строка; пустой результат и `NULL` в первом значении оба возвращают `Stream.Null`/`TextReader.Null` (скалярный API in-memory их не различает). Возвращённый объект — обычный BCL `MemoryStream`/`StringReader`, принадлежащий вызывающему, — на контексте освобождать нечего. Поскольку значение уже материализовано, выигрыша O(буфера) в памяти нет. Многоколоночный [`ToDataReader`](xref:NextORM.Core.QueryCommandExtensions.ToDataReader``1(NextORM.Core.QueryCommand{``0},System.ReadOnlySpan{System.Object})) остаётся неподдерживаемым (`NotSupportedException`: нет `DbDataReader`). См. [Потоковое чтение больших объектов](../guide/26-large-objects.md).
+Скалярные LOB-терминалы работают на провайдере in-memory. [`ToStream`](xref:NextORM.Core.QueryCommandExtensions.ToStream(NextORM.Core.QueryCommand{System.Byte[]},System.ReadOnlySpan{System.Object}))/`ToStreamAsync` возвращают `MemoryStream` над единственной спроецированной колонкой `byte[]`, а [`ToTextReader`](xref:NextORM.Core.QueryCommandExtensions.ToTextReader(NextORM.Core.QueryCommand{System.String},System.ReadOnlySpan{System.Object}))/`ToTextReaderAsync` — `StringReader` над единственной спроецированной `string`. Проекция должна быть ровно одной колонкой `byte[]`/`string`. Читается только первая строка; пустой результат и `NULL` в первом значении оба возвращают `Stream.Null`/`TextReader.Null` (скалярный API in-memory их не различает). Возвращённый объект — обычный BCL `MemoryStream`/`StringReader`, принадлежащий вызывающему, — на контексте освобождать нечего. Поскольку значение уже материализовано, выигрыша O(буфера) в памяти нет. Многоколоночный [`ToDataReader`](xref:NextORM.Core.QueryCommandExtensions.ToDataReader``1(NextORM.Core.QueryCommand{``0},System.ReadOnlySpan{System.Object})) остаётся неподдерживаемым (`NotSupportedException`: нет `DbDataReader`). См. [Потоковое чтение больших объектов](../guide/28-large-objects.md).
 
 ## Не поддерживается
 
@@ -136,7 +136,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 - **Коррелированные подзапросы** (подзапрос, ссылающийся на внешнюю строку, например
   `SqlFunctions.Sql.exists(inner.Where(i => i.Id == outer.Id))`) вычисляются один раз на внешнюю
   строку для корреляции глубины один: скалярные подзапросы, агрегатные терминалы, `EXISTS` и `IN`
-  работают в `SELECT`, `WHERE` и `ORDER BY` (см. [Подзапросы](../guide/05-subqueries.md#коррелированный-скалярный-подзапрос)).
+  работают в `SELECT`, `WHERE` и `ORDER BY` (см. [Подзапросы](../guide/07-subqueries.md#коррелированный-скалярный-подзапрос)).
   Глубина корреляции больше одной, ссылка на внешнюю строку во внутренней проекции или `ORDER BY`,
   коррелированный `GROUP BY`/`HAVING` и асинхронный внутренний источник бросают `NotSupportedException`.
 
@@ -166,7 +166,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 
 ---
 
-Source: `tests/nextorm.core.tests/InMemoryTests.cs:28,46,55,212,226,244,349,374`,
-`tests/nextorm.core.tests/InMemoryJoinTests.cs:14,47,64,107,145,162`,
+Source: `tests/nextorm.core.tests/InMemory/InMemoryTests.cs:28,46,55,212,226,244,349,374`,
+`tests/nextorm.core.tests/InMemory/InMemoryJoinTests.cs:14,47,64,107,145,162`,
 `src/nextorm.core/DataContext/InMemoryDataContext.cs`,
 `src/nextorm.core/Builders/InMemoryCommandBuilder.cs`.

@@ -218,7 +218,7 @@ native-only + measured-unsupported-legacy form described in §PLAN r=2 deltas.
   DB-backed `D198JsonRead` benchmark cannot run without disproportionate new infrastructure. The focused
   category therefore exercises the changed **converter/DOM seam** (`JsonColumnConverter` native
   resolution + object-root serialize/deserialize + `JsonDocument`/`JsonElement` adaptation) as a
-  fallback (`benchmarks/nextorm.benchmark/JsonColumnConverterBenchmark.cs`); the changed
+  fallback (`benchmarks/nextorm.benchmark/Json/JsonColumnConverterBenchmark.cs`); the changed
   `ClickHouseDataContext.CreateParam` **parameter-normalization path is covered only by CH integration
   tests, not by a database benchmark**. Numbers: CH object-root write ≈806 ns / read ≈897 ns, native
   resolve ≈4.18 ns, DOM adapt ≈694–830 ns (`perf-D198JsonRead.log`, comparison `perf-r2.md`). Acceptance
@@ -417,7 +417,7 @@ Tests (unit + integration):
 
 Benchmark (new):
 
-- `benchmarks/nextorm.benchmark/JsonColumnConverterBenchmark.cs` (new, focused `D198JsonRead`)
+- `benchmarks/nextorm.benchmark/Json/JsonColumnConverterBenchmark.cs` (new, focused `D198JsonRead`)
 
 Docs EN:
 
@@ -455,7 +455,7 @@ Task/status:
   `src/nextorm.core/Visitors/TypeFacts.cs:83-93` (D198.11),
   `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:639-652` (D198.11),
   `src/nextorm.clickhouse/ClickHouseDataContext.cs:61-112`,
-  `benchmarks/nextorm.benchmark/JsonColumnConverterBenchmark.cs`,
+  `benchmarks/nextorm.benchmark/Json/JsonColumnConverterBenchmark.cs`,
   `tests/nextorm.integration.tests/Providers/ClickHouseTestProvider.cs:180-209`,
   `tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:1114-1185,1626-1634`.
 - Docs touched (D198.7R2): `docs/guide/16-json.md`, `docs/guide/provider-specific-sql/clickhouse.md`,
@@ -481,7 +481,7 @@ Task/status:
 | E198-10 | full integration suite with `DOCKER_HOST` | required providers execute | PASS — exit 0, total 3300, succeeded 3103, skipped 197, failed 0; executed CH 205, PG 800, SQLite 668, SQL Server 676, MySQL 585; `artifacts/pdca/D198/full-integration-r2.log` | coder |
 | E198-11 | docs EN+RU diff + `dotnet docfx docs/docfx.json` | EN/RU parity; docfx 0 errors | PASS — docs EN+RU updated (storage matrix, `SupportsPostgresJsonSql` split, legacy measured-unsupported, bare-scalar limitation) in `docs/{guide,providers,advanced,infrastructure}/**/**.md` + `docs/ru/**`; docfx exit 0, `0 error(s)`, 2 pre-existing warnings; `artifacts/pdca/D198/docfx.log` | coder |
 | E198-12 | coverage | ≥ `MIN_LINE_COVERAGE`/`MIN_BRANCH_COVERAGE` | PASS — commands reproduced from `.github/workflows/dotnet.yml:45,55-59` (`dotnet-coverage collect` over `coverage.settings.xml` + `reportgenerator`); the workflow persists no exit code, so the recorded run is `artifacts/pdca/D198/coverage-r2.log` — line **88.6%** (≥ `MIN_LINE_COVERAGE=85`), branch **80%** (≥ `MIN_BRANCH_COVERAGE=75`); changed paths `JsonColumnConverter` 95%, `JsonColumnConverterFactory` 100%, `JsonSqlTranslator` 95.5%, `PostgresDialect` 94.1%; final-tree r=3 re-run `artifacts/pdca/D198/check3-coverage.log` exit 0 — 8816 total / 8618 succeeded / 0 failed, line **88.6%** / branch **80%** | coder |
-| E198-13 | scope/provenance `git diff --name-only` / `git status --short` / `git diff --check` | planned files only; no whitespace errors | PASS — `git diff --check` exit 0; final r=3 tree `git diff --name-only` **31** tracked-modified; `git status --short` **35** entries (4 untracked: `artifacts/pdca/`, `benchmarks/nextorm.benchmark/JsonColumnConverterBenchmark.cs`, this status file, `tests/nextorm.clickhouse.tests/ClickHouseJsonNativeStorageTests.cs`); all uncommitted on `1.0.9-rc1`; snapshots `artifacts/pdca/D198/scope-final-r2.txt`, `artifacts/pdca/D198/r3-scope.txt` | coder |
+| E198-13 | scope/provenance `git diff --name-only` / `git status --short` / `git diff --check` | planned files only; no whitespace errors | PASS — `git diff --check` exit 0; final r=3 tree `git diff --name-only` **31** tracked-modified; `git status --short` **35** entries (4 untracked: `artifacts/pdca/`, `benchmarks/nextorm.benchmark/Json/JsonColumnConverterBenchmark.cs`, this status file, `tests/nextorm.clickhouse.tests/ClickHouseJsonNativeStorageTests.cs`); all uncommitted on `1.0.9-rc1`; snapshots `artifacts/pdca/D198/scope-final-r2.txt`, `artifacts/pdca/D198/r3-scope.txt` | coder |
 | E198-14 | D198.9 contract carry-forward + compatibility audit | implementers + all `SupportsJson` refs with `file:line`; additive pattern recorded | PASS — refs above; default interface members + `SqlDialectBase` virtuals | coder |
 | E198-15 | r=2 inner-loop evidence: build + filtered unit tests + `validate_inner_loop.py` | exit 0; selected_count ≥ 1 per run; validator exit 0 | PASS — `artifacts/pdca/D198/evidence-r2-impl.json`; validator exit 0 | coder |
 | E198-16 | fresh r=2 n=2 re-verification (CHECK→DO return): solution build + filtered core/CH/PG unit + CH integration (DOCKER_HOST) + `validate_inner_loop.py report evidence-r2-do2.json` | build 0W/0E; every test run exit 0; CH integration executed (>0, not skipped); validator exit 0 | PASS — build exit 0 0W/0E `check2-build-final.log`; core 21/21 `check2-core.log`; CH unit 42/42 `check2-ch-unit.log`; PG unit 41/41 `check2-pg-unit.log`; CH integration 205 total/205 passed/0 failed/0 skipped `check2-ch-integration.log`; validator exit 0 on `evidence-r2-do2.json` | coder |

@@ -11,7 +11,7 @@ namespace NextORM.Examples.SqlServer.AdventureWorks;
 /// <c>README.md</c>), expressed with the nextorm LINQ API. Each method's comment names the SQL file it
 /// models and states whether it is <c>WORKING</c>; when it is not, the comment says why (with the
 /// roadmap document that tracks the gap). <c>README.md</c> maps every SQL construct to the nextorm
-/// construct that replaces it.
+/// construct that replaces it. Each method returns its row list; the runner prints it.
 /// </summary>
 public static class AdventureWorksQueries
 {
@@ -19,7 +19,7 @@ public static class AdventureWorksQueries
     // WORKING: two typed CTEs (`AsCte`); the outer query names the root (`WithAlias(Alias.Root)`) and both
     // LEFT JOINs (`Alias.SalesPerson` / `Alias.Manager`). The root projects the named `CustomerMetricRow`
     // DTO because the alias surface cannot render the chain's anonymous type. FORMAT uses DemoUdf.
-    public static async Task VipChurn(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> VipChurn(IDataContext ctx, CancellationToken ct)
     {
         // CTE CustomerOrders; the manager join stays in the outer SELECT. AsCte makes it a typed
         // descriptor (member access) instead of reading it by name through TableAlias.
@@ -76,13 +76,13 @@ public static class AdventureWorksQueries
             })
             .ToListAsync(ct);
 
-        Print("1. vip_churn", rows);
+        return rows;
     }
 
     // 2. Sql/mssql_rolling_kpi.sql
     // WORKING: typed CTE MonthlySales (`AsCte`); the outer query reads it with member access, formats via
     // DemoUdf and applies cumulative/3-month window frames.
-    public static async Task RollingKpi(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> RollingKpi(IDataContext ctx, CancellationToken ct)
     {
         // CTE MonthlySales; AsCte makes it a typed descriptor (member access) instead of reading it by name.
         var monthly = ctx.From<ISalesOrderHeader>()
@@ -123,13 +123,13 @@ public static class AdventureWorksQueries
             })
             .ToListAsync(ct);
 
-        Print("2. rolling_kpi", rows);
+        return rows;
     }
 
     // 3. Sql/mssql_supply_chain.sql
     // WORKING: two typed CTEs (`AsCte`: SupplierDelays, ProductionImpact); the outer query joins them and
     // reads each side with member access.
-    public static async Task SupplyChain(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> SupplyChain(IDataContext ctx, CancellationToken ct)
     {
         // CTE SupplierDelays
         var supplierDelays = ctx.From<IPurchaseOrderDetail>()
@@ -172,14 +172,14 @@ public static class AdventureWorksQueries
             })
             .ToListAsync(ct);
 
-        Print("3. supply_chain", rows);
+        return rows;
     }
 
     // 4. Sql/mssql_product_abc_xyz.sql
     // WORKING: three chained typed CTEs (`AsCte`: ProductQuarterlySales, ProductAggregates, AbcRanking); the
     // running-share windows and CASE-based ABC/XYZ classes are computed over the CTEs. `avg`/`stdev` are
     // projected as nullable (`(double?)`) so the one-row-per-group case stays distinguishable from zero.
-    public static async Task ProductAbcXyz(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> ProductAbcXyz(IDataContext ctx, CancellationToken ct)
     {
         // CTE ProductQuarterlySales.
         var quarterly = ctx.From<ISalesOrderDetail>()
@@ -244,14 +244,14 @@ public static class AdventureWorksQueries
             })
             .ToListAsync(ct);
 
-        Print("4. product_abc_xyz", rows);
+        return rows;
     }
 
     // 5. Sql/mssql_quarterly_pivot.sql
     // WORKING: a derived query (5-table join with a computed Margin and FOR column) reshaped by the
     // native PIVOT. The typed overload declares the result members (the grouping category and the four
     // quarter cells) and each pivot value once, deriving the IN list from the projection.
-    public static async Task QuarterlyPivot(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> QuarterlyPivot(IDataContext ctx, CancellationToken ct)
     {
         var orderMargins = ctx.From<ISalesOrderDetail>()
             .Join(ctx.From<ISalesOrderHeader>(), (sod, soh) => sod.SalesOrderId == soh.SalesOrderId)
@@ -290,12 +290,12 @@ public static class AdventureWorksQueries
             })
             .ToListAsync(ct);
 
-        Print("5. quarterly_pivot", rows);
+        return rows;
     }
 
     // 6. top_products_by_category
     // WORKING: ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC) top-N per group.
-    public static async Task TopProductsByCategory(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> TopProductsByCategory(IDataContext ctx, CancellationToken ct)
     {
         var productRevenue = ctx.From<ISalesOrderDetail>()
             .Join(ctx.From<ISalesOrderHeader>(), (sod, soh) => sod.SalesOrderId == soh.SalesOrderId)
@@ -335,12 +335,12 @@ public static class AdventureWorksQueries
             })
             .ToListAsync(ct);
 
-        Print("6. top_products_by_category", rows);
+        return rows;
     }
 
     // 7. territory_yoy
     // WORKING: LAG over a yearly aggregate (year-over-year growth).
-    public static async Task TerritoryYearOverYear(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> TerritoryYearOverYear(IDataContext ctx, CancellationToken ct)
     {
         var yearly = ctx.From<ISalesOrderHeader>()
             .Join(ctx.From<ISalesTerritory>(), (soh, st) => soh.TerritoryId == st.TerritoryId)
@@ -376,12 +376,12 @@ public static class AdventureWorksQueries
             })
             .ToListAsync(ct);
 
-        Print("7. territory_yoy", rows);
+        return rows;
     }
 
     // 8. customer_rfm
     // WORKING: NTILE(4) OVER (ORDER BY … DESC) RFM segmentation.
-    public static async Task CustomerRfm(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> CustomerRfm(IDataContext ctx, CancellationToken ct)
     {
         var rfm = ctx.From<ISalesOrderHeader>()
             .Join(ctx.From<ICustomer>(), (soh, c) => soh.CustomerId == c.CustomerId)
@@ -424,12 +424,12 @@ public static class AdventureWorksQueries
             })
             .ToListAsync(ct);
 
-        Print("8. customer_rfm", rows);
+        return rows;
     }
 
     // 9. quota_attainment
     // WORKING: per-entity target vs actual, computed in Select.
-    public static async Task QuotaAttainment(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> QuotaAttainment(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<ISalesPerson>()
             .Join(ctx.From<IPerson>(), (sp, per) => sp.BusinessEntityId == per.BusinessEntityId)
@@ -444,12 +444,12 @@ public static class AdventureWorksQueries
             })
             .ToListAsync(ct);
 
-        Print("9. quota_attainment", rows);
+        return rows;
     }
 
     // 10. territory_growth_mom
     // WORKING: LAG over a monthly aggregate (month-over-month % change).
-    public static async Task TerritoryGrowthMonthOverMonth(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> TerritoryGrowthMonthOverMonth(IDataContext ctx, CancellationToken ct)
     {
         var monthly = ctx.From<ISalesOrderHeader>()
             .Join(ctx.From<ISalesTerritory>(), (soh, st) => soh.TerritoryId == st.TerritoryId)
@@ -485,12 +485,12 @@ public static class AdventureWorksQueries
             })
             .ToListAsync(ct);
 
-        Print("10. territory_growth_mom", rows);
+        return rows;
     }
 
     // 11. customer_pareto
     // WORKING: ABC / Pareto 80-20 concentration with running window shares.
-    public static async Task CustomerPareto(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> CustomerPareto(IDataContext ctx, CancellationToken ct)
     {
         var customerRevenue = ctx.From<ISalesOrderHeader>()
             .GroupBy(soh => new { soh.CustomerId })
@@ -517,22 +517,9 @@ public static class AdventureWorksQueries
             })
             .ToListAsync(ct);
 
-        Print("11. customer_pareto", rows);
+        return rows;
     }
 
-    private static void Print(string title, IEnumerable<object> rows)
-    {
-        var list = rows.ToList();
-        Console.WriteLine($"-- {title}: {list.Count} row(s)");
-
-        foreach (var row in list.Take(10))
-            Console.WriteLine("   " + JsonSerializer.Serialize(row));
-
-        if (list.Count > 10)
-            Console.WriteLine("   ...");
-
-        Console.WriteLine();
-    }
 }
 
 // A named projection for the CustomerMetrics CTE. The named join-alias surface (#160) generates an

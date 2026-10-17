@@ -4,7 +4,9 @@
 
 ## Построенная команда
 
-`ctx.From<TEntity>()` возвращает [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); каждый fluent-оператор (`Where`, `Join`, `Select`, `OrderBy`, `GroupBy`, `With`, хинты, ...) записывает часть намерения в [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1). Пока ничего не исполняется — команда это описание запроса, а не живое соединение.
+`ctx.From<TEntity>()` — одна из фабрик построителей на контексте (все перечислены в разделе [точки входа построителей](index.md#точки-входа-построителей)); она возвращает [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1). Каждый fluent-оператор (`Where`, `Join`, `Select`, `OrderBy`, `GroupBy`, `With`, хинты, ...) записывает часть намерения в [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1). Пока ничего не исполняется — команда это описание запроса, а не живое соединение.
+
+Остальные фабрики открывают другие формы утверждений и возвращают свои построители (`InsertBuilder<T>`, `UpdateBuilder<T>`, `DeleteBuilder<T>`, `MergeBuilder<T>`, `BatchBuilder`, ...). Такие утверждения рендерятся и исполняются путями мутаций и батчей, а не кэшем планов, о котором здесь речь; эта страница идёт по пути `SELECT`.
 
 Именно вызываемый терминал (`ToListAsync`, `FirstAsync`, `ToAsyncEnumerable`, ...) прогоняет команду через остальной конвейер. Один и тот же тип команды несёт проекцию, так что `Select` фиксирует `TResult` один раз, и терминалы возвращают эту форму.
 
@@ -31,5 +33,5 @@
 * [Обзор движка](index.md)
 * [Исполнение и строки](02-execution-and-rows.md)
 * [Кэш планов и переиспользование](03-plan-cache-and-reuse.md)
-* [Хинты запросов](../guide/13-query-hints.md)
+* [Хинты запросов](../guide/15-query-hints.md)
 * [Провайдер-специфичный SQL](../guide/provider-specific-sql/overview.md)

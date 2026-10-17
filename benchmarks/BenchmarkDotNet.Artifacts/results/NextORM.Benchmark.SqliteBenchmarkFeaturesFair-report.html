@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>NextORM.Benchmark.SqliteBenchmarkFeaturesFair-20261017-150133</title>
+<title>NextORM.Benchmark.SqliteBenchmarkFeaturesFair-20261017-203847</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -16,68 +16,122 @@
 BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
 AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
 .NET SDK 10.0.401
-  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  ShortRun : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
 </code></pre>
-<pre><code>Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
-LaunchCount=1  WarmupCount=3  
+<pre><code>Job=ShortRun  IterationCount=3  LaunchCount=1  
+WarmupCount=3  
 </code></pre>
 
 <table>
-<thead><tr><th>Method                   </th><th>Categories </th><th>Mean</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+<thead><tr><th>Method                   </th><th>Toolchain       </th><th>Categories </th><th>Mean</th><th>Median</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>A_Nextorm_Prepared_CaseWhen</td><td>A_CaseWhen</td><td>92.56 &mu;s</td><td>0.8545</td><td>-</td><td>7.27 KB</td>
-</tr><tr><td>A_Dapper_CaseWhen</td><td>A_CaseWhen</td><td>145.99 &mu;s</td><td>1.4648</td><td>-</td><td>13.44 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_CaseWhen</td><td>A_CaseWhen</td><td>150.78 &mu;s</td><td>1.7090</td><td>-</td><td>15.94 KB</td>
-</tr><tr><td>A_EFCore_Compiled_CaseWhen</td><td>A_CaseWhen</td><td>356.08 &mu;s</td><td>9.2773</td><td>4.3945</td><td>78.99 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_Cte</td><td>A_Cte</td><td>94.92 &mu;s</td><td>0.8545</td><td>-</td><td>7.74 KB</td>
-</tr><tr><td>A_Dapper_Cte</td><td>A_Cte</td><td>214.31 &mu;s</td><td>1.7090</td><td>-</td><td>15.7 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_Cte</td><td>A_Cte</td><td>215.21 &mu;s</td><td>1.9531</td><td>-</td><td>17.74 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_Distinct</td><td>A_Distinct</td><td>110.14 &mu;s</td><td>0.8545</td><td>-</td><td>7.27 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_Distinct</td><td>A_Distinct</td><td>174.13 &mu;s</td><td>1.7090</td><td>-</td><td>15.94 KB</td>
-</tr><tr><td>A_Dapper_Distinct</td><td>A_Distinct</td><td>185.47 &mu;s</td><td>1.7090</td><td>-</td><td>15.55 KB</td>
-</tr><tr><td>A_EFCore_Compiled_Distinct</td><td>A_Distinct</td><td>406.01 &mu;s</td><td>9.2773</td><td>4.3945</td><td>76.64 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_Except</td><td>A_Except</td><td>110.69 &mu;s</td><td>0.8545</td><td>-</td><td>7.42 KB</td>
-</tr><tr><td>A_Dapper_Except</td><td>A_Except</td><td>177.18 &mu;s</td><td>1.7090</td><td>-</td><td>14.38 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_Except</td><td>A_Except</td><td>207.97 &mu;s</td><td>1.9531</td><td>-</td><td>16.8 KB</td>
-</tr><tr><td>A_EFCore_Compiled_Except</td><td>A_Except</td><td>434.70 &mu;s</td><td>10.7422</td><td>5.3711</td><td>88.13 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_ListContains</td><td>A_InList</td><td>123.25 &mu;s</td><td>1.7090</td><td>-</td><td>15.7 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_In</td><td>A_InList</td><td>124.24 &mu;s</td><td>1.7090</td><td>-</td><td>15.7 KB</td>
-</tr><tr><td>A_Dapper_In</td><td>A_InList</td><td>186.52 &mu;s</td><td>1.4648</td><td>-</td><td>12.66 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_In</td><td>A_InList</td><td>435.32 &mu;s</td><td>18.5547</td><td>-</td><td>152.35 KB</td>
-</tr><tr><td>A_EFCore_Compiled_In</td><td>A_InList</td><td>606.98 &mu;s</td><td>17.5781</td><td>5.8594</td><td>147.74 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_Intersect</td><td>A_Intersect</td><td>103.61 &mu;s</td><td>0.8545</td><td>-</td><td>7.27 KB</td>
-</tr><tr><td>A_Dapper_Intersect</td><td>A_Intersect</td><td>167.73 &mu;s</td><td>1.4648</td><td>-</td><td>12.89 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_Intersect</td><td>A_Intersect</td><td>196.58 &mu;s</td><td>1.9531</td><td>-</td><td>16.33 KB</td>
-</tr><tr><td>A_EFCore_Compiled_Intersect</td><td>A_Intersect</td><td>417.51 &mu;s</td><td>9.2773</td><td>4.3945</td><td>79.38 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_Join4</td><td>A_Join4</td><td>126.27 &mu;s</td><td>1.2207</td><td>-</td><td>10.55 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_Join4</td><td>A_Join4</td><td>232.67 &mu;s</td><td>2.4414</td><td>-</td><td>20.7 KB</td>
-</tr><tr><td>A_Dapper_Join4</td><td>A_Join4</td><td>255.22 &mu;s</td><td>2.4414</td><td>-</td><td>20.24 KB</td>
-</tr><tr><td>A_EFCore_Compiled_Join4</td><td>A_Join4</td><td>468.19 &mu;s</td><td>10.2539</td><td>4.8828</td><td>84.92 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_LeftJoin</td><td>A_LeftJoin</td><td>120.89 &mu;s</td><td>1.4648</td><td>-</td><td>12.03 KB</td>
-</tr><tr><td>A_Dapper_LeftJoin</td><td>A_LeftJoin</td><td>198.44 &mu;s</td><td>2.6855</td><td>-</td><td>22.19 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_LeftJoin</td><td>A_LeftJoin</td><td>202.90 &mu;s</td><td>2.6855</td><td>-</td><td>23.2 KB</td>
-</tr><tr><td>A_EFCore_Compiled_LeftJoin</td><td>A_LeftJoin</td><td>416.43 &mu;s</td><td>11.7188</td><td>5.8594</td><td>99.22 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_RecursiveCte</td><td>A_RecursiveCte</td><td>126.38 &mu;s</td><td>0.7324</td><td>-</td><td>7.34 KB</td>
-</tr><tr><td>A_Dapper_RecursiveCte</td><td>A_RecursiveCte</td><td>242.36 &mu;s</td><td>1.4648</td><td>-</td><td>15.31 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_RecursiveCte</td><td>A_RecursiveCte</td><td>257.26 &mu;s</td><td>1.9531</td><td>-</td><td>17.81 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_Contains</td><td>A_StringFunctions</td><td>89.62 &mu;s</td><td>0.8545</td><td>-</td><td>7.19 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_ToUpper</td><td>A_StringFunctions</td><td>92.62 &mu;s</td><td>0.8545</td><td>-</td><td>7.5 KB</td>
-</tr><tr><td>A_Dapper_ToUpper</td><td>A_StringFunctions</td><td>139.21 &mu;s</td><td>1.4648</td><td>-</td><td>12.81 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_ToUpper</td><td>A_StringFunctions</td><td>151.82 &mu;s</td><td>1.9531</td><td>-</td><td>16.41 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_Contains</td><td>A_StringFunctions</td><td>160.28 &mu;s</td><td>1.9531</td><td>-</td><td>16.17 KB</td>
-</tr><tr><td>A_Dapper_Contains</td><td>A_StringFunctions</td><td>195.50 &mu;s</td><td>1.9531</td><td>-</td><td>17.19 KB</td>
-</tr><tr><td>A_EFCore_Compiled_ToUpper</td><td>A_StringFunctions</td><td>350.82 &mu;s</td><td>8.7891</td><td>4.3945</td><td>74.92 KB</td>
-</tr><tr><td>A_EFCore_Compiled_Contains</td><td>A_StringFunctions</td><td>366.51 &mu;s</td><td>8.7891</td><td>4.3945</td><td>74.69 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_Udf</td><td>A_Udf</td><td>92.66 &mu;s</td><td>0.8545</td><td>-</td><td>7.5 KB</td>
-</tr><tr><td>A_Dapper_Udf</td><td>A_Udf</td><td>140.82 &mu;s</td><td>1.4648</td><td>-</td><td>12.81 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_Udf</td><td>A_Udf</td><td>150.54 &mu;s</td><td>1.9531</td><td>-</td><td>16.41 KB</td>
-</tr><tr><td>A_EFCore_Compiled_Udf</td><td>A_Udf</td><td>348.23 &mu;s</td><td>8.7891</td><td>4.3945</td><td>74.92 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_RowNumber</td><td>A_Window</td><td>144.44 &mu;s</td><td>0.9766</td><td>-</td><td>8.28 KB</td>
-</tr><tr><td>A_Nextorm_Prepared_SumOver</td><td>A_Window</td><td>148.17 &mu;s</td><td>0.9766</td><td>-</td><td>8.52 KB</td>
-</tr><tr><td>A_Dapper_RowNumber</td><td>A_Window</td><td>300.39 &mu;s</td><td>1.4648</td><td>-</td><td>15.39 KB</td>
-</tr><tr><td>A_Dapper_SumOver</td><td>A_Window</td><td>301.80 &mu;s</td><td>1.4648</td><td>-</td><td>15.47 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_SumOver</td><td>A_Window</td><td>318.43 &mu;s</td><td>1.9531</td><td>-</td><td>17.42 KB</td>
-</tr><tr><td>A_Linq2Db_Compiled_RowNumber</td><td>A_Window</td><td>322.25 &mu;s</td><td>1.9531</td><td>-</td><td>17.35 KB</td>
+</thead><tbody><tr><td>A_Nextorm_Prepared_CaseWhen</td><td>Default</td><td>A_CaseWhen</td><td>98.16 &mu;s</td><td>97.05 &mu;s</td><td>0.8545</td><td>-</td><td>7.27 KB</td>
+</tr><tr><td>A_Dapper_CaseWhen</td><td>Default</td><td>A_CaseWhen</td><td>146.41 &mu;s</td><td>143.46 &mu;s</td><td>1.4648</td><td>-</td><td>13.44 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_CaseWhen</td><td>Default</td><td>A_CaseWhen</td><td>149.86 &mu;s</td><td>148.71 &mu;s</td><td>1.7090</td><td>-</td><td>15.94 KB</td>
+</tr><tr><td>A_EFCore_Compiled_CaseWhen</td><td>Default</td><td>A_CaseWhen</td><td>363.36 &mu;s</td><td>363.34 &mu;s</td><td>9.2773</td><td>4.3945</td><td>78.98 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Cte</td><td>Default</td><td>A_Cte</td><td>98.16 &mu;s</td><td>98.08 &mu;s</td><td>0.8545</td><td>-</td><td>7.73 KB</td>
+</tr><tr><td>A_Dapper_Cte</td><td>Default</td><td>A_Cte</td><td>210.01 &mu;s</td><td>209.41 &mu;s</td><td>1.7090</td><td>-</td><td>15.7 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Cte</td><td>Default</td><td>A_Cte</td><td>211.13 &mu;s</td><td>211.07 &mu;s</td><td>1.9531</td><td>-</td><td>17.73 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Distinct</td><td>Default</td><td>A_Distinct</td><td>113.71 &mu;s</td><td>113.43 &mu;s</td><td>0.8545</td><td>-</td><td>7.27 KB</td>
+</tr><tr><td>A_Dapper_Distinct</td><td>Default</td><td>A_Distinct</td><td>179.64 &mu;s</td><td>179.36 &mu;s</td><td>1.7090</td><td>-</td><td>15.55 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Distinct</td><td>Default</td><td>A_Distinct</td><td>184.73 &mu;s</td><td>185.08 &mu;s</td><td>1.7090</td><td>-</td><td>15.94 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Distinct</td><td>Default</td><td>A_Distinct</td><td>394.69 &mu;s</td><td>393.14 &mu;s</td><td>9.2773</td><td>4.3945</td><td>76.64 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Except</td><td>Default</td><td>A_Except</td><td>113.20 &mu;s</td><td>112.60 &mu;s</td><td>0.8545</td><td>-</td><td>7.42 KB</td>
+</tr><tr><td>A_Dapper_Except</td><td>Default</td><td>A_Except</td><td>181.07 &mu;s</td><td>182.89 &mu;s</td><td>1.7090</td><td>-</td><td>14.38 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Except</td><td>Default</td><td>A_Except</td><td>220.50 &mu;s</td><td>218.23 &mu;s</td><td>1.9531</td><td>-</td><td>16.8 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Except</td><td>Default</td><td>A_Except</td><td>428.37 &mu;s</td><td>427.90 &mu;s</td><td>10.7422</td><td>5.3711</td><td>88.13 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_In</td><td>Default</td><td>A_InList</td><td>124.94 &mu;s</td><td>124.33 &mu;s</td><td>1.7090</td><td>-</td><td>15.7 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_ListContains</td><td>Default</td><td>A_InList</td><td>126.09 &mu;s</td><td>125.48 &mu;s</td><td>1.7090</td><td>-</td><td>15.7 KB</td>
+</tr><tr><td>A_Dapper_In</td><td>Default</td><td>A_InList</td><td>181.19 &mu;s</td><td>180.98 &mu;s</td><td>1.4648</td><td>-</td><td>12.66 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_In</td><td>Default</td><td>A_InList</td><td>414.07 &mu;s</td><td>412.75 &mu;s</td><td>18.0664</td><td>-</td><td>151.09 KB</td>
+</tr><tr><td>A_EFCore_Compiled_In</td><td>Default</td><td>A_InList</td><td>583.36 &mu;s</td><td>579.77 &mu;s</td><td>17.5781</td><td>5.8594</td><td>147.74 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Intersect</td><td>Default</td><td>A_Intersect</td><td>116.82 &mu;s</td><td>112.27 &mu;s</td><td>0.8545</td><td>-</td><td>7.27 KB</td>
+</tr><tr><td>A_Dapper_Intersect</td><td>Default</td><td>A_Intersect</td><td>161.86 &mu;s</td><td>159.87 &mu;s</td><td>1.4648</td><td>-</td><td>12.89 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Intersect</td><td>Default</td><td>A_Intersect</td><td>196.30 &mu;s</td><td>196.11 &mu;s</td><td>1.9531</td><td>-</td><td>16.33 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Intersect</td><td>Default</td><td>A_Intersect</td><td>439.55 &mu;s</td><td>444.33 &mu;s</td><td>9.2773</td><td>4.3945</td><td>79.38 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Join4</td><td>Default</td><td>A_Join4</td><td>129.58 &mu;s</td><td>129.50 &mu;s</td><td>1.2207</td><td>-</td><td>10.55 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Join4</td><td>Default</td><td>A_Join4</td><td>236.00 &mu;s</td><td>233.23 &mu;s</td><td>2.4414</td><td>-</td><td>20.7 KB</td>
+</tr><tr><td>A_Dapper_Join4</td><td>Default</td><td>A_Join4</td><td>276.47 &mu;s</td><td>284.11 &mu;s</td><td>2.4414</td><td>-</td><td>20.23 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Join4</td><td>Default</td><td>A_Join4</td><td>465.15 &mu;s</td><td>464.88 &mu;s</td><td>9.7656</td><td>4.8828</td><td>84.92 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_LeftJoin</td><td>Default</td><td>A_LeftJoin</td><td>138.33 &mu;s</td><td>137.32 &mu;s</td><td>1.4648</td><td>-</td><td>12.03 KB</td>
+</tr><tr><td>A_Dapper_LeftJoin</td><td>Default</td><td>A_LeftJoin</td><td>259.39 &mu;s</td><td>267.36 &mu;s</td><td>1.9531</td><td>-</td><td>22.19 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_LeftJoin</td><td>Default</td><td>A_LeftJoin</td><td>279.86 &mu;s</td><td>275.74 &mu;s</td><td>2.4414</td><td>-</td><td>23.2 KB</td>
+</tr><tr><td>A_EFCore_Compiled_LeftJoin</td><td>Default</td><td>A_LeftJoin</td><td>421.33 &mu;s</td><td>422.15 &mu;s</td><td>11.7188</td><td>5.8594</td><td>99.22 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_RecursiveCte</td><td>Default</td><td>A_RecursiveCte</td><td>124.08 &mu;s</td><td>123.96 &mu;s</td><td>0.7324</td><td>-</td><td>7.34 KB</td>
+</tr><tr><td>A_Dapper_RecursiveCte</td><td>Default</td><td>A_RecursiveCte</td><td>238.27 &mu;s</td><td>238.29 &mu;s</td><td>1.7090</td><td>-</td><td>15.31 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_RecursiveCte</td><td>Default</td><td>A_RecursiveCte</td><td>261.13 &mu;s</td><td>258.67 &mu;s</td><td>1.9531</td><td>-</td><td>17.81 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Contains</td><td>Default</td><td>A_StringFunctions</td><td>94.78 &mu;s</td><td>94.44 &mu;s</td><td>0.8545</td><td>-</td><td>7.19 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_ToUpper</td><td>Default</td><td>A_StringFunctions</td><td>94.99 &mu;s</td><td>94.84 &mu;s</td><td>0.8545</td><td>-</td><td>7.5 KB</td>
+</tr><tr><td>A_Dapper_ToUpper</td><td>Default</td><td>A_StringFunctions</td><td>147.26 &mu;s</td><td>144.65 &mu;s</td><td>1.4648</td><td>-</td><td>12.81 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_ToUpper</td><td>Default</td><td>A_StringFunctions</td><td>154.62 &mu;s</td><td>154.79 &mu;s</td><td>1.9531</td><td>-</td><td>16.41 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Contains</td><td>Default</td><td>A_StringFunctions</td><td>157.13 &mu;s</td><td>157.42 &mu;s</td><td>1.9531</td><td>-</td><td>16.17 KB</td>
+</tr><tr><td>A_Dapper_Contains</td><td>Default</td><td>A_StringFunctions</td><td>199.12 &mu;s</td><td>196.55 &mu;s</td><td>1.9531</td><td>-</td><td>17.19 KB</td>
+</tr><tr><td>A_EFCore_Compiled_ToUpper</td><td>Default</td><td>A_StringFunctions</td><td>362.00 &mu;s</td><td>349.47 &mu;s</td><td>8.7891</td><td>4.3945</td><td>74.92 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Contains</td><td>Default</td><td>A_StringFunctions</td><td>378.05 &mu;s</td><td>377.59 &mu;s</td><td>8.7891</td><td>4.3945</td><td>74.69 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Udf</td><td>Default</td><td>A_Udf</td><td>98.04 &mu;s</td><td>98.26 &mu;s</td><td>0.8545</td><td>-</td><td>7.5 KB</td>
+</tr><tr><td>A_Dapper_Udf</td><td>Default</td><td>A_Udf</td><td>143.71 &mu;s</td><td>143.39 &mu;s</td><td>1.4648</td><td>-</td><td>12.81 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Udf</td><td>Default</td><td>A_Udf</td><td>148.12 &mu;s</td><td>147.86 &mu;s</td><td>1.9531</td><td>-</td><td>16.41 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Udf</td><td>Default</td><td>A_Udf</td><td>354.41 &mu;s</td><td>352.72 &mu;s</td><td>8.7891</td><td>4.3945</td><td>74.92 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_SumOver</td><td>Default</td><td>A_Window</td><td>145.09 &mu;s</td><td>145.09 &mu;s</td><td>0.9766</td><td>-</td><td>8.52 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_RowNumber</td><td>Default</td><td>A_Window</td><td>146.76 &mu;s</td><td>146.94 &mu;s</td><td>0.9766</td><td>-</td><td>8.28 KB</td>
+</tr><tr><td>A_Dapper_SumOver</td><td>Default</td><td>A_Window</td><td>295.02 &mu;s</td><td>293.95 &mu;s</td><td>1.4648</td><td>-</td><td>15.47 KB</td>
+</tr><tr><td>A_Dapper_RowNumber</td><td>Default</td><td>A_Window</td><td>298.64 &mu;s</td><td>297.80 &mu;s</td><td>1.4648</td><td>-</td><td>15.39 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_SumOver</td><td>Default</td><td>A_Window</td><td>307.89 &mu;s</td><td>308.69 &mu;s</td><td>1.9531</td><td>-</td><td>17.42 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_RowNumber</td><td>Default</td><td>A_Window</td><td>309.44 &mu;s</td><td>309.70 &mu;s</td><td>1.9531</td><td>-</td><td>17.34 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_CaseWhen</td><td>InProcessEmitToolchain</td><td>A_CaseWhen</td><td>93.41 &mu;s</td><td>93.39 &mu;s</td><td>0.8545</td><td>-</td><td>7.27 KB</td>
+</tr><tr><td>A_Dapper_CaseWhen</td><td>InProcessEmitToolchain</td><td>A_CaseWhen</td><td>142.62 &mu;s</td><td>142.49 &mu;s</td><td>1.4648</td><td>-</td><td>13.44 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_CaseWhen</td><td>InProcessEmitToolchain</td><td>A_CaseWhen</td><td>149.08 &mu;s</td><td>149.43 &mu;s</td><td>1.7090</td><td>-</td><td>15.94 KB</td>
+</tr><tr><td>A_EFCore_Compiled_CaseWhen</td><td>InProcessEmitToolchain</td><td>A_CaseWhen</td><td>345.74 &mu;s</td><td>346.63 &mu;s</td><td>9.2773</td><td>4.3945</td><td>78.99 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Cte</td><td>InProcessEmitToolchain</td><td>A_Cte</td><td>96.41 &mu;s</td><td>96.10 &mu;s</td><td>0.8545</td><td>-</td><td>7.74 KB</td>
+</tr><tr><td>A_Dapper_Cte</td><td>InProcessEmitToolchain</td><td>A_Cte</td><td>207.03 &mu;s</td><td>207.29 &mu;s</td><td>1.7090</td><td>-</td><td>15.7 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Cte</td><td>InProcessEmitToolchain</td><td>A_Cte</td><td>217.37 &mu;s</td><td>215.27 &mu;s</td><td>1.9531</td><td>-</td><td>17.74 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Distinct</td><td>InProcessEmitToolchain</td><td>A_Distinct</td><td>112.02 &mu;s</td><td>111.99 &mu;s</td><td>0.8545</td><td>-</td><td>7.27 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Distinct</td><td>InProcessEmitToolchain</td><td>A_Distinct</td><td>178.95 &mu;s</td><td>178.40 &mu;s</td><td>1.7090</td><td>-</td><td>15.94 KB</td>
+</tr><tr><td>A_Dapper_Distinct</td><td>InProcessEmitToolchain</td><td>A_Distinct</td><td>187.21 &mu;s</td><td>187.60 &mu;s</td><td>1.7090</td><td>-</td><td>15.55 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Distinct</td><td>InProcessEmitToolchain</td><td>A_Distinct</td><td>409.94 &mu;s</td><td>411.86 &mu;s</td><td>9.2773</td><td>4.3945</td><td>76.64 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Except</td><td>InProcessEmitToolchain</td><td>A_Except</td><td>109.73 &mu;s</td><td>109.77 &mu;s</td><td>0.8545</td><td>-</td><td>7.42 KB</td>
+</tr><tr><td>A_Dapper_Except</td><td>InProcessEmitToolchain</td><td>A_Except</td><td>170.20 &mu;s</td><td>170.19 &mu;s</td><td>1.7090</td><td>-</td><td>14.38 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Except</td><td>InProcessEmitToolchain</td><td>A_Except</td><td>220.74 &mu;s</td><td>218.60 &mu;s</td><td>1.9531</td><td>-</td><td>16.8 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Except</td><td>InProcessEmitToolchain</td><td>A_Except</td><td>514.12 &mu;s</td><td>437.97 &mu;s</td><td>10.7422</td><td>5.3711</td><td>88.13 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_In</td><td>InProcessEmitToolchain</td><td>A_InList</td><td>124.16 &mu;s</td><td>124.10 &mu;s</td><td>1.7090</td><td>-</td><td>15.7 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_ListContains</td><td>InProcessEmitToolchain</td><td>A_InList</td><td>125.97 &mu;s</td><td>125.09 &mu;s</td><td>1.7090</td><td>-</td><td>15.7 KB</td>
+</tr><tr><td>A_Dapper_In</td><td>InProcessEmitToolchain</td><td>A_InList</td><td>264.49 &mu;s</td><td>184.81 &mu;s</td><td>0.9766</td><td>-</td><td>12.66 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_In</td><td>InProcessEmitToolchain</td><td>A_InList</td><td>771.85 &mu;s</td><td>816.75 &mu;s</td><td>18.5547</td><td>-</td><td>152.35 KB</td>
+</tr><tr><td>A_EFCore_Compiled_In</td><td>InProcessEmitToolchain</td><td>A_InList</td><td>907.04 &mu;s</td><td>933.39 &mu;s</td><td>17.5781</td><td>5.8594</td><td>147.74 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Intersect</td><td>InProcessEmitToolchain</td><td>A_Intersect</td><td>104.33 &mu;s</td><td>104.45 &mu;s</td><td>0.8545</td><td>-</td><td>7.27 KB</td>
+</tr><tr><td>A_Dapper_Intersect</td><td>InProcessEmitToolchain</td><td>A_Intersect</td><td>159.19 &mu;s</td><td>159.39 &mu;s</td><td>1.4648</td><td>-</td><td>12.89 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Intersect</td><td>InProcessEmitToolchain</td><td>A_Intersect</td><td>193.29 &mu;s</td><td>193.38 &mu;s</td><td>1.9531</td><td>-</td><td>16.33 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Intersect</td><td>InProcessEmitToolchain</td><td>A_Intersect</td><td>423.36 &mu;s</td><td>424.12 &mu;s</td><td>9.2773</td><td>4.3945</td><td>79.38 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Join4</td><td>InProcessEmitToolchain</td><td>A_Join4</td><td>149.13 &mu;s</td><td>153.75 &mu;s</td><td>1.2207</td><td>-</td><td>10.55 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Join4</td><td>InProcessEmitToolchain</td><td>A_Join4</td><td>240.64 &mu;s</td><td>236.77 &mu;s</td><td>2.4414</td><td>-</td><td>20.7 KB</td>
+</tr><tr><td>A_Dapper_Join4</td><td>InProcessEmitToolchain</td><td>A_Join4</td><td>330.10 &mu;s</td><td>336.84 &mu;s</td><td>2.4414</td><td>-</td><td>20.23 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Join4</td><td>InProcessEmitToolchain</td><td>A_Join4</td><td>555.82 &mu;s</td><td>479.30 &mu;s</td><td>9.7656</td><td>4.8828</td><td>84.93 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_LeftJoin</td><td>InProcessEmitToolchain</td><td>A_LeftJoin</td><td>133.06 &mu;s</td><td>125.81 &mu;s</td><td>1.4648</td><td>-</td><td>12.03 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_LeftJoin</td><td>InProcessEmitToolchain</td><td>A_LeftJoin</td><td>203.64 &mu;s</td><td>203.50 &mu;s</td><td>2.6855</td><td>-</td><td>23.2 KB</td>
+</tr><tr><td>A_Dapper_LeftJoin</td><td>InProcessEmitToolchain</td><td>A_LeftJoin</td><td>205.70 &mu;s</td><td>204.49 &mu;s</td><td>2.6855</td><td>-</td><td>22.19 KB</td>
+</tr><tr><td>A_EFCore_Compiled_LeftJoin</td><td>InProcessEmitToolchain</td><td>A_LeftJoin</td><td>451.98 &mu;s</td><td>446.93 &mu;s</td><td>11.7188</td><td>5.8594</td><td>99.22 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_RecursiveCte</td><td>InProcessEmitToolchain</td><td>A_RecursiveCte</td><td>128.16 &mu;s</td><td>126.59 &mu;s</td><td>0.7324</td><td>-</td><td>7.34 KB</td>
+</tr><tr><td>A_Dapper_RecursiveCte</td><td>InProcessEmitToolchain</td><td>A_RecursiveCte</td><td>245.59 &mu;s</td><td>245.44 &mu;s</td><td>1.4648</td><td>-</td><td>15.31 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_RecursiveCte</td><td>InProcessEmitToolchain</td><td>A_RecursiveCte</td><td>277.44 &mu;s</td><td>273.87 &mu;s</td><td>1.9531</td><td>-</td><td>17.81 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Contains</td><td>InProcessEmitToolchain</td><td>A_StringFunctions</td><td>90.94 &mu;s</td><td>91.05 &mu;s</td><td>0.8545</td><td>-</td><td>7.19 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_ToUpper</td><td>InProcessEmitToolchain</td><td>A_StringFunctions</td><td>94.35 &mu;s</td><td>94.52 &mu;s</td><td>0.8545</td><td>-</td><td>7.5 KB</td>
+</tr><tr><td>A_Dapper_ToUpper</td><td>InProcessEmitToolchain</td><td>A_StringFunctions</td><td>139.70 &mu;s</td><td>138.83 &mu;s</td><td>1.4648</td><td>-</td><td>12.81 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_ToUpper</td><td>InProcessEmitToolchain</td><td>A_StringFunctions</td><td>153.98 &mu;s</td><td>154.30 &mu;s</td><td>1.9531</td><td>-</td><td>16.41 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Contains</td><td>InProcessEmitToolchain</td><td>A_StringFunctions</td><td>164.07 &mu;s</td><td>164.35 &mu;s</td><td>1.9531</td><td>-</td><td>16.17 KB</td>
+</tr><tr><td>A_Dapper_Contains</td><td>InProcessEmitToolchain</td><td>A_StringFunctions</td><td>190.98 &mu;s</td><td>190.68 &mu;s</td><td>1.9531</td><td>-</td><td>17.19 KB</td>
+</tr><tr><td>A_EFCore_Compiled_ToUpper</td><td>InProcessEmitToolchain</td><td>A_StringFunctions</td><td>362.17 &mu;s</td><td>364.17 &mu;s</td><td>8.7891</td><td>4.3945</td><td>74.92 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Contains</td><td>InProcessEmitToolchain</td><td>A_StringFunctions</td><td>386.47 &mu;s</td><td>384.95 &mu;s</td><td>8.7891</td><td>4.3945</td><td>74.69 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Udf</td><td>InProcessEmitToolchain</td><td>A_Udf</td><td>93.13 &mu;s</td><td>93.07 &mu;s</td><td>0.8545</td><td>-</td><td>7.5 KB</td>
+</tr><tr><td>A_Dapper_Udf</td><td>InProcessEmitToolchain</td><td>A_Udf</td><td>142.58 &mu;s</td><td>142.44 &mu;s</td><td>1.4648</td><td>-</td><td>12.81 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Udf</td><td>InProcessEmitToolchain</td><td>A_Udf</td><td>152.77 &mu;s</td><td>152.30 &mu;s</td><td>1.9531</td><td>-</td><td>16.41 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Udf</td><td>InProcessEmitToolchain</td><td>A_Udf</td><td>347.09 &mu;s</td><td>347.22 &mu;s</td><td>8.7891</td><td>4.3945</td><td>74.92 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_RowNumber</td><td>InProcessEmitToolchain</td><td>A_Window</td><td>141.44 &mu;s</td><td>141.39 &mu;s</td><td>0.9766</td><td>-</td><td>8.28 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_SumOver</td><td>InProcessEmitToolchain</td><td>A_Window</td><td>142.89 &mu;s</td><td>141.22 &mu;s</td><td>0.9766</td><td>-</td><td>8.52 KB</td>
+</tr><tr><td>A_Dapper_SumOver</td><td>InProcessEmitToolchain</td><td>A_Window</td><td>307.00 &mu;s</td><td>300.04 &mu;s</td><td>1.4648</td><td>-</td><td>15.47 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_SumOver</td><td>InProcessEmitToolchain</td><td>A_Window</td><td>308.17 &mu;s</td><td>308.08 &mu;s</td><td>1.9531</td><td>-</td><td>17.42 KB</td>
+</tr><tr><td>A_Dapper_RowNumber</td><td>InProcessEmitToolchain</td><td>A_Window</td><td>308.24 &mu;s</td><td>305.72 &mu;s</td><td>1.4648</td><td>-</td><td>15.39 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_RowNumber</td><td>InProcessEmitToolchain</td><td>A_Window</td><td>315.86 &mu;s</td><td>316.28 &mu;s</td><td>1.9531</td><td>-</td><td>17.35 KB</td>
 </tr></tbody></table>
 </body>
 </html>

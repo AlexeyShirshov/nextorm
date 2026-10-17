@@ -168,7 +168,7 @@ select cardinality(@norm_p1) as "N"
 > ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)): одна колонка-запись `ROW(...)`
 > (арность 1..7) или зарегистрированный вызывающим именованный composite материализуется в
 > соответствующий `System.Tuple<...>`/именованный тип (см.
-> [Сырой SQL](../guide/12-raw-sql.md#сырые-postgresql-строки-и-composite-типы)); `ValueTuple`,
+> [Сырой SQL](../guide/14-raw-sql.md#сырые-postgresql-строки-и-composite-типы)); `ValueTuple`,
 > арность ≥8, вложенный/пустой `ROW`, несколько или смешанные колонки-записи, незарегистрированный
 > именованный composite и composite, объявленный как `System.Tuple`, остаются под гардом
 > `NotSupportedException`. `untuple` не поддерживается, так как меняет набор колонок результата,

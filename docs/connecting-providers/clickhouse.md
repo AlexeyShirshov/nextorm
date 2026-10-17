@@ -195,7 +195,7 @@ public sealed class TvpRow
 }
 ```
 
-The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used for a bound parameter — `format`/`values` require a literal structure and `input` is valid only in `INSERT ... SELECT`, so the array form is the supported emulation. ClickHouse has **no stored procedures** ([`SupportsStoredProcedures`](xref:NextORM.Core.ISqlDialect.SupportsStoredProcedures) is `false`, and `ExecuteProcedure` throws `NotSupportedException`), so the parameter is consumed by `ExecuteRaw`/`ExecuteRawAsync` SQL that calls `arrayJoin` itself. `TypeName` is SQL Server only and is rejected with `ArgumentException`. An empty set binds an empty array, and null elements, nullable columns and empty sets are covered by the provider tests. Only CLR types with a ClickHouse mapping are supported — the scalar column set (the integer types, `float`/`double`, `decimal` as the declared `Decimal(p, s)` or `Decimal(38, 10)`, `bool`, `string`/`char`, `Guid`, `DateTime`/`DateTimeOffset`/`DateOnly`, an enum as its underlying number; `TimeOnly` as `String` formatted invariantly as `HH:mm:ss.fffffff`, `TimeSpan` as `Int64` in its mapped duration unit (ticks by default), and `byte[]` as `String`); any other column type throws `NotSupportedException`. A `byte[]` column is bound as `String`, so the row reader returns a `string`, not a `byte[]` — do not rely on a `byte[]` round-trip. The set is sent as one array parameter, not streamed or copied, so use the driver's binary insert API for very large sets. See [Raw SQL: table-valued parameters](../guide/12-raw-sql.md#table-valued-parameters).
+The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used for a bound parameter — `format`/`values` require a literal structure and `input` is valid only in `INSERT ... SELECT`, so the array form is the supported emulation. ClickHouse has **no stored procedures** ([`SupportsStoredProcedures`](xref:NextORM.Core.ISqlDialect.SupportsStoredProcedures) is `false`, and `ExecuteProcedure` throws `NotSupportedException`), so the parameter is consumed by `ExecuteRaw`/`ExecuteRawAsync` SQL that calls `arrayJoin` itself. `TypeName` is SQL Server only and is rejected with `ArgumentException`. An empty set binds an empty array, and null elements, nullable columns and empty sets are covered by the provider tests. Only CLR types with a ClickHouse mapping are supported — the scalar column set (the integer types, `float`/`double`, `decimal` as the declared `Decimal(p, s)` or `Decimal(38, 10)`, `bool`, `string`/`char`, `Guid`, `DateTime`/`DateTimeOffset`/`DateOnly`, an enum as its underlying number; `TimeOnly` as `String` formatted invariantly as `HH:mm:ss.fffffff`, `TimeSpan` as `Int64` in its mapped duration unit (ticks by default), and `byte[]` as `String`); any other column type throws `NotSupportedException`. A `byte[]` column is bound as `String`, so the row reader returns a `string`, not a `byte[]` — do not rely on a `byte[]` round-trip. The set is sent as one array parameter, not streamed or copied, so use the driver's binary insert API for very large sets. See [Raw SQL: table-valued parameters](../guide/14-raw-sql.md#table-valued-parameters).
 
 ## Provider differences
 
@@ -235,7 +235,7 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
 | Table functions | `numbers`/`numbers_mt` (the `UInt64 number` column is cast to `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (the built-in `generate_random()`/`generate_random(seed)` fix the structure `id UInt64, value Float64, name String` and cast `id` to `Int64`), and the server/cluster functions `url(url, format, structure)`, `s3(url, format, structure)`, `file(path, format, structure)`, `remote(addresses, db, table)`, `remote_secure(...)`, `cluster(cluster, db, table)`, `cluster_all_replicas(...)` (the row shape is the caller's `TRow` interface) |
 | Array functions | over `Array(T)` columns/expressions: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `startsWith`, `endsWith`, `hasSubstr`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; the CLR `string.Split` renders as `splitByChar(separator, value)` under [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (one-character separator only); `arrayJoin(array)` expands one row per element, and `EntityBuilder.ArrayJoin`/`LeftArrayJoin` render the `[left ]array join expr, ...` clause. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` additionally bind the expanded element to `ArrayJoinProjection<TEntity, TElement>.Element` (with the original entity at `.Item1`); the clause expression is aliased and `p.Element` references that alias (see [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Tuple surface | a native `Tuple(...)` column/expression projects as `System.Tuple<...>` (arity 1–7); `Tuple.Create(a, b, ...)` renders `tuple(a, b, ...)` and `System.Tuple<...>.ItemN` renders `tupleElement(t, n)`, both under [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions); `untuple` is not supported (it changes the result column set) |
-| Native JSON column type | a native object-rooted `JSON` type: a `[JsonColumn]` property (`Auto`/`Native`: object-root POCO/`JsonObject`/`JsonDocument`/`JsonElement`) and a bare `JsonObject`/`JsonDocument`/`JsonElement` property (read and parameter) map to it; arrays/scalar roots fail closed. A bare top-level scalar `Select(x => x.Doc)` is not handled by the core projection classifier — use an anonymous type or a DTO. `Text` keeps a `String` column; a bare `string` and the legacy `Object('json')` alias are not supported. See [JSON support](../guide/14-json.md#map-a-clr-object-to-a-native-json-column) |
+| Native JSON column type | a native object-rooted `JSON` type: a `[JsonColumn]` property (`Auto`/`Native`: object-root POCO/`JsonObject`/`JsonDocument`/`JsonElement`) and a bare `JsonObject`/`JsonDocument`/`JsonElement` property (read and parameter) map to it; arrays/scalar roots fail closed. A bare top-level scalar `Select(x => x.Doc)` is not handled by the core projection classifier — use an anonymous type or a DTO. `Text` keeps a `String` column; a bare `string` and the legacy `Object('json')` alias are not supported. See [JSON support](../guide/16-json.md#map-a-clr-object-to-a-native-json-column) |
 | LOB streaming (`ToStream`/`ToTextReader`) | `NotSupportedException` (the driver exposes no streaming getters) |
 
 ## Notes and limitations
@@ -269,17 +269,17 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
   bare `string` read over a `JSON` column and the legacy `Object('json')` alias are not supported — the
   alias needs a connection-level `allow_experimental_object_type` (which nextorm never sets) and even then
   reads materialize as `Tuple<SByte,String>`, not through the native `JsonObject` transport
-  ([JSON support](../guide/14-json.md#map-a-clr-object-to-a-native-json-column)).
+  ([JSON support](../guide/16-json.md#map-a-clr-object-to-a-native-json-column)).
 - `hits_v1` and similar wide tables have far more columns than an entity interface declares. Rather
   than mapping every column, project the extra ones by name with
   [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (see
-  [Querying and projections](../guide/30-projections.md#columns-by-name)); the name is a raw name,
+  [Querying and projections](../guide/02-projections.md#columns-by-name)); the name is a raw name,
   always safely quoted by the dialect (independently of the
   [`UseQuotedIdentifiers`](xref:NextORM.Core.DataContextBuilder.UseQuotedIdentifiers(System.Boolean))
   option).
 - The LOB streaming terminals (`ToStream`/`ToTextReader`) are rejected with `NotSupportedException`:
   `ClickHouse.Driver` exposes no streaming getters (see
-  [Streaming large objects](../guide/26-large-objects.md)).
+  [Streaming large objects](../guide/28-large-objects.md)).
 
 ## See also
 
@@ -293,4 +293,4 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
 
 Source: `src/nextorm.clickhouse/ClickHouseDialect.cs`, `src/nextorm.clickhouse/ClickHouseDataContext.cs`,
 `src/nextorm.clickhouse/DI/ClickHouseDataContextOptionsBuilderExtensions.cs`,
-`tests/nextorm.clickhouse.tests/ClickHouseDialectTests.cs`, `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs`.
+`tests/nextorm.clickhouse.tests/Dialect/ClickHouseDialectTests.cs`, `tests/nextorm.clickhouse.tests/SqlGeneration/SqlGenerationTests.cs`.

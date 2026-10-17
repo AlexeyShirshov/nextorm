@@ -107,7 +107,7 @@ var rows = dataContext.From<IComplexEntity>()
 ## `json_each` / `json_tree` table functions
 
 `json_each` walks the immediate children of a JSON value and `json_tree` walks it recursively. Use them
-through [`FromTableFunction`](../11-table-valued-functions.md) and project the row shape returned by the
+through [`FromTableFunction`](../13-table-valued-functions.md) and project the row shape returned by the
 call; the columns are `key`, `value`, `type`, `fullkey` and `path` (plus `id`/`parent` for
 `json_tree`).
 

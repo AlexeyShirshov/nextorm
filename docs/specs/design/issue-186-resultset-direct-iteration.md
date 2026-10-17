@@ -1,8 +1,8 @@
 # Issue #186 — Direct result-set iteration for `BatchResult` and `ProcedureResult`
 
-Status: design (implementation in progress)
+Status: implemented — issue #186 closed 2026-10-04; public guides reconciled
 Tracking: GitHub issue #186, milestone `1.0.9-b`
-Branch: `1.0.9-b`
+Delivered in: `1.0.9-b`
 
 ## Problem
 
@@ -100,10 +100,10 @@ The existing semantics are preserved: one-shot forward-only sequence, column-les
 
 ## Docs
 
-Reconcile `docs/guide/23-sql-batch.md` and `docs/guide/12-raw-sql.md` (EN + RU) onto the single model: the result object is enumerable, `ResultSet` is the common cursor, and only the buffering/disposal difference between the two types is called out.
+Reconcile `docs/guide/25-sql-batch.md` and `docs/guide/14-raw-sql.md` (EN + RU) onto the single model: the result object is enumerable, `ResultSet` is the common cursor, and only the buffering/disposal difference between the two types is called out.
 
 ## References
 
-* `docs/specs/roadmap/evidence-02-resultset-unification.md`
+* `docs/guide/25-sql-batch.md` and `docs/guide/14-raw-sql.md` (EN + RU) — reconciled public docs
 * `docs/specs/design/API-NAMING-REVIEW.md:5264-5284`
 * `docs/specs/status/procedure-result-sets-1.md`

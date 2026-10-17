@@ -67,14 +67,14 @@ warning (дубли `AnalyzerReleases.*.md` в sourcegenerator).
 
 ### 3.2 Querying растворяется в Guide
 
-- `querying/01-projections.md` → `guide/30-projections.md`
-- `querying/02-query-sources.md` → `guide/31-query-sources.md`
+- `querying/01-projections.md` → `guide/02-projections.md`
+- `querying/02-query-sources.md` → `guide/01-query-sources.md`
 - `querying/03-provider-specifics.md` → `guide/32-provider-specific-features.md`
   (номера 30–32 — в конец, `guide/01–29` не трогаем).
 - Обзор `querying/index.md` становится `engine/index.md`; каталоги `docs/querying/` и
   `docs/ru/querying/` удаляются.
 - Внутренние ссылки перенесённых страниц переписываются под новое расположение (например,
-  `../guide/02-joins.md` → `02-joins.md`); RU-зеркала — синхронно.
+  `../guide/04-joins.md` → `04-joins.md`); RU-зеркала — синхронно.
 
 ### 3.3 Перенумерация Infrastructure
 
@@ -92,8 +92,8 @@ Infrastructure в `docs/index.md`/`docs/ru/index.md` обновляются.
 
 | Действие | EN | RU |
 |---|---|---|
-| move | `querying/01-projections.md` → `guide/30-projections.md` | `ru/querying/01-projections.md` → `ru/guide/30-projections.md` |
-| move | `querying/02-query-sources.md` → `guide/31-query-sources.md` | `ru/querying/02-query-sources.md` → `ru/guide/31-query-sources.md` |
+| move | `querying/01-projections.md` → `guide/02-projections.md` | `ru/querying/01-projections.md` → `ru/guide/02-projections.md` |
+| move | `querying/02-query-sources.md` → `guide/01-query-sources.md` | `ru/querying/02-query-sources.md` → `ru/guide/01-query-sources.md` |
 | move | `querying/03-provider-specifics.md` → `guide/32-provider-specific-features.md` | `ru/querying/03-provider-specifics.md` → `ru/guide/32-provider-specific-features.md` |
 | move | `infrastructure/01-query-reuse-and-caching.md` → `engine/03-plan-cache-and-reuse.md` | аналог в `ru/` |
 | new | `engine/index.md`, `engine/01-query-pipeline.md`, `engine/02-execution-and-rows.md`, `engine/toc.yml` | `ru/engine/index.md`, `ru/engine/01…`, `ru/engine/02…` |
@@ -162,8 +162,8 @@ Infrastructure в `docs/index.md`/`docs/ru/index.md` обновляются.
 6. RU-зеркала всех пунктов в `docs/ru/engine/**`.
 
 **Фаза 2 — растворение Querying в Guide.**
-7. Переместить `docs/querying/01-projections.md` → `docs/guide/30-projections.md`,
-   `02-query-sources.md` → `guide/31-query-sources.md`, `03-provider-specifics.md` →
+7. Переместить `docs/querying/01-projections.md` → `docs/guide/02-projections.md`,
+   `02-query-sources.md` → `guide/01-query-sources.md`, `03-provider-specifics.md` →
    `guide/32-provider-specific-features.md`; переписать внутренние ссылки под новое расположение.
 8. Удалить `docs/querying/` и `docs/ru/querying/`.
 9. RU-зеркала.

@@ -15,7 +15,7 @@
 > global query filters, command interceptors, a SQL batch builder, result-set streaming and export, stored
 > procedures and table-valued parameters, and an EF Core integration package.
 
-**Prerequisites:** [Provider overview](../../connecting-providers/overview.md) · [Limitations](../../advanced/limitations.md) · [Query hints](../../guide/13-query-hints.md)
+**Prerequisites:** [Provider overview](../../connecting-providers/overview.md) · [Limitations](../../advanced/limitations.md) · [Query hints](../../guide/15-query-hints.md)
 
 ## Positioning
 
@@ -30,17 +30,17 @@
   scenarios. The mapping layer covers value converters, JSON columns and a dynamic-columns store; the
   execution layer covers raw commands and stored procedures, table-valued parameters, a SQL batch builder
   and result-set streaming and export. It also models relationships declaratively
-  (`[Relationship]`/`HasMany`/`HasOne` + `JoinInto`) with `LoadWith` eager loading (nested level 2+) and
-  declared-relationship implicit navigation, ships command interceptors and global query filters, and
+  (`[Relationship]`/`HasMany`/`HasOne`/`HasOneToOne`/`HasManyThrough` + `JoinInto`) with `LoadWith` eager
+  loading (nested level 2+) and declared-relationship implicit navigation, ships command interceptors and global query filters, and
   integrates with EF Core (`nextorm.entityframeworkcore`).
 * **linq2db** is a broad, mature LINQ-to-SQL ORM: a wider provider matrix, full CRUD (`INSERT`/`UPDATE`/
   `DELETE`/`MERGE`), associations/eager loading, bulk copy, temporary tables, schema code-generation
   tooling, extensibility (interceptors, custom SQL mapping) and an EF Core integration package. That extra
   surface comes with change tracking and a heavier model.
 
-The two overlap on the *query* surface and explicit data modification — where nextorm matches or exceeds
-linq2db — and diverge on *relationship modelling*, *change tracking* and *tooling*, which nextorm leaves out
-by design.
+The two overlap on the *query* surface, explicit data modification and **declarative relationship
+modelling** — where nextorm matches or exceeds linq2db — and diverge on *change tracking* and
+*database-first tooling*, which nextorm leaves out by design.
 
 ## Capability matrix
 
@@ -157,10 +157,13 @@ Against the shared surface nextorm matches or exceeds linq2db; on top of that it
   `RETURNING` rows are read typed with the full operator set, or fed into a further `INSERT ... SELECT`); and
   **transactions** (`ITransactionManager`, own or enlisted from EF Core/Dapper/ADO.NET) — all explicit
   commands, with no change tracking and no `SaveChanges`.
-* Declarative relationships and eager loading: O2M/M2O via `[Relationship]`/`HasMany`/`HasOne` and
-  `JoinInto` (LEFT/INNER, `Where`, parent paging, multiple collections, in-memory parity), plus `LoadWith`
-  (split-query by default, opt-in `EagerLoadMode.SingleQuery`, nested level 2+) with global query filters applied to children at every level
-  ([relationships](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md)).
+* Declarative relationships and eager loading: O2M/M2O/O2O/M2M via `[Relationship]`/`HasMany`/`HasOne`/
+  `HasOneToOne`/`HasManyThrough` and `JoinInto` (LEFT/INNER, `Where`, parent paging, multiple collections,
+  many-to-many through a junction, in-memory parity), plus `LoadWith` (split-query by default, opt-in
+  `EagerLoadMode.SingleQuery`/`Auto`, nested level 2+, per-parent ordering/top-N) with global query filters
+  applied to children at every level ([relationships](../../relationships/relationships.md),
+  [eager loading](../../relationships/eager-loading.md),
+  [per-parent paging](../../relationships/eager-loading-per-parent-paging.md)).
 * An EF Core integration package (`nextorm.entityframeworkcore`): `UseNextOrm`/`GetNextOrmContext`/
   `AddNextOrmFromDbContext` run nextorm over the EF connection with the EF model mapping and share the EF
   transaction; `ToNextOrm` translates a bounded EF `IQueryable` subset
@@ -226,26 +229,17 @@ surface, which nextorm matches or exceeds. linq2db covers them:
   `DELETE`/full `MERGE`), bulk insert, `CREATE TABLE AS SELECT` and transactions, but every write stays an
   explicit command — there is no `SaveChanges` and no automatic change tracking. linq2db flushes a tracked
   unit of work.
-* **Relationships**: nextorm models O2M/M2O/O2O/M2M relationships declaratively (`[Relationship]`/`HasMany`/
-  `HasOne`/`HasOneToOne`/`HasManyThrough` + `JoinInto`) with `LoadWith` eager loading (nested level 2+) and
-  declared-relationship implicit navigation ([relationships](../../advanced/relationships.md),
-  [eager loading](../../advanced/eager-loading.md), [implicit navigation](../../guide/29-implicit-navigation.md));
-  nextorm also ships an explicit eager-load strategy (`EagerLoadMode` with split, single-query and a
-  conservative `Auto`, plus a context-wide default), so what linq2db still adds is per-parent eager-load
-  ordering/top-N — convention-over-FK inference is absent in both, since associations are declared in each library.
 * **Database-first tooling**: linq2db ships a CLI/T4 code-generation toolchain that scaffolds entity and
   table-function mappings from a live database; nextorm declares mappings in code. The dynamic-schema
   sources nextorm supports through a caller-declared `TRow` schema (ClickHouse `values()`, PostgreSQL
-  `jsonb_to_record(set)`, [dynamic result schema](../../guide/11-table-valued-functions.md#dynamic-result-schema))
+  `jsonb_to_record(set)`, [dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema))
   are unsupported by linq2db as well.
-* **Provider breadth**: the two overlap on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse;
-  linq2db additionally ships Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB and
-  Ydb, while nextorm adds an in-memory object context and separate MySQL/MariaDB providers (linq2db models
-  MariaDB as a MySQL version).
+* **Provider breadth**: beyond the providers both ship, linq2db additionally covers Oracle, Firebird, DB2,
+  SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB and Ydb, while nextorm adds an in-memory object context
+  and separate MySQL/MariaDB providers (linq2db models MariaDB as a MySQL version).
 * **DDL / schema management**: linq2db ships `CreateTable`/`DropTable` and a schema API; nextorm mutates the
   schema only through `CREATE TABLE AS SELECT` — ad-hoc DDL goes through `ExecuteRaw` (out of scope).
-* **External / linked-server sources**: `WithServer`/`WithDatabase` only rename the `FROM` qualifier;
-  `OPENROWSET`/`OPENQUERY` are out of scope (linq2db has no first-class surface either).
+
 Correlation is uniform on the SQL providers (arbitrary nesting depth for scalar subqueries, aggregate
 terminals, `EXISTS`/`IN`/`ANY`/`ALL` and correlated `APPLY`/`LATERAL` sources). The in-memory provider
 now evaluates depth-one correlated scalar/aggregate/`EXISTS`/`IN` once per outer row, and only rejects
@@ -274,10 +268,8 @@ families, the ClickHouse-specific constructs, cross-provider row values, TVFs an
 allocation footprint, benchmark results at or above Dapper, EF Core and linq2db on the shipped scenarios,
 and more configurable SQL output (identifier quoting, naming conventions and keyword casing are opt-in and
 overridable per command, whereas linq2db quotes by default and fixes names through its mapping schema).
-linq2db remains the better fit only when the same layer must also track changes, generate the data layer from
-a live schema, or eager-load per-parent ordered/top-N children — surface nextorm deliberately leaves out (O2M/M2O/O2O
-relationships, many-to-many through a junction, declared-relationship implicit navigation and nested eager
-loading with explicit split/single/auto strategies and `JoinInto` are already covered).
+linq2db remains the better fit only when the same layer must also track changes or generate the data layer from
+a live schema — the deliberate boundaries listed above.
 
 ## See also
 
@@ -285,9 +277,9 @@ loading with explicit split/single/auto strategies and `JoinInto` are already co
 - [linq2db backlog gap analysis](linq2db-backlog-gap-analysis.md) — what linq2db *plans to add* and which of it nextorm lacks.
 - [SQL capabilities gap analysis](../roadmap/sql-capabilities-gap-analysis.md) — nextorm vs EF Core and linq2db, per construct.
 - [Limitations and out-of-scope features](../../advanced/limitations.md)
-- [Joins](../../guide/02-joins.md) — `CrossApply`/`OuterApply`.
-- [Range columns](../../guide/25-range-columns.md) — a `Range<T>` stored as a pair of scalar columns.
-- [Query hints](../../guide/13-query-hints.md)
+- [Joins](../../guide/04-joins.md) — `CrossApply`/`OuterApply`.
+- [Range columns](../../guide/27-range-columns.md) — a `Range<T>` stored as a pair of scalar columns.
+- [Query hints](../../guide/15-query-hints.md)
 - [Provider overview](../../connecting-providers/overview.md)
 
 ---

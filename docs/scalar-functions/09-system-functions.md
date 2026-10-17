@@ -137,11 +137,15 @@ in that it is not bounded to the current database.
 
 ## Not exposed (SQL Server)
 
-Seven T-SQL connection-, session- or statement-scope names are not modelled: they report the state of
-the connection or statement rather than compute a per-row value. They remain reachable through raw SQL
-or a `[SqlFunction]` wrapper, and each has a review trigger if a concrete per-row use appears. The
-session/server-identity subset (`SERVER_NAME`/`@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`,
-`SUSER_NAME`, `ORIGINAL_LOGIN`) is shipped — see
+Seven T-SQL names that report **live, mutable connection-, session- or statement-scope state** are not
+modelled: their value changes independently of the query — a transaction begins or ends, a previous
+statement runs, another session inserts a row — rather than being computed per row from the row's
+columns. They remain reachable through raw SQL or a `[SqlFunction]` wrapper, and each has a review
+trigger if a concrete per-row use appears.
+
+Stable configuration and identity constants of the same scope are shipped: `CURRENT_TIMEZONE`/
+`CURRENT_TIMEZONE_ID` and the session/server-identity subset (`SERVER_NAME`/`@@SERVERNAME`, `HOST_ID`,
+`HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) — see
 [Session and server identity](#session-and-server-identity) above.
 
 | Function | Scope |

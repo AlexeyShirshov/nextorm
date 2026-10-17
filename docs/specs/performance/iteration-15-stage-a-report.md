@@ -245,8 +245,8 @@ Command: `rg -c -- '<pattern>' <files>`. Ratios are `count / 1391`.
 | `GC.Collect` | 0 | 0.00000 | — |
 | `Console.Write` | 4 | 0.00288 | `StageADiagnostics.cs:89,90,91` (STAGE-A JSON emit channel), `Program.cs:36` (commented-out dev line) |
 
-Files: `benchmarks/nextorm.benchmark/Program.cs` (36), `benchmarks/nextorm.benchmark/SqliteBenchmarkStageA.cs`
-(198), `benchmarks/nextorm.benchmark/StageADiagnostics.cs` (429),
+Files: `benchmarks/nextorm.benchmark/Program.cs` (36), `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStageA.cs`
+(198), `benchmarks/nextorm.benchmark/Diagnostics/StageADiagnostics.cs` (429),
 `tests/nextorm.core.tests/PlanKeyStructureTests.cs` (336),
 `tests/nextorm.sqlite.tests/DataContextCacheClearTests.cs` (100),
 `tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs` (292). All suppression/slop markers are

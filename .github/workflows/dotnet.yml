@@ -26,6 +26,12 @@ jobs:
     env:
       MIN_LINE_COVERAGE: 85
       MIN_BRANCH_COVERAGE: 75
+      # Dedicated gate for tests/nextorm.integration.tests (real databases only).
+      # Branch threshold is a hard 75 %. Measured integration-only baseline: 56.6 % branch
+      # (all 8 assemblies) / 57.7 % (the 4 gated CI modules) — the gate is RED until the branch
+      # coverage of the integration suite is raised to 75 %; it is a target, not a description.
+      MIN_INTEGRATION_LINE_COVERAGE: 65
+      MIN_INTEGRATION_BRANCH_COVERAGE: 75
 
     steps:
       - uses: actions/checkout@v7
@@ -43,6 +49,34 @@ jobs:
         run: |
           mkdir -p tests/coverage
           dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"
+      - name: Integration coverage (dedicated gate)
+        run: |
+          mkdir -p tests/coverage
+          dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura -o tests/coverage/integration.cobertura.xml "dotnet test tests/nextorm.integration.tests --no-build --verbosity normal"
+          # The in-memory provider is unit-only by policy (AGENTS.md "Tests"), so its paths are outside
+          # what the integration suite can or should cover; excluded from this gate's denominator only.
+          dotnet tool run reportgenerator \
+            -reports:tests/coverage/integration.cobertura.xml \
+            -targetdir:tests/coverage/integration-report \
+            -reporttypes:"Html;TextSummary" \
+            -classfilters:"-NextORM.Core.InMemory*" \
+            -riskhotspotassemblyfilters:"+nextorm.*"
+          SUMMARY=tests/coverage/integration-report/Summary.txt
+          LINE=$(grep -oP 'Line coverage: \K[0-9.]+' "$SUMMARY")
+          BRANCH=$(grep -oP 'Branch coverage: \K[0-9.]+' "$SUMMARY")
+          echo "Integration line coverage: ${LINE}% (threshold: ${MIN_INTEGRATION_LINE_COVERAGE}%)"
+          echo "Integration branch coverage: ${BRANCH}% (threshold: ${MIN_INTEGRATION_BRANCH_COVERAGE}%)"
+          FAIL=0
+          awk -v c="$LINE" -v min="$MIN_INTEGRATION_LINE_COVERAGE" 'BEGIN { exit (c + 0 < min) }' || FAIL=1
+          awk -v c="$BRANCH" -v min="$MIN_INTEGRATION_BRANCH_COVERAGE" 'BEGIN { exit (c + 0 < min) }' || FAIL=1
+          if [ "$FAIL" -eq 0 ]; then
+            echo "Integration coverage OK"
+          elif [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            echo "::error::Integration coverage below threshold (line ${LINE}% < ${MIN_INTEGRATION_LINE_COVERAGE}% or branch ${BRANCH}% < ${MIN_INTEGRATION_BRANCH_COVERAGE}%)"
+            exit 1
+          else
+            echo "::warning::Integration coverage below threshold (line ${LINE}% < ${MIN_INTEGRATION_LINE_COVERAGE}% or branch ${BRANCH}% < ${MIN_INTEGRATION_BRANCH_COVERAGE}%); hard-fails on main only"
+          fi
       - name: Benchmark table generator self-tests
         run: python3 -m unittest discover -s eng/perf/tests -p 'test_update_benchmark_tables.py'
       - name: Allocation regression gate

@@ -154,7 +154,7 @@ Plain-select / reprepare arms (InProcessEmit; inner loop 100; Default-toolchain 
 | FuncFilter_Prepared_ToList (wildcard match) | 1.070 ms | 75.01 KB | 768 |
 | Recursive_Reused_Prepared_ToList (wildcard match) | 1.236 ms | 45.32 KB | 464 |
 
-Artifact paths — actual (repo-root `BenchmarkDotNet.Artifacts/results/`, see finding above):
+Artifact paths — actual at the time (repo-root `BenchmarkDotNet.Artifacts/results/`, see finding above; since migrated to `benchmarks/BenchmarkDotNet.Artifacts/results/` under the same names):
 - `BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-{github.md,csv,html}`
 - `BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-{github.md,csv,html}`
 - `BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-{github.md,csv,html}`
@@ -256,7 +256,7 @@ exit 0, **14 benchmarks** (7 arms × {Default, InProcessEmitToolchain}), wall **
 
 ### Artifacts / logs
 
-BDN artifact paths (repo-root `BenchmarkDotNet.Artifacts/results/`, github.md/csv/html each; not deleted):
+BDN artifact paths (repo-root `BenchmarkDotNet.Artifacts/results/` at the time, github.md/csv/html each; not deleted; since migrated to `benchmarks/BenchmarkDotNet.Artifacts/results/`):
 - `NextORM.Benchmark.InMemoryBenchmarkAggregates-report-*` (21:59:21) — acceptance
 - `NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-*` (21:59:29) — acceptance
 - `NextORM.Benchmark.SqliteBenchmarkAny-report-*` (21:59:38) — acceptance

@@ -171,9 +171,11 @@ by every other provider:
 - **String/conversion:** `stuff` and `str`; `isdate`/`isnumeric` return the native T-SQL `int` (1/0),
   not `bit`; `formatmessage` accepts a format string or a `sys.messages` id and at most 20 arguments.
 
-Ten connection/session/statement-scope names are intentionally not exposed: `CURRENT_REQUEST_ID`,
-`CURRENT_TRANSACTION_ID`, `XACT_STATE`, `APP_NAME`, `HOST_ID`, `HOST_NAME`, `IDENT_CURRENT`,
-`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`. See the
+Seven names that report live, mutable connection-, session- or statement-scope state are intentionally
+not exposed: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
+`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`. Stable configuration and identity constants
+of the same scope (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`,
+`APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) are shipped. See the
 [T-SQL scalar functions guide](../guide/provider-specific-sql/sqlserver.md#t-sql-scalar-functions).
 
 ## Recursive CTEs and `maxRecursion`
@@ -225,7 +227,7 @@ select t1.value, t2.somestring as [String]
 
 ## Table-valued parameters
 
-SQL Server binds a table-valued parameter natively through a user-defined table type: pass the type name with `ProcedureParameter.Table(name, typeName, rows)`. The rows are streamed as `SqlDataRecord` (one reused record per enumeration), so a large set is never buffered. A scalar row type maps to a single column; an entity row type maps its non-computed columns in metadata order, including identity columns. A `decimal` column uses the precision/scale declared with `[DecimalPrecision(p, s)]` or the fluent mapping, defaulting to `decimal(38,18)`. An empty sequence is bound as an empty table. See [Raw SQL](../guide/12-raw-sql.md#table-valued-parameters).
+SQL Server binds a table-valued parameter natively through a user-defined table type: pass the type name with `ProcedureParameter.Table(name, typeName, rows)`. The rows are streamed as `SqlDataRecord` (one reused record per enumeration), so a large set is never buffered. A scalar row type maps to a single column; an entity row type maps its non-computed columns in metadata order, including identity columns. A `decimal` column uses the precision/scale declared with `[DecimalPrecision(p, s)]` or the fluent mapping, defaulting to `decimal(38,18)`. An empty sequence is bound as an empty table. See [Raw SQL](../guide/14-raw-sql.md#table-valued-parameters).
 
 ```sql
 create type dbo.IdList as table (value int not null);
@@ -280,7 +282,7 @@ using var reader = ctx.From<Document>()
     .ToTextReader();
 ```
 
-The returned stream owns the reader and the per-call command until it is disposed, and it does not close the context; the projection must be exactly one `byte[]`/`string` column (otherwise `InvalidOperationException`). MySQL/MariaDB, ClickHouse and the in-memory provider reject the terminals with `NotSupportedException`. See [Streaming large objects](../guide/26-large-objects.md).
+The returned stream owns the reader and the per-call command until it is disposed, and it does not close the context; the projection must be exactly one `byte[]`/`string` column (otherwise `InvalidOperationException`). MySQL/MariaDB, ClickHouse and the in-memory provider reject the terminals with `NotSupportedException`. See [Streaming large objects](../guide/28-large-objects.md).
 
 SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` terminal: it hands the same sequential-access command over as a caller-owned `DbDataReader`, so the caller can read every column and row (or several LOB columns in order) without materialising the result. SQLite supports it too, but via a buffered, locator-free reader (no `rowid`, no `SequentialAccess`, so no chunked LOB); MySQL/MariaDB, ClickHouse and the in-memory provider have no sequential-access support and reject it.
 
@@ -313,7 +315,7 @@ SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` ter
 | Regular expressions | `regexp_like(value, pattern, 'c'/'i')` / `regexp_replace(value, pattern, replacement, 1, 0, 'c'/'i')` (SQL Server 2025+; `regexp_like` additionally needs database compatibility level 170) |
 | Locking table hints | `with (hint, ...)` after the source, after its alias when aliased ([`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[]))) |
 | Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on **every** physical `FROM`/`JOIN` source (behavior change: previously the primary source only); [`FromOptions.ForUpdate`](xref:NextORM.Core.FromOptions.ForUpdate)/[`JoinOptions.ForUpdate`](xref:NextORM.Core.JoinOptions.ForUpdate) target one source ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); a [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) adds `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
-| Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions` (see [Bulk insert](../guide/20-bulk-insert.md#sql-server-bulk-copy-options)) |
+| Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions` (see [Bulk insert](../guide/22-bulk-insert.md#sql-server-bulk-copy-options)) |
 | Session/info functions | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
 | T-SQL clock/offset/`*FROMPARTS` | `sysdatetime` / `sysdatetimeoffset` / `sysutcdatetime` / `switchoffset` / `todatetimeoffset` / `timefromparts` / `smalldatetimefromparts` / `datetimefromparts` / `datetime2fromparts` / `datetimeoffsetfromparts` (per-name gated) |
 | T-SQL binary/checksum/other | `checksum` / `binary_checksum` / `compress` / `decompress` / `rand` / `stuff` / `str` / `isdate` / `isnumeric` / `formatmessage` (per-name gated) |
@@ -336,8 +338,8 @@ SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` ter
 
 ---
 
-Source: `tests/nextorm.sqlserver.tests/SqlServerDialectTests.cs:25,37,43,52,60,69,84,93,102`,
-`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:133,146,160,185,218,231,249,268,856,1044`,
-`tests/nextorm.integration.tests/SqlServerSpecificTests.cs:24,43`,
+Source: `tests/nextorm.sqlserver.tests/Dialect/SqlServerDialectTests.cs:25,37,43,52,60,69,84,93,102`,
+`tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:133,146,160,185,218,231,249,268,856,1044`,
+`tests/nextorm.integration.tests/SqlServer/SqlServerSpecificTests.cs:24,43`,
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.sqlserver/SqlServerDataContext.cs`,
 `src/nextorm.sqlserver/DI/SqlServerDataContextOptionsBuilderExtensions.cs`.

@@ -97,7 +97,7 @@ they throw `NotSupportedException` immediately (see [Limitations](../advanced/li
 
 ## LOB streaming
 
-The scalar LOB terminals work on the in-memory provider. [`ToStream`](xref:NextORM.Core.QueryCommandExtensions.ToStream(NextORM.Core.QueryCommand{System.Byte[]},System.ReadOnlySpan{System.Object}))/`ToStreamAsync` return a `MemoryStream` over the single projected `byte[]`, and [`ToTextReader`](xref:NextORM.Core.QueryCommandExtensions.ToTextReader(NextORM.Core.QueryCommand{System.String},System.ReadOnlySpan{System.Object}))/`ToTextReaderAsync` a `StringReader` over the single projected `string`. The projection must be exactly one `byte[]`/`string` column. Only the first row is read; an empty result and a first value that is `NULL` both return `Stream.Null`/`TextReader.Null` (the in-memory scalar API does not distinguish them). The returned object is an ordinary BCL `MemoryStream`/`StringReader` owned by the caller — nothing on the context needs disposing. Because the value is already materialised, there is no O(buffer) benefit in memory. The multi-column [`ToDataReader`](xref:NextORM.Core.QueryCommandExtensions.ToDataReader``1(NextORM.Core.QueryCommand{``0},System.ReadOnlySpan{System.Object})) remains unsupported (`NotSupportedException`: no `DbDataReader`). See [Streaming large objects](../guide/26-large-objects.md).
+The scalar LOB terminals work on the in-memory provider. [`ToStream`](xref:NextORM.Core.QueryCommandExtensions.ToStream(NextORM.Core.QueryCommand{System.Byte[]},System.ReadOnlySpan{System.Object}))/`ToStreamAsync` return a `MemoryStream` over the single projected `byte[]`, and [`ToTextReader`](xref:NextORM.Core.QueryCommandExtensions.ToTextReader(NextORM.Core.QueryCommand{System.String},System.ReadOnlySpan{System.Object}))/`ToTextReaderAsync` a `StringReader` over the single projected `string`. The projection must be exactly one `byte[]`/`string` column. Only the first row is read; an empty result and a first value that is `NULL` both return `Stream.Null`/`TextReader.Null` (the in-memory scalar API does not distinguish them). The returned object is an ordinary BCL `MemoryStream`/`StringReader` owned by the caller — nothing on the context needs disposing. Because the value is already materialised, there is no O(buffer) benefit in memory. The multi-column [`ToDataReader`](xref:NextORM.Core.QueryCommandExtensions.ToDataReader``1(NextORM.Core.QueryCommand{``0},System.ReadOnlySpan{System.Object})) remains unsupported (`NotSupportedException`: no `DbDataReader`). See [Streaming large objects](../guide/28-large-objects.md).
 
 ## Unsupported
 
@@ -137,7 +137,7 @@ The provider fails loudly instead of returning wrong results:
 - **Correlated subqueries** (a subquery referencing the outer row, for example
   `SqlFunctions.Sql.exists(inner.Where(i => i.Id == outer.Id))`) are evaluated once per outer row for
   depth-one correlation: scalar subqueries, aggregate terminals, `EXISTS` and `IN` work in `SELECT`,
-  `WHERE` and `ORDER BY` (see [Subqueries](../guide/05-subqueries.md#correlated-scalar-subquery)).
+  `WHERE` and `ORDER BY` (see [Subqueries](../guide/07-subqueries.md#correlated-scalar-subquery)).
   Correlation depth greater than one, an outer reference inside the inner projection or `ORDER BY`, a
   correlated `GROUP BY`/`HAVING` and an async inner source throw `NotSupportedException`.
 
@@ -167,8 +167,8 @@ The provider fails loudly instead of returning wrong results:
 
 ---
 
-Source: `tests/nextorm.core.tests/InMemoryTests.cs:28,46,55,212,226,244,349,374`,
-`tests/nextorm.core.tests/InMemoryJoinTests.cs:14,47,64,107,145,162`,
-`tests/nextorm.core.tests/InMemorySelectManyTests.cs`,
+Source: `tests/nextorm.core.tests/InMemory/InMemoryTests.cs:28,46,55,212,226,244,349,374`,
+`tests/nextorm.core.tests/InMemory/InMemoryJoinTests.cs:14,47,64,107,145,162`,
+`tests/nextorm.core.tests/InMemory/InMemorySelectManyTests.cs`,
 `src/nextorm.core/DataContext/InMemoryDataContext.cs`,
 `src/nextorm.core/Builders/InMemoryCommandBuilder.cs`.

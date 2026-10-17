@@ -55,6 +55,8 @@
 - Normalize after edits: `perl -pi -e 's/\r?\n/\r\n/g' <file>`.
 
 ## Tests
+- **Assertions: FluentAssertions only.** Every value/exception assertion in `tests/**` goes through FluentAssertions: `actual.Should().Be(expected)`, `actual.Should().BeSameAs(expected)` for reference identity (`PropertyInfo`, cached metadata instances — `PropertyInfoAssertions` has no `Be` in 7.x), `FluentActions.Invoking(...).Should().Throw<T>()`, `await act.Should().ThrowAsync<T>()`. `Xunit.Assert` is reserved for the skip primitives `Assert.Skip` / `Assert.SkipUnless` / `Assert.SkipWhen`, which have no FluentAssertions equivalent. `tests/nextorm.core.tests/Conventions/AssertionStyleTests.cs` enforces both halves of the rule: it parses (not greps) every test source and fails on any other `Assert.*`, and it fails when an xunit test project does not reference the FluentAssertions package (version pinned centrally, 7.2.2 = last Apache-2.0 release).
+- **Integration tests use a real DBMS.** A test in `tests/nextorm.integration.tests` must exercise a live database: a container-backed provider through `ProviderTestSuite` / `ITestProvider`, a raw ADO.NET connection to a container, a file-based SQLite connection, or — for **core-level** tests only — a single provider (SQLite is the natural choice: in-process, no container). A test that needs no database is a unit test and belongs to the matching unit project — `tests/nextorm.core.tests` for core/DI/type contracts and the in-memory provider, `tests/nextorm.<provider>.tests` for SQL-generation and dialect assertions over a placeholder connection. **The in-memory provider is never used in the integration project** (`InMemoryDataContext` is unit-only). The single harness exception is a test whose subject *is* the integration harness (the capability matrix in `ProviderCapabilityContractTests`). `tests/nextorm.core.tests/Conventions/IntegrationSuiteScopingTests.cs` enforces the rule: it parses (not greps) every integration source, fails on any `InMemoryDataContext` usage, and fails on a test class with no database evidence (`ProviderTestSuite` ancestry, harness/container type, ADO.NET connection type, EF Core `DbContext`, a connection-open call, or an explicit SQLite context).
 - `dotnet test tests/<project> -c Debug` works (via the Microsoft.Testing.Platform runner in `global.json`). Focus one test with `--filter "FullyQualifiedName~InMemoryTests"`.
 - xunit v3 native filters also work: `dotnet run --project tests/<project> -c Debug -- -class nextorm.core.tests.InMemoryTests` (`-method`, `-namespace`, `-trait`).
 - `nextorm.integration.tests` starts PostgreSQL, SQL Server, MySQL and ClickHouse with Testcontainers. Point them at the running Podman machine:
@@ -62,13 +64,24 @@
   DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
     dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor
   ```
-  Pre-pulled images: `postgres:17-alpine`, `mcr.microsoft.com/mssql/server:2025-latest`, `mysql:8.4`, `testcontainers/ryuk`; `clickhouse/clickhouse-server:25.8-alpine` is pulled on the first ClickHouse run (`TESTCONTAINERS_RYUK_DISABLED` is not needed). Without `DOCKER_HOST` only the SQLite integration tests run. See `.opencode/skills/running-integration-tests/SKILL.md`.
+  Pre-pulled images: `postgres:17-alpine`, `mcr.microsoft.com/mssql/server:2025-latest`, `mysql:8.4`, `testcontainers/ryuk`; `clickhouse/clickhouse-server:25.8-alpine` is pulled on the first ClickHouse run (`TESTCONTAINERS_RYUK_DISABLED` is not needed). The suite is fail-closed: without `DOCKER_HOST` the container-backed providers **fail**, they do not skip — opt out explicitly with `NEXTORM_SKIP_PROVIDERS=postgres,sqlserver,mysql,clickhouse` if you only need SQLite. See `.opencode/skills/running-integration-tests/SKILL.md`.
 - External databases: `NEXTORM_POSTGRES_CONNECTION`, `NEXTORM_SQLSERVER_CONNECTION`, `NEXTORM_MYSQL_CONNECTION`, `NEXTORM_CLICKHOUSE_CONNECTION` (see `tests/nextorm.integration.tests/Providers/*Container.cs`).
 - **Container-backed integration tests are not optional evidence.** Load `.opencode/skills/running-integration-tests/SKILL.md` before running them. If the Podman socket is missing, do **not** stop at "cannot run": start the machine (`"/mnt/c/Program Files/RedHat/Podman/podman.exe" machine start`), wait, re-check the socket and rerun with `DOCKER_HOST` (see the skill's Troubleshooting). A run where PostgreSQL/SQL Server/MySQL/ClickHouse report `skipped` (i.e. no `DOCKER_HOST`) is **not** a passing run: either set `DOCKER_HOST` and execute them, or state explicitly which providers were not run. Never present a suite that skips provider tests as green.
 
 ## Coverage
 - `coverage.settings.xml` includes only `nextorm.{core,sqlite,postgres,sqlserver}`.
 - CI thresholds `MIN_LINE_COVERAGE=85` and `MIN_BRANCH_COVERAGE=75` (both, `dotnet-coverage`/`reportgenerator`) hard-fail only on `main`; other branches warn. Reproduce with the `dotnet-coverage collect` → `reportgenerator` steps in `.github/workflows/dotnet.yml`.
+- **The integration suite has its own gate.** `coverage.integration.settings.xml` measures what `tests/nextorm.integration.tests` alone covers across every provider assembly it references (core, sqlite, postgres, sqlserver, mysql, mariadb, clickhouse, entityframeworkcore). Thresholds: `MIN_INTEGRATION_LINE_COVERAGE=65`, **`MIN_INTEGRATION_BRANCH_COVERAGE=75`**. `NextORM.Core.InMemory*` is excluded from this gate's denominator (`reportgenerator -classfilters:"-NextORM.Core.InMemory*"`) because the in-memory provider is unit-only by policy and the integration suite can never execute those paths. The branch threshold is a hard requirement: after that exclusion the measured baseline is 73.6 % line / 61.9 % branch, i.e. the gate is currently **red** and stays red until the integration suite's branch coverage is raised to 75 % — do not lower the threshold to make it green. Same main-only hard-fail, other branches warn. Reproduce:
+  ```bash
+  DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+    dotnet tool run dotnet-coverage collect -s coverage.integration.settings.xml -f cobertura \
+      -o tests/coverage/integration.cobertura.xml \
+      "dotnet test tests/nextorm.integration.tests --no-build --verbosity normal"
+  dotnet tool run reportgenerator -reports:tests/coverage/integration.cobertura.xml \
+    -targetdir:tests/coverage/integration-report -reporttypes:"Html;TextSummary" \
+    -riskhotspotassemblyfilters:"+nextorm.*"
+  ```
+  The integration numbers are not comparable to the whole-solution 85/75: the unit-only paths (in-memory provider, DI/type contracts, SQL-assembly tests) are 0 % there by design — that is exactly why they live in the unit projects.
 
 ## Docs
 - DocFX is a local tool: `dotnet docfx docs/docfx.json`. `docs/api/` and `docs/_site/` are generated and gitignored; article pages are hand-written.

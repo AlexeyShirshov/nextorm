@@ -59,7 +59,7 @@ Unit execution mode: sequential in the current tree. D04-R/D04-S share tests; D0
 
 ## Write-footprint
 
-- D01: existing core JoinInto test files, six provider SQL-test projects, `CommonTestSuite.JoinInto.cs`; planned `benchmarks/nextorm.benchmark/JoinIntoBenchmarks.cs`.
+- D01: existing core JoinInto test files, six provider SQL-test projects, `CommonTestSuite.JoinInto.cs`; planned `benchmarks/nextorm.benchmark/Focused/JoinIntoBenchmarks.cs`.
 - D02: `src/nextorm.core/Builders/EntityBuilder.cs:864-1009`, `Builders/Joins/JoinIntoSpec.cs:189/319/436/551/745`, `JoinIntoStitcher.cs:103-215`, `JoinIntoManyToManySpec.cs:221-339`, `JunctionLinkSourceFactory.cs:99-107`; identity/cache files only if proven necessary.
 - D03: `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs` (`TryBuildProjectionSelectList`); test file `tests/nextorm.core.tests/JoinIntoCompositeCarrierSpikeTests.cs`; no entity/materializer change.
 - D04: `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs` (MemberInit gate), `QueryCommand.cs`/`QueryDefinition.cs` (junction-link marker), `Visitors/MemberTranslator.cs` (marker-gated alias fallback), `Builders/Joins/JunctionLinkSourceFactory.cs` (composite `Projection<TJunction,long>` source + marker), `Builders/Joins/JoinIntoManyToManySpec.cs` (composite branch + `GetItemTypes`), `Builders/EntityBuilder.cs` (`BuildPairedKeyEquality` accessibility only); probes `tests/nextorm.sqlite.tests/JoinIntoCompositeJunctionProbeTests.cs`, core materializer probe.

@@ -1,12 +1,13 @@
 # nextorm.examples.mssql.adventureworks
 
-Runnable nextorm port of the AdventureWorks 2022 OLTP database (`Sales`, `Production`, `Person`,
-`Purchasing`). Provider: `nextorm.sqlserver`.
+Comparison project for the AdventureWorks 2022 OLTP database (`Sales`, `Production`, `Person`,
+`Purchasing`): every query is implemented **twice** — with nextorm and with
+[linq2db](https://github.com/linq2db/linq2db) — then both arms are executed against the same database
+and benchmarked.
 
-The point of this project is to show **how a real SQL query becomes nextorm code**. Every method in
-[`AdventureWorksQueries.cs`](AdventureWorksQueries.cs) models exactly one query file in [`Sql/`](Sql) —
-the method comment names it, and the tables below map each SQL construct to the nextorm construct that
-replaces it. Read a `Sql/*.sql` file next to its method and you can translate your own queries.
+The project shows **how a real SQL query becomes nextorm code, and how it looks in another LINQ ORM**.
+Every method pair models exactly one query file in [`Sql/`](Sql): the method comment names it, and the
+tables below map each SQL construct to the nextorm construct that replaces it.
 
 > **Consumes the current checkout (not a published package).** Unlike the postgres and clickhouse
 > examples, this project references `nextorm.core`/`nextorm.sqlserver` from `src/` via `ProjectReference`
@@ -17,12 +18,16 @@ replaces it. Read a `Sql/*.sql` file next to its method and you can translate yo
 
 | Path | What it is |
 |---|---|
-| [`Sql/*.sql`](Sql) | Original T-SQL model queries — the reference the C# is verified against |
+| [`Sql/*.sql`](Sql) | Original T-SQL model queries — the reference both arms are verified against |
 | [`AdventureWorksQueries.cs`](AdventureWorksQueries.cs) | nextorm implementation of the 5 demo queries + 6 course-style exercises |
-| [`Entities.cs`](Entities.cs) | `[SqlTable]` / `[Column]` entity interfaces for the AdventureWorks schemas |
+| [`Entities.cs`](Entities.cs) | nextorm `[SqlTable]` / `[Column]` entity interfaces |
+| [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of the same eleven queries |
+| [`Linq2DbEntities.cs`](Linq2DbEntities.cs) | linq2db `[Table]` / `[Column]` POCOs for the same tables |
+| [`Comparison.cs`](Comparison.cs) | Runs both arms, prints `[ OK ]`/`[FAIL]`/`[DIFF]`, compares row counts |
+| [`Benchmarks.cs`](Benchmarks.cs) | BenchmarkDotNet class: one `[Benchmark]` per arm and query |
 | [`DemoUdf.cs`](DemoUdf.cs) | Provider `[SqlFunction("format")]` UDF for T-SQL `FORMAT` |
 | [`DemoDatabase.cs`](DemoDatabase.cs) | Testcontainers provisioning and `.bak` restore |
-| [`Program.cs`](Program.cs) | Entry point; runs every query, catching per-query failures, and prints a summary |
+| [`Program.cs`](Program.cs) | Entry point: comparison run, or `--benchmark` |
 
 ## Running
 
@@ -31,10 +36,36 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
   dotnet run --project examples/nextorm.examples.mssql.adventureworks -c Debug
 ```
 
-Pass `--connection "<cs>"` (or set `ADVENTUREWORKS_CONNECTION`) to skip the container and restore. The
-program runs every query, prints `[ OK ]`/`[FAIL]` per query, and ends with an `n/m succeeded` summary —
-a `FAIL` is a documented engine gap (`NotSupportedException`/`QueryPreparationException`); any other error
-still aborts the run. See [`../README.md`](../README.md) for details.
+Pass `--connection "<cs>"` (or set `ADVENTUREWORKS_CONNECTION`) to skip the container and restore. Add
+`--only Name1,Name2` to run a subset and `--benchmark` to run the BenchmarkDotNet comparison.
+
+The plain run executes both arms per query, prints the first rows of each and a per-query verdict, then
+an `n/m queries matched in both arms` summary. `[ OK ]` means both arms returned the same number of
+rows; `[FAIL]` means one arm hit a documented engine gap; `[DIFF]` means the row counts differ. Any
+other exception still aborts the run. See [`../README.md`](../README.md) for the shared run notes.
+
+### Benchmarks
+
+`--benchmark` reuses the provisioned database and runs BenchmarkDotNet in-process (`Job.ShortRun` +
+`InProcessEmitToolchain`, `[MemoryDiagnoser]`). Every query has a `Nextorm_*` baseline and a
+`Linq2Db_*` arm; a filtered run:
+
+```bash
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.mssql.adventureworks -c Release -- \
+  --benchmark --filter '*RollingKpi*'
+```
+
+Set `NEXTORM_EXAMPLES_BENCH_FULL=1` for the full out-of-process BenchmarkDotNet job.
+
+### The linq2db arm
+
+Window functions use `Sql.Window.*`, month/quarter buckets use the same
+`DATEADD(quarter, DATEDIFF(quarter, 0, …), 0)` idiom translated through `Sql.DateAdd`/`Sql.DateDiff`,
+`STDEV` uses `AnalyticFunctions.StdDev`, and `FORMAT` is emitted with `Sql.Expr` (as in the nextorm
+arm's `DemoUdf`). The `PIVOT` query is expressed as the equivalent conditional aggregation
+(`SUM(CASE WHEN quarter = n …)`), which is exactly what `PIVOT` rewrites to — this is noted in
+[`Linq2DbQueries.cs`](Linq2DbQueries.cs).
 
 ## SQL → nextorm: general rules
 

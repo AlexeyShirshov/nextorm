@@ -155,7 +155,7 @@ Write BDN output into dedicated directories. Inventory pre-existing tracked/untr
 ## Footprint and predecessor requirements
 Production: `src/nextorm.core/DataContext/DataContext.cs`, `src/nextorm.core/Query/Json/JsonRowWriterFactory.cs`, planned `src/nextorm.core/Query/Json/JsonRowWriterCache.cs`.
 Tests: core/SQLite files above; conditional integration additions in `tests/nextorm.integration.tests/CommonTestSuite.JsonStream.cs` or `.JsonStreamNested.cs` if existing coverage cannot close a matrix row.
-Bench/gate: `benchmarks/nextorm.benchmark/SqliteBenchmarkWriteJson.cs`, `SqliteBenchmarkJsonStreamPhase2.cs`, `eng/perf/{iteration14_gate.py,iteration14-budgets.json,t247_json_gate.py}`, `eng/perf/tests/test_t247_json_gate.py`.
+Bench/gate: `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWriteJson.cs`, `SqliteBenchmarkJsonStreamPhase2.cs`, `eng/perf/{iteration14_gate.py,iteration14-budgets.json,t247_json_gate.py}`, `eng/perf/tests/test_t247_json_gate.py`.
 Docs: this status; planned `docs/specs/performance/T247-json-streaming-report.md`; `docs/comparisons/feature-benchmarks-2026-10-17.md`; RU mirror; `docs/specs/performance/{feature-benchmark-followups-2026-10-17.md,performance-findings.md}`.
 Other collection tasks also need: benchmark directory, `eng/perf/**`, comparison EN/RU files and performance registries; T246 also needs `DataContext.cs`. These shared paths require an exclusive edit/measurement lease.
 No semantic predecessor on T243–T246. Before starting an overlapping edit, its owner must finish/checkpoint and provide the exact diff/base plus retained contracts. T246 must preserve JSON seams; no common preparation-cache abstraction is required.

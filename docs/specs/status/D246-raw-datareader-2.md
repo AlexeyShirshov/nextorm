@@ -353,7 +353,7 @@ CHECK consumes one frozen manifest, appends evidence only, applies P1 priorities
 
 Production, only after P2: `src/nextorm.core/Query/QueryCommandExtensions.cs:308-397`; `src/nextorm.core/DataContext/DataContext.cs:469-583`; `src/nextorm.core/DataContext/QueryPlanner.cs:603-656,820-829`; `src/nextorm.core/DataContext/LobDataReader.cs:20-398`.
 Tests: the five core/SQLite files in `test_scope`, `tests/nextorm.integration.tests/CommonTestSuite.Lob.cs`, `tests/nextorm.integration.tests/SqliteSpecificTests.cs`.
-Harness/tooling: `benchmarks/nextorm.benchmark/SqliteBenchmarkStreaming.cs`; `eng/perf/t246_evidence.py`; `eng/perf/t246-budgets.json`; `eng/perf/tests/test_t246_evidence.py`; `eng/perf/update_benchmark_tables.py`.
+Harness/tooling: `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs`; `eng/perf/t246_evidence.py`; `eng/perf/t246-budgets.json`; `eng/perf/tests/test_t246_evidence.py`; `eng/perf/update_benchmark_tables.py`.
 Docs: the four exact paths under Docs plan; evidence under `artifacts/pdca/T246/rv2/`.
 **Bookkeeping remains writable by coder but outside the frozen-tree footprint:** `docs/specs/status/D246-raw-datareader-2.md`, `docs/specs/status/collection-1.0.9-rc3-open-3.md`, and the strictly limited rv1 pointer below.
 `CommandReaderOwner.cs`, `NextormConfig.cs`, seed DB, sibling gates and rv1 artifacts are read-only. Preserve CRLF; normalize only intentionally edited files and inspect the scoped diff.
@@ -397,7 +397,7 @@ footprint:
   - tests/nextorm.sqlite.tests/D199ScalarInPlanCacheTests.cs
   - tests/nextorm.integration.tests/CommonTestSuite.Lob.cs
   - tests/nextorm.integration.tests/SqliteSpecificTests.cs
-  - benchmarks/nextorm.benchmark/SqliteBenchmarkStreaming.cs
+  - benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs
   - eng/perf/t246_evidence.py
   - eng/perf/t246-budgets.json
   - eng/perf/tests/test_t246_evidence.py

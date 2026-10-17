@@ -61,7 +61,7 @@ select id
 * **`[Key]` и `[DatabaseGenerated]`** - `KeyAttribute` помечает первичный ключ, а
   `DatabaseGeneratedAttribute` - столбец, генерируемый базой данных (`DatabaseGeneratedOption.Identity`
   или `.Computed`). Запросы их игнорируют, но билдер вставки читает их: столбцы identity/computed
-  исключаются из записываемых значений (см. [Изменение данных (INSERT)](../guide/15-insert-statement.md)).
+  исключаются из записываемых значений (см. [Изменение данных (INSERT)](../guide/17-insert-statement.md)).
   Если ключ не объявлен, свойство с именем `Id` или `<TypeName>Id` считается ключом по соглашению.
 * **Бинарные столбцы** - свойство `byte[]` отображается на бинарный столбец (`bytea` в PostgreSQL,
   `varbinary`/`image` в SQL Server, `blob` в SQLite). `byte[]` можно также проецировать напрямую
@@ -351,10 +351,10 @@ public interface IOrder
 
 ---
 
-Source: `tests/nextorm.integration.tests/Entities.cs:7`;
-`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:37`;
-`tests/nextorm.sqlite.tests/MetadataRegistrationTests.cs:18`;
+Source: `tests/nextorm.integration.tests/Support/Entities.cs:7`;
+`tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:37`;
+`tests/nextorm.sqlite.tests/Metadata/MetadataRegistrationTests.cs:18`;
 `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs:111`;
 `src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs:16`;
 `src/nextorm.core/DataContext/DataContextCache.cs:20`;
-`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:116`.
+`tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:116`.

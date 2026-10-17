@@ -1,0 +1,769 @@
+# Common table expressions (CTE)
+
+> Declare one or more named `with` queries and use them as the `from` source of a query, including
+> recursive CTEs for series and hierarchies.
+
+**Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](../engine/index.md) · [Set operations](08-set-operations.md)
+
+## Overview
+
+A CTE is declared with `With(name, query)` (non-recursive) or `WithRecursive(name, query, maxRecursion)`
+(recursive) on [`IDataContext`](xref:NextORM.Core.IDataContext). Both are extension methods ([`DataContextExtensions`](xref:NextORM.Core.DataContextExtensions)) and both return a
+[`CteQuery`](xref:NextORM.Core.CteQuery) scope that holds the declarations collected so far in [`Ctes`](xref:NextORM.Core.CteQuery.Ctes):
+
+```csharp
+public static CteQuery With(this IDataContext dataContext, string name, QueryCommand query);
+
+public static CteQuery WithRecursive(this IDataContext dataContext, string name, QueryCommand query,
+    int? maxRecursion = null);
+```
+
+Declarations are immutable: every [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand))/[`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32})) call returns a **new** scope that appends a
+[`CteDefinition`](xref:NextORM.Core.CteDefinition) to the previous ones. A definition records the name, the [`QueryCommand`](xref:NextORM.Core.QueryCommand) that produces it
+and whether the body may reference its own name.
+
+[`From`](xref:NextORM.Core.CteQuery.From(NextORM.Core.CteDefinition)) (or `From(CteDefinition)`) starts a new query whose `from` is one of the
+declared CTEs, carrying every declaration into the resulting command. It returns the regular
+[`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1) over the entity-free [`TableAlias`](xref:NextORM.Core.TableAlias) mode, so the
+**full operator set** applies — [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}}))/[`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))/[`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}}))/[`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32))/[`Limit`](xref:NextORM.Core.EntityBuilder`1.Limit(System.Int32))/[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})).
+CTE columns are read by name (`t["id"].AsInt` or `t.GetInt64("id")`). Recursive bodies reference their own
+name the same way (`dataContext.From("nums")` inside the step query).
+
+Rendering: dialects that use the ANSI form emit `with recursive` when any definition is recursive
+(SQLite, PostgreSQL); SQL Server declares a recursive CTE with `with` alone and appends the depth option
+after the statement.
+
+## Non-recursive CTE
+
+```csharp
+var recent = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id });
+
+var rows = dataContext
+    .With("recent", recent)
+    .From("recent")
+    .Select(t => new { Id = t["id"].AsInt })
+    .ToList();
+```
+
+```sql
+-- SQLite (all providers produce the same shape)
+with recent as (select id
+ from complex_entity where (id > 1)) select id
+ from recent
+```
+
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
+Output:
+
+| Id |
+|----|
+| 2 |
+| 3 |
+
+## Typed CTE
+
+`With` reads a CTE through [`TableAlias`](xref:NextORM.Core.TableAlias), so every column is addressed by a
+string. When you still hold the defining query, [`AsCte`](xref:NextORM.Core.QueryCommand`1.AsCte(System.String))
+declares the same ordinary CTE as a typed descriptor and `From(Cte<T>)` reads it with member access and
+type inference:
+
+```csharp
+var recent = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id })
+    .AsCte("recent");
+
+var rows = dataContext
+    .From(recent)
+    .Select(r => new { r.Id })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with recent as (select id
+ from complex_entity where (id > 1)) select id
+ from recent as 't1'
+```
+
+[`QueryCommand<T>.AsCte`](xref:NextORM.Core.QueryCommand`1.AsCte(System.String)) returns an immutable
+[`Cte<TResult>`](xref:NextORM.Core.Cte`1) whose `TResult` is exactly the `Select` projection;
+`From(Cte<T>)` returns the regular [`EntityBuilder<TResult>`](xref:NextORM.Core.EntityBuilder`1), so the
+**full operator set** (`Where`/`Join`/`GroupBy`/`OrderBy`/`Limit`/`Select`) applies and members (`r.Id`)
+replace `t["id"]` / `t.GetInt64("id")`. A CTE is a **typed projection source, not a mapped entity**: a
+whole-entity `TResult` does not make the outer source a table, and members resolve to the defining
+projection's output aliases, carrying its aliases and configured converters/provider types — no DTO remapping.
+
+The string API is unchanged: `With`/`WithRecursive`/`From(string)`/`From(CteDefinition)` still declare and
+read CTEs by name and remain available. A recursive CTE can also be declared through the typed
+`AsRecursiveCte` surface described below.
+
+Typed declaration reuses the same machinery, so heterogeneous descriptors and a self-join compose normally.
+The same descriptor instance used twice is declared once; different `TResult`s are independent:
+
+```csharp
+var recent = dataContext.From<IComplexEntity>()
+    .Select(x => new { x.Id, x.String })
+    .AsCte("recent");
+var other = dataContext.From<ISimpleEntity>()
+    .Select(y => new { y.Id })
+    .AsCte("other");
+
+var joined = dataContext.From(recent)
+    .Join(dataContext.From(other), (r, o) => r.Id == o.Id)
+    .Select(p => new { Id = p.Item1.Id, Name = p.Item1.String, Other = p.Item2.Id })
+    .ToList();
+
+// self-join: one declaration, two outer aliases
+var pairs = dataContext.From(recent)
+    .Join(dataContext.From(recent), (a, b) => a.Id == b.Id)
+    .Select(p => new { Left = p.Item1.Id, Right = p.Item2.Id })
+    .ToList();
+```
+
+```sql
+-- SQLite: heterogeneous descriptors
+with recent as (select id as 'Id', somestring as 'String'
+ from complex_entity), other as (select id as 'Id'
+ from simple_entity) select t1.Id, t1.String, t2.Id
+ from recent as 't1'
+ join other as 't2' on t1.Id = cast(t2.Id as bigint)
+
+-- SQLite: self-
+join of one descriptor -> one declaration, two aliases
+with recent as (select id as 'Id', somestring as 'String'
+ from complex_entity) select t1.Id, t2.Id
+ from recent as 't1'
+ join recent as 't2' on t1.Id = t2.Id
+```
+
+Dependencies are hoisted automatically: `From(Cte<T>)` attaches the descriptor's declaration together with
+every declaration its body transitively references (nested CTE bodies, joins, derived subqueries,
+set-operation branches), ordered dependency-before-consumer, and omits declarations the body carries but never
+references. A descriptor used more than once contributes a single declaration; two different declarations
+sharing a name are still rejected, as with the string API.
+
+The descriptor itself can be passed straight to the join family, so the conversion
+(`dataContext.From(cte)`) can be dropped when the receiving builder already carries the context — see
+[Joining a typed CTE directly](#joining-a-typed-cte-directly). This works for the whole operator set,
+including `AsCte`-descriptors that project an anonymous type.
+
+Entity filters are **not** injected on the typed source — neither on the main `From(Cte<T>)` source nor on a
+joined one; the defining query's own filters stay inside the CTE body.
+
+## Typed recursive CTE
+
+A typed recursive CTE is declared from its **anchor** with `AsRecursiveCte`. It takes the name, a callback
+that builds the step from a typed self-reference, and (on the second overload) a required recursion-depth
+limit:
+
+```csharp
+public Cte<TResult> AsRecursiveCte(string name,
+    Func<CteReference<TResult>, QueryCommand<TResult>> step);
+
+public Cte<TResult> AsRecursiveCte(string name,
+    Func<CteReference<TResult>, QueryCommand<TResult>> step, int maxRecursion);
+```
+
+The callback runs **exactly once**, during the `AsRecursiveCte` call; it is never re-invoked by
+preparation, SQL generation or execution. Inside it [`dataContext.From(reference)`](xref:NextORM.Core.CteReference`1)
+returns the regular [`EntityBuilder<TResult>`](xref:NextORM.Core.EntityBuilder`1) reading the CTE, and member
+access resolves against the anchor's projection shape. The step query is combined with the anchor as
+`anchor UNION ALL step` **automatically** — there is no manual `UnionAll` and no second declaration.
+
+The self-reference is **owner-scoped**: a [`CteReference<TResult>`](xref:NextORM.Core.CteReference`1) is valid
+only while the callback that received it is running. Reading it outside that callback (a captured or foreign
+reference, even one carrying the same name) or reading a self-reference from the anchor throws
+`InvalidOperationException` **before any database command is built**. There is no mutual recursion: a
+recursive CTE may reference only its own self-reference, never another recursive definition.
+
+```csharp
+// Anchor: id 1. Step: add 1 while the value is below 5 -> 1, 2, 3, 4, 5.
+var numbers = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => s.Id)
+    .AsRecursiveCte("nums", self => dataContext.From(self)
+        .Where(n => n < 5)
+        .Select(n => n + 1));
+
+var rows = dataContext.From(numbers).ToList();
+```
+
+```sql
+-- SQLite
+with recursive nums as (select id as 'Id'
+ from simple_entity
+ where id = 1
+ union all
+ select (Id + 1) as 'c0'
+ from nums as 't1'
+ where (t1.Id < 5)) select id
+ from nums as 't1'
+```
+
+The same surface covers an anonymous projection with several slots:
+
+```csharp
+var numbers = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => new { s.Id, Next = s.Id + 1 })
+    .AsRecursiveCte("nums", self => dataContext.From(self)
+        .Where(n => n.Id < 4)
+        .Select(n => new { Id = n.Id + 1, Next = n.Next + 1 }));
+
+var rows = dataContext.From(numbers)
+    .Select(n => new { n.Id, n.Next })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with recursive nums as (select id as 'Id', (id + 1) as 'Next'
+ from simple_entity
+ where id = 1
+ union all
+ select (id + 1) as 'Id', (Next + 1) as 'Next'
+ from nums as 't1'
+ where (t1.Id < 4)) select Id, Next
+ from nums as 't1'
+```
+
+... and a DTO projection, for example the member-init `CteNumberRow` used by the string API below:
+
+```csharp
+public sealed class CteNumberRow
+{
+    public int n { get; set; }
+}
+
+var numbers = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => new CteNumberRow { n = s.Id })
+    .AsRecursiveCte("nums", self => dataContext.From(self)
+        .Where(n => n.n < 5)
+        .Select(n => new CteNumberRow { n = n.n + 1 }));
+
+var rows = dataContext.From(numbers)
+    .Select(n => new CteNumberRow { n = n.n })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with recursive nums as (select id as 'n'
+ from simple_entity
+ where id = 1
+ union all
+ select (n + 1) as 'n'
+ from nums as 't1'
+ where (t1.n < 5)) select n
+ from nums as 't1'
+```
+
+### The anchor defines the shape
+
+The recursive CTE's readable columns, their order and their aliases come from the **anchor's** projection,
+not the step's. The step must reproduce that shape slot-for-slot; the step's own aliases do not rename the
+CTE's columns. Before any SQL reaches a database, every preparation validates the step against the anchor
+per leaf and throws `InvalidOperationException` when any of the following differs:
+
+* the column **count**;
+* the self-reference **member slot** at that position (a bare member read must name the anchor's column);
+* the declared **CLR type**;
+* the bound **provider type** (the converter-bound type, or the prepared provider type);
+* the **nullability** (whether the CLR type is a `Nullable<T>`).
+
+The message names the CTE and the step position, for example:
+
+```text
+The recursive common table expression 'reordered' is invalid at step position 0: the step reads the
+self-reference member 'Total' at position 0, but the anchor names that column 'Id'.
+```
+
+The validation runs on every preparation, including a plan-cache hit, so a cached plan cannot bypass the
+anchor/step contract.
+
+### Recursion depth (`maxRecursion`)
+
+The two-argument overload emits **no** depth hint: SQL Server uses its own default (`100`). The
+three-argument overload takes a required `int` (there is no nullable default) and emits
+`option (maxrecursion n)` on SQL Server only; `0` means "no limit" and a positive value is the maximum
+recursion depth. Every other provider ignores the hint and uses its own default, exactly as the legacy
+string API does.
+
+```csharp
+var numbers = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => s.Id)
+    .AsRecursiveCte("nums", self => dataContext.From(self)
+        .Where(n => n < 5)
+        .Select(n => n + 1), 100);
+
+var rows = dataContext.From(numbers).ToList();
+```
+
+```sql
+-- SQL Server: no `recursive` keyword, depth option appended
+with nums as (select id as [Id]
+ from simple_entity
+ where id = 1
+ union all
+ select (Id + 1) as [c0]
+ from nums as [t1]
+ where (t1.Id < 5)) select id
+ from nums as [t1] option (maxrecursion 100)
+```
+
+### Provider differences (typed recursion)
+
+| Provider | Typed recursive CTE |
+|---|---|
+| SQLite | Supported; declares `with recursive`; `maxRecursion` ignored. |
+| PostgreSQL | Supported; declares `with recursive`; `maxRecursion` ignored. |
+| SQL Server | Supported; declares `with` (no `recursive` keyword); two-argument overload emits no hint (server default), three-argument overload emits `option (maxrecursion n)` (`0` = no limit, positive = depth). |
+| MySQL | Supported; declares `with recursive`; `maxRecursion` ignored. |
+| MariaDB | Supported; declares `with recursive`; `maxRecursion` ignored. |
+| ClickHouse | **Excluded**: a typed recursive CTE throws `NotSupportedException` before any SQL is emitted. An ordinary (non-recursive) typed CTE still works on ClickHouse. |
+| In-memory | Not applicable: recursion is rendered by the SQL dialects. |
+
+The legacy string `WithRecursive` is **not** gated by this capability check and keeps its existing behavior on
+every provider.
+
+Every example above is bounded by a terminating predicate in the step; never build an unbounded recursive
+CTE.
+
+## Chained declarations
+
+Each [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) appends to the previous scope, so a later CTE can be defined in terms of an earlier one.
+The declarations are rendered in declaration order:
+
+```csharp
+var first = dataContext.From<IComplexEntity>()
+    .Where(x => x.Id > 1)
+    .Select(x => new { x.Id });
+
+var second = dataContext.From("first")
+    .Select(t => new { id = t["id"].AsInt });
+
+var rows = dataContext
+    .With("first", first)
+    .With("second", second)
+    .From("second")
+    .Select(t => new { id = t["id"].AsInt })
+    .ToList();
+```
+
+```sql
+with first as (select id
+ from complex_entity where (id > 1)), second as (select id
+ from first) select id
+ from second
+```
+
+> **Nested CTEs are hoisted automatically.** A CTE whose body itself carries a `WITH` — a query built as
+> `dataContext.With(...).From(...)` and passed as the body of another `With` — is flattened into a single
+> top-level `with` instead of being rendered literally nested. The hoister emits each dependency before
+> the CTE that consumes it, even when the dependency is a sibling declared later, and keeps the original
+> relative order of declarations that do not depend on each other. A declaration is listed only once when
+> the same `CteDefinition` instance is referenced more than once; two different instances that share a
+> name are rejected with an `InvalidOperationException` (a single `WITH` cannot bind one name to two
+> definitions).
+>
+> Every provider then sees the flat, portable form. In particular, SQL Server always emits a plain
+> `with name as (...)` list — never `with recursive`; T-SQL declares a recursive CTE with `with` alone.
+>
+> A declaration that cannot be moved to the top-level `WITH` — one nested inside a derived-table subquery,
+> a correlated reference or a set-operation branch — fails fast with an `InvalidOperationException` before
+> any SQL is rendered, rather than emitting the non-portable nested form.
+
+`From(CteDefinition)` is equivalent to `From(definition.Name)` and is convenient when you kept the scope
+instead of the name:
+
+```csharp
+var cte = dataContext.With("recent", recent);
+var rows = cte.From(cte.Ctes[0])
+    .Select(t => new { id = t["id"].AsInt })
+    .ToList();
+```
+
+## Composing over a CTE
+
+The CTE source is the regular generic builder, so anything that works over a table works over a CTE:
+filter, aggregate, order, page and join. A later CTE can also aggregate an earlier one by name:
+
+```csharp
+var first = dataContext.From<IComplexEntity>()
+    .Select(x => new { x.Id, name = x.String });
+
+var second = dataContext.From("first")
+    .GroupBy(t => new { name = t.GetString("name") })
+    .Select(t => new { name = t.GetString("name"), count = SqlFunctions.Sql.count() });
+
+var rows = dataContext
+    .With("first", first)
+    .With("second", second)
+    .From("second")
+    .OrderByDescending(t => t.GetInt32("count"))
+    .Select(t => new { name = t.GetString("name"), count = t.GetInt32("count") })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with first as (select id, somestring as 'name'
+ from complex_entity),
+     second as (select name, count(*) as 'count'
+ from first group by name)
+select name, count
+ from second order by count desc
+```
+
+A CTE can be joined to another CTE (or to a table). Both sides are addressed by name, and each
+`TableAlias` column is table-qualified, so a column shared by both CTEs is unambiguous:
+
+```csharp
+var left = dataContext.From<IComplexEntity>().Select(x => new { x.Id });
+var right = dataContext.From<ISimpleEntity>().Select(x => new { x.Id });
+
+var rows = dataContext
+    .With("l", left)
+    .With("r", right)
+    .From("l")
+    .Join(dataContext.From("r"), (l, r) => l.GetInt64("id") == r.GetInt64("id"))
+    .Select(p => new { Id = p.Item1.GetInt64("id"), Other = p.Item2.GetInt64("id") })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with l as (select id
+ from complex_entity), r as (select id
+ from simple_entity) select t1.id, t2.id
+ from l as 't1'
+ join r as 't2' on t1.id = t2.id
+```
+
+> The CTE source has no mapped entity, so its columns are read by name (`t.GetInt64("id")` /
+> `t["id"].AsInt`) and the names must match the CTE body's output aliases. Name the projection members
+> after the SQL aliases (lower-case `snake_case`) so the outer references stay exact.
+
+### Joining a typed CTE directly
+
+Once a descriptor exists, every join operator accepts it directly: `Join`, `LeftJoin`, `RightJoin`,
+`FullJoin`, `CrossJoin`, `CrossApply` and `OuterApply` each take a [`Cte<T>`](xref:NextORM.Core.Cte`1) and convert it with the
+receiving builder's context before delegating to the existing [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1)-source overload. The direct form
+produces exactly the SQL, parameters and materialized shape of converting it first:
+
+```csharp
+var left = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id })
+    .AsCte("l");
+var right = dataContext.From<ISimpleEntity>()
+    .Select(s => new { s.Id })
+    .AsCte("r");
+
+// direct: the descriptor is converted with this context
+var rows = dataContext.From(left)
+    .Join(right, (l, r) => l.Id == r.Id)
+    .Select(p => new { Id = p.Item1.Id, Other = p.Item2.Id })
+    .ToList();
+
+// equivalent explicit form
+var converted = dataContext.From(left)
+    .Join(dataContext.From(right), (l, r) => l.Id == r.Id)
+    .Select(p => new { Id = p.Item1.Id, Other = p.Item2.Id })
+    .ToList();
+```
+
+```sql
+-- SQLite: both forms produce this
+with l as (select id as 'Id'
+ from complex_entity where (id > 1)), r as (select id as 'Id'
+ from simple_entity) select t1.Id, t2.Id
+ from l as 't1'
+ join r as 't2' on t1.Id = cast(t2.Id as bigint)
+```
+
+All seven operators are covered. The conditionless three (`CrossJoin`/`CrossApply`/`OuterApply`) take
+only the descriptor; the four conditional ones take the predicate and an optional trailing
+`Action<JoinOptions>`. The options overloads have **no** default value, so an omitted options argument
+selects the concise overload:
+
+```csharp
+var rows = dataContext.From(left)
+    .Join(right, (l, r) => l.Id == r.Id, o => o.SuppressCartesianWarning());
+```
+
+A direct descriptor behaves exactly like the converted one everywhere: dependencies are hoisted in
+dependency-before-consumer order, the same instance used twice is declared once, a distinct descriptor
+with a duplicate name is still rejected, entity filters stay inside the defining body, and repeated
+calls do not mutate the shared command or its cache flag. On a [`JoinedEntityBuilder<T1..Tn>`](xref:NextORM.Core.JoinedEntityBuilder`2) the same
+overloads exist for receiver arities 2–7, so a CTE can be joined at any continuation; the flat typed
+projection still stops at eight slots (no further join case is declared at arity eight), while the
+inherited generic-base joins remain reachable.
+
+A CTE scope also drives a multi-table `UPDATE`/`DELETE`. Put the CTE on the **joined** side and keep the
+physical table as the target; the declaration is hoisted before the mutation:
+
+```csharp
+var recent = dataContext
+    .With("recent", dataContext.From<IOrder>().Where(o => o.Id > 1000).Select(o => new { o.Id }));
+
+dataContext.From<IOrder>()
+    .Join(recent.From("recent"), (o, r) => o.Id == r.GetInt64("id"))
+    .CreateUpdateJoinBuilder()
+    .Set(p => p.Item1.Status, "archived")
+    .Update();
+```
+
+```sql
+-- PostgreSQL
+with recent as (select id
+ from orders where (id > 1000)) update orders as "t1" set status = @p0 from recent as "t2" where t1.id = t2.id
+```
+
+This works on every provider that supports `UPDATE ... FROM`/`JOIN` (and `DELETE ... USING`/join), at any
+join position, and for recursive CTEs. See
+[Data modification (UPDATE)](19-update-statement.md#updating-from-a-join) and
+[Data modification (DELETE)](18-delete-statement.md#delete-based-on-a-join).
+
+## Recursive CTE: a number series
+
+A recursive CTE is a `union all` of an **anchor** (a non-recursive query) and a **step** that reads the
+CTE by name and stops when the predicate no longer matches. Call [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32})) with the union as the
+body:
+
+```csharp
+public sealed class CteNumberRow
+{
+    public int n { get; set; }
+}
+
+var anchor = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => new CteNumberRow { n = s.Id });
+
+var step = dataContext.From("nums")
+    .Where(t => t["n"].AsInt < 5)
+    .Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+
+var body = anchor.UnionAll(step);
+
+var numbers = dataContext
+    .WithRecursive("nums", body)
+    .From("nums")
+    .Select(t => new CteNumberRow { n = t["n"].AsInt })
+    .ToList();
+
+// numbers -> 1, 2, 3, 4, 5
+```
+
+```sql
+-- SQLite: `with recursive` prefix
+with recursive nums as (select id as 'n'
+ from simple_entity where id = 1 union all select (n + 1) as 'n'
+ from nums where (n < 5)) select n
+ from nums
+```
+
+Output:
+
+| n |
+|---|
+| 1 |
+| 2 |
+| 3 |
+| 4 |
+| 5 |
+
+`maxRecursion` is an optional depth limit. Only SQL Server has a statement-level option for it, and the
+dialect appends `option (maxrecursion n)` to the end of the statement; SQLite and PostgreSQL ignore it
+and use their own default:
+
+```csharp
+var numbers = dataContext
+    .WithRecursive("nums", body, maxRecursion: 100)
+    .From("nums")
+    .Select(t => new CteNumberRow { n = t["n"].AsInt })
+    .ToList();
+```
+
+```sql
+-- SQL Server: no `recursive` keyword, depth option appended
+with nums as (select id as [n]
+ from simple_entity where id = 1 union all select (n + 1) as [n]
+ from nums where (n < 5)) select n
+ from nums option (maxrecursion 100)
+```
+
+## CTE plus a captured parameter
+
+A captured value in the CTE body becomes a parameter exactly like anywhere else, and the
+parameter-extraction pass walks the `with` clause, not only the outer statement:
+
+```csharp
+var threshold = 1L;
+
+var prepared = dataContext
+    .With("recent", dataContext.From<IComplexEntity>()
+        .Where(x => x.Id > threshold)
+        .Select(x => new { x.Id }))
+    .From("recent")
+    .Select(t => new { id = t["id"].AsInt })
+    .Prepare();
+
+var ids = prepared.ToList(dataContext);
+```
+
+```sql
+-- SQLite parameter placeholder; SQL Server/PostgreSQL use @threshold
+with recent as (select id
+ from complex_entity where (id > $threshold)) select id
+ from recent
+```
+
+## Plan-cache reuse
+
+The CTE definitions take part in the plan-cache key, so two queries that differ only in a CTE body do
+**not** share a cached plan. Conversely, freshly built but structurally equal chains do reuse the cached
+plan, including a recursive CTE whose body is a `union all` of two fresh commands:
+
+* a cached CTE plan re-extracts the CTE's captured parameter on a cache hit
+  (`PlanCacheTests.Cte_WithCapturedParam_RepeatedExecution_ShouldRefreshParam`);
+* two different CTE bodies produce two plans
+  (`PlanCacheTests.Cte_DifferentDefinitions_ShouldNotSharePlan`);
+* an equivalent recursive CTE built again reuses the cached plan
+  (`PlanCacheTests.RecursiveCte_FreshCommand_ShouldReuseCachedPlan`).
+
+See [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md) for the lifetime and invalidation rules of the
+plan cache.
+
+## Data-modifying CTE (PostgreSQL)
+
+PostgreSQL is the only supported provider that accepts a data-modifying statement as a CTE body
+(`WITH <name> AS (<INSERT|UPDATE|DELETE> ... RETURNING ...)`), gated by
+[`SupportsDataModifyingCtes`](xref:NextORM.Core.ISqlDialect.SupportsDataModifyingCtes). nextorm exposes it
+through the `With(name, mutation)` overloads on `IDataContext`/`CteQuery`, which accept a row-returning
+`INSERT`, `UPDATE` or `DELETE` and return a
+[`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1) typed by the `RETURNING` projection.
+A `RETURNING` projection is required — a side-effect-only body is out of scope — and both single-table and
+join/multi-table mutations are accepted on PostgreSQL INNER joins for arities 2–8: a multi-table
+`UPDATE ... FROM` through
+[`UpdateJoinBuilder<TProjection>.Returning()`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning) or
+[`Returning(projection)`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})),
+and a multi-table `DELETE ... USING` through the joined
+builder's [`CreateDeleteJoinBuilder()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteJoinBuilder``2(NextORM.Core.JoinedEntityBuilder{``0,``1})),
+which returns a [`DeleteJoinBuilder<TProjection>`](xref:NextORM.Core.DeleteJoinBuilder`1) whose
+[`Returning()`](xref:NextORM.Core.DeleteJoinBuilder`1.Returning)/[`Returning(projection)`](xref:NextORM.Core.DeleteJoinBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))
+switches to the row-returning terminal. `Returning()` — equivalent to `Returning(p => p)` — returns the whole
+joined projection; the explicit projection form is unchanged. Every other provider rejects
+`With(name, mutation)` with `NotSupportedException`, because its CTE body must be a `SELECT`. Unlike a read
+CTE, a statement whose `WITH` contains a data-modifying CTE is never stored in the plan cache (it is
+side-effecting), so it is re-planned on every call.
+
+```csharp
+// Single-table UPDATE body: update, then read the updated rows typed.
+var updated = dataContext
+    .With("upd", dataContext.CreateUpdateBuilder<IOrder>()
+        .Set(x => x.Total, 0)
+        .Where(x => x.CustomerId == 7)
+        .Returning(x => new { x.Id, x.Total }))
+    .From("upd")
+    .Select(r => new { r.Id, r.Total })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+with upd as (update orders set total = @p0 where customer_id = 7 returning id, total) select id, total
+ from upd as "t1"
+```
+
+```csharp
+// Join/multi-table DELETE body: delete the target rows matched by the join, returning columns from both sides.
+var doomed = dataContext
+    .From<IOrder>()
+    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .CreateDeleteJoinBuilder()
+    .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
+
+var removed = dataContext
+    .With("del", doomed)
+    .From("del")
+    .Select(r => new { r.OrderId, r.CustomerName })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName"
+ from del as "t1"
+```
+
+```csharp
+// Whole-projection body: .Returning() returns every slot, and the read side addresses them by ItemN.
+var doomed = dataContext
+    .From<IOrder>()
+    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .CreateDeleteJoinBuilder()
+    .Returning();   // equivalent to .Returning(p => p)
+
+var removed = dataContext
+    .With("del", doomed)
+    .From("del")
+    .Select(r => new { OrderId = r.Item1.Id, CustomerName = r.Item2.Name })
+    .ToList();
+```
+
+The whole-projection body emits **every** returnable column of both slots under deterministic
+`__sN_*` aliases (`__s1_*` for the target, `__s2_*` for the joined side), so the read side addresses the
+stored alias rather than the CLR member name:
+
+```sql
+-- PostgreSQL: read side of the whole-projection body above
+select "__s1_id", "__s2_name"
+ from del as "t1"
+```
+
+The write CTE is documented together with the write surface it belongs to — typed read-back via
+`From`/`FromTable`, a `VALUES` or `INSERT ... SELECT` body, reading an earlier read CTE, and feeding a main
+`INSERT ... SELECT` — in
+[Data modification (INSERT): Data-modifying CTE](17-insert-statement.md#data-modifying-cte-postgresql).
+For the general `UPDATE` surface see [Data modification (UPDATE)](19-update-statement.md), and for `DELETE`
+[Data modification (DELETE)](18-delete-statement.md).
+
+## Provider differences
+
+| Provider | Behaviour |
+|---|---|
+| SQLite | `with` for non-recursive, `with recursive` for recursive; no depth option. |
+| SQL Server | Recursive CTEs are declared with `with` alone (no `recursive` keyword); `maxRecursion` renders `option (maxrecursion n)` at the end of the statement. |
+| PostgreSQL | `with` / `with recursive`; no depth option. |
+| MySQL | `with` for non-recursive, `with recursive` for recursive; no depth option. |
+| MariaDB | `with` / `with recursive`; no depth option. |
+| ClickHouse | Every CTE is declared with plain `with`; recursive CTEs are not supported. |
+| In-memory | Not applicable: CTEs are rendered by the SQL dialects and are not part of the in-memory provider. |
+
+## See also
+
+* [Set operations](08-set-operations.md) - [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) and friends, used to build a recursive body.
+* [Joins](04-joins.md) - joining a CTE to a table, as in `CommonTestSuite.Cte.cs`.
+* [Raw SQL](14-raw-sql.md) - when the whole statement is hand-written.
+* [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md) - how CTE plans are cached.
+
+---
+
+Source: `src/nextorm.core/Builders/CteQuery.cs:7`, `src/nextorm.core/DataContext/DataContextExtensions.cs:9`;
+`tests/nextorm.integration.tests/CommonTestSuite/Cte/CommonTestSuite.Cte.cs:14`, `tests/nextorm.integration.tests/CommonTestSuite/Cte/CommonTestSuite.Cte.cs:33`;
+`tests/nextorm.core.tests/Cte/CteQueryTests.cs:8`;
+typed recursive CTE: `src/nextorm.core/Cte.cs:15`, `src/nextorm.core/Query/QueryCommand.TResult.cs:1100`,
+`src/nextorm.core/DataContext/SqlSourceRenderer.cs:35`, `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:981`;
+`tests/nextorm.core.tests/Cte/TypedCteTests.cs:1057`, `tests/nextorm.sqlite.tests/Cte/TypedCteTests.cs:718`;
+`tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:190`, `tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:343`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:1188`, `:1202`, `:1216`, `:1231`, `:1248`;
+`tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:827`, `:856`;
+`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:759`, `:788`.

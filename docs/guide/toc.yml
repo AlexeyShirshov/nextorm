@@ -1,67 +1,65 @@
-- name: Filtering (WHERE)
-  href: 01-filtering-where.md
-- name: Joins
-  href: 02-joins.md
-- name: Grouping and aggregates
-  href: 03-grouping-and-aggregates.md
-- name: Sorting and paging
-  href: 04-sorting-and-paging.md
-- name: Subqueries
-  href: 05-subqueries.md
-- name: Set operations
-  href: 06-set-operations.md
-- name: SELECT DISTINCT
-  href: 07-distinct.md
-- name: Common table expressions (CTE)
-  href: 08-cte.md
-- name: Window functions
-  href: 09-window-functions.md
-- name: User-defined functions
-  href: 10-user-defined-functions.md
-- name: Table-valued functions
-  href: 11-table-valued-functions.md
-- name: Raw SQL
-  href: 12-raw-sql.md
-- name: Query hints
-  href: 13-query-hints.md
-- name: JSON support across providers
-  href: 14-json.md
-- name: Data modification (INSERT)
-  href: 15-insert-statement.md
-- name: Data modification (DELETE)
-  href: 16-delete-statement.md
-- name: Data modification (UPDATE)
-  href: 17-update-statement.md
-- name: Materializing a query into a table
-  href: 18-create-table-as.md
-- name: Data modification (MERGE)
-  href: 19-merge-statement.md
-- name: Bulk insert
-  href: 20-bulk-insert.md
-- name: Transactions
-  href: 21-transactions.md
-- name: Duration (TimeSpan) columns
-  href: 22-duration-columns.md
-- name: Executing statements in one batch
-  href: 23-sql-batch.md
-- name: Optimistic concurrency and change tracking
-  href: 24-optimistic-concurrency.md
-- name: Range columns (pair of scalar columns)
-  href: 25-range-columns.md
-- name: Streaming large objects (BLOB/CLOB)
-  href: 26-large-objects.md
-- name: Dynamic columns
-  href: 27-dynamic-columns.md
-- name: Streaming data to a Stream
-  href: 28-streaming-data.md
-- name: Implicit navigation queries
-  href: 29-implicit-navigation.md
-- name: Projections
-  href: 30-projections.md
 - name: Query sources
-  href: 31-query-sources.md
+  href: 01-query-sources.md
+- name: Projections
+  href: 02-projections.md
+- name: Filtering (WHERE)
+  href: 03-filtering-where.md
+- name: Joins
+  href: 04-joins.md
+- name: Grouping and aggregates
+  href: 05-grouping-and-aggregates.md
+- name: Sorting and paging
+  href: 06-sorting-and-paging.md
+- name: Subqueries
+  href: 07-subqueries.md
+- name: Set operations
+  href: 08-set-operations.md
+- name: SELECT DISTINCT
+  href: 09-distinct.md
+- name: Common table expressions (CTE)
+  href: 10-cte.md
+- name: Window functions
+  href: 11-window-functions.md
+- name: User-defined functions
+  href: 12-user-defined-functions.md
+- name: Table-valued functions
+  href: 13-table-valued-functions.md
+- name: Raw SQL
+  href: 14-raw-sql.md
+- name: Query hints
+  href: 15-query-hints.md
+- name: JSON support across providers
+  href: 16-json.md
+- name: Data modification (INSERT)
+  href: 17-insert-statement.md
+- name: Data modification (DELETE)
+  href: 18-delete-statement.md
+- name: Data modification (UPDATE)
+  href: 19-update-statement.md
+- name: Materializing a query into a table
+  href: 20-create-table-as.md
+- name: Data modification (MERGE)
+  href: 21-merge-statement.md
+- name: Bulk insert
+  href: 22-bulk-insert.md
+- name: Transactions
+  href: 23-transactions.md
+- name: Duration (TimeSpan) columns
+  href: 24-duration-columns.md
+- name: Executing statements in one batch
+  href: 25-sql-batch.md
+- name: Optimistic concurrency and change tracking
+  href: 26-optimistic-concurrency.md
+- name: Range columns (pair of scalar columns)
+  href: 27-range-columns.md
+- name: Streaming large objects (BLOB/CLOB)
+  href: 28-large-objects.md
+- name: Dynamic columns
+  href: 29-dynamic-columns.md
+- name: Streaming data to a Stream
+  href: 30-streaming-data.md
 - name: Provider-specific features
-  href: 32-provider-specific-features.md
+  href: 31-provider-specific-features.md
 - name: Provider-specific SQL
   items:
     - name: Overview

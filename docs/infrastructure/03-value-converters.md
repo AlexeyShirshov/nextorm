@@ -128,7 +128,7 @@ The native provider representation is `JsonElement` on PostgreSQL and `JsonObjec
 ClickHouse's native `JSON` is object-rooted, so a model that does not serialize to a JSON object throws
 `NotSupportedException` — use `Text` for array/scalar roots. The legacy ClickHouse `Object('json')`
 alias is not supported by this integration; see
-[JSON support](../guide/14-json.md#map-a-clr-object-to-a-native-json-column).
+[JSON support](../guide/16-json.md#map-a-clr-object-to-a-native-json-column).
 
 ```csharp
 public sealed class Address

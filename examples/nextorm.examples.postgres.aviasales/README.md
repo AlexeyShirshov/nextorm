@@ -1,22 +1,28 @@
 # nextorm.examples.postgres.aviasales
 
-Runnable nextorm port of the PostgreSQL Pro demo database «Авиаперевозки» (schema `bookings`,
-dump `demo-20250901-3m`). Provider: `nextorm.postgres`.
+Comparison project for the PostgreSQL Pro demo database «Авиаперевозки» (schema `bookings`, dump
+`demo-20250901-3m`): every query is implemented **twice** — with nextorm and with
+[linq2db](https://github.com/linq2db/linq2db) — and both arms are executed against the same dataset,
+then benchmarked.
 
-The point of this project is to show **how a real SQL query becomes nextorm code**. Every method in
-[`AviasalesQueries.cs`](AviasalesQueries.cs) models exactly one query file in [`Sql/`](Sql) — the
-method comment names it, and the tables below map each SQL construct to the nextorm construct that
-replaces it. Read a `Sql/*.sql` file next to its method and you can translate your own queries.
+The project shows **how a real SQL query becomes nextorm code, and how it looks in another LINQ ORM**.
+Every method pair models exactly one query file in [`Sql/`](Sql): the method comment names it, and the
+tables below map each SQL construct to the nextorm construct that replaces it. Read a `Sql/*.sql` file
+next to its two implementations and you can translate your own queries in either direction.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| [`Sql/*.sql`](Sql) | Original model queries — the reference the C# is verified against |
+| [`Sql/*.sql`](Sql) | Original model queries — the reference both arms are verified against |
 | [`AviasalesQueries.cs`](AviasalesQueries.cs) | nextorm implementation of the 5 demo queries + 6 course-style exercises |
-| [`Entities.cs`](Entities.cs) | `[SqlTable]` / `[Column]` entity interfaces for the `bookings` schema |
+| [`Entities.cs`](Entities.cs) | nextorm `[SqlTable]` / `[Column]` entity interfaces for the `bookings` schema |
+| [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of the same eleven queries |
+| [`Linq2DbEntities.cs`](Linq2DbEntities.cs) | linq2db `[Table]` / `[Column]` POCOs for the same tables |
+| [`Comparison.cs`](Comparison.cs) | Runs both arms, prints `[ OK ]`/`[FAIL]`/`[DIFF]`, compares row counts |
+| [`Benchmarks.cs`](Benchmarks.cs) | BenchmarkDotNet class: one `[Benchmark]` per arm and query |
 | [`DemoDatabase.cs`](DemoDatabase.cs) | Testcontainers provisioning and dataset download |
-| [`Program.cs`](Program.cs) | Entry point; runs every query, catching per-query failures, and prints a summary |
+| [`Program.cs`](Program.cs) | Entry point: comparison run, or `--benchmark` |
 
 ## Running
 
@@ -26,10 +32,39 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
 ```
 
 Pass `--connection "<cs>"` (or set `AVIASALES_CONNECTION`) to skip the container and dataset download.
-Add `--log-sql` to print the generated SQL. The program runs every query, prints `[ OK ]`/`[FAIL]` per
-query, and ends with an `n/m succeeded` summary — a `FAIL` is a documented engine gap
-(`NotSupportedException`/`QueryPreparationException`); any other error still aborts the run. See
-[`../README.md`](../README.md) for details.
+Add `--log-sql` to print the nextorm SQL, `--only Name1,Name2` to run a subset, and `--benchmark` to
+run the BenchmarkDotNet comparison instead of the plain run (see below).
+
+The plain run executes both arms per query, prints the first rows of each and a per-query verdict, then
+an `n/m queries matched in both arms` summary. `[ OK ]` means both arms returned the same number of
+rows; `[FAIL]` means one arm hit a documented engine gap (`NotSupportedException`,
+`QueryPreparationException` or `LinqToDBException`); `[DIFF]` means the row counts differ. Any other
+exception still aborts the run. See [`../README.md`](../README.md) for the shared run notes.
+
+### Benchmarks
+
+`--benchmark` provisions the database once (the same named volume as the plain run) and then runs
+BenchmarkDotNet in-process (`Job.ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`). Every
+query has a `Nextorm_*` baseline and a `Linq2Db_*` arm; the measured code is only "build + execute +
+materialise" (no printing, no JSON). A full filtered example:
+
+```bash
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.postgres.aviasales -c Release -- \
+  --benchmark --filter '*AircraftDelayChains*'
+```
+
+Set `NEXTORM_EXAMPLES_BENCH_FULL=1` for the full out-of-process BenchmarkDotNet job. Reports land in
+`BenchmarkDotNet.Artifacts/` under the current directory.
+
+### The linq2db arm
+
+The linq2db queries mirror the SQL structurally as well: typed CTEs use `AsCte`/`From`, window
+functions use `Sql.Window.*`, `STDDEV` uses `AnalyticFunctions.StdDevSamp`, and `string_agg` uses
+`Sql.StringAggregate(...).ToValue()`. Two constructs have no linq2db LINQ surface and are issued
+through `FromSql` (still inside linq2db, not a separate driver): the ordered-set
+`percentile_disc(...) WITHIN GROUP (...)` in query 8, and nothing else — the `jsonb ->>` operator uses
+`Sql.Expr`. Both are annotated in [`Linq2DbQueries.cs`](Linq2DbQueries.cs).
 
 ## SQL → nextorm: general rules
 

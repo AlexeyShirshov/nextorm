@@ -115,7 +115,7 @@ bool same = ReferenceEquals(((IConnectionManager)ctx).GetConnection(), ctx.GetCo
 [`ITransactionManager`](xref:NextORM.Core.ITransactionManager): начните транзакцию через
 `BeginTransaction*` или встройтесь в чужую (EF Core, Dapper, сырой ADO.NET) через `UseTransaction`.
 Её поддерживают SQLite, PostgreSQL, SQL Server и MySQL/MariaDB; ClickHouse её отклоняет, а провайдер
-in-memory её не реализует. Полный гайд — [Транзакции](../guide/21-transactions.md).
+in-memory её не реализует. Полный гайд — [Транзакции](../guide/23-transactions.md).
 
 ## Таймаут команды
 
@@ -174,15 +174,15 @@ var slowIds = ctx.From<ISimpleEntity>()
 
 ---
 
-Source: `tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:24` (created connection),
-`tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:32` (stable across calls),
-`tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:40` (supplied instance),
-`tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:49` (supplied stays open),
-`tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:63` (owned is disposed),
-`tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:76` / `:84` ([`ConnectionString`](xref:NextORM.Core.DataContext.ConnectionString)),
-`tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:93` ([`IConnectionManager`](xref:NextORM.Core.IConnectionManager)),
-`tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:101` (SQLite functions on a supplied connection),
-`tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:116` (queries use the supplied connection);
+Source: `tests/nextorm.sqlite.tests/Raw/ConnectionManagementTests.cs:24` (created connection),
+`tests/nextorm.sqlite.tests/Raw/ConnectionManagementTests.cs:32` (stable across calls),
+`tests/nextorm.sqlite.tests/Raw/ConnectionManagementTests.cs:40` (supplied instance),
+`tests/nextorm.sqlite.tests/Raw/ConnectionManagementTests.cs:49` (supplied stays open),
+`tests/nextorm.sqlite.tests/Raw/ConnectionManagementTests.cs:63` (owned is disposed),
+`tests/nextorm.sqlite.tests/Raw/ConnectionManagementTests.cs:76` / `:84` ([`ConnectionString`](xref:NextORM.Core.DataContext.ConnectionString)),
+`tests/nextorm.sqlite.tests/Raw/ConnectionManagementTests.cs:93` ([`IConnectionManager`](xref:NextORM.Core.IConnectionManager)),
+`tests/nextorm.sqlite.tests/Raw/ConnectionManagementTests.cs:101` (SQLite functions on a supplied connection),
+`tests/nextorm.sqlite.tests/Raw/ConnectionManagementTests.cs:116` (queries use the supplied connection);
 `src/nextorm.core/DataContext/Roles/IConnectionManager.cs:10`,
 `src/nextorm.core/DataContext/Roles/IContextEnvironment.cs:8`,
 `src/nextorm.core/DataContext/DataContext.cs:106` ([`GetConnection`](xref:NextORM.Core.DataContext.GetConnection)),

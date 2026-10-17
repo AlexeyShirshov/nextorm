@@ -57,10 +57,10 @@ These throw `NotSupportedException` rather than emitting SQL with different sema
 
 * `string.IsNullOrWhiteSpace(x)` - throws with a message mentioning `IsNullOrWhiteSpace`
   (`SqlGenerationTests.IsNullOrWhiteSpace_ShouldThrowClearException`,
-  `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:974`).
+  `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:974`).
 * `Math.Log(value, base)` - the two-argument form has a provider-specific argument order, so it is left
   unsupported (`SqlGenerationTests.MathLogWithBase_ShouldThrowClearException`,
-  `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:985`). The PostgreSQL two-argument form is available
+  `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:985`). The PostgreSQL two-argument form is available
   as `SqlFunctions.Postgres.log(base, x)` in the extended scalar library instead.
 * `Math.Round` overloads that take a `MidpointRounding` (more than two arguments) - not portable.
 * `string.Substring(Range)` - no SQL equivalent.

@@ -111,7 +111,7 @@ Existing Except/Intersect residual failures vs #240's absolute target remain vis
 
 ## 4. Attribution spike — required before a product fix
 Existing phase measurements do not isolate the raw-recipe hit. A **measurement-only spike is required**.
-Extend `benchmarks/nextorm.benchmark/SqliteBenchmarkWarmDecompose.cs` (existing anchors `:107-167,262-276`) with diagnostic phases covering separately: (1) construct a fresh CTE/recursive graph; (2) capture raw shape and fingerprint; (3) raw lookup and preparation replay; (4) plan-key/comparer creation after replay; (5) end-to-end fresh cached-warm execution; (6) existing prepared/reused execution.
+Extend `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWarmDecompose.cs` (existing anchors `:107-167,262-276`) with diagnostic phases covering separately: (1) construct a fresh CTE/recursive graph; (2) capture raw shape and fingerprint; (3) raw lookup and preparation replay; (4) plan-key/comparer creation after replay; (5) end-to-end fresh cached-warm execution; (6) existing prepared/reused execution.
 Requirements:
 - Internal diagnostic calls may use benchmark-only once-bound delegates; no per-operation reflection in measured regions.
 - No diagnostic branches or counters in product code.
@@ -144,7 +144,7 @@ D244-02/D244-03 skip rule: record `not applicable` only with attribution plus pr
 [
   {"unit":"D244-01","projects":["benchmarks/nextorm.benchmark"],
    "selectors":["*SqliteBenchmarkWarmDecompose*","*SqliteBenchmarkFeaturesFairCached.B_*","*SqliteBenchmarkFeaturesFair.A_*"],
-   "files":["benchmarks/nextorm.benchmark/SqliteBenchmarkWarmDecompose.cs","eng/perf/t244_evidence.py","eng/perf/tests/test_t244_evidence.py"],
+   "files":["benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWarmDecompose.cs","eng/perf/t244_evidence.py","eng/perf/tests/test_t244_evidence.py"],
    "rebuild":"affected","boundary":"attribution-before-product-edit",
    "rationale":"prove the measured execution path and the allocation ranking","integration_projects":[],"integration_boundary_runs":0},
   {"unit":"D244-02","projects":["tests/nextorm.core.tests","tests/nextorm.sqlite.tests","tests/nextorm.sqlserver.tests","tests/nextorm.postgres.tests","tests/nextorm.mysql.tests","tests/nextorm.mariadb.tests","tests/nextorm.clickhouse.tests","tests/nextorm.clickhouse.extensions.tests"],
@@ -248,7 +248,7 @@ Not touched: frozen D240 status/recipe, historical iteration reports, unrelated 
 | Product | `src/nextorm.core/Builders/CteMerge.cs` | potential T245 overlap |
 | Product | `src/nextorm.core/Query/QueryCommand.Plan.cs` | potential T243/T245 overlap |
 | Product | `src/nextorm.core/Query/QueryPlanEqualityComparer.cs` (Roslyn-confirmed path substitutes if different) | shared cache contract |
-| Benchmark | `benchmarks/nextorm.benchmark/SqliteBenchmarkWarmDecompose.cs` | **shared T243/T245, potentially T246/T247** |
+| Benchmark | `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWarmDecompose.cs` | **shared T243/T245, potentially T246/T247** |
 | Harness | `eng/perf/t244_evidence.py` (new) | T244-owned |
 | Harness tests | `eng/perf/tests/test_t244_evidence.py` (new) | T244-owned |
 | Native gate | `eng/perf/iteration14_gate.py` | **shared T243–T247** |
@@ -339,3 +339,21 @@ Principal risks: frozen-recipe allocations may dominate; container savings may b
 
 Not executed — lane G1 stopped: predecessor T246 reached a terminal `incomplete` (measurement-protocol GAP).
 Task status: `incomplete` («группа остановлена»). Plan retained; nothing executed, nothing superseded.
+
+## Lane disposition — G2 stop (2026-10-17)
+
+status: incomplete — outside-cycle blocker
+Counters unchanged: N=1, r=1, rv=1, n=1/3.
+No product edit was made.
+Valid baseline rounds: 0/2.
+Round-01 is invalid and is **not** acceptance evidence (benchmark assembly rebuilt 15 s into invocation 1: `b7514a17→e1d04479`; HEAD moved; tree 228→903→1042).
+Own harness defect found and left unfixed: two empty-target `[GlobalSetup]` methods in `SqliteBenchmarkWarmDecompose` (`Verify`, `VerifyDiagnosticProbes`) → BDN refuses the class; the attribution arm never ran.
+Escalate decision: **STOP** the lane with the resume conditions below.
+Resume conditions:
+1. the foreign campaign is finished, committed or parked and the tree is stable;
+2. an exclusive host window is guaranteed;
+3. a pre-T244 base commit is fixed;
+4. paths are re-anchored to `Sqlite/…`;
+5. the double `[GlobalSetup]` is fixed;
+6. two consecutive valid baseline rounds are obtained.
+Artifacts preserved at `/tmp/opencode/t244-preserve/` (harness, harness tests, `rv1/` evidence). Issue #244 stays open.

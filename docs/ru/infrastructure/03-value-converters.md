@@ -131,7 +131,7 @@ public object? Payload { get; set; }
 `JSON` в ClickHouse имеет корень-объект, поэтому модель, не сериализующаяся в JSON-объект, бросает
 `NotSupportedException` — для корней-массивов/скаляров используйте `Text`. Легаси-алиас ClickHouse
 `Object('json')` в этой интеграции не поддерживается; см.
-[Поддержка JSON](../guide/14-json.md#отобразить-clr-объект-на-нативную-json-колонку).
+[Поддержка JSON](../guide/16-json.md#отобразить-clr-объект-на-нативную-json-колонку).
 
 ```csharp
 public sealed class Address

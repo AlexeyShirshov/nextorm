@@ -48,7 +48,7 @@
 ### Decisive protocol
 
 - **R=3** независимых запуска до изменений и **R=3** после изменений.
-- Каждый запуск содержит A, B, linq2db и Dapper, включая empty, из одного committed класса (`benchmarks/nextorm.benchmark/SqliteBenchmarkStreaming.cs:182-235`).
+- Каждый запуск содержит A, B, linq2db и Dapper, включая empty, из одного committed класса (`benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs:182-235`).
 - Только **`NEXTORM_BENCH_FULL=1` / `Job.Default`** (`NextormConfig.cs:23-25`).
 - ShortRun допустим только для диагностики; он не закрывает acceptance.
 - Извлекать unrounded Mean, Error, StdDev и allocated bytes/op из машинных артефактов. Формат, потерявший необходимую точность, непригоден для gate.
@@ -306,7 +306,7 @@ NEXTORM_BENCH_FULL=1 dotnet run --project benchmarks/nextorm.benchmark -c Releas
 
 Production (планируемый): `src/nextorm.core/Query/QueryCommandExtensions.cs:308-397`; `src/nextorm.core/DataContext/DataContext.cs:469-583`; `src/nextorm.core/DataContext/QueryPlanner.cs:603-656,820-829`; `src/nextorm.core/DataContext/LobDataReader.cs:20-398`. `CommandReaderOwner.cs` — read-only контракт, production-правки не планируются.
 
-Tests/tooling/reports: `tests/nextorm.core.tests/LobDataReaderTests.cs`; `tests/nextorm.core.tests/RecordsAffectedTests.cs`; `tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs`; `tests/nextorm.sqlite.tests/ResultReaderTests.cs`; `tests/nextorm.sqlite.tests/D199ScalarInPlanCacheTests.cs`; `tests/nextorm.integration.tests/CommonTestSuite.Lob.cs`; `tests/nextorm.integration.tests/SqliteSpecificTests.cs`; `benchmarks/nextorm.benchmark/SqliteBenchmarkStreaming.cs`; `eng/perf/t246_evidence.py` (новый); `eng/perf/t246-budgets.json` (новый); `eng/perf/update_benchmark_tables.py`; `docs/comparisons/benchmarks.md`; `docs/comparisons/feature-benchmarks-2026-10-17.md`; `docs/specs/performance/feature-benchmark-followups-2026-10-17.md`; `docs/specs/status/D246-raw-datareader-1.md`; `artifacts/pdca/T246/**`.
+Tests/tooling/reports: `tests/nextorm.core.tests/LobDataReaderTests.cs`; `tests/nextorm.core.tests/RecordsAffectedTests.cs`; `tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs`; `tests/nextorm.sqlite.tests/ResultReaderTests.cs`; `tests/nextorm.sqlite.tests/D199ScalarInPlanCacheTests.cs`; `tests/nextorm.integration.tests/CommonTestSuite.Lob.cs`; `tests/nextorm.integration.tests/SqliteSpecificTests.cs`; `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs`; `eng/perf/t246_evidence.py` (новый); `eng/perf/t246-budgets.json` (новый); `eng/perf/update_benchmark_tables.py`; `docs/comparisons/benchmarks.md`; `docs/comparisons/feature-benchmarks-2026-10-17.md`; `docs/specs/performance/feature-benchmark-followups-2026-10-17.md`; `docs/specs/status/D246-raw-datareader-1.md`; `artifacts/pdca/T246/**`.
 
 **Неопределённость footprint:** точные пути RU/README generated outputs не подтверждены (scout до редактирования generator); полный output map `update_benchmark_tables.py` — prerequisite D246-00/06. Не расширять footprint самостоятельно.
 

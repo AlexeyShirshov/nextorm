@@ -2,12 +2,12 @@
 
 > Для запроса `SelectWhereMax`/`SelectWhereMin` с `ExtremeRowTies.One` PostgreSQL и ClickHouse рендерят нативную SQL-стратегию вместо переносимого понижения до оконной функции — автоматически, по провайдеру и форме запроса, без opt-in и без переключателя на экземпляре.
 
-**Предварительные требования:** [Выбор экстремальной строки](../guide/07-distinct.md) · [Обзор провайдеров](../connecting-providers/overview.md) · [Краткий справочник API](api-reference.md)
+**Предварительные требования:** [Выбор экстремальной строки](../guide/09-distinct.md) · [Обзор провайдеров](../connecting-providers/overview.md) · [Краткий справочник API](api-reference.md)
 
 ## Обзор
 
 [`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) и
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) оставляют строку, значение которой под селектором наибольшее или наименьшее в источнике — глобально или по группам. Это фильтр строк, а не агрегат: выжившая строка сохраняет все колонки. Семантика не изменилась относительно переносимой реализации — полный контракт см. в разделе [Выбор экстремальной строки](../guide/07-distinct.md).
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) оставляют строку, значение которой под селектором наибольшее или наименьшее в источнике — глобально или по группам. Это фильтр строк, а не агрегат: выжившая строка сохраняет все колонки. Семантика не изменилась относительно переносимой реализации — полный контракт см. в разделе [Выбор экстремальной строки](../guide/09-distinct.md).
 
 Эта страница описывает *то, как* запрос с `One` доходит до базы. Выбор стратегии автоматический и детерминированный **по провайдеру и форме/типу запроса**:
 
@@ -116,7 +116,7 @@ select t1.id, t1.score, t1.team_id as `TeamId`, t1.name
 
 ## См. также
 
-- [Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)](../guide/07-distinct.md)
+- [Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)](../guide/09-distinct.md)
 - [Расширяемость: пользовательские SQL-диалекты и рендереры](extensibility.md)
 - [Краткий справочник API](api-reference.md)
 - [Обзор провайдеров](../connecting-providers/overview.md)

@@ -28,7 +28,7 @@ Raw transcript: `docs/specs/status/nested-read-cte-1-evidence/E06-acceptance.log
 | 7 | `Nextorm_Cached_ToListAsync` | 2.031 ms | 1.304 ms | 565.5 KB | 2.137 ms | 692.07 KB |
 
 Per-class raw BDN reports overwritten by the run under
-`BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.{InMemoryBenchmarkAggregates,InMemoryBenchmarkGroupBy,SqliteBenchmarkAny,SqliteBenchmarkCachedPlan,SqliteBenchmarkWhere}-report-github.md`;
+`benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.{InMemoryBenchmarkAggregates,InMemoryBenchmarkGroupBy,SqliteBenchmarkAny,SqliteBenchmarkCachedPlan,SqliteBenchmarkWhere}-report-github.md`;
 the artifacts dir was restored to its pre-run state after this capture (see below).
 
 ## Cached vs prepared (same run)

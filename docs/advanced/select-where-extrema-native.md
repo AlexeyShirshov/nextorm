@@ -2,12 +2,12 @@
 
 > For a `SelectWhereMax`/`SelectWhereMin` request with `ExtremeRowTies.One`, PostgreSQL and ClickHouse render a native SQL strategy instead of the portable window-function lowering — automatically, from the provider and the query form, with no opt-in and no per-instance switch.
 
-**Prerequisites:** [Keeping the extreme row](../guide/07-distinct.md) · [Provider overview](../connecting-providers/overview.md) · [API quick reference](api-reference.md)
+**Prerequisites:** [Keeping the extreme row](../guide/09-distinct.md) · [Provider overview](../connecting-providers/overview.md) · [API quick reference](api-reference.md)
 
 ## Overview
 
 [`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) and
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row whose value under a selector is the greatest or smallest in the source, globally or per group. They are a row filter, not an aggregate: a surviving row keeps every column. The semantics are unchanged from the portable implementation — see [Keeping the extreme row](../guide/07-distinct.md) for the full contract.
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row whose value under a selector is the greatest or smallest in the source, globally or per group. They are a row filter, not an aggregate: a surviving row keeps every column. The semantics are unchanged from the portable implementation — see [Keeping the extreme row](../guide/09-distinct.md) for the full contract.
 
 What this page adds is *how* the `One` request reaches the database. Selection is automatic and deterministic **by provider and query form/type**:
 
@@ -116,7 +116,7 @@ To build such a dialect and register it on a context, see [Extensibility: custom
 
 ## See also
 
-- [Keeping the extreme row (`SelectWhereMax` / `SelectWhereMin`)](../guide/07-distinct.md)
+- [Keeping the extreme row (`SelectWhereMax` / `SelectWhereMin`)](../guide/09-distinct.md)
 - [Extensibility: custom SQL dialects and renderers](extensibility.md)
 - [API quick reference](api-reference.md)
 - [Provider overview](../connecting-providers/overview.md)

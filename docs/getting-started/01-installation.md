@@ -89,4 +89,4 @@ The packages target `net10.0` and enable implicit usings and nullable reference 
 Source: `docs/index.md:91`; `src/nextorm.core/nextorm.core.csproj:4`;
 `src/nextorm.sqlite/nextorm.sqlite.csproj:7`; `src/nextorm.sqlserver/nextorm.sqlserver.csproj:16`;
 `src/nextorm.postgres/nextorm.postgres.csproj:8`;
-in-memory availability: `tests/nextorm.core.tests/DependencyInjectionTests.cs:16`.
+in-memory availability: `tests/nextorm.core.tests/DependencyInjection/DependencyInjectionTests.cs:16`.

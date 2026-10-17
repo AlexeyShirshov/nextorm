@@ -1,54 +1,91 @@
+using BenchmarkDotNet.Running;
+using LinqToDB;
+using LinqToDB.Data;
+using LinqToDB.DataProvider.SqlServer;
 using Microsoft.Extensions.Logging;
 using NextORM.Core;
 using NextORM.Examples.SqlServer.AdventureWorks;
 using NextORM.SqlServer;
 
-var connectionString = ParseConnectionString(args, "--connection", "-c");
-var logSql = args.Contains("--log-sql");
-
-await using var database = await DemoDatabase.Start(connectionString, CancellationToken.None);
-
-using var loggerFactory = logSql
-    ? LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Debug))
-    : null;
-
-var contextBuilder = new DataContextBuilder();
-if (loggerFactory is not null)
-    contextBuilder.UseLoggerFactory(loggerFactory);
-
-await using var ctx = new SqlServerDataContext(database.ConnectionString, contextBuilder);
-
-var results = new List<(string Name, Exception? Error)>();
-
-await Run("VipChurn", () => AdventureWorksQueries.VipChurn(ctx, CancellationToken.None));
-await Run("RollingKpi", () => AdventureWorksQueries.RollingKpi(ctx, CancellationToken.None));
-await Run("SupplyChain", () => AdventureWorksQueries.SupplyChain(ctx, CancellationToken.None));
-await Run("ProductAbcXyz", () => AdventureWorksQueries.ProductAbcXyz(ctx, CancellationToken.None));
-await Run("QuarterlyPivot", () => AdventureWorksQueries.QuarterlyPivot(ctx, CancellationToken.None));
-await Run("TopProductsByCategory", () => AdventureWorksQueries.TopProductsByCategory(ctx, CancellationToken.None));
-await Run("TerritoryYearOverYear", () => AdventureWorksQueries.TerritoryYearOverYear(ctx, CancellationToken.None));
-await Run("CustomerRfm", () => AdventureWorksQueries.CustomerRfm(ctx, CancellationToken.None));
-await Run("QuotaAttainment", () => AdventureWorksQueries.QuotaAttainment(ctx, CancellationToken.None));
-await Run("TerritoryGrowthMonthOverMonth", () => AdventureWorksQueries.TerritoryGrowthMonthOverMonth(ctx, CancellationToken.None));
-await Run("CustomerPareto", () => AdventureWorksQueries.CustomerPareto(ctx, CancellationToken.None));
-
-Console.WriteLine();
-Console.WriteLine($"{results.Count(r => r.Error is null)}/{results.Count} queries succeeded; " +
-                  $"{results.Count(r => r.Error is not null)} not working (see README).");
-
-async Task Run(string name, Func<Task> query)
+if (args.Contains("--benchmark"))
 {
-    try
+    await RunBenchmarks(args);
+    return;
+}
+
+await RunComparison(args);
+return;
+
+static async Task RunComparison(string[] args)
+{
+    var connectionString = ParseConnectionString(args, "--connection", "-c");
+    var logSql = args.Contains("--log-sql");
+
+    await using var database = await DemoDatabase.Start(connectionString, CancellationToken.None);
+
+    using var loggerFactory = logSql
+        ? LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Debug))
+        : null;
+
+    var contextBuilder = new DataContextBuilder();
+    if (loggerFactory is not null)
+        contextBuilder.UseLoggerFactory(loggerFactory);
+
+    await using var ctx = new SqlServerDataContext(database.ConnectionString, contextBuilder);
+    using var l2db = new DataConnection(new DataOptions()
+        .UseSqlServer(database.ConnectionString, SqlServerVersion.v2022, SqlServerProvider.MicrosoftDataSqlClient));
+
+    var queries = new (string Name, Func<CancellationToken, Task<object>> Nextorm, Func<CancellationToken, Task<object>> Linq2Db)[]
     {
-        await query();
-        results.Add((name, null));
-        Console.WriteLine($"[ OK ] {name}");
-    }
-    catch (Exception ex) when (ex is NotSupportedException or QueryPreparationException)
+        ("VipChurn", ct => AdventureWorksQueries.VipChurn(ctx, ct), ct => Linq2DbQueries.VipChurn(l2db, ct)),
+        ("RollingKpi", ct => AdventureWorksQueries.RollingKpi(ctx, ct), ct => Linq2DbQueries.RollingKpi(l2db, ct)),
+        ("SupplyChain", ct => AdventureWorksQueries.SupplyChain(ctx, ct), ct => Linq2DbQueries.SupplyChain(l2db, ct)),
+        ("ProductAbcXyz", ct => AdventureWorksQueries.ProductAbcXyz(ctx, ct), ct => Linq2DbQueries.ProductAbcXyz(l2db, ct)),
+        ("QuarterlyPivot", ct => AdventureWorksQueries.QuarterlyPivot(ctx, ct), ct => Linq2DbQueries.QuarterlyPivot(l2db, ct)),
+        ("TopProductsByCategory", ct => AdventureWorksQueries.TopProductsByCategory(ctx, ct), ct => Linq2DbQueries.TopProductsByCategory(l2db, ct)),
+        ("TerritoryYearOverYear", ct => AdventureWorksQueries.TerritoryYearOverYear(ctx, ct), ct => Linq2DbQueries.TerritoryYearOverYear(l2db, ct)),
+        ("CustomerRfm", ct => AdventureWorksQueries.CustomerRfm(ctx, ct), ct => Linq2DbQueries.CustomerRfm(l2db, ct)),
+        ("QuotaAttainment", ct => AdventureWorksQueries.QuotaAttainment(ctx, ct), ct => Linq2DbQueries.QuotaAttainment(l2db, ct)),
+        ("TerritoryGrowthMonthOverMonth", ct => AdventureWorksQueries.TerritoryGrowthMonthOverMonth(ctx, ct), ct => Linq2DbQueries.TerritoryGrowthMonthOverMonth(l2db, ct)),
+        ("CustomerPareto", ct => AdventureWorksQueries.CustomerPareto(ctx, ct), ct => Linq2DbQueries.CustomerPareto(l2db, ct)),
+    };
+
+    var only = ParseList(args, "--only");
+    if (only.Length > 0)
+        queries = queries.Where(q => only.Contains(q.Name, StringComparer.OrdinalIgnoreCase)).ToArray();
+
+    var passed = 0;
+    foreach (var query in queries)
     {
-        results.Add((name, ex));
-        Console.WriteLine($"[FAIL] {name}: {ex.GetType().Name}: {ex.Message}");
+        if (await Comparison.Run(query.Name, query.Nextorm, query.Linq2Db, CancellationToken.None))
+            passed++;
     }
+
+    Console.WriteLine();
+    Console.WriteLine($"{passed}/{queries.Length} queries matched in both arms; " +
+                      $"{queries.Length - passed} not working (see README).");
+}
+
+static async Task RunBenchmarks(string[] args)
+{
+    var connectionString = ParseConnectionString(args, "--connection", "-c");
+    await using var database = await DemoDatabase.Start(connectionString, CancellationToken.None);
+
+    AdventureWorksBenchmarks.ConnectionString = database.ConnectionString;
+    var bdnArgs = new List<string>();
+    for (var i = 0; i < args.Length - 1; i++)
+    {
+        if (args[i] is "--filter" or "--anyCategories" or "--allCategories")
+        {
+            bdnArgs.Add(args[i]);
+            bdnArgs.Add(args[i + 1]);
+        }
+    }
+
+    if (bdnArgs.Count == 0)
+        BenchmarkRunner.Run<AdventureWorksBenchmarks>(new ExampleBenchmarkConfig());
+    else
+        BenchmarkSwitcher.FromTypes([typeof(AdventureWorksBenchmarks)]).Run([.. bdnArgs], new ExampleBenchmarkConfig());
 }
 
 static string? ParseConnectionString(string[] args, params string[] names)
@@ -60,4 +97,15 @@ static string? ParseConnectionString(string[] args, params string[] names)
     }
 
     return null;
+}
+
+static string[] ParseList(string[] args, string name)
+{
+    for (var i = 0; i < args.Length - 1; i++)
+    {
+        if (args[i] == name)
+            return args[i + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    return [];
 }

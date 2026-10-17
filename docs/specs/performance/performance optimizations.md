@@ -5,7 +5,7 @@
 
 ## Бенчмарк
 
-Файл: `benchmarks/nextorm.benchmark/SqliteBenchmarkCachedPlan.cs`
+Файл: `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkCachedPlan.cs`
 Отчёт: `benchmarks/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkCachedPlan-report-github.md`
 
 Запуск:
@@ -46,7 +46,7 @@ dotnet run -c Release --project benchmarks/nextorm.benchmark -- \
 - `_sbPool` через `ObjectPool<StringBuilder>` — `src/nextorm.core/DataContext/SqlBuilder.cs:12`, `src/nextorm.core/DataContext/DataContext.cs:20`.
 - `ValueList<T>` / `ValueList3<T>` на inline-массивах — `src/nextorm.core/DataContext/ValueList.cs:11`, `src/nextorm.core/Query/DefaultColumnsProvider.cs:10`.
 - `ExpressionKey` кэширует хэш в `_hash` — `src/nextorm.core/ExpressionCache.cs:14,17`.
-- Бенчмарки уже с `[MemoryDiagnoser]` (напр. `benchmarks/nextorm.benchmark/SqliteBenchmarkWhere.cs:17`).
+- Бенчмарки уже с `[MemoryDiagnoser]` (напр. `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWhere.cs:17`).
 
 ## Находки (по убыванию значимости)
 
@@ -214,14 +214,14 @@ HEAD (без правок):
 
 Сделано:
 
-- `benchmarks/nextorm.benchmark/NextormConfig.cs` — job вынесен централизованно: по умолчанию `Job.ShortRun`
+- `benchmarks/nextorm.benchmark/Infrastructure/NextormConfig.cs` — job вынесен централизованно: по умолчанию `Job.ShortRun`
   (warmup 3 / iterations 3) + `InProcessEmitToolchain` (без build/launch на кейс); `NEXTORM_BENCH_FULL=1`
   включает полный out-of-process `Job.Default`.
 - `benchmarks/nextorm.benchmark/Program.cs` — включён `BenchmarkSwitcher...Run(args)` (фильтры и `--list` работают).
 - Убраны `[SimpleJob]` из всех классов (иначе job'ы дублировались), `[Config(typeof(NextormConfig))]`
   добавлен где отсутствовал.
 - Добавлены parameterless-конструкторы классам с `(bool withLogging = false)` — требование `InProcessEmit`.
-- `benchmarks/nextorm.benchmark/BenchDb.cs` — путь к БД: `NEXTORM_BENCH_DB` → `/tmp/nextorm-bench/test.db` →
+- `benchmarks/nextorm.benchmark/Infrastructure/BenchDb.cs` — путь к БД: `NEXTORM_BENCH_DB` → `/tmp/nextorm-bench/test.db` →
   fallback `data/test.db`. Все SQLite-классы переведены на него.
 - БД скопирована в WSL: `/tmp/nextorm-bench/test.db`.
 

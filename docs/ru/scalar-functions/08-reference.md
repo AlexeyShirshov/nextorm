@@ -57,10 +57,10 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 
 * `string.IsNullOrWhiteSpace(x)` — бросает исключение с сообщением, упоминающим `IsNullOrWhiteSpace`
   (`SqlGenerationTests.IsNullOrWhiteSpace_ShouldThrowClearException`,
-  `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:974`).
+  `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:974`).
 * `Math.Log(value, base)` — у двухаргументной формы порядок аргументов зависит от провайдера, поэтому она
   оставлена неподдерживаемой (`SqlGenerationTests.MathLogWithBase_ShouldThrowClearException`,
-  `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:985`). Двухаргументная форма PostgreSQL доступна как
+  `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:985`). Двухаргументная форма PostgreSQL доступна как
   `SqlFunctions.Postgres.log(base, x)` в расширенной библиотеке скалярных функций.
 * Перегрузки `Math.Round`, принимающие `MidpointRounding` (больше двух аргументов), — не переносимы.
 * `string.Substring(Range)` — нет эквивалента в SQL.

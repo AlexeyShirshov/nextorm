@@ -538,7 +538,7 @@ Escalation/no-fourth:
 
 - PLAN r1 written to this file by coder; phase PLAN; DO not started; `plan_state=ready`.
 - 2026-10-08T07:35:13Z | DO | revision r1 | iteration 1/3 | DO started; user approved written spec ("D191 spec user-approved (proceed)") | `docs/superpowers/specs/2026-10-05-provider-specific-extensions-design.md` sha256 `8bf020f693f0dde347d99c17fad10f73a92c45a1b24ed4839a997b2f62c139ad`
-- 2026-10-08T07:42:07Z | DO | revision r1 | iteration 1/3 | D191.2 benchmark fixtures added and BEFORE baselines captured (7 provider-extensions + 7 acceptance); D191.1/D191.2 `brief` gates exit 0; benchmark Debug build + both BDN Release runs exit 0 | `benchmarks/nextorm.benchmark/ProviderExtensionsBenchmark.cs`; `$EV/logs/perf-before-*.log`; `$EV/perf/before/*/wall.txt`; mirror `artifacts/pdca/rc2-191/r1/`
+- 2026-10-08T07:42:07Z | DO | revision r1 | iteration 1/3 | D191.2 benchmark fixtures added and BEFORE baselines captured (7 provider-extensions + 7 acceptance); D191.1/D191.2 `brief` gates exit 0; benchmark Debug build + both BDN Release runs exit 0 | `benchmarks/nextorm.benchmark/Focused/ProviderExtensionsBenchmark.cs`; `$EV/logs/perf-before-*.log`; `$EV/perf/before/*/wall.txt`; mirror `artifacts/pdca/rc2-191/r1/`
 - 2026-10-08T07:42:07Z | DO | revision r1 | iteration 1/3 | D191.2 `report` validator exit 2: `validate_inner_loop` cannot represent a build/benchmark-only unit (`selected_count >= 1` required, zero unit tests selected); manual-gate note recorded, no count fabricated | `$EV/inner-loop/D191.2.report.log`
 - 2026-10-08T07:42:07Z | DO | revision r1 | iteration 1/3 | BDN BEFORE runs dirtied 15 tracked `BenchmarkDotNet.Artifacts/results/*`; restored via `git checkout -- BenchmarkDotNet.Artifacts`; `benchmarks/BenchmarkDotNet.Artifacts` untouched; new benchmark file, csproj refs and raw provider-extensions export retained | `git status --porcelain`
 - 2026-10-08T08:00:05Z | DO | revision r1 | iteration 1/3 | D191.3 direct relocation executed: provider fluent bodies moved to ClickHouse/PostgreSQL/SQL Server extensions; core typed state retained; CS0108 on joined `JoinCore` recovered; solution build exit 0 (0/0) | `$EV/logs/build-slnx.log`; `src/nextorm.clickhouse/Extensions/ClickHouseEntityBuilderExtensions.cs`; `src/nextorm.postgres/Extensions/PostgresEntityBuilderExtensions.cs`; `src/nextorm.sqlserver/Extensions/SqlServerEntityBuilderExtensions.cs`
@@ -637,7 +637,7 @@ Recorded in `$EV/provenance/footprint-sha256-before.txt`:
 
 ### Deliverables
 
-- Added `benchmarks/nextorm.benchmark/ProviderExtensionsBenchmark.cs` (new, untracked): 7 `[Benchmark]` methods under `[BenchmarkCategory("provider-extensions")]` — `ClickHouse_Construct_Final_PreWhere_Settings`, `ClickHouse_Construct_ArrayJoin`, `ClickHouse_Joined_ArrayJoin`, `ClickHouse_Construct_PasteJoin`, `Postgres_Construct_DistinctOn`, `SqlServer_Construct_Pivot`, `SqlServer_Construct_Unpivot`; `[MemoryDiagnoser]` + `[Config(typeof(NextormConfig))]`. Fixtures use placeholder connection strings and never open a connection — only query construction/composition is measured.
+- Added `benchmarks/nextorm.benchmark/Focused/ProviderExtensionsBenchmark.cs` (new, untracked): 7 `[Benchmark]` methods under `[BenchmarkCategory("provider-extensions")]` — `ClickHouse_Construct_Final_PreWhere_Settings`, `ClickHouse_Construct_ArrayJoin`, `ClickHouse_Joined_ArrayJoin`, `ClickHouse_Construct_PasteJoin`, `Postgres_Construct_DistinctOn`, `SqlServer_Construct_Pivot`, `SqlServer_Construct_Unpivot`; `[MemoryDiagnoser]` + `[Config(typeof(NextormConfig))]`. Fixtures use placeholder connection strings and never open a connection — only query construction/composition is measured.
 - csproj refs added to `benchmarks/nextorm.benchmark/nextorm.benchmark.csproj`: `src/nextorm.clickhouse/nextorm.clickhouse.csproj` and `src/nextorm.postgres/nextorm.postgres.csproj` (the SQL Server reference was already present). No product code relocated in D191.2.
 
 ### Exact commands, exit codes and wall time
@@ -745,7 +745,7 @@ The first affected build (`build-D191.3-attempt1.log`) failed with 6× `CS0108`:
 
 ### Variant-matrix closure
 
-No product edits beyond D191.3/D191.4; this unit exercises the relocated surface through the filtered variant suites. New test files added: `tests/nextorm.clickhouse.extensions.tests/ClickHouseExtensionStateTests.cs`, `tests/nextorm.postgres.tests/ProviderExtensionCloneTests.cs`, `tests/nextorm.sqlserver.tests/ProviderExtensionEagerGuardTests.cs` (plus the D191.2 `benchmarks/nextorm.benchmark/ProviderExtensionsBenchmark.cs` fixture).
+No product edits beyond D191.3/D191.4; this unit exercises the relocated surface through the filtered variant suites. New test files added: `tests/nextorm.clickhouse.extensions.tests/ClickHouseExtensionStateTests.cs`, `tests/nextorm.postgres.tests/ProviderExtensionCloneTests.cs`, `tests/nextorm.sqlserver.tests/ProviderExtensionEagerGuardTests.cs` (plus the D191.2 `benchmarks/nextorm.benchmark/Focused/ProviderExtensionsBenchmark.cs` fixture).
 
 | Variant(s) | Suites (selected) |
 |---|---|

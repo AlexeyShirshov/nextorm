@@ -161,10 +161,10 @@ builder.UsePostgres("Host=localhost;Database=app");
 
 ---
 
-Source: `tests/nextorm.core.tests/DependencyInjectionTests.cs:13`,
-`tests/nextorm.core.tests/DependencyInjectionTests.cs:43`,
-`tests/nextorm.core.tests/DependencyInjectionTests.cs:58`,
-`tests/nextorm.core.tests/DependencyInjectionTests.cs:71`;
+Source: `tests/nextorm.core.tests/DependencyInjection/DependencyInjectionTests.cs:13`,
+`tests/nextorm.core.tests/DependencyInjection/DependencyInjectionTests.cs:43`,
+`tests/nextorm.core.tests/DependencyInjection/DependencyInjectionTests.cs:58`,
+`tests/nextorm.core.tests/DependencyInjection/DependencyInjectionTests.cs:71`;
 `src/nextorm.core/DI/ServiceCollectionExtensions.cs:73`;
 `src/nextorm.core/DI/DataContextBuilder.cs:20`;
 `src/nextorm.sqlite/DI/SqliteDataContextOptionsBuilderExtensions.cs:8`;

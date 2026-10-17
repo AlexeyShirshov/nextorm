@@ -45,7 +45,7 @@ select id
 [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). Операторы вынесены в статические методы с именами
 SQL-токенов, поэтому ни один член не конфликтует с CLR-оператором или полнотекстовым `Contains`:
 
-На базе без нативного range-типа отобразите свойство `Range<T>` на пару скалярных колонок через [`RangeColumns`](../25-range-columns.md); те же операторы транслируются поверх пары.
+На базе без нативного range-типа отобразите свойство `Range<T>` на пару скалярных колонок через [`RangeColumns`](../27-range-columns.md); те же операторы транслируются поверх пары.
 
 | Член | SQL |
 |---|---|
@@ -131,7 +131,7 @@ select jsonb_agg(somestring)
 ```
 
 См. [JSON и JSONB (PostgreSQL)](../../scalar-functions/index.md) и
-[Поддержка JSON в разных провайдерах](../14-json.md).
+[Поддержка JSON в разных провайдерах](../16-json.md).
 
 ## Упорядоченные, регрессионные и логические агрегаты
 
@@ -143,7 +143,7 @@ select jsonb_agg(somestring)
 * `array_agg` и поверхность строковых/массивных агрегатов гейтятся
   [`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates).
 
-См. [Группировка и агрегаты](../03-grouping-and-aggregates.md).
+См. [Группировка и агрегаты](../05-grouping-and-aggregates.md).
 
 ## Полнотекстовый поиск
 
@@ -211,7 +211,7 @@ select distinct on (somestring) id, somestring
  from complex_entity order by somestring
 ```
 
-См. [DISTINCT](../07-distinct.md).
+См. [DISTINCT](../09-distinct.md).
 
 ## Функции, возвращающие наборы
 
@@ -238,7 +238,7 @@ PostgreSQL заменяет единственную колонку скаляр
 колонкой (`from (select generate_series from generate_series(...)) as "t1"`); функции с явной колонкой
 (`value`, `key`/`value`, `word`/`ndoc`/`nentry`) эмитятся без обёртки.
 
-См. [Табличные функции](../11-table-valued-functions.md).
+См. [Табличные функции](../13-table-valued-functions.md).
 
 ## `TABLESAMPLE`
 
@@ -262,7 +262,7 @@ select id
 [`TableSampleMethod.System`](xref:NextORM.Core.TableSampleMethod.System) генерирует
 `tablesample system (10)`, а [`TableSampleMethod.Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli)
 — `tablesample bernoulli (5)`; остальные провайдеры отклоняют модификатор при построении SQL. См.
-[Сэмплирование таблицы](../../guide/31-query-sources.md#сэмплирование-таблицы-tablesample).
+[Сэмплирование таблицы](../../guide/01-query-sources.md#сэмплирование-таблицы-tablesample).
 
 ## Блокировка строк
 
@@ -287,11 +287,11 @@ select id
 `LockMode.Update` генерирует `for update`, а `LockMode.Share` — `for share`. Оба принимают
 [`LockWaitMode`](xref:NextORM.Core.LockWaitMode): `ForUpdate(LockWaitMode.SkipLocked)` генерирует
 `for update skip locked`, а `ForShare(LockWaitMode.NoWait)` — `for share nowait` (PostgreSQL 9.5+). См.
-[Блокировку строк](../../guide/32-provider-specific-features.md#блокировка-строк-for-update--for-share).
+[Блокировку строк](../../guide/31-provider-specific-features.md#блокировка-строк-for-update--for-share).
 
 Для оптимистичной конкурентности доступна и системная колонка PostgreSQL `xmin`: сопоставьте её свойству
 `uint`, помеченному computed, и сравнивайте в `Where` (только на равенство) — см.
-[Оптимистичную конкурентность и отслеживание изменений](../24-optimistic-concurrency.md#postgresql-xmin).
+[Оптимистичную конкурентность и отслеживание изменений](../26-optimistic-concurrency.md#postgresql-xmin).
 
 То же отображение `uint` читает системные колонки PostgreSQL `oid` и другие системные типы на основе
 `uint` (например, `cid`) в CLR-свойство `uint`: Npgsql представляет их как `uint`, поэтому
@@ -329,8 +329,8 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 Тело может быть `VALUES`-insert или `INSERT ... SELECT`, а мутация может читать более ранний read-CTE
 (объявите его первым и используйте `CteQuery.With(имя, insert)`) либо питать главный `INSERT ... SELECT`.
 Полный набор форм — в разделе
-[Изменение данных (INSERT): Модифицирующий CTE](../15-insert-statement.md#модифицирующий-cte-postgresql);
-общие (read) CTE — в [Общих табличных выражениях](../08-cte.md). Остальные провайдеры отклоняют
+[Изменение данных (INSERT): Модифицирующий CTE](../17-insert-statement.md#модифицирующий-cte-postgresql);
+общие (read) CTE — в [Общих табличных выражениях](../10-cte.md). Остальные провайдеры отклоняют
 `With(имя, insert)` на этапе построения SQL с `NotSupportedException`.
 
 ## Сырые строки и composite-типы
@@ -339,7 +339,7 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 зарегистрированный вызывающим именованный composite, — может быть материализована в соответствующий
 `System.Tuple<...>` или именованный CLR-тип. Это аналог результата `tuple(...)` в ClickHouse; полная
 матрица форм, конфигурация и контракт ошибок — в
-[Сыром SQL](../12-raw-sql.md#сырые-postgresql-строки-и-composite-типы).
+[Сыром SQL](../14-raw-sql.md#сырые-postgresql-строки-и-composite-типы).
 
 ```csharp
 using var result = dataContext.ExecuteRaw(
@@ -356,7 +356,7 @@ var rows = result.Read<System.Tuple<int, string?>>();
 незарегистрированный composite и composite, объявленный как `System.Tuple`, — бросают
 `NotSupportedException`; `NULL` в поле, объявленном non-nullable value-типом, бросает
 `InvalidOperationException` вместо подстановки `default`. См.
-[Сырой SQL](../12-raw-sql.md#сырые-postgresql-строки-и-composite-типы).
+[Сырой SQL](../14-raw-sql.md#сырые-postgresql-строки-и-composite-типы).
 
 Классификация composite авторитетна: колонка считается именованным composite только тогда, когда это подтверждает загруженный каталог типов Npgsql, — никогда по dotted-имени типа данных или форме исключения. На чистом каталоге неотображённый некомпозитный тип (например `hstore` или `ltree`) теперь даёт обычную ошибку "None of the result-set columns (...) matches a mapped property", а не диагностику named-composite; настоящий composite, чей тип отсутствует в загруженном каталоге, деградирует до той же обычной ошибки, пока нет авторитетных метаданных типа (осознанный компромисс — холодный каталог не даёт вердикт о composite вместо вводящего в заблуждение). Composite, зарегистрированный через `MapComposite<T>`, по-прежнему материализуется, а незарегистрированный composite на прогретом каталоге по-прежнему сообщает специфичный для composite guard (его нужно зарегистрировать, прежде чем читать). Контексты nextorm используют общий на уровне процесса неявный источник данных Npgsql, ключом которого служит строка подключения; перезагрузка типов должна выполняться для источника, связанного с той же строкой подключения, что используется контекстом.
 
@@ -377,12 +377,12 @@ select a, b
 поддерживается. Сценарии без схемы покрываются существующими путями:
 
 * хранилище `[DynamicColumns]` (`Dictionary<string, object?>`) собирает не сопоставленные колонки
-  строки — см. [Динамические колонки](../27-dynamic-columns.md);
-* сырой путь чтения — колонки [`ResultSet`](../12-raw-sql.md#несколько-наборов-результатов) читаются
-  по `FieldCount`/`ColumnNames` без материализации, а [`ToDataReader`](../26-large-objects.md) отдаёт
+  строки — см. [Динамические колонки](../29-dynamic-columns.md);
+* сырой путь чтения — колонки [`ResultSet`](../14-raw-sql.md#несколько-наборов-результатов) читаются
+  по `FieldCount`/`ColumnNames` без материализации, а [`ToDataReader`](../28-large-objects.md) отдаёт
   их как `DbDataReader`;
 * `jsonb_each` / `jsonb_each_text` / `jsonb_object_keys` разворачивают JSON-объект в строки
-  ключ/значение — см. [Динамическая схема результата](../11-table-valued-functions.md#dynamic-result-schema).
+  ключ/значение — см. [Динамическая схема результата](../13-table-valued-functions.md#dynamic-result-schema).
 
 Варианты `json_populate_record(set)` (заполняющие переданную вызывающим базовую запись, а не
 свободный список колонок) остаются вне области охвата. См.
@@ -396,4 +396,4 @@ select a, b
 ---
 
 Source: `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.core/Query/SqlFunctions.Postgres.cs`,
-`tests/nextorm.postgres.tests/SqlGenerationTests.cs`.
+`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs`.

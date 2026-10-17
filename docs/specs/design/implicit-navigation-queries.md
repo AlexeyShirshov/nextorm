@@ -3,8 +3,8 @@
 **Дата:** 2026-10-01
 **Tracking issue:** [#148](https://github.com/AlexeyShirshov/nextorm/issues/148) — верифицировано 2026-10-01 (title/state/milestone/body проверены через gh API; milestone `1.0.9-b` = number 18).
 **Milestone:** 1.0.9-b
-**Предшественник:** [#105](https://github.com/AlexeyShirshov/nextorm/issues/105) — закрыт; поставлены **только слайсы A+B**, слайс C явно отложен.
-**Статус:** [#148](https://github.com/AlexeyShirshov/nextorm/issues/148) **открыт** (milestone `1.0.9-b`); дизайн согласован. Реализация разделена: **#148-A** — внутренний фундамент (поставлен **internal-only**, публичной поверхности не меняет; commit `8393f82`), **#148-B** — пользовательская поверхность (`NavigationExpansion` + четыре терминала + `AsEntityBuilder<T>` + SQL/InMemory-семантика) **поставлена** (ветка `1.0.9-b`, DO D0–D9, статус `docs/specs/status/nav-implicit-148b-1.md`); публичная поверхность неявных навигационных запросов / `AsEntityBuilder<T>` доступна, публичный гайд EN+RU — `docs/guide/29-implicit-navigation.md`. Поставленный объём и явные отложенные пункты — §11.
+**Предшественник:** [#105](https://github.com/AlexeyShirshov/nextorm/issues/105) — закрыт; там поставлены слайсы A+B, слайс C был отложен и затем поставлен под #148.
+**Статус:** [#148](https://github.com/AlexeyShirshov/nextorm/issues/148) **закрыт** (2026-10-03, milestone `1.0.9-b`); дизайн согласован. Реализация разделена: **#148-A** — внутренний фундамент (поставлен **internal-only**, публичной поверхности не меняет; commit `8393f82`), **#148-B** — пользовательская поверхность (`NavigationExpansion` + четыре терминала + `AsEntityBuilder<T>` + SQL/InMemory-семантика) **поставлена** (ветка `1.0.9-b`, DO D0–D9, статус `docs/specs/status/nav-implicit-148b-1.md`); публичная поверхность неявных навигационных запросов / `AsEntityBuilder<T>` доступна, публичный гайд EN+RU — `docs/guide/31-implicit-navigation.md`. Поставленный объём и явные отложенные пункты — §11.
 
 **Цель.** Эргономичные навигационные запросы на пути к паритету с linq2db / EF Core **БЕЗ** второго полного транслятора `Enumerable`/`Queryable`. Эта ограниченная фича — **НЕ** полный паритет. Существующий публичный API нативного движка и лимиты провайдеров сохраняются.
 
@@ -57,7 +57,7 @@
 - **Не** подключён ни к одному visitor/preparation/execution; `NavigationExpansion`, `AsEntityBuilder<T>`, прямые терминалы и SQL/InMemory-семантика отсутствуют.
 - Приёмка #148-A (аллокация из §8): Roslyn symbol impact (`internal`-типы, отсутствие публичной дельты); сборка Debug/Release `0/0`; source/alias identity; single-column key; identity conversions + safe reference upcasts; fail-closed matrix (undeclared/missing key/intermediate collection/unbound or sibling scope/captured root/method call/downcast); отсутствие evaluation и wiring. Провайдерные/интеграционные прогоны и InMemory parity — **не** приёмка A.
 
-**#148-B — пользовательская поверхность (ожидает реализации).**
+**#148-B — пользовательская поверхность (поставлена).**
 
 - Единицы: `NavigationExpansion` + четыре прямых терминала (`Any()`, `Count()`, `LongCount()`, свойство `Count`) + `AsEntityBuilder<T>` + SQL/InMemory-семантика + end-to-end отклонение.
 - End-to-end отклонение: использование `AsEntityBuilder`/прямого маркера вне поддерживаемого query-выражения всегда бросает `NotSupportedException` (никогда null/default), включая captured enumerable и composite keys.
@@ -123,14 +123,14 @@ ctx.From<Parent>()
 - `src/nextorm.core/Builders/EntityBuilder.cs` — `Select` (249), конструкторы (65–80), `Limit` (2130), `Offset` (2141).
 - `src/nextorm.core/Builders/EntityBuilderExtensions.cs` — `Count` (815), `Any` (213).
 - `src/nextorm.core/Visitors/CorrelatedQueryExpressionVisitor.cs` — receiver (339–346), compile (261–268).
-- Существующая документация связей и `docs/specs/roadmap/todo_navigation_properties.md` (A+B vs C).
+- Существующая документация связей (`docs/relationships/relationships.md`, `docs/relationships/eager-loading.md`); разделение A+B vs C зафиксировано в §3–4a этой спеки.
 - `src/nextorm.core/Visitors/WhereExpressionVisitor.cs` (21–66) / `src/nextorm.core/Visitors/PredicateTranslator.cs` (327–473) — null gap.
 - `src/nextorm.core/DataContext/InMemoryConditionFactory.cs` (29–53) — сырой CLR-граф.
 - ClickHouse docs: https://clickhouse.com/docs/reference/settings/session-settings/join#join_use_nulls
 
 ## 10. Согласования / handoff
 
-Принятые разговорные решения — выше; спека ожидает одобрения пользователя; далее `writing-plans`; никакого кода/плана/коммита сегодня. Любое открытие при реализации, требующее расширения нативных возможностей или изменения утверждённой null/API-семантики, требует **явной ревизии дизайна**, а не тихого изменения объёма.
+Принятые разговорные решения — выше; спека реализована (#148 закрыт), отложенные пункты — §11. Любое открытие при реализации, требующее расширения нативных возможностей или изменения утверждённой null/API-семантики, требует **явной ревизии дизайна**, а не тихого изменения объёма.
 
 ## 11. Статус реализации (2026-10-02)
 
@@ -148,7 +148,7 @@ ctx.From<Parent>()
   - native `EntityBuilderExtensions.LongCount`/`LongCountAsync` (`count_big`);
   - **ClickHouse**: query-local `join_use_nulls=1` (dialect capability `ISqlDialect.OuterJoinNullSettings`) для reference-запросов, явный конфликтующий `join_use_nulls=0` отклоняется до исполнения;
   - **InMemory** parity для reference и collection (метаданные авторитетны, без CLR-графа);
-  - **conformance**: SQLite/PostgreSQL/SQL Server/MySQL/MariaDB/ClickHouse + in-memory; публичный гайд EN+RU `docs/guide/29-implicit-navigation.md` (+ `docs/ru/guide/29-implicit-navigation.md`), оба `toc`.
+  - **conformance**: SQLite/PostgreSQL/SQL Server/MySQL/MariaDB/ClickHouse + in-memory; публичный гайд EN+RU `docs/guide/31-implicit-navigation.md` (+ `docs/ru/guide/31-implicit-navigation.md`), оба `toc`.
 - **Публичная поверхность**: `EntityBuilderExtensions.AsEntityBuilder<T>` (collection + reference overload), `EntityBuilderExtensions.LongCount`/`LongCountAsync`, `ISqlDialect.OuterJoinNullSettings` (DIM) + `SqlDialectBase`/`ClickHouseDialect` override. Реестр имён — `docs/specs/design/API-NAMING-REVIEW.md` (N148B-1/N148B-2).
 
 **Отложено (fail-closed, вне текущего объёма).**

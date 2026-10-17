@@ -1,11 +1,12 @@
 # Examples verification report
 
-> **Last verified: 2026-10-13** (examples switched to the published `nextorm` **1.0.9-rc2** NuGet
-> packages; ClickHouse queries re-validated against `clickhouse/clickhouse-server:25.8-alpine`).
-> Re-run the examples whenever the engine gains features and update the tables below. This file is the
-> source of truth for "what works / what does not and why"; the topics are owned by the roadmap backlog
-> under [`docs/specs/roadmap/`](../docs/specs/roadmap) and [`docs/specs/`](../docs/specs).
-> Run mechanics live in [`.opencode/skills/running-examples/SKILL.md`](../.opencode/skills/running-examples/SKILL.md).
+> **Last verified: 2026-10-17** (the examples are now **comparison projects**: every query has a
+> nextorm arm and a linq2db arm, and both are executed against the same dataset; BenchmarkDotNet runs
+> through `--benchmark`). Re-run the examples whenever the engine gains features and update the tables
+> below. This file is the source of truth for "what works / what does not and why"; the topics are owned
+> by the roadmap backlog under [`docs/specs/roadmap/`](../docs/specs/roadmap) and
+> [`docs/specs/`](../docs/specs). Run mechanics live in
+> [`.opencode/skills/running-examples/SKILL.md`](../.opencode/skills/running-examples/SKILL.md).
 
 ## Environment
 
@@ -18,23 +19,34 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
   dotnet run --project examples/<name> -c Debug
 ```
 
-Each `Program` runs every query to completion: it prints `[ OK ]`/`[FAIL]` per query and an
-`n/m succeeded` summary. Only documented gaps (`NotSupportedException`/`QueryPreparationException`)
-are recorded as `FAIL`; any other exception aborts the run.
+Each `Program` runs both arms (nextorm and linq2db) for every query to completion: it prints the rows of
+each arm, `[ OK ]`/`[FAIL]`/`[DIFF]` per query and an `n/m queries matched in both arms` summary. Only
+documented gaps (`NotSupportedException`, `QueryPreparationException`, `LinqToDBException`) are recorded
+as `FAIL`; any other exception aborts the run.
 
 ## Results
 
-| Example | Result | Failing queries |
+| Example | Matched in both arms | Failing query (documented gap) |
 |---|---|---|
 | `nextorm.examples.postgres.aviasales` | **11/11** | — |
 | `nextorm.examples.mssql.adventureworks` | **11/11** | — |
-| `nextorm.examples.clickhouse.analytics` | **10/11** | `Incremental` |
+| `nextorm.examples.clickhouse.analytics` | **10/11** | `Incremental` (nextorm arm only) |
+
+Query-by-query counts on 2026-10-17 (warm volumes, Podman):
+
+* postgres: aircraft delay chains 30, occupancy matrix 8, no-show 0, rolling revenue 91, ABC/XYZ 614,
+  top routes 186, airport OTP 63, percentiles 8, frequent flyers 10, passenger growth 2, cancellations 15
+  — identical in both arms.
+* mssql: 146, 364, 0, 266, 4, 12, 40, 20, 14, 364, 40 — identical in both arms.
+* clickhouse: array analytics 10, funnel 3, retention 1, sessions 100, daily traffic 7, top landing
+  pages 10, device split 2, top referrers 10, session depth 5, rolling activity 7; `Incremental`
+  returns 7 rows on the linq2db arm and throws on the nextorm arm.
 
 ## Failures and their tracked cause
 
 | Query | Why it fails | Tracked in |
 |---|---|---|
-| CH `Incremental` | `uniqMerge`, the `-Merge` combinator over an `AggregateFunction(uniq, …)` state column, has no LINQ surface in the released packages (the state cannot be projected as a scalar) | [`todo_clickhouse_aggregate_function_state.md`](../docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md) |
+| CH `Incremental` | nextorm: `uniqMerge`, the `-Merge` combinator over an `AggregateFunction(uniq, …)` state column, has no LINQ surface in the released packages (the state cannot be projected as a scalar). The linq2db arm runs the query through `FromSql` and returns 7 rows, so the gap is visible rather than assumed. | [`todo_clickhouse_aggregate_function_state.md`](../docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md) |
 
 MSSQL `QuarterlyPivot` is no longer a failure: the native `PIVOT` now accepts a derived query, so the
 reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed directly.
@@ -99,6 +111,35 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   so the one-row-per-group case stays distinguishable from zero — matching the previous `GetNullable*`
   reads. The only remaining by-name reads are the MSSQL `Pivot` result columns, which are dynamic. Re-run
   unchanged: postgres `11/11`, mssql `11/11`, clickhouse `10/11` (`Incremental` only).
+
+## Comparison conversion (2026-10-17)
+
+* **Every example is now a comparison project.** The eleven queries per dataset are implemented twice:
+  `*Queries.cs` (nextorm) and `Linq2DbQueries.cs` (linq2db 6.5.0), with parallel entity mappings
+  (`Entities.cs` interfaces for nextorm, `Linq2DbEntities.cs` POCOs for linq2db). `Program` runs both
+  arms per query, prints the first rows of each, reports `[ OK ]`/`[FAIL]`/`[DIFF]` and checks that the
+  row counts match. Known-gap exceptions on either side are `[FAIL]`; anything else aborts.
+* **Benchmarks.** Each project has a BenchmarkDotNet class (`Benchmarks.cs`) with a `Nextorm_*`
+  baseline and a `Linq2Db_*` arm per query; `--benchmark` provisions the DB once and runs BDN in-process
+  (`Job.ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`). Filter with
+  `--benchmark --filter '*Name*'`; set `NEXTORM_EXAMPLES_BENCH_FULL=1` for the full job. The measured
+  code is only build + execute + materialise (no printing/JSON).
+* **linq2db arms deliberately use raw terminals where the LINQ surface ends** — annotated per method:
+  PostgreSQL `percentile_disc(...) WITHIN GROUP` (`FromSql`), MSSQL `PIVOT` (rewritten as conditional
+  aggregation), ClickHouse `windowFunnel`/`groupArray`/`uniqMerge` (`FromSql`) and the aggregate-state
+  threshold. Everything else is LINQ (`AsCte`, `Sql.Window.*`, `Sql.StringAggregate`, `Sql.Expr`).
+  Value parity was spot-checked across all queries. Two intentional representation differences remain on
+  ClickHouse: `uniq` is approximate, so the linq2db arm uses exact `COUNT(DISTINCT)` (e.g.
+  `DeviceSplit` desktop users 86 944 vs 86 317), and the retention matrix is a `toString(...)` string on
+  the linq2db arm vs a CLR tuple array on the nextorm arm. PostgreSQL `date_diff("minute")` is truncated
+  integer minutes in nextorm, so the linq2db arm emits the same `CAST(trunc(EXTRACT(EPOCH …)/60) AS integer)`
+  for `AirportOnTimePerformance`/`DelayPercentilesByModel` (values then match exactly).
+* **Packages.** The examples add `linq2db` 6.5.0 plus the PostgreSQL/SQL Server/ClickHouse providers
+  (`Linq2DbVersion` in [`Directory.Packages.props`](Directory.Packages.props)). The nextorm package
+  model is unchanged: postgres/clickhouse use the published `1.0.9-rc2` packages, mssql stays on
+  `ProjectReference` for the typed `Pivot` surface.
+* **Benchmark smoke run** (Debug, `--filter '*RollingRevenueMetrics*'`): both arms executed and the
+  summary table was produced; use a Release build for numbers worth quoting.
 
 ## Known environment pitfalls (do not mistake for product failures)
 

@@ -42,7 +42,7 @@
 
 Плюс новые страницы документации EN + RU: `advanced/relationships.md`, `advanced/eager-loading.md`,
 `advanced/query-filters.md`, `advanced/integration-efcore.md`, `infrastructure/04-logging.md`,
-глава `guide/27-dynamic-columns.md`; перенумерация глав руководства (13–27).
+глава `guide/29-dynamic-columns.md`; перенумерация глав руководства (13–27).
 
 Итог по пакетам: `nextorm` (core + in-memory) и провайдеры `nextorm.sqlite`, `nextorm.sqlserver`,
 `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb`, `nextorm.clickhouse` (7 пакетов).

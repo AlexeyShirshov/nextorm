@@ -232,7 +232,7 @@ id in ($p0, $p1)
 
 `values.Contains(c.Id)` is handled the same way. A `null` element adds an `is null` branch (for example `(nullableint in ($p0) or nullableint is null)`), and an empty or all-null collection folds to a constant (`1 = 0` / `is null`) with no parameters.
 
-A captured collection indexed by a query expression (`dict[column]`) folds the same way: the entry count is part of the plan key, so the generated `CASE` is rebuilt when the collection changes. See [Filtering (WHERE)](../guide/01-filtering-where.md).
+A captured collection indexed by a query expression (`dict[column]`) folds the same way: the entry count is part of the plan key, so the generated `CASE` is rebuilt when the collection changes. See [Filtering (WHERE)](../guide/03-filtering-where.md).
 
 ## Provider differences
 
@@ -254,18 +254,18 @@ A captured collection indexed by a query expression (`dict[column]`) folds the s
 
 ---
 
-Source: `tests/nextorm.sqlite.tests/PlanCacheTests.cs:49` (buffered then streaming),
-`tests/nextorm.sqlite.tests/PlanCacheTests.cs:99` (`Prepare(nonStreamUsing: false)`),
-`tests/nextorm.sqlite.tests/PlanCacheTests.cs:124` (buffered reuse),
-`tests/nextorm.sqlite.tests/PlanCacheTests.cs:152` (streaming the default throws),
-`tests/nextorm.sqlite.tests/PlanCacheTests.cs:257` ([`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) does not populate the cache);
-`tests/nextorm.sqlite.tests/InListCacheTests.cs:41` (same-shape captured collection),
-`tests/nextorm.sqlite.tests/InListCacheTests.cs:92` (reassigned array),
-`tests/nextorm.sqlite.tests/InListCacheTests.cs:117` (grown list);
-`tests/nextorm.core.tests/DataContextCacheScopeTests.cs:20` (cache sharing scope);
-`tests/nextorm.core.tests/QueryCacheControlsTests.cs:45` (clear, disable without mutating `Cache`, sliding expiration);
-`tests/nextorm.sqlite.tests/DataContextCacheClearTests.cs:31` (`DataContextCache.Clear` invalidates the plan cache);
-`tests/nextorm.integration.tests/CommonTestSuite.Cache.cs:6`;
+Source: `tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:49` (buffered then streaming),
+`tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:99` (`Prepare(nonStreamUsing: false)`),
+`tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:124` (buffered reuse),
+`tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:152` (streaming the default throws),
+`tests/nextorm.sqlite.tests/PlanCache/PlanCacheTests.cs:257` ([`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) does not populate the cache);
+`tests/nextorm.sqlite.tests/PlanCache/InListCacheTests.cs:41` (same-shape captured collection),
+`tests/nextorm.sqlite.tests/PlanCache/InListCacheTests.cs:92` (reassigned array),
+`tests/nextorm.sqlite.tests/PlanCache/InListCacheTests.cs:117` (grown list);
+`tests/nextorm.core.tests/Caching/DataContextCacheScopeTests.cs:20` (cache sharing scope);
+`tests/nextorm.core.tests/Caching/QueryCacheControlsTests.cs:45` (clear, disable without mutating `Cache`, sliding expiration);
+`tests/nextorm.sqlite.tests/PlanCache/DataContextCacheClearTests.cs:31` (`DataContextCache.Clear` invalidates the plan cache);
+`tests/nextorm.integration.tests/CommonTestSuite/Caching/CommonTestSuite.Cache.cs:6`;
 `src/nextorm.core/Query/QueryCommand.TResult.cs:38` ([`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken))),
 `src/nextorm.core/DataContext/Cache/IPreparedQueryCommand.cs:5` (prepared terminals),
 `src/nextorm.core/DataContext/DataContext.cs:315` (`GetPreparedQueryCommand`).

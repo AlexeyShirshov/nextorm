@@ -64,7 +64,7 @@ A (текущий цикл) → B1 (equality-scope allocations, `ExpressionPlanE
   `Cached_ToList`; controls Any/First/Single/Where; prepared control; Iteration/LargeIteration symmetry;
   warm/cold; matched SQL/types/rows; отдельно timed runs и diagnostic batches; CPU/alloc профили;
   inclusive CPU не суммировать; если seams не хватает — вернуть PLAN, не внедрять незапланированную
-  instrumentation); **CLOSED 2026-10-04** — `benchmarks/nextorm.benchmark/SqliteBenchmarkStageA.cs`, `StageADiagnostics.cs`; mandatory acceptance 7/7 exit 0 (wall 45.788s).
+  instrumentation); **CLOSED 2026-10-04** — `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStageA.cs`, `StageADiagnostics.cs`; mandatory acceptance 7/7 exit 0 (wall 45.788s).
 - A3 correctness characterization (coder; closures same shape/diff values; повторные captures/dedup/pN;
   WHERE/JOIN/projection, null, converter; IN/lookup изменение; Any/Count/All ↔ DML/CTE; structural
   mismatch при hash collision на lookup; nested shadowing/reentrancy; cache clear/lifetime; fallback

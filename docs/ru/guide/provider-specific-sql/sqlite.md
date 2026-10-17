@@ -106,7 +106,7 @@ var rows = dataContext.From<IComplexEntity>()
 ## Табличные функции `json_each` / `json_tree`
 
 `json_each` обходит непосредственных детей JSON-значения, `json_tree` — рекурсивно. Используйте их
-через [`FromTableFunction`](../11-table-valued-functions.md) и проецируйте форму строки вызова;
+через [`FromTableFunction`](../13-table-valued-functions.md) и проецируйте форму строки вызова;
 колонки — `key`, `value`, `type`, `fullkey` и `path` (плюс `id`/`parent` у `json_tree`).
 
 ```csharp

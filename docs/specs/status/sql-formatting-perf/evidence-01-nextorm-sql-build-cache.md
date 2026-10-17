@@ -141,12 +141,12 @@ Key files read in full or in relevant ranges:
 
 60 classes named `*Benchmark` were listed (plus helper types such as `BenchmarkQueryCommand`). Classes that
 measure the cached/prepared (plan-reuse) path:
-- `SqliteBenchmarkCachedPlan` (`benchmarks/nextorm.benchmark/SqliteBenchmarkCachedPlan.cs:12`) — explicit
+- `SqliteBenchmarkCachedPlan` (`benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkCachedPlan.cs:12`) — explicit
   cached vs prepared vs build arms: `Prepared_ToList` `:45`, `Cached_ToList` `:60`,
   `Cached_PlanOnly_Param` `:74`, `Cached_PlanOnly_NoParam` `:88`, `Build_Sql` `:102`
   (comment `:99-100` "No plan cache ... SQL is regenerated every iteration"), `Build_Sql_Join` `:115`,
   `RePrepare_PlanOnly_Param` `:144`, `M12_NoCache_PlanOnly_Param` `:160`, `M12_NoCache_ToList` `:174`.
-- `SqliteBenchmarkCache` (`benchmarks/nextorm.benchmark/SqliteBenchmarkCache.cs:14`) — `NextormCached`
+- `SqliteBenchmarkCache` (`benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkCache.cs:14`) — `NextormCached`
   `:63`, `NextormPrepared` `:82` (both purge/execute cached/prepared paths vs Dapper/Linq2Db).
 - `SqliteBenchmarkFeaturePlanCache` (`.../SqliteBenchmarkFeaturePlanCache.cs:20`) —
   `Warm_PlanOnly_Distinct` `:63`, `Warm_PlanOnly_In_AtIn_Captured` `:72`, `Warm_PlanOnly_In_AtIn_Inline`

@@ -68,7 +68,7 @@ select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (
 ## Функции, возвращающие наборы (PostgreSQL)
 
 `SqlFunctions.Postgres.generate_series` и `SqlFunctions.Postgres.unnest` — это предобъявленные источники
-[`[SqlTableFunction]`](../guide/11-table-valued-functions.md), поэтому отдельная обёртка не нужна:
+[`[SqlTableFunction]`](../guide/13-table-valued-functions.md), поэтому отдельная обёртка не нужна:
 
 ```csharp
 var numbers = dataContext

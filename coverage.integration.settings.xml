@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Coverage settings for the DEDICATED INTEGRATION-SUITE GATE.
+
+  Unlike coverage.settings.xml (the whole-solution gate limited to the four modules that CI
+  publishes), the integration suite is the only test project that exercises every provider against a
+  live server, so its gate measures all provider assemblies the integration project references.
+  Everything else mirrors coverage.settings.xml: test assemblies are excluded and unused/legacy code
+  is dropped through the same attributes.
+-->
+<Configuration>
+  <CodeCoverage>
+    <ModulePaths>
+      <Include>
+        <ModulePath>.*nextorm\.(core|sqlite|postgres|sqlserver|mysql|mariadb|clickhouse|entityframeworkcore)\.dll$</ModulePath>
+      </Include>
+    </ModulePaths>
+
+    <Attributes>
+      <Exclude>
+        <Attribute>^System\.Diagnostics\.CodeAnalysis\.ExcludeFromCodeCoverageAttribute$</Attribute>
+        <Attribute>^System\.CodeDom\.Compiler\.GeneratedCodeAttribute$</Attribute>
+        <Attribute>^System\.ObsoleteAttribute$</Attribute>
+      </Exclude>
+    </Attributes>
+  </CodeCoverage>
+</Configuration>

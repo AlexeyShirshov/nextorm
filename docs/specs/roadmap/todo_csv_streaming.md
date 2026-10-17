@@ -66,7 +66,7 @@
 - Tracking: [#250](https://github.com/AlexeyShirshov/nextorm/issues/250) (milestone `1.0.9-rc3`).
   Замер (SQLite, 2026-10-17): fixed-часть ≈ 200–207 µs на колонку плюс ~8–9 КБ аллокаций на колонку
   за вызов; 3-колоночный экспорт на 100 строк — 698 µs, из них ~590 µs (85 %) — сборка плана;
-  на 10 000 строк доля падает до 5.4 %. Harness: `benchmarks/nextorm.benchmark/SqliteBenchmarkCsvFixedCost.cs`.
+  на 10 000 строк доля падает до 5.4 %. Harness: `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkCsvFixedCost.cs`.
 
 ### (b) Memory-bound бинарных (`byte[]`) полей — частично закрыто (поддерживаемый direct-binary sequential-путь)
 

@@ -141,4 +141,4 @@ Source: `src/nextorm.core/Interceptors/IQueryInterceptor.cs`,
 `src/nextorm.core/Interceptors/IConnectionInterceptor.cs`,
 `src/nextorm.core/DataContext/QueryExecutor.cs`,
 `src/nextorm.core/DataContext/DbConnectionManager.cs`,
-`tests/nextorm.sqlite.tests/InterceptorTests.cs`.
+`tests/nextorm.sqlite.tests/Interceptors/InterceptorTests.cs`.

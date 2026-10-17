@@ -8,15 +8,14 @@ namespace NextORM.Examples.Postgres.Aviasales;
 /// The five demo queries from <c>Sql/</c> plus six extra course-style exercises (see
 /// <c>README.md</c>), expressed with the nextorm LINQ API. Each method's comment names the SQL file it
 /// models and states whether it is <c>WORKING</c>; when it is not, the comment says why (with the
-/// roadmap document that tracks the gap). Each working method prints the number of rows and the first
-/// few rows as JSON.
+/// roadmap document that tracks the gap). Each method returns its row list; the runner prints it.
 /// </summary>
 public static class AviasalesQueries
 {
     // 1. Sql/aircraft_delay_chains.sql — WITH flight_delays AS (...), delay_chains AS (...), then JOIN
     // WORKING: two typed CTEs (`AsCte`); delay_chains reads flight_delays with member access; the outer
     // query joins the CTE to airplanes_data (the CTE API supports the join, unlike the old derived-query form).
-    public static async Task AircraftDelayChains(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> AircraftDelayChains(IDataContext ctx, CancellationToken ct)
     {
         // CTE flight_delays (delay_minutes + LAG over the same partition).
         var flightDelays = ctx.From<ITimetable>()
@@ -67,13 +66,13 @@ public static class AviasalesQueries
             })
             .ToListAsync(ct);
 
-        Print("1. aircraft_delay_chains", rows);
+        return rows;
     }
 
     // 2. Sql/business_occupancy_matrix.sql — WITH flight_business_capacity, flight_occupancy, then joins
     // WORKING: two typed CTEs (`AsCte`), joined to each other and to airplanes_data; the pivot is a
     // plain AVG(CASE ...) over day_of_week.
-    public static async Task BusinessOccupancyMatrix(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> BusinessOccupancyMatrix(IDataContext ctx, CancellationToken ct)
     {
         // CTE flight_business_capacity: COUNT(*) over the business seats per airplane.
         var capacity = ctx.From<ISeat>()
@@ -141,12 +140,12 @@ public static class AviasalesQueries
             })
             .ToListAsync(ct);
 
-        Print("2. business_occupancy_matrix", rows);
+        return rows;
     }
 
     // 3. Sql/passenger_noshow_analysis.sql — WITH passenger_flight_history, passenger_stats
     // WORKING: two typed CTEs (`AsCte`); passenger_stats groups passenger_flight_history with member access.
-    public static async Task PassengerNoShowAnalysis(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> PassengerNoShowAnalysis(IDataContext ctx, CancellationToken ct)
     {
         // CTE passenger_flight_history: carries the is_noshow flag exactly as the original.
         var history = ctx.From<ITicket>()
@@ -192,13 +191,13 @@ public static class AviasalesQueries
             })
             .ToListAsync(ct);
 
-        Print("3. passenger_noshow_analysis", rows);
+        return rows;
     }
 
     // 4. Sql/rolling_revenue_metrics.sql — WITH daily_revenue, then SUM/AVG windows
     // WORKING: typed CTE daily_revenue (`AsCte`); the outer query reads it with member access and applies
     // framed windows.
-    public static async Task RollingRevenueMetrics(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> RollingRevenueMetrics(IDataContext ctx, CancellationToken ct)
     {
         // CTE daily_revenue.
         var daily = ctx.From<IBooking>()
@@ -227,14 +226,14 @@ public static class AviasalesQueries
             })
             .ToListAsync(ct);
 
-        Print("4. rolling_revenue_metrics", rows);
+        return rows;
     }
 
     // 5. Sql/route_network_abc_xyz.sql — WITH route_monthly_revenue, route_aggregates, abc_analys
     // WORKING: three chained typed CTEs (`AsCte`); the running share is a window over the route aggregate.
     // `avg`/`stdev` are projected as nullable (`(decimal?)`) so the one-month-per-route case stays
     // distinguishable from zero.
-    public static async Task RouteNetworkAbcXyz(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> RouteNetworkAbcXyz(IDataContext ctx, CancellationToken ct)
     {
         // CTE route_monthly_revenue.
         var monthly = ctx.From<ITimetable>()
@@ -300,12 +299,12 @@ public static class AviasalesQueries
             })
             .ToListAsync(ct);
 
-        Print("5. route_network_abc_xyz", rows);
+        return rows;
     }
 
     // 6. top_routes_by_city
     // WORKING: RANK() OVER (PARTITION BY city ORDER BY revenue DESC) top-N per group.
-    public static async Task TopRoutesByCity(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> TopRoutesByCity(IDataContext ctx, CancellationToken ct)
     {
         var routeRevenue = ctx.From<ITimetable>()
             .Join(ctx.From<ISegment>(), (f, tf) => f.FlightId == tf.FlightId)
@@ -352,12 +351,12 @@ public static class AviasalesQueries
             })
             .ToListAsync(ct);
 
-        Print("6. top_routes_by_city", rows);
+        return rows;
     }
 
     // 7. airport_otp
     // WORKING: conditional aggregation (SUM(CASE…)) plus a derived-query HAVING-equivalent filter.
-    public static async Task AirportOnTimePerformance(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> AirportOnTimePerformance(IDataContext ctx, CancellationToken ct)
     {
         var flights = ctx.From<ITimetable>()
             .Join(ctx.From<IAirportData>(), (f, dep) => f.DepartureAirport == dep.AirportCode)
@@ -399,12 +398,12 @@ public static class AviasalesQueries
             })
             .ToListAsync(ct);
 
-        Print("7. airport_otp", rows);
+        return rows;
     }
 
     // 8. delay_percentiles_by_model
     // WORKING: percentile_disc(...) WITHIN GROUP (ORDER BY …).
-    public static async Task DelayPercentilesByModel(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> DelayPercentilesByModel(IDataContext ctx, CancellationToken ct)
     {
         var stats = ctx.From<ITimetable>()
             .Join(ctx.From<IAirplaneData>(), (f, a) => f.AirplaneCode == a.AirplaneCode)
@@ -425,12 +424,12 @@ public static class AviasalesQueries
             .Select(s => new { s.Model, s.Flights, s.MedianDelay, s.P90Delay })
             .ToListAsync(ct);
 
-        Print("8. delay_percentiles_by_model", rows);
+        return rows;
     }
 
     // 9. frequent_flyers
     // WORKING: string_agg + HAVING count() >= 5 + LIMIT.
-    public static async Task FrequentFlyers(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> FrequentFlyers(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<ITicket>()
             .Join(ctx.From<ISegment>(), (t, tf) => t.TicketNo == tf.TicketNo)
@@ -454,12 +453,12 @@ public static class AviasalesQueries
             })
             .ToListAsync(ct);
 
-        Print("9. frequent_flyers", rows);
+        return rows;
     }
 
     // 10. passenger_growth_mom
     // WORKING: LAG over a monthly aggregate.
-    public static async Task PassengerGrowth(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> PassengerGrowth(IDataContext ctx, CancellationToken ct)
     {
         var monthly = ctx.From<ITimetable>()
             .Join(ctx.From<ISegment>(), (f, tf) => f.FlightId == tf.FlightId)
@@ -496,12 +495,12 @@ public static class AviasalesQueries
             })
             .ToListAsync(ct);
 
-        Print("10. passenger_growth_mom", rows);
+        return rows;
     }
 
     // 11. cancellation_by_route
     // WORKING: conditional COUNT + rate, top-N.
-    public static async Task CancellationByRoute(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> CancellationByRoute(IDataContext ctx, CancellationToken ct)
     {
         var perRoute = ctx.From<ITimetable>()
             .Join(ctx.From<IAirportData>(), (f, dep) => f.DepartureAirport == dep.AirportCode)
@@ -532,20 +531,6 @@ public static class AviasalesQueries
             })
             .ToListAsync(ct);
 
-        Print("11. cancellation_by_route", rows);
-    }
-
-    private static void Print(string title, IEnumerable<object> rows)
-    {
-        var list = rows.ToList();
-        Console.WriteLine($"-- {title}: {list.Count} row(s)");
-
-        foreach (var row in list.Take(10))
-            Console.WriteLine("   " + JsonSerializer.Serialize(row));
-
-        if (list.Count > 10)
-            Console.WriteLine("   ...");
-
-        Console.WriteLine();
+        return rows;
     }
 }

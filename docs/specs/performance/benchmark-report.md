@@ -363,7 +363,7 @@ ShortRun / InProcess, tmpfs, изолированная копия. Разбро
 
 Что было исправлено по пути:
 - **Блокирующий баг `InMemoryDataContext`.** `GetPreparedQueryCommand` падал с `NullReferenceException`, если `queryCommand.Cache == true`, а `storeInCache == false` (путь `QueryCommand.Prepare`): `queryPlan` не создавался, но использовался через `queryPlan!`. Теперь запись в кэш планов идёт под тем же условием `storeInCache && queryCommand.Cache`, что и в `DataContext`. До фикса **все** in-memory бенчмарки возвращали `NA`.
-- В `nextorm.benchmark` добавлены пакет `Microsoft.EntityFrameworkCore.InMemory` и контекст `EFInMemoryDataContext` (`benchmarks/nextorm.benchmark/EfInMemory.cs`).
+- В `nextorm.benchmark` добавлены пакет `Microsoft.EntityFrameworkCore.InMemory` и контекст `EFInMemoryDataContext` (`benchmarks/nextorm.benchmark/Infrastructure/EfInMemory.cs`).
 
 ## Что оптимизировано в in-memory провайдере
 
@@ -430,7 +430,7 @@ ShortRun / InProcess, tmpfs, изолированная копия. Разбро
 ```bash
 NEXTORM_BENCH_FULL=1 dotnet run -c Release --project benchmarks/nextorm.benchmark -- --filter "*InMemoryBenchmark*"
 ```
-Классы: `InMemoryBenchmarkAny`, `InMemoryBenchmarkIteration`, `InMemoryBenchmarkWhere`; EF-контекст — `benchmarks/nextorm.benchmark/EfInMemory.cs`.
+Классы: `InMemoryBenchmarkAny`, `InMemoryBenchmarkIteration`, `InMemoryBenchmarkWhere`; EF-контекст — `benchmarks/nextorm.benchmark/Infrastructure/EfInMemory.cs`.
 
 ---
 
@@ -885,7 +885,7 @@ SQL и публичного API.
 - БД — tmpfs `/tmp/nextorm-bench/test.db`; `Job.ShortRun` + `InProcessEmitToolchain`,
   прогоны строго последовательно. Прогон шёл на **4 логических / 2 физических ядрах** (WSL),
   как и Итерация 7; относительные позиции сопоставимы, абсолютные — с разбросом ±20–30 %.
-- Новый класс `benchmarks/nextorm.benchmark/SqliteBenchmarkWarmDecompose.cs`. Каждый arm
+- Новый класс `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWarmDecompose.cs`. Каждый arm
   пересобирает команду с нуля и останавливается на своём этапе, поэтому стоимость этапа — это
   разность двух arm'ов:
   - `*_Construct` — только fluent-сборка `QueryCommand`;
@@ -1805,9 +1805,11 @@ NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
 - Поэтому **абсолютные времена выше Итерации 10 в ≈ 1.4×** (`Any Nextorm_Prepared` 922.9 µs → 1.289 ms),
   но **все арм'ы класса измерены в одном прогоне**, значит относительные коэффициенты сопоставимы.
   **Аллокации детерминированы и совпадают** с Итерацией 10 везде, кроме явно отмеченного `Nextorm_Cached`.
-- Артефакты пишутся в **корневой** `BenchmarkDotNet.Artifacts/`: `BenchmarkArtifacts.Resolve` ищет
-  `nextorm.sln`, а репозиторий — на `nextorm.slnx`, поэтому срабатывает fallback `$CWD`; committed
-  отчёты в `benchmarks/BenchmarkDotNet.Artifacts` после этого устаревшие.
+- Артефакты на момент прогона писались в **корневой** `BenchmarkDotNet.Artifacts/`:
+  `BenchmarkArtifacts.Resolve` искал `nextorm.sln`, а репозиторий — на `nextorm.slnx`, поэтому
+  срабатывал fallback `$CWD`; committed отчёты в `benchmarks/BenchmarkDotNet.Artifacts` после этого
+  устаревшие. (Путь исправлен в `97b2bc1a`: `Resolve` теперь видит и `nextorm.slnx`; корневые отчёты
+  перенесены в `benchmarks/BenchmarkDotNet.Artifacts/results/`.)
 - Режим: `NEXTORM_BENCH_FULL=1` → `Job.Default` + `MemoryDiagnoser`; классы строго последовательно
   (Any 444 s, First 583 s, Single 184 s, Join 171 s, Where 626 s, Iteration 660 s, LargeIteration 1149 s,
   Cache 1154 s; ≈ 1.7 ч). Симметрия категорий прежняя: **A** — `Nextorm_Prepared` ⟷ EF `CompileAsyncQuery`
@@ -1920,8 +1922,8 @@ NEXTORM_BENCH_FULL=1 NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
 #   … First, Single, Join, Where, Iteration, LargeIteration, Cache
 ```
 
-Артефакты: корневой `BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmark*-report-github.md`
-(из-за `nextorm.slnx` — см. оговорку выше).
+Артефакты: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmark*-report-github.md`
+(на момент прогона падали в корневой `BenchmarkDotNet.Artifacts/` из-за `nextorm.slnx`, см. оговорку выше).
 
 ---
 

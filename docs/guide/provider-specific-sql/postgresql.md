@@ -45,7 +45,7 @@ surface is gated by [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRan
 [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). The operators are exposed as static methods named
 after the SQL tokens, so no range member collides with a CLR operator or the full-text `Contains`:
 
-On a database without a native range type, map a `Range<T>` property to a pair of scalar columns with [`RangeColumns`](../25-range-columns.md); the same operators are then translated over the pair.
+On a database without a native range type, map a `Range<T>` property to a pair of scalar columns with [`RangeColumns`](../27-range-columns.md); the same operators are then translated over the pair.
 
 | Member | SQL |
 |---|---|
@@ -131,7 +131,7 @@ select jsonb_agg(somestring)
 ```
 
 See [JSON and JSONB (PostgreSQL)](../../scalar-functions/index.md) and
-[JSON support across providers](../14-json.md).
+[JSON support across providers](../16-json.md).
 
 ## Ordered-set, regression and boolean aggregates
 
@@ -143,7 +143,7 @@ See [JSON and JSONB (PostgreSQL)](../../scalar-functions/index.md) and
 * `array_agg` and the string/array aggregate surface are gated by
   [`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates).
 
-See [Grouping and aggregates](../03-grouping-and-aggregates.md).
+See [Grouping and aggregates](../05-grouping-and-aggregates.md).
 
 ## Full-text search
 
@@ -210,7 +210,7 @@ select distinct on (somestring) id, somestring
  from complex_entity order by somestring
 ```
 
-See [Distinct](../07-distinct.md).
+See [Distinct](../09-distinct.md).
 
 ## Set-returning functions
 
@@ -237,7 +237,7 @@ adds to a derived source, so the dialect wraps those calls in a one-column subqu
 (`from (select generate_series from generate_series(...)) as "t1"`); the functions with an explicit
 output column (`value`, `key`/`value`, `word`/`ndoc`/`nentry`) are emitted unchanged.
 
-See [Table-valued functions](../11-table-valued-functions.md).
+See [Table-valued functions](../13-table-valued-functions.md).
 
 ## `TABLESAMPLE`
 
@@ -261,7 +261,7 @@ select id
 [`TableSampleMethod.System`](xref:NextORM.Core.TableSampleMethod.System) renders
 `tablesample system (10)` and [`TableSampleMethod.Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli)
 renders `tablesample bernoulli (5)`; other providers reject the modifier at SQL build time. See
-[Table sampling](../../guide/31-query-sources.md#table-sampling-tablesample).
+[Table sampling](../../guide/01-query-sources.md#table-sampling-tablesample).
 
 ## Row locking
 
@@ -285,11 +285,11 @@ select id
 `LockMode.Update` renders `for update` and `LockMode.Share` renders `for share`. Both accept a
 [`LockWaitMode`](xref:NextORM.Core.LockWaitMode): `ForUpdate(LockWaitMode.SkipLocked)` renders
 `for update skip locked` and `ForShare(LockWaitMode.NoWait)` renders `for share nowait` (PostgreSQL 9.5+).
-See [Row locking](../../guide/32-provider-specific-features.md#row-locking-for-update--for-share).
+See [Row locking](../../guide/31-provider-specific-features.md#row-locking-for-update--for-share).
 
 For optimistic concurrency, PostgreSQL's `xmin` system column is available too: map it to a `uint`
 property marked computed and compare it in `Where` (equality only) — see
-[Optimistic concurrency and change tracking](../24-optimistic-concurrency.md#postgresql-xmin).
+[Optimistic concurrency and change tracking](../26-optimistic-concurrency.md#postgresql-xmin).
 
 The same `uint` mapping reads PostgreSQL's `oid` and other `uint`-backed system types (for example
 `cid`) into a CLR `uint` property: Npgsql surfaces them as `uint`, so materialising one works. Only
@@ -325,9 +325,9 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 
 The body may be a `VALUES` insert or an `INSERT ... SELECT`, and the mutation may read an earlier read CTE
 (declare it first and use `CteQuery.With(name, insert)`) or feed a main `INSERT ... SELECT`. See
-[Data modification (INSERT): Data-modifying CTE](../15-insert-statement.md#data-modifying-cte-postgresql)
+[Data modification (INSERT): Data-modifying CTE](../17-insert-statement.md#data-modifying-cte-postgresql)
 for the full set of forms; general read CTEs are in
-[Common table expressions](../08-cte.md). Every
+[Common table expressions](../10-cte.md). Every
 other provider rejects `With(name, insert)` at build time with `NotSupportedException`.
 
 ## Raw rows and composites
@@ -335,7 +335,7 @@ other provider rejects `With(name, insert)` at build time with `NotSupportedExce
 A raw statement that projects a single PostgreSQL record column — an anonymous `ROW(...)` or a
 caller-registered named composite — can be materialised into the matching `System.Tuple<...>` or the named
 CLR type. This is the PostgreSQL counterpart of the ClickHouse `tuple(...)` result; see
-[Raw SQL](../12-raw-sql.md#postgresql-raw-rows-and-composites) for the full shape matrix, the
+[Raw SQL](../14-raw-sql.md#postgresql-raw-rows-and-composites) for the full shape matrix, the
 configuration and the error contract.
 
 ```csharp
@@ -352,7 +352,7 @@ Only a single record column is supported. Unsupported shapes — a `ValueTuple`,
 `ROW`, several or mixed record columns, an unregistered composite and a composite declared as
 `System.Tuple` — throw `NotSupportedException`; a `NULL` in a field declared as a non-nullable value type
 throws `InvalidOperationException` instead of substituting `default`. See
-[Raw SQL](../12-raw-sql.md#postgresql-raw-rows-and-composites).
+[Raw SQL](../14-raw-sql.md#postgresql-raw-rows-and-composites).
 
 Composite classification is authoritative: a column is treated as a named composite only when the loaded Npgsql type catalog says so, never from a dotted data type name or an exception shape. On a clean catalog an unmapped non-composite type (for example `hstore` or `ltree`) now yields the ordinary "None of the result-set columns (...) matches a mapped property" error rather than the named-composite diagnostic; a genuine composite whose type is not in the loaded catalog degrades to the same ordinary error until authoritative type metadata is available (a deliberate trade-off — a cold catalog gives no composite verdict instead of a misleading one). A composite registered through `MapComposite<T>` still materialises, and a warm-catalog unregistered composite still reports the composite-specific guard (it must be registered before it can be read). nextorm contexts share a process-wide implicit Npgsql data source keyed by connection string; a type reload must target the source associated with the same connection string used by the context.
 
@@ -373,12 +373,12 @@ A free/partial column list **without** a caller-declared `TRow` is not supported
 functions. Schema-less scenarios are covered by the existing paths instead:
 
 * a `[DynamicColumns]` store (`Dictionary<string, object?>`) captures the row's unmapped columns —
-  see [Dynamic columns](../27-dynamic-columns.md);
-* the raw reader path — [`ResultSet`](../12-raw-sql.md#multiple-result-sets) columns are read by
-  `FieldCount`/`ColumnNames` without materialisation, and [`ToDataReader`](../26-large-objects.md)
+  see [Dynamic columns](../29-dynamic-columns.md);
+* the raw reader path — [`ResultSet`](../14-raw-sql.md#multiple-result-sets) columns are read by
+  `FieldCount`/`ColumnNames` without materialisation, and [`ToDataReader`](../28-large-objects.md)
   streams them as a `DbDataReader`;
 * `jsonb_each` / `jsonb_each_text` / `jsonb_object_keys` expand a JSON object into key/value rows —
-  see [Dynamic result schema](../11-table-valued-functions.md#dynamic-result-schema).
+  see [Dynamic result schema](../13-table-valued-functions.md#dynamic-result-schema).
 
 The `json_populate_record(set)` variants (which populate a caller-supplied base record instead of a
 free-form column list) remain out of scope. See
@@ -392,4 +392,4 @@ free-form column list) remain out of scope. See
 ---
 
 Source: `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.core/Query/SqlFunctions.Postgres.cs`,
-`tests/nextorm.postgres.tests/SqlGenerationTests.cs`.
+`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs`.

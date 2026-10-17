@@ -55,7 +55,7 @@ select id, nullableint
  from complex_entity order by id limit 2 by nullableint
 ```
 
-See [Sorting and paging](../04-sorting-and-paging.md#limit-by-clickhouse)
+See [Sorting and paging](../06-sorting-and-paging.md#limit-by-clickhouse)
 ([`LimitBy`](xref:NextORM.Core.ISqlDialect.LimitBy)).
 
 ## `GROUP BY ... WITH TOTALS`
@@ -77,7 +77,7 @@ select nullableint, count(*)
  from complex_entity group by nullableint with totals
 ```
 
-See [Grouping and aggregates](../03-grouping-and-aggregates.md#with-totals)
+See [Grouping and aggregates](../05-grouping-and-aggregates.md#with-totals)
 ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals)). The official
 `ClickHouse.Driver` returns the totals block separately and does not surface it through `IDataReader`, so
 only the group rows are materialised.
@@ -101,7 +101,7 @@ select id
  from complex_entity final prewhere (nullableint > 0) settings max_threads = 2
 ```
 
-See [Query hints](../13-query-hints.md#clickhouse-query-modifiers)
+See [Query hints](../15-query-hints.md#clickhouse-query-modifiers)
 ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings)).
 `FINAL`/`PREWHERE` need a table engine that supports them — the `Memory` engine rejects both.
 
@@ -124,7 +124,7 @@ select t1.id, t2.somestring
  global left any join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
 ```
 
-See [Joins](../02-joins.md#provider-specific-join-modifiers-clickhouse)
+See [Joins](../04-joins.md#provider-specific-join-modifiers-clickhouse)
 ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness)/[`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 `ANY` keeps one right-hand row per left-hand row, `ALL` keeps every match and `ASOF` needs one equi-join
 column plus a final inequality; `GLOBAL` broadcasts the right side for distributed queries.
@@ -150,7 +150,7 @@ select id
  from simple_entity where global in (@p0, @p1)
 ```
 
-See [Filtering](../01-filtering-where.md#global-in-clickhouse)
+See [Filtering](../03-filtering-where.md#global-in-clickhouse)
 ([`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates)).
 
 ## Aggregates
@@ -180,7 +180,7 @@ MariaDB) and `corr`/`covar*` — are documented with the concept page, not here.
 `DbDataReader.GetFieldValue<ulong>` accessor, so only the function results above need the normalising
 cast.
 
-See [Grouping and aggregates](../03-grouping-and-aggregates.md).
+See [Grouping and aggregates](../05-grouping-and-aggregates.md).
 
 ## Native scalar functions, maps and hashes
 
@@ -243,7 +243,7 @@ See [Scalar functions](../../scalar-functions/index.md).
   `System.Tuple<...>.ItemN` renders `tupleElement(t, n)` (a whole `Tuple(...)` projects as
   `System.Tuple<...>`); `untuple` is not supported.
 
-See [Scalar functions](../../scalar-functions/index.md) and [JSON support](../14-json.md)
+See [Scalar functions](../../scalar-functions/index.md) and [JSON support](../16-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).
 
 ## Table functions
@@ -259,7 +259,7 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
     .ToList();
 ```
 
-See [Table-valued functions](../11-table-valued-functions.md).
+See [Table-valued functions](../13-table-valued-functions.md).
 
 ## Native JSON columns
 
@@ -276,7 +276,7 @@ in a `Nullable(JSON)` column stays distinct from it (`null`, or `default`/`Undef
 supported; the alias can be created only with a connection-level `allow_experimental_object_type`, which
 nextorm never sets, and even then reads materialize as `Tuple<SByte,String>` rather than through the
 native `JsonObject` transport. See
-[JSON support](../14-json.md#map-a-clr-object-to-a-native-json-column).
+[JSON support](../16-json.md#map-a-clr-object-to-a-native-json-column).
 
 ## Not yet supported
 
@@ -293,4 +293,4 @@ exercising them end-to-end against a real cluster is not covered and stays out o
 ---
 
 Source: `src/nextorm.clickhouse/ClickHouseDialect.cs`, `src/nextorm.core/Query/SqlFunctions.ClickHouse.cs`,
-`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs`.
+`tests/nextorm.clickhouse.tests/SqlGeneration/SqlGenerationTests.cs`.

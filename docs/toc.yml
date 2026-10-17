@@ -2,10 +2,12 @@
   href: index.md
 - name: Getting started
   href: getting-started/
-- name: Guide
-  href: guide/
 - name: Engine
   href: engine/
+- name: Relationships
+  href: relationships/
+- name: Guide
+  href: guide/
 - name: Infrastructure
   href: infrastructure/
 - name: Scalar functions

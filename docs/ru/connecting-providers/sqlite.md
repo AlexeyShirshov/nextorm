@@ -289,7 +289,7 @@ await ctx.From<ISimpleEntity>()
 [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})) и [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) отклоняются диалектом с `NotSupportedException`, потому что в SQLite
 нет `intersect all` / `except all`.
 
-Терминалы потокового чтения LOB (`ToStream`/`ToTextReader`) поддерживаются для одной колонки `byte[]`/`string` (бинарной и текстовой). У SQLite нет собственного локатора строк, поэтому `Microsoft.Data.Sqlite` возвращает настоящий потоковый `SqliteBlob` только когда запрос выбирает ещё и `rowid`; диалект добавляет завершающий [`LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn) (`rowid`, payload остаётся на позиции `0`). Поэтому источник обязан быть обычной rowid-таблицей: на `view` или таблице `WITHOUT ROWID` **одноколоночная потоковая** команда падает fail-closed с сырым `Microsoft.Data.Sqlite.SqliteException: no such column: rowid` — буферизованного фолбэка **на этом скалярном/локаторном LOB-пути** нет (многоколоночный `ToDataReader` ниже идёт через отдельный буферизованный шов без локатора). См. [Потоковое чтение больших объектов](../guide/26-large-objects.md).
+Терминалы потокового чтения LOB (`ToStream`/`ToTextReader`) поддерживаются для одной колонки `byte[]`/`string` (бинарной и текстовой). У SQLite нет собственного локатора строк, поэтому `Microsoft.Data.Sqlite` возвращает настоящий потоковый `SqliteBlob` только когда запрос выбирает ещё и `rowid`; диалект добавляет завершающий [`LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn) (`rowid`, payload остаётся на позиции `0`). Поэтому источник обязан быть обычной rowid-таблицей: на `view` или таблице `WITHOUT ROWID` **одноколоночная потоковая** команда падает fail-closed с сырым `Microsoft.Data.Sqlite.SqliteException: no such column: rowid` — буферизованного фолбэка **на этом скалярном/локаторном LOB-пути** нет (многоколоночный `ToDataReader` ниже идёт через отдельный буферизованный шов без локатора). См. [Потоковое чтение больших объектов](../guide/28-large-objects.md).
 
 Многоколоночный терминал `ToDataReader`/`ToDataReaderAsync` в SQLite **поддерживается**. Он идёт через отдельный шов без локатора (per-call буферизованная подготовка `storeInCache: false`, а не LOB-путь с `SequentialAccess`): локатор `rowid` не добавляется, поэтому `FieldCount` равен числу колонок проекции, а ordinals соответствуют `Select`. Reader **буферизованный**, а не чанковый — колонка `byte[]`/`string` внутри многоколоночной проекции читается целиком в managed-память, — поэтому для одной большой LOB-колонки предпочитайте `ToStream`/`ToTextReader`. Возвращённый reader принадлежит вызывающему: освободите его, чтобы освободить provider-reader и per-call команду; контекст остаётся живым и пригодным.
 
@@ -326,8 +326,8 @@ await ctx.From<ISimpleEntity>()
 
 ---
 
-Source: `tests/nextorm.sqlite.tests/SqliteDialectTests.cs:23,29,42,50`,
-`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:120,133,142,152,161,173,204,217,892`,
-`tests/nextorm.integration.tests/SqliteSpecificTests.cs:16,30`,
+Source: `tests/nextorm.sqlite.tests/Dialect/SqliteDialectTests.cs:23,29,42,50`,
+`tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:120,133,142,152,161,173,204,217,892`,
+`tests/nextorm.integration.tests/Sqlite/SqliteSpecificTests.cs:16,30`,
 `src/nextorm.sqlite/SqliteDialect.cs`, `src/nextorm.sqlite/SQLiteFunctions.cs`,
 `src/nextorm.sqlite/SqliteDataContext.cs`, `src/nextorm.sqlite/DI/SqliteDataContextOptionsBuilderExtensions.cs`.

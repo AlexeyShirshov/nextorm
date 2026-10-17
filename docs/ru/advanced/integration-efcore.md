@@ -2,7 +2,7 @@
 
 > Запускайте чтения и запись nextorm поверх соединения и транзакции существующего EF Core `DbContext`, переиспользуя маппинг из EF-модели вместо повторного его объявления.
 
-**Предварительные требования:** [Provider overview](../connecting-providers/overview.md) · [Транзакции](../guide/21-transactions.md) · [API reference](api-reference.md)
+**Предварительные требования:** [Provider overview](../connecting-providers/overview.md) · [Транзакции](../guide/23-transactions.md) · [API reference](api-reference.md)
 
 ## Обзор
 
@@ -170,7 +170,7 @@ next.From<Row>().Where(r => r.Name == "pending").ToList(); // пусто
 
 > **MySQL проверен через провайдер Oracle.** Поскольку у `Pomelo.EntityFrameworkCore.MySql` нет релиза под EF Core 10 (последний 9.0.0 нацелен на EF Core 9), container-backed тесты MySQL выполняются на EF Core 10 с Oracle `MySql.EntityFrameworkCore` 10.0.9 и его ADO.NET-драйвером `MySql.Data`. Мост распознаёт оба имени провайдера — `Pomelo.EntityFrameworkCore.MySql` и `MySql.EntityFrameworkCore`; чтобы обслужить второй драйвер, `nextorm.mysql` создаёт параметры через выполняемую команду (`command.CreateParameter()`), а обычный путь `MySqlConnector` остаётся без изменений. Совместная работа в транзакции EF на MySQL, таким образом, проверена, а не отложена. MariaDB обслуживается только провайдером Pomelo.
 
-Контракт встраивания, общий с Dapper и сырым ADO.NET, описан в разделе [Транзакции](../guide/21-transactions.md).
+Контракт встраивания, общий с Dapper и сырым ADO.NET, описан в разделе [Транзакции](../guide/23-transactions.md).
 
 ## Отображение модели
 
@@ -398,7 +398,7 @@ var active = db.Documents
 
 ## См. также
 
-- [Транзакции](../guide/21-transactions.md)
+- [Транзакции](../guide/23-transactions.md)
 - [Подключения](../infrastructure/01-connections.md)
 - [Provider overview](../connecting-providers/overview.md)
 - [Глобальные фильтры запросов](query-filters.md)

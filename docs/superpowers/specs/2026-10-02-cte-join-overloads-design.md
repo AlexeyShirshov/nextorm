@@ -139,8 +139,8 @@ Left/Right/Full повторяют Join; CrossApply/OuterApply повторяю�
 
 **Публичные документы (точные пути и разделы):**
 
-- `docs/guide/08-cte.md` и `docs/ru/guide/08-cte.md` — обязательны.
-- `docs/guide/02-joins.md`, раздел "Named join aliases" (EN, строка 108), и `docs/ru/guide/02-joins.md`, раздел «Именованные псевдонимы соединений» (RU, строка 110).
+- `docs/guide/10-cte.md` и `docs/ru/guide/10-cte.md` — обязательны.
+- `docs/guide/04-joins.md`, раздел "Named join aliases" (EN, строка 108), и `docs/ru/guide/04-joins.md`, раздел «Именованные псевдонимы соединений» (RU, строка 110).
 - `docs/querying/01-projections.md`, раздел "Named join aliases" (EN, строка 329), и `docs/ru/querying/01-projections.md`, раздел «Именованные псевдонимы соединений» (RU, строка 330) — для согласованности краткой формы примера.
 - `docs/advanced/api-reference.md` и RU-версия — только если курируемая поверхность join-перегрузок требует обновления.
 

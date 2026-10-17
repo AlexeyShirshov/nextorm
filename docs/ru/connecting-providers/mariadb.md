@@ -123,4 +123,4 @@ MariaDB отличается от [MySQL](mysql.md) возможностью о�
 
 Source: `src/nextorm.mariadb/MariaDbDialect.cs`, `src/nextorm.mariadb/MariaDbDataContext.cs`,
 `src/nextorm.mariadb/DI/MariaDbDataContextOptionsBuilderExtensions.cs`,
-`tests/nextorm.mariadb.tests/MariaDbDialectTests.cs`, `tests/nextorm.mariadb.tests/SqlGenerationTests.cs`.
+`tests/nextorm.mariadb.tests/Dialect/MariaDbDialectTests.cs`, `tests/nextorm.mariadb.tests/SqlGeneration/SqlGenerationTests.cs`.

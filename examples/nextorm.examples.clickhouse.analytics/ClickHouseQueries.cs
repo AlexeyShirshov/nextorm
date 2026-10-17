@@ -8,8 +8,7 @@ namespace NextORM.Examples.ClickHouse.Analytics;
 /// <c>README.md</c>), expressed with the nextorm LINQ API. Each method's comment names the SQL file it
 /// models, states whether it currently works, and — when it does not — why (with the roadmap document
 /// that tracks the gap). Queries with no LINQ surface are <b>not</b> worked around: they throw
-/// <see cref="NotSupportedException"/> instead. Each working method prints the number of rows and the
-/// first few rows as JSON.
+/// <see cref="NotSupportedException"/> instead. Each method returns its row list; the runner prints it.
 /// </summary>
 public static class ClickHouseQueries
 {
@@ -19,7 +18,7 @@ public static class ClickHouseQueries
     // length() of a higher-order lambda parameter cannot be written as x.Length (member access on the
     // parameter is rejected by the translator), so it is reached through the lower() call — a no-op on
     // the already-lowercased element. Grouping by the resulting array is supported by ClickHouse.
-    public static async Task ArrayAnalytics(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> ArrayAnalytics(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Where(h => h.SearchPhrase != "" && h.EventDate == new DateTime(2014, 3, 20))
@@ -44,13 +43,13 @@ public static class ClickHouseQueries
             })
             .ToListAsync(ct);
 
-        Print("1. array_analytics", rows);
+        return rows;
     }
 
     // 2. Sql/clickhouse_funnel.sql
     // WORKING: windowFunnel(1800)(...) → SqlFunctions.ClickHouse.window_funnel(...); the inner
     // GROUP BY UserID and the outer GROUP BY level map to two derived queries.
-    public static async Task Funnel(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> Funnel(IDataContext ctx, CancellationToken ct)
     {
         var perUser = ctx.From<IHit>()
             .Where(h => h.EventDate == new DateTime(2014, 3, 20))
@@ -68,7 +67,7 @@ public static class ClickHouseQueries
             .Select(p => new { p.Level, ConversionCount = SqlFunctions.Sql.count() })
             .ToListAsync(ct);
 
-        Print("2. funnel", rows);
+        return rows;
     }
 
     // 3. Sql/clickhouse_incremental.sql
@@ -76,7 +75,7 @@ public static class ClickHouseQueries
     // released nextorm packages (there is no uniqMerge/`-Merge` combinator), so the state column cannot
     // be projected as a scalar. Not worked around with raw SQL on purpose; tracked in
     // docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md.
-    public static Task Incremental(IDataContext ctx, CancellationToken ct) =>
+    public static Task<object> Incremental(IDataContext ctx, CancellationToken ct) =>
         throw new NotSupportedException(
             "uniqMerge over an AggregateFunction state has no LINQ surface (see docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md).");
 
@@ -85,7 +84,7 @@ public static class ClickHouseQueries
     // and read back with member access; the inner t subquery joins hits with first_visits;
     // groupArray((week_number, pct)) → group_array(Tuple.Create(...)), which materialises as a CLR
     // Tuple<...>[]. The matrix is formatted for display in C# (there is no portable toString()).
-    public static async Task Retention(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> Retention(IDataContext ctx, CancellationToken ct)
     {
         // CTE first_visits: each user's first (Monday-aligned) visit. UserID is projected as Int64 so the
         // later join with hits_v1.UserID (UInt64) has a common key type on both sides.
@@ -149,7 +148,7 @@ public static class ClickHouseQueries
                 r.RetentionMatrix.Select(t => $"(week {t.Item1}: {t.Item2:0.##}%)")) + "]"
         });
 
-        Print("4. retention", display);
+        return display.ToList();
     }
 
     // 5. Sql/clickhouse_sessions.sql
@@ -157,7 +156,7 @@ public static class ClickHouseQueries
     // lagInFrame → lag_in_frame(...).Over(...); runningAccumulate(if(…)) → framed sum_over(c ? 1 : 0)
     // (runningAccumulate still has no LINQ surface); the quantile threshold is computed once and
     // passed as a parameter.
-    public static async Task Sessions(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> Sessions(IDataContext ctx, CancellationToken ct)
     {
         // CTE sessions.
         var sessions = ctx.From<IHit>()
@@ -217,12 +216,12 @@ public static class ClickHouseQueries
             })
             .ToListAsync(ct);
 
-        Print("5. sessions", rows);
+        return rows;
     }
 
     // 6. daily_traffic
     // WORKING: GROUP BY EventDate with count() + uniqExact.
-    public static async Task DailyTraffic(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> DailyTraffic(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
@@ -236,12 +235,12 @@ public static class ClickHouseQueries
             })
             .ToListAsync(ct);
 
-        Print("6. daily_traffic", rows);
+        return rows;
     }
 
     // 7. top_landing_pages
     // WORKING: URL grouping with count() + uniq, top-N by hits.
-    public static async Task TopLandingPages(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> TopLandingPages(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Where(h => h.EventDate == new DateTime(2014, 3, 20) && h.Url != "")
@@ -256,12 +255,12 @@ public static class ClickHouseQueries
             })
             .ToListAsync(ct);
 
-        Print("7. top_landing_pages", rows);
+        return rows;
     }
 
     // 8. device_split
     // WORKING: if(IsMobile = 1, …) → ternary; countIf → Sql.count(() => c); uniq → uniq; ROUND → Math.Round.
-    public static async Task DeviceSplit(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> DeviceSplit(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
@@ -279,12 +278,12 @@ public static class ClickHouseQueries
             })
             .ToListAsync(ct);
 
-        Print("8. device_split", rows);
+        return rows;
     }
 
     // 9. top_referrers
     // WORKING: RefererDomain grouping with count() + uniq, top-N by hits.
-    public static async Task TopReferrers(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> TopReferrers(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Where(h => h.EventDate == new DateTime(2014, 3, 20) && h.RefererDomain != "")
@@ -299,12 +298,12 @@ public static class ClickHouseQueries
             })
             .ToListAsync(ct);
 
-        Print("9. top_referrers", rows);
+        return rows;
     }
 
     // 10. session_depth
     // WORKING: lagInFrame → lag_in_frame; running sum → framed sum_over; multiIf → multi_if.
-    public static async Task SessionDepth(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> SessionDepth(IDataContext ctx, CancellationToken ct)
     {
         var hits = ctx.From<IHit>()
             .Where(h => h.EventDate == new DateTime(2014, 3, 20))
@@ -358,12 +357,12 @@ public static class ClickHouseQueries
             })
             .ToListAsync(ct);
 
-        Print("10. session_depth", rows);
+        return rows;
     }
 
     // 11. rolling_activity
     // WORKING: window over an aggregate with 7-day and cumulative frames.
-    public static async Task RollingActivity(IDataContext ctx, CancellationToken ct)
+    public static async Task<object> RollingActivity(IDataContext ctx, CancellationToken ct)
     {
         var daily = ctx.From<IHit>()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
@@ -392,20 +391,6 @@ public static class ClickHouseQueries
             })
             .ToListAsync(ct);
 
-        Print("11. rolling_activity", rows);
-    }
-
-    private static void Print(string title, IEnumerable<object> rows)
-    {
-        var list = rows.ToList();
-        Console.WriteLine($"-- {title}: {list.Count} row(s)");
-
-        foreach (var row in list.Take(10))
-            Console.WriteLine("   " + JsonSerializer.Serialize(row));
-
-        if (list.Count > 10)
-            Console.WriteLine("   ...");
-
-        Console.WriteLine();
+        return rows;
     }
 }

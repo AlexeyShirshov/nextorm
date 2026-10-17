@@ -66,7 +66,7 @@ select id
 * **`[Key]` and `[DatabaseGenerated]`** - `KeyAttribute` marks the primary key and
   `DatabaseGeneratedAttribute` marks a database-generated column (`DatabaseGeneratedOption.Identity`
   or `.Computed`). Queries ignore both, but the insert builder reads them: identity/computed columns
-  are excluded from the written values (see [Data modification (INSERT)](../guide/15-insert-statement.md)).
+  are excluded from the written values (see [Data modification (INSERT)](../guide/17-insert-statement.md)).
   When no key is declared, a property named `Id` or `<TypeName>Id` is treated as the key by convention.
 * **Binary columns** - a `byte[]` property maps to a binary column (`bytea` on PostgreSQL,
   `varbinary`/`image` on SQL Server, `blob` on SQLite). A `byte[]` can also be projected directly
@@ -371,10 +371,10 @@ provider-side quoting instead.
 
 ---
 
-Source: `tests/nextorm.integration.tests/Entities.cs:7`;
-`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:37`;
-`tests/nextorm.sqlite.tests/MetadataRegistrationTests.cs:18`;
+Source: `tests/nextorm.integration.tests/Support/Entities.cs:7`;
+`tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:37`;
+`tests/nextorm.sqlite.tests/Metadata/MetadataRegistrationTests.cs:18`;
 `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs:111`;
 `src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs:16`;
 `src/nextorm.core/DataContext/DataContextCache.cs:20`;
-`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:116`.
+`tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:116`.

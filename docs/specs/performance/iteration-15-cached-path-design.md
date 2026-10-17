@@ -56,9 +56,9 @@ Dapper 277.8 µs / 21.45 KB, linq2db 106.92 KB. Это **end-to-end** замер
 уничтожаются.
 
 - Строка отчёта `benchmark-report.md:1854` (`Where for-loop (100) = 1 080.0 µs`) — это арм
-  `Nextorm_CachedForLoop_ToListAsync` (`benchmarks/nextorm.benchmark/SqliteBenchmarkWhere.cs:146-155`):
+  `Nextorm_CachedForLoop_ToListAsync` (`benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWhere.cs:146-155`):
   `.Prepare()` **один раз** до 100-операционного цикла, аллокация **114.67 KB** (сырой CSV
-  `BenchmarkDotNet.Artifacts/results/Nextorm.Benchmark.SqliteBenchmarkWhere-report.csv`). Его выигрыш у
+  `benchmarks/BenchmarkDotNet.Artifacts/results/Nextorm.Benchmark.SqliteBenchmarkWhere-report.csv`). Его выигрыш у
   Dapper — результат prepared-vs-raw, а не fresh-cached.
 - Обычный fresh-cached: `Nextorm_Cached_AsyncStream` (`SqliteBenchmarkWhere.cs:121-132`) —
   **2 087.6 µs / 734.65 KB** против `Dapper_AsyncStream` (`:213-221`) **1 693.2 µs / 203.98 KB**;

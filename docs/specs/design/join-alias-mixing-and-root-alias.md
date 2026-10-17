@@ -174,7 +174,7 @@ PostgreSQL / SQL Server / MySQL / MariaDB / SQLite / ClickHouse (где форм
 
 **Coverage:** ≥ `MIN_LINE_COVERAGE`(85) / `MIN_BRANCH_COVERAGE`(75).
 
-**Docs:** `docs/guide/02-joins.md` + `docs/ru/guide/02-joins.md` (свободное смешивание, `.WithAlias`, единый
+**Docs:** `docs/guide/04-joins.md` + `docs/ru/guide/04-joins.md` (свободное смешивание, `.WithAlias`, единый
 нейминг, примеры); `docs/querying/01-projections.md` (+RU) где затрагивается; `docs/advanced/limitations.md`
 (+RU) — снять формулировки alias-only / in-memory; внутренние `docs/specs/**` (статус alias-only и variant-matrix).
 

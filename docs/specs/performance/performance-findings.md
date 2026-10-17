@@ -197,7 +197,7 @@ Span неприменим. Массив там неизбежен (сохран�
 ### Step 0 — дельта подтверждена замером (сделано)
 
 `LangVersion` поднят до `latest` в `NextORM.Core`, `nextorm.postgres`, `nextorm.sqlserver`,
-`nextorm.benchmark`. Добавлен бенчмарк `benchmarks/nextorm.benchmark/ParamsAllocationBenchmark.cs`
+`nextorm.benchmark`. Добавлен бенчмарк `benchmarks/nextorm.benchmark/Focused/ParamsAllocationBenchmark.cs`
 (каждая пара arm'ов — один и тот же путь, различие только в аллокации params-массива).
 Прогон: `--filter "*ParamsAllocationBenchmark*"`, ShortRun/InProcess, tmpfs.
 

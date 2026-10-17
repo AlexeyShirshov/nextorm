@@ -179,9 +179,11 @@ XQuery — строковым литералом).
   (1/0), а не `bit`; `formatmessage` принимает строку формата или id из `sys.messages` и не более 20
   аргументов.
 
-Десять имён области соединения/сессии/инструкции намеренно не открыты: `CURRENT_REQUEST_ID`,
-`CURRENT_TRANSACTION_ID`, `XACT_STATE`, `APP_NAME`, `HOST_ID`, `HOST_NAME`, `IDENT_CURRENT`,
-`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` и `SCOPE_IDENTITY`. См.
+Семь имён, сообщающих живое изменяемое состояние соединения, сессии или инструкции, намеренно не
+открыты: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
+`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` и `SCOPE_IDENTITY`. Стабильные конфигурационные константы и
+константы идентичности той же области (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`,
+`HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) открыты. См.
 [гайд по скалярам T-SQL](../guide/provider-specific-sql/sqlserver.md#скаляры-t-sql).
 
 ## Рекурсивные CTE и `maxRecursion`
@@ -233,7 +235,7 @@ select t1.value, t2.somestring as [String]
 
 ## Табличные параметры
 
-SQL Server связывает табличный параметр нативно через пользовательский табличный тип: передайте имя типа в `ProcedureParameter.Table(name, typeName, rows)`. Строки передаются потоком как `SqlDataRecord` (один переиспользуемый record на перечисление), поэтому большой набор не буферизуется. Скалярный тип строки отображается на один столбец; тип-сущность — на её невычисляемые столбцы в порядке метаданных, включая identity-столбцы. Столбец `decimal` использует точность/масштаб, объявленные через `[DecimalPrecision(p, s)]` или fluent-отображение, по умолчанию — `decimal(38,18)`. Пустая последовательность связывается с пустой таблицей. См. [Сырой SQL](../guide/12-raw-sql.md#табличные-параметры).
+SQL Server связывает табличный параметр нативно через пользовательский табличный тип: передайте имя типа в `ProcedureParameter.Table(name, typeName, rows)`. Строки передаются потоком как `SqlDataRecord` (один переиспользуемый record на перечисление), поэтому большой набор не буферизуется. Скалярный тип строки отображается на один столбец; тип-сущность — на её невычисляемые столбцы в порядке метаданных, включая identity-столбцы. Столбец `decimal` использует точность/масштаб, объявленные через `[DecimalPrecision(p, s)]` или fluent-отображение, по умолчанию — `decimal(38,18)`. Пустая последовательность связывается с пустой таблицей. См. [Сырой SQL](../guide/14-raw-sql.md#табличные-параметры).
 
 ```sql
 create type dbo.IdList as table (value int not null);
@@ -288,7 +290,7 @@ using var reader = ctx.From<Document>()
     .ToTextReader();
 ```
 
-Возвращённый поток владеет reader'ом и per-call командой до освобождения и не закрывает контекст; проекция обязана быть ровно одной колонкой `byte[]`/`string` (иначе `InvalidOperationException`). MySQL/MariaDB, ClickHouse и провайдер in-memory отклоняют терминалы через `NotSupportedException`. См. [Потоковое чтение больших объектов](../guide/26-large-objects.md).
+Возвращённый поток владеет reader'ом и per-call командой до освобождения и не закрывает контекст; проекция обязана быть ровно одной колонкой `byte[]`/`string` (иначе `InvalidOperationException`). MySQL/MariaDB, ClickHouse и провайдер in-memory отклоняют терминалы через `NotSupportedException`. См. [Потоковое чтение больших объектов](../guide/28-large-objects.md).
 
 SQL Server также поддерживает многоколоночный терминал `ToDataReader`/`ToDataReaderAsync`: он отдаёт ту же sequential-access команду как принадлежащий вызывающему `DbDataReader`, поэтому вызывающий может прочитать все колонки и строки (или несколько LOB-колонок по порядку), не материализуя результат. SQLite тоже его поддерживает, но через буферизованный reader без локатора (без `rowid`, без `SequentialAccess`, то есть без чанкового LOB); MySQL/MariaDB, ClickHouse и провайдер in-memory не имеют поддержки sequential access и отклоняют его.
 
@@ -327,7 +329,7 @@ SQL Server также поддерживает многоколоночный т
 | Регулярные выражения | `regexp_like(value, pattern, 'c'/'i')` / `regexp_replace(value, pattern, replacement, 1, 0, 'c'/'i')` (SQL Server 2025+; для `regexp_like` дополнительно нужен уровень совместимости БД 170) |
 | Блокирующие табличные хинты | `with (hint, ...)` после источника, после его псевдонима, если он есть ([`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[]))) |
 | Блокировка строк | `ForUpdate`/`ForShare` рендерят `with (updlock)`/`with (holdlock)` на **каждом** физическом источнике `FROM`/`JOIN` (изменение поведения: раньше — только основной источник); [`FromOptions.ForUpdate`](xref:NextORM.Core.FromOptions.ForUpdate)/[`JoinOptions.ForUpdate`](xref:NextORM.Core.JoinOptions.ForUpdate) нацелены на один источник ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) добавляет `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
-| Нативный bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` отображаются в `SqlBulkCopyOptions` (см. [Массовая вставка](../guide/20-bulk-insert.md#опции-bulk-copy-в-sql-server)) |
+| Нативный bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` отображаются в `SqlBulkCopyOptions` (см. [Массовая вставка](../guide/22-bulk-insert.md#опции-bulk-copy-в-sql-server)) |
 | JSON-вывод | весь набор одним JSON-документом, терминальные `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[]))) |
 | XML-вывод | весь набор одним XML-документом, терминальные `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[]))) |
 | Методы типа XML | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` / `xml.nodes('xpath') as [alias]([value])` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) |
@@ -344,8 +346,8 @@ SQL Server также поддерживает многоколоночный т
 
 ---
 
-Source: `tests/nextorm.sqlserver.tests/SqlServerDialectTests.cs:25,37,43,52,60,69,84,93,102`,
-`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:133,146,160,185,218,231,249,268,856,1044`,
-`tests/nextorm.integration.tests/SqlServerSpecificTests.cs:24,43`,
+Source: `tests/nextorm.sqlserver.tests/Dialect/SqlServerDialectTests.cs:25,37,43,52,60,69,84,93,102`,
+`tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:133,146,160,185,218,231,249,268,856,1044`,
+`tests/nextorm.integration.tests/SqlServer/SqlServerSpecificTests.cs:24,43`,
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.sqlserver/SqlServerDataContext.cs`,
 `src/nextorm.sqlserver/DI/SqlServerDataContextOptionsBuilderExtensions.cs`.

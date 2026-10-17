@@ -218,7 +218,7 @@ naming policy). Компиляция — не чаще одного раза н�
 
 > Замеренная цена отсутствия кэша: [#247](https://github.com/AlexeyShirshov/nextorm/issues/247)
 > (комментарий 2026-10-17) — fixed-часть ≈ 1.7 мс на 3-колоночный экспорт (~2.9× CSV), на 100 строках
-> это 93 % времени вызова; harness `benchmarks/nextorm.benchmark/SqliteBenchmarkJsonFixedCost.cs`.
+> это 93 % времени вызова; harness `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkJsonFixedCost.cs`.
 > CSV-аналог и общий механизм bounded-кэша терминальных планов — [#250](https://github.com/AlexeyShirshov/nextorm/issues/250).
 
 ### Валидация

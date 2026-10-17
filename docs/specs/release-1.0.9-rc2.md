@@ -151,7 +151,7 @@ CI (`build` job, шаг `Test with coverage`) падал на 2 тестах, д
 `missing row <id> (<type>.<method>): no result` по классам `SqliteBenchmarkWarmDecompose`,
 `SqliteBenchmarkCachedPlan`, `SqliteBenchmarkFeaturePlanBuild`.
 
-Причина: `BenchmarkArtifacts.Resolve()` (`benchmarks/nextorm.benchmark/BenchmarkArtifacts.cs`,
+Причина: `BenchmarkArtifacts.Resolve()` (`benchmarks/nextorm.benchmark/Infrastructure/BenchmarkArtifacts.cs`,
 изменён в `a2dd5aca`) теперь распознаёт `nextorm.slnx` в корне репозитория и возвращает канонический
 каталог `benchmarks/BenchmarkDotNet.Artifacts` (= `NextormConfig.ArtifactsPath`), поэтому BDN пишет
 отчёты в `benchmarks/BenchmarkDotNet.Artifacts/results/`. Гейт же читал legacy-путь

@@ -56,7 +56,7 @@ select id, nullableint
  from complex_entity order by id limit 2 by nullableint
 ```
 
-См. [Сортировка и постраничная выборка](../04-sorting-and-paging.md#limit-by-clickhouse)
+См. [Сортировка и постраничная выборка](../06-sorting-and-paging.md#limit-by-clickhouse)
 ([`LimitBy`](xref:NextORM.Core.ISqlDialect.LimitBy)).
 
 ## `GROUP BY ... WITH TOTALS`
@@ -78,7 +78,7 @@ select nullableint, count(*)
  from complex_entity group by nullableint with totals
 ```
 
-См. [Группировка и агрегаты](../03-grouping-and-aggregates.md#with-totals)
+См. [Группировка и агрегаты](../05-grouping-and-aggregates.md#with-totals)
 ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals)). Официальный
 `ClickHouse.Driver` возвращает блок итогов отдельно и не отдаёт его через `IDataReader`, поэтому
 материализуются только строки групп.
@@ -102,7 +102,7 @@ select id
  from complex_entity final prewhere (nullableint > 0) settings max_threads = 2
 ```
 
-См. [Хинты запросов](../13-query-hints.md#модификаторы-запроса-clickhouse)
+См. [Хинты запросов](../15-query-hints.md#модификаторы-запроса-clickhouse)
 ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings)).
 `FINAL`/`PREWHERE` требуют движок таблицы, который их поддерживает, — движок `Memory` отклоняет оба.
 
@@ -125,7 +125,7 @@ select t1.id, t2.somestring
  global left any join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
 ```
 
-См. [Соединения](../02-joins.md#специфичные-для-провайдера-модификаторы-соединения-clickhouse)
+См. [Соединения](../04-joins.md#специфичные-для-провайдера-модификаторы-соединения-clickhouse)
 ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness)/[`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 `ANY` оставляет одну правую строку на каждую левую, `ALL` — все совпадения, `ASOF` требует одну
 колонку равенства и завершающее неравенство; `GLOBAL` рассылает правую сторону в распределённых
@@ -152,7 +152,7 @@ select id
  from simple_entity where global in (@p0, @p1)
 ```
 
-См. [Фильтрация](../01-filtering-where.md#global-in-clickhouse)
+См. [Фильтрация](../03-filtering-where.md#global-in-clickhouse)
 ([`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates)).
 
 ## Агрегаты
@@ -181,7 +181,7 @@ MySQL и MariaDB) и `corr`/`covar*` — документированы на т�
 `DbDataReader.GetFieldValue<ulong>`, поэтому нормализующее приведение нужно только результатам функций
 выше.
 
-См. [Группировка и агрегаты](../03-grouping-and-aggregates.md).
+См. [Группировка и агрегаты](../05-grouping-and-aggregates.md).
 
 ## Нативные скалярные функции, Map и хэши
 
@@ -247,7 +247,7 @@ var rows = dataContext.From<Event>()
   а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)` (целый `Tuple(...)` проецируется как
   `System.Tuple<...>`); `untuple` не поддерживается.
 
-См. [Скалярные функции](../../scalar-functions/index.md) и [Поддержка JSON](../14-json.md)
+См. [Скалярные функции](../../scalar-functions/index.md) и [Поддержка JSON](../16-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).
 
 ## Табличные функции
@@ -263,7 +263,7 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
     .ToList();
 ```
 
-См. [Табличные функции](../11-table-valued-functions.md).
+См. [Табличные функции](../13-table-valued-functions.md).
 
 ## Нативные JSON-колонки
 
@@ -280,7 +280,7 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 легаси-алиас `Object('json')` не поддерживаются; алиас создаётся только с connection-level параметром
 `allow_experimental_object_type`, который nextorm никогда не выставляет, и даже тогда чтение
 материализуется как `Tuple<SByte,String>`, а не через нативный транспорт `JsonObject`. См.
-[Поддержка JSON](../14-json.md#отобразить-clr-объект-на-нативную-json-колонку).
+[Поддержка JSON](../16-json.md#отобразить-clr-объект-на-нативную-json-колонку).
 
 ## Пока не поддерживается
 
@@ -297,4 +297,4 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 ---
 
 Source: `src/nextorm.clickhouse/ClickHouseDialect.cs`, `src/nextorm.core/Query/SqlFunctions.ClickHouse.cs`,
-`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs`.
+`tests/nextorm.clickhouse.tests/SqlGeneration/SqlGenerationTests.cs`.

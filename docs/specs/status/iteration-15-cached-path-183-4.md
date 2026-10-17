@@ -107,7 +107,7 @@ Time attribution fails again on a calm host → loop-back to DO defect eliminati
 - tests/nextorm.core.tests/ExpressionPlanEqualityComparerTests.cs
 - tests/nextorm.core.tests/PlanKeyStructureTests.cs
 - tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs
-- benchmarks/nextorm.benchmark/StageAttributionBenchmark.cs (new)
+- benchmarks/nextorm.benchmark/Diagnostics/StageAttributionBenchmark.cs (new)
 - docs/specs/performance/iteration-15-cached-path-results.md
 - docs/specs/status/iteration-15-cached-path-183-4.md
 2026-10-05 | DO | r=1 | n=1/3 | boundary sweep: integration exit 0 (SQLite 665/622/43; PG 776/751/25; SQL Server 698/655/43; MySQL+MariaDB 702/623/79; ClickHouse 173/173/0; 0 failed, 193 skips total); coverage line 87.1% branch 78.7%
@@ -120,7 +120,7 @@ Time attribution fails again on a calm host → loop-back to DO defect eliminati
 - B1 — done | evidence: status:83, /tmp/opencode/do-a/build-final.log
 - B2 — done | evidence: status:85, /tmp/opencode/do-b/test-sqlite-char.log
 - counters — done | evidence: src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs:28-45,167, tests/nextorm.core.tests/ExpressionPlanEqualityComparerNodeTests.cs
-- harness — done | evidence: benchmarks/nextorm.benchmark/StageAttributionBenchmark.cs
+- harness — done | evidence: benchmarks/nextorm.benchmark/Diagnostics/StageAttributionBenchmark.cs
 - tests — done | evidence: tests/nextorm.core.tests/ParamRefreshRecipeTests.cs, tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs
 - docs — done | evidence: docs/specs/performance/iteration-15-cached-path-results.md
 - boundary sweep — done | evidence: docs/specs/status/iteration-15-cached-path-183-4-evidence/, status:112-113
@@ -304,7 +304,7 @@ Status: **AC4 met (2026-10-05, interleaved 10-pair ABAB; 0/10 & 1/10 blocks ≥1
 - `tests/nextorm.core.tests/ExpressionPlanEqualityComparerTests.cs`
 - `tests/nextorm.core.tests/PlanKeyStructureTests.cs`
 - `tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs`
-- `benchmarks/nextorm.benchmark/StageAttributionBenchmark.cs` (new)
+- `benchmarks/nextorm.benchmark/Diagnostics/StageAttributionBenchmark.cs` (new)
 
 **Verified facts:** build 0/0; unit recipe 23/23, comparer 47/47, plankey 19/19, sqlite-char 19/19; integration exit 0 Failed 0 all-5 providers; coverage line 87.1 / branch 78.7; allocation gate exit 0 56/56; acceptance `--anyCategories=acceptance` 7/7 exit 0; deterministic B/op per op Where −1944.03/−1944.04, Join −359.96/−424.00; D1 red→green (`InvalidCastException` → pass).
 

@@ -286,7 +286,7 @@ await ctx.From<ISimpleEntity>()
 [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})) and [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) are rejected by the dialect with a `NotSupportedException` because SQLite
 has no `intersect all` / `except all`.
 
-The LOB streaming terminals (`ToStream`/`ToTextReader`) are supported for a single `byte[]`/`string` column (binary and text). SQLite has no row locator of its own, so `Microsoft.Data.Sqlite` returns a true streaming `SqliteBlob` only when the query also selects `rowid`; the dialect appends its trailing [`LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn) (`rowid`, with the payload staying at ordinal `0`). The source must therefore be a normal rowid table: on a `view` or a `WITHOUT ROWID` table the **single-column streaming** command fails closed with the raw `Microsoft.Data.Sqlite.SqliteException: no such column: rowid` — there is no buffered fallback **on that scalar/locator LOB path** (the multi-column `ToDataReader` below uses a separate, buffered, locator-free seam). See [Streaming large objects](../guide/26-large-objects.md).
+The LOB streaming terminals (`ToStream`/`ToTextReader`) are supported for a single `byte[]`/`string` column (binary and text). SQLite has no row locator of its own, so `Microsoft.Data.Sqlite` returns a true streaming `SqliteBlob` only when the query also selects `rowid`; the dialect appends its trailing [`LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn) (`rowid`, with the payload staying at ordinal `0`). The source must therefore be a normal rowid table: on a `view` or a `WITHOUT ROWID` table the **single-column streaming** command fails closed with the raw `Microsoft.Data.Sqlite.SqliteException: no such column: rowid` — there is no buffered fallback **on that scalar/locator LOB path** (the multi-column `ToDataReader` below uses a separate, buffered, locator-free seam). See [Streaming large objects](../guide/28-large-objects.md).
 
 The multi-column `ToDataReader`/`ToDataReaderAsync` terminal **is** supported on SQLite. It goes through a separate, locator-free seam (the per-call `storeInCache: false` buffered preparation, not the `SequentialAccess` LOB path): the `rowid` locator is never appended, so `FieldCount` equals the projection column count and the ordinals match `Select`. The reader is **buffered**, not chunked — a `byte[]`/`string` column inside a multi-column projection is read whole into managed memory — so for a single large LOB column prefer `ToStream`/`ToTextReader`. The returned reader is caller-owned: dispose it to release the provider reader and the per-call command; the context stays alive and usable.
 
@@ -323,8 +323,8 @@ SQLite's own FTS3/FTS4/FTS5 query surface is available (see [Full-text search](#
 
 ---
 
-Source: `tests/nextorm.sqlite.tests/SqliteDialectTests.cs:23,29,42,50`,
-`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:120,133,142,152,161,173,204,217,892`,
-`tests/nextorm.integration.tests/SqliteSpecificTests.cs:16,30`,
+Source: `tests/nextorm.sqlite.tests/Dialect/SqliteDialectTests.cs:23,29,42,50`,
+`tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:120,133,142,152,161,173,204,217,892`,
+`tests/nextorm.integration.tests/Sqlite/SqliteSpecificTests.cs:16,30`,
 `src/nextorm.sqlite/SqliteDialect.cs`, `src/nextorm.sqlite/SQLiteFunctions.cs`,
 `src/nextorm.sqlite/SqliteDataContext.cs`, `src/nextorm.sqlite/DI/SqliteDataContextOptionsBuilderExtensions.cs`.

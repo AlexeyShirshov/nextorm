@@ -4,7 +4,9 @@
 
 ## The built query
 
-`ctx.From<TEntity>()` returns an [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); each fluent operator (`Where`, `Join`, `Select`, `OrderBy`, `GroupBy`, `With`, hints, ...) records a piece of intent on a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1). Nothing is executed yet — a command is a description of a query, not a live connection.
+`ctx.From<TEntity>()` is one of the builder factories on the context (all of them are listed under [builder entry points](index.md#builder-entry-points)); it returns an [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1). Each fluent operator (`Where`, `Join`, `Select`, `OrderBy`, `GroupBy`, `With`, hints, ...) records a piece of intent on a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1). Nothing is executed yet — a command is a description of a query, not a live connection.
+
+The other factories start the other statement shapes and return their own builders (`InsertBuilder<T>`, `UpdateBuilder<T>`, `DeleteBuilder<T>`, `MergeBuilder<T>`, `BatchBuilder`, ...). Those statements are rendered and run by the mutation and batch paths, not by the plan cache described here; this page follows the `SELECT` path.
 
 The terminal you call (`ToListAsync`, `FirstAsync`, `ToAsyncEnumerable`, ...) is what drives the command through the rest of the pipeline. The same command type is used for the projection, so `Select` fixes `TResult` once and the terminals return that shape.
 
@@ -31,5 +33,5 @@ The [in-memory provider](../connecting-providers/in-memory.md) runs the same com
 * [Engine overview](index.md)
 * [Execution and rows](02-execution-and-rows.md)
 * [Plan cache and reuse](03-plan-cache-and-reuse.md)
-* [Query hints](../guide/13-query-hints.md)
+* [Query hints](../guide/15-query-hints.md)
 * [Provider-specific SQL](../guide/provider-specific-sql/overview.md)

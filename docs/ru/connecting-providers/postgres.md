@@ -314,7 +314,7 @@ using var reader = ctx.From<Document>()
     .ToTextReader();
 ```
 
-Возвращённый поток владеет reader'ом и per-call командой до освобождения и не закрывает контекст; проекция обязана быть ровно одной колонкой `byte[]`/`string` (иначе `InvalidOperationException`). MySQL/MariaDB, ClickHouse и провайдер in-memory отклоняют терминалы через `NotSupportedException`. См. [Потоковое чтение больших объектов](../guide/26-large-objects.md).
+Возвращённый поток владеет reader'ом и per-call командой до освобождения и не закрывает контекст; проекция обязана быть ровно одной колонкой `byte[]`/`string` (иначе `InvalidOperationException`). MySQL/MariaDB, ClickHouse и провайдер in-memory отклоняют терминалы через `NotSupportedException`. См. [Потоковое чтение больших объектов](../guide/28-large-objects.md).
 
 PostgreSQL также поддерживает многоколоночный терминал `ToDataReader`/`ToDataReaderAsync`: он отдаёт ту же sequential-access команду как принадлежащий вызывающему `DbDataReader`, поэтому вызывающий может прочитать все колонки и строки (или несколько LOB-колонок по порядку), не материализуя результат. SQLite тоже его поддерживает, но через буферизованный reader без локатора (без `rowid`, без `SequentialAccess`, то есть без чанкового LOB); MySQL/MariaDB, ClickHouse и провайдер in-memory не имеют поддержки sequential access и отклоняют его.
 
@@ -368,8 +368,8 @@ select t1.value, t2.somestring as "String"
 
 ---
 
-Source: `tests/nextorm.postgres.tests/PostgresDialectTests.cs:21,27,41,49`,
-`tests/nextorm.postgres.tests/SqlGenerationTests.cs:117,130,139,151,160,172,199,211,223,248,788,976`,
-`tests/nextorm.integration.tests/PostgresSpecificTests.cs:15,24`,
+Source: `tests/nextorm.postgres.tests/Dialect/PostgresDialectTests.cs:21,27,41,49`,
+`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:117,130,139,151,160,172,199,211,223,248,788,976`,
+`tests/nextorm.integration.tests/Postgres/PostgresSpecificTests.cs:15,24`,
 `src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.postgres/PostgresDataContext.cs`,
 `src/nextorm.postgres/DI/PostgresDataContextOptionsBuilderExtensions.cs`.

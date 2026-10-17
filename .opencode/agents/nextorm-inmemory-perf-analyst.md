@@ -25,7 +25,7 @@ connection. Stay on this path:
 - `Builders/InMemoryCommandBuilder.cs`, `DataContext/RowMaterializerBuilder.cs`,
   `DataContext/ContextEnvironment.cs`.
 - DI registers `InMemoryContext`; the test helper is
-  `tests/nextorm.core.tests/InMemoryDataContext.cs`.
+  `tests/nextorm.core.tests/Support/InMemoryDataContext.cs`.
 
 ## Benchmarks (this side only)
 
