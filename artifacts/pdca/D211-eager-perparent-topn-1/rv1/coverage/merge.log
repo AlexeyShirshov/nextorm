@@ -1,5 +1,0 @@
-dotnet-coverage v18.11.2.0 [linux-x64 - .NET 10.0.12]
-
-Including file /home/alex/sources/nextorm/artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/coverage-integration.xml.
-Including file /home/alex/sources/nextorm/artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/coverage.xml.
-Merged into file /home/alex/sources/nextorm/artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/coverage-merged.xml.

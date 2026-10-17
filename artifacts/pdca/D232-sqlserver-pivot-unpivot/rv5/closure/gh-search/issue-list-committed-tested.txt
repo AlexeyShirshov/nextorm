@@ -1,2 +1,0 @@
-$ gh issue list --state all --search "committed tested" --limit 50
-# exit=0

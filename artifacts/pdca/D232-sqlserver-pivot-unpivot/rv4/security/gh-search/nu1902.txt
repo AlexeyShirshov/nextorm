@@ -1,2 +1,0 @@
-$ gh issue list --state all --search NU1902
-EXIT=0

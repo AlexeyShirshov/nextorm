@@ -55,7 +55,7 @@ in the `HasDataModifyingCte` getter, after the mutation-first flat scan finds no
 - F3 lazy memoization (state/invalidation)
 
 #### Decisions
-- perf = REQUIRED (per-call work, not one-time): acceptance 7-case suite + target before/after GC measurement + `eng/perf/iteration14_gate.py`.
+- perf = REQUIRED (per-call work, not one-time): acceptance 7-case suite + target before/after GC measurement + `scripts/perf/iteration14_gate.py`.
 - Reconnaissance = not needed (F1 invariant proven by targeted scout); in-cycle prerequisites only (resolve test helpers, sync/async entry paths).
 - Unit mode = sequential, one stream S1, current tree (getter+tests share footprint).
 - Docs = public EN/RU docs untouched (no public symbol/API/SQL/behavior change); only status/evidence records.
@@ -108,7 +108,7 @@ Owner stream S1 = coder; CHECK validates. Every row inherits: rv=2; owner S1=cod
 - C4: `dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o docs/specs/status/nested-read-cte-1-evidence/cov-<proj>.cobertura.xml "dotnet test tests/nextorm.<proj>.tests --no-build --verbosity normal"` ×{core,sqlite,postgres,sqlserver} → exit 0, nonempty each.
 - C5: `dotnet tool run reportgenerator -reports:<4 cov paths> -targetdir:docs/specs/status/nested-read-cte-1-evidence/c5-report -reporttypes:"Html;TextSummary;Cobertura" -riskhotspotassemblyfilters:"+nextorm.*"` → exit 0; evaluate 85/75 (warnings off-main).
 - C6: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance` (retained, no rerun).
-- C7: `python3 eng/perf/iteration14_gate.py` (retained, no rerun).
+- C7: `python3 scripts/perf/iteration14_gate.py` (retained, no rerun).
 - C8: `git diff --check` + diff review of src/core, tests/core, tests/nextorm.sqlite.tests, this status file → exit 0; CRLF preserved; unrelated changes untouched.
 
 ### Sealed rows (full fields)
@@ -170,8 +170,8 @@ Owner stream S1 = coder; CHECK validates. Every row inherits: rv=2; owner S1=cod
 #### R07 — existing iteration-14 allocation budgets
 - requirement: existing flat/recursive zero-CTE budgets preserved.
 - scenario: retained rv=1 gate run, not re-run in r2 (product unchanged).
-- evidence kinds/sources: `eng/perf/iteration14_gate.py` verdicts.
-- exact command/invocation: `python3 eng/perf/iteration14_gate.py`.
+- evidence kinds/sources: `scripts/perf/iteration14_gate.py` verdicts.
+- exact command/invocation: `python3 scripts/perf/iteration14_gate.py`.
 - required result/exit: exit 0, **56** row/job verdicts within budget; `Cte_Warm_Reused`/`RecursiveCte_Warm_Reused` = 0.00 B/op both toolchains.
 - artifacts: `E07-gate.log`, `E07-gate.md`, 3× `E07-*-report-full-compressed.json`.
 - owner: S1=coder. applicability: true (retained). rv: 2.
@@ -221,7 +221,7 @@ Owner stream S1 = coder; CHECK validates. Every row inherits: rv=1; applicabilit
 - C4: coverage over `nextorm.{core,sqlite,postgres,sqlserver}.tests` via `coverage.settings.xml` (see AGENTS.md) → exit 0, nonempty each.
 - C5: `reportgenerator` on the cobertura → exit 0; evaluate 85/75 (warnings off-main).
 - C6: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance` → exit 0, exactly 7 completed cases, no failures, elapsed ≤240s.
-- C7: `python3 eng/perf/iteration14_gate.py` → exit 0; existing flat/recursive zero CTE budgets preserved.
+- C7: `python3 scripts/perf/iteration14_gate.py` → exit 0; existing flat/recursive zero CTE budgets preserved.
 - C8: `git diff --check` + diff review of `src/nextorm.core`, `tests/nextorm.core.tests`, this status file → exit 0; CRLF preserved; unrelated changes untouched.
 
 ### Rows

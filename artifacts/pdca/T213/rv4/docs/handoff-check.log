@@ -1,8 +1,0 @@
-== T213 r=5 docs handoff verification ==
-date(UTC): 2026-10-12T16:08:31Z
-repo HEAD: 20a67a1cba7b0babbe017fe37e0809f2384f8dcd
-command: GIT_INDEX_FILE=/tmp/t213-idx git read-tree 20a67a1c && GIT_INDEX_FILE=/tmp/t213-idx git apply --cached --check artifacts/pdca/T213/rv4/docs/AC07.patch
---- read-tree ---
-read-tree exit: 0
-apply --cached --check exit: 0
---- end ---

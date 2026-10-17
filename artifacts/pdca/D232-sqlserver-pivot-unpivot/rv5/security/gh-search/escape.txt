@@ -1,3 +1,0 @@
-$ gh issue list --repo AlexeyShirshov/nextorm --state all --search Escape identifier
-161	CLOSED	ClickHouse identifier quoting does not escape backslashes		2026-10-07T05:20:53Z
-EXIT=0

@@ -1,2 +1,0 @@
-  Line coverage: 87.3%
-  Branch coverage: 79.9% (28189 of 35243)

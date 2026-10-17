@@ -1,3 +1,0 @@
-$ gh issue list --state all --search "T232" --limit 50
-237	OPEN	Identifier safety: SQL Server bracket escaping and raw UNPIVOT/Column<T> names		2026-10-15T07:12:57Z
-# exit=0

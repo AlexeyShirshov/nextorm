@@ -1,6 +1,6 @@
 # E07 — iteration-14 allocation gate (C7), issue #166
 
-Args (exact): `["python3", "eng/perf/iteration14_gate.py"]`
+Args (exact): `["python3", "scripts/perf/iteration14_gate.py"]`
 
 Env: `DOTNET_GCHeapHardLimit=0x80000000 DOTNET_gcServer=0`, `timeout 900` (outer cap).
 

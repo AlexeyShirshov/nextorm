@@ -1,7 +1,0 @@
-xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
-  Discovering: nextorm.integration.tests
-  Discovered:  nextorm.integration.tests
-  Starting:    nextorm.integration.tests
-  Finished:    nextorm.integration.tests (ID = 'b4ece81caced377475cbe4ebc5ceca7103a9595a1230fab7f41a6fb60ce4340a')
-=== TEST EXECUTION SUMMARY ===
-   nextorm.integration.tests  Total: 14, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 1.610s

@@ -1,5 +1,0 @@
-{"control": "N5-invalid-artifact-path", "intended_reason": "the log artifact path pointed at a non-existent directory: the artifact guard must fire", "exit_code": 1,
- "guard_token": "unexpected exception", "outcome": "intended",
- "artifact_log": null,
- "artifact_log_status": "not-produced-by-design: this control intentionally points the log artifact path at a non-existent directory, so no log can exist; the control's exit evidence is N5-invalid-artifact-path.exit and the guard token is recorded above (integrity: no fabricated log file).",
- "artifact_exit": "artifacts/pdca/D226/rv2/negative-controls/N5-invalid-artifact-path.exit"}

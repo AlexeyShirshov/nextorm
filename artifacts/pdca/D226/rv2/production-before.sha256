@@ -1,4 +1,0 @@
-cf030526b1eed51361f51747ba34265eb27c916ae59bf8d6b629fe9d181b1b98  src/nextorm.core/DataContext/CommandReaderOwner.cs
-a166586f29354b10da216e64eb803d48ff8e2afb4be7eaef6b085fee0b030e8d  src/nextorm.core/DataContext/ProcedureResult.cs
-9e5a15b1c715d7a031b53ffbac7ef905f20f96e82f6179535342ea64392aec93  src/nextorm.core/Builders/BatchBuilder.cs
-9bf200945db90eb60188c270d5d65061980d6160c600dcef0cad05fdf2cc3683  src/nextorm.core/DataContext/BatchRunner.cs

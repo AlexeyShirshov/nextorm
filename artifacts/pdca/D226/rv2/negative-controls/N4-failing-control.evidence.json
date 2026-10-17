@@ -1,5 +1,0 @@
-{"control": "N4-failing-control", "intended_reason": "the clean control expectation changed from 16 to 99: the control guard must fire", "exit_code": 1,
- "guard_token": "clean control core-recordsaffected did not pass", "outcome": "intended",
- "artifact_log": "artifacts/pdca/D226/rv2/negative-controls/N4-failing-control.log",
- "artifact_log_status": "produced",
- "artifact_exit": "artifacts/pdca/D226/rv2/negative-controls/N4-failing-control.exit"}

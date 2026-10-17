@@ -147,7 +147,7 @@ CI (`build` job, шаг `Test with coverage`) падал на 2 тестах, д
 ### 3.6. Fix красноты CI (2): Allocation regression gate читал не тот каталог отчётов
 
 После фикса §3.5 шаг `Test with coverage` стал зелёным, но job `build` упал дальше — на шаге
-`Allocation regression gate` (`eng/perf/iteration14_gate.py`) с **28** записями
+`Allocation regression gate` (`scripts/perf/iteration14_gate.py`) с **28** записями
 `missing row <id> (<type>.<method>): no result` по классам `SqliteBenchmarkWarmDecompose`,
 `SqliteBenchmarkCachedPlan`, `SqliteBenchmarkFeaturePlanBuild`.
 
@@ -160,8 +160,8 @@ CI (`build` job, шаг `Test with coverage`) падал на 2 тестах, д
 «missing row». До `a2dd5aca` резолюция не находила корень (искался `nextorm.sln`, а репозиторий на
 `nextorm.slnx`) и падала на `Directory.GetCurrentDirectory()` = корень репо — совпадая с гейтом «случайно».
 
-Фикс (tooling, продуктовый код не менялся): `DEFAULT_REPORTS_DIR` в `eng/perf/iteration14_gate.py` →
-`REPO_ROOT / "benchmarks" / "BenchmarkDotNet.Artifacts" / "results"`. Проверка: `python3 eng/perf/iteration14_gate.py --no-run`
+Фикс (tooling, продуктовый код не менялся): `DEFAULT_REPORTS_DIR` в `scripts/perf/iteration14_gate.py` →
+`REPO_ROOT / "benchmarks" / "BenchmarkDotNet.Artifacts" / "results"`. Проверка: `python3 scripts/perf/iteration14_gate.py --no-run`
 — **56/56 row/job verdicts within budget, exit 0** (было 28 «missing row»).
 
 ## 4. Публикация (шаги владельца)

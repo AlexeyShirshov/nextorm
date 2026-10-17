@@ -1,3 +1,0 @@
-$ gh issue list --state all --search "hash ledger" --limit 50
-191	CLOSED	Вынести провайдер-специфичные методы и их реализацию из EntityBuilder в extensions		2026-10-08T09:20:44Z
-# exit=0

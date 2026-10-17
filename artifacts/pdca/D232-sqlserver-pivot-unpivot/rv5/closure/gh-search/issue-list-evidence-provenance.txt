@@ -1,8 +1,0 @@
-$ gh issue list --state all --search "evidence provenance" --limit 50
-234	OPEN	Evidence pipeline hardening: atomic evidence generator + stale-hash lint (from T217 r=5 STOP)		2026-10-14T15:41:43Z
-187	OPEN	Repository API: provider-neutral DbContext and bounded query DELETE		2026-10-04T16:48:31Z
-217	CLOSED	Полноценная поддержка DateTimeOffset: SQL-трансляция Now/UtcNow и частей даты		2026-10-14T15:42:10Z
-157	CLOSED	Reconcile register finding 25		2026-10-07T15:29:22Z
-206	CLOSED	Source generator: CS0111 signature collision when two alias joins share Alias.X with different projection types		2026-10-10T13:34:37Z
-201	OPEN	Perf: M12 #3 — паритет cached-пути с LINQ to DB по времени и аллокациям	enhancement	2026-10-10T11:06:09Z
-# exit=0

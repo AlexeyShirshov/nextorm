@@ -383,11 +383,11 @@ The deciding command is not a Warm_Reused-only full-job command.
 
 Run from repository root:
 
-    env -u NEXTORM_BENCH_FULL python3 eng/perf/iteration14_gate.py --manifest eng/perf/iteration14-budgets.json --reports-dir benchmarks/BenchmarkDotNet.Artifacts/results
+    env -u NEXTORM_BENCH_FULL python3 scripts/perf/iteration14_gate.py --manifest scripts/perf/iteration14-budgets.json --reports-dir benchmarks/BenchmarkDotNet.Artifacts/results
 
 Then reconcile the same newly generated reports:
 
-    env -u NEXTORM_BENCH_FULL python3 eng/perf/iteration14_gate.py --manifest eng/perf/iteration14-budgets.json --reports-dir benchmarks/BenchmarkDotNet.Artifacts/results --no-run
+    env -u NEXTORM_BENCH_FULL python3 scripts/perf/iteration14_gate.py --manifest scripts/perf/iteration14-budgets.json --reports-dir benchmarks/BenchmarkDotNet.Artifacts/results --no-run
 
 Required: both commands exit 0; all 28 rows are represented for both toolchains.
 
@@ -558,7 +558,7 @@ The project's ~20% noise guidance never relaxes the approved 5% bound.
 
 ## Evidence instrumentation and completeness
 
-Add the planned task-specific wrapper `eng/perf/t201_evidence.py`.
+Add the planned task-specific wrapper `scripts/perf/t201_evidence.py`.
 It validates inventories, records commands/wall times, runs the unchanged
 native gate, implements the rules above, and assembles evidence.
 

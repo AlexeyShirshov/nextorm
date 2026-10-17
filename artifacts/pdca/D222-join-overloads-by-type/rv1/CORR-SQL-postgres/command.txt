@@ -1,8 +1,0 @@
-dotnet
-test
-tests/nextorm.postgres.tests
--c
-Debug
---no-build
---filter
-FullyQualifiedName~TypeOnlyJoinSqlGenerationTests

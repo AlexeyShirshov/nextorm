@@ -1,7 +1,0 @@
-xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
-  Discovering: nextorm.clickhouse.tests
-  Discovered:  nextorm.clickhouse.tests
-  Starting:    nextorm.clickhouse.tests
-  Finished:    nextorm.clickhouse.tests (ID = '8d6ace8efb011a4b007ae884c73d2356b3833b0e9b87a3ca0d3dea5c8174dc50')
-=== TEST EXECUTION SUMMARY ===
-   nextorm.clickhouse.tests  Total: 7, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 0.366s

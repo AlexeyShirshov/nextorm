@@ -135,7 +135,7 @@ DML-CTE не кэшируются; запрет кэширования оста�
 
 Для обычных запросов ориентир — приблизиться к `v1.0.9-a`, а не принять HEAD как новую норму. Допуски для функционально более сложных сценариев определить по замерам и явно согласовать до включения гейта. Шумное время выполнения не делать жёстким CI-критерием. Числовые бюджеты для ненулевых сценариев пока не утверждены; данный отчёт не является готовой спецификацией CI-гейта.
 
-**Статус (issue #165):** гейт реализован (`eng/perf/*`, шаг CI) — ожидает CHECK.
+**Статус (issue #165):** гейт реализован (`scripts/perf/*`, шаг CI) — ожидает CHECK.
 
 ## Рекомендуемый порядок
 
@@ -165,7 +165,7 @@ DML-CTE не кэшируются; запрет кэширования оста�
 
 Issue: **#165**. Предложения 2–4 реализованы и проверены; предложение 1 дало baseline (стековая
 атрибуция аллокационного профиля не удалась — Note); предложение 5 (гейт) реализовано в
-`eng/perf/iteration14_gate.py` и `eng/perf/iteration14-budgets.json`, добавлено шагом CI и ожидает CHECK.
+`scripts/perf/iteration14_gate.py` и `scripts/perf/iteration14-budgets.json`, добавлено шагом CI и ожидает CHECK.
 
 Доказательства:
 
@@ -173,4 +173,4 @@ Issue: **#165**. Предложения 2–4 реализованы и пров
   time-ratio 2.49 → 1.99, allocated-ratio 8.63 → 7.83, `Prepared_ToList` 76.14 KB / 780 B/op.
 - `docs/specs/performance/benchmark-report.md` — «Iteration-14 fix: disposition (issue #165)».
 - `docs/specs/performance/performance-findings.md` — «Iteration-14 allocation recovery (issue #165)».
-- Warm CTE reuse = **0 B/op** по `eng/perf/iteration14_gate.py` (`eng/perf/iteration14-budgets.json`).
+- Warm CTE reuse = **0 B/op** по `scripts/perf/iteration14_gate.py` (`scripts/perf/iteration14-budgets.json`).

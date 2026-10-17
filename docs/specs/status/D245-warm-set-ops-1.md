@@ -114,7 +114,7 @@ All sources below are **planned evidence sources** until produced. New tests go 
 | Unit | Scope and disposition | Affected test subset | Boundary / integration |
 |---|---|---|---|
 | **D245-1 — Establish entry evidence and attribution decision** | **Fix now / prerequisite.** Capture entry tree, toolchain, public surface, SQL/results, controls and two isolated BDN rounds. Extend per-case decomposition in `SqliteBenchmarkWarmDecompose.cs:259-292` for EXCEPT/INTERSECT. Attribute construction, `Prepare` and hash/equality costs separately; allocation stacks supplement, not replace, BDN totals. Inspect `QueryCommand.cs:319-400`, `QueryCommand.Clone.cs:18-169`, `QueryCommand.QueryPreparer.cs:115,135-164`, `QueryPlanner.cs:609-654,836-871`, and `QueryPlan.cs:40-48,72-97` through Roslyn. Record chosen eligible lever or return to PLAN. | `C-CORE`; `C-SQL`; existing perf-tool tests through `C-PY`. Attribution scaffolding must not change production behavior. | No full integration boundary required for measurement-only edits. Entry integration behavior needed by new semantic cases is captured through `C-INT`; it does not replace the final boundary. |
-| **D245-2 — Add narrow evidence admission and native-gate coverage** | **Fix now.** Add two 100-operation fresh-fluent warm set-operation benchmark arms in the natural native-gate host; preserve existing arms. Update `eng/perf/iteration14-budgets.json` and only necessary gate/report wiring. Planned scoped sources: `eng/perf/t245_evidence.py`, `eng/perf/tests/test_t245_evidence.py`. Keep `t240_evidence.py` and its five-scenario/default-threshold contract unchanged. | `C-PY`; `C-NATIVE`. Test absent/duplicate rows, wrong operation count, raw-byte units, round mismatch, one-case failure and strict over-budget rejection. | Gate/report boundary only. No production changes in this unit. |
+| **D245-2 — Add narrow evidence admission and native-gate coverage** | **Fix now.** Add two 100-operation fresh-fluent warm set-operation benchmark arms in the natural native-gate host; preserve existing arms. Update `scripts/perf/iteration14-budgets.json` and only necessary gate/report wiring. Planned scoped sources: `scripts/perf/t245_evidence.py`, `scripts/perf/tests/test_t245_evidence.py`. Keep `t240_evidence.py` and its five-scenario/default-threshold contract unchanged. | `C-PY`; `C-NATIVE`. Test absent/duplicate rows, wrong operation count, raw-byte units, round mismatch, one-case failure and strict over-budget rejection. | Gate/report boundary only. No production changes in this unit. |
 | **D245-3 — Implement the measured narrow optimization and semantic guards** | **Fix now, blocked on D245-1 decision.** Candidate region: six methods at `QueryCommand<TResult>.cs:1042-1122`, cloning/state preparation boundaries and non-frozen allocation sites identified by measurement. Preserve `QueryCommand.cs:1171-1181`. `QueryCommand.Clone.cs:18-169` is conditional footprint, not an instruction to edit it. Frozen recipe regions remain read-only. Add boundary tests in existing `T240CommandConstructionTests.cs`, `T240BuilderConstructionTests.cs`, `InMemoryTests.cs`, provider `SqlGenerationTests.cs`, and `CommonTestSuite.SetOperations.cs` as applicable. | After each production edit: `C-CORE` and `C-SQL`; selected new cases are admitted through these existing class filters. Run `C-PY` if evidence/gate code changes. | Final code exit requires `C-BUILD`, `C-CORE`, `C-SQL`, `C-INT`, `C-COVERAGE` and `C-NATIVE`. Exactly **one complete final boundary sweep** is mandatory; source changes afterward invalidate affected evidence and require another sweep. |
 | **D245-4 — Final measurement, documentation and evidence freeze** | **Fix now.** Two final comparison rounds; prepared controls; native gate; per-case attribution reconciliation; EN/RU tables and internal records. Reopen #240’s existing residual IDs for the affected retuning claim without changing its recipe or 1.20 threshold. | `C-PY`, `C-COMPARE`, `C-CONTROLS`, `C-NATIVE`, `C-DOCS`, `C-LINT`. | No extra integration sweep for documentation-only edits. Any production or execution-relevant benchmark edit returns to D245-3’s boundary requirement. |
 | **Deferred — broad metadata/CTE redesign** | Remains in **`1.0.9-rc3`**, not a new milestone. Trigger: measured allocation attribution proves it necessary, or T244 changes invalidate the narrow lever. Requires a revised PLAN with preserved acceptance criteria. | Existing guards remain mandatory meanwhile. | Not authorized by this revision. |
@@ -195,7 +195,7 @@ Use this together with `C-BUILD`, `C-INT` and coverage for the full final bounda
 **C-PY**
 
 ```text
-python -m pytest eng/perf/tests
+python -m pytest scripts/perf/tests
 ```
 
 Require a nonempty test inventory, including the existing 13 `test_t240_evidence.py` tests, native-gate tests and planned T245 admission tests. Runner availability is a D245-1 prerequisite; do not accept zero collected tests.
@@ -256,7 +256,7 @@ dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter '*Sqlit
 **C-NATIVE — admission, planned interface**
 
 ```text
-python eng/perf/t245_evidence.py native --reports artifacts/pdca/D245/rv1/bdn/native-final --budgets eng/perf/iteration14-budgets.json --output artifacts/pdca/D245/rv1/native-gate.json
+python scripts/perf/t245_evidence.py native --reports artifacts/pdca/D245/rv1/bdn/native-final --budgets scripts/perf/iteration14-budgets.json --output artifacts/pdca/D245/rv1/native-gate.json
 ```
 
 This adapter must execute the existing native gate through its actual supported entry point, preserve all existing rows and strict comparison rules, and record its underlying invocation and exit. It must not substitute a T245-only approximation.
@@ -264,19 +264,19 @@ This adapter must execute the existing native gate through its actual supported 
 **C-COMPARE — planned interface**
 
 ```text
-python eng/perf/t245_evidence.py compare --entry-r1 artifacts/pdca/D245/rv1/bdn/entry-r1 --entry-r2 artifacts/pdca/D245/rv1/bdn/entry-r2 --final-r1 artifacts/pdca/D245/rv1/bdn/final-r1 --final-r2 artifacts/pdca/D245/rv1/bdn/final-r2 --output artifacts/pdca/D245/rv1/comparison.json
+python scripts/perf/t245_evidence.py compare --entry-r1 artifacts/pdca/D245/rv1/bdn/entry-r1 --entry-r2 artifacts/pdca/D245/rv1/bdn/entry-r2 --final-r1 artifacts/pdca/D245/rv1/bdn/final-r1 --final-r2 artifacts/pdca/D245/rv1/bdn/final-r2 --output artifacts/pdca/D245/rv1/comparison.json
 ```
 
 **C-CONTROL-CHECK — planned interface**
 
 ```text
-python eng/perf/t245_evidence.py controls --entry artifacts/pdca/D245/rv1/bdn/controls-entry --final artifacts/pdca/D245/rv1/bdn/controls-final --native artifacts/pdca/D245/rv1/native-gate.json --output artifacts/pdca/D245/rv1/controls.json
+python scripts/perf/t245_evidence.py controls --entry artifacts/pdca/D245/rv1/bdn/controls-entry --final artifacts/pdca/D245/rv1/bdn/controls-final --native artifacts/pdca/D245/rv1/native-gate.json --output artifacts/pdca/D245/rv1/controls.json
 ```
 
 **C-ATTRIBUTION — planned interface**
 
 ```text
-python eng/perf/t245_evidence.py attribution --entry artifacts/pdca/D245/rv1/bdn/decompose-entry --final artifacts/pdca/D245/rv1/bdn/decompose-final --comparison artifacts/pdca/D245/rv1/comparison.json --output artifacts/pdca/D245/rv1/attribution.json
+python scripts/perf/t245_evidence.py attribution --entry artifacts/pdca/D245/rv1/bdn/decompose-entry --final artifacts/pdca/D245/rv1/bdn/decompose-final --comparison artifacts/pdca/D245/rv1/comparison.json --output artifacts/pdca/D245/rv1/attribution.json
 ```
 
 Phase measurements may overlap and must not be naively summed. The report must distinguish direct allocation-stack attribution, phase totals, calculated deltas and unexplained residuals.
@@ -294,7 +294,7 @@ Discover affected type identities from that output, then use Roslyn `members` wi
 Planned comparison interface:
 
 ```text
-python eng/perf/t245_evidence.py api --entry artifacts/pdca/D245/rv1/api/entry.json --final artifacts/pdca/D245/rv1/api/final.json --output artifacts/pdca/D245/rv1/api/diff.json
+python scripts/perf/t245_evidence.py api --entry artifacts/pdca/D245/rv1/api/entry.json --final artifacts/pdca/D245/rv1/api/final.json --output artifacts/pdca/D245/rv1/api/diff.json
 ```
 
 Incomplete surface exports are invalid evidence, not an empty API diff.
@@ -421,8 +421,8 @@ For any successor:
 | Six set-operation bodies and `QueryCommand.cs:1171-1181` | T245 semantic responsibility; shared-tail guard cannot be removed or weakened. |
 | Frozen plan/equality/store files | Read-only for T245; inspect changes from predecessors for compliance. |
 | `benchmarks/nextorm.benchmark/**` | T245 owns its set-operation arms; preserve other tasks’ fixtures/configuration and arms. |
-| `eng/perf/iteration14-budgets.json` and native gate | Shared serialized edits; T245 adds its two rows, never relaxes existing rows. |
-| `eng/perf/t245_evidence.py` and tests | T245-owned planned files; no task-wide replacement of existing evidence tools. |
+| `scripts/perf/iteration14-budgets.json` and native gate | Shared serialized edits; T245 adds its two rows, never relaxes existing rows. |
+| `scripts/perf/t245_evidence.py` and tests | T245-owned planned files; no task-wide replacement of existing evidence tools. |
 | Comparison table EN/RU and table generator | Shared serialization; T245 changes only its rows and necessary generated content. |
 | `docs/specs/performance/**` | Shared serialization; retain other tasks’ conclusions and residual IDs. |
 | `docs/specs/status/D245-warm-set-ops-1.md` and D245 artifacts | T245-owned; status excluded from the frozen source tree per canonical rules. |
@@ -599,7 +599,7 @@ At the final boundary:
 - **selected_variant:** `pdca-dotnet` with `nextorm-pdca`.
 - **N/r/n:** `1/1/1`; **contract rv:** `1`.
 - **Footprint:** conditional set-operation construction/clone/non-frozen preparation changes; semantic tests; set-operation decomposition/native arms; native budgets; scoped evidence adapter/tests; EN/RU comparison and internal performance records.
-- **Other tasks also need:** `QueryCommand.Clone.cs`, `QueryCommand.QueryPreparer.cs`, `benchmarks/nextorm.benchmark/**`, `eng/perf/**`, native budgets, comparison EN/RU and `docs/specs/performance/**`.
+- **Other tasks also need:** `QueryCommand.Clone.cs`, `QueryCommand.QueryPreparer.cs`, `benchmarks/nextorm.benchmark/**`, `scripts/perf/**`, native budgets, comparison EN/RU and `docs/specs/performance/**`.
 - **Dependency requirements:** settle and fingerprint any predecessor’s shared-path changes before entry measurement; preserve frozen recipe semantics; successors touching the same path revalidate affected T245 rows.
 - **Measurement isolation:** one exclusive host measurement token across T243–T247; no concurrent BDN, profiling, builds or test load.
 - **T244 recommendation:** settle T244’s clone/preparation output before T245 attribution and optimization. Collection planner assigns ordering/groups after the ALL-barrier; this plan creates no DAG.

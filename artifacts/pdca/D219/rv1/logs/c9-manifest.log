@@ -1,8 +1,0 @@
-=== python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D219/rv1/manifest.json ===
-exit=0
-=== python3 scripts/validate_inner_loop.py report artifacts/pdca/D219/rv1/report.json ===
-exit=0
-=== python3 scripts/validate_inner_loop.py report artifacts/pdca/D219/rv1/scope-integration.json ===
-exit=0
-=== python3 scripts/validate_inner_loop.py brief artifacts/pdca/D219/rv1/scope.json ===
-exit=0

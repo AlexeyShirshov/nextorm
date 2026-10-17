@@ -78,7 +78,7 @@ These execution counts are not independent BDN observations: exported `Statistic
 
 ```bash
 # Planned driver: one lock for the entire block; exact BDN argv below.
-python3 eng/perf/t246_evidence.py measure --phase baseline --runs 3 --max-attempts 4 \
+python3 scripts/perf/t246_evidence.py measure --phase baseline --runs 3 --max-attempts 4 \
   --root artifacts/pdca/T246/rv2 --lock /tmp/opencode/nextorm-bdn-host.lock \
   --lock-wait-seconds 3600 --run-timeout-seconds 600 \
   --total-measurement-budget-seconds 7200
@@ -222,20 +222,20 @@ E16–21 add protocol variants under rv2; their row revision is 2 while inherite
 
 All new `t246_evidence.py` subcommands below are **planned CLI**, not claims that the tool already exists; implement with Python stdlib and fail closed.
 `C-BDN` is the driver invocation above; final uses `--phase final`. Both phases enforce the shared total measurement-time budget and immutable attempt ledger.
-`C-PROTOCOL`: `python3 eng/perf/t246_evidence.py protocol --root artifacts/pdca/T246/rv2`; verifies list output, hashes, counts, exports and monitoring prerequisites.
-`C-QUALIFY`: `python3 eng/perf/t246_evidence.py qualify --root artifacts/pdca/T246/rv2`; writes qualification and immutable numeric thresholds only after three valid baseline runs.
-`C-ORACLE`: `python3 eng/perf/t246_evidence.py oracle --root artifacts/pdca/T246/rv2`; validates byte arithmetic, source identities and canonical-only selection.
-`C-MODES`: `python3 eng/perf/t246_evidence.py modes --root artifacts/pdca/T246/rv2 --phase baseline`; repeat with `--phase final` for the final block.
-`C-GATE`: `python3 eng/perf/t246_evidence.py gate --budgets eng/perf/t246-budgets.json --runs artifacts/pdca/T246/rv2/perf/final --output artifacts/pdca/T246/rv2/perf/gate.json`.
-`C-GATE-NEGATIVE`: `python3 eng/perf/t246_evidence.py self-test --output artifacts/pdca/T246/rv2/perf/gate-negative.json`.
+`C-PROTOCOL`: `python3 scripts/perf/t246_evidence.py protocol --root artifacts/pdca/T246/rv2`; verifies list output, hashes, counts, exports and monitoring prerequisites.
+`C-QUALIFY`: `python3 scripts/perf/t246_evidence.py qualify --root artifacts/pdca/T246/rv2`; writes qualification and immutable numeric thresholds only after three valid baseline runs.
+`C-ORACLE`: `python3 scripts/perf/t246_evidence.py oracle --root artifacts/pdca/T246/rv2`; validates byte arithmetic, source identities and canonical-only selection.
+`C-MODES`: `python3 scripts/perf/t246_evidence.py modes --root artifacts/pdca/T246/rv2 --phase baseline`; repeat with `--phase final` for the final block.
+`C-GATE`: `python3 scripts/perf/t246_evidence.py gate --budgets scripts/perf/t246-budgets.json --runs artifacts/pdca/T246/rv2/perf/final --output artifacts/pdca/T246/rv2/perf/gate.json`.
+`C-GATE-NEGATIVE`: `python3 scripts/perf/t246_evidence.py self-test --output artifacts/pdca/T246/rv2/perf/gate-negative.json`.
 `C-CORE`: `dotnet test tests/nextorm.core.tests -c Debug --filter "FullyQualifiedName~LobDataReaderTests|FullyQualifiedName~RecordsAffectedTests"`; include discovered new tests in the pinned selector inventory.
 `C-SQLITE`: `dotnet test tests/nextorm.sqlite.tests -c Debug --filter "FullyQualifiedName~ToDataReaderSqliteTests|FullyQualifiedName~ResultReaderTests|FullyQualifiedName~D199ScalarInPlanCacheTests"`.
 `C-BOUNDARY`: `dotnet build nextorm.slnx -c Debug`, then `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet test nextorm.slnx -c Debug`; both exit 0.
 `C-INTEGRATION`: `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor`.
 `C-COVERAGE`: under the same `DOCKER_HOST`, run `dotnet-coverage collect -s coverage.settings.xml -f cobertura -o artifacts/pdca/T246/rv2/coverage/coverage.cobertura.xml "dotnet test nextorm.slnx -c Debug"`, then `reportgenerator "-reports:artifacts/pdca/T246/rv2/coverage/coverage.cobertura.xml" "-targetdir:artifacts/pdca/T246/rv2/coverage/report" "-reporttypes:Cobertura;TextSummary"`; verify ≥85% line/≥75% branch.
-`C-RECON`, `C-CACHED`, `C-MUTATION`: `python3 eng/perf/t246_evidence.py replay --recipe artifacts/pdca/T246/rv2/recon/commands.json --id <ID> --root artifacts/pdca/T246/rv2`, substituting the named ID.
+`C-RECON`, `C-CACHED`, `C-MUTATION`: `python3 scripts/perf/t246_evidence.py replay --recipe artifacts/pdca/T246/rv2/recon/commands.json --id <ID> --root artifacts/pdca/T246/rv2`, substituting the named ID.
 The replay recipe is a prerequisite scout output: exact existing cached-acceptance invocation/contract, measured attribution-probe invocation, and targeted mutation/test/restore invocations; every argv is pinned before execution. No guessed test symbols or replacement acceptance contract.
-`C-DOCS`: `python3 eng/perf/update_benchmark_tables.py`, then `python3 eng/perf/update_benchmark_tables.py --check`; capture both exits and review generated output map before permitting writes.
+`C-DOCS`: `python3 scripts/perf/update_benchmark_tables.py`, then `python3 scripts/perf/update_benchmark_tables.py --check`; capture both exits and review generated output map before permitting writes.
 `C-PUBLISH`: `gh issue edit 246 --repo AlexeyShirshov/nextorm --body-file artifacts/pdca/T246/rv2/docs/issue-246.md`, then `gh issue view 246 --repo AlexeyShirshov/nextorm --json number,url,body`; verify body against the artifact.
 All command logs record argv, environment, start/end, exit and selected counts; exit 0 alone never substitutes for a required semantic result.
 
@@ -264,7 +264,7 @@ Reopen requires an explicit approved, evidence-backed bounded revision identifyi
 
 ## Test strategy
 
-Gate-tool unit tests: `python3 -m unittest discover -s eng/perf/tests -p 'test_t246_evidence.py' -v`; also run `python3 -m unittest discover -s eng/perf/tests -v`.
+Gate-tool unit tests: `python3 -m unittest discover -s scripts/perf/tests -p 'test_t246_evidence.py' -v`; also run `python3 -m unittest discover -s scripts/perf/tests -v`.
 Negative fixtures: missing/duplicate/NA/rounded data; missing empty/Dapper/launch; job/count/runtime mismatch; DB-SHA/parity mismatch; nonpositive denominator; error/spread overflow; unsupported confidence level; stale hashes.
 Mode fixtures: unexplained bimodality rejected; replicated product modes accepted only as evidence, slowest pairing governs; averaging/hiding modes rejected; contaminated-run replacement consumes budget.
 Positive fixtures prove exact boundary ≤1.00, immutable threshold derivation, launch extraction, allocation arithmetic and unchanged original gate behavior. No pytest.
@@ -279,7 +279,7 @@ All E01–21 and new runtime branches are **P1**: direct acceptance invariants/e
 test_scope:
   projects: [tests/nextorm.core.tests, tests/nextorm.sqlite.tests, tests/nextorm.integration.tests]
   selectors: ["FullyQualifiedName~LobDataReaderTests|FullyQualifiedName~RecordsAffectedTests", "FullyQualifiedName~ToDataReaderSqliteTests|FullyQualifiedName~ResultReaderTests|FullyQualifiedName~D199ScalarInPlanCacheTests"]
-  files: [tests/nextorm.core.tests/LobDataReaderTests.cs, tests/nextorm.core.tests/RecordsAffectedTests.cs, tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs, tests/nextorm.sqlite.tests/ResultReaderTests.cs, tests/nextorm.sqlite.tests/D199ScalarInPlanCacheTests.cs, tests/nextorm.integration.tests/CommonTestSuite.Lob.cs, tests/nextorm.integration.tests/SqliteSpecificTests.cs, eng/perf/tests/test_t246_evidence.py]
+  files: [tests/nextorm.core.tests/LobDataReaderTests.cs, tests/nextorm.core.tests/RecordsAffectedTests.cs, tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs, tests/nextorm.sqlite.tests/ResultReaderTests.cs, tests/nextorm.sqlite.tests/D199ScalarInPlanCacheTests.cs, tests/nextorm.integration.tests/CommonTestSuite.Lob.cs, tests/nextorm.integration.tests/SqliteSpecificTests.cs, scripts/perf/tests/test_t246_evidence.py]
   rebuild: affected
   boundary: "dotnet build nextorm.slnx -c Debug; full solution tests with configured DOCKER_HOST; stdlib perf-tool tests"
   rationale: "Protocol parser plus inherited reader/planner/cache/owner seam; full boundary catches LOB/CSV and provider regressions"
@@ -353,7 +353,7 @@ CHECK consumes one frozen manifest, appends evidence only, applies P1 priorities
 
 Production, only after P2: `src/nextorm.core/Query/QueryCommandExtensions.cs:308-397`; `src/nextorm.core/DataContext/DataContext.cs:469-583`; `src/nextorm.core/DataContext/QueryPlanner.cs:603-656,820-829`; `src/nextorm.core/DataContext/LobDataReader.cs:20-398`.
 Tests: the five core/SQLite files in `test_scope`, `tests/nextorm.integration.tests/CommonTestSuite.Lob.cs`, `tests/nextorm.integration.tests/SqliteSpecificTests.cs`.
-Harness/tooling: `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs`; `eng/perf/t246_evidence.py`; `eng/perf/t246-budgets.json`; `eng/perf/tests/test_t246_evidence.py`; `eng/perf/update_benchmark_tables.py`.
+Harness/tooling: `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs`; `scripts/perf/t246_evidence.py`; `scripts/perf/t246-budgets.json`; `scripts/perf/tests/test_t246_evidence.py`; `scripts/perf/update_benchmark_tables.py`.
 Docs: the four exact paths under Docs plan; evidence under `artifacts/pdca/T246/rv2/`.
 **Bookkeeping remains writable by coder but outside the frozen-tree footprint:** `docs/specs/status/D246-raw-datareader-2.md`, `docs/specs/status/collection-1.0.9-rc3-open-3.md`, and the strictly limited rv1 pointer below.
 `CommandReaderOwner.cs`, `NextormConfig.cs`, seed DB, sibling gates and rv1 artifacts are read-only. Preserve CRLF; normalize only intentionally edited files and inspect the scoped diff.
@@ -398,10 +398,10 @@ footprint:
   - tests/nextorm.integration.tests/CommonTestSuite.Lob.cs
   - tests/nextorm.integration.tests/SqliteSpecificTests.cs
   - benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs
-  - eng/perf/t246_evidence.py
-  - eng/perf/t246-budgets.json
-  - eng/perf/tests/test_t246_evidence.py
-  - eng/perf/update_benchmark_tables.py
+  - scripts/perf/t246_evidence.py
+  - scripts/perf/t246-budgets.json
+  - scripts/perf/tests/test_t246_evidence.py
+  - scripts/perf/update_benchmark_tables.py
   - docs/comparisons/benchmarks.md
   - docs/comparisons/feature-benchmarks-2026-10-17.md
   - docs/specs/performance/acceptance-benchmarks.md
@@ -452,7 +452,7 @@ Autonomous mode waives only user approval. Qualification prerequisites remain ac
 
 **Verdict:** `TERMINAL_GAP` · **Reason:** `qualification exhausted: 0/3 valid runs from 4 executions` · **Phase:** DO → GAP.
 **Counters unchanged:** `N=1` · `r=2` · `rv=2` · `n=1` · iteration `1/3`.
-**Production:** no production edit; `src/**`, `tests/**`, `benchmarks/**` untouched. Files added by this task are harness-only (`eng/perf/t246_evidence.py`, `eng/perf/t246-budgets.json`, `eng/perf/tests/test_t246_evidence.py`); no production fix is authorized.
+**Production:** no production edit; `src/**`, `tests/**`, `benchmarks/**` untouched. Files added by this task are harness-only (`scripts/perf/t246_evidence.py`, `scripts/perf/t246-budgets.json`, `scripts/perf/tests/test_t246_evidence.py`); no production fix is authorized.
 **Disposition artifacts:** `artifacts/pdca/T246/rv2/GAP.md`, `artifacts/pdca/T246/rv2/gap-disposition.json`, `artifacts/pdca/T246/rv2/perf/attempt-ledger.json`, `artifacts/pdca/T246/rv2/perf/baseline/TERMINAL_GAP.json`.
 
 ### Qualification outcome
@@ -491,3 +491,7 @@ No contract row is claimed `met` beyond the preserved preflight/tooling checks. 
 Issue **#246 stays open**; the lane continues **T244 → T245 → T247**. rv1 remains terminal evidence, unchanged.
 
 2026-10-17 | DO | revision r=2 (rv2) | iteration 1/3 | terminal GAP — 4 executions, 0/3 valid runs; harness report-precision defect consumed the attempt ceiling; empty stratum never started | artifacts/pdca/T246/rv2/GAP.md
+
+## Supersession — 2026-10-17
+Approved protocol revision: [D246 rv3](D246-raw-datareader-3.md), r=3 / rv=3.
+rv2 remains terminal GAP evidence; no criteria or historical results changed.

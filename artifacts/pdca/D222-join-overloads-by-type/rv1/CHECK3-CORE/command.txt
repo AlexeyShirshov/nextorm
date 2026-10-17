@@ -1,8 +1,0 @@
-dotnet
-test
-tests/nextorm.core.tests
--c
-Debug
---no-build
---filter
-FullyQualifiedName~InMemoryJoinTests

@@ -1762,7 +1762,7 @@ HEAD-колонка этого отчёта — **pre-fix D1** (`713dcde`). По
   `Nextorm_Cached` (Any) 636.78 → **568.01 KB**, `Cached_PlanOnly_Param` 581.27 → **520.33 KB**,
   `Nextorm_Count` 381.25 → **354.69 KB**; time-ratio 2.49 → **1.99**, allocated-ratio 8.63 → **7.83**.
 - **Предложенные бюджеты** — `ceil(After × 1.25)`, `warm = 0`, `Prepared` no-growth — закреплены
-  гейтом `eng/perf/iteration14_gate.py` + `eng/perf/iteration14-budgets.json`.
+  гейтом `scripts/perf/iteration14_gate.py` + `scripts/perf/iteration14-budgets.json`.
 
 Разделение job'ов (`Default` vs `InProcessEmitToolchain`) **задокументировано, а не объявлено
 доказанным шумом**: гейт проверяет оба job'а и берёт худший (больший) B/op.
@@ -2182,7 +2182,7 @@ NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
   конкурентов (без compiled-арм'ов), плюс проверка регрессии против Итерации 16: allocation-probe и
   `git bisect` по диапазону `5f5be4f..881bf497`, затем фикс и повторный замер.
 - **Аллокационный гейт Iteration 14** — 28 строк × 2 job'а (`Default` и `InProcessEmitToolchain`),
-  `eng/perf/iteration14_gate.py`.
+  `scripts/perf/iteration14_gate.py`.
 
 ## Методика
 
@@ -2385,7 +2385,7 @@ Any ускорились примерно вдвое, Data fetch / First / Singl
 «Бюджет» — максимальный `B/op` на **худший** из двух job'ов (`Default` и `InProcessEmitToolchain`);
 `% от бюджета` — сколько потолка занято (`current / budget`), чем меньше, тем больше запас.
 
-`eng/perf/iteration14_gate.py`: **56/56 вердиктов в бюджете** (28 строк × 2 job'а). Ключевые строки
+`scripts/perf/iteration14_gate.py`: **56/56 вердиктов в бюджете** (28 строк × 2 job'а). Ключевые строки
 (худший из двух job'ов, B/op):
 
 | Arm | 2026-10-17 | Бюджет | % от бюджета | Итерация 16 | Δ к 16 |
@@ -2460,9 +2460,9 @@ dotnet run --project benchmarks/nextorm.benchmark -c Release -- \
            '*SqliteBenchmarkAny*' '*SqliteBenchmarkFirst*' '*SqliteBenchmarkSingle*'
 
 # аллокационный гейт (28 строк × 2 job'а)
-python3 eng/perf/iteration14_gate.py
+python3 scripts/perf/iteration14_gate.py
 
 # пересобрать таблицы readme/docs из отчётов и проверить их актуальность
-python3 eng/perf/update_benchmark_tables.py
-python3 eng/perf/update_benchmark_tables.py --check
+python3 scripts/perf/update_benchmark_tables.py
+python3 scripts/perf/update_benchmark_tables.py --check
 ```

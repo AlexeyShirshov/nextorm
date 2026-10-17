@@ -1,9 +1,0 @@
-Running tests from /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64)
-/home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64) passed (786ms)
-
-Test run summary: Passed!
-  total: 9
-  failed: 0
-  succeeded: 9
-  skipped: 0
-  duration: 1s 021ms

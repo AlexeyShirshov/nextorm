@@ -605,8 +605,8 @@ prepared arm `Prepared_ToList` is **unchanged** at **76.14 KB / 780 B/op** acros
 `>= 20 %` time-ratio investigation rule is **not** triggered: after **1.99 < 2.244** (the documented
 **1.87** baseline × 1.20), so no investigation is required.
 
-The allocation gate that enforces these budgets is `eng/perf/iteration14_gate.py` together with
-`eng/perf/iteration14-budgets.json`; the warm CTE reuse rows (`Cte_Warm_Reused`,
+The allocation gate that enforces these budgets is `scripts/perf/iteration14_gate.py` together with
+`scripts/perf/iteration14-budgets.json`; the warm CTE reuse rows (`Cte_Warm_Reused`,
 `RecursiveCte_Warm_Reused`) must be **0 B/op** after warm-up.
 
 ## Results 2026-10-06 — issue #197 (D197: bare `JsonNode` native read)

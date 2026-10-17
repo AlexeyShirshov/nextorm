@@ -181,7 +181,7 @@ command instance) — the same mechanism the production plan-cache tests assert.
 
 Normalization: `B/op = Memory.BytesAllocatedPerOperation / 100` logical ops. Budget =
 `ceil(observed × 1.20)` B/op (a `>20 %` allocation-growth budget aligned with the acceptance rule).
-`Prepared_ToList` stays at the existing **no-growth 780 B/op** (`eng/perf/iteration14-budgets.json`).
+`Prepared_ToList` stays at the existing **no-growth 780 B/op** (`scripts/perf/iteration14-budgets.json`).
 
 | Arm | Observed B/op | Frozen budget B/op |
 |-----|--------------:|-------------------:|

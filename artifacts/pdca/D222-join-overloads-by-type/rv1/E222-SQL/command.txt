@@ -1,2 +1,0 @@
-bash
-artifacts/pdca/D222-join-overloads-by-type/rv1/sql-sweep.sh

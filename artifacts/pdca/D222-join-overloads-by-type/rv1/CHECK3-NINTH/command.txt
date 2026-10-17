@@ -1,5 +1,0 @@
-dotnet
-build
-artifacts/pdca/D222-join-overloads-by-type/rv1/compatibility/ninth/NinthJoinFixture.csproj
--c
-Debug

@@ -1,2 +1,0 @@
-$ gh issue list --repo AlexeyShirshov/nextorm --state all --search PIVOT identifier
-EXIT=0

@@ -1,4 +1,0 @@
-$ gh issue list --repo AlexeyShirshov/nextorm --state all --search BaseExpressionVisitor
-232	OPEN	SQL Server PIVOT/UNPIVOT: типизированная проекция результата (вместо TableAlias по имени)	enhancement	2026-10-13T17:14:56Z
-56	CLOSED	ClickHouse: массивы Array(T)/Tuple — row reader, array-агрегаты и higher-order (lambda) функции		2026-09-22T16:02:52Z
-EXIT=0

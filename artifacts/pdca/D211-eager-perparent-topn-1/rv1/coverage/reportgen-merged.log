@@ -1,9 +1,0 @@
-2026-10-11T21:02:02: Arguments
-2026-10-11T21:02:02:  -reports:artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/coverage-merged.xml
-2026-10-11T21:02:02:  -targetdir:artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/report-merged
-2026-10-11T21:02:02:  -reporttypes:Html;TextSummary;Cobertura
-2026-10-11T21:02:02:  -riskhotspotassemblyfilters:+nextorm.*
-2026-10-11T21:02:05: Writing report file 'artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/report-merged/Cobertura.xml'
-2026-10-11T21:02:05: Writing report file 'artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/report-merged/index.html'
-2026-10-11T21:02:05: Writing report file 'artifacts/pdca/D211-eager-perparent-topn-1/rv1/coverage/report-merged/Summary.txt'
-2026-10-11T21:02:06: Report generation took 3.9 seconds

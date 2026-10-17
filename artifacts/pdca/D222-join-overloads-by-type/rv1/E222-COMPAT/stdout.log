@@ -1,3 +1,0 @@
-PASS T222-COMPAT-POS: exit 0
-PASS T222-COMPAT-NEG-INFER: exit 1 with expected diagnostics [CS0411]
-PASS T222-COMPAT-ALLNULL: exit 0

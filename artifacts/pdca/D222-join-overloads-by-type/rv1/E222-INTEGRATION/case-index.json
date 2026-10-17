@@ -1,7 +1,0 @@
-{
-  "row": "E222-INTEGRATION",
-  "variant_closure": {
-    "V28": "CommonTestSuite.JoinByType_* (SQLite/Postgres/SqlServer/MySql) + ClickHouseJoinByTypeIntegrationTests (ClickHouse)",
-    "V29": "JoinByType_FullJoin_EquivalentToExplicitOrEquivalentlyRejected"
-  }
-}

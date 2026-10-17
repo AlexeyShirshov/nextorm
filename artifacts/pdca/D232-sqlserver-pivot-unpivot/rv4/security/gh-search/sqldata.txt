@@ -1,2 +1,0 @@
-$ gh issue list --state all --search Microsoft.Data.SqlClient
-EXIT=0

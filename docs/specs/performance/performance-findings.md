@@ -641,7 +641,7 @@ if (createEnumerator && compiledQuery.Enumerator is null)
 ## Iteration-14 allocation recovery (issue #165)
 
 Статус: **закрыто** по трём исправленным сайтам; остаточный бюджет CTE prepare-арм'ов — **tracked
-budget row** в `eng/perf/iteration14-budgets.json`, а не переоткрытие settled-находок M*/I*.
+budget row** в `scripts/perf/iteration14-budgets.json`, а не переоткрытие settled-находок M*/I*.
 
 ### Три корневые причины
 
@@ -667,7 +667,7 @@ budget row** в `eng/perf/iteration14-budgets.json`, а не переоткры�
 ### Измеренный эффект
 
 - Warm CTE reuse возвращён к **0 B/op** (`Cte_Warm_Reused`, `RecursiveCte_Warm_Reused`), проверяется
-  `eng/perf/iteration14_gate.py`.
+  `scripts/perf/iteration14_gate.py`.
 - Acceptance allocated-ratio `Cached_ToList / Prepared_ToList` **8.63 → 7.83**; time-ratio **2.49 →
   1.99**; `Cached_ToList` **657.42 → 596.47 KB**, `Nextorm_Cached` (Any) **636.78 → 568.01 KB**,
   `Cached_PlanOnly_Param` **581.27 → 520.33 KB**.
@@ -681,7 +681,7 @@ budget row** в `eng/perf/iteration14-budgets.json`, а не переоткры�
 
 ### Бюджетный гейт
 
-`eng/perf/iteration14_gate.py` исполняет `eng/perf/iteration14-budgets.json`: `zero`-строки (warm
+`scripts/perf/iteration14_gate.py` исполняет `scripts/perf/iteration14-budgets.json`: `zero`-строки (warm
 CTE reuse = **0 B/op**), `budget`-строки `ceil(After × 1.25)` и no-growth для `Prepared_ToList`.
 
 ---

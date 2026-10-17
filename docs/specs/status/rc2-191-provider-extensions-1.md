@@ -313,7 +313,7 @@ dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories 
 - Для одинаковых параметров:
   `R = Cached_ToList.Mean / Prepared_ToList.Mean`;
   `R_after ≤ 1.05 × R_before`.
-- Existing allocation regression gate проходит по `eng/perf/iteration14-budgets.json`.
+- Existing allocation regression gate проходит по `scripts/perf/iteration14-budgets.json`.
 - Любой явно шумный/невалидный замер повторяется один раз **парой before/after** с тем же workload; отсутствие сопоставимого baseline не трактуется как PASS.
 - Неубедительный результат фиксируется как uncertainty и направляется по правилам evidence/perf classification; thresholds молча не ослаблять.
 
@@ -454,7 +454,7 @@ dotnet docfx docs/docfx.json
 | E11 / REQ-191-COVERAGE / P1 | Coverage collection/report из exact CI tools/settings | Две точные coverage команды из раздела Coverage; оба exit 0; Summary содержит line/branch values; thresholds 85/75 применены как warning на этой ветке | `tests/coverage/coverage.cobertura.xml`, `tests/coverage/report/`, copied summary/logs | D191.6 / coder | **Всегда** | 1 |
 | E12 / REQ-191-PERF / P1 | Before/after 7 acceptance cases; BDN raw results и environment | Две acceptance команды из Performance; обе exit 0; ровно перечисленные 7 cases, все parameter sets сопоставимы и без benchmark errors | `$EV/perf/{before,after}/acceptance/`, baseline manifest, comparison | D191.2/D191.6 / coder | **Всегда** | 1 |
 | E13 / REQ-191-PERF + REQ-191-CACHE / P1 | Before/after moved-path category; mean/allocations и cached/prepared ratio | Две `provider-extensions` команды из Performance; exit 0, selected/executed >0; comparison по закреплённым limits; ratio вычислен из E12 для одинаковых параметров | `$EV/perf/{before,after}/provider-extensions/`, exact case inventory, perf/ratio comparison | D191.2/D191.6 / coder | **Всегда** | 1 |
-| E14 / REQ-191-PERF / P1 | Existing allocation regression gate, distinct from BDN/validator | `python3 -m unittest discover -s eng/perf/tests -p test_iteration14_gate.py`; `bash "$EV/commands/allocation-ci.sh"`; оба exit 0; CI gate выполнен с exact workflow argv и budgets, не только unit tests | Test/gate logs, script/hash, budget/input/output artifacts | D191.1/D191.6 / coder | **Всегда** | 1 |
+| E14 / REQ-191-PERF / P1 | Existing allocation regression gate, distinct from BDN/validator | `python3 -m unittest discover -s scripts/perf/tests -p test_iteration14_gate.py`; `bash "$EV/commands/allocation-ci.sh"`; оба exit 0; CI gate выполнен с exact workflow argv и budgets, не только unit tests | Test/gate logs, script/hash, budget/input/output artifacts | D191.1/D191.6 / coder | **Всегда** | 1 |
 | E15 / REQ-191-EVIDENCE / P1 | Final inner-loop report validation; current source/artifact revisions | `python3 /home/alex/.config/opencode/skills/pdca-dotnet/scripts/validate_inner_loop.py report "$EV/inner-loop/report.json"`; exit 0; CHECK получает raw exit; executions nonempty и schema-valid | Report JSON, validator log/exit record | D191.5/D191.8 / coder | **Всегда** | 1 |
 | E16 / REQ-191-DOCS / P2 | XML/EN/RU/register consistency, DocFX, links, CRLF/diff | `dotnet docfx docs/docfx.json`; `git diff --check`; `bash "$EV/commands/docs-audit.sh"`; все exit 0; audit проверяет old API samples, public-spec links и CRLF changed text files | DocFX/diff/audit logs, docs mapping, audit script/hash | D191.7 / coder | **Всегда** | 1 |
 | E17 / REQ-191-DOCS / P2 | Issue #191 read/write/read-back и milestone evidence | Exact `gh issue view/edit` commands из Documentation; exit 0; read-back number=191, verified URL, milestone=`1.0.9-rc2`, сохранён intended body | `$EV/issue/{before,after}.json`, before/after body, write logs | D191.7 / coder | **Всегда**, write verification перед docs unit | 1 |
@@ -821,7 +821,7 @@ After commands (exact argv, all exit 0):
 - E13 `R = Cached_ToList.Mean / Prepared_ToList.Mean`: **R_before = 2.070**, **R_after = 1.997**; `R_after = 0.965 × R_before` (limit `R_after ≤ 1.05 × R_before`) → pass.
 - E13 provider-extensions, 7/7 cases, Mean after / before (ratio): `SqlServer_Construct_Unpivot` 143.7/185.5 ns (0.775), `ClickHouse_Construct_PasteJoin` 186.4/351.9 ns (0.530), `Postgres_Construct_DistinctOn` 476.9/612.1 ns (0.779), `ClickHouse_Construct_ArrayJoin` 638.8/800.1 ns (0.798), `ClickHouse_Construct_Final_PreWhere_Settings` 841.4/1081.5 ns (0.778), `SqlServer_Construct_Pivot` 1613.5/1776.0 ns (0.909), `ClickHouse_Joined_ArrayJoin` 2024.1/2960.1 ns (0.684). All means improved.
 - **Flagged uncertainty (not a pass):** the `Allocated` column for three ClickHouse construct cases is reproducibly higher than the D191.2 baseline — `ClickHouse_Construct_ArrayJoin` 1.31→1.38 KB, `ClickHouse_Construct_Final_PreWhere_Settings` 2.26→2.33 KB, `ClickHouse_Joined_ArrayJoin` 3.4→3.46 KB (~+70 B/op). The noise re-check reproduced the same values (1.38 / 2.33 / 3.46 KB), so this is **not** run-to-run noise; the other four cases are unchanged. The plan requires allocated bytes not to increase, so this is recorded as an open perf-classification item for CHECK/ACT rather than a PASS. The pinned allocation gate (which covers the query/plan-cache path) is green.
-- E14 allocation gate: `["python3","-m","unittest","discover","-s","eng/perf/tests","-p","test_iteration14_gate.py"]` → exit **0** (Ran 13 tests, OK); `["bash","/tmp/nextorm-D191-r1/commands/allocation-ci.sh"]` → exit **0**, wall 761 s, `All 56 row/job verdicts within budget` (`$EV/logs/allocation-ci.log`). The gate ran the CI argv from `.github/workflows/dotnet.yml:46-52` (`--filter *SqliteBenchmarkWarmDecompose* *SqliteBenchmarkCachedPlan* *SqliteBenchmarkFeaturePlanBuild* --job short --exporters json`).
+- E14 allocation gate: `["python3","-m","unittest","discover","-s","scripts/perf/tests","-p","test_iteration14_gate.py"]` → exit **0** (Ran 13 tests, OK); `["bash","/tmp/nextorm-D191-r1/commands/allocation-ci.sh"]` → exit **0**, wall 761 s, `All 56 row/job verdicts within budget` (`$EV/logs/allocation-ci.log`). The gate ran the CI argv from `.github/workflows/dotnet.yml:46-52` (`--filter *SqliteBenchmarkWarmDecompose* *SqliteBenchmarkCachedPlan* *SqliteBenchmarkFeaturePlanBuild* --job short --exporters json`).
 
 ### Report JSON and validator
 
@@ -954,7 +954,7 @@ Boundary evidence bound to this snapshot (`source_revision == artifact_revision`
 
 **E14 allocation gate re-run (evidence).** `bash $EV/commands/allocation-ci.sh` (literal CI copy; sha256 `ff52e60be32ca7a378ce7e6310d165ef6854c0c0d7c60b526647b7258f929308`, matches `provenance/commands-sha256.txt`) on the current tree:
 
-- exit **0**; wall **706 s**; `python3 -m unittest discover -s eng/perf/tests` → `Ran 13 tests ... OK`; gate → `All 56 row/job verdicts within budget` (56/56 `OK` rows).
+- exit **0**; wall **706 s**; `python3 -m unittest discover -s scripts/perf/tests` → `Ran 13 tests ... OK`; gate → `All 56 row/job verdicts within budget` (56/56 `OK` rows).
 - Logs: `$EV/logs/allocation-ci-rg2.log`, `$EV/logs/allocation-ci-rg2.exit` (`EXIT=0 WALL_SECONDS=706`).
 - `BenchmarkDotNet.Artifacts/results/*` (12 tracked files) restored via `git checkout --`; snapshot hashes returned to the values above.
 

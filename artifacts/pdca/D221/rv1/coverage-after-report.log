@@ -1,7 +1,0 @@
-2026-10-13T11:15:11: Arguments
-2026-10-13T11:15:11:  -reports:TestResults/D221/rv1/coverage-after.cobertura.xml
-2026-10-13T11:15:11:  -targetdir:TestResults/D221/rv1/coverage-after
-2026-10-13T11:15:11:  -reporttypes:TextSummary;Html
-2026-10-13T11:15:14: Writing report file 'TestResults/D221/rv1/coverage-after/index.html'
-2026-10-13T11:15:14: Writing report file 'TestResults/D221/rv1/coverage-after/Summary.txt'
-2026-10-13T11:15:14: Report generation took 3.8 seconds

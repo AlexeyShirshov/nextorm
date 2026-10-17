@@ -1,3 +1,0 @@
-argv: python3 artifacts/pdca/D225/rv2/check_docs.py --scope artifacts/pdca/D225/rv3/scope.json --baseline 0ed8e01dae44122276056f9f89676d913891ff09 --output artifacts/pdca/D225/rv3/structural.json
-exit=0
-check_docs: 16 file(s) checked, 0 failure(s)

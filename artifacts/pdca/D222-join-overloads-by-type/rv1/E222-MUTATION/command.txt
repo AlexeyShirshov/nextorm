@@ -1,6 +1,0 @@
-dotnet
-stryker
--f
-artifacts/pdca/D222-join-overloads-by-type/rv1/E222-MUTATION/stryker-config.json
--O
-artifacts/pdca/D222-join-overloads-by-type/rv1/E222-MUTATION

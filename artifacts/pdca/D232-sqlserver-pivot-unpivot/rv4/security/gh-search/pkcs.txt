@@ -1,2 +1,0 @@
-$ gh issue list --state all --search System.Security.Cryptography.Pkcs
-EXIT=0

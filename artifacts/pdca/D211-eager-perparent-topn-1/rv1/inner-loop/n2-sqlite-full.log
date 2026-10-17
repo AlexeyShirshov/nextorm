@@ -1,9 +1,0 @@
-xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
-  Discovering: nextorm.sqlite.tests
-  Discovered:  nextorm.sqlite.tests
-  Starting:    nextorm.sqlite.tests
-    NextORM.Sqlite.Tests.SqliteRowIdLobProbeTests.Sqlite_RowId_Projection_Streams_Lobs_MemoryBounded [SKIP]
-      Set NEXTORM_LOB_SQLITE_PROBE=1 to run the SQLite rowid LOB capability probe.
-  Finished:    nextorm.sqlite.tests (ID = 'a5abfb47315c331d69873aec368d5caeca8b1b317eae0481172250d5022c1251')
-=== TEST EXECUTION SUMMARY ===
-   nextorm.sqlite.tests  Total: 1595, Errors: 0, Failed: 0, Skipped: 1, Not Run: 0, Time: 19.583s

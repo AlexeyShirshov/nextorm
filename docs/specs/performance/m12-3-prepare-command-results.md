@@ -16,7 +16,7 @@
 | Host | Linux 6.18.33.2-microsoft-standard-WSL2 x86_64, 8 vCPU, AMD Ryzen 7 5800HS |
 | Competitor | LINQ to DB `6.5.0` (`Directory.Packages.props:13-14`), unchanged |
 | Benchmarks | `SqliteBenchmarkFeaturesFairCached.B_*` (55 arms, exact ten-arm map), seven `acceptance` cases, unchanged bodies |
-| Native gate | `eng/perf/iteration14_gate.py` + `eng/perf/iteration14-budgets.json`, unchanged (28 rows, `logical_ops_per_invocation = 100`, `bdn_operations_per_invoke = 1`) |
+| Native gate | `scripts/perf/iteration14_gate.py` + `scripts/perf/iteration14-budgets.json`, unchanged (28 rows, `logical_ops_per_invocation = 100`, `bdn_operations_per_invoke = 1`) |
 
 Note on the digest: `tree_identity()` hashes the `git status --porcelain` text, not file contents.
 The unit's two tracked writes after this boundary (`docs/specs/performance/m12-3-prepare-command-results.md`,
@@ -25,7 +25,7 @@ touch no measured input. The measurement itself ran on `a21e5d89` plus the wrapp
 
 Unit-local tooling writes (no product `src/**` change in this unit):
 
-- `eng/perf/t201_evidence.py` — (a) the API `capture` block is now phase-aware
+- `scripts/perf/t201_evidence.py` — (a) the API `capture` block is now phase-aware
   (`pre_production = label == "baseline"`; candidate `source_revision = T201-D201-5-r2rv1`), fixing the
   D201-4 observation that `--phase candidate` hard-coded `pre_production: true`; (b) `stage_manifest` now
   derives a row's status from its own measured decision — EC201-02..06 from `reports/parity.json`,
@@ -38,19 +38,19 @@ Unit-local tooling writes (no product `src/**` change in this unit):
 
 ## 2. Exact commands, exits and wall times
 
-Stage runner: `python3 eng/perf/t201_evidence.py --root artifacts/pdca/T201/rv1` (see `runs.json` for the
+Stage runner: `python3 scripts/perf/t201_evidence.py --root artifacts/pdca/T201/rv1` (see `runs.json` for the
 argument arrays, env set/unset, exits, wall times and log digests).
 
 | Stage | Command (argv) | Exit | Wall |
 |---|---|---:|---:|
-| W-S | `eng/perf/t201_evidence.py --stage self-test --root artifacts/pdca/T201/rv1` | 0 | 0.3 s (46/46 cases) |
-| W-C | `NEXTORM_T201_QUARANTINE=1 eng/perf/t201_evidence.py --stage candidate --root artifacts/pdca/T201/rv1` | 0 | 1744 s |
-| W-P | `eng/perf/t201_evidence.py --stage parity --root artifacts/pdca/T201/rv1` | **1** | <1 s |
-| W-W | `eng/perf/t201_evidence.py --stage warm-gate --root artifacts/pdca/T201/rv1` | 0 | 0.1 s |
-| W-A | `eng/perf/t201_evidence.py --stage acceptance --root artifacts/pdca/T201/rv1` | 0 | <1 s |
-| W-API | `eng/perf/t201_evidence.py --stage api --root artifacts/pdca/T201/rv1` | 0 | 22 s |
-| W-Q | `eng/perf/t201_evidence.py --stage coverage --root artifacts/pdca/T201/rv1` | 0 | 43 s |
-| W-M | `eng/perf/t201_evidence.py --stage manifest --root artifacts/pdca/T201/rv1` | **1** (5 open rows) | <1 s |
+| W-S | `scripts/perf/t201_evidence.py --stage self-test --root artifacts/pdca/T201/rv1` | 0 | 0.3 s (46/46 cases) |
+| W-C | `NEXTORM_T201_QUARANTINE=1 scripts/perf/t201_evidence.py --stage candidate --root artifacts/pdca/T201/rv1` | 0 | 1744 s |
+| W-P | `scripts/perf/t201_evidence.py --stage parity --root artifacts/pdca/T201/rv1` | **1** | <1 s |
+| W-W | `scripts/perf/t201_evidence.py --stage warm-gate --root artifacts/pdca/T201/rv1` | 0 | 0.1 s |
+| W-A | `scripts/perf/t201_evidence.py --stage acceptance --root artifacts/pdca/T201/rv1` | 0 | <1 s |
+| W-API | `scripts/perf/t201_evidence.py --stage api --root artifacts/pdca/T201/rv1` | 0 | 22 s |
+| W-Q | `scripts/perf/t201_evidence.py --stage coverage --root artifacts/pdca/T201/rv1` | 0 | 43 s |
+| W-M | `scripts/perf/t201_evidence.py --stage manifest --root artifacts/pdca/T201/rv1` | **1** (5 open rows) | <1 s |
 | V | `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/T201/rv1/manifest.json` | 0 (schema only) | — |
 
 Inner commands invoked by **W-C** (all with real exit codes; logs under `artifacts/pdca/T201/rv1/candidate/`):
@@ -60,7 +60,7 @@ Inner commands invoked by **W-C** (all with real exit codes; logs under `artifac
 | `candidate/build-release` | `dotnet build -c Release` | 0 | 49.5 s |
 | `candidate/category-b` | `NEXTORM_BENCH_FULL=1 dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkFeaturesFairCached.B_* --exporters json --artifacts artifacts/pdca/T201/rv1/candidate/category-b` | 0 | 808.0 s |
 | `candidate/acceptance` | `NEXTORM_BENCH_FULL=1 dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance --exporters json --artifacts artifacts/pdca/T201/rv1/candidate/acceptance` | 0 | 119.2 s |
-| `candidate/gate-live` | `env -u NEXTORM_BENCH_FULL python3 eng/perf/iteration14_gate.py --manifest eng/perf/iteration14-budgets.json --reports-dir benchmarks/BenchmarkDotNet.Artifacts/results` | 0 | 766.6 s |
+| `candidate/gate-live` | `env -u NEXTORM_BENCH_FULL python3 scripts/perf/iteration14_gate.py --manifest scripts/perf/iteration14-budgets.json --reports-dir benchmarks/BenchmarkDotNet.Artifacts/results` | 0 | 766.6 s |
 | `candidate/gate-report` | same `+ --no-run` | 0 | 0.05 s |
 
 Baseline order of magnitude is unchanged (D201-2: build 2.7 s, B-BASE 779.9 s, A-BASE 130.3 s,

@@ -65,7 +65,7 @@ AC4 **met** (2026-10-05, interleaved 10-pair ABAB; 0/10 min и 1/10 p10 блок
 - `Join_CachedHit_PlanOnly` / `Join_CachedHit_ToList` — **Δ −359.96 / −424.00 B/op** (per-op; raw per-100-invocation −35,996 / −42,400).
 - Harness `StageAttributionBenchmark.CachedHit_PlanOnly_Param` per-hit (N=256/4096): 6528.13 → 4584.09 B/op (Δ −1944.04).
 
-Гейт аллокаций `eng/perf/iteration14_gate.py` → **exit 0**, 56 row/jobs в бюджете, 0 проваливших.
+Гейт аллокаций `scripts/perf/iteration14_gate.py` → **exit 0**, 56 row/jobs в бюджете, 0 проваливших.
 
 Acceptance-категория → **7/7, exit 0, 39.46 с BDN** (внешне ~39–43 с); отношение `Cached_ToList`/`Prepared_ToList` — **0.90** (`acceptance-new.log`; `Cached_PlanOnly_Param` 0.30, `Prepared_ToList` baseline 1.00).
 

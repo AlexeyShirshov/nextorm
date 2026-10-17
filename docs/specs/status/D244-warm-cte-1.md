@@ -25,7 +25,7 @@ Reduce the remaining allocations of **fresh-command, cached-warm CTE and Recursi
 - Do not change existing #240 thresholds or its evaluator (alloc <= 1.20x, time <= 1.05, `D240...:27,33-34`).
 - No benchmark-specific product branches, public API changes, cache-policy changes or mutation of shared cached commands.
 - Preserve owner WIP `957fcfe7` (`HasEverPrepared`, `ShapeValuesStable`, thread-static unkeyed-scan sets).
-- `Cte_Warm_Reused` and `RecursiveCte_Warm_Reused` remain exactly `0 B` (`eng/perf/iteration14-budgets.json:13-14`, `eng/perf/iteration14_gate.py:397-414`).
+- `Cte_Warm_Reused` and `RecursiveCte_Warm_Reused` remain exactly `0 B` (`scripts/perf/iteration14-budgets.json:13-14`, `scripts/perf/iteration14_gate.py:397-414`).
 - Prepared `A_*` controls do not regress.
 - Assess all five #240 Category-B scenarios individually: Cte, RecursiveCte, Except, Intersect, Distinct.
 - No CTE-family averages and no allocation averaging across toolchains, rounds or scenarios.
@@ -48,7 +48,7 @@ Measured-path fact that drives this decision: the two arms build a **fresh fluen
 
 ## 3. Measurement and acceptance oracle
 ### 3.1 Definitions
-- FairCached bytes/query = `Memory.BytesAllocatedPerOperation / 10` (`eng/perf/update_benchmark_tables.py:51-52`, `SqliteBenchmarkFeaturesFairCached.cs:29`).
+- FairCached bytes/query = `Memory.BytesAllocatedPerOperation / 10` (`scripts/perf/update_benchmark_tables.py:51-52`, `SqliteBenchmarkFeaturesFairCached.cs:29`).
 - WarmDecompose bytes/operation = exported bytes / 100 (`SqliteBenchmarkWarmDecompose.cs:26`, `iteration14-budgets.json:5`, `iteration14_gate.py:30,397`).
 - Reject missing, duplicate, `NA`, unexpected OPI or unverified logical-operation counts.
 - Allocation ratio = Nextorm bytes/query divided by the **linq2db arm in the same class, job and round** (`:502-508`, `:534-538`; same process/data, `Linq2DbDataContext.cs:60-67,186-206`). Same-round oracle — no stored baseline.
@@ -56,11 +56,11 @@ Measured-path fact that drives this decision: the two arms build a **fresh fluen
 - Verify actual loop counts for `A_*` during attribution and record them explicitly; do not apply `/100` or `/10` indiscriminately.
 
 ### 3.2 Commands
-Planned new tool (not existing): `eng/perf/t244_evidence.py`, unittest-compatible, retaining raw BDN data and exposing the underlying invocations verbatim in its command log.
+Planned new tool (not existing): `scripts/perf/t244_evidence.py`, unittest-compatible, retaining raw BDN data and exposing the underlying invocations verbatim in its command log.
 ```
 A=artifacts/pdca/D244/rv1
 flock -x /tmp/opencode/nextorm-bdn.host.lock \
-  python3 eng/perf/t244_evidence.py measure --repo . --phase baseline --round 1 \
+  python3 scripts/perf/t244_evidence.py measure --repo . --phase baseline --round 1 \
   --output artifacts/pdca/D244/rv1/baseline/round-01
 ```
 Candidate rounds: `--phase candidate`. Per round, run exactly:
@@ -74,10 +74,10 @@ env -u NEXTORM_BENCH_FULL dotnet run --project benchmarks/nextorm.benchmark -c R
 ```
 Inventory the configured artifact directory (`benchmarks/BenchmarkDotNet.Artifacts`, `BenchmarkArtifacts.cs:34`) before/after each invocation and copy only that invocation's outputs into its round dir; never read stale JSON.
 ```
-python3 eng/perf/t244_evidence.py evaluate \
+python3 scripts/perf/t244_evidence.py evaluate \
   --baseline artifacts/pdca/D244/rv1/baseline --candidate artifacts/pdca/D244/rv1/candidate \
   --output artifacts/pdca/D244/rv1/evaluation.json
-python3 eng/perf/t244_evidence.py attribute \
+python3 scripts/perf/t244_evidence.py attribute \
   --round artifacts/pdca/D244/rv1/baseline/round-01 \
   --output artifacts/pdca/D244/rv1/attribution.json
 ```
@@ -134,10 +134,10 @@ Per row, `gap = max(0, NextormB - linq2dbB)`. A non-frozen component is eligible
 ## 5. D-units
 | Unit | Files / anchors | Concrete work and applicability | Tests and boundary |
 |---|---|---|---|
-| D244-01 — attribution and baseline | `SqliteBenchmarkWarmDecompose.cs:107-167,262-276`; planned `eng/perf/t244_evidence.py`, `eng/perf/tests/test_t244_evidence.py` | Implement measurement-only phases and evaluator; snapshot pre-T244 state; collect baseline; prove the raw-hit path; publish ranking and candidate eligibility | Python evaluator negative tests; Release benchmark build; two baseline rounds. Boundary: validate phase accounting before any product edit |
+| D244-01 — attribution and baseline | `SqliteBenchmarkWarmDecompose.cs:107-167,262-276`; planned `scripts/perf/t244_evidence.py`, `scripts/perf/tests/test_t244_evidence.py` | Implement measurement-only phases and evaluator; snapshot pre-T244 state; collect baseline; prove the raw-hit path; publish ranking and candidate eligibility | Python evaluator negative tests; Release benchmark build; two baseline rounds. Boundary: validate phase accounting before any product edit |
 | D244-02 — construction containers | `Builders/CteQuery.cs:110-146`; `Builders/CteMerge.cs:17-37` | If eligible: remove redundant transient list/container materialization using exact-sized internal storage and existing empty/identity cases. Preserve declaration order, duplicate/conflict handling and independent command state. No pooling, no shared mutable storage, no dropped validation, no public return-type change | Core CTE/merge/ownership tests + provider generation projects. Boundary: construction/join/full-prepare matrix cases; rerun phase measurements |
 | D244-03 — non-frozen plan-key overhead | `Query/QueryCommand.Plan.cs:30-44,72-87`; `Query/QueryPlanEqualityComparer.cs` (exact path confirmed by Roslyn before edit) | If eligible and comparer state is proven immutable/stateless: reuse comparers via type-correct immutable holders instead of instantiating per fresh command. Preserve equality/hash semantics, generic/runtime-type separation and concurrency. Do not change frozen raw-shape comparators, `CaptureRawShape`, fingerprint semantics or preparation replay | Core equality/cache/generic/concurrency tests; all five Category-B rows. Boundary: all unit/dialect tests + provider integration + phase remeasurement |
-| D244-04 — native gate, final measurements, docs, package | `eng/perf/iteration14_gate.py:86-90,155-190,344-465`; `eng/perf/iteration14-budgets.json`; planned evaluator tests; docs §9 | Add the two FairCached rows with explicit reference arms, /10, dual-job validation, final/checkpoint targets; preserve existing rows and /100. Capture candidate rounds, classify the outcome, sync docs, generate the evidence package | Parser/evaluator self-tests; complete native gate; all test and evidence boundaries |
+| D244-04 — native gate, final measurements, docs, package | `scripts/perf/iteration14_gate.py:86-90,155-190,344-465`; `scripts/perf/iteration14-budgets.json`; planned evaluator tests; docs §9 | Add the two FairCached rows with explicit reference arms, /10, dual-job validation, final/checkpoint targets; preserve existing rows and /100. Capture candidate rounds, classify the outcome, sync docs, generate the evidence package | Parser/evaluator self-tests; complete native gate; all test and evidence boundaries |
 D244-02/D244-03 skip rule: record `not applicable` only with attribution plus proof that the guard is false — a skipped candidate is not a "done fix". A materially different implementation needs a revised `P:`.
 
 ### Test-scope records (frozen; validated by `scripts/validate_inner_loop.py brief` before any edit)
@@ -145,7 +145,7 @@ D244-02/D244-03 skip rule: record `not applicable` only with attribution plus pr
 [
   {"unit":"D244-01","projects":["benchmarks/nextorm.benchmark"],
    "selectors":["*SqliteBenchmarkWarmDecompose*","*SqliteBenchmarkFeaturesFairCached.B_*","*SqliteBenchmarkFeaturesFair.A_*"],
-   "files":["benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWarmDecompose.cs","eng/perf/t244_evidence.py","eng/perf/tests/test_t244_evidence.py"],
+   "files":["benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWarmDecompose.cs","scripts/perf/t244_evidence.py","scripts/perf/tests/test_t244_evidence.py"],
    "rebuild":"affected","boundary":"attribution-before-product-edit",
    "rationale":"prove the measured execution path and the allocation ranking","integration_projects":[],"integration_boundary_runs":0},
   {"unit":"D244-02","projects":["tests/nextorm.core.tests","tests/nextorm.sqlite.tests","tests/nextorm.sqlserver.tests","tests/nextorm.postgres.tests","tests/nextorm.mysql.tests","tests/nextorm.mariadb.tests","tests/nextorm.clickhouse.tests","tests/nextorm.clickhouse.extensions.tests"],
@@ -160,19 +160,19 @@ D244-02/D244-03 skip rule: record `not applicable` only with attribution plus pr
    "rationale":"hash/equality isolation, concurrency and non-CTE cache safety","integration_projects":["tests/nextorm.integration.tests"],"integration_boundary_runs":1},
   {"unit":"D244-04","projects":["tests/nextorm.core.tests","tests/nextorm.sqlite.tests","tests/nextorm.sqlserver.tests","tests/nextorm.postgres.tests","tests/nextorm.mysql.tests","tests/nextorm.mariadb.tests","tests/nextorm.clickhouse.tests","tests/nextorm.clickhouse.extensions.tests","tests/nextorm.entityframeworkcore.tests","tests/nextorm.alias.tests","tests/nextorm.publicextensibility.tests","tests/nextorm.integration.tests"],
    "selectors":["FullyQualifiedName~T244CteAllocationTests"],
-   "files":["eng/perf/iteration14_gate.py","eng/perf/iteration14-budgets.json","eng/perf/tests/test_t244_evidence.py","tests/nextorm.core.tests/T244CteAllocationTests.cs"],
+   "files":["scripts/perf/iteration14_gate.py","scripts/perf/iteration14-budgets.json","scripts/perf/tests/test_t244_evidence.py","tests/nextorm.core.tests/T244CteAllocationTests.cs"],
    "rebuild":"affected","boundary":"final-group-build-and-evidence: dotnet test nextorm.slnx -c Debug",
    "rationale":"complete semantic, provider, gate and evidence sweep","integration_projects":["tests/nextorm.integration.tests"],"integration_boundary_runs":1}
 ]
 ```
 Note: `D244-04` has no in-DO inner loop (it is the boundary unit itself); its scope is dispatched only at the boundary. Its `projects`/`selectors` name the real test projects and one narrow selector (the T244-owned new test); the complete sweep is the single `dotnet test nextorm.slnx -c Debug` run stated in `boundary`, never an inner selector. Verified narrow test symbols: `CteQueryTests` (`tests/nextorm.core.tests/Cte/CteQueryTests.cs:5`), `Iteration14CteLookupTests` (`Iteration14CteLookupTests.cs:18`), `TypedCteTests` (`TypedCteTests.cs:21`; sqlite `TypedCteTests.cs:72`), `CachedPreparationRecipeTests` (`CachedPreparationRecipeTests.cs:36`, incl. `Recipe_RecursiveCte_` :571), `DataModifyingCteRejectionTests` (`tests/nextorm.sqlserver.tests/Cte/DataModifyingCteRejectionTests.cs:11`; sqlite :11), `DirectCteJoinTests` (`:13`), `TypedCteSqlGenerationTests` (`:11`). New core test source planned as `tests/nextorm.core.tests/T244CteAllocationTests.cs` (name confirmed by Roslyn/scout before creation).
 
-The full verified test-project set of `nextorm.slnx` is `nextorm.core.tests`, `nextorm.sqlite.tests`, `nextorm.sqlserver.tests`, `nextorm.postgres.tests`, `nextorm.mysql.tests`, `nextorm.mariadb.tests`, `nextorm.clickhouse.tests`, `nextorm.clickhouse.extensions.tests`, `nextorm.entityframeworkcore.tests`, `nextorm.alias.tests`, `nextorm.publicextensibility.tests`, `nextorm.integration.tests` (12; `nextorm.alias.poc` is an exe, not a test project). The Python helper test file `eng/perf/tests/test_t244_evidence.py` follows the repo convention: `unittest`, shebang, module docstring carrying `python3 -m unittest discover -s eng/perf/tests -p 'test_t244_evidence.py' -v`, and the `sys.path.insert` + `import` pattern of `eng/perf/tests/test_t240_evidence.py:1-27`.
+The full verified test-project set of `nextorm.slnx` is `nextorm.core.tests`, `nextorm.sqlite.tests`, `nextorm.sqlserver.tests`, `nextorm.postgres.tests`, `nextorm.mysql.tests`, `nextorm.mariadb.tests`, `nextorm.clickhouse.tests`, `nextorm.clickhouse.extensions.tests`, `nextorm.entityframeworkcore.tests`, `nextorm.alias.tests`, `nextorm.publicextensibility.tests`, `nextorm.integration.tests` (12; `nextorm.alias.poc` is an exe, not a test project). The Python helper test file `scripts/perf/tests/test_t244_evidence.py` follows the repo convention: `unittest`, shebang, module docstring carrying `python3 -m unittest discover -s scripts/perf/tests -p 'test_t244_evidence.py' -v`, and the `sys.path.insert` + `import` pattern of `scripts/perf/tests/test_t240_evidence.py:1-27`.
 
 ### Exact invocations
 ```
 dotnet test tests/nextorm.core.tests -c Debug --filter 'FullyQualifiedName~CteQueryTests'
-python3 -m unittest discover -s eng/perf/tests -p 'test_t244_evidence.py' -v
+python3 -m unittest discover -s scripts/perf/tests -p 'test_t244_evidence.py' -v
 dotnet build nextorm.slnx -c Debug
 dotnet build nextorm.slnx -c Release
 DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor
@@ -217,8 +217,8 @@ Extend, do not replace, `iteration14_gate.py` and its manifest schema:
 - Missing/mismatched references, jobs, OPI or duplicate rows fail closed.
 - Planned CLI `--tier final|checkpoint`, default final; checkpoint output names the unresolved final requirements.
 ```
-flock -x /tmp/opencode/nextorm-bdn.host.lock env -u NEXTORM_BENCH_FULL python3 eng/perf/iteration14_gate.py --tier checkpoint
-flock -x /tmp/opencode/nextorm-bdn.host.lock env -u NEXTORM_BENCH_FULL python3 eng/perf/iteration14_gate.py --tier final
+flock -x /tmp/opencode/nextorm-bdn.host.lock env -u NEXTORM_BENCH_FULL python3 scripts/perf/iteration14_gate.py --tier checkpoint
+flock -x /tmp/opencode/nextorm-bdn.host.lock env -u NEXTORM_BENCH_FULL python3 scripts/perf/iteration14_gate.py --tier final
 ```
 Checkpoint gate must return 0 for checkpoint acceptance; final gate returns 0 for FINAL and at checkpoint fails only the unresolved final targets. Any other unmet existing budget stays a failure. Parser tests must cover /10 vs /100, missing comparator, duplicate rows, missing toolchain, NA, non-1 OPI, nonzero reused values, one failing CTE row and the checkpoint/final distinction.
 
@@ -250,10 +250,10 @@ Not touched: frozen D240 status/recipe, historical iteration reports, unrelated 
 | Product | `src/nextorm.core/Query/QueryCommand.Plan.cs` | potential T243/T245 overlap |
 | Product | `src/nextorm.core/Query/QueryPlanEqualityComparer.cs` (Roslyn-confirmed path substitutes if different) | shared cache contract |
 | Benchmark | `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWarmDecompose.cs` | **shared T243/T245, potentially T246/T247** |
-| Harness | `eng/perf/t244_evidence.py` (new) | T244-owned |
-| Harness tests | `eng/perf/tests/test_t244_evidence.py` (new) | T244-owned |
-| Native gate | `eng/perf/iteration14_gate.py` | **shared T243–T247** |
-| Budgets | `eng/perf/iteration14-budgets.json` | **shared T243–T247** |
+| Harness | `scripts/perf/t244_evidence.py` (new) | T244-owned |
+| Harness tests | `scripts/perf/tests/test_t244_evidence.py` (new) | T244-owned |
+| Native gate | `scripts/perf/iteration14_gate.py` | **shared T243–T247** |
+| Budgets | `scripts/perf/iteration14-budgets.json` | **shared T243–T247** |
 | Core tests | `tests/nextorm.core.tests/T244CteAllocationTests.cs` (planned) | T244-owned additions |
 | Integration tests | existing `tests/nextorm.integration.tests/CommonTestSuite.*.cs` partial selected by Roslyn, else one new T244 partial | shared suite contract |
 | Dialect tests | existing CTE test sources (verified above) or new `T244CteTests.cs` per actually present provider test project | bounded to listed test projects |
@@ -308,14 +308,14 @@ Abbreviations: B/C = `artifacts/pdca/D244/rv1/baseline|/candidate/`; EV = evalua
 | E244-05 / 1 | R244-04; timing | job-matched B/C means, repeat log | M + EV; §3.3 band and repeat policy; frozen time report retained | `timing.csv`, `round-validity.json` | measurement; always |
 | E244-06 / 1 | R244-05; reused zero | WarmDecompose JSON, native output | M + gate §7; both rows/jobs exactly zero | `warm-reused.csv`, gate logs | measurement; always |
 | E244-07 / 1 | R244-06; prepared controls | complete `A_*` inventory, B/C JSON, logical-op map | M + EV; every applicable control <= 1.03x | `prepared-controls.csv`, `logical-ops.json` | measurement; always |
-| E244-08 / 1 | R244-07; five Category-B rows | same-round JSON, baseline deltas, unchanged #240 report | EV plus `python3 eng/perf/t240_evidence.py --round <recorded round dir> --alloc-tol 1.20 --time-tol 1.05 --output <recorded path>`; exact expanded calls + rc, including known residual failures | `category-b.csv`, per-round `t240-report.*`, commands log | measurement; always |
+| E244-08 / 1 | R244-07; five Category-B rows | same-round JSON, baseline deltas, unchanged #240 report | EV plus `python3 scripts/perf/t240_evidence.py --round <recorded round dir> --alloc-tol 1.20 --time-tol 1.05 --output <recorded path>`; exact expanded calls + rc, including known residual failures | `category-b.csv`, per-round `t240-report.*`, commands log | measurement; always |
 | E244-09 / 1 | R244-09; phase table | existing + added WarmDecompose results | M + AT; distinct construct/no-hash/hash/plan-only/raw-hit/reused rows for both families | `phases.csv`, `phases.md` | measurement; always |
 | E244-10 / 1 | R244-08; native budgets | budget diff, parser tests, fresh gate output | both §7 gate commands; checkpoint rc 0; final rc 0 or explicitly unresolved final-only failure | `gate/checkpoint.log`, `gate/final.log`, `gate/results.json` | gate-docs; always |
 | E244-11 / 1 | R244-10; matrix closure | source/test mapping, test logs | Tests; rc 0, nonzero counts, no applicable skips; every matrix row mapped | `tests/variant-matrix.json`, `tests/results/`, `tests/commands.log` | implementation; always |
 | E244-12 / 1 | R244-14; branch/mutation/coverage | coverage XML, changed-branch map, mutant patches + red/green logs | §5/§6 commands; green rc 0; mutant failures attributable to assertions | `tests/coverage.cobertura.xml`, `tests/branch-delta.json`, `tests/mutations/` | implementation; predicate: production type changed, else explicit no-change guard |
-| E244-13 / 1 | R244-11; docs sync | prose diff, source-to-table mapping | `python3 eng/perf/t244_evidence.py docs-check --repo . --evaluation artifacts/pdca/D244/rv1/evaluation.json` rc 0; no final wording at checkpoint | `docs-check.json`, `docs-mapping.json` | gate-docs; always |
-| E244-14 / 1 | R244-12; invariants/WIP/API | baseline-to-final diff, Roslyn impact map, frozen-region hashes | `python3 eng/perf/t244_evidence.py invariants --repo . --execution-map artifacts/pdca/D244/rv1/execution-map.json --output artifacts/pdca/D244/rv1/invariants.json` rc 0; independent CHECK reviews the diff | `invariants.json`, `source-diff.patch`, `roslyn-impact.json` | implementation + CHECK; always |
-| E244-15 / 1 | R244-08/13; fail-closed tooling | Python tests, malformed fixtures | `python3 -m unittest discover -s eng/perf/tests -p 'test_t244_evidence.py' -v` rc 0, nonzero cases | `tests/perf-tools.log` | gate-docs; always |
+| E244-13 / 1 | R244-11; docs sync | prose diff, source-to-table mapping | `python3 scripts/perf/t244_evidence.py docs-check --repo . --evaluation artifacts/pdca/D244/rv1/evaluation.json` rc 0; no final wording at checkpoint | `docs-check.json`, `docs-mapping.json` | gate-docs; always |
+| E244-14 / 1 | R244-12; invariants/WIP/API | baseline-to-final diff, Roslyn impact map, frozen-region hashes | `python3 scripts/perf/t244_evidence.py invariants --repo . --execution-map artifacts/pdca/D244/rv1/execution-map.json --output artifacts/pdca/D244/rv1/invariants.json` rc 0; independent CHECK reviews the diff | `invariants.json`, `source-diff.patch`, `roslyn-impact.json` | implementation + CHECK; always |
+| E244-15 / 1 | R244-08/13; fail-closed tooling | Python tests, malformed fixtures | `python3 -m unittest discover -s scripts/perf/tests -p 'test_t244_evidence.py' -v` rc 0, nonzero cases | `tests/perf-tools.log` | gate-docs; always |
 | E244-16 / 1 | R244-13; package validity | generated manifest + validator logs | commands below; both mandatory gates rc 0 | `package/manifest.json`, `validation/*.log` | CHECK; always |
 | E244-17 / 1 | R244-04/09; isolation/provenance | process snapshots, lock log, env/source/build/DB hashes | M and locked gate calls; no external overlap, correct group build | `provenance.json`, `processes/`, `commands.log` | measurement; always |
 | E244-18 / 1 | R244-12/14; provider boundary | build/test logs, provider identities | Debug/Release builds and integration commands §5; rc 0, actual applicable provider execution | `tests/build-*.log`, `tests/integration.log` | implementation; always |

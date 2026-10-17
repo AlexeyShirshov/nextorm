@@ -232,7 +232,7 @@ Actions:
 - Validate the source-backed oracle inventories and emit a baseline boundary report.
 
 Write-footprint:
-- eng/perf/t201_evidence.py — new
+- scripts/perf/t201_evidence.py — new
 - tests/nextorm.core.tests/CachedPreparationRecipeTests.cs — new
 - docs/specs/status/D201-cached-parity-1.md
 - artifacts/pdca/T201/rv1/instrumentation/**
@@ -657,7 +657,7 @@ Tracked files:
 7. tests/nextorm.core.tests/CachedPreparationRecipeTests.cs — new
 8. tests/nextorm.integration.tests/CommonTestSuite.CachedPreparation.cs — new
 9. tests/nextorm.integration.tests/SqlServerCachedPreparationSpecificTests.cs — new
-10. eng/perf/t201_evidence.py — new
+10. scripts/perf/t201_evidence.py — new
 11. docs/specs/performance/m12-3-prepare-command-results.md — new
 
 Generated evidence ownership:
@@ -769,34 +769,34 @@ containing open or na.
 Repository root is cwd. Wrapper is planned, not currently asserted to exist.
 
 W-S:
-    python3 eng/perf/t201_evidence.py --stage self-test --root artifacts/pdca/T201/rv1
+    python3 scripts/perf/t201_evidence.py --stage self-test --root artifacts/pdca/T201/rv1
 
 W-B:
-    python3 eng/perf/t201_evidence.py --stage baseline --root artifacts/pdca/T201/rv1
+    python3 scripts/perf/t201_evidence.py --stage baseline --root artifacts/pdca/T201/rv1
 
 W-T:
-    DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock python3 eng/perf/t201_evidence.py --stage tests --root artifacts/pdca/T201/rv1
+    DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock python3 scripts/perf/t201_evidence.py --stage tests --root artifacts/pdca/T201/rv1
 
 W-C:
-    python3 eng/perf/t201_evidence.py --stage candidate --root artifacts/pdca/T201/rv1
+    python3 scripts/perf/t201_evidence.py --stage candidate --root artifacts/pdca/T201/rv1
 
 W-P:
-    python3 eng/perf/t201_evidence.py --stage parity --root artifacts/pdca/T201/rv1
+    python3 scripts/perf/t201_evidence.py --stage parity --root artifacts/pdca/T201/rv1
 
 W-W:
-    python3 eng/perf/t201_evidence.py --stage warm-gate --root artifacts/pdca/T201/rv1
+    python3 scripts/perf/t201_evidence.py --stage warm-gate --root artifacts/pdca/T201/rv1
 
 W-A:
-    python3 eng/perf/t201_evidence.py --stage acceptance --root artifacts/pdca/T201/rv1
+    python3 scripts/perf/t201_evidence.py --stage acceptance --root artifacts/pdca/T201/rv1
 
 W-API:
-    python3 eng/perf/t201_evidence.py --stage api --root artifacts/pdca/T201/rv1
+    python3 scripts/perf/t201_evidence.py --stage api --root artifacts/pdca/T201/rv1
 
 W-Q:
-    python3 eng/perf/t201_evidence.py --stage coverage --root artifacts/pdca/T201/rv1
+    python3 scripts/perf/t201_evidence.py --stage coverage --root artifacts/pdca/T201/rv1
 
 W-M:
-    python3 eng/perf/t201_evidence.py --stage manifest --root artifacts/pdca/T201/rv1
+    python3 scripts/perf/t201_evidence.py --stage manifest --root artifacts/pdca/T201/rv1
 
 V:
     python3 scripts/validate_inner_loop.py manifest artifacts/pdca/T201/rv1/manifest.json
@@ -808,10 +808,10 @@ CORE:
     dotnet test tests/nextorm.core.tests -c Debug
 
 G-LIVE:
-    env -u NEXTORM_BENCH_FULL python3 eng/perf/iteration14_gate.py --manifest eng/perf/iteration14-budgets.json --reports-dir benchmarks/BenchmarkDotNet.Artifacts/results
+    env -u NEXTORM_BENCH_FULL python3 scripts/perf/iteration14_gate.py --manifest scripts/perf/iteration14-budgets.json --reports-dir benchmarks/BenchmarkDotNet.Artifacts/results
 
 G-REPORT:
-    env -u NEXTORM_BENCH_FULL python3 eng/perf/iteration14_gate.py --manifest eng/perf/iteration14-budgets.json --reports-dir benchmarks/BenchmarkDotNet.Artifacts/results --no-run
+    env -u NEXTORM_BENCH_FULL python3 scripts/perf/iteration14_gate.py --manifest scripts/perf/iteration14-budgets.json --reports-dir benchmarks/BenchmarkDotNet.Artifacts/results --no-run
 
 B-BASE:
     NEXTORM_BENCH_FULL=1 dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter '*SqliteBenchmarkFeaturesFairCached.B_*' --exporters json --artifacts artifacts/pdca/T201/rv1/baseline/category-b
@@ -1002,14 +1002,14 @@ actions justify another plan revision.
 
 - Unit boundary: D201-2 is instrumentation + measurement only. **No production `src/**` edit** was made
   (before or after the API baseline capture). Tracked writes are this status file,
-  `eng/perf/t201_evidence.py` (new) and `tests/nextorm.core.tests/CachedPreparationRecipeTests.cs` (new).
+  `scripts/perf/t201_evidence.py` (new) and `tests/nextorm.core.tests/CachedPreparationRecipeTests.cs` (new).
   Cycle N=1, plan revision r=2, attempt n=1, contract rv1 — unchanged; single group, current tree,
   no worktree/branch/merge.
 - Dependency D201-1 is satisfied (commit `bff40da2`); D201-3 is unblocked once this boundary is green.
 
 ### Deliverables
 
-1. `eng/perf/t201_evidence.py` — stages `self-test|baseline|tests|candidate|parity|warm-gate|acceptance|api|coverage|manifest`
+1. `scripts/perf/t201_evidence.py` — stages `self-test|baseline|tests|candidate|parity|warm-gate|acceptance|api|coverage|manifest`
    under `--root artifacts/pdca/T201/rv1`, exits 0/1/2 exactly as contracted. It records exact argv,
    env set/unset, exit code, wall time, log sha256 and run identity in `runs.json`, validates the oracle
    inventories, runs the **unchanged** native gate, implements the frozen ratio/noise rules (point and
@@ -1333,7 +1333,7 @@ actions justify another plan revision.
   upstream sibling outcomes and tested baseline identity, and the source-backed oracle inventories;
   inner-loop brief/report validators exit 0; no production `.cs` change; D201-2 is next.
 - 2026-10-15 | DO | revision r=2 | iteration n=1/3 | D201-2 evidence runner + W-S negative self-tests + baseline captured | artifacts/pdca/T201/rv1/reports/unit-boundaries/D201-2.md
-- 2026-10-15, DO D201-2 (n=1, r=2, rv1): `eng/perf/t201_evidence.py` (10 stages, exits 0/1/2), W-S
+- 2026-10-15, DO D201-2 (n=1, r=2, rv1): `scripts/perf/t201_evidence.py` (10 stages, exits 0/1/2), W-S
   46/46 self-test cases distinguished (exit 0), `CachedPreparationRecipeTests.cs` public-surface export
   (298 public types / 4 assemblies, pre-production tree identity recorded in the artifact `capture`
   block; no `src/**` edit before or after the capture), baseline B-BASE 779.940 s /
@@ -1367,7 +1367,7 @@ actions justify another plan revision.
 ## DO — D201-5 (candidate oracles and complete DO→CHECK manifest) — DO→PLAN candidate
 
 - Unit boundary: D201-5 is measurement/evidence/report only. **No production `src/**` edit** was made.
-  Tracked writes: `eng/perf/t201_evidence.py` (three evidence-tooling fixes), the new result report
+  Tracked writes: `scripts/perf/t201_evidence.py` (three evidence-tooling fixes), the new result report
   `docs/specs/performance/m12-3-prepare-command-results.md` and this status file. Cycle N=1, plan
   revision **r=2**, attempt **n=1/3**, contract **rv1** — unchanged; single group, current tree, no
   worktree/branch/merge. Dependencies D201-1..D201-4 satisfied.

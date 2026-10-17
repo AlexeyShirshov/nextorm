@@ -1,4 +1,0 @@
-$ python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D211-eager-perparent-topn-1/rv1/manifest.json
-exit=0
-# re-run on the corrected-tree refresh (r=1, n=2/3): exit=0
-# re-run on the finalize tree (r=1, n=3/3): manifest exit=0; report exit=0

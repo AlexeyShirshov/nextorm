@@ -1,7 +1,0 @@
-nextorm.core.tests: exit 0
-nextorm.sqlite.tests: exit 0
-nextorm.postgres.tests: exit 0
-nextorm.sqlserver.tests: exit 0
-nextorm.mysql.tests: exit 0
-nextorm.mariadb.tests: exit 0
-nextorm.clickhouse.tests: exit 0

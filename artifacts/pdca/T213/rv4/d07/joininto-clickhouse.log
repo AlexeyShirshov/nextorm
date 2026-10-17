@@ -1,9 +1,0 @@
-Running tests from /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll (net10.0|x64)
-/home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll (net10.0|x64) passed (1s 265ms)
-
-Test run summary: Passed!
-  total: 16
-  failed: 0
-  succeeded: 16
-  skipped: 0
-  duration: 1s 582ms

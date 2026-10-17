@@ -1,5 +1,0 @@
-coverage_xml: artifacts/pdca/D226/rv1/baseline/coverage.cobertura.xml
-reportgenerator_exit: 0
-Line coverage: 88.7% (threshold: 85%)
-Branch coverage: 80.8% (threshold: 75%)
-threshold_fail: 0

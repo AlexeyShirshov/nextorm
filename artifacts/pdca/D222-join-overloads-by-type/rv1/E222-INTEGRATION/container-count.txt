@@ -1,6 +1,0 @@
-Integration container lifecycle (from E222-INTEGRATION/stdout.log):
-  Start Docker container lines: 5
-  Stop Docker container lines:  5
-Correction: the DO status line originally recorded "4 container starts"; the log records 5 start/stop pairs
-(PostgreSQL, SQL Server, MySQL, ClickHouse + the Testcontainers Ryuk reaper). The executed test providers are
-PostgreSQL/SQL Server/MySQL/ClickHouse (SQLite is in-process); 0 provider-unavailable skips.

@@ -1,9 +1,0 @@
-Running tests from /home/alex/sources/nextorm/tests/nextorm.entityframeworkcore.tests/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.tests.dll (net10.0|x64)
-/home/alex/sources/nextorm/tests/nextorm.entityframeworkcore.tests/bin/linux/Debug/net10.0/nextorm.entityframeworkcore.tests.dll (net10.0|x64) passed (1s 617ms)
-
-Test run summary: Passed!
-  total: 13
-  failed: 0
-  succeeded: 13
-  skipped: 0
-  duration: 1s 849ms

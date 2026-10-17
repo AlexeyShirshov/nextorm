@@ -1,5 +1,0 @@
-{"control": "N6-infrastructure-failure", "intended_reason": "a genuine assertion-failure record tainted with an infrastructure diagnostic must be classified as infrastructure failure, not as a kill", "exit_code": 1,
- "guard_token": "infrastructure diagnostic present", "outcome": "intended",
- "artifact_log": "artifacts/pdca/D226/rv2/negative-controls/N6-infrastructure-failure.log",
- "artifact_log_status": "produced",
- "artifact_exit": "artifacts/pdca/D226/rv2/negative-controls/N6-infrastructure-failure.exit"}

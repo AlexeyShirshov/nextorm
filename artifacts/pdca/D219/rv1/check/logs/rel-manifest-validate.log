@@ -1,2 +1,0 @@
-cmd: python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D219/rv1/manifest.json
-exit: 0

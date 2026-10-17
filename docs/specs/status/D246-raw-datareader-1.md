@@ -227,11 +227,11 @@ Aggregate scope остаётся определённой `coverage.settings.xml
 
 ## Docs plan
 
-Затрагиваем: `docs/specs/performance/feature-benchmark-followups-2026-10-17.md:17,27`; `docs/comparisons/feature-benchmarks-2026-10-17.md:63,66-67,147`; `docs/comparisons/benchmarks.md:232-238` и соответствующую RU generated table; `eng/perf/update_benchmark_tables.py` (включение B и обеих empty строк, сохранение остальных разделов).
+Затрагиваем: `docs/specs/performance/feature-benchmark-followups-2026-10-17.md:17,27`; `docs/comparisons/feature-benchmarks-2026-10-17.md:63,66-67,147`; `docs/comparisons/benchmarks.md:232-238` и соответствующую RU generated table; `scripts/perf/update_benchmark_tables.py` (включение B и обеих empty строк, сохранение остальных разделов).
 
 ```bash
-python3 eng/perf/update_benchmark_tables.py
-python3 eng/perf/update_benchmark_tables.py --check
+python3 scripts/perf/update_benchmark_tables.py
+python3 scripts/perf/update_benchmark_tables.py --check
 ```
 
 Публиковать Mean, allocation, Error/StdDev, job, run count, ratios и ограничения. Не переписывать исторический baseline как будто это новая величина.
@@ -267,11 +267,11 @@ dotnet run --project benchmarks/nextorm.benchmark -c Release -- \
 
 ### Gate
 
-Планируются `eng/perf/t246_evidence.py` и `eng/perf/t246-budgets.json`; две budget rows: raw-reader **10k** и **empty**, каждая с time/allocation ratio `1.00`.
+Планируются `scripts/perf/t246_evidence.py` и `scripts/perf/t246-budgets.json`; две budget rows: raw-reader **10k** и **empty**, каждая с time/allocation ratio `1.00`.
 
 ```bash
-python3 eng/perf/t246_evidence.py gate --budgets eng/perf/t246-budgets.json --runs artifacts/pdca/T246/rv1/perf/final --output artifacts/pdca/T246/rv1/perf/gate.json
-python3 eng/perf/t246_evidence.py self-test --output artifacts/pdca/T246/rv1/perf/gate-negative.json
+python3 scripts/perf/t246_evidence.py gate --budgets scripts/perf/t246-budgets.json --runs artifacts/pdca/T246/rv1/perf/final --output artifacts/pdca/T246/rv1/perf/gate.json
+python3 scripts/perf/t246_evidence.py self-test --output artifacts/pdca/T246/rv1/perf/gate-negative.json
 ```
 
 Это **новый планируемый CLI**, не существующий инструмент. Self-test должен отвергать missing/duplicate/NA, неверный job, потерю empty arm, округлённые недостаточные данные и превышения ratio. Не добавлять reader в текущий `iteration14_gate.py` с `logical_ops_per_invocation=100`: reader invocation имеет другую семантику; existing gate/budgets не меняются (их меняют sibling-задачи #243/#245).
@@ -297,7 +297,7 @@ NEXTORM_BENCH_FULL=1 dotnet run --project benchmarks/nextorm.benchmark -c Releas
 - Обязателен сериализованный BDN window на host (одна BDN-сессия за раз, включая cached-acceptance runs).
 - Writer lease на `src/nextorm.core/DataContext/DataContext.cs`: регионы #247 `353-420` и T246 `469-583` могут сосуществовать, но одновременные файловые правки запрещены.
 - `DataContext.cs` не обязан быть свободен от уже интегрированных непересекающихся изменений #247; их revision/diff фиксируется.
-- #243/#245 могут менять `eng/perf/iteration14_gate.py`/`iteration14-budgets.json`: T246 их не меняет и не требует конкретного порядка до/после.
+- #243/#245 могут менять `scripts/perf/iteration14_gate.py`/`iteration14-budgets.json`: T246 их не меняет и не требует конкретного порядка до/после.
 - Generator и общие report pages (`docs/comparisons/benchmarks.md`, EN+RU) обновлять под отдельным writer lease, не затирая sibling rows.
 - Acceptance привязан к фактически frozen candidate tree: если sibling integration меняет runtime, benchmark configuration или build inputs после measurement — результаты инвалидируются.
 - Commits/merge/push этим планом не разрешаются; действуют разрешения collection.
@@ -306,7 +306,7 @@ NEXTORM_BENCH_FULL=1 dotnet run --project benchmarks/nextorm.benchmark -c Releas
 
 Production (планируемый): `src/nextorm.core/Query/QueryCommandExtensions.cs:308-397`; `src/nextorm.core/DataContext/DataContext.cs:469-583`; `src/nextorm.core/DataContext/QueryPlanner.cs:603-656,820-829`; `src/nextorm.core/DataContext/LobDataReader.cs:20-398`. `CommandReaderOwner.cs` — read-only контракт, production-правки не планируются.
 
-Tests/tooling/reports: `tests/nextorm.core.tests/LobDataReaderTests.cs`; `tests/nextorm.core.tests/RecordsAffectedTests.cs`; `tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs`; `tests/nextorm.sqlite.tests/ResultReaderTests.cs`; `tests/nextorm.sqlite.tests/D199ScalarInPlanCacheTests.cs`; `tests/nextorm.integration.tests/CommonTestSuite.Lob.cs`; `tests/nextorm.integration.tests/SqliteSpecificTests.cs`; `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs`; `eng/perf/t246_evidence.py` (новый); `eng/perf/t246-budgets.json` (новый); `eng/perf/update_benchmark_tables.py`; `docs/comparisons/benchmarks.md`; `docs/comparisons/feature-benchmarks-2026-10-17.md`; `docs/specs/performance/feature-benchmark-followups-2026-10-17.md`; `docs/specs/status/D246-raw-datareader-1.md`; `artifacts/pdca/T246/**`.
+Tests/tooling/reports: `tests/nextorm.core.tests/LobDataReaderTests.cs`; `tests/nextorm.core.tests/RecordsAffectedTests.cs`; `tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs`; `tests/nextorm.sqlite.tests/ResultReaderTests.cs`; `tests/nextorm.sqlite.tests/D199ScalarInPlanCacheTests.cs`; `tests/nextorm.integration.tests/CommonTestSuite.Lob.cs`; `tests/nextorm.integration.tests/SqliteSpecificTests.cs`; `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs`; `scripts/perf/t246_evidence.py` (новый); `scripts/perf/t246-budgets.json` (новый); `scripts/perf/update_benchmark_tables.py`; `docs/comparisons/benchmarks.md`; `docs/comparisons/feature-benchmarks-2026-10-17.md`; `docs/specs/performance/feature-benchmark-followups-2026-10-17.md`; `docs/specs/status/D246-raw-datareader-1.md`; `artifacts/pdca/T246/**`.
 
 **Неопределённость footprint:** точные пути RU/README generated outputs не подтверждены (scout до редактирования generator); полный output map `update_benchmark_tables.py` — prerequisite D246-00/06. Не расширять footprint самостоятельно.
 
@@ -489,7 +489,7 @@ Issue #246; `docs/specs/performance/feature-benchmark-followups-2026-10-17.md:17
 
 `2026-10-17T12:08:30Z | P | revision r=1 | iteration 1/3 | PLAN ready — handoff to collection (plan_state=ready) | docs/specs/status/D246-raw-datareader-1.md`
 `2026-10-17T13:55:00Z | DO | revision r=1 | iteration 1/3 | D246-00 done — issue #246 verified OPEN (https://github.com/AlexeyShirshov/nextorm/issues/246); toolchain: dotnet 10.0.401, python 3.10.12, dotnet-coverage 18.11.2 + reportgenerator 5.5.11 present as LOCAL tools (not global), validate_inner_loop.py --help exit 0; contract rv1 written (15 rows, 18 footprint paths, exclusions artifacts/** + docs/specs/status/**); inner-loop brief written and `validate_inner_loop.py brief` exit 0 | artifacts/pdca/T246/rv1/{contract.json,inner-loop-brief.json,recon/issue.txt,recon/toolchain.txt,recon/brief-validation.txt}`
-`2026-10-17T13:55:00Z | DO | revision r=1 | iteration 1/3 | D246-00 preflight — generator output map: eng/perf/update_benchmark_tables.py writes exactly readme.md, docs/comparisons/benchmarks.md, docs/ru/comparisons/benchmarks.md (blocks conditions/e2e/allocations/category-b), `--check` exists (exit 1 when stale); SqliteBenchmarkStreaming is not in E2E_ROWS/CATEGORY_B yet (D246-06) | artifacts/pdca/T246/rv1/recon/generator-map.md`
+`2026-10-17T13:55:00Z | DO | revision r=1 | iteration 1/3 | D246-00 preflight — generator output map: scripts/perf/update_benchmark_tables.py writes exactly readme.md, docs/comparisons/benchmarks.md, docs/ru/comparisons/benchmarks.md (blocks conditions/e2e/allocations/category-b), `--check` exists (exit 1 when stale); SqliteBenchmarkStreaming is not in E2E_ROWS/CATEGORY_B yet (D246-06) | artifacts/pdca/T246/rv1/recon/generator-map.md`
 `2026-10-17T13:55:00Z | DO | revision r=1 | iteration 1/3 | D246-00 preflight — DB: /tmp/nextorm-bench/test.db ABSENT; committed seed benchmarks/nextorm.benchmark/data/test.db (753664 B, sha256 32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295, large_table 10000 rows) is the only dataset; no --create-db path exists (BenchDb.cs:9-19 path resolution, SqliteBenchmarkStreaming.cs:85-133 validates only); plan's cp /tmp/nextorm-bench/test.db source is absent -> D246-01 must copy the committed seed | artifacts/pdca/T246/rv1/recon/db.txt`
 `2026-10-17T13:55:00Z | DO | revision r=1 | iteration 1/3 | D246-00 preflight — duration probe under /tmp/opencode/nextorm-bdn-host.lock: ShortRun (InProcessEmit, w3/i3, 7 arms) exit 0, wall 11 s (BDN 3.68 s); feasibility only, not evidence; Job.Default (NEXTORM_BENCH_FULL=1) estimated 2-4 min per run (7 arms; up to ~7 min if IterationCount hits the 100 cap) | artifacts/pdca/T246/rv1/recon/shortrun-probe.log, shortrun-probe.status, recon/shortrun-probe/`
 `2026-10-17T13:47:00Z | DO | revision r=1 | iteration 1/3 | D246-01 part1 DB resolution — /tmp/nextorm-bench/test.db ABSENT -> created as a byte-identical copy of the committed canonical seed benchmarks/nextorm.benchmark/data/test.db (753664 B, large_table 10000 rows, sum(id)=50005000, sum(length)=360000); sha256 source == copy == 32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295; no data synthesized/substituted; canonical because BenchDb.cs:9-19 only resolves a path and SqliteBenchmarkStreaming.cs:85-133 only validates (no create path) | artifacts/pdca/T246/rv1/recon/db-resolution.md`
