@@ -358,3 +358,17 @@ Resume conditions:
 5. the double `[GlobalSetup]` is fixed;
 6. two consecutive valid baseline rounds are obtained.
 Artifacts preserved at `/tmp/opencode/t244-preserve/` (harness, harness tests, `rv1/` evidence). Issue #244 stays open.
+
+## Lane disposition — G4 resume (2026-10-17)
+
+DO started under lane G4 (T244 → T245 → T247).
+
+Harness `[GlobalSetup]` defect fixed in the working tree: `SqliteBenchmarkWarmDecompose` carried two empty-target `[GlobalSetup]` methods (`Verify`, `VerifyDiagnosticProbes`), so BDN refused the class. The fix removes `[GlobalSetup]` from `VerifyDiagnosticProbes()` and calls it from the single `[GlobalSetup] Verify()`. Verified in step 4: `env -u NEXTORM_BENCH_FULL dotnet run --project benchmarks/nextorm.benchmark -c Release -- --list flat --filter '*SqliteBenchmarkWarmDecompose*'` → exit 0, 31 methods listed, no BDN refusal ("multiple `[GlobalSetup]`" / "No benchmarks to run").
+
+Path re-anchor: the perf tooling really lives under `.pdca/scripts/perf/` (`.pdca/scripts/perf/t244_evidence.py`, `.pdca/scripts/perf/tests/test_t244_evidence.py`) and the validators under `.pdca/scripts/` (`.pdca/scripts/validate_inner_loop.py`, `.pdca/scripts/pdca_evidence.py`); there is no top-level `scripts/`. Every `scripts/perf/…` / `scripts/<validator>.py` spelling in this plan is read as the corresponding `.pdca/scripts/…` path.
+
+G2's `baseline/round-01` stays **invalid** evidence (foreign rebuild of the benchmark assembly mid-invocation: `b7514a17→e1d04479`, HEAD moved, tree 228→903→1042) and is never acceptance evidence.
+
+Counters unchanged: N=1, r=1, rv=1, n=1/3. No product edit, no measurement in this phase; the first valid baseline round is still to be collected.
+
+2026-10-17T19:01:22Z | DO/T244 | revision r=1 | iteration n=1/3 | DO started — harness [GlobalSetup] fix verified (BDN list OK); path re-anchor recorded; no measurement yet | artifacts/pdca/D244/rv1/

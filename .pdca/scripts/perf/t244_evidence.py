@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/perf/t244_evidence.py — T244 (#244) warm-CTE measurement evidence harness.
+""".pdca/scripts/perf/t244_evidence.py — T244 (#244) warm-CTE measurement evidence harness.
 
 Scope
 -----
@@ -107,7 +107,7 @@ CANDIDATE_COMPONENTS = {"Construct": "D244-02", "PlanKey": "D244-03"}
 LOCK_PATH = Path("/tmp/opencode/nextorm-bdn-host.lock")
 ARTIFACTS_REL = Path("benchmarks/BenchmarkDotNet.Artifacts")
 BENCH_PROJECT_REL = Path("benchmarks/nextorm.benchmark")
-DEFAULT_REPO = Path(__file__).resolve().parents[2]
+DEFAULT_REPO = Path(__file__).resolve().parents[3]
 DEFAULT_MIN_ROUNDS = 2
 
 INVOCATIONS = (
@@ -429,7 +429,7 @@ def verify_divisor_contract(repo, classes) -> dict:
                 f"{short_type!r}"
             )
         path = None
-        for candidate in sorted(src_dir.glob("*.cs")):
+        for candidate in sorted(src_dir.rglob("*.cs")):
             try:
                 text = candidate.read_text(encoding="utf-8")
             except OSError as exc:
@@ -872,8 +872,8 @@ def command_line(argv, repo) -> str:
     )
 
 
-def collect_invocation(repo, artifact_root, staged_dir, argv, env) -> dict:
-    """Run one pinned invocation and stage only its new artifacts."""
+def collect_invocation(repo, artifact_root, staged_dir, argv, env, timeout=None) -> dict:
+    """Run one pinned invocation (bounded by ``timeout``) and stage only its new artifacts."""
     staged_dir = Path(staged_dir)
     staged_dir.mkdir(parents=True, exist_ok=True)
     before = inventory_artifacts(artifact_root)
@@ -885,6 +885,7 @@ def collect_invocation(repo, artifact_root, staged_dir, argv, env) -> dict:
     started_at = utc_now()
     clock = time.monotonic()
     log_path = staged_dir / "console.log"
+    timed_out = False
     with open(log_path, "wb") as log:
         try:
             completed = subprocess.run(
@@ -893,8 +894,17 @@ def collect_invocation(repo, artifact_root, staged_dir, argv, env) -> dict:
                 env=env,
                 stdout=log,
                 stderr=subprocess.STDOUT,
+                timeout=timeout,
             )
             exit_code = completed.returncode
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            exit_code = None
+            log.write(
+                "\ninvocation exceeded the {} s timeout; child killed\n".format(
+                    timeout
+                ).encode("utf-8")
+            )
         except OSError as exc:
             log.write(f"\nlaunch failed: {exc}\n".encode("utf-8"))
             exit_code = None
@@ -916,6 +926,8 @@ def collect_invocation(repo, artifact_root, staged_dir, argv, env) -> dict:
         "ended_at": ended_at,
         "duration_s": duration,
         "exit_code": exit_code,
+        "timed_out": timed_out,
+        "timeout_s": timeout,
         "stdout_log": str(log_path.relative_to(staged_dir)),
         "source_state_before": source_before,
         "source_state_after": source_after,
@@ -1016,13 +1028,16 @@ def measure(args) -> int:
         reasons.append("wrong environment: NEXTORM_BENCH_FULL survived into the child env")
 
     head = record["source_state_start"]
+    invocation_timeout = getattr(args, "invocation_timeout", None)
     for number, invocation in enumerate(INVOCATIONS, start=1):
         tag = invocation["tag"]
         staged_dir = output / f"{number}-{tag}"
         argv = benchmark_argv(invocation["filter"])
         commands.append(command_line(argv, repo))
         try:
-            collected = collect_invocation(repo, artifact_root, staged_dir, argv, env)
+            collected = collect_invocation(
+                repo, artifact_root, staged_dir, argv, env, timeout=invocation_timeout
+            )
         except Reject as exc:
             reasons.append(f"{tag}: {exc}")
             collected = {"tag": tag, "error": str(exc)}
@@ -1036,6 +1051,10 @@ def measure(args) -> int:
         if "error" in collected:
             continue
 
+        if collected.get("timed_out"):
+            reasons.append(
+                f"{tag}: invocation exceeded the {invocation_timeout} s timeout (see console.log)"
+            )
         if collected["exit_code"] != 0:
             reasons.append(
                 f"{tag}: invocation exited {collected['exit_code']!r} (see console.log)"
@@ -2299,6 +2318,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.0,
         help="seconds to wait for the host lock (default: 0 = fail immediately)",
+    )
+    measure_parser.add_argument(
+        "--invocation-timeout",
+        type=float,
+        default=3600.0,
+        help="per-invocation wall-clock limit in seconds (default: 3600)",
     )
 
     evaluate_parser = subparsers.add_parser(

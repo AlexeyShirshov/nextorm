@@ -24,6 +24,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -1036,7 +1037,7 @@ class MeasureTests(T244TestCase):
         def release(self):
             self.released = True
 
-    def fake_collect(self, *, exit_code=0, staged=None):
+    def fake_collect(self, *, exit_code=0, staged=None, timed_out=False):
         state = {"head": "abc", "porcelain_sha256": "def", "dirty_paths": 0}
         return {
             "argv": ["dotnet"],
@@ -1046,6 +1047,8 @@ class MeasureTests(T244TestCase):
             "ended_at": "2026-10-17T00:00:01Z",
             "duration_s": 1.0,
             "exit_code": exit_code,
+            "timed_out": timed_out,
+            "timeout_s": 3600.0,
             "stdout_log": "console.log",
             "source_state_before": state,
             "source_state_after": state,
@@ -1121,6 +1124,54 @@ class MeasureTests(T244TestCase):
         self.assertEqual(code, 0, log)
         self.assertTrue(lock.released)
         self.assertTrue(read(output / "round-validity.json")["valid"])
+
+    def test_invocation_timeout_invalidates_the_round(self):
+        code, output, lock, log = self.run_measure(
+            collect=lambda *a, **k: self.fake_collect(exit_code=None, timed_out=True)
+        )
+        self.assertEqual(code, 2, log)
+        reasons = read(output / "provenance.json")["validity"]["reasons"]
+        self.assertTrue(
+            any("exceeded the" in reason and "timeout" in reason for reason in reasons),
+            reasons,
+        )
+
+    def test_default_invocation_timeout_is_one_hour(self):
+        args = t244.build_parser().parse_args(
+            ["measure", "--phase", "baseline", "--round", "1", "--output", "x"]
+        )
+        self.assertEqual(args.invocation_timeout, 3600.0)
+
+    def test_collect_invocation_records_a_timeout(self):
+        state = {"head": "abc", "porcelain_sha256": "def", "dirty_paths": 0}
+        staged_dir = self.tmp / "staged"
+        with contextlib.ExitStack() as stack:
+            for name, value in (
+                ("inventory_artifacts", {}),
+                ("source_state", state),
+                ("benchmark_assembly", {"sha256": "aaa"}),
+                ("resolve_db", {"sha256": "ddd"}),
+                ("processes_snapshot", []),
+                ("conflicting_processes", []),
+                ("stage_invocation_artifacts", ([], {}, [])),
+            ):
+                stack.enter_context(mock.patch.object(t244, name, return_value=value))
+            run = stack.enter_context(
+                mock.patch.object(
+                    t244.subprocess,
+                    "run",
+                    side_effect=subprocess.TimeoutExpired(["dotnet"], 3600),
+                )
+            )
+            record = t244.collect_invocation(
+                self.tmp, self.tmp, staged_dir, ["dotnet", "run"], {}, timeout=3600
+            )
+        self.assertTrue(record["timed_out"])
+        self.assertIsNone(record["exit_code"])
+        self.assertEqual(run.call_args.kwargs["timeout"], 3600)
+        self.assertIn(
+            "timeout", (staged_dir / "console.log").read_text(encoding="utf-8")
+        )
 
 
 class ProviderFailureTests(unittest.TestCase):

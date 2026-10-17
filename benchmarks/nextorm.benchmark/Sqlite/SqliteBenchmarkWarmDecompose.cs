@@ -106,11 +106,17 @@ public class SqliteBenchmarkWarmDecompose
     [GlobalSetup]
     public void Verify()
     {
-        if (Interlocked.Exchange(ref _verified, 1) == 1) return;
+        if (Interlocked.Exchange(ref _verified, 1) == 0)
+        {
+            Console.WriteLine("SqliteBenchmarkWarmDecompose verification passed: "
+                + BuildCte().ToList().Count + "," + BuildRecursiveCte().ToList().Count + ","
+                + BuildJoin4().ToList().Count + "," + BuildInAtInInline().ToList().Count);
+        }
 
-        Console.WriteLine("SqliteBenchmarkWarmDecompose verification passed: "
-            + BuildCte().ToList().Count + "," + BuildRecursiveCte().ToList().Count + ","
-            + BuildJoin4().ToList().Count + "," + BuildInAtInInline().ToList().Count);
+        // BDN rejects a second un-targeted [GlobalSetup] method in the same class, so both
+        // verifications are performed by this single effective setup: the D244-01 probes run
+        // per instance, after the verification warm-up above has published their recipes.
+        VerifyDiagnosticProbes();
     }
 
     private static CancellationToken Ct => CancellationToken.None;
@@ -464,9 +470,9 @@ public class SqliteBenchmarkWarmDecompose
     /// Per family it runs the unmodified end-to-end warm call once, then the same isolated
     /// lookup/replay/plan-key seam the new arms measure on a second fresh command. Results are
     /// reported by <see cref="ReportDiagnosticProbes"/>, so a miss is visible in the output instead of
-    /// being silently measured.
+    /// being silently measured. Invoked by <see cref="Verify"/> (single effective
+    /// <c>[GlobalSetup]</c>).
     /// </summary>
-    [GlobalSetup]
     public void VerifyDiagnosticProbes()
     {
         _cteRawHitVerified = VerifyRawHit(BuildCte, out _cteRawHitNote);

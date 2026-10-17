@@ -73,6 +73,7 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
 - 2026-10-17 | G3 | T246 rv3 terminal GAP — `incomplete`, no production change, #246 stays open; evidence artifacts/pdca/T246/rv3/GAP.md + D246-3 §Terminal GAP.
 - 2026-10-17 | G3 | lane stopped — host-level role outage (`API key expired`; dispatch `Go requires a credential`, 7 attempts): cheap tier was bound to `opencode-go` and the replacement Console key has no active Go subscription. Roles restored via documented fallback `deepseek/deepseek-flash`; T244/T245/T247 not started.
 - 2026-10-17 | P.7 | owner: continue the queue → G4 created: T244 → T245 → T247. Cheap tier (coder/scout/btw/pdca-executor/pdca-orchestrator) repointed to `deepseek/deepseek-flash` (OpenCode Go subscription absent on the replacement key); medium/strong tiers stay on `opencode/*` (Console PAYG, verified). Acceptance gates, caps and the T244→T245 edge unchanged.
+- 2026-10-17 | G4 | T244 DO started — harness [GlobalSetup] defect fixed and BDN class accepted; path re-anchor to .pdca/scripts/perf recorder; baseline rounds next.
 
 ## General verification & recovery
 
