@@ -5,17 +5,17 @@
 - input: **open issues of milestone `1.0.9-rc3`**, re-read 2026-10-17 via `gh`: **#243, #244, #245, #246, #247**.
 - base: branch `1.0.9-rc3` @ `01815f3a` (owner snapshot `957fcfe7`: 2026-10-17 warm-path report, BDN artifacts, table generator + CI step, cached-preparation WIP; build Debug 0W/0E; targeted suites 23/23 + 84/84; pushed on explicit owner request).
 - mode: **autonomous + auto-commit** (explicit owner request: «автономный pdca с автокомитам по открытым задачам rc3»). Push is **not** part of the collection; only the bootstrap snapshot was pushed on explicit request.
-- phase: **D — lane G1 stopped (T243 done; T246 terminal GAP)**.
+- phase: **D — G1 stopped (T243 done; T246 terminal GAP), owner-approved re-schedule into G2: T246 rv2 → T244 → T245 → T247**.
 
 ## Tasks
 
 | id | issue | title | variant | status | plan_state | cycle N | r | rv | status file | baseline ref | commit |
 |----|-------|-------|---------|--------|-----------|---|--|----|-------------|--------------|--------|
 | T243 | #243 | Perf: warm-path Count/Sum allocations exceed linq2db | pdca-dotnet | done | ready | 1 | 1 | 1 | docs/specs/status/D243-warm-aggregates-1.md | 957fcfe7 | b5b717cc |
-| T246 | #246 | Perf: ToDataReader raw reader is slower than linq2db | pdca-dotnet | incomplete | gap | 1 | 1 | 1 | docs/specs/status/D246-raw-datareader-1.md | 957fcfe7 | — |
-| T244 | #244 | Perf: warm CTE/recursive CTE allocations exceed linq2db (#240 follow-up) | pdca-dotnet | incomplete («группа остановлена») | ready | 1 | 1 | 1 | docs/specs/status/D244-warm-cte-1.md | 957fcfe7 | — |
-| T245 | #245 | Perf: warm EXCEPT/INTERSECT allocations exceed linq2db (#240 follow-up) | pdca-dotnet | incomplete («группа остановлена») | ready | 1 | 1 | 1 | docs/specs/status/D245-warm-set-ops-1.md | 957fcfe7 | — |
-| T247 | #247 | Perf: JSON streaming is slower than linq2db at 10k rows | pdca-dotnet | incomplete («группа остановлена») | ready | 1 | 1 | 1 | docs/specs/status/D247-json-streaming-1.md | 957fcfe7 | — |
+| T246 | #246 | Perf: ToDataReader raw reader is slower than linq2db | pdca-dotnet | pending (G2, rv2 plan) | rv2-pending | 1 | 2 | 2 | docs/specs/status/D246-raw-datareader-1.md → rv2 file | 957fcfe7 | — |
+| T244 | #244 | Perf: warm CTE/recursive CTE allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending (G2) | ready | 1 | 1 | 1 | docs/specs/status/D244-warm-cte-1.md | 957fcfe7 | — |
+| T245 | #245 | Perf: warm EXCEPT/INTERSECT allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending (G2) | ready | 1 | 1 | 1 | docs/specs/status/D245-warm-set-ops-1.md | 957fcfe7 | — |
+| T247 | #247 | Perf: JSON streaming is slower than linq2db at 10k rows | pdca-dotnet | pending (G2) | ready | 1 | 1 | 1 | docs/specs/status/D247-json-streaming-1.md | 957fcfe7 | — |
 
 Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 604 / 208 lines, all CRLF, all persisted by their own PLAN step (no code, no benchmarks, no commits).
 
@@ -24,6 +24,7 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
 | group | tasks (topological order) | worktree | branch/ref | status |
 |-------|---------------------------|----------|------------|--------|
 | G1 | **T243 → T246 → T244 → T245 → T247** | none (single group) | current branch `1.0.9-rc3` | **incomplete** — stopped by terminal T246 GAP (T243 done; T246 incomplete; T244/T245/T247 not executed) |
+| G2 | **T246 (rv2) → T244 → T245 → T247** | none (single group) | current branch `1.0.9-rc3` | **in-progress** — owner-approved re-schedule; T243 excluded (done) |
 
 ## Phase decisions
 
@@ -46,6 +47,7 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
   - report-page fragments are merged between tasks (single lane ⇒ no concurrent writer);
   - a round is invalid on lock bypass/overlap, source/environment drift, changed measurement inputs/DB/config, or incomplete evidence; a later edit invalidates earlier evidence only if it touches the same execution path or acceptance gate.
 - **Model-region incident (2026-10-17):** the first P.2 launch failed with `Country, region, or territory not supported` on `opencode/gpt-6.1-sol`; probes showed `gemini-4-argon` and `claude-sonnet-5-5` reachable and `grok-4.7` endpoint-unavailable. Retry of `gpt-6.1-sol` succeeded; **no profile/config change was made** (backup only: `~/.config/opencode/pdca-backups/deepseek.jsonc.*`).
+- **P.5 Re-schedule (2026-10-17) — OWNER-APPROVED.** After the G1 stop, the owner chose «Ревизия протокола T246, затем очередь». Decision: reopen **T246 only** with a **bounded measurement-protocol revision (rv2, r=2)** and keep the substantive acceptance gates unchanged (`time_upper_ratio ≤ 1.00`, `allocation_ratio ≤ 1.00`, zero empty tolerance); precision must be demonstrated **before** any production change. After T246 (done or a second terminal GAP) the queue continues with **T244 → T245 → T247** under their existing rv1 plans. Rationale for a new group rather than resuming G1: the collection rule forbids automatic rerun/re-schedule after a lane starts; G1 stays closed as `incomplete`, G2 carries only the remaining work. T246 rv1 contract (`E246-01..15` / `R246-01..13`) is preserved verbatim; rv2 may add protocol rows, never rewrite rv1 rows. T243 stays `done` and is not re-executed.
 
 ## Lane log
 
@@ -56,17 +58,19 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
 - 2026-10-17 | G1 | T243 done — Count 2979.84→408 B/op, Sum 3389.44→970 B/op; gate green; 6/6 mutations killed; commit b5b717cc. Next: T246.
 - 2026-10-17 | G1 | T246 incomplete — baseline precision predicates unattainable (10k B spread 50.08 %; empty Error/Mean 11.74/12.33 %); planner terminal GAP; no production change; artifacts preserved.
 - 2026-10-17 | G1 | lane stopped — T244/T245/T247 marked incomplete «группа остановлена», not executed.
+- 2026-10-17 | P.5 | owner approved «Ревизия протокола T246, затем очередь» → G2 created: T246 (rv2) → T244 → T245 → T247; acceptance gates unchanged, precision demonstrated before production work.
+- 2026-10-17 | G2 | rv2 PLAN for T246 dispatched (bounded protocol revision; r=2, rv=2, N=1).
 
 ## General verification & recovery
 
-- state: **stopped — T246 terminal GAP**.
+- state: **`D — G2 in progress`** (T243 done; T246 rv2 planning; T244/T245/T247 queued).
 - last C result / evidence: **CHECK pass — T243 R243-01..R243-12 met (12/12), 0 defects**; evidence `docs/specs/status/D243-warm-aggregates-1.md` (§Done / Verified) + `docs/specs/performance/d243-warm-aggregates.md`.
-- defect id / history: `mutation-e-cache-flag-guard` — observed at r=1/n=1, survived first probe, 1 fix applied (focused `DisablingCacheAfterWarm_…` test), then **killed**; `suite-state-flake` (integration run-2, 124 failures) — not reproduced on identical binaries, 0 fixes, recorded as transient container-state, not a D243 defect. `perf-oracle-window-noise` (T246) — r=1/n=1, 0 fixes, planner terminal GAP (see D246 §GAP disposition).
+- defect id / history: `mutation-e-cache-flag-guard` — observed at r=1/n=1, survived first probe, 1 fix applied (focused `DisablingCacheAfterWarm_…` test), then **killed**; `suite-state-flake` (integration run-2, 124 failures) — not reproduced on identical binaries, 0 fixes, recorded as transient container-state, not a D243 defect. `perf-oracle-window-noise` (T246) — r=1/n=1, 0 fixes, planner terminal GAP (see D246 §GAP disposition), reopened by owner as rv2.
 - correction-task status file: none.
-- next allowed step: **none in this lane — requires an approved measurement-protocol revision (see D246 GAP disposition).**
+- next allowed step: **D — T246 rv2 PLAN (G2), then continue G2 with T244 → T245 → T247.**
 
 ## Done / Verified / Incomplete
 
 - **Done:** T243 (`b5b717cc`).
 - **Verified:** T243 — CHECK pass 12/12.
-- **Incomplete:** T246 (terminal GAP), T244/T245/T247 (lane stopped).
+- **Incomplete:** T246 (terminal GAP in rv1; reopened as rv2 by owner), T244/T245/T247 (G1 stopped; rescheduled into G2, not executed).
