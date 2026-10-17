@@ -206,3 +206,8 @@ No supersession exists at rv1. A justified future revision must explicitly super
 ## Progress log
 - PLAN r1/n1: fact pack reviewed; minimal bounded-writer-cache intervention selected; required spike and evidence contract specified.
 - Pending: coder persists plan; collection records PLAN→DO stop. No implementation or measurement has run under this plan.
+
+## Lane disposition (2026-10-17)
+
+Not executed — lane G1 stopped: predecessor T246 reached a terminal `incomplete` (measurement-protocol GAP).
+Task status: `incomplete` («группа остановлена»). Plan retained; nothing executed, nothing superseded.

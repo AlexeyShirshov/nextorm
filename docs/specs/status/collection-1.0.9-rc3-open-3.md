@@ -5,17 +5,17 @@
 - input: **open issues of milestone `1.0.9-rc3`**, re-read 2026-10-17 via `gh`: **#243, #244, #245, #246, #247**.
 - base: branch `1.0.9-rc3` @ `01815f3a` (owner snapshot `957fcfe7`: 2026-10-17 warm-path report, BDN artifacts, table generator + CI step, cached-preparation WIP; build Debug 0W/0E; targeted suites 23/23 + 84/84; pushed on explicit owner request).
 - mode: **autonomous + auto-commit** (explicit owner request: «автономный pdca с автокомитам по открытым задачам rc3»). Push is **not** part of the collection; only the bootstrap snapshot was pushed on explicit request.
-- phase: **D — lane G1 running** (P.2/P.3/P.4 complete).
+- phase: **D — lane G1 stopped (T243 done; T246 terminal GAP)**.
 
 ## Tasks
 
 | id | issue | title | variant | status | plan_state | cycle N | r | rv | status file | baseline ref | commit |
 |----|-------|-------|---------|--------|-----------|---|--|----|-------------|--------------|--------|
-| T243 | #243 | Perf: warm-path Count/Sum allocations exceed linq2db | pdca-dotnet | done | ready | 1 | 1 | 1 | docs/specs/status/D243-warm-aggregates-1.md | 957fcfe7 | c4351b0a |
-| T246 | #246 | Perf: ToDataReader raw reader is slower than linq2db | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D246-raw-datareader-1.md | 957fcfe7 | — |
-| T244 | #244 | Perf: warm CTE/recursive CTE allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D244-warm-cte-1.md | 957fcfe7 | — |
-| T245 | #245 | Perf: warm EXCEPT/INTERSECT allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D245-warm-set-ops-1.md | 957fcfe7 | — |
-| T247 | #247 | Perf: JSON streaming is slower than linq2db at 10k rows | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D247-json-streaming-1.md | 957fcfe7 | — |
+| T243 | #243 | Perf: warm-path Count/Sum allocations exceed linq2db | pdca-dotnet | done | ready | 1 | 1 | 1 | docs/specs/status/D243-warm-aggregates-1.md | 957fcfe7 | b5b717cc |
+| T246 | #246 | Perf: ToDataReader raw reader is slower than linq2db | pdca-dotnet | incomplete | gap | 1 | 1 | 1 | docs/specs/status/D246-raw-datareader-1.md | 957fcfe7 | — |
+| T244 | #244 | Perf: warm CTE/recursive CTE allocations exceed linq2db (#240 follow-up) | pdca-dotnet | incomplete («группа остановлена») | ready | 1 | 1 | 1 | docs/specs/status/D244-warm-cte-1.md | 957fcfe7 | — |
+| T245 | #245 | Perf: warm EXCEPT/INTERSECT allocations exceed linq2db (#240 follow-up) | pdca-dotnet | incomplete («группа остановлена») | ready | 1 | 1 | 1 | docs/specs/status/D245-warm-set-ops-1.md | 957fcfe7 | — |
+| T247 | #247 | Perf: JSON streaming is slower than linq2db at 10k rows | pdca-dotnet | incomplete («группа остановлена») | ready | 1 | 1 | 1 | docs/specs/status/D247-json-streaming-1.md | 957fcfe7 | — |
 
 Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 604 / 208 lines, all CRLF, all persisted by their own PLAN step (no code, no benchmarks, no commits).
 
@@ -23,7 +23,7 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
 
 | group | tasks (topological order) | worktree | branch/ref | status |
 |-------|---------------------------|----------|------------|--------|
-| G1 | **T243 → T246 → T244 → T245 → T247** | none (single group) | current branch `1.0.9-rc3` | **in-progress** — lane started 2026-10-17 |
+| G1 | **T243 → T246 → T244 → T245 → T247** | none (single group) | current branch `1.0.9-rc3` | **incomplete** — stopped by terminal T246 GAP (T243 done; T246 incomplete; T244/T245/T247 not executed) |
 
 ## Phase decisions
 
@@ -53,18 +53,20 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
 - 2026-10-17 | P | five own PLANs persisted (`D243`, `D246`, `D244`, `D245`, `D247`); ALL-barrier passed; single group G1; schedule rv=1 bound.
 - 2026-10-17 | prereq | benchmark DB `benchmarks/nextorm.benchmark/data/test.db` OK (`large_table` = 10,000 rows); Podman socket started and present; `flock` available; `/tmp/nextorm-bench/` absent (T246 owns bootstrap).
 - 2026-10-17 | G1 | lane started on `1.0.9-rc3` (single tree, sequential queue).
-- 2026-10-17 | G1 | T243 done — Count 2979.84→408 B/op, Sum 3389.44→970 B/op; gate green; 6/6 mutations killed; commit c4351b0a. Next: T246.
+- 2026-10-17 | G1 | T243 done — Count 2979.84→408 B/op, Sum 3389.44→970 B/op; gate green; 6/6 mutations killed; commit b5b717cc. Next: T246.
+- 2026-10-17 | G1 | T246 incomplete — baseline precision predicates unattainable (10k B spread 50.08 %; empty Error/Mean 11.74/12.33 %); planner terminal GAP; no production change; artifacts preserved.
+- 2026-10-17 | G1 | lane stopped — T244/T245/T247 marked incomplete «группа остановлена», not executed.
 
 ## General verification & recovery
 
-- state: **`D — lane G1 in progress`** (T243 verified; T246 current).
+- state: **stopped — T246 terminal GAP**.
 - last C result / evidence: **CHECK pass — T243 R243-01..R243-12 met (12/12), 0 defects**; evidence `docs/specs/status/D243-warm-aggregates-1.md` (§Done / Verified) + `docs/specs/performance/d243-warm-aggregates.md`.
-- defect id / history: `mutation-e-cache-flag-guard` — observed at r=1/n=1, survived first probe, 1 fix applied (focused `DisablingCacheAfterWarm_…` test), then **killed**; `suite-state-flake` (integration run-2, 124 failures) — not reproduced on identical binaries, 0 fixes, recorded as transient container-state, not a D243 defect.
+- defect id / history: `mutation-e-cache-flag-guard` — observed at r=1/n=1, survived first probe, 1 fix applied (focused `DisablingCacheAfterWarm_…` test), then **killed**; `suite-state-flake` (integration run-2, 124 failures) — not reproduced on identical binaries, 0 fixes, recorded as transient container-state, not a D243 defect. `perf-oracle-window-noise` (T246) — r=1/n=1, 0 fixes, planner terminal GAP (see D246 §GAP disposition).
 - correction-task status file: none.
-- next allowed step: **D — continue G1 from T246.**
+- next allowed step: **none in this lane — requires an approved measurement-protocol revision (see D246 GAP disposition).**
 
 ## Done / Verified / Incomplete
 
-- **Done:** none.
-- **Verified:** none.
-- **Incomplete:** none.
+- **Done:** T243 (`b5b717cc`).
+- **Verified:** T243 — CHECK pass 12/12.
+- **Incomplete:** T246 (terminal GAP), T244/T245/T247 (lane stopped).

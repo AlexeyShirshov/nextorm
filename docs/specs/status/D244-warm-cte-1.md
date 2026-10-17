@@ -334,3 +334,8 @@ Principal risks: frozen-recipe allocations may dominate; container savings may b
 
 ## Progress log
 - 2026-10-17T00:00:00Z | PLAN | revision r=1 | iteration n=1/3 | PLAN ready — collection handoff (PLAN→DO boundary owned by pdca-collection); no DO started, no code edited, no benchmark run. | docs/specs/status/D244-warm-cte-1.md
+
+## Lane disposition (2026-10-17)
+
+Not executed — lane G1 stopped: predecessor T246 reached a terminal `incomplete` (measurement-protocol GAP).
+Task status: `incomplete` («группа остановлена»). Plan retained; nothing executed, nothing superseded.

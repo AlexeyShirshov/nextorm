@@ -602,3 +602,8 @@ At the final boundary:
 - **Dependency requirements:** settle and fingerprint any predecessor’s shared-path changes before entry measurement; preserve frozen recipe semantics; successors touching the same path revalidate affected T245 rows.
 - **Measurement isolation:** one exclusive host measurement token across T243–T247; no concurrent BDN, profiling, builds or test load.
 - **T244 recommendation:** settle T244’s clone/preparation output before T245 attribution and optimization. Collection planner assigns ordering/groups after the ALL-barrier; this plan creates no DAG.
+
+## Lane disposition (2026-10-17)
+
+Not executed — lane G1 stopped: predecessor T246 reached a terminal `incomplete` (measurement-protocol GAP).
+Task status: `incomplete` («группа остановлена»). Plan retained; nothing executed, nothing superseded.

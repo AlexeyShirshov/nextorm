@@ -1,7 +1,7 @@
 # D246 — ToDataReader: стоимость открытия и чтения raw reader
 
 **Task:** T246 · **Issue:** #246 (https://github.com/AlexeyShirshov/nextorm/issues/246) · **Milestone:** `1.0.9-rc3`
-**Plan state:** `plan_state=ready` · **Selected variant:** `V2`
+**Plan state:** `plan_state: gap — measurement protocol unattainable (terminal, task incomplete)` · **Phase:** `DO stopped — D246-01 GAP` · **Selected variant:** `V2`
 **Durable state:** Current cycle `N=1`, Plan revision `r=1`, Attempt `n=1`, Contract revision `rv=1`
 **Base:** branch `1.0.9-rc3` @ `01815f3a` (baseline recipe commit `957fcfe7` is an ancestor; code identical)
 **Mode:** autonomous collection task; PLAN ends at the PLAN→DO boundary, DO is started by the collection parent after its applicability check.
@@ -443,10 +443,10 @@ D246-02/03 остаются активными и `blocked`, не `done` и не
 
 | Unit | State | Criteria covered | superseded→replacement |
 |---|---|---|---|
-| D246-00 | pending | R246-12, rv1 setup | — |
-| D246-01 | pending | R246-13 | — |
-| D246-02 | pending (blocked on D246-01) | R246-01, R246-08 | — |
-| D246-03 | pending (blocked on D246-01) | R246-01, R246-03 | — |
+| D246-00 | done | R246-12, rv1 setup | — |
+| D246-01 | blocked — GAP (terminal) | R246-13 | — |
+| D246-02 | blocked (active; blocked on D246-01) | R246-01, R246-08 | — |
+| D246-03 | blocked (active; blocked on D246-01) | R246-01, R246-03 | — |
 | D246-04 | pending | R246-03..R246-06, R246-11 | — |
 | D246-05 | pending | R246-01, R246-02, R246-09, R246-10 | — |
 | D246-06 | pending | R246-10, R246-12 | — |
@@ -456,15 +456,24 @@ D246-02/03 остаются активными и `blocked`, не `done` и не
 
 | Defect key | Observed r/n | Fixes applied | Last recurrence | Escalation outcome |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| `perf-oracle-window-noise` | r=1 / n=1 (baseline, baseline2, re-gather) | 0 | 2026-10-17 baseline2 — 10k B spread 50.08 %, empty `Error/Mean` 8.49–11.74 / 9.46–12.33 % | planner terminal GAP 2026-10-17 (no rv2, no counter reset) |
 
 ## Current state
 
-Phase **P (PLAN complete)**, `plan_state=ready`, revision `r=1`, iteration `1/3` (not yet started). DO not started — collection parent owns the PLAN→DO boundary and resumes this cycle at DO after its applicability check.
+DO stopped at **D246-01** (GAP). `plan_state: gap — measurement protocol unattainable (terminal, task incomplete)`, revision `r=1`, iteration `1/3`, attempt `n=1`. **D246-02/D246-03 remain active and blocked**; task disposition **incomplete (GAP)**; nothing superseded; no rv2.
+
+## GAP disposition (2026-10-17)
+
+- `/tmp/nextorm-bench/test.db` was absent and was resolved explicitly as a byte-identical copy of the committed canonical seed `benchmarks/nextorm.benchmark/data/test.db` (sha256 `32bf10a0…72295`, 10 000 rows) — no synthesized data.
+- Baseline R=3 clean-window results (`perf/baseline2/ratios.json`): 10k A tr 1.2152/1.2231/1.2453 (spread 2.48 %); 10k B tr 1.1926/1.2360/0.8236 (**spread 50.08 %**); empty tr 2.9322/2.8142/2.6604, allocation ratio **7.94/7.86/7.86**, `Error/Mean` nextorm **8.49–11.74 %**, linq2db **9.46–12.33 %**.
+- The frozen protocol's own precision predicates (4) `Error/Mean ≤ 10 %` and (5) spread `≤ 19 %` fail at baseline ⇒ §Obtainability/GAP trigger.
+- Planner decision (terminal): do not proceed to production optimization under this oracle; **no additional decisive runs authorized**; criteria unchanged (`time_upper_ratio ≤ 1.00`, `allocation_ratio ≤ 1.00`, zero empty tolerance); rv1 and all R246/E246 IDs preserved verbatim; no rv2, no supersession, no counter reset.
+- Reopen condition: an explicitly approved bounded measurement-protocol revision specifying exact argv, precision predicates, run budget, and matching baseline/final treatment, with both substantive `≤ 1.00` gates and zero empty tolerance preserved, and precision demonstrated **before** production changes.
+- Artifacts preserved: `artifacts/pdca/T246/rv1/{recon,perf,contract.json,inner-loop-brief.json}`.
 
 ## Next plan / next todo
 
-Next: **D246-00** (status/contract/brief, toolchain + output-map + measurement-lease preflight), then **D246-01** (baseline + probe + Roslyn isolation audit). Todo is not carried between sessions; it lives here.
+Next: **none** — DO stopped at D246-01 by terminal GAP; reopen requires an explicitly approved measurement-protocol revision (§GAP disposition). Todo is not carried between sessions; it lives here.
 
 ## Changed files
 
@@ -479,3 +488,14 @@ Issue #246; `docs/specs/performance/feature-benchmark-followups-2026-10-17.md:17
 ## Progress log
 
 `2026-10-17T12:08:30Z | P | revision r=1 | iteration 1/3 | PLAN ready — handoff to collection (plan_state=ready) | docs/specs/status/D246-raw-datareader-1.md`
+`2026-10-17T13:55:00Z | DO | revision r=1 | iteration 1/3 | D246-00 done — issue #246 verified OPEN (https://github.com/AlexeyShirshov/nextorm/issues/246); toolchain: dotnet 10.0.401, python 3.10.12, dotnet-coverage 18.11.2 + reportgenerator 5.5.11 present as LOCAL tools (not global), validate_inner_loop.py --help exit 0; contract rv1 written (15 rows, 18 footprint paths, exclusions artifacts/** + docs/specs/status/**); inner-loop brief written and `validate_inner_loop.py brief` exit 0 | artifacts/pdca/T246/rv1/{contract.json,inner-loop-brief.json,recon/issue.txt,recon/toolchain.txt,recon/brief-validation.txt}`
+`2026-10-17T13:55:00Z | DO | revision r=1 | iteration 1/3 | D246-00 preflight — generator output map: eng/perf/update_benchmark_tables.py writes exactly readme.md, docs/comparisons/benchmarks.md, docs/ru/comparisons/benchmarks.md (blocks conditions/e2e/allocations/category-b), `--check` exists (exit 1 when stale); SqliteBenchmarkStreaming is not in E2E_ROWS/CATEGORY_B yet (D246-06) | artifacts/pdca/T246/rv1/recon/generator-map.md`
+`2026-10-17T13:55:00Z | DO | revision r=1 | iteration 1/3 | D246-00 preflight — DB: /tmp/nextorm-bench/test.db ABSENT; committed seed benchmarks/nextorm.benchmark/data/test.db (753664 B, sha256 32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295, large_table 10000 rows) is the only dataset; no --create-db path exists (BenchDb.cs:9-19 path resolution, SqliteBenchmarkStreaming.cs:85-133 validates only); plan's cp /tmp/nextorm-bench/test.db source is absent -> D246-01 must copy the committed seed | artifacts/pdca/T246/rv1/recon/db.txt`
+`2026-10-17T13:55:00Z | DO | revision r=1 | iteration 1/3 | D246-00 preflight — duration probe under /tmp/opencode/nextorm-bdn-host.lock: ShortRun (InProcessEmit, w3/i3, 7 arms) exit 0, wall 11 s (BDN 3.68 s); feasibility only, not evidence; Job.Default (NEXTORM_BENCH_FULL=1) estimated 2-4 min per run (7 arms; up to ~7 min if IterationCount hits the 100 cap) | artifacts/pdca/T246/rv1/recon/shortrun-probe.log, shortrun-probe.status, recon/shortrun-probe/`
+`2026-10-17T13:47:00Z | DO | revision r=1 | iteration 1/3 | D246-01 part1 DB resolution — /tmp/nextorm-bench/test.db ABSENT -> created as a byte-identical copy of the committed canonical seed benchmarks/nextorm.benchmark/data/test.db (753664 B, large_table 10000 rows, sum(id)=50005000, sum(length)=360000); sha256 source == copy == 32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295; no data synthesized/substituted; canonical because BenchDb.cs:9-19 only resolves a path and SqliteBenchmarkStreaming.cs:85-133 only validates (no create path) | artifacts/pdca/T246/rv1/recon/db-resolution.md`
+`2026-10-17T13:47:00Z | DO | revision r=1 | iteration 1/3 | D246-01 part1 baseline R=3 under ONE acquisition of /tmp/opencode/nextorm-bdn-host.lock (driver exit 0) — run-1 EXIT 0 wall 45 s, run-2 EXIT 0 wall 24 s, run-3 EXIT 0 wall 23 s; NEXTORM_BENCH_FULL=1 => Job.Default out-of-process (Job-CNUJVU, InvocationCount=1, UnrollFactor=1), 7 benchmarks/run, each run its own DB copy (sha256 32bf10a0...2295 verified) and artifacts dir; GlobalSetup parity logged (rows=10000, checksum=422955955263575176, bytes=360000; null-Str 3/10; empty 0) | artifacts/pdca/T246/rv1/perf/baseline-driver.log, perf/baseline/run-{1,2,3}.log`
+`2026-10-17T13:47:00Z | DO | revision r=1 | iteration 1/3 | D246-01 part1 arm/job inventory — PASS in all 3 runs: exactly one result each for A_RawReader (A_Nextorm_Prepared_ToDataReader), B_RawReader (B_Nextorm_ToDataReader, Linq2Db_ToDataReader, Dapper_ToDataReader) and B_RawReader_Empty (B_Nextorm_ToDataReader_Empty, Linq2Db_ToDataReader_Empty, Dapper_ToDataReader_Empty); 7 results/run, no extras, no duplicates | artifacts/pdca/T246/rv1/perf/baseline/inventory.md`
+`2026-10-17T13:47:00Z | DO | revision r=1 | iteration 1/3 | D246-01 part1 ratios (unrounded Mean/Error/StdDev/BytesAllocatedPerOperation from *-report-full-compressed.json; runs not averaged) — 10k A(prepared) time_ratio 1.2343/1.1509/1.6444, time_upper 1.2648/1.1865/1.6777, alloc 1.00194, Err/Mean 1.08-1.97 %; 10k B time_ratio 0.8446/1.1481/1.7164, time_upper 0.8701/1.1835/1.7504, alloc 1.00505, Err/Mean 1.10-1.96 %; empty time_ratio 3.4208/2.9574/1.7236, time_upper 4.2887/3.6103/2.2453, alloc 7.8615, Err/Mean N 9.33-12.51 % / L 9.56-16.08 %; spread max/min-1: A 42.87 %, B 103.23 %, empty 98.47 % | artifacts/pdca/T246/rv1/perf/baseline/ratios.md, ratios.json`
+`2026-10-17T13:47:00Z | DO | revision r=1 | iteration 1/3 | D246-01 part1 predicate facts (no verdict) — denominators positive in all runs; time_upper <= 1.00 only 10k B run-1 (0.8701); allocation_ratio > 1.00 in every run (10k 1.00194/1.00505, empty 7.8615); Error/Mean > 10 % in empty: nextorm runs 1-2, linq2db runs 1 and 3; spread > 19 % for all three arms; benchmark tree unchanged (git status benchmarks/ clean, no new files in benchmarks/BenchmarkDotNet.Artifacts) | artifacts/pdca/T246/rv1/perf/baseline/ratios.md`
+`2026-10-17T13:48:26Z | DO | revision r=1 | iteration 1/3 | D246-01 part1 RE-GATHER (plan CHECK re-gather allowance 1/1 consumed as a measurement re-run; no plan revision change, no new fix applied, defect key `perf-oracle-window-noise`, attempt n unchanged 1/3) — window exclusivity proven BEFORE the block: no foreign BenchmarkDotNet/testhost/vstest/benchmark process, only persistent tooling (MSBuild node-reuse servers, VBCSCompiler, roslynq serve, VS Code C# server); load 0.82/1.57/2.01 on nproc 8; canonical lock /tmp/opencode/nextorm-bdn-host.lock free (flock -n probe); per-run pre-snapshots recorded. Same protocol as baseline, fresh root perf/baseline2/, ONE `flock -x -w 3600` acquisition for the whole R=3 block, driver exit 0 — run-1 EXIT 0 wall 22 s, run-2 EXIT 0 wall 22 s, run-3 EXIT 0 wall 23 s; Job-CNUJVU(InvocationCount=1, UnrollFactor=1); 7 benchmarks/run; per-run DB copies sha256 32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295. Ratios (runs never averaged): 10k A(prepared) time_ratio 1.2152/1.2231/1.2453, time_upper 1.2481/1.2534/1.2823, alloc 1.00194, Err/Mean N 0.88-1.36 % / L 1.48-1.56 %, spread 2.48 %; 10k B time_ratio 1.1926/1.2360/0.8236, time_upper 1.2223/1.2685/0.8464, alloc 1.00505, Err/Mean N 0.97-1.16 % / L 1.48-1.56 %, spread 50.08 %; empty time_ratio 2.9322/2.8142/2.6604, time_upper 3.5587/3.4729/3.3104, alloc 7.9385/7.8615/7.8615, Err/Mean N 8.49-11.74 % / L 9.46-12.33 %, spread 10.22 %. Baseline vs baseline2: 10k A spread 42.87 % -> 2.48 % and empty 98.47 % -> 10.22 % => the first block was contaminated by the host window; 10k B range 0.8446-1.7164 -> 0.8236-1.2360 stays bimodal (nextorm ~4.26 ms vs ~6.18-6.20 ms), i.e. arm-level variance reproduced, not a window artifact. Gate predicates still failing in baseline2: time_upper <= 1.00 in 9/9 rows, allocation_ratio <= 1.00 in 9/9 rows (10k 1.00194/1.00505, empty 7.86-7.94), empty Err/Mean N run-2 11.74 % and L runs 1/3 10.61 %/12.33 %, 10k B spread 50.08 % > 19 %. Oracle still unobtainable for the stated gate. Benchmark/test/product sources unchanged by this unit. | artifacts/pdca/T246/rv1/perf/exclusivity.txt, perf/baseline2-driver.log, perf/baseline2/{inventory.md,ratios.md,ratios.json,comparison.md,host-monitor.log}, perf/baseline2/run-{1,2,3}.log`
+`2026-10-17 | DO stopped | D246-01 GAP — terminal, task incomplete`
