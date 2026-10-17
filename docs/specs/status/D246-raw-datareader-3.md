@@ -26,6 +26,14 @@ Approved protocol revision: [D246 rv3](D246-raw-datareader-3.md), r=3 / rv=3.
 rv2 remains terminal GAP evidence; no criteria or historical results changed.
 ```
 
+## Re-anchor rv3 (2026-10-17, clarification — no revision bump)
+
+- Tree moved again after the previous re-anchor: `eng/` → `scripts/` → `.pdca/scripts/` (commit `dd894f0c` + an uncommitted staged rename by another session). All harness/validator/test paths above are re-anchored; the plan's substance, criteria, gates and 16-row variant matrix are unchanged. Counters stay `N=1, r=3, rv=3, n=1` — a clarification is not a plan revision.
+- Artifacts stay at `artifacts/pdca/T246/rv3/**` and this status file stays at `docs/specs/status/D246-raw-datareader-3.md` (lane-owner constraint for this in-flight cycle); rv2 stays read-only input.
+- Code state verified before DO: (a) per-op normalisation present at `:584`/`:958`, strict compare `:902`, but no `Operations>1` regression proof; (b) resolved out-of-process job NOT implemented — `is_default` at `:820` still requires the CSV `Job` to start with `default`, which is exactly why rv2 rejected every real run (`Job=Job-NREBDM`); (c) idle-`VBCSCompiler` exclusion present at `:2810`/`:2949–2952`, no test; (d) `parse-check` subcommand absent; (e) self-test has 17 cases.
+- Notice: the second planner round (final DO go/no-go with the three closed evidence gaps) was unreachable — the medium-tier provider returned "This API key has expired". The governing decision is the first planner round: plan applicable, re-anchor is mechanical, `D246-H` executable after an ownership preflight, then `D246-B`, then `D246-M`, then `D246-E`.
+- Notice: the `.pdca/scripts/**` harness tree exists only as another session's uncommitted staged rename. This cycle edits only its own files and stages only those paths; the foreign rename, workflows, integration tests, skills and docs are never staged, reverted, cleaned or committed.
+
 ## Почему rv3
 
 rv2 не доказал host incapacity: qualification завершилась `REJECT`, `valid-run-count:0!=3`, при наличии captured 10k runs и отсутствии frozen protocol lock. Одновременно обнаружены конкретные пробелы harness regression proof:
@@ -46,8 +54,8 @@ rv2 не доказал host incapacity: qualification завершилась `R
 
 ### Scope
 
-- Три harness fixes в `eng/perf/t246_evidence.py`.
-- Regression tests в `eng/perf/tests/test_t246_evidence.py`.
+- Три harness fixes в `.pdca/scripts/perf/t246_evidence.py`.
+- Regression tests в `.pdca/scripts/perf/tests/test_t246_evidence.py`.
 - Аддитивный read-only `parse-check`.
 - Fresh rv3 artifacts, ledger, qualification, oracle, final measurement и gate.
 - Однократный .NET boundary sweep.
@@ -56,7 +64,7 @@ rv2 не доказал host incapacity: qualification завершилась `R
 ### Out of scope
 
 - Product C# changes, новые optimisations, изменения public API.
-- Изменения `eng/perf/t246-budgets.json`, включая его `contract_rv: 2`.
+- Изменения `.pdca/scripts/perf/t246-budgets.json`, включая его `contract_rv: 2`.
 - Ослабление caps, confidence requirements, oracle или требований к valid runs.
 - Изменение `measure`/`gate` semantics вне трёх согласованных harness fixes.
 - Использование rv2 measurements как rv3 baseline или final.
@@ -124,7 +132,7 @@ rv2 не доказал host incapacity: qualification завершилась `R
 
 ### Разрешённые harness changes
 
-1. **Normalisation:** `eng/perf/t246_evidence.py:659–680` и соответствующие parser paths.
+1. **Normalisation:** `.pdca/scripts/perf/t246_evidence.py:584, 958`; strict compare :902 и соответствующие parser paths.
    - JSON `Statistics.Mean`, confidence statistics и `Memory.BytesAllocatedPerOperation` трактуются в их per-operation units.
    - Raw log duration делится на фактический operation count ровно один раз.
    - Проверка согласования log/JSON не использует двойное деление или identity-only fixture.
@@ -146,19 +154,19 @@ rv2 не доказал host incapacity: qualification завершилась `R
 **C-H-UNIT**
 
 ```bash
-python3 -m unittest discover -s eng/perf/tests -p 'test_t246_evidence.py' -v
+python3 -m unittest discover -s .pdca/scripts/perf/tests -p 'test_t246_evidence.py' -v
 ```
 
 **C-H-NEGATIVE**
 
 ```bash
-python3 eng/perf/t246_evidence.py self-test --output artifacts/pdca/T246/rv3/harness/gate-negative.json
+python3 .pdca/scripts/perf/t246_evidence.py self-test --output artifacts/pdca/T246/rv3/harness/gate-negative.json
 ```
 
 **C-H-PARSE** — новый additive CLI surface:
 
 ```bash
-python3 eng/perf/t246_evidence.py parse-check --runs artifacts/pdca/T246/rv2/perf/baseline > artifacts/pdca/T246/rv3/harness/parse-check.json
+python3 .pdca/scripts/perf/t246_evidence.py parse-check --runs artifacts/pdca/T246/rv2/perf/baseline > artifacts/pdca/T246/rv3/harness/parse-check.json
 ```
 
 Контракт `parse-check`:
@@ -196,7 +204,7 @@ python3 eng/perf/t246_evidence.py parse-check --runs artifacts/pdca/T246/rv2/per
 
 ## Protocol unchanged
 
-Нормативный источник всех ранее закреплённых числовых caps и protocol fields — rv2 contract и **неизменённые bytes** `eng/perf/t246-budgets.json`. Их значения не переоцениваются и не выводятся из новых результатов.
+Нормативный источник всех ранее закреплённых числовых caps и protocol fields — rv2 contract и **неизменённые bytes** `.pdca/scripts/perf/t246-budgets.json`. Их значения не переоцениваются и не выводятся из новых результатов.
 
 **Protocol deltas vs rv2: none** — кроме трёх harness fixes, аддитивного read-only `parse-check` и замены planned paths `rv2` → `rv3`. Caps, argv, counts, lock, seed/sha, oracle, acceptance gates и zero-empty tolerance — byte/verbatim inherited.
 
@@ -208,7 +216,7 @@ python3 eng/perf/t246_evidence.py parse-check --runs artifacts/pdca/T246/rv2/per
 - additive read-only `parse-check`;
 - замена planned rv2 output roots на rv3.
 
-`eng/perf/t246-budgets.json` остаётся **byte-identical**, включая **`contract_rv: 2`**. Это поле принадлежит frozen protocol identity input; cycle evidence contract независимо имеет `contract_rv=3`. Изменение поля ради совпадения номеров нарушило бы identity.
+`.pdca/scripts/perf/t246-budgets.json` остаётся **byte-identical**, включая **`contract_rv: 2`**. Это поле принадлежит frozen protocol identity input; cycle evidence contract независимо имеет `contract_rv=3`. Изменение поля ради совпадения номеров нарушило бы identity.
 
 До harness edits сохранить исходные bytes budgets в:
 
@@ -217,7 +225,7 @@ python3 eng/perf/t246_evidence.py parse-check --runs artifacts/pdca/T246/rv2/per
 После edits и перед measurement выполнить:
 
 ```bash
-cmp -s eng/perf/t246-budgets.json artifacts/pdca/T246/rv3/protocol/t246-budgets.rv2.json
+cmp -s .pdca/scripts/perf/t246-budgets.json artifacts/pdca/T246/rv3/protocol/t246-budgets.rv2.json
 ```
 
 Требуется rc=0. SHA-256 обоих файлов и полный набор inherited caps/strata/arms фиксируются в `protocol/identity.json`. Числовые caps, не приведённые во входной сводке, копируются **точно из frozen source**, не подбираются. Невозможность восстановить их идентичность означает GAP до measurement.
@@ -240,7 +248,7 @@ Seed:
 
 - Committed source: `benchmarks/nextorm.benchmark/data/test.db`.
 - Size: **753,664 B**.
-- Runtime path: **`/tmp/nextorm-bench/test.db`**, `eng/perf/t246_evidence.py:60`.
+- Runtime path: **`/tmp/nextorm-bench/test.db`**, `.pdca/scripts/perf/t246_evidence.py:60`.
 - SHA-256: **`32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295`**, `:62`.
 - Preflight copy: `artifacts/pdca/T246/rv3/perf/preflight/test.db`.
 - Parity: **rows=10000**, **checksum=422955955263575176**.
@@ -261,37 +269,37 @@ Oracle:
 **C-PROTOCOL**
 
 ```bash
-python3 eng/perf/t246_evidence.py protocol --root artifacts/pdca/T246/rv3
+python3 .pdca/scripts/perf/t246_evidence.py protocol --root artifacts/pdca/T246/rv3
 ```
 
 **C-BASELINE**
 
 ```bash
-python3 eng/perf/t246_evidence.py measure --phase baseline --runs 3 --max-attempts 4 --root artifacts/pdca/T246/rv3 --lock /tmp/opencode/nextorm-bdn-host.lock --lock-wait-seconds 3600 --run-timeout-seconds 600 --total-measurement-budget-seconds 7200
+python3 .pdca/scripts/perf/t246_evidence.py measure --phase baseline --runs 3 --max-attempts 4 --root artifacts/pdca/T246/rv3 --lock /tmp/opencode/nextorm-bdn-host.lock --lock-wait-seconds 3600 --run-timeout-seconds 600 --total-measurement-budget-seconds 7200
 ```
 
 **C-QUALIFY**
 
 ```bash
-python3 eng/perf/t246_evidence.py qualify --root artifacts/pdca/T246/rv3
+python3 .pdca/scripts/perf/t246_evidence.py qualify --root artifacts/pdca/T246/rv3
 ```
 
 **C-ORACLE**
 
 ```bash
-python3 eng/perf/t246_evidence.py oracle --root artifacts/pdca/T246/rv3
+python3 .pdca/scripts/perf/t246_evidence.py oracle --root artifacts/pdca/T246/rv3
 ```
 
 **C-FINAL**
 
 ```bash
-python3 eng/perf/t246_evidence.py measure --phase final --runs 3 --max-attempts 4 --root artifacts/pdca/T246/rv3 --lock /tmp/opencode/nextorm-bdn-host.lock --lock-wait-seconds 3600 --run-timeout-seconds 600 --total-measurement-budget-seconds 7200
+python3 .pdca/scripts/perf/t246_evidence.py measure --phase final --runs 3 --max-attempts 4 --root artifacts/pdca/T246/rv3 --lock /tmp/opencode/nextorm-bdn-host.lock --lock-wait-seconds 3600 --run-timeout-seconds 600 --total-measurement-budget-seconds 7200
 ```
 
 **C-GATE**
 
 ```bash
-python3 eng/perf/t246_evidence.py gate --budgets eng/perf/t246-budgets.json --runs artifacts/pdca/T246/rv3/perf/final --output artifacts/pdca/T246/rv3/perf/gate.json
+python3 .pdca/scripts/perf/t246_evidence.py gate --budgets .pdca/scripts/perf/t246-budgets.json --runs artifacts/pdca/T246/rv3/perf/final --output artifacts/pdca/T246/rv3/perf/gate.json
 ```
 
 На каждом шаге требуется rc=0 **и** ожидаемый PASS/result artifact. Один rc=0 не заменяет проверку содержания. Отрицательные fixtures считаются успешными только при ожидаемом reject.
@@ -340,6 +348,32 @@ python3 eng/perf/t246_evidence.py gate --budgets eng/perf/t246-budgets.json --ru
 Reopen требует явного owner-authorized решения и нового проверяемого факта, устраняющего конкретную причину GAP: например, доказанного исправления instrument или проверенного изменения host condition. Нужны causal evidence, пересмотренные действия/зависимости и новый ограниченный budget. Переименование, новый session/root, отсутствие отчёта или желание повторить те же inputs не являются reopen precondition.
 
 Низкая уверенность не объявляется host incapacity. При стойкой неопределённости после разрешённых проверок оркестратору рекомендуется `escalate` по trigger 5; молчаливого дополнительного measurement нет.
+
+## Terminal GAP — rv3 (2026-10-17)
+
+Диспозиция: **`incomplete` — terminal GAP**, production без изменений, issue #246 остаётся open.
+Полный разбор — `artifacts/pdca/T246/rv3/GAP.md`.
+
+Gate H (до любого измерения): **GREEN, 0 measurements** — unit `Ran 63 tests` rc=0;
+self-test rc=0 (21 case); `parse-check` rc=0 4/4 (`operations=64`, `relative_diff=0.0`,
+`unnormalised_ratio=64.0`); resolved-job fix red rc=1 / 7 `ResolvedJobTests` → green.
+Boundary (D246-B): build 0W/0E; core 2638/2638; sqlite 1783 + 1 skip; conventions 4/4;
+integration 3868 passed / 0 failed / 199 capability skips; skip budget rc=0; product drift нет.
+
+Qualification: **4/4 executions spent** (3 harness-valid, **1 lane-admissible** против
+требуемых 3) — `baseline/run-{3,4}` инвалидированы `foreign-competing-workload-mid-block`
+(чужой `dotnet build`/`run` integration, `dotnet-coverage`, `dotnet test` в окне блока).
+Разрешённая поправка: empty `invocationCount` 4096 → 8192 при неизменном `iterationCount=10`
+(18:06:39Z). 726.10 s из 7200 s. `qualify` rc=2 `mode-pair-not-represented:run=1:n=1:c=0`;
+`protocol-lock.json` отсутствует ⇒ `gate` rc=2 (missing-file) ⇒ `time_upper_ratio` и
+`allocation_ratio` **недоступны и не оценивались**. Ни одна строка контракта не повышена
+на недоступных данных.
+
+Лейн остановлен не продуктом: `pdca-planner` упал с `API key expired`, затем каждый
+dispatch субагента — `Upstream request failed: Go requires a credential` (7 попыток).
+Причина — ротация ключа: cheap-тир был привязан к `opencode-go`, а новый OpenCode Console
+ключ не имеет активной Go-подписки. Роли восстановлены переводом cheap-тира на штатный
+fallback профиля `deepseek/deepseek-flash`.
 
 ## Test strategy
 
@@ -480,11 +514,11 @@ python3 eng/check-integration-skip-budget.py --log /tmp/opencode/integration.log
 
 **Perf measurement нужен:** это предмет D246 acceptance, а не факультативный benchmark.
 
-- Instrument: существующий `eng/perf/t246_evidence.py` + BDN.
+- Instrument: существующий `.pdca/scripts/perf/t246_evidence.py` + BDN.
 - Baseline: fresh rv3 qualification block, только после Gate H.
 - Final: fresh rv3 final block после qualification freeze и oracle.
 - Captured rv2 runs — только parser evidence, не baseline substitution.
-- Correctness-critical normalisation location: `eng/perf/t246_evidence.py:659–680`.
+- Correctness-critical normalisation location: `.pdca/scripts/perf/t246_evidence.py:584, 958`.
 - Seed identity anchors: `:60`, `:62`.
 - Product per-row path не изменяется; дополнительного product microbenchmark вне frozen protocol нет.
 
@@ -518,7 +552,7 @@ Historical rv1/rv2 rows/results не редактируются. Lane сохра
 
 | DO unit | Footprint / действие | Решение |
 |---|---|---|
-| **D246-H** | `eng/perf/t246_evidence.py:659–680`, job/host guards того же файла; `eng/perf/tests/test_t246_evidence.py` | **Fix now:** три fixes, parse-check, Gate H |
+| **D246-H** | `.pdca/scripts/perf/t246_evidence.py:584, 958`, job/host guards того же файла; `.pdca/scripts/perf/tests/test_t246_evidence.py` | **Fix now — closed (2026-10-17):** три fixes, parse-check, Gate H |
 | **D246-B** | Текущие tests, boundary artifacts, Roslyn-resolved R100 mapping | **Fix now:** один boundary sweep, без product refactor |
 | **D246-M** | `artifacts/pdca/T246/rv3/perf/**` | **Fix now после H/B:** frozen-order bounded measurement |
 | **D246-E** | rv3 manifest/status, rv2 append, collection lane | **Fix now:** provenance, validators, CHECK handoff |
@@ -588,11 +622,11 @@ Manifest:
 **Оба gate обязательны; любой nonzero — FAIL:**
 
 ```bash
-python3 scripts/validate_inner_loop.py manifest artifacts/pdca/T246/rv3/manifest.json
+python3 .pdca/scripts/validate_inner_loop.py manifest artifacts/pdca/T246/rv3/manifest.json
 ```
 
 ```bash
-python3 scripts/pdca_evidence.py lint --repo . --manifest artifacts/pdca/T246/rv3/manifest.json
+python3 .pdca/scripts/pdca_evidence.py lint --repo . --manifest artifacts/pdca/T246/rv3/manifest.json
 ```
 
 Требуется rc=0 у обоих; rc=2 evidence lint не игнорируется. В terminal GAP также сохраняются результаты validators, но structural validity не превращает незакрытые acceptance rows в PASS.
@@ -612,6 +646,16 @@ python3 scripts/pdca_evidence.py lint --repo . --manifest artifacts/pdca/T246/rv
 
 - 2026-10-17 | D246/T246 | D246 rv2 GAP — qualification REJECT, valid-run-count 0!=3, captured 10k runs 1–4, protocol lock absent; rv2 evidence preserved.
 - 2026-10-17 | D246/T246 | D246 PLAN rv3 — N=1, r=3, rv=3, n=1, iteration 1/3; owner «обнови пути и продолжи», Gate H pending, rv3 measurement executions 0; persist contract before DO.
+- 2026-10-17 | DO/T246 rv3 | DO started — D246-H active; Gate H pending; 0 measurement executions; preflight captured at artifacts/pdca/T246/rv3/harness/preflight.json.
+- 2026-10-17 | DO/T246 rv3 | D246-H closed — Gate H GREEN, 0 measurement executions. Axis 1 (H-N1): Operations=64 regression proves single division at :584/:958 and rejects the unnormalised 64x total. Axis 2 (H-N2): resolved out-of-process job implemented (log header tuple 64/10/3/1/5 + CSV/log agreement + out-of-process toolchain; per-setting failures) — red rc=1 / 7 failing ResolvedJobTests ids, then green. Axis 3 (H-N3): idle VBCSCompiler accepted, active csc/testhost/build/test/publish/coverage/BDN rejected alone and alongside the idle server. Axis 4 (C-H-PARSE): parse-check on 4 captured rv2 runs — operations=64, relative_diff=0.0, unnormalised_ratio=64.0 each.
+- 2026-10-17 | DO/T246 rv3 | Gate H evidence: unit discover rc=0 Ran 63 tests; self-test rc=0 21 cases; parse-check rc=0 4/4; journal->project rc=0, report --journal rc=0. Paths: artifacts/pdca/T246/rv3/harness/{unit-tests.log,gate-negative.json,parse-check.json,parse-check-inputs.json,regression-proof.json,inner-loop/}.
+- Notice: the working tree of .pdca/scripts/perf/t246_evidence.py also carries two hunks from another session's pending path refactor (docstring/DRIVER_PATH/BUDGETS_PATH/repo_root().parents[3]). They are correct for the new location and are left untouched; this cycle commits none of the foreign staged rename.
+- Notice: D246-H completion does NOT authorise measurement — D246-B (boundary sweep) must close first; measurement executions remain 0.
+- 2026-10-17 | DO/T246 rv3 | D246-B closed — boundary green (build 0W/0E; core 2638/2638; sqlite 1783+1 skip; conventions 4/4; integration 3868/0/199 skips; skip budget rc=0; no drift); 0 measurement executions.
+- 2026-10-17 | DO/T246 rv3 | C-BASELINE spent 4/4 executions — 3 harness-valid, 1 lane-admissible; run-3/4 invalidated `foreign-competing-workload-mid-block`; authorised empty invocationCount 4096→8192 (iterationCount 10 unchanged); 726.10 s / 7200 s.
+- 2026-10-17 | DO/T246 rv3 | C-QUALIFY rc=2 `mode-pair-not-represented:run=1:n=1:c=0`; no protocol-lock.json ⇒ C-GATE rc=2 input-error; time_upper_ratio / allocation_ratio unavailable, not evaluated.
+- 2026-10-17 | GAP/T246 rv3 | TERMINAL GAP — `incomplete`; no production change; issue #246 stays open; reopen only by owner authorisation + verified host-condition change; evidence artifacts/pdca/T246/rv3/GAP.md.
+- 2026-10-17 | STOP/G3 | Lane stopped by host-level role outage (`API key expired`; all dispatch `Go requires a credential`; 7 attempts). Root cause: cheap tier bound to `opencode-go`, replacement Console key has no active Go subscription. Roles restored via documented fallback `deepseek/deepseek-flash`. T244/T245/T247 not started.
 
 В collection lane использовать её **существующий group value** и строку вида `- 2026-10-17 | group | D246 state — numbers; next.`, без переименования группы и переписывания истории.
 
