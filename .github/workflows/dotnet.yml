@@ -27,9 +27,9 @@ jobs:
       MIN_LINE_COVERAGE: 85
       MIN_BRANCH_COVERAGE: 75
       # Dedicated gate for tests/nextorm.integration.tests (real databases only).
-      # Branch threshold is a hard 75 %. Measured integration-only baseline: 56.6 % branch
-      # (all 8 assemblies) / 57.7 % (the 4 gated CI modules) — the gate is RED until the branch
-      # coverage of the integration suite is raised to 75 %; it is a target, not a description.
+      # Branch threshold is a hard 75 %. Measured integration-only baseline after the
+      # NextORM.Core.InMemory* exclusion (unit-only by policy): 74.5 % line / 64.4 % branch —
+      # the gate is RED until the integration suite's branch coverage is raised to 75 %.
       MIN_INTEGRATION_LINE_COVERAGE: 65
       MIN_INTEGRATION_BRANCH_COVERAGE: 75
 

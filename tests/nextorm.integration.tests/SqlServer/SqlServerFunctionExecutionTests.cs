@@ -107,7 +107,7 @@ public sealed class SqlServerFunctionExecutionTests : ProviderTestSuite
                 ObjectIdType = SqlFunctions.SqlServer.object_id("simple_entity", "U"),
                 ObjectName = SqlFunctions.SqlServer.object_name(SqlFunctions.SqlServer.object_id("simple_entity")),
                 ColLength = SqlFunctions.SqlServer.col_length("simple_entity", "id"),
-                ColName = SqlFunctions.SqlServer.col_name(1, 1),
+                ColName = SqlFunctions.SqlServer.col_name(SqlFunctions.SqlServer.object_id("simple_entity"), 1),
                 AnsiNull = SqlFunctions.SqlServer.getansinull(),
             })
             .First();

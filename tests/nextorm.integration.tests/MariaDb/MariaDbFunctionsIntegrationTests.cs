@@ -289,6 +289,59 @@ public sealed class MariaDbFunctionsIntegrationTests : IDisposable
         using var cmd = ((DataContext)_ctx).CreateCommand(sql);
         cmd.ExecuteNonQuery();
     }
+
+    [Fact]
+    public void OracleCompatibleFunctions_ShouldExecute()
+    {
+        var r = Probe
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Sub = SqlFunctions.MySql.regexp_substr("abc123", "[0-9]+"),
+                Instr = SqlFunctions.MySql.regexp_instr("abc123", "[0-9]+"),
+                Replaced = SqlFunctions.MySql.regexp_replace("abc123", "[0-9]+", "x"),
+                Nvl = SqlFunctions.MySql.nvl<string>(null, "fallback"),
+                Nvl2 = SqlFunctions.MySql.nvl2<string>("a", "yes", "no"),
+                Nvl2Null = SqlFunctions.MySql.nvl2<string>(null, "yes", "no"),
+                AddMonths = SqlFunctions.MySql.add_months(new DateTime(2023, 1, 31), 1),
+                ToChar = SqlFunctions.MySql.to_char(new DateTime(2023, 5, 17), "YYYY-MM-DD"),
+                Detailed = SqlFunctions.MySql.json_detailed("{\"a\":1}"),
+                Compact = SqlFunctions.MySql.json_compact("{ \"a\" : 1 }")
+            })
+            .First();
+
+        r.Sub.Should().Be("123");
+        r.Instr.Should().Be(4);
+        r.Replaced.Should().Be("abcx");
+        r.Nvl.Should().Be("fallback");
+        r.Nvl2.Should().Be("yes");
+        r.Nvl2Null.Should().Be("no");
+        r.AddMonths.Should().Be(new DateTime(2023, 2, 28));
+        r.ToChar.Should().Be("2023-05-17");
+        r.Detailed.Should().Contain("\n");
+        r.Compact.Should().NotContain(" ");
+    }
+
+    [Fact]
+    public void Sequences_ShouldExecute()
+    {
+        Execute("drop sequence if exists nextorm_functions_seq");
+        Execute("create sequence nextorm_functions_seq start with 10 increment by 1");
+
+        Probe.Select(_ => SqlFunctions.MySql.next_value_for("nextorm_functions_seq")).First()
+            .Should().BeGreaterThanOrEqualTo(10);
+
+        Probe.Select(_ => SqlFunctions.MySql.nextval("nextorm_functions_seq")).First()
+            .Should().BeGreaterThanOrEqualTo(11);
+
+        Probe.Select(_ => SqlFunctions.MySql.setval("nextorm_functions_seq", 200)).First()
+            .Should().Be(200);
+
+        Probe.Select(_ => SqlFunctions.MySql.lastval("nextorm_functions_seq")).First()
+            .Should().Be(11);
+    }
+
+
 }
 
 [SqlTable("fn_probe")]
