@@ -105,7 +105,7 @@ Actions:
 | `docs/connecting-providers/sqlite.md:230–265,306` | `docs/ru/connecting-providers/sqlite.md` | Consolidate maintenance availability and frozen operation/terminal contract; distinguish successful execution from any guarantee of a fixed affected-row count. |
 | `docs/guide/provider-specific-sql/sqlite.md:246–286` | `docs/ru/guide/provider-specific-sql/sqlite.md` | Add/adjust concise sync and async maintenance examples; explain verbatim names, signed `Merge`, integrity modes, cancellation. |
 | `docs/advanced/limitations.md:42,81` | `docs/ru/advanced/limitations.md` | Align supported maintenance and failure limitations with tested behavior: capability rejection, invalid targets, existing contentless rebuild limitation. |
-Use existing wording where accurate. Do NOT touch `docs/guide/11-table-valued-functions.md` (DML not TVF), numbered guide structure/TOCs (no renumbering), internal comparison specs, or production sources. Do not add public links to `docs/specs/**`.
+Use existing wording where accurate. Do NOT touch `docs/guide/13-table-valued-functions.md` (DML not TVF), numbered guide structure/TOCs (no renumbering), internal comparison specs, or production sources. Do not add public links to `docs/specs/**`.
 
 ### D196.4 — Final boundary validation and CHECK (FIX NOW)
 Run the command/evidence matrix; inspect actual test counts and skipped-provider output, not just exit codes; validate docs parity, production-source invariance, CRLF, allowlisted diff; record coverage percentages and threshold warnings.

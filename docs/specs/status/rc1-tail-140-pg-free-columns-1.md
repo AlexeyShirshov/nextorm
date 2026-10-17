@@ -41,10 +41,10 @@ A reader who wants a schema-less result is routed to the three existing paths (a
   is allowed but **no new public API** may be invented.
 - **R140-02** (canonical paths, EN+RU): the same sections list the three schema-less paths with a
   one-line purpose each and a **public** link: `[DynamicColumns] Dictionary<string, object?>` →
-  `../27-dynamic-columns.md`; the raw `ToDataReader`/`ResultSet` reader → `../12-raw-sql.md` /
-  `../26-large-objects.md`; `jsonb_each`/`jsonb_each_text`/`jsonb_object_keys` →
-  `../11-table-valued-functions.md#dynamic-result-schema`. *Negative case:* no link to `docs/specs/**`.
-- **R140-03** (TVF guide, EN+RU): `docs/guide/11-table-valued-functions.md` `## Dynamic result
+  `../29-dynamic-columns.md`; the raw `ToDataReader`/`ResultSet` reader → `../14-raw-sql.md` /
+  `../28-large-objects.md`; `jsonb_each`/`jsonb_each_text`/`jsonb_object_keys` →
+  `../13-table-valued-functions.md#dynamic-result-schema`. *Negative case:* no link to `docs/specs/**`.
+- **R140-03** (TVF guide, EN+RU): `docs/guide/13-table-valued-functions.md` `## Dynamic result
   schema` / RU `## Динамическая схема результата` explicitly list the three alternatives and link the
   canonical section; the existing `jsonb_each*` prose is reused, no long examples duplicated.
   *Negative case:* no new/duplicated full SQL example block is added there.
@@ -56,11 +56,11 @@ A reader who wants a schema-less result is routed to the three existing paths (a
 - **R140-05** (consistency and scope): EN and RU are semantically identical; every touched link is
   public; CRLF is preserved on all six docs; `dotnet docfx docs/docfx.json` succeeds. **Allowed
   paths** are exactly the six agreed docs — `docs/guide/provider-specific-sql/postgresql.md`,
-  `docs/ru/guide/provider-specific-sql/postgresql.md`, `docs/guide/11-table-valued-functions.md`,
-  `docs/ru/guide/11-table-valued-functions.md`, `docs/advanced/limitations.md`,
+  `docs/ru/guide/provider-specific-sql/postgresql.md`, `docs/guide/13-table-valued-functions.md`,
+  `docs/ru/guide/13-table-valued-functions.md`, `docs/advanced/limitations.md`,
   `docs/ru/advanced/limitations.md` — **plus** the mandatory cycle status file
   `docs/specs/status/rc1-tail-140-pg-free-columns-1.md` (bookkeeping only, excluded from DocFX).
-  **Forbidden:** code, tests, config, TOC files, any other specs, `docs/guide/27-dynamic-columns.md`,
+  **Forbidden:** code, tests, config, TOC files, any other specs, `docs/guide/29-dynamic-columns.md`,
   `docs/connecting-providers/postgres.md` (+RU). *Negative case:* any forbidden file in `git status`, or a
   non-public link, fails the criterion.
 
@@ -132,7 +132,7 @@ Two findings (both actionable, no false positives):
 - **`D140-frozen-scope-extra-specs-file`** — the brief's R140-05 scope text listed `docs/specs/**` as
   forbidden while the cycle's own **mandatory status file** (`docs/specs/status/...`) must be edited
   as bookkeeping. Scope wording corrected in r=2 (R140-05: allowed = six docs + this status file;
-  forbidden = code, tests, config, TOC, any other specs, `docs/guide/27-dynamic-columns.md`,
+  forbidden = code, tests, config, TOC, any other specs, `docs/guide/29-dynamic-columns.md`,
   `docs/connecting-providers/postgres.md`).
 
 Candidate `stable-anchors` (line-number drift of the moved caveat) — **dismissed: no defect**; the
@@ -147,8 +147,8 @@ Criterion matrix, all checked clean:
   requires it, and that a free/partial column list without a caller-declared `TRow` is not supported.
   No new public API invented.
 - **R140-02** — the same sections list the three schema-less paths with public links
-  (`../27-dynamic-columns.md`, `../12-raw-sql.md` / `../26-large-objects.md`,
-  `../11-table-valued-functions.md#dynamic-result-schema`); no `docs/specs/**` link.
+  (`../29-dynamic-columns.md`, `../14-raw-sql.md` / `../28-large-objects.md`,
+  `../13-table-valued-functions.md#dynamic-result-schema`); no `docs/specs/**` link.
 - **R140-03** — TVF guide EN+RU lists the three alternatives and links the canonical section; no
   duplicated full SQL example.
 - **R140-04** — limitations EN+RU carry a short caveat with a public link to the canonical section;

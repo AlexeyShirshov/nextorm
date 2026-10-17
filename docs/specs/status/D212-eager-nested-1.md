@@ -50,7 +50,7 @@ Split path `EagerLoadSpec.Load :232` / `LoadAsync :244` calls `BuildChild(...).T
 - Coverage: `coverage.settings.xml` scope core/sqlite/postgres/sqlserver >=85/75 this cycle regardless of branch.
 
 ## Docs plan (R7)
-Update EN + RU: `docs/advanced/eager-loading.md`, `advanced/relationships.md`, `advanced/limitations.md`, `advanced/query-filters.md`, `guide/29-implicit-navigation.md`, `index.md`, `comparisons/capabilities.md` (and RU mirrors); inspect `docs/advanced/toc.yml:7-8`, `docs/ru/toc.yml`; no page move/deletion -> no renumbering. Public pages must not link to internal specs. Sync internal pipeline/gap/comparison specs.
+Update EN + RU: `docs/advanced/eager-loading.md`, `advanced/relationships.md`, `advanced/limitations.md`, `advanced/query-filters.md`, `guide/31-implicit-navigation.md`, `index.md`, `comparisons/capabilities.md` (and RU mirrors); inspect `docs/advanced/toc.yml:7-8`, `docs/ru/toc.yml`; no page move/deletion -> no renumbering. Public pages must not link to internal specs. Sync internal pipeline/gap/comparison specs.
 
 ## Performance measurement decision (R8) — MEASURE
 Execution/materialization change is per-query/per-row (`EntityBuilderExtensions.cs:496-539`, `EntityBuilder.cs:1227`, `JoinIntoStitcher.cs:60`). Capture the 7 acceptance cases before/after on the same host/config: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance`. Investigate >5% time/allocation regressions with two further paired runs; reject reproducible regression. Nested tests additionally assert no per-parent N+1 and stable execution counts as fan-out grows.

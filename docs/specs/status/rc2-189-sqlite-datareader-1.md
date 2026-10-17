@@ -67,7 +67,7 @@ Artifacts root: `A=artifacts/pdca/D189/r1` (coder создаёт каталог 
 - **Coverage/branch/mutation:** полный B отчёт; 85% line/75% branch, hard на main, warning на этой ветке, оба результата записать. Structural runtime branch-delta должен быть 0; sibling edge-list сверить с M1–M8. Stryker.NET на изменённых product types: ожидаемый набор пуст; N/A только по observed diff+Roslyn inventory, иначе возврат PLAN.
 
 ## Docs plan
-Проверить без изменения `docs/guide/26-large-objects.md`, `docs/ru/guide/26-large-objects.md`, `docs/advanced/api-reference.md`, `docs/ru/advanced/api-reference.md`; остальные EN/RU файлы R09 — по точному predecessor inventory. Исправляем лишь подтверждённые D2–D3 артефакты; runtime XML-doc четырёх overload не трогаем.
+Проверить без изменения `docs/guide/28-large-objects.md`, `docs/ru/guide/28-large-objects.md`, `docs/advanced/api-reference.md`, `docs/ru/advanced/api-reference.md`; остальные EN/RU файлы R09 — по точному predecessor inventory. Исправляем лишь подтверждённые D2–D3 артефакты; runtime XML-doc четырёх overload не трогаем.
 
 ## Perf-measurement decision
 Новый замер **не нужен**, потому что runtime path не меняется (`QueryCommandExtensions.cs:334-336,388-390`; `DataContext.cs:468-488`). Обязательны inherited D134 R10 actual cached-path baseline/результат и R07 cached-vs-prepared данные плюс доказанный нулевой runtime diff; при изменении пути — replan с новым baseline/замером.

@@ -9,8 +9,8 @@
 
 | EN | RU |
 |---|---|
-| `docs/guide/28-streaming-data.md` (`### SQL Server native fast-path`, :187-226) | `docs/ru/guide/28-streaming-data.md` (:189-229) |
-| `docs/guide/14-json.md` (:40-52, :102-108) | `docs/ru/guide/14-json.md` (:40-52, :102-108) |
+| `docs/guide/30-streaming-data.md` (`### SQL Server native fast-path`, :187-226) | `docs/ru/guide/30-streaming-data.md` (:189-229) |
+| `docs/guide/16-json.md` (:40-52, :102-108) | `docs/ru/guide/16-json.md` (:40-52, :102-108) |
 | `docs/advanced/api-reference.md` (`JsonStreamMode`/`JsonStreamOptions` row, :89) | `docs/ru/advanced/api-reference.md` (:89) |
 
 ## Claims checked against in-tree code / evidence
@@ -24,13 +24,13 @@
 | Large document split across reader rows, concatenated; surrogate-safe across chunk boundary | `JsonNativeStream.cs:141-160`; `Native_SurrogateAcrossReaderRow_ShouldRoundTrip` (:315) | accurate |
 | Empty result writes `[]` in `Array` mode | `JsonNativeStream.cs:164-165`; `Native_EmptyResult_ShouldBeEmptyArray` (:240) | accurate |
 | Caller owns destination; never `Stream.Flush`/dispose; cancellation/error fail-stop with partial output retained; pre-output refusals untouched | `QueryExecutor.cs:1249-1279`; core `WriteDocument*` fault/sink tests (`JsonNativeStreamTests.cs:387-505`); integration `Native_DestinationIsCallerOwned...` (:281), `NativeAsync_MidStreamCancellation...` (:368), `NativeSync_MidStreamWriteFailure...` (:388) | accurate |
-| Scalar `ForJson`/`ForJsonAsync` unchanged, one materialized `string`, `null` on empty | `docs/guide/14-json.md:102-108`; scalar tests retained in `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:853/866/889` | accurate |
+| Scalar `ForJson`/`ForJsonAsync` unchanged, one materialized `string`, `null` on empty | `docs/guide/16-json.md:102-108`; scalar tests retained in `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:853/866/889` | accurate |
 
 ## Discrepancy check
 
 - **No demonstrated discrepancy; no public-doc edit made.** Every statement above is consistent with the
   in-tree product and its tests.
-- Internal nuance recorded (not a contradiction): the detailed eligibility list (`docs/guide/28-streaming-data.md:195-207`,
+- Internal nuance recorded (not a contradiction): the detailed eligibility list (`docs/guide/30-streaming-data.md:195-207`,
   RU :197-210) is phrased as a necessary condition ("eligible ... only when **all** of these hold") and does not
   spell out the internal direct-pass-through guard `if (!column.IsDirectPassThrough) return false;`
   (`src/nextorm.core/Query/Json/JsonNativeStream.cs:80`; `JsonShapePlan.IsDirectProjection`, `JsonShapePlan.cs:348-368`).

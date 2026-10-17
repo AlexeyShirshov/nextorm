@@ -136,8 +136,8 @@ sequentially backward; before/after hashes and kill report required.
 
 ## Docs
 
-`docs/guide/12-raw-sql.md:310,332,579` + RU counterpart `:318+`;
-`docs/guide/23-sql-batch.md:215,222,242` + RU counterpart `:215+`: value/sentinel, availability
+`docs/guide/14-raw-sql.md:310,332,579` + RU counterpart `:318+`;
+`docs/guide/25-sql-batch.md:215,222,242` + RU counterpart `:215+`: value/sentinel, availability
 moment, early Dispose, single batch count, ClickHouse limits; XML docs on both properties. No other
 guides/readme; no public links to specs.
 

@@ -138,7 +138,7 @@ reportgenerator \
 
 ## Documentation plan
 
-Change: `docs/guide/28-streaming-data.md` (`:67-87`) and RU (`:75-77`) — supported enums, stock string attributes, numeric-storage scope, custom/storage converter rejection; `docs/advanced/api-reference.md:89` and RU (`:89`); internal `docs/specs/roadmap/todo_json_streaming.md` (`:123,:280`, stale `DataContext/Json/` path, converter stance `:24-25,:135,:200,:234-236,:326`). Do not touch `docs/advanced/limitations.md` (no enum row), `14-json.md`, `26-large-objects.md`, readme unless gather finds a contradiction. Public docs must not link to `docs/specs/**`; verify `dotnet docfx docs/docfx.json` exit 0.
+Change: `docs/guide/30-streaming-data.md` (`:67-87`) and RU (`:75-77`) — supported enums, stock string attributes, numeric-storage scope, custom/storage converter rejection; `docs/advanced/api-reference.md:89` and RU (`:89`); internal `docs/specs/roadmap/todo_json_streaming.md` (`:123,:280`, stale `DataContext/Json/` path, converter stance `:24-25,:135,:200,:234-236,:326`). Do not touch `docs/advanced/limitations.md` (no enum row), `16-json.md`, `28-large-objects.md`, readme unless gather finds a contradiction. Public docs must not link to `docs/specs/**`; verify `dotnet docfx docs/docfx.json` exit 0.
 
 ## Performance decision
 

@@ -64,7 +64,7 @@ Out of scope: a new caching model; fixing the TVP resolver; interface whole-enti
 - Production: `src/nextorm.core/Builders/EntityBuilderExtensions.cs`.
 - Consumer/cache/TVP files (`DataContextExtensions.cs`, `DataContextCache.cs`, `QueryPreparer.cs`, `MemberTranslator.cs`, `RowMaterializerBuilder.cs`, `RawMapperFactory.cs`) — read-only control; any additional production edit requires a justified replan.
 - Tests: `tests/nextorm.core.tests/RawSourceBinding{Tests,MetadataTests,FilterTests}.cs`; `tests/nextorm.{sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}.tests/RawSourceBindingSqlGenerationTests.cs`; acceptable additional existing targets `tests/**/TvpMetadataCacheTests.cs`, `tests/**/CommonTestSuite.RawSourceBinding.cs`, `tests/**/MariaDbRawSourceBindingTests.cs`, `tests/**/ClickHouseQueryFilterTests.cs`; diagnostics/EF tests run first, edited only for a necessary regression.
-- Docs: `docs/guide/12-raw-sql.md`, `docs/ru/guide/12-raw-sql.md`.
+- Docs: `docs/guide/14-raw-sql.md`, `docs/ru/guide/14-raw-sql.md`.
 - **Uncertainty:** whether registering in `Metadata` alone is sufficient for interface whole-entity materialization, or whether parity requires more, is NOT yet confirmed; it is closed by parity tests vs the registered path, not by expanding the footprint. Exact new line numbers after the diff are not invented now.
 
 ## Predecessor-result requirements

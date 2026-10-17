@@ -29,8 +29,8 @@
 - D169.3 variants: V01–V12 and V15 closed per `variants.md` (new: PG/MySQL inline composition with join hint, SQL Server hinted→unhinted→hinted parity/leakage). V11 target-only table hints deliberately left unchanged (P2 deferred); V15 proven non-reachable (sole callers `QueryPlanner:461`/`:510`; temp-table/TVP route through `MakeSelect`).
 - D169.3 mutation ledger `mutation.md`: M1 structural-off → sqlserver 3 fail; M2 inline-off → postgres 5 / mysql 3 fail; M3 validation-off → sqlite 1 fail. Each reverted immediately; final `SqlBuilder.cs` SHA1 `4d6d5fe6560ce18a30ca25f02a7325867a952fd2` matches pre-mutation. No `MUTATION-` residue.
 - D169.3 perf after `perf/after/`: `CMD-P` exit 0, wall 52s, 7 cases within baseline noise; supplemental `DmlScopeHintBenchmark` exit 0, wall 44s, 6 cases — no-hint arms allocate identically, hinted arms grow ~38–48 KB because the hint is now emitted (expected). Cached/prepared SELECT arms unchanged. Tracked BDN artifacts restored.
-- `2026-10-09T05:59:21Z | DO | revision r=1 | iteration 1/3 | D169.4 docs done | docs/guide/13-query-hints.md`
-- D169.4: EN+RU `guide/13-query-hints.md` gained "Tables-in-scope hints on joined DELETE/UPDATE" (structural vs inline, placement, unsupported rejection, hint-free unchanged). EN/RU `advanced/limitations.md` reviewed; no contradicting statement, so unchanged. `roadmap/todo_hint-followups.md` section D kept (finalization is ACT). No public `docs/specs/**` links added.
+- `2026-10-09T05:59:21Z | DO | revision r=1 | iteration 1/3 | D169.4 docs done | docs/guide/15-query-hints.md`
+- D169.4: EN+RU `guide/15-query-hints.md` gained "Tables-in-scope hints on joined DELETE/UPDATE" (structural vs inline, placement, unsupported rejection, hint-free unchanged). EN/RU `advanced/limitations.md` reviewed; no contradicting statement, so unchanged. `roadmap/todo_hint-followups.md` section D kept (finalization is ACT). No public `docs/specs/**` links added.
 - `2026-10-09T05:59:21Z | DO | revision r=1 | iteration 1/3 | inner-loop report validated | /tmp/nextorm-rc2-169-r1/evidence.json`
 - `validate_inner_loop.py report evidence.json` exit 0. D169.2–D169.4 complete. Boundary (D169.5 CMD-I + CMD-BOUNDARY + coverage + CHECK) not run in this dispatch. Defect ledger updated: `DEF-169-01` fixes applied=1 (structural+inline propagation), `DEF-169-02` fixes applied=1 (capability rejection); both closed in DO, pending CHECK.
 - `2026-10-09T06:04:25Z | DO | revision r=1 | iteration 1/3 | D169.5 boundary sweep | /tmp/nextorm-rc2-169-r1/boundary/`
@@ -184,7 +184,7 @@ Execute these units sequentially in the collection-assigned tree.
 | Tests | `tests/nextorm.sqlserver.tests/**`, `tests/nextorm.mysql.tests/**`, `tests/nextorm.clickhouse.tests/**`, `tests/nextorm.core.tests/**` | **Likely**; exact test files require discovery |
 | Integration | `tests/nextorm.integration.tests/CommonTestSuite.*.cs`, provider-specific test files | **Possible**; use common tests only for genuinely common behaviour |
 | Benchmarks | `benchmarks/nextorm.benchmark/**` | **Possible**; only if existing cases cannot measure DML preparation |
-| Public docs | `docs/guide/13-query-hints.md`, `docs/ru/guide/13-query-hints.md` | **Confirmed** |
+| Public docs | `docs/guide/15-query-hints.md`, `docs/ru/guide/15-query-hints.md` | **Confirmed** |
 | Public docs | EN/RU provider overview and limitations pages | **Possible**; change only contradicting statements |
 | Internal docs | `docs/specs/roadmap/todo_hint-followups.md:9-12`; proposed status file | **Confirmed** |
 

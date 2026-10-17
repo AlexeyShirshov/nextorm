@@ -30,7 +30,7 @@
 
 ## Decisions
 
-- Clustering: one lane. All tasks touch shared query-path files (`QueryCommand*`, `EntityBuilder`, `Dialect/*`), provider test projects and shared docs pages (`query-filters.md`, `08-cte.md`, `12-raw-sql.md`) — parallel groups would conflict on merge.
+- Clustering: one lane. All tasks touch shared query-path files (`QueryCommand*`, `EntityBuilder`, `Dialect/*`), provider test projects and shared docs pages (`query-filters.md`, `10-cte.md`, `14-raw-sql.md`) — parallel groups would conflict on merge.
 - Order: dependency-first (#116→#136, #39→#112); rest by planner chain.
 - Merge: none — single group, so no `merge --no-ff`; commits land directly on `1.0.9-b`.
 - Units inside each task: decided per-task PLAN.

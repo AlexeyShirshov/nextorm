@@ -43,7 +43,7 @@ Uncommitted, frozen on branch `1.0.9` @ base `62e59e53`:
 | `src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs` | +202/-1 — adds `NORMGEN009` (anonymous chain type → fail closed) and the #230 syntactic root recovery (`QueryRootOperators`/`ElementPreservingOperators`/`ElementWrappers`) | #229, #230 |
 | `src/nextorm.core.sourcegenerator/AnalyzerReleases.Unshipped.md` | registers `NORMGEN009 | NextORM.JoinAlias | Error | Join alias over an anonymous projection type` | #229 |
 | `tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs` | adds `Aliased_chain_consumed_by_a_later_query_keeps_the_downstream_aliases` (@527) and `Alias_over_an_anonymous_chain_type_reports_NORMGEN009` (@575) | #230, #229 |
-| `docs/guide/02-joins.md`, `docs/ru/guide/02-joins.md` | generator reports `NORMGEN001`–`NORMGEN009`; alias over an anonymous chain type | #229 |
+| `docs/guide/04-joins.md`, `docs/ru/guide/04-joins.md` | generator reports `NORMGEN001`–`NORMGEN009`; alias over an anonymous chain type | #229 |
 | `docs/advanced/limitations.md`, `docs/ru/advanced/limitations.md` | alias limitation row updated with the anonymous-projection rejection | #229 |
 
 DO **does not edit any of these**. Identity: HEAD `62e59e53c1121a32c4e0854332513a65a41d6516`; current
@@ -109,8 +109,8 @@ No `--no-build`; logs under `artifacts/pdca/D229-D230-join-alias/rv1/`.
 
 ## Docs plan
 
-Docs are already updated and frozen as part of the implementation: `docs/guide/02-joins.md` and
-`docs/ru/guide/02-joins.md` (generator range `NORMGEN001`–`NORMGEN009`, anonymous-chain rejection) and
+Docs are already updated and frozen as part of the implementation: `docs/guide/04-joins.md` and
+`docs/ru/guide/04-joins.md` (generator range `NORMGEN001`–`NORMGEN009`, anonymous-chain rejection) and
 `docs/advanced/limitations.md` / `docs/ru/advanced/limitations.md` (alias limitation row). DO makes no
 further docs edits. **Attribution:** the `DateTimeOffset` limitation row that also appears in the
 `limitations.md` diffs is parallel **D217** work — it is **not** part of #229/#230 and must not be
@@ -266,7 +266,7 @@ Frozen uncommitted files (identity pinned by HEAD `62e59e53`): the product files
 `62e59e53:src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs` sha256
 `cc098b69228d2417b10d94b586cc37c3a49a145d47098f4c0dea74787191cd06`),
 `src/nextorm.core.sourcegenerator/AnalyzerReleases.Unshipped.md`, the four EN+RU docs pages
-(`docs/guide/02-joins.md`, `docs/ru/guide/02-joins.md`, `docs/advanced/limitations.md`,
+(`docs/guide/04-joins.md`, `docs/ru/guide/04-joins.md`, `docs/advanced/limitations.md`,
 `docs/ru/advanced/limitations.md`), plus `tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs`
 and this status file. All **uncommitted** — no commit/push/merge in this cycle.
 

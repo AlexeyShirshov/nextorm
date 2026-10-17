@@ -241,8 +241,8 @@ Cycle **N=1**; plan revision **r=3**; attempt **n=1/3**; evidence contract **rv=
 | `docs/advanced/relationships.md`; `docs/ru/advanced/relationships.md` | Audit; retain accurate composite support statements. |
 | `docs/advanced/limitations.md`; `docs/ru/advanced/limitations.md` | Audit; retain accurate content. |
 | `docs/advanced/eager-loading.md`; `docs/ru/advanced/eager-loading.md` | Audit; no invented composite-junction section. |
-| `docs/guide/02-joins.md`; `docs/ru/guide/02-joins.md` | Audit; no invented composite-junction section. |
-| `docs/guide/29-implicit-navigation.md:257`; `docs/ru/guide/29-implicit-navigation.md:263` | Re-scope the blanket key limitation using the evidence rule above. |
+| `docs/guide/04-joins.md`; `docs/ru/guide/04-joins.md` | Audit; no invented composite-junction section. |
+| `docs/guide/31-implicit-navigation.md:257`; `docs/ru/guide/31-implicit-navigation.md:263` | Re-scope the blanket key limitation using the evidence rule above. |
 | `docs/specs/comparison/capability-matrix.md:110` | Remove obsolete composite/scalar-M:N SingleQuery gaps; retain independently valid limitations. |
 | `docs/specs/comparison/linq2db-comparison.md:109` | Same correction against delivered behaviour. |
 | `docs/specs/comparison/linq2db-backlog-gap-analysis.md:54,346,405,505` | Correct every stale residual-gap statement consistently. |

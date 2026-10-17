@@ -12,7 +12,7 @@
 | id | issue | title | variant | status | plan_state | cycle N | r | rv | status file | baseline ref | commit |
 |----|-------|-------|---------|--------|-----------|---|--|----|-------------|--------------|--------|
 | T243 | #243 | Perf: warm-path Count/Sum allocations exceed linq2db | pdca-dotnet | done | ready | 1 | 1 | 1 | docs/specs/status/D243-warm-aggregates-1.md | 957fcfe7 | b5b717cc |
-| T246 | #246 | Perf: ToDataReader raw reader is slower than linq2db | pdca-dotnet | pending (G2, rv2 plan) | rv2-pending | 1 | 2 | 2 | docs/specs/status/D246-raw-datareader-1.md → rv2 file | 957fcfe7 | — |
+| T246 | #246 | Perf: ToDataReader raw reader is slower than linq2db | pdca-dotnet | pending (G2, rv2 plan) | ready (rv2) | 1 | 2 | 2 | docs/specs/status/D246-raw-datareader-2.md | 957fcfe7 | — |
 | T244 | #244 | Perf: warm CTE/recursive CTE allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending (G2) | ready | 1 | 1 | 1 | docs/specs/status/D244-warm-cte-1.md | 957fcfe7 | — |
 | T245 | #245 | Perf: warm EXCEPT/INTERSECT allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending (G2) | ready | 1 | 1 | 1 | docs/specs/status/D245-warm-set-ops-1.md | 957fcfe7 | — |
 | T247 | #247 | Perf: JSON streaming is slower than linq2db at 10k rows | pdca-dotnet | pending (G2) | ready | 1 | 1 | 1 | docs/specs/status/D247-json-streaming-1.md | 957fcfe7 | — |
@@ -47,7 +47,7 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
   - report-page fragments are merged between tasks (single lane ⇒ no concurrent writer);
   - a round is invalid on lock bypass/overlap, source/environment drift, changed measurement inputs/DB/config, or incomplete evidence; a later edit invalidates earlier evidence only if it touches the same execution path or acceptance gate.
 - **Model-region incident (2026-10-17):** the first P.2 launch failed with `Country, region, or territory not supported` on `opencode/gpt-6.1-sol`; probes showed `gemini-4-argon` and `claude-sonnet-5-5` reachable and `grok-4.7` endpoint-unavailable. Retry of `gpt-6.1-sol` succeeded; **no profile/config change was made** (backup only: `~/.config/opencode/pdca-backups/deepseek.jsonc.*`).
-- **P.5 Re-schedule (2026-10-17) — OWNER-APPROVED.** After the G1 stop, the owner chose «Ревизия протокола T246, затем очередь». Decision: reopen **T246 only** with a **bounded measurement-protocol revision (rv2, r=2)** and keep the substantive acceptance gates unchanged (`time_upper_ratio ≤ 1.00`, `allocation_ratio ≤ 1.00`, zero empty tolerance); precision must be demonstrated **before** any production change. After T246 (done or a second terminal GAP) the queue continues with **T244 → T245 → T247** under their existing rv1 plans. Rationale for a new group rather than resuming G1: the collection rule forbids automatic rerun/re-schedule after a lane starts; G1 stays closed as `incomplete`, G2 carries only the remaining work. T246 rv1 contract (`E246-01..15` / `R246-01..13`) is preserved verbatim; rv2 may add protocol rows, never rewrite rv1 rows. T243 stays `done` and is not re-executed.
+- **P.5 Re-schedule (2026-10-17) — OWNER-APPROVED.** After the G1 stop, the owner chose «Ревизия протокола T246, затем очередь». Decision: reopen **T246 only** with a **bounded measurement-protocol revision (rv2, r=2)** and keep the substantive acceptance gates unchanged (`time_upper_ratio ≤ 1.00`, `allocation_ratio ≤ 1.00`, zero empty tolerance); precision must be demonstrated **before** any production change. After T246 (done or a second terminal GAP) the queue continues with **T244 → T245 → T247** under their existing rv1 plans. Rationale for a new group rather than resuming G1: the collection rule forbids automatic rerun/re-schedule after a lane starts; G1 stays closed as `incomplete`, G2 carries only the remaining work. T246 rv1 contract (`E246-01..15` / `R246-01..13`) is preserved verbatim; rv2 may add protocol rows, never rewrite rv1 rows. T243 stays `done` and is not re-executed. **Stop semantics for G2 (owner-approved):** a second terminal GAP in T246 rv2 (precision still unattainable) closes T246 as `incomplete` with the evidence preserved and does **not** stop the lane — T246 makes no production change and T244/T245/T247 are semantically independent of it, so the queue continues with T244 → T245 → T247. Only a terminal `incomplete` in one of T244/T245/T247 stops the remaining queue.
 
 ## Lane log
 
@@ -60,6 +60,7 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
 - 2026-10-17 | G1 | lane stopped — T244/T245/T247 marked incomplete «группа остановлена», not executed.
 - 2026-10-17 | P.5 | owner approved «Ревизия протокола T246, затем очередь» → G2 created: T246 (rv2) → T244 → T245 → T247; acceptance gates unchanged, precision demonstrated before production work.
 - 2026-10-17 | G2 | rv2 PLAN for T246 dispatched (bounded protocol revision; r=2, rv=2, N=1).
+- 2026-10-17 | PLAN/T246 | rv2 ready — N=1; r=2; rv=2; n=1; iteration 1/3; bounded measurement-protocol revision; production blocked until precision PASS; both ≤1.00 gates and empty tolerance 0 % unchanged.
 
 ## General verification & recovery
 

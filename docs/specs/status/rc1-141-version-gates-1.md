@@ -260,13 +260,13 @@ Branch `1.0.9-rc1`, HEAD `815e0127`; 32 entries = 28 modified + 4 untracked, **0
 ```
  M docs/advanced/api-reference.md
  M docs/advanced/limitations.md
- M docs/guide/03-grouping-and-aggregates.md
+ M docs/guide/05-grouping-and-aggregates.md
  M docs/connecting-providers/mariadb.md
  M docs/connecting-providers/overview.md
  M docs/connecting-providers/postgres.md
  M docs/ru/advanced/api-reference.md
  M docs/ru/advanced/limitations.md
- M docs/ru/guide/03-grouping-and-aggregates.md
+ M docs/ru/guide/05-grouping-and-aggregates.md
  M docs/ru/connecting-providers/mariadb.md
  M docs/ru/connecting-providers/overview.md
  M docs/ru/connecting-providers/postgres.md

@@ -76,7 +76,7 @@ Key files read in full or in relevant ranges:
     "select t1.id, t2.id as 'SId', t1.String from (select id, somestring as 'String' from complex_entity\n where (id > 0)) as 't1' join simple_entity as 't2' on t1.id = cast(t2.id as bigint)"
     ```
   - union: `SqlGenerationTests.cs:560` `"select id from simple_entity\n union \nselect id from simple_entity"`.
-  - docs sample is single-line: `docs/guide/14-json.md:87`
+  - docs sample is single-line: `docs/guide/16-json.md:87`
     `select id, somestring from complex_entity for json path, root('items'), include_null_values`.
 - Concise shape today: `select <cols> from <src> <joins>` then each later clause (`where`, `group by`,
   `having`, `order by`, union, paging, ...) starts on a new line; there is no per-clause indentation.

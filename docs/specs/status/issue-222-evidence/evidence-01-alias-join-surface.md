@@ -59,14 +59,14 @@ $ git log --oneline --all --grep="alias" -i
 statements are the signature documentation (`docs/specs/status/rc2-159-cte-direct-joins-1.md:377,381`)
 which say explicit sources are *honoured*, not that they are *required*. See Not found.
 
-**`docs/guide/02-joins.md` claims (NOT a decision record; listed because issue #222 cites it):**
-- `docs/guide/02-joins.md:15-21` — right-hand side can be: another typed entity `EntityBuilder<TJoinEntity>`; a `QueryCommand<TJoinEntity>`; a raw table `EntityBuilder` from `From(string)` read via `TableAlias`. No statement that a source must be supplied.
-- `docs/guide/02-joins.md:162-171` — `Named join aliases ... A join may additionally carry an optional trailing Alias.<Name> argument ... aliases matter when two joined sources share the same CLR type — for example a buyer and an approver are both Person — because positional members cannot tell them apart.` (the stated reason aliases exist = repeated CLR type / slot disambiguation, not source explicitness).
-- `docs/guide/02-joins.md:189-200` — generated `AliasProjection_<suffix>` + `AliasJoin_<suffix>`; namespace `NextORM.Generated.<assembly name>`; `[JoinSlot(n)]` = 1-based entity position.
-- `docs/guide/02-joins.md:209-211` — `All seven projection join operators accept an alias; JoinInto is not one of them ... The conditionless three take only the source and the marker`.
-- `docs/guide/02-joins.md:223` — alias CrossJoin SQL string shown: `select t2.id from orders as 't1' cross join person as 't2'`.
-- `docs/guide/02-joins.md:186` — alias inner join SQL string shown: `select t2.id as 'Buyer', t3.id as 'Approver' from orders as 't1' join person as 't2' on t1.buyerid = t2.id join person as 't3' on t1.approverid = t3.id`.
-- `docs/guide/02-joins.md:584-589` — `A raw-table (TableAlias) join now honours an explicit source ... A plain mapped entity with no explicit source keeps the metadata fallback.`
+**`docs/guide/04-joins.md` claims (NOT a decision record; listed because issue #222 cites it):**
+- `docs/guide/04-joins.md:15-21` — right-hand side can be: another typed entity `EntityBuilder<TJoinEntity>`; a `QueryCommand<TJoinEntity>`; a raw table `EntityBuilder` from `From(string)` read via `TableAlias`. No statement that a source must be supplied.
+- `docs/guide/04-joins.md:162-171` — `Named join aliases ... A join may additionally carry an optional trailing Alias.<Name> argument ... aliases matter when two joined sources share the same CLR type — for example a buyer and an approver are both Person — because positional members cannot tell them apart.` (the stated reason aliases exist = repeated CLR type / slot disambiguation, not source explicitness).
+- `docs/guide/04-joins.md:189-200` — generated `AliasProjection_<suffix>` + `AliasJoin_<suffix>`; namespace `NextORM.Generated.<assembly name>`; `[JoinSlot(n)]` = 1-based entity position.
+- `docs/guide/04-joins.md:209-211` — `All seven projection join operators accept an alias; JoinInto is not one of them ... The conditionless three take only the source and the marker`.
+- `docs/guide/04-joins.md:223` — alias CrossJoin SQL string shown: `select t2.id from orders as 't1' cross join person as 't2'`.
+- `docs/guide/04-joins.md:186` — alias inner join SQL string shown: `select t2.id as 'Buyer', t3.id as 'Approver' from orders as 't1' join person as 't2' on t1.buyerid = t2.id join person as 't3' on t1.approverid = t3.id`.
+- `docs/guide/04-joins.md:584-589` — `A raw-table (TableAlias) join now honours an explicit source ... A plain mapped entity with no explicit source keeps the metadata fallback.`
 
 **Issue #222 itself (from `gh issue view 222`, not a decision record):** title `Джойны: перегрузки без
 явного источника (Join/LeftJoin/RightJoin/FullJoin по типу)`; body states `Покрывается только один из
@@ -163,7 +163,7 @@ Integration:
 
 Note: no test asserts a full exact alias CrossJoin/Join SQL string via `Should().Be(<literal>)`; the alias
 SQL-gen tests use `Be(positional)` + `Contain(keyword)`. The full literal alias SQL appears only in
-`docs/guide/02-joins.md:223` (cross join) and `:186` (join).
+`docs/guide/04-joins.md:223` (cross join) and `:186` (join).
 
 ## Not found
 

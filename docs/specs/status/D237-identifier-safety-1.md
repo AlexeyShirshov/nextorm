@@ -104,8 +104,8 @@ SQL generation — unit/no-DB; actual execution/escaping — integration I once 
 
 ## Docs plan
 
-- **EN:** `docs/guide/provider-specific-sql/sqlserver.md`, `docs/guide/30-projections.md`, `docs/connecting-providers/clickhouse.md`, `docs/connecting-providers/overview.md`, `docs/advanced/api-reference.md`, `docs/comparisons/capabilities.md`.
-- **RU:** `docs/ru/guide/provider-specific-sql/sqlserver.md`, `docs/ru/guide/30-projections.md`, `docs/ru/connecting-providers/clickhouse.md`, `docs/ru/connecting-providers/overview.md`, `docs/ru/advanced/api-reference.md`, `docs/ru/comparisons/capabilities.md`.
+- **EN:** `docs/guide/provider-specific-sql/sqlserver.md`, `docs/guide/02-projections.md`, `docs/connecting-providers/clickhouse.md`, `docs/connecting-providers/overview.md`, `docs/advanced/api-reference.md`, `docs/comparisons/capabilities.md`.
+- **RU:** `docs/ru/guide/provider-specific-sql/sqlserver.md`, `docs/ru/guide/02-projections.md`, `docs/ru/connecting-providers/clickhouse.md`, `docs/ru/connecting-providers/overview.md`, `docs/ru/advanced/api-reference.md`, `docs/ru/comparisons/capabilities.md`.
 - **XML/docs checks:** `src/nextorm.core/Query/{SqlFunctions,PivotExpression,PivotValues}.cs`; explain raw names and the `Column(t,"[1]")`→`Column(t,"1")` migration; replace affected `GetNullableDecimal("[1]")` with the existing `Column`. `dotnet docfx docs/docfx.json` and the planned `python3 "$A/audit-docs.py"`: exit=0, EN/RU/XML review, no public specs links; do not change toc/numbering/API signatures.
 
 ## Write footprint

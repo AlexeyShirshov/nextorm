@@ -156,10 +156,10 @@ Paths below are exact intended locations, **not claims that every planned source
 - `benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs` — new
 - `docs/advanced/eager-loading-per-parent-paging.md` — new
 - `docs/ru/advanced/eager-loading-per-parent-paging.md` — new
-- `docs/guide/02-joins.md`
-- `docs/ru/guide/02-joins.md`
-- `docs/guide/29-implicit-navigation.md`
-- `docs/ru/guide/29-implicit-navigation.md`
+- `docs/guide/04-joins.md`
+- `docs/ru/guide/04-joins.md`
+- `docs/guide/31-implicit-navigation.md`
+- `docs/ru/guide/31-implicit-navigation.md`
 - `docs/specs/status/D211-eager-perparent-topn-1.md`
 
 ### Declared evidence sources/artifacts
@@ -285,7 +285,7 @@ Test helper formatting, prose and report presentation are P2, but their required
 
 - Add matching EN/RU advanced pages at the exact planned paths.
 - Explain per-parent versus root paging, filter/order/rank order, both eager modes, ordering ties, empty collections, batching and unsupported shapes.
-- Update examples/links in `02-joins.md` and `29-implicit-navigation.md`, in both languages.
+- Update examples/links in `04-joins.md` and `31-implicit-navigation.md`, in both languages.
 - Link the advanced article from these existing guide pages. Do not create/move/delete numbered guides or add a separate section; **no renumbering** is required.
 - No public rename/remove; curated API naming review and generated API output are not edited.
 - No public links to `docs/specs/**`.
@@ -587,7 +587,7 @@ Sequential units in the current tree; no worktree, branch, commit, merge or push
 Retained production footprint: `src/nextorm.core/Builders/EntityBuilderEagerLoading.cs`, `Builders/EntityBuilder.cs`, `DataContext/SqlBuilder.cs`; no speculative edits. `DataContext/Dialect/ISqlDialect.cs` remains read-only.
 Tests: `tests/nextorm.{core,sqlite,postgres,sqlserver,mysql,clickhouse}.tests/EagerLoadPerParentPagingTests.cs`; `tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj`.
 Integration: `tests/nextorm.integration.tests/CommonTestSuite.EagerLoadPerParentPaging.cs`, `Providers/MariaDbEagerPagingFixture.cs`, `MariaDbEagerPagingTests.cs`.
-Benchmark/docs: `benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs`; EN/RU `advanced/eager-loading-per-parent-paging.md`, `guide/02-joins.md`, `guide/29-implicit-navigation.md`.
+Benchmark/docs: `benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs`; EN/RU `advanced/eager-loading-per-parent-paging.md`, `guide/04-joins.md`, `guide/31-implicit-navigation.md`.
 Evidence/status: `artifacts/pdca/D211-eager-perparent-topn-1/rv2/**` including preserved `recon/**`; `docs/specs/status/D211-eager-perparent-topn-1.md`. Read rv1; never overwrite it.
 No package/API-name/guide-numbering/provider-production/Paging/FromExpression/JunctionLinkSourceFactory changes.
 
@@ -643,7 +643,7 @@ Perf required (`acceptance-benchmarks.md:15,37–69,109–116`): Count 2.915 ms/
 Recon satisfied: 0/7 capture self-tests and captured-exit MUT_FINAL3_B (951.61 s, exit 0) / MUT_CORRECTED_B (1117.94 s, exit 0) establish obtainability; their durations justify the new bound.
 
 ### Final DO-brief test-scope JSON
-{"unit":"D:R2-evidence-remediation","scope":{"projects":["tests/nextorm.core.tests","tests/nextorm.sqlite.tests","tests/nextorm.postgres.tests","tests/nextorm.sqlserver.tests","tests/nextorm.mysql.tests","tests/nextorm.mariadb.tests","tests/nextorm.clickhouse.tests","tests/nextorm.integration.tests"],"selectors":["Feature=D211"],"files":["src/nextorm.core/Builders/EntityBuilderEagerLoading.cs","src/nextorm.core/Builders/EntityBuilder.cs","src/nextorm.core/DataContext/SqlBuilder.cs","tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.postgres.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.sqlserver.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.mysql.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj","tests/nextorm.clickhouse.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.integration.tests/CommonTestSuite.EagerLoadPerParentPaging.cs","tests/nextorm.integration.tests/Providers/MariaDbEagerPagingFixture.cs","tests/nextorm.integration.tests/MariaDbEagerPagingTests.cs","benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs","docs/advanced/eager-loading-per-parent-paging.md","docs/ru/advanced/eager-loading-per-parent-paging.md","docs/guide/02-joins.md","docs/ru/guide/02-joins.md","docs/guide/29-implicit-navigation.md","docs/ru/guide/29-implicit-navigation.md","docs/specs/status/D211-eager-perparent-topn-1.md","artifacts/pdca/D211-eager-perparent-topn-1/rv2/capture.py","artifacts/pdca/D211-eager-perparent-topn-1/rv2/probe.py","artifacts/pdca/D211-eager-perparent-topn-1/rv2/coverage/changed_branch_delta.py","artifacts/pdca/D211-eager-perparent-topn-1/rv2/mutation/stryker-config.json","artifacts/pdca/D211-eager-perparent-topn-1/rv2/mutation/stryker-config.final3.json"],"rationale":"Same verified r1 feature scope; r2 repairs capture, mutation accounting and evidence binding. Inner tests select Feature=D211; all mandatory boundary checks remain required.","rebuild":"affected","boundary":"Warning-free Debug/Release builds; whole-solution regression and coverage; real six-provider integration; scoped mutation plus restart; docs; seven-case acceptance and dedicated eager measurements; report/manifest validation."}}
+{"unit":"D:R2-evidence-remediation","scope":{"projects":["tests/nextorm.core.tests","tests/nextorm.sqlite.tests","tests/nextorm.postgres.tests","tests/nextorm.sqlserver.tests","tests/nextorm.mysql.tests","tests/nextorm.mariadb.tests","tests/nextorm.clickhouse.tests","tests/nextorm.integration.tests"],"selectors":["Feature=D211"],"files":["src/nextorm.core/Builders/EntityBuilderEagerLoading.cs","src/nextorm.core/Builders/EntityBuilder.cs","src/nextorm.core/DataContext/SqlBuilder.cs","tests/nextorm.core.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.sqlite.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.postgres.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.sqlserver.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.mysql.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj","tests/nextorm.clickhouse.tests/EagerLoadPerParentPagingTests.cs","tests/nextorm.integration.tests/CommonTestSuite.EagerLoadPerParentPaging.cs","tests/nextorm.integration.tests/Providers/MariaDbEagerPagingFixture.cs","tests/nextorm.integration.tests/MariaDbEagerPagingTests.cs","benchmarks/nextorm.benchmark/EagerPerParentPagingBenchmark.cs","docs/advanced/eager-loading-per-parent-paging.md","docs/ru/advanced/eager-loading-per-parent-paging.md","docs/guide/04-joins.md","docs/ru/guide/04-joins.md","docs/guide/31-implicit-navigation.md","docs/ru/guide/31-implicit-navigation.md","docs/specs/status/D211-eager-perparent-topn-1.md","artifacts/pdca/D211-eager-perparent-topn-1/rv2/capture.py","artifacts/pdca/D211-eager-perparent-topn-1/rv2/probe.py","artifacts/pdca/D211-eager-perparent-topn-1/rv2/coverage/changed_branch_delta.py","artifacts/pdca/D211-eager-perparent-topn-1/rv2/mutation/stryker-config.json","artifacts/pdca/D211-eager-perparent-topn-1/rv2/mutation/stryker-config.final3.json"],"rationale":"Same verified r1 feature scope; r2 repairs capture, mutation accounting and evidence binding. Inner tests select Feature=D211; all mandatory boundary checks remain required.","rebuild":"affected","boundary":"Warning-free Debug/Release builds; whole-solution regression and coverage; real six-provider integration; scoped mutation plus restart; docs; seven-case acceptance and dedicated eager measurements; report/manifest validation."}}
 
 ### Risks, handoff and CHANGE_PLAN
 Risks: sibling drift, CRLF span drift, timing-dependent mutants, hidden Safe-Mode exclusions, incomparable perf environments; mitigate via fingerprints, span accounting, paired runs and explicit caveats/open rows.

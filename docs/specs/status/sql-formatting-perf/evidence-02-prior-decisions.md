@@ -55,7 +55,7 @@ rg -n -i -e 'byte-exact' -e 'byte.for.byte' -e 'golden' tests -g '*.cs'
 
 - `DataContextBuilder.UseMultilineBatchSql()` is a recorded, deliberate multi-line decision — but it
   controls the separator **between statements in a batch**, not `from`/`join` clause placement:
-  - `docs/guide/23-sql-batch.md:150` "By default `ToSql()` prints the statements on one line separated
+  - `docs/guide/25-sql-batch.md:150` "By default `ToSql()` prints the statements on one line separated
     by `; `; enable `DataContextBuilder.UseMultilineBatchSql()` to render each statement on its own line,
     as shown here."
   - `docs/specs/design/API-NAMING-REVIEW.md:4755` "### Аудит 24.09.2026 — многострочный батч-`ToSql`

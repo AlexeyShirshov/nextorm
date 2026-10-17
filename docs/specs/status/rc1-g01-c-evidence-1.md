@@ -73,7 +73,7 @@ collection/historical scope).
 | D127-E07 | nullable/value/reference source values | value `id`/`age`; nullable reference `name` NULL round-trip `SqlServerSpecificTests.cs:1937-1954` | closed |
 | D127-E08 | INSERT empty-result set | **gap: no test exists** | open (not closed) |
 | D127-E09 | computed source value through OutputInto table-variable | **gap: no `OutputInto*` test references a computed column** | open (not closed) |
-| D127-E10 | EN+RU docs (no "phase", comparison table, no public→specs links) | `docs/guide/15-insert-statement.md:531-572,576-582`, `docs/ru/guide/15-insert-statement.md:534-577,579-585`; link audit | closed |
+| D127-E10 | EN+RU docs (no "phase", comparison table, no public→specs links) | `docs/guide/17-insert-statement.md:531-572,576-582`, `docs/ru/guide/17-insert-statement.md:534-577,579-585`; link audit | closed |
 
 Run bindings: `artifacts/d127/test-sqlserver.log:4-8` (697/697/0/0), `artifacts/d127/sqlserver-class.log:22-23` (87/0/0, EXIT=0), `artifacts/d127/integration.log:437-439` (3191/0/193, EXIT=0).
 

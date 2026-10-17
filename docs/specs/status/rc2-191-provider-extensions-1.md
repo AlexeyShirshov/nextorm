@@ -843,7 +843,7 @@ After commands (exact argv, all exit 0):
 
 - EN (**5** files) and RU (**5** files) article pages were switched from `NextORM.Core.EntityBuilder.*` xrefs to the new provider extension classes and now name the required `using NextORM.Postgres;` / `using NextORM.SqlServer;`:
   - `docs/advanced/api-reference.md` (+RU): new `PostgresEntityBuilderExtensions` / `SqlServerEntityBuilderExtensions` rows in the namespace tables.
-  - `docs/guide/03-grouping-and-aggregates.md` (+RU) and `docs/guide/07-distinct.md` (+RU): `DistinctOn` xrefs → `NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(...)`.
+  - `docs/guide/05-grouping-and-aggregates.md` (+RU) and `docs/guide/09-distinct.md` (+RU): `DistinctOn` xrefs → `NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(...)`.
   - `docs/guide/provider-specific-sql/postgresql.md` (+RU): `DistinctOn` xref + extension/`using` note.
   - `docs/guide/provider-specific-sql/sqlserver.md` (+RU): `Pivot`/`Unpivot` xrefs → `NextORM.SqlServer.SqlServerEntityBuilderExtensions.*` + extension/`using` note.
 - Verified `rg -n 'xref:NextORM\.Core\.EntityBuilder`1\.(DistinctOn|Pivot|Unpivot)'` over article docs → **none**. Generated `docs/api/**` and `docs/_site/**` untouched; no page renumbering; no public docs link to `docs/specs/**`.

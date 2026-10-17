@@ -77,7 +77,7 @@ Mutation: unavailable. Exercise changed branches explicitly: default provider fa
 Coverage: enforce 85% line / 75% branch even on this non-main branch; configured scope core/sqlite/postgres/sqlserver does not replace testing mysql/clickhouse/mariadb.
 
 ## Docs plan
-EN `docs/guide/12-raw-sql.md:404`, `docs/guide/provider-specific-sql/postgresql.md:348`, `docs/advanced/limitations.md:47`; RU `docs/ru/guide/12-raw-sql.md:411`, `docs/ru/guide/provider-specific-sql/postgresql.md:352`, `docs/ru/advanced/limitations.md:47`. State unknown-catalog non-composites get the ordinary mapping error; cold genuine composites also degrade to that error until authoritative metadata is available. Preserve registration guidance and mixed-result limitations. Document the new protected extension point in both languages + the curated API surface. Append register entries: API-NAMING-REVIEW (new protected member, rationale, consumers/lines; after EOF :5576) and code-smells register (removal of name/exception-shape inference + constrained provider seam; after EOF :8281; do not reopen the god-class observation). Preserve CRLF; no guide moves/renumbering; no public links to internal specs.
+EN `docs/guide/14-raw-sql.md:404`, `docs/guide/provider-specific-sql/postgresql.md:348`, `docs/advanced/limitations.md:47`; RU `docs/ru/guide/14-raw-sql.md:411`, `docs/ru/guide/provider-specific-sql/postgresql.md:352`, `docs/ru/advanced/limitations.md:47`. State unknown-catalog non-composites get the ordinary mapping error; cold genuine composites also degrade to that error until authoritative metadata is available. Preserve registration guidance and mixed-result limitations. Document the new protected extension point in both languages + the curated API surface. Append register entries: API-NAMING-REVIEW (new protected member, rationale, consumers/lines; after EOF :5576) and code-smells register (removal of name/exception-shape inference + constrained provider seam; after EOF :8281; do not reopen the god-class observation). Preserve CRLF; no guide moves/renumbering; no public links to internal specs.
 
 ## Perf
 Measurement required by AC5 despite one-time classification. Run `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance`; require exactly 7 executed cases / 0 failures; record wall time, per-case Mean/Allocated, cached-vs-prepared ratio vs `docs/specs/performance/acceptance-benchmarks.md`. No additional permanent benchmark planned: the predicate reads existing metadata during mapper preparation, not per row (`RawMapperFactory.cs:72-136,617`; `ProcedureResult.cs:136/170/362/375`); structural review + cadence tests prove placement. Do not claim the 7 cases exercise hstore/composites. Trigger for extra focused measurement: observed acceptance regression, unexpected allocation, or cadence-proof failure; keep extras outside the acceptance category so the required count stays 7. After reports: `git checkout -- benchmarks/BenchmarkDotNet.Artifacts`.
@@ -243,10 +243,10 @@ Scoped `perl -0777 -ne` count per explicit path (never `grep -r`/`find`): `CRLF`
 | File | CRLF | lone_LF | lone_CR |
 |---|---:|---:|---:|
 | docs/advanced/limitations.md | 98 | 0 | 0 |
-| docs/guide/12-raw-sql.md | 737 | 0 | 0 |
+| docs/guide/14-raw-sql.md | 737 | 0 | 0 |
 | docs/guide/provider-specific-sql/postgresql.md | 385 | 0 | 0 |
 | docs/ru/advanced/limitations.md | 98 | 0 | 0 |
-| docs/ru/guide/12-raw-sql.md | 744 | 0 | 0 |
+| docs/ru/guide/14-raw-sql.md | 744 | 0 | 0 |
 | docs/ru/guide/provider-specific-sql/postgresql.md | 389 | 0 | 0 |
 | docs/specs/design/API-NAMING-REVIEW.md | 5588 | 0 | 0 |
 | docs/specs/design/code-smells-review.md | 8293 | 0 | 0 |
@@ -333,10 +333,10 @@ Flow complete: the single #203 cycle is done and issue #203 is closed. No furthe
 | `src/nextorm.postgres/PostgresDataContext.cs` | +15: Postgres override (`NpgsqlDataReader` + `PostgresCompositeType`) |
 | `tests/nextorm.core.tests/RawRowMaterializerTests.cs` | explicit per-ordinal composite facts on the fake reader; cadence + negative coverage |
 | `tests/nextorm.integration.tests/PostgresRawRowTests.cs` | T01–T14 cold/warm hstore/ltree/composite + transaction cases |
-| `docs/guide/12-raw-sql.md` | behavior + protected extension point |
+| `docs/guide/14-raw-sql.md` | behavior + protected extension point |
 | `docs/guide/provider-specific-sql/postgresql.md` | behavior + protected extension point |
 | `docs/advanced/limitations.md` | clean-catalog degradation note |
-| `docs/ru/guide/12-raw-sql.md` | RU mirror |
+| `docs/ru/guide/14-raw-sql.md` | RU mirror |
 | `docs/ru/guide/provider-specific-sql/postgresql.md` | RU mirror |
 | `docs/ru/advanced/limitations.md` | RU mirror |
 | `docs/specs/design/API-NAMING-REVIEW.md` | register entry N203-1 |
