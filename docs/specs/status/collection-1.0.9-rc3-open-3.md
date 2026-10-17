@@ -3,40 +3,56 @@
 - collection-id: `1.0.9-rc3-open-3`
 - slug: `collection-1.0.9-rc3-open-3`
 - input: **open issues of milestone `1.0.9-rc3`**, re-read 2026-10-17 via `gh`: **#243, #244, #245, #246, #247**.
-- base: branch `1.0.9-rc3` @ `957fcfe7` (owner snapshot: 2026-10-17 warm-path feature report, BDN artifacts, table-generator + CI step, cached-preparation WIP; build Debug 0W/0E, targeted suites green; pushed by explicit owner request).
+- base: branch `1.0.9-rc3` @ `01815f3a` (owner snapshot `957fcfe7`: 2026-10-17 warm-path report, BDN artifacts, table generator + CI step, cached-preparation WIP; build Debug 0W/0E; targeted suites 23/23 + 84/84; pushed on explicit owner request).
 - mode: **autonomous + auto-commit** (explicit owner request: «автономный pdca с автокомитам по открытым задачам rc3»). Push is **not** part of the collection; only the bootstrap snapshot was pushed on explicit request.
-- phase: **P — bootstrap done; own PLAN per task not started**.
+- phase: **D — lane G1 running** (P.2/P.3/P.4 complete).
 
 ## Tasks
 
 | id | issue | title | variant | status | plan_state | cycle N | r | rv | status file | baseline ref |
 |----|-------|-------|---------|--------|-----------|---|--|----|-------------|--------------|
-| T243 | #243 | Perf: warm-path Count/Sum allocations exceed linq2db | pdca-dotnet | pending | pending | — | — | — | — | 957fcfe7 |
-| T244 | #244 | Perf: warm CTE/recursive CTE allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending | pending | — | — | — | — | 957fcfe7 |
-| T245 | #245 | Perf: warm EXCEPT/INTERSECT allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending | pending | — | — | — | — | 957fcfe7 |
-| T246 | #246 | Perf: ToDataReader raw reader is slower than linq2db | pdca-dotnet | pending | pending | — | — | — | — | 957fcfe7 |
-| T247 | #247 | Perf: JSON streaming is slower than linq2db at 10k rows | pdca-dotnet | pending | pending | — | — | — | — | 957fcfe7 |
+| T243 | #243 | Perf: warm-path Count/Sum allocations exceed linq2db | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D243-warm-aggregates-1.md | 957fcfe7 |
+| T246 | #246 | Perf: ToDataReader raw reader is slower than linq2db | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D246-raw-datareader-1.md | 957fcfe7 |
+| T244 | #244 | Perf: warm CTE/recursive CTE allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D244-warm-cte-1.md | 957fcfe7 |
+| T245 | #245 | Perf: warm EXCEPT/INTERSECT allocations exceed linq2db (#240 follow-up) | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D245-warm-set-ops-1.md | 957fcfe7 |
+| T247 | #247 | Perf: JSON streaming is slower than linq2db at 10k rows | pdca-dotnet | pending | ready | 1 | 1 | 1 | docs/specs/status/D247-json-streaming-1.md | 957fcfe7 |
+
+Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 604 / 208 lines, all CRLF, all persisted by their own PLAN step (no code, no benchmarks, no commits).
 
 ## Groups (allocated only after ALL-barrier)
 
 | group | tasks (topological order) | worktree | branch/ref | status |
 |-------|---------------------------|----------|------------|--------|
-| — | — | — | — | not allocated (ALL-barrier not passed) |
+| G1 | **T243 → T246 → T244 → T245 → T247** | none (single group) | current branch `1.0.9-rc3` | **in-progress** — lane started 2026-10-17 |
 
 ## Phase decisions
 
 - **P.1 Bootstrap (2026-10-17):** scope = the 5 open issues of milestone `1.0.9-rc3`. Variant by language rule: all C#/.NET → `pdca-dotnet`. Input snapshot committed as `957fcfe7` (owner decision: «закомитить запушить»).
-- **Known cross-task constraints (input to P.2/P.4, not a schedule):**
-  - All five are **warm-path allocation/time** tasks measured with BenchmarkDotNet on this single host; concurrent BDN runs invalidate each other's numbers (ShortRun noise band ±20 %). PLAN must state how its measurement is isolated.
-  - Likely shared footprint: `benchmarks/nextorm.benchmark/**` (scenario/decomposition benches), `eng/perf/**` (gate + budgets), `docs/comparisons/feature-benchmarks-2026-10-17.md`, `docs/specs/performance/**` — the planner decides whether that merges the tasks into one connected component.
-  - Uncommitted WIP from the owner is **now part of the baseline** (`ShapeValuesStable`/`HasEverPrepared`, thread-static visited sets, InValues stability). #244 item 2 (per-call `HashSet` churn) may already be partially addressed by it — PLAN must check, not assume.
-- **P.2 Own PLAN per task — pending.**
-- **P.3 ALL-barrier — not passed.**
-- **P.4 Clustering — not started.**
+- **P.2 Own PLAN per task — DONE (2026-10-17).** All five `plan_state=ready`, N=1, r=1, rv=1, CHECK re-gather budget 2, evidence manifests deferred to DO→CHECK:
+  - **T243** — `V-D-owned-immutable-scalar-artifacts` (context-owned immutable scalar shape/normalization artifacts + invocation-local binding; fail-closed fallback). Contract `E243-01..14` / `R243-01..12`. Oracle reproducible (committed BDN CSV reproduces 3,824/2,864 and 4,226/3,490 B). Own gate `eng/perf/d243_aggregate_gate.py`; **no** shared `iteration14` edit; report page untouched (fragment only).
+  - **T246** — `V2` (isolated reuse of immutable raw preparation + lightened existing wrapper). Contract `E246-01..15` / `R246-01..13`. Correction carried: on SQLite `LobLocatorColumn = "rowid"`, so `ToDataReader` already uses the **result-reader** seam; the issue's `OpenLobReader` seam is the PG/MSSQL branch. Own `eng/perf/t246_evidence.py` + `t246-budgets.json`; no shared `iteration14` edit.
+  - **T244** — contract `E244-01..18` / `R244-01..14`. Corrected fact: the issue's hypothesized allocators (hoister / `EnsureNoUnhoistedCtes` / CTE plan hash) are **not** on the measured warm path (raw-recipe hit skips `Prepare`); attribution spike must rank real allocators first. Edits `iteration14_gate.py` + budgets (first owner).
+  - **T245** — contract `E245-01..16` / `R245-01..16`; caps converted to 5,171.2 / 5,130.24 B/op. Verified inert: the "Clone copies empty metadata" hypothesis (`_joins`/`_sorting`/`_arrayJoins` are null for this shape). Adds 2 budget rows (second gate owner).
+  - **T247** — contract `E247-01..19` / `R247-01..11`. Oracle needs a new `ToList_Dto + JsonSerializer` control arm (D247-01) before it is obtainable. Per-row flush removal deferred (would break exact-prefix cancellation tests); chosen fix = bounded 64-entry context-owned compiled-writer cache. Adds 3 gate rows (third gate owner).
+- **P.3 ALL-barrier — PASSED (2026-10-17).** All five plans persisted and `ready`; no gap placeholders.
+- **P.4 Clustering (2026-10-17) — ONE group G1.** All five share `benchmarks/nextorm.benchmark/**`, `docs/comparisons/feature-benchmarks-2026-10-17.md` (+RU) and `docs/specs/performance/**`; `eng/perf/iteration14*` is shared by T244/T245/T247; `DataContext.cs` by T243/T246/T247; `QueryPlanner.cs` by T243/T246; `SqliteBenchmarkWarmDecompose.cs` by T244/T245. Disjoint footprints are impossible → one connected component, sequential lane on the current branch, **no worktree/group branch/merge**. Hard DAG edge: **T244 → T245**.
+- **D merge strategy:** n/a — single group; task commits land directly on `1.0.9-rc3`.
+- **Schedule binding (rv=1):** order `T243 → T246 → T244 → T245 → T247`; all plans stay r=1/rv=1/N=1; the schedule adds coordination obligations only.
+- **Measurement rules pinned before the lane:**
+  - canonical host lock **`/tmp/opencode/nextorm-bdn-host.lock`** (supersedes every per-plan lock name);
+  - one BDN process at a time; every round runs via `flock -x /tmp/opencode/nextorm-bdn-host.lock bash -lc "$ROUND_CMD"`; no second benchmark, including from another session;
+  - DB bootstrap/mutation also requires measurement ownership; T246 must resolve the missing `/tmp/nextorm-bench/test.db` explicitly (no silent substitution);
+  - gate ownership order: **T244 first, then T245 (+2 rows), then T247 (+3 rows)**; predecessor rows/validation never relaxed; T243/T246 use their own gate files;
+  - report-page fragments are merged between tasks (single lane ⇒ no concurrent writer);
+  - a round is invalid on lock bypass/overlap, source/environment drift, changed measurement inputs/DB/config, or incomplete evidence; a later edit invalidates earlier evidence only if it touches the same execution path or acceptance gate.
+- **Model-region incident (2026-10-17):** the first P.2 launch failed with `Country, region, or territory not supported` on `opencode/gpt-6.1-sol`; probes showed `gemini-4-argon` and `claude-sonnet-5-5` reachable and `grok-4.7` endpoint-unavailable. Retry of `gpt-6.1-sol` succeeded; **no profile/config change was made** (backup only: `~/.config/opencode/pdca-backups/deepseek.jsonc.*`).
 
 ## Lane log
 
 - 2026-10-17 | bootstrap | owner snapshot committed and pushed as `957fcfe7`; collection `1.0.9-rc3-open-3` created with 5 tasks.
+- 2026-10-17 | P | five own PLANs persisted (`D243`, `D246`, `D244`, `D245`, `D247`); ALL-barrier passed; single group G1; schedule rv=1 bound.
+- 2026-10-17 | prereq | benchmark DB `benchmarks/nextorm.benchmark/data/test.db` OK (`large_table` = 10,000 rows); Podman socket started and present; `flock` available; `/tmp/nextorm-bench/` absent (T246 owns bootstrap).
+- 2026-10-17 | G1 | lane started on `1.0.9-rc3` (single tree, sequential queue).
 
 ## General verification & recovery
 
@@ -44,7 +60,7 @@
 - last C result / evidence: none.
 - defect id / history: none.
 - correction-task status file: none.
-- next allowed step: **P.2 — own PLAN for T243..T247, then ALL-barrier.**
+- next allowed step: **D — continue G1 queue from the first `pending` task.**
 
 ## Done / Verified / Incomplete
 
