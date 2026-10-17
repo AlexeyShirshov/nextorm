@@ -15,7 +15,8 @@ comparator, duplicate rows, missing toolchain/job, NA, non-1 OperationsPerInvoke
 nonzero ``*_Warm_Reused``, one failing CTE row, checkpoint vs final, exit codes
 0/1/2, allocation-failure persistence across rounds, the median-of-three timing
 repeat rule, attribution nesting/double-count rejection and the residual bound,
-malformed/missing artifacts, and staging only the current invocation's outputs.
+malformed/missing artifacts, staging only the current invocation's outputs, and the round
+source-state fingerprint scope (compiled inputs are hashed, BDN's own output is not).
 """
 from __future__ import annotations
 
@@ -818,6 +819,205 @@ class ArtifactStagingTests(T244TestCase):
         staged.mkdir(parents=True)
         with self.assertRaises(t244.Reject):
             t244.validate_staged_report(staged, TYPE_CACHED)
+
+
+class SourceStateScopeTests(T244TestCase):
+    """The round fingerprint covers compiled inputs only — never BDN's own output.
+
+    A BDN invocation rewrites tracked reports under
+    ``benchmarks/BenchmarkDotNet.Artifacts/results/``; hashing the whole ``git status``
+    made every round invalidate itself (round-01 of the T244 baseline died that way).
+    Every fixture is a real throw-away git repository, so the ``git`` pathspec and the
+    post-filter are exercised as they ship.
+    """
+
+    FIXTURE_FILES = (
+        "src/nextorm.core/Query/QueryCommand.cs",
+        "src/nextorm.core/obj/nextorm.core.csproj.nuget.g.cs",
+        "benchmarks/nextorm.benchmark/Program.cs",
+        "benchmarks/nextorm.benchmark/bin/release/nextorm.benchmark.dll",
+        "benchmarks/BenchmarkDotNet.Artifacts/results/report-full.json",
+        "docs/guide/10-querying.md",
+        "Directory.Build.props",
+        "Directory.Packages.props",
+        "global.json",
+        "nextorm.slnx",
+        ".editorconfig",
+    )
+
+    def git(self, repo, *args):
+        completed = subprocess.run(
+            ["git", *args], cwd=str(repo), capture_output=True, text=True
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return completed.stdout
+
+    def make_repo(self):
+        repo = self.tmp / "repo"
+        for rel in self.FIXTURE_FILES:
+            path = repo / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"// {rel}\n", encoding="utf-8")
+        self.git(repo, "init", "-q")
+        self.git(repo, "config", "user.email", "t244@example.invalid")
+        self.git(repo, "config", "user.name", "T244")
+        self.git(repo, "config", "commit.gpgsign", "false")
+        self.git(repo, "add", "-A")
+        self.git(repo, "commit", "-q", "-m", "init")
+        return repo
+
+    def fingerprint(self, repo):
+        return t244.source_state(repo)
+
+    # -- acceptance axis (a): measurement output never invalidates the round --------------
+    def test_rewritten_bdn_artifact_report_does_not_change_the_fingerprint(self):
+        repo = self.make_repo()
+        before = self.fingerprint(repo)
+        tracked = repo / "benchmarks/BenchmarkDotNet.Artifacts/results/report-full.json"
+        tracked.write_text("rewritten by BDN\n", encoding="utf-8")
+        untracked = repo / "benchmarks/BenchmarkDotNet.Artifacts/results/report.csv"
+        untracked.write_text("fresh from BDN\n", encoding="utf-8")
+        after = self.fingerprint(repo)
+        self.assertEqual(after, before)
+        self.assertEqual(after["porcelain_sha256"], before["porcelain_sha256"])
+        self.assertEqual(after["dirty_paths"], before["dirty_paths"])
+
+    def test_fingerprint_is_stable_across_calls_on_an_unchanged_repo(self):
+        repo = self.make_repo()
+        self.assertEqual(self.fingerprint(repo), self.fingerprint(repo))
+
+    # -- acceptance axis (b): a real source edit does invalidate ---------------------------
+    def test_src_source_change_changes_the_fingerprint(self):
+        repo = self.make_repo()
+        before = self.fingerprint(repo)
+        (repo / "src/nextorm.core/Query/QueryCommand.cs").write_text(
+            "// edited\n", encoding="utf-8"
+        )
+        after = self.fingerprint(repo)
+        self.assertEqual(after["head"], before["head"])
+        self.assertNotEqual(after["porcelain_sha256"], before["porcelain_sha256"])
+        self.assertGreater(after["dirty_paths"], before["dirty_paths"])
+        self.assertNotEqual(after, before)
+
+    def test_new_untracked_source_file_changes_the_fingerprint(self):
+        repo = self.make_repo()
+        before = self.fingerprint(repo)
+        (repo / "src/nextorm.core/Query/NewVisitor.cs").write_text(
+            "// new compiled input\n", encoding="utf-8"
+        )
+        after = self.fingerprint(repo)
+        self.assertNotEqual(after["porcelain_sha256"], before["porcelain_sha256"])
+
+    # -- acceptance axis (c): docs/specs are not compiled inputs ---------------------------
+    def test_docs_change_does_not_change_the_fingerprint(self):
+        repo = self.make_repo()
+        before = self.fingerprint(repo)
+        (repo / "docs/guide/10-querying.md").write_text("# edited\n", encoding="utf-8")
+        (repo / "docs/specs/status/other.md").parent.mkdir(parents=True, exist_ok=True)
+        (repo / "docs/specs/status/other.md").write_text("# new\n", encoding="utf-8")
+        after = self.fingerprint(repo)
+        self.assertEqual(after, before)
+
+    # -- acceptance axis (d): the benchmark project itself is a compiled input -------------
+    def test_benchmark_project_change_changes_the_fingerprint(self):
+        repo = self.make_repo()
+        before = self.fingerprint(repo)
+        (repo / "benchmarks/nextorm.benchmark/Program.cs").write_text(
+            "// edited benchmark\n", encoding="utf-8"
+        )
+        after = self.fingerprint(repo)
+        self.assertNotEqual(after["porcelain_sha256"], before["porcelain_sha256"])
+        self.assertNotEqual(after, before)
+
+    # -- acceptance axis (e): HEAD stays authoritative ------------------------------------
+    def test_head_change_changes_the_fingerprint(self):
+        repo = self.make_repo()
+        before = self.fingerprint(repo)
+        self.git(repo, "commit", "-q", "--allow-empty", "-m", "bump")
+        after = self.fingerprint(repo)
+        self.assertNotEqual(after["head"], before["head"])
+        self.assertEqual(after["porcelain_sha256"], before["porcelain_sha256"])
+        self.assertNotEqual(after, before)
+
+    # -- the post-filter drops build outputs inside otherwise in-scope paths --------------
+    def test_tracked_build_output_under_an_in_scope_path_is_dropped(self):
+        repo = self.make_repo()
+        before = self.fingerprint(repo)
+        (repo / "src/nextorm.core/obj/nextorm.core.csproj.nuget.g.cs").write_text(
+            "// regenerated\n", encoding="utf-8"
+        )
+        (repo / "benchmarks/nextorm.benchmark/bin/release/nextorm.benchmark.dll").write_text(
+            "rebuilt\n", encoding="utf-8"
+        )
+        (repo / "TestResults/results.trx").parent.mkdir(parents=True, exist_ok=True)
+        (repo / "TestResults/results.trx").write_text("trx\n", encoding="utf-8")
+        self.assertEqual(self.fingerprint(repo), before)
+
+    def test_measurement_output_predicate(self):
+        for path in (
+            "benchmarks/BenchmarkDotNet.Artifacts/results/x.json",
+            "artifacts/pdca/D244/rv1/round-01/provenance.json",
+            "TestResults/run.trx",
+            "src/nextorm.core/obj/x.g.cs",
+            "benchmarks/nextorm.benchmark/bin/release/nextorm.benchmark.dll",
+        ):
+            self.assertTrue(t244._is_measurement_output(path), path)
+        for path in (
+            "src/nextorm.core/Query/QueryCommand.cs",
+            "benchmarks/nextorm.benchmark/Program.cs",
+            "Directory.Build.props",
+            "docs/guide/10-querying.md",
+            "tests/nextorm.core.tests/MeasureTests.cs",
+        ):
+            self.assertFalse(t244._is_measurement_output(path), path)
+
+    def test_porcelain_entry_paths_parse_and_unquote(self):
+        self.assertEqual(
+            t244._porcelain_entry_paths(" M src/nextorm.core/Query.cs"),
+            ["src/nextorm.core/Query.cs"],
+        )
+        self.assertEqual(
+            t244._porcelain_entry_paths('?? "src/nextorm.core/a b.cs"'),
+            ["src/nextorm.core/a b.cs"],
+        )
+        self.assertEqual(
+            t244._porcelain_entry_paths('?? "src/quote\\"d.cs"'),
+            ['src/quote"d.cs'],
+        )
+        self.assertEqual(
+            t244._porcelain_entry_paths(
+                "R  benchmarks/x.json -> benchmarks/nextorm.benchmark/x.json"
+            ),
+            ["benchmarks/x.json", "benchmarks/nextorm.benchmark/x.json"],
+        )
+
+    def test_rename_is_dropped_only_when_every_path_is_an_output(self):
+        self.assertTrue(
+            t244._is_measurement_entry(
+                "R  benchmarks/BenchmarkDotNet.Artifacts/results/x.json -> "
+                "benchmarks/BenchmarkDotNet.Artifacts/results/y.json"
+            )
+        )
+        self.assertFalse(
+            t244._is_measurement_entry(
+                "R  benchmarks/BenchmarkDotNet.Artifacts/results/x.json -> "
+                "benchmarks/nextorm.benchmark/x.json"
+            )
+        )
+
+    def test_pathspec_covers_compiled_inputs_only(self):
+        for entry in (
+            "src",
+            "benchmarks/nextorm.benchmark",
+            "Directory.Build.props",
+            "Directory.Packages.props",
+            "global.json",
+            "nextorm.slnx",
+            ".editorconfig",
+        ):
+            self.assertIn(entry, t244.SOURCE_STATE_PATHSPEC)
+        self.assertNotIn("docs", t244.SOURCE_STATE_PATHSPEC)
+        self.assertNotIn("benchmarks/BenchmarkDotNet.Artifacts", t244.SOURCE_STATE_PATHSPEC)
 
 
 class LockAndProcessTests(T244TestCase):

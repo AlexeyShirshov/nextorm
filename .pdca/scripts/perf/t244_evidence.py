@@ -681,17 +681,131 @@ def host_identity() -> dict:
     return identity
 
 
+#: Pathspec of the source-state fingerprint: the compiled inputs that can change the
+#: benchmark binary or its measured behaviour.  Everything else (docs, specs, tests, CI
+#: config) is deliberately out of scope, so a measurement round cannot invalidate itself.
+SOURCE_STATE_PATHSPEC = (
+    "src",
+    "benchmarks/nextorm.benchmark",
+    "Directory.Build.props",
+    "Directory.Packages.props",
+    "global.json",
+    "nextorm.slnx",
+    ".editorconfig",
+)
+
+#: Measurement outputs are never inputs: BDN rewrites tracked reports under
+#: ``benchmarks/BenchmarkDotNet.Artifacts/results/`` on every run, so hashing them would
+#: invalidate the very round that produced them (the root-anchored ``.gitignore`` entry
+#: ``/BenchmarkDotNet.Artifacts/`` does not cover that nested path).
+SOURCE_STATE_EXCLUDED_PREFIXES = (
+    "benchmarks/BenchmarkDotNet.Artifacts/",
+    "artifacts/",
+    "TestResults/",
+)
+
+_SOURCE_STATE_EXCLUDED_SEGMENTS = ("bin", "obj")
+
+_PORCELAIN_UNESCAPES = {
+    "a": "\a",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+    "v": "\v",
+    "\\": "\\",
+    '"': '"',
+}
+
+
+def _unquote_porcelain_path(text: str) -> str:
+    """Undo git's C-quoting of a path in ``git status --porcelain`` output."""
+    if len(text) < 2 or not text.startswith('"') or not text.endswith('"'):
+        return text
+    body = text[1:-1]
+    out = []
+    index = 0
+    while index < len(body):
+        char = body[index]
+        if char != "\\":
+            out.append(char)
+            index += 1
+            continue
+        if index + 1 >= len(body):
+            out.append(char)
+            break
+        escaped = body[index + 1]
+        octal = body[index + 1:index + 4]
+        if escaped in _PORCELAIN_UNESCAPES:
+            out.append(_PORCELAIN_UNESCAPES[escaped])
+            index += 2
+        elif len(octal) == 3 and octal.isdigit():
+            out.append(chr(int(octal, 8)))
+            index += 4
+        else:
+            out.append(escaped)
+            index += 2
+    return "".join(out)
+
+
+def _porcelain_entry_paths(line: str) -> list:
+    """Paths named by one porcelain entry (two for a rename/copy ``old -> new``)."""
+    body = line[3:] if len(line) > 3 else ""
+    parts = body.split(" -> ") if " -> " in body else [body]
+    return [
+        _unquote_porcelain_path(part).replace("\\", "/").rstrip("/") for part in parts
+    ]
+
+
+def _is_measurement_output(path: str) -> bool:
+    """True for a path that is a measurement output (or a build artifact), never an input."""
+    if path.startswith(SOURCE_STATE_EXCLUDED_PREFIXES):
+        return True
+    return any(segment in _SOURCE_STATE_EXCLUDED_SEGMENTS for segment in path.split("/"))
+
+
+def _is_measurement_entry(line: str) -> bool:
+    """True only when *every* path of the entry is a measurement output.
+
+    A rename whose target is real source input keeps the entry (fail-closed).
+    """
+    paths = _porcelain_entry_paths(line)
+    return bool(paths) and all(_is_measurement_output(path) for path in paths)
+
+
 def source_state(repo) -> dict:
+    """Fingerprint the git inputs that can change the benchmark binary/behaviour.
+
+    Scoped to ``SOURCE_STATE_PATHSPEC`` and post-filtered through
+    ``_is_measurement_output``: BDN rewrites tracked report files under
+    ``benchmarks/BenchmarkDotNet.Artifacts/`` on every invocation, so hashing the whole
+    ``git status`` would make each round invalidate itself.  ``HEAD`` stays authoritative.
+    """
     code, head = run_capture(["git", "rev-parse", "HEAD"], cwd=repo)
     if code != 0 or not head:
         raise Reject(f"cannot resolve git HEAD in {repo}: {head}")
-    code_s, status = run_capture(["git", "status", "--porcelain"], cwd=repo)
+    code_s, status = run_capture(
+        [
+            "git",
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--",
+            *SOURCE_STATE_PATHSPEC,
+        ],
+        cwd=repo,
+    )
     if code_s != 0:
         raise Reject(f"cannot read git status in {repo}: {status}")
-    entries = [line for line in status.splitlines() if line.strip()]
+    entries = [
+        line
+        for line in status.splitlines()
+        if line.strip() and not _is_measurement_entry(line)
+    ]
     return {
         "head": head.splitlines()[0].strip(),
-        "porcelain_sha256": sha256_text(status),
+        "porcelain_sha256": sha256_text("\n".join(entries)),
         "dirty_paths": len(entries),
     }
 
