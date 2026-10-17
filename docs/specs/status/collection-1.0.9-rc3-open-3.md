@@ -74,6 +74,7 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
 - 2026-10-17 | G3 | lane stopped — host-level role outage (`API key expired`; dispatch `Go requires a credential`, 7 attempts): cheap tier was bound to `opencode-go` and the replacement Console key has no active Go subscription. Roles restored via documented fallback `deepseek/deepseek-flash`; T244/T245/T247 not started.
 - 2026-10-17 | P.7 | owner: continue the queue → G4 created: T244 → T245 → T247. Cheap tier (coder/scout/btw/pdca-executor/pdca-orchestrator) repointed to `deepseek/deepseek-flash` (OpenCode Go subscription absent on the replacement key); medium/strong tiers stay on `opencode/*` (Console PAYG, verified). Acceptance gates, caps and the T244→T245 edge unchanged.
 - 2026-10-17 | G4 | T244 DO started — harness [GlobalSetup] defect fixed and BDN class accepted; path re-anchor to .pdca/scripts/perf recorder; baseline rounds next.
+- 2026-10-17 | G4 | T244 baseline round 1 — INVALID (tool rc=2; 9 reason codes; tree 63→80; HEAD bb95d859 unchanged; harness rewrites 12 tracked BDN reports under benchmarks/BenchmarkDotNet.Artifacts/results/ that its own whole-porcelain source-state hash covers → self-invalidation; foreign lane writes + live foreign opencode/roslynq session in-block; inv1 rebuilt the benchmark assembly d08f81a5→bc8de537). 0/2 valid baseline rounds; round numbers are not acceptance evidence; next: planner decision on harness source-state scope and/or exclusive-tree isolation.
 
 ## General verification & recovery
 

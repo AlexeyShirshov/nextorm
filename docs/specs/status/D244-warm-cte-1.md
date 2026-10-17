@@ -372,3 +372,4 @@ G2's `baseline/round-01` stays **invalid** evidence (foreign rebuild of the benc
 Counters unchanged: N=1, r=1, rv=1, n=1/3. No product edit, no measurement in this phase; the first valid baseline round is still to be collected.
 
 2026-10-17T19:01:22Z | DO/T244 | revision r=1 | iteration n=1/3 | DO started — harness [GlobalSetup] fix verified (BDN list OK); path re-anchor recorded; no measurement yet | artifacts/pdca/D244/rv1/
+2026-10-17T19:39:11Z | DO/T244 | revision r=1 | iteration n=1/3 | baseline round 1: invalid — tool rc=2, 9 reason codes; tree 63→80 dirty paths (HEAD bb95d859 unchanged); harness self-modifies 12 tracked BDN reports under benchmarks/BenchmarkDotNet.Artifacts/results/; foreign lane writes + foreign opencode/roslynq session inside the block; inv1 rebuilt nextorm.benchmark.dll d08f81a5→bc8de537; valid baseline rounds 0/2; numbers not admissible | artifacts/pdca/D244/rv1/baseline/round-01/
