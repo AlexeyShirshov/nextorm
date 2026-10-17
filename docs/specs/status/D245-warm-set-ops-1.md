@@ -17,6 +17,7 @@ status: plan_ready
 blocked_reason: none
 baseline_ref: 957fcfe7
 base_ref: 01815f3a
+- **Re-anchor (2026-10-17):** base `b5ab6502` — benchmarks and tests were reorganized by topic; paths updated, decisions/criteria/counters unchanged. Repo test conventions apply to any test this task adds: FluentAssertions-only assertions (`Assert.Skip*` allowed) and integration tests must exercise a real DBMS (no `InMemoryDataContext` in `tests/nextorm.integration.tests`).
 branch: 1.0.9-rc3
 worktree: /home/alex/sources/nextorm
 execution_mode: autonomous

@@ -3,7 +3,7 @@
 - collection-id: `1.0.9-rc3-open-3`
 - slug: `collection-1.0.9-rc3-open-3`
 - input: **open issues of milestone `1.0.9-rc3`**, re-read 2026-10-17 via `gh`: **#243, #244, #245, #246, #247**.
-- base: branch `1.0.9-rc3` @ `01815f3a` (owner snapshot `957fcfe7`: 2026-10-17 warm-path report, BDN artifacts, table generator + CI step, cached-preparation WIP; build Debug 0W/0E; targeted suites 23/23 + 84/84; pushed on explicit owner request).
+- base: branch `1.0.9-rc3` @ `b5ab6502` (current collection base; benchmarks and tests grouped by topic, docs renumbered). Historical: branch `1.0.9-rc3` @ `01815f3a` (owner snapshot `957fcfe7`: 2026-10-17 warm-path report, BDN artifacts, table generator + CI step, cached-preparation WIP; build Debug 0W/0E; targeted suites 23/23 + 84/84; pushed on explicit owner request).
 - mode: **autonomous + auto-commit** (explicit owner request: «автономный pdca с автокомитам по открытым задачам rc3»). Push is **not** part of the collection; only the bootstrap snapshot was pushed on explicit request.
 - phase: **D — G1 stopped (T243 done; T246 terminal GAP), owner-approved re-schedule into G2: T246 rv2 → T244 → T245 → T247**.
 
@@ -66,6 +66,7 @@ Rows are listed in **lane order** (topological). Plan files: 273 / 481 / 336 / 6
 - 2026-10-17 | G2 | T244 baseline attempt: round-01 invalid (foreign build rebuilt the benchmark assembly 15 s into invocation 1; HEAD moved; tree 228→903→1042); round-01 numbers not acceptance evidence.
 - 2026-10-17 | G2 | T244 own harness defect: two empty-target [GlobalSetup] in SqliteBenchmarkWarmDecompose → BDN refuses the class; unfixed, preserved.
 - 2026-10-17 | G2 | T244 incomplete — outside-cycle blocker (concurrent session owns branch/tree; no exclusive host/stable tree; canonical flock bypassed). Escalate decision: STOP. T245/T247 not executed («группа остановлена»).
+- 2026-10-17 | P.6 | benchmark/test/docs refactor committed as b5ab6502 (owner request) and pushed; plans D244/D245/D247 re-anchored to the new layout; repo test conventions (FluentAssertions-only, integration = real DBMS) now apply.
 
 ## General verification & recovery
 

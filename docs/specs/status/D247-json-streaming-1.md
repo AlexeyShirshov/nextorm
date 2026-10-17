@@ -17,6 +17,7 @@ selected_variant: pdca-dotnet
 - `collection_status_path: docs/specs/status/collection-1.0.9-rc3-open-3.md`.
 - Status file: `docs/specs/status/D247-json-streaming-1.md`.
 - Repository baseline: branch `1.0.9-rc3`, commit `01815f3a`.
+- **Re-anchor (2026-10-17):** base `b5ab6502` — benchmarks and tests were reorganized by topic; paths updated, decisions/criteria/counters unchanged. Repo test conventions apply to any test this task adds: FluentAssertions-only assertions (`Assert.Skip*` allowed) and integration tests must exercise a real DBMS (no `InMemoryDataContext` in `tests/nextorm.integration.tests`).
 - **STOP at PLAN→DO.** Persist this plan; this own-PLAN step authorizes no implementation or measurements.
 
 ## Goal and immutable constraints
@@ -76,7 +77,7 @@ DO must update the task list when starting/completing each unit.
 | D247-00 | **Fix now:** establish clean/dirt-aware baseline, URL/tool CLI facts, provider readiness, artifact inventory, shared-file leases and BDN lock protocol. Validate WIP recipe with existing mutation/cache regressions before interpreting perf. | Existing `QueryCommand.cs:96,197`, `QueryCommand.QueryPreparer.cs:134,245`, `QueryPlanner.cs:610`; inspection only. If baseline fails, retain this unit active and return `P247-BASELINE`. |
 | D247-01 | **Fix now:** add NextORM materialize+serialize control and compile-only diagnostic; build evidence/gate helper; collect two pre-production rounds plus phase evidence. Freeze baseline fingerprints and formulas. | `SqliteBenchmarkWriteJson.cs:42,112-127,237`; `SqliteBenchmarkJsonStreamPhase2.cs:246,272-295`; planned `eng/perf/t247_json_gate.py`. |
 | D247-02 | **Fix now:** implement bounded managed writer cache; preserve fresh preparation, shape build, reader validation and native path. | `DataContext.cs:385-429`; `JsonRowWriterFactory.cs:90,149,161,239-244`; planned `Query/Json/JsonRowWriterCache.cs`. Core/SQLite filtered tests below. |
-| D247-03 | **Fix now:** add cache correctness and boundary regressions using assertion names below; retain cancellation semantics without batching. | `tests/nextorm.core.tests/{JsonShapeWriterTests,JsonStreamWriterTests}.cs`; `tests/nextorm.sqlite.tests/JsonStreamingTests.cs`; integration JSON partials only where existing cases do not cover the matrix. |
+| D247-03 | **Fix now:** add cache correctness and boundary regressions using assertion names below; retain cancellation semantics without batching. | `tests/nextorm.core.tests/Json/{JsonShapeWriterTests,JsonStreamWriterTests}.cs`; `tests/nextorm.sqlite.tests/Json/JsonStreamingTests.cs`; integration JSON partials only where existing cases do not cover the matrix. |
 | D247-04 | **Fix now:** extend perf tooling with parameter-aware JSON rows and per-row logical-op override; add timing-ratio/control validation and parser tests. | `eng/perf/iteration14_gate.py:15-44,364-378,451-495`; `iteration14-budgets.json`; planned `eng/perf/tests/test_t247_json_gate.py`. |
 | D247-05 | **Fix now:** two serialized final rounds, legacy/JSON gates, acceptance-set comparisons, report and EN/RU documentation. | Benchmark artifacts and docs listed below. Threshold failure returns `P247-PERF`; do not silently add another optimization. |
 | D247-06 | **Fix now:** after all edits, one DO→CHECK boundary sweep; coverage, hygiene, evidence manifest and handoff. No further production edits without invalidating affected evidence. | All affected test projects; `artifacts/pdca/D247/rv1/**`; this status file. CHECK owns verdict. |
@@ -154,7 +155,7 @@ Write BDN output into dedicated directories. Inventory pre-existing tracked/untr
 
 ## Footprint and predecessor requirements
 Production: `src/nextorm.core/DataContext/DataContext.cs`, `src/nextorm.core/Query/Json/JsonRowWriterFactory.cs`, planned `src/nextorm.core/Query/Json/JsonRowWriterCache.cs`.
-Tests: core/SQLite files above; conditional integration additions in `tests/nextorm.integration.tests/CommonTestSuite.JsonStream.cs` or `.JsonStreamNested.cs` if existing coverage cannot close a matrix row.
+Tests: core/SQLite files above; conditional integration additions in `tests/nextorm.integration.tests/CommonTestSuite/Json/CommonTestSuite.JsonStream.cs` or `.JsonStreamNested.cs` if existing coverage cannot close a matrix row.
 Bench/gate: `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWriteJson.cs`, `SqliteBenchmarkJsonStreamPhase2.cs`, `eng/perf/{iteration14_gate.py,iteration14-budgets.json,t247_json_gate.py}`, `eng/perf/tests/test_t247_json_gate.py`.
 Docs: this status; planned `docs/specs/performance/T247-json-streaming-report.md`; `docs/comparisons/feature-benchmarks-2026-10-17.md`; RU mirror; `docs/specs/performance/{feature-benchmark-followups-2026-10-17.md,performance-findings.md}`.
 Other collection tasks also need: benchmark directory, `eng/perf/**`, comparison EN/RU files and performance registries; T246 also needs `DataContext.cs`. These shared paths require an exclusive edit/measurement lease.
