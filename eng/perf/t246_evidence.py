@@ -86,8 +86,8 @@ SPREAD_MARGIN = 0.010
 
 BENCH_PROJECT = "benchmarks/nextorm.benchmark"
 BENCH_TYPE = "SqliteBenchmarkStreaming"
-HARNESS_PATH = "benchmarks/nextorm.benchmark/SqliteBenchmarkStreaming.cs"
-CONFIG_PATH = "benchmarks/nextorm.benchmark/NextormConfig.cs"
+HARNESS_PATH = "benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs"
+CONFIG_PATH = "benchmarks/nextorm.benchmark/Infrastructure/NextormConfig.cs"
 DRIVER_PATH = "eng/perf/t246_evidence.py"
 BUDGETS_PATH = "eng/perf/t246-budgets.json"
 
