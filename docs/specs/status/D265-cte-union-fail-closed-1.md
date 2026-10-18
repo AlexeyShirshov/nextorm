@@ -184,6 +184,62 @@ Manifest замораживается на границе DO→CHECK; CHECK от
 5. Бенчмарки не запускаются; `docs/specs/design/code-smells-review.md` не трогается.
 6. Первый шаг: D265-A — scope JSON, baseline-классы и baseline-артефакты.
 
+## Done / Verified (ACT, после CHECK PASS)
+
+| Проверка | Результат |
+|---|---|
+| Commit | `101152ea` — `#265 reject legacy recursive UNION on SQL Server before caching` |
+| Build | `dotnet build nextorm.slnx -c Debug` — exit 0, 0 warnings / 0 errors (`.pdca/D265/rv1/check/build.log`) |
+| Scoped tests | filtered `FullyQualifiedName~T265RecursiveUnionTests` — 20/20 passed, 6 проектов, все exit 0: core 1, sqlserver 8, postgres 3, sqlite 3, mysql 4 (вкл. MariaDB), clickhouse 1 (`.pdca/D265/rv1/check/filtered-summary.txt`) |
+| Full sqlserver | 988 total — 980 passed, 0 failed, 8 skipped; все 8 — предсуществующие `[Fact(Explicit = true)]` (не `Assert.Skip*`), ancestor `b5ab6502` (`.pdca/D265/rv1/check/unfiltered-sqlserver.log`) |
+| Full core | 2648/2648 passed, 0 failed, 0 skipped, exit 0 (`.pdca/D265/rv1/check/unfiltered-core.log`) |
+| Validators | `validate_inner_loop.py report/manifest` exit 0; `pdca_evidence.py lint` exit 0 |
+| Suppressions/skips | 0 новых: `#pragma warning disable` / `[Fact(Skip` / `Assert.Skip` в diff — none (`.pdca/D265/rv1/audit.log`) |
+| EOL | CRLF во всех 16 затронутых файлах (CR == lines) |
+| Footprint | 16 paths: 5 src, 6 tests, 4 docs, 1 status — §13 соблюдён, чужие изменения не затронуты (`.pdca/D265/rv1/footprint.log`) |
+| Typed path | типизированный `AsRecursiveCte` не изменён — те же SQL и сообщения |
+| Compatibility | PG/SQLite/MySQL/MariaDB SQL байт-идентичен `.pdca/D265/rv1/baseline/*.txt` |
+
+## CHECK-адъюдикации (rv=1)
+
+- **Edge A — raw-recipe probe (`QueryPlanner.cs:609-653`)**: структурно недостижим; обход скелета без тела CTE не доходит до emission/validation-точки, поэтому probe не может обойти guard.
+- **Edge B — cross-context `IsPrepared` reuse**: конструкцией не поддержан — подготовка принадлежит своему `QueryCommand`/`DataContext` и повторно проходит `PrepareCommand`, снова упираясь в guard.
+- **`MutationCteQuery`**: отвергнут раньше — provider-gate в `MutationCteQuery.cs:155` (scope build), до `WithRecursive`/`PrepareCtes`; bypass не найден.
+- **Integration-negative deviation**: принято (см. «Что не сказала постановка» (a)); provider SQL-generation/validation тесты плюс доказательство отказа до execution закрывают критерий.
+
+## Changed files
+
+| # | Path | Kind |
+|---|---|---|
+| 1 | `src/nextorm.core/Builders/CteQuery.cs` | src — shared guard |
+| 2 | `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` | src — `RequiresRecursiveCteUnionAll` (default `false`) |
+| 3 | `src/nextorm.core/DataContext/Dialect/SqlDialectBase.cs` | src — default `false` |
+| 4 | `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs` | src — вызов guard в `PrepareCtes` |
+| 5 | `src/nextorm.sqlserver/SqlServerDialect.cs` | src — `true` |
+| 6 | `tests/nextorm.core.tests/Cte/T265RecursiveUnionTests.cs` | test — capability default/typed unit |
+| 7 | `tests/nextorm.sqlserver.tests/Cte/T265RecursiveUnionTests.cs` | test — reject/cache/`UnionAll`/typed/non-recursive |
+| 8 | `tests/nextorm.postgres.tests/Cte/T265RecursiveUnionTests.cs` | test — compatibility goldens |
+| 9 | `tests/nextorm.sqlite.tests/Cte/T265RecursiveUnionTests.cs` | test — compatibility goldens |
+| 10 | `tests/nextorm.mysql.tests/Cte/T265RecursiveUnionTests.cs` | test — MySQL + MariaDB goldens |
+| 11 | `tests/nextorm.clickhouse.tests/Cte/T265RecursiveUnionTests.cs` | test — recursive остаётся неподдержанным |
+| 12 | `docs/guide/10-cte.md` | docs EN — ограничение + миграция |
+| 13 | `docs/ru/guide/10-cte.md` | docs RU — зеркало |
+| 14 | `docs/advanced/limitations.md` | docs EN — строка ограничения |
+| 15 | `docs/ru/advanced/limitations.md` | docs RU — зеркало |
+| 16 | `docs/specs/status/D265-cte-union-fail-closed-1.md` | status — этот файл |
+
+## Pointers
+
+- Evidence root: `.pdca/D265/rv1/`
+- Manifest: `.pdca/D265/rv1/manifest.json` (frozen на DO→CHECK, оба валидатора exit 0)
+- Baseline dir: `.pdca/D265/rv1/baseline/` (`postgres.txt`, `sqlite.txt`, `mysql.txt`, `mariadb.txt` + `README.md` с sha256)
+- CHECK evidence: `.pdca/D265/rv1/check/`
+- DO evidence: `.pdca/D265/rv1/tests/`, `.pdca/D265/rv1/{build,footprint,audit,docs}.log`
+
+## Next plan
+
+`T275 (#275) — OPTION (MAXRECURSION n) must survive hoisting in QueryPlanner.RenderSource; next cycle 1 of task D275`
+
 ## Журнал прогресса (append-only)
 
 2026-10-18T11:11:56Z | PLAN | r=1 | n=1/3 | PLAN ready — DO started (autonomous lane, no user approval) | docs/specs/status/D265-cte-union-fail-closed-1.md
@@ -197,3 +253,13 @@ Manifest замораживается на границе DO→CHECK; CHECK от
 2026-10-18T12:21:15Z | DO | r=1 | n=1/3 | build gate — `dotnet build nextorm.slnx -c Debug` exit 0, 0 Warning(s), 0 Error(s) | .pdca/D265/rv1/build.log
 2026-10-18T12:22:00Z | DO | r=1 | n=1/3 | inner-loop evidence — journal, project and report validators all exit 0 | .pdca/D265/rv1/journal.json, .pdca/D265/rv1/evidence.json
 2026-10-18T12:22:30Z | DO | r=1 | n=1/3 | D265-E closed, DO → CHECK — all six scoped projects green, build 0W/0E, CRLF verified, footprint limited to §13 surfaces, manifest frozen and both validators exit 0 | .pdca/D265/rv1/manifest.json, .pdca/D265/rv1/footprint.log, .pdca/D265/rv1/audit.log
+2026-10-18T16:24:10Z | DO | r=1 | n=1/3 | coder gather report — evidence pack for CHECK assembled: build.log, filtered/unfiltered summaries, footprint/audit/docs logs, manifest frozen | .pdca/D265/rv1/check/
+2026-10-18T16:24:40Z | DO | r=1 | n=1/3 | scout diff-facts report — diff facts across the 16 paths: 9 production/doc diffs, 6 new test files, guard reached only from `PrepareCtes`; no construction-path edits | .pdca/D265/rv1/footprint.log, .pdca/D265/rv1/audit.log
+2026-10-18T16:25:00Z | CHECK | r=1 | n=1/3 | DO → CHECK boundary opened — manifest rv=1 and frozen; CHECK re-gather budget used: 0/2 | .pdca/D265/rv1/manifest.json
+2026-10-18T16:26:20Z | CHECK | r=1 | n=1/3 | CHECK verdict: PASS (r=1, n=1/3, rv=1, 0 open rows) — все 8 критериев met по обеим половинам; 2 non-binding пробы закрыты адъюдикацией; 0 re-gather request | .pdca/D265/rv1/check/
+2026-10-18T16:27:00Z | ACT | r=1 | n=1/3 | D265-A closure carried into ACT — baselines/goldens неизменны и совпадают байт-в-байт с PG/SQLite/MySQL/MariaDB SQL | .pdca/D265/rv1/baseline/
+2026-10-18T16:27:05Z | ACT | r=1 | n=1/3 | D265-B closure carried into ACT — capability + shared guard, SQL Server 8/8 | .pdca/D265/rv1/tests/sqlserver-inner.log
+2026-10-18T16:27:10Z | ACT | r=1 | n=1/3 | D265-C closure carried into ACT — compatibility/typed/non-recursive/ClickHouse 12/12 | .pdca/D265/rv1/tests/
+2026-10-18T16:27:15Z | ACT | r=1 | n=1/3 | D265-D closure carried into ACT — EN+RU docs, без ссылок на `docs/specs/**` | .pdca/D265/rv1/docs.log
+2026-10-18T16:27:20Z | ACT | r=1 | n=1/3 | D265-E closure carried into ACT — build 0W/0E, шесть scoped-проектов зелёные, CRLF/footprint-аудит чист | .pdca/D265/rv1/{build,footprint,audit}.log
+2026-10-18T16:28:30Z | ACT | r=1 | n=1/3 | ACT closed; next task T275 — flow продолжается в lane (next cycle 1 of task D275) | docs/specs/status/D265-cte-union-fail-closed-1.md
