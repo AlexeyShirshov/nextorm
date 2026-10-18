@@ -1006,6 +1006,13 @@ public abstract class SqlDialectBase : ISqlDialect
     /// </summary>
     public virtual bool SupportsRecursiveCte => true;
 
+    /// <summary>
+    /// Defaults to <c>false</c>. When <c>true</c>, a recursive CTE body must be <c>UNION ALL</c>: a legacy
+    /// <c>WithRecursive</c> declaration whose body is a distinct <c>UNION</c> is rejected during preparation
+    /// (before execution and before the plan cache). SQL Server overrides it to <c>true</c>.
+    /// </summary>
+    public virtual bool RequiresRecursiveCteUnionAll => false;
+
     /// <summary>Defaults to <c>false</c>; only PostgreSQL returns the affected rows of a multi-table <c>UPDATE ... FROM ... JOIN</c>.</summary>
     public virtual bool SupportsUpdateJoinReturning => false;
 

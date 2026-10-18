@@ -127,6 +127,12 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server <c>MERGE</c> supports an explicit <c>ON &lt;condition&gt;</c> and <c>WHEN ... AND &lt;condition&gt;</c>.</summary>
     public override bool SupportsMergeConditionalBranches => true;
 
+    /// <summary>
+    /// SQL Server requires a recursive CTE body to use <c>UNION ALL</c>; a distinct <c>UNION</c> is rejected
+    /// by the server, so preparation rejects it locally before execution and before the plan cache.
+    /// </summary>
+    public override bool RequiresRecursiveCteUnionAll => true;
+
     /// <summary>SQL Server requires a terminating semicolon after <c>MERGE</c>.</summary>
     public override string MakeMergeStatementTerminator(KeywordCase keywordCase = KeywordCase.Lower) => ";";
 

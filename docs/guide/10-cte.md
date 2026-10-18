@@ -330,7 +330,26 @@ with nums as (select id as [Id]
 | In-memory | Not applicable: recursion is rendered by the SQL dialects. |
 
 The legacy string `WithRecursive` is **not** gated by this capability check and keeps its existing behavior on
-every provider.
+every provider, with one SQL Server restriction described below.
+
+### SQL Server: legacy recursive CTE must use `UNION ALL`
+
+A legacy `WithRecursive` declaration whose body is a distinct `UNION` (`anchor.Union(step)`) is not a valid
+SQL Server recursive CTE — the server answers *"does not contain a top-level UNION ALL operator"*. nextorm
+rejects it locally while the query is prepared, **before** it is executed and before it is placed in the plan
+cache, with a `NotSupportedException` naming SQL Server and both supported forms:
+
+```csharp
+// Rejected on SQL Server: distinct UNION in a recursive body.
+var body = anchor.Union(step);
+
+// Supported alternatives:
+var body = anchor.UnionAll(step);                        // legacy API, explicit UNION ALL
+var nums = anchor.AsRecursiveCte("nums", self => ...);   // typed API, always UNION ALL
+```
+
+PostgreSQL, SQLite, MySQL and MariaDB keep accepting a distinct `UNION` in a recursive CTE and emit it
+byte-for-byte as before.
 
 Every example above is bounded by a terminating predicate in the step; never build an unbounded recursive
 CTE.

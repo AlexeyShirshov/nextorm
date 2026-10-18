@@ -332,7 +332,27 @@ with nums as (select id as [Id]
 | In-memory | Не применимо: рекурсию рендерят SQL-диалекты. |
 
 Устаревший строковый `WithRecursive` **не** гейтится этой проверкой возможности и сохраняет прежнее
-поведение на каждом провайдере.
+поведение на каждом провайдере — кроме одного ограничения SQL Server, описанного ниже.
+
+### SQL Server: устаревший рекурсивный CTE требует `UNION ALL`
+
+Устаревшее объявление `WithRecursive`, тело которого — distinct `UNION` (`anchor.Union(step)`), не является
+корректным рекурсивным CTE для SQL Server: сервер отвечает *«does not contain a top-level UNION ALL
+operator»*. nextorm теперь отвергает его локально во время подготовки запроса — **до** исполнения и до
+попадания в кэш планов — с `NotSupportedException`, который называет SQL Server и обе поддерживаемые
+формы:
+
+```csharp
+// Отвергается на SQL Server: distinct UNION в рекурсивном теле.
+var body = anchor.Union(step);
+
+// Поддерживаемые варианты:
+var body = anchor.UnionAll(step);                        // строковый API, явный UNION ALL
+var nums = anchor.AsRecursiveCte("nums", self => ...);   // типизированный API, всегда UNION ALL
+```
+
+PostgreSQL, SQLite, MySQL и MariaDB по-прежнему принимают distinct `UNION` в рекурсивном CTE и выводят
+его байт-в-байт как раньше.
 
 Каждый пример выше ограничен завершающим предикатом в шаге; никогда не стройте неограниченный
 рекурсивный CTE.

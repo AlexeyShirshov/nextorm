@@ -389,9 +389,16 @@ public partial class QueryCommand
                 // mutated.
                 cmd._ctes = CteHoister.Hoist(cmd._ctes);
 
+                var dialect = (cmd._dataContext as DataContext)?.Dialect;
+
                 for (var (i, cnt) = (0, cmd._ctes!.Count); i < cnt; i++)
                 {
                     var cte = cmd._ctes[i];
+
+                    // Fail closed before anything else happens to a CTE: on a dialect that requires
+                    // UNION ALL in a recursive CTE (SQL Server), a legacy distinct UNION must not reach
+                    // the body preparation, execution or the plan cache.
+                    cte.EnsureRecursiveUnionSupported(dialect);
 
                     if (cte.RecursiveReference is { } recursive)
                     {
