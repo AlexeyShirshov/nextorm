@@ -120,6 +120,13 @@ Contract: `.pdca/T245/rv1/contract.json` (`contract_rv: 1`, `base_ref: 01815f3a`
 
 Production was never modified (`git status --porcelain src` empty at every step); therefore no final boundary sweep was warranted and **R245-14 remains open/unclaimed** — no sweep is claimed. Docs EN/RU were intentionally not updated because there is no claim to publish, so **R245-15 remains open**. Issue #245 is left open.
 
+## CHECK status (2026-10-19)
+
+Notice: CHECK (gate 3) NOT PASSED — the `check` role is unavailable: two dispatches failed with the provider error "Insufficient account funds" (medium/strong tier). No CHECK verdict exists, and self-certification by the cheap tier is forbidden by the contract.
+Consequence: the terminal disposition (`incomplete`, measured GAP) and all evidence artifacts are committed and durable, but ACT is not closed on a CHECK verdict. Gate 3 remains unsatisfied; the cycle stops here as a resource blocker. Resume = re-dispatch `check` over `.pdca/T245/rv1/{lever-decision.md,attribution.json}` + `bdn/*/summary.json`; no measurement needs to be repeated.
+Evidence completeness for that re-check: entry rounds 2/2 valid (one admitted on provenance), controls + decompose valid, allocation closure residual 0.00, candidate pool blocked with `file:line`, three documentation defects corrected append-only at HEAD.
+No push was performed (AGENTS.md).
+
 ## Progress log
 
 - PLAN closed; DO started (2026-10-18). Re-anchor note appended; evidence root moved to .pdca/T245/rv1/.

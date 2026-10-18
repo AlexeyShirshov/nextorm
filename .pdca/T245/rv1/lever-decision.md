@@ -67,3 +67,10 @@ Candidate pool 1,464 B/query (comparers 984 + records 480) is formally above the
 ## Provenance
 
 All paths are under `.pdca/T245/rv1/`: `bdn/entry-r1/`, `bdn/entry-r2/`, `bdn/controls-entry/`, `bdn/decompose-entry/`, `attribution/probe-variants.json`, `attribution/probe-variants2.json`, `tests/core-attribution2.log`, `api/entry.json`, `logs/entry-r2-quiet-window.txt`, `logs/controls-entry-quiet-runner.txt`, `logs/decompose-entry-quiet-runner.txt`, `logs/*-argv.txt`, `logs/*-head-*.txt`, `logs/*-binary-sha-*.txt`, `logs/db-sha256.txt`. Exact commands are recorded in those argv files and in the block logs; `attribution.json` carries the machine-readable assembly.
+
+## Corrections (2026-10-19)
+
+- Corrected relation, candidate pool: comparers 984 + `QueryDefinition` records 480 = 1,464 B/query **exceeds** the absolute-cap deltas (−1,356.9 EXCEPT / −1,381.9 INTERSECT) but both candidates are blocked (`QueryCommand.Plan.cs` on the D240 protected list; `QueryDefinition` is a public sealed record, R245-07), so the *available* permitted saving remains **0 B/query**. The ≤1.00× linq2db arm additionally requires a shift of the frozen preparation block itself (1,264 B/query residual preparation + 984 comparers), not merely the two blocked candidates.
+- Corrected citation for the raw-shape-shortcut rejection: plan row `docs/specs/status/D245-warm-set-ops-1.md:91` (rejected alternative) and the code at `src/nextorm.core/DataContext/QueryPlanner.cs:606-654`; the earlier `QueryCommand.QueryPreparer.cs:91` reference was a mistaken file/line.
+- Corrected precision on the comparer registry-resolution citation: `ExpressionPlanEqualityComparer.cs:813-815,889` are the referenced-command resolution sites (approximate at this HEAD); the load-bearing facts are the captured `_queryProvider` fields (`QueryPlanEqualityComparer.cs:15-19,28-36`, `ExpressionPlanEqualityComparer.cs:49-50`, `FromExpressionPlanEqualityComparer.cs:12,16,32`) and the identity assertion `QueryPlan.cs:150`.
+- None of these corrections changes the decision (`insufficient`), any gate row, or the terminal disposition.
