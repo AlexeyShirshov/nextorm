@@ -12,8 +12,8 @@ cycle: 1
 attempt: 1
 plan_revision: 1
 evidence_contract_rv: 1
-plan_state: ready
-status: plan_ready
+plan_state: in_progress
+status: do_started
 blocked_reason: none
 baseline_ref: 957fcfe7
 base_ref: 01815f3a
@@ -608,3 +608,37 @@ At the final boundary:
 
 Not executed — lane G1 stopped: predecessor T246 reached a terminal `incomplete` (measurement-protocol GAP).
 Task status: `incomplete` («группа остановлена»). Plan retained; nothing executed, nothing superseded.
+
+## RE-ANCHOR NOTE (2026-10-18)
+
+- Re-anchored r=1 to branch `1.0.9-rc3`, current HEAD `8c94207f`, before any DO execution. Retain contract `base_ref: 01815f3a`; it is not replaced by the current entry HEAD.
+- Canonical evidence root: `artifacts/pdca/D245/rv1/**` → `.pdca/T245/rv1/**`. Every `$A/...` and relative contract artifact subpath retains its suffix under the new root. Legacy `artifacts/**` is read-only and must not receive new evidence.
+- Canonical live status: `.pdca/status/T245-warm-set-ops-1.md`; this file remains the source PLAN pointer. Re-anchor the contract envelope's `status_file` accordingly. Evidence/status exclusions follow those canonical locations; do not blanket-exclude `.pdca/**`: admitted `.pdca/scripts/**` tooling remains in the frozen footprint.
+- Tool references: `scripts/perf/**` → `.pdca/scripts/perf/**`, including `iteration14_gate.py`, `iteration14-budgets.json`, `t240_evidence.py`, planned `t245_evidence.py` and planned `tests/test_t245_evidence.py`. `scripts/validate_inner_loop.py` and `scripts/pdca_evidence.py` resolve under `.pdca/scripts/`. Planned interfaces remain planned until D245-2 implements and tests them.
+- Benchmark root remains `benchmarks/nextorm.benchmark/`. FairCached arms are in `Sqlite/SqliteBenchmarkFeaturesFairCached.cs`: nextorm INTERSECT `:557-563`, linq2db INTERSECT `:573-579`, nextorm EXCEPT `:589-595`, linq2db EXCEPT `:605-611`; `Iterations=10` at `:29`.
+- Prepared controls: `Sqlite/SqliteBenchmarkFeatures.cs:531-536,566-571`; companion fair controls: `Sqlite/SqliteBenchmarkFeaturesFair.cs:682-688,717-723`. Preserve the existing ShortRun/InProcessEmit configuration; unset `NEXTORM_BENCH_FULL`.
+- The old `SqliteBenchmarkWarmDecompose.cs:259-292` citation is not a set-operation implementation anchor: the current area contains InAtIn arms (`:250-293`). D245-1 must add the planned EXCEPT/INTERSECT decomposition arms and record their actual implemented symbols/locations.
+- `QueryCommand<TResult>.cs:1042-1122` means `src/nextorm.core/Query/QueryCommand.TResult.cs`; `:1042-1051` currently contains the Union body and ResetPreparation/_from comment. Re-resolve the six candidate methods through Roslyn; the historical range is not an expanded editing authorization.
+- Test anchors: `tests/nextorm.core.tests/Builders/T240CommandConstructionTests.cs:207`; `tests/nextorm.core.tests/InMemory/InMemoryTests.cs:891-976`; provider `tests/nextorm.<provider>.tests/SqlGeneration/SqlGenerationTests.cs` (sqlite `:575-612`, postgres `:265-301`, sqlserver `:389-426`, mariadb `:510-529`); integration `tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SetOperations.cs:7-88`. MySQL/ClickHouse currently have dialect flags but no set-operation SQL tests; retain the planned capability/exception obligations.
+
+### Cap-unit clarification
+
+The smaller byte figures at :75 and E245-01/02 are per logical query, not raw FairCached BDN operation. CHECK reads the unchanged targets as follows:
+
+| Row | Per-query ceiling: raw BytesAllocatedPerOperation / 10 | Equivalent raw FairCached ceiling |
+|---|---:|---:|
+| E245-01 / EXCEPT | 5.05 KiB = 5171.2 B/query | 51712 B/op |
+| E245-02 / INTERSECT | 5.01 KiB = 5130.24 B/query | 51302.4 B/op |
+
+CHECK independently requires each case's same-round allocation ratio ≤1.00 in both final rounds, using raw exporter values without rounding or round averaging. Native budgets retain their own 100-operation normalization: compare per-logical-query bytes against the applicable cap and normalized final comparator, then apply the existing integer-budget rule. Do not transfer the FairCached divisor 10 to native reports.
+
+- Decisions, criteria, thresholds, denominators and counters are unchanged: N=1, r=1, rv=1, n=1/3. All E245/R245 IDs, unconditional obligations, owners, applicability predicates and evidence requirements remain intact; no contract supersession is introduced.
+- The 2026-10-17 lane disposition remains historical and is not deleted or rewritten. Current collection admission unblocks T245 following the owner's 2026-10-18 acceptance of T244's residual; the stale collection task-row label is bookkeeping, not a prerequisite.
+
+### Re-anchor risks
+
+- T244 residual adjacency: do not modify CTE construction or silently absorb its accepted residual into T245.
+- Foreign-lane integration/coverage work can invalidate host isolation; reserve a quiet interval before measurement.
+- Benchmark-host lock contention requires waiting and recorded ownership, never a parallel or unlocked measurement.
+- Factor-10 confusion can falsely admit/reject results; distinguish raw FairCached B/op, per-query bytes and native normalization.
+- `.pdca/` is gitignored; explicitly preserve required status/tooling files without accidentally staging the whole evidence tree.
