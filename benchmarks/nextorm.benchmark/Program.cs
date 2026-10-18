@@ -27,6 +27,14 @@ if (args.Length > 0 && args[0] == "--stage-a")
 if (args.Length > 0 && args[0] == "--t217-perf-probe")
     return await T217DtoPerfProbe.RunAsync(args.Length > 1 ? args[1] : ".");
 
+// T245 (#245) D245-1: allocation attribution probe (per-candidate bytes/query) for the warm
+// EXCEPT/INTERSECT path. Benchmark-project-only; it never touches nextorm.core and runs no BDN job.
+if (args.Length > 0 && args[0] == "--t245-attribution")
+    return await T245AttributionProbe.RunAsync(
+        args.Length > 1
+            ? args[1]
+            : Environment.GetEnvironmentVariable("NEXTORM_T245_ATTRIBUTION_OUT") ?? ".pdca/T245/rv1/attribution");
+
 // T297-G8 (#297): BenchmarkDotNet launches one process per benchmark, so the class-level static
 // collector never sees more than the last probe of a BDN run. This env-gated entry point runs all
 // 32 probe bodies in a single process and writes the evidence; benchmark-project-only, and with
