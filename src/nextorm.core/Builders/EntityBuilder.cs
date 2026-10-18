@@ -342,7 +342,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// </summary>
     private QueryCommand<TResult> SelectCore<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
-        var cmd = _dataProvider.CreateCommand<TResult>(new QueryDefinition
+        // A stack-only shape keeps the builder-to-command step free of a QueryDefinition record
+        // allocation; the joins/sorting arrays produced here are owned by the new command.
+        var cmd = _dataProvider.CreateCommand<TResult>(new QueryShape
         {
             Exp = exp,
             SrcType = _sourceEntityType,

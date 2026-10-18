@@ -274,8 +274,9 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
 
     /// <summary>
     /// Snapshot of this command's shape as a <see cref="QueryDefinition"/>, used by external readers and
-    /// the test surface. Each read materialises a fresh record and it is deliberately not used by the
-    /// internal clone paths (they transfer state directly and allocate no record).
+    /// the test surface. The record is materialised once per description and memoised there; any raw
+    /// write installs a fresh description (copy-on-write), whose empty cache yields the new value. The
+    /// internal clone paths do not read it — they transfer state directly and allocate no record.
     /// </summary>
     internal QueryDefinition Definition => Description.DefinitionCache ??= BuildDefinition();
     /// <summary>Materialises the shape record from the current description and memoizes it there.</summary>

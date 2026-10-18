@@ -234,6 +234,11 @@ public sealed class Cte<TResult>
     // declaration under an already-used name is rejected by the hoister, matching the legacy CTE path.
     private static IReadOnlyList<CteDefinition> BuildDefinitions(CteDefinition definition, QueryCommand<TResult> query)
     {
+        // The common typed descriptor declares one definition with no dependencies: return a
+        // single-element array instead of allocating a growable list the hoister would only echo back.
+        if (query.Ctes is not { Count: > 0 } && query.UnionQuery?.Ctes is not { Count: > 0 })
+            return new[] { definition };
+
         var candidates = new List<CteDefinition>(2 + (query.Ctes?.Count ?? 0) + (query.UnionQuery?.Ctes?.Count ?? 0)) { definition };
         if (query.Ctes is { Count: > 0 } carried)
             candidates.AddRange(carried);
