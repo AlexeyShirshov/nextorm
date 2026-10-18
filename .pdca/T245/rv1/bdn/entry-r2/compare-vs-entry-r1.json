@@ -1,0 +1,67 @@
+{
+  "note": "entry-r1 is ADMITTED on provenance at r=2 (docs/status-only commit + lock waiter, zero measured-path diff); the two entry rounds are recorded side by side and are never averaged",
+  "per_arm": {
+    "B_Nextorm_Cached_Except": {
+      "entry_r1_alloc_bytes_per_op": 65281,
+      "entry_r2_alloc_bytes_per_op": 65281,
+      "alloc_delta_pct": 0.0,
+      "entry_r1_mean_ns": 210212.2,
+      "entry_r2_mean_ns": 187556.4,
+      "mean_delta_pct": -10.78
+    },
+    "B_Linq2Db_Except": {
+      "entry_r1_alloc_bytes_per_op": 51762,
+      "entry_r2_alloc_bytes_per_op": 51762,
+      "alloc_delta_pct": 0.0,
+      "entry_r1_mean_ns": 567823.0,
+      "entry_r2_mean_ns": 413540.1,
+      "mean_delta_pct": -27.17
+    },
+    "B_Nextorm_Cached_Intersect": {
+      "entry_r1_alloc_bytes_per_op": 65121,
+      "entry_r2_alloc_bytes_per_op": 65121,
+      "alloc_delta_pct": 0.0,
+      "entry_r1_mean_ns": 248516.8,
+      "entry_r2_mean_ns": 183586.6,
+      "mean_delta_pct": -26.13
+    },
+    "B_Linq2Db_Intersect": {
+      "entry_r1_alloc_bytes_per_op": 51285,
+      "entry_r2_alloc_bytes_per_op": 51282,
+      "alloc_delta_pct": -0.01,
+      "entry_r1_mean_ns": 568467.9,
+      "entry_r2_mean_ns": 390728.7,
+      "mean_delta_pct": -31.27
+    }
+  },
+  "per_operation": {
+    "EXCEPT": {
+      "entry_r1_bytes_per_query": {
+        "bytes_per_query_nextorm": 6528.1,
+        "bytes_per_query_linq2db": 5176.2,
+        "ratio_nextorm_over_linq2db": 1.2612
+      },
+      "entry_r2_bytes_per_query": {
+        "bytes_per_query_nextorm": 6528.1,
+        "bytes_per_query_linq2db": 5176.2,
+        "ratio_nextorm_over_linq2db": 1.2612
+      },
+      "nextorm_bytes_per_query_delta_pct": 0.0,
+      "ratio_delta": 0.0
+    },
+    "INTERSECT": {
+      "entry_r1_bytes_per_query": {
+        "bytes_per_query_nextorm": 6512.1,
+        "bytes_per_query_linq2db": 5128.5,
+        "ratio_nextorm_over_linq2db": 1.2698
+      },
+      "entry_r2_bytes_per_query": {
+        "bytes_per_query_nextorm": 6512.1,
+        "bytes_per_query_linq2db": 5128.2,
+        "ratio_nextorm_over_linq2db": 1.2699
+      },
+      "nextorm_bytes_per_query_delta_pct": 0.0,
+      "ratio_delta": 0.0001
+    }
+  }
+}

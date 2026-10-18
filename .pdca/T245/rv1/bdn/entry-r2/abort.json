@@ -1,0 +1,67 @@
+{
+  "block": "entry-r2",
+  "label": "C-FAIR entry round 2",
+  "label_in_brief": "C-FAIR entry-r2",
+  "state": "ABORTED_BEFORE_MEASUREMENT",
+  "valid": null,
+  "validity_verdict_note": "no verdict exists: the measurement block never started, so there is no measured interval to validate",
+  "reason_codes": [
+    "HOST_LOCK_NOT_ACQUIRED_WITHIN_15_MIN",
+    "ORPHANED_FLOCK_INHERITED_BY_MSBUILD_NODE_REUSE_SERVERS"
+  ],
+  "argv_planned": "env -u NEXTORM_BENCH_FULL NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkFeaturesFairCached.B_* --exporters json --artifacts .pdca/T245/rv1/bdn/entry-r2",
+  "argv_executed": null,
+  "lock": {
+    "path": "/tmp/opencode/nextorm-bdn-host.lock",
+    "device": 2096,
+    "inode": 187859,
+    "command": "flock -x -w 900 /tmp/opencode/nextorm-bdn-host.lock bash -lc \"<entry-r2 block script>\"",
+    "acquired": false,
+    "exit_code": 1,
+    "acquire_started_utc": "2026-10-18T16:29:43Z",
+    "acquire_gave_up_utc": "2026-10-18T16:44:20Z",
+    "wait_seconds": 877,
+    "block_started": false,
+    "proof": "the block script writes .pdca/T245/rv1/logs/entry-r2-block.txt as its first action; that file does not exist, so bash -lc never ran"
+  },
+  "lock_holder_analysis": {
+    "holder_processes": [
+      {"pid": 2002215, "comm": "dotnet", "args": "/home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false", "lstart_utc": "2026-10-18T16:25:38Z", "state": "S (futex_do_wait)", "pcpu": 1.7},
+      {"pid": 2002312, "comm": "dotnet", "args": "/home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false", "lstart_utc": "2026-10-18T16:25:40Z", "state": "S (futex_do_wait)", "pcpu": 1.7}
+    ],
+    "fd_proof": "/proc/2002215/fdinfo/3 and /proc/2002312/fdinfo/3 both read `lock:\t1: FLOCK  ADVISORY  WRITE 0 08:30:187859 0 EOF` (same mnt_id 62, ino 187859): an exclusive flock on the host lock file is held on the open file description inherited by the two persistent node-reuse build servers; owner pid 0 means the process that created the lock has exited (orphaned lock), so the flock outlives its wrapper and no one can acquire it",
+    "proc_locks_proof": "/proc/locks (13 entries, whole file) contains no entry for 08:30:187859, consistent with an orphaned flock whose owner is gone",
+    "busy_probe": "`flock -n /tmp/opencode/nextorm-bdn-host.lock -c 'echo GOT'` -> BUSY; a fresh file in the same directory locks immediately, so flock itself and the filesystem are healthy",
+    "no_measurement_executing": "ps filtered on nextorm.benchmark|BenchmarkDotNet|testhost|dotnet-coverage|reportgenerator|dotnet build|dotnet test returned only the two idle MSBuild nodes and the lock waiters for the whole 16:29:43Z..16:45:31Z window",
+    "second_waiter": {"pid": 2006493, "cmd": "python3 .pdca/scripts/perf/t244_evidence.py measure --repo . --phase baseline --round 1 --output .pdca/T297/rv2/baseline/round-01 --lock-timeout 1800", "started_utc": "2026-10-18T16:28:05Z", "state": "S (poll_schedule_timeout), 0.0% CPU, no child process", "note": "lane T297 is blocked on the same lock; its fdinfo/3 shows ino 187859 with no `lock:` line, i.e. a waiter, not a holder", "classification": "OBSERVATION_ONLY (waiter, cannot execute a measurement)"}
+  },
+  "db_pin": {
+    "expected": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+    "verified": true,
+    "paths": {
+      "/tmp/nextorm-bench/test.db": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+      "benchmarks/nextorm.benchmark/data/test.db": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295"
+    },
+    "verified_utc": "2026-10-18T16:28:14Z",
+    "note": "verified by the pre-launch check (sha256sum of both paths) and re-checked by hand at 16:45Z; the block's own check never ran"
+  },
+  "fingerprints": {
+    "head_before": "eceefd94695ffbec0a91fbc9cf8bf46a28da8040",
+    "head_after": "eceefd94695ffbec0a91fbc9cf8bf46a28da8040",
+    "head_changed": false,
+    "note": "no measured interval existed; HEAD was read before the launch attempt and again at abort time",
+    "tracked_benchmark_artifacts_modified": false
+  },
+  "quiet_window": null,
+  "arms": {},
+  "derived": null,
+  "summary_absent_reason": "no BDN run -> no report json/csv -> no alloc/mean numbers; nothing was fabricated",
+  "evidence_pointers": [
+    ".pdca/T245/rv1/logs/entry-r2-lock-wait.txt",
+    ".pdca/T245/rv1/logs/entry-r2-db-sha256.txt (not written: block never started; the pre-launch check is quoted in db_pin)",
+    "/tmp/opencode/t245-entry-r2-outer-result.txt (outer wrapper: 877 s, rc=1)",
+    "/tmp/opencode/t245-entry-r2.sh, /tmp/opencode/t245-entry-r2-outer.sh (harness, unexecuted body)",
+    "/tmp/opencode/t245_r2_quiet.py, /tmp/opencode/t245_r2_monitor.py (syntax-checked, never invoked)"
+  ],
+  "remedy_for_rerun": "hold the lock with `flock -x --close <lock> <cmd>` so the lock fd is closed before exec and cannot be inherited by MSBuild node-reuse servers, and/or run the measured dotnet with MSBUILDDISABLENODEREUSE=1 (or -nodeReuse:false); the currently stuck lock clears only when pids 2002215/2002312 exit"
+}

@@ -1,0 +1,45 @@
+T245 D245-1 block 1 (C-FAIR entry-r2) — host lock acquisition record
+captured_utc: 2026-10-18T16:29:34Z (outer wrapper start) .. 2026-10-18T16:45:31Z
+lock: /tmp/opencode/nextorm-bdn-host.lock (dev 2096, inode 187859, size 0, mtime 2026-10-18T15:45)
+lock command: flock -x -w 900 /tmp/opencode/nextorm-bdn-host.lock bash -lc "<entry-r2 block script>"
+              (single exclusive lock for the whole block; --wait deadline = start + 900 s;
+               the block script itself never takes or releases a lock)
+
+== observations while waiting (2026-10-18T16:28:14Z .. 16:35:00Z) ==
+- waiter (self): pid 2008489 `flock -x -w 900 ...`, wchan=locks_lock_inode_wait, state=S,
+  started 2026-10-18T16:29:34Z, fd 3 -> /tmp/opencode/nextorm-bdn-host.lock.
+- concurrent lane T297: pid 2006493 `python3 .pdca/scripts/perf/t244_evidence.py measure
+  --repo . --phase baseline --round 1 --output .pdca/T297/rv2/baseline/round-01 --lock-timeout 1800`,
+  started 2026-10-18T16:28:05Z, fd 3 -> same lock file, wchan=poll_schedule_timeout, state=S,
+  0.0 % CPU, NO child benchmark/build/testhost process: it is itself inside its
+  LOCK_EX|LOCK_NB retry loop (its earlier block `construct-allocation` completed at
+  2026-10-18T16:26:29Z and is on disk).
+- apparent holder: pids 2002215 and 2002312, `dotnet .../MSBuild.dll /noautoresponse /nologo
+  /nodemode:1 /nodeReuse:true`, started 2026-10-18T16:25:38Z / 16:25:40Z, fd 3 -> the lock file,
+  state=S (futex_do_wait), ~1.7-3 % cumulative CPU, no build in progress.
+- `/proc/locks` (13 entries, whole file read) contains NO entry for inode 187859.
+  `flock -n` on the path returns BUSY (EWOULDBLOCK); a freshly created lock file in the same
+  directory locks immediately, so the FS/flock mechanism is healthy and the contention is real,
+  not a path or mount artefact.
+- No foreign benchmark/testhost/coverage/build process was executing during the wait
+  (`ps` filtered on nextorm.benchmark|BenchmarkDotNet|testhost|dotnet-coverage|reportgenerator|
+  dotnet build|dotnet test -> only the two idle MSBuild server nodes and the lock waiters).
+
+== outcome (final) ==
+- 2026-10-18T16:44:20Z: `flock -w 900` gave up, rc=1, wait 877 s (16:29:43Z .. 16:44:20Z).
+  The block script never started (`.pdca/T245/rv1/logs/entry-r2-block.txt` absent), so no argv
+  was executed, no quiet window was taken, no BDN run occurred, no artifacts or numbers exist.
+- 2026-10-18T16:45:31Z: lock still BUSY and still held by the same two MSBuild servers
+  (1192 s old, 1.7 % cumulative CPU, no build in progress). They never took the lock
+  themselves — they hold it as an inherited open file description:
+      /proc/2002215/fdinfo/3 -> `lock: 1: FLOCK  ADVISORY  WRITE 0 08:30:187859 0 EOF`
+      /proc/2002312/fdinfo/3 -> `lock: 1: FLOCK  ADVISORY  WRITE 0 08:30:187859 0 EOF`
+  owner pid 0 = the acquiring process is gone, so the flock is orphaned and unacquirable until
+  those file descriptions close (node exit or kill).
+- T297 (pid 2006493) has been blocked on the same lock since 16:28:05Z with
+  `/proc/2006493/fdinfo/3` showing ino 187859 but NO `lock:` line: waiter, not holder.
+- Aborted per protocol: no retry, no parallel run queued. entry-r2 is NOT measured and therefore
+  has no valid/invalid verdict (entry-r1 keeps its invalid-diagnostic status; the two rounds are
+  never averaged).
+- Remedy for the re-run: `flock -x --close <lock> <cmd>` and/or MSBUILDDISABLENODEREUSE=1,
+  so the lock fd is not inherited by `nodeReuse:true` build servers.
