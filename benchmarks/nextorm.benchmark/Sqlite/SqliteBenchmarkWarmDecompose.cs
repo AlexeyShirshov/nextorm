@@ -33,6 +33,8 @@ public class SqliteBenchmarkWarmDecompose
     private readonly QueryCommand<int> _reusedRecursiveCte;
     private readonly QueryCommand<FourJoinRow> _reusedJoin4;
     private readonly QueryCommand<long> _reusedInAtInInline;
+    private readonly QueryCommand<int> _reusedExcept;
+    private readonly QueryCommand<int> _reusedIntersect;
 
     // T244 (#244) D244-01 diagnostics. The raw-recipe store is keyed by the concrete context type
     // (QueryPlanner passes GetType()), so the probes need exactly that type. The counters below are
@@ -58,6 +60,8 @@ public class SqliteBenchmarkWarmDecompose
         _ = _db.GetPreparedQueryCommand(BuildRecursiveCte(), false, true, CancellationToken.None);
         _ = _db.GetPreparedQueryCommand(BuildJoin4(), false, true, CancellationToken.None);
         _ = _db.GetPreparedQueryCommand(BuildInAtInInline(), false, true, CancellationToken.None);
+        _ = _db.GetPreparedQueryCommand(BuildExcept(), false, true, CancellationToken.None);
+        _ = _db.GetPreparedQueryCommand(BuildIntersect(), false, true, CancellationToken.None);
 
         // Already-prepared commands for the *_Warm_Reused arms: the loop only pays the cache lookup.
         _reusedCte = BuildCte();
@@ -68,6 +72,10 @@ public class SqliteBenchmarkWarmDecompose
         _ = _db.GetPreparedQueryCommand(_reusedJoin4, false, true, CancellationToken.None);
         _reusedInAtInInline = BuildInAtInInline();
         _ = _db.GetPreparedQueryCommand(_reusedInAtInInline, false, true, CancellationToken.None);
+        _reusedExcept = BuildExcept();
+        _ = _db.GetPreparedQueryCommand(_reusedExcept, false, true, CancellationToken.None);
+        _reusedIntersect = BuildIntersect();
+        _ = _db.GetPreparedQueryCommand(_reusedIntersect, false, true, CancellationToken.None);
     }
 
     private QueryCommand<CteJoinRow> BuildCte()
@@ -101,6 +109,13 @@ public class SqliteBenchmarkWarmDecompose
     private QueryCommand<long> BuildInAtInCaptured()
         => _ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, CapturedInValues)).Select(c => c.Id);
 
+    // Exact fluent shape of SqliteBenchmarkFeaturesFairCached.B_Nextorm_Cached_Except / _Intersect.
+    private QueryCommand<int> BuildExcept()
+        => _ctx.SimpleEntity.Select(s => s.Id).Except(_ctx.ComplexEntity.Select(c => (int)c.Id));
+
+    private QueryCommand<int> BuildIntersect()
+        => _ctx.SimpleEntity.Select(s => s.Id).Intersect(_ctx.ComplexEntity.Select(c => (int)c.Id));
+
     private static int _verified;
 
     [GlobalSetup]
@@ -110,7 +125,8 @@ public class SqliteBenchmarkWarmDecompose
         {
             Console.WriteLine("SqliteBenchmarkWarmDecompose verification passed: "
                 + BuildCte().ToList().Count + "," + BuildRecursiveCte().ToList().Count + ","
-                + BuildJoin4().ToList().Count + "," + BuildInAtInInline().ToList().Count);
+                + BuildJoin4().ToList().Count + "," + BuildInAtInInline().ToList().Count
+                + "," + BuildExcept().ToList().Count + "," + BuildIntersect().ToList().Count);
         }
 
         // BDN rejects a second un-targeted [GlobalSetup] method in the same class, so both
@@ -305,6 +321,112 @@ public class SqliteBenchmarkWarmDecompose
     {
         IPreparedQueryCommand<long>? r = null;
         for (var i = 0; i < Iterations; i++) r = _db.GetPreparedQueryCommand(_reusedInAtInInline, false, true, Ct);
+        return r!;
+    }
+
+    // =============================================================================================
+    // T245 (#245) D245-1 set-operation decomposition — measurement only, no product change.
+    //
+    // The same stage ladder as the CTE / recursive CTE / Join4 / IN-list families above, applied to
+    // the exact fluent shape SqliteBenchmarkFeaturesFairCached.B_Nextorm_Cached_Except /
+    // B_Nextorm_Cached_Intersect executes (same tables, same projection, same terminal), so the
+    // warm totals are comparable with the FairCached B arms:
+    //   *_Construct      = build the QueryCommand only (expression tree + clone).
+    //   *_Prepare_NoHash = construct + PrepareCommand(dontCalculateHash: true) (visitors).
+    //   *_Prepare_Hash   = construct + PrepareCommand(false) (visitors + all *PlanHash).
+    //   *_Warm_PlanOnly  = full implicit-cache hit path on a fresh command.
+    //   *_Warm_Reused    = the same already-prepared command every iteration: plan-key + lookup only
+    //                      (expected 0 B per operation). Delta vs *_Warm_PlanOnly is exactly
+    //                      "construct + prepare + hash".
+    // =============================================================================================
+
+    [Benchmark]
+    [BenchmarkCategory("Warm_Except")]
+    public QueryCommand<int> Except_Construct()
+    {
+        QueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++) r = BuildExcept();
+        return r!;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Warm_Except")]
+    public QueryCommand<int> Except_Prepare_NoHash()
+    {
+        QueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++) { r = BuildExcept(); r.PrepareCommand(true, Ct); }
+        return r!;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Warm_Except")]
+    public QueryCommand<int> Except_Prepare_Hash()
+    {
+        QueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++) { r = BuildExcept(); r.PrepareCommand(false, Ct); }
+        return r!;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Warm_Except")]
+    public IPreparedQueryCommand<int> Except_Warm_PlanOnly()
+    {
+        IPreparedQueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++) r = _db.GetPreparedQueryCommand(BuildExcept(), false, true, Ct);
+        return r!;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Warm_Except")]
+    public IPreparedQueryCommand<int> Except_Warm_Reused()
+    {
+        IPreparedQueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++) r = _db.GetPreparedQueryCommand(_reusedExcept, false, true, Ct);
+        return r!;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Warm_Intersect")]
+    public QueryCommand<int> Intersect_Construct()
+    {
+        QueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++) r = BuildIntersect();
+        return r!;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Warm_Intersect")]
+    public QueryCommand<int> Intersect_Prepare_NoHash()
+    {
+        QueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++) { r = BuildIntersect(); r.PrepareCommand(true, Ct); }
+        return r!;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Warm_Intersect")]
+    public QueryCommand<int> Intersect_Prepare_Hash()
+    {
+        QueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++) { r = BuildIntersect(); r.PrepareCommand(false, Ct); }
+        return r!;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Warm_Intersect")]
+    public IPreparedQueryCommand<int> Intersect_Warm_PlanOnly()
+    {
+        IPreparedQueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++) r = _db.GetPreparedQueryCommand(BuildIntersect(), false, true, Ct);
+        return r!;
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("Warm_Intersect")]
+    public IPreparedQueryCommand<int> Intersect_Warm_Reused()
+    {
+        IPreparedQueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++) r = _db.GetPreparedQueryCommand(_reusedIntersect, false, true, Ct);
         return r!;
     }
 
