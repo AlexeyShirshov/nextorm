@@ -23,6 +23,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private readonly QueryExecutor _executor;
     private readonly QueryPlanner _planner;
     private readonly InterceptorHooks _interceptors;
+    // Compiled JSON row writers owned by this context: a bounded LRU, so a repeated warm export does
+    // not recompile the same shape. Entries are pure delegates (no reader, destination or command) and
+    // are invalidated on PurgeQueryCache or by the process-wide DataContextCache.Clear generation.
+    private readonly JsonRowWriterCache _jsonRowWriters = new();
 
     /// <summary>
     /// Creates a context from builder options (logger factory, mapping mode, naming convention and
@@ -343,8 +347,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     /// <summary>
     /// Streams a query's projected rows as JSON to a caller-owned stream, without a row mapper. The
-    /// command is prepared once with the no-mapper flag (a live <c>DocumentMode</c> clone) and
-    /// the shape plan and row writer are built per call; no writer cache is used.
+    /// command is prepared once with the no-mapper flag (a live <c>DocumentMode</c> clone); the shape
+    /// plan is built per call and the compiled row writer is served from the context-owned bounded
+    /// writer cache, so a repeated warm export does not recompile the same shape.
     /// </summary>
     /// <typeparam name="TResult">The projected result type; it is never materialized on this path.</typeparam>
     /// <param name="queryCommand">The command whose projection drives the JSON shape.</param>
@@ -425,7 +430,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
 
         var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options, cmd.JsonShape);
-        return (prepared, JsonRowWriterFactory.Build(plan), plan, false);
+        return (prepared, _jsonRowWriters.GetOrBuild(plan), plan, false);
     }
 
     // Clones the caller's command into a JSON-stream preparation. DocumentMode is the planner's existing
@@ -1751,7 +1756,19 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         => await _executor.SingleOrDefaultAsync(preparedQueryCommand, @params, cancellationToken).ConfigureAwait(false);
 
     /// <summary>Clears all cached query plans held by this context.</summary>
-    public void PurgeQueryCache() => _queryCache.PurgeQueryCache();
+    public void PurgeQueryCache()
+    {
+        // The retained JSON writers reference no plan, but they belong to the same per-context cache
+        // lifetime: a purge drops them so a disposed/purged context releases everything it compiled.
+        _jsonRowWriters.Clear();
+        _queryCache.PurgeQueryCache();
+    }
+
+    /// <summary>
+    /// The context-owned compiled JSON row-writer cache. Test/evidence observability only: the cache is
+    /// an engine detail and is not part of the public context surface.
+    /// </summary>
+    internal JsonRowWriterCache JsonRowWriterCacheForTesting => _jsonRowWriters;
 
     /// <summary>
     /// Executes a supported scalar terminal (T243/D243 fast path) from the context-owned immutable
