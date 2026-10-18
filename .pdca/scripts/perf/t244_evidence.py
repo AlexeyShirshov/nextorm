@@ -2936,7 +2936,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     measure_parser.add_argument("--repo", default=".", help="repository root (default: .)")
     measure_parser.add_argument(
-        "--phase", required=True, choices=("baseline", "candidate"), help="measured phase"
+        "--phase",
+        required=True,
+        choices=("baseline", "candidate", "diagnostic"),
+        help="measured phase ('diagnostic' = D244-05 targeted re-gather, --scope warm-decompose)",
     )
     measure_parser.add_argument("--round", required=True, type=int, help="round number")
     measure_parser.add_argument("--output", required=True, help="round output directory")

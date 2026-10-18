@@ -99,4 +99,49 @@ public sealed class WindowFunctionSweepTests : ProviderTestSuite
         rows.Select(r => r.Min).Should().Equal(1L, 1L, 2L);
         rows.Select(r => r.Max).Should().Equal(2L, 3L, 3L);
     }
+
+    [Fact]
+    public void NamedWindowWithFrame_ShouldExecute()
+    {
+        var e = _sut.ComplexEntity;
+
+        var rows = e
+            .Window(
+                "w",
+                partitionBy: [x => x.Int],
+                orderBy: [e.Asc(x => x.Id)],
+                frame: WindowFrame.Rows(WindowFrameBound.UnboundedPreceding, WindowFrameBound.CurrentRow))
+            .Select(x => new
+            {
+                x.Id,
+                Row = SqlFunctions.Sql.row_number().Over("w"),
+                Total = SqlFunctions.Sql.sum_over(x.Id).Over("w")
+            })
+            .OrderBy(x => x.Id)
+            .ToList();
+
+        rows.Select(r => r.Row).Should().Equal(1, 1, 2);
+        rows.Select(r => r.Total).Should().Equal(1L, 2L, 5L);
+    }
+
+    [Fact]
+    public void InvalidWindowNames_ShouldBeRejected()
+    {
+        var e = _sut.ComplexEntity;
+
+        foreach (var name in new[] { "", "1w", "w x", "w-x", "w;" })
+        {
+            FluentActions
+                .Invoking(() => e.Window(name, partitionBy: [x => x.Int]))
+                .Should().Throw<ArgumentException>(name);
+        }
+
+        FluentActions
+            .Invoking(() => e.Window("w", partitionBy: [x => x.Int]).Window("w", partitionBy: [x => x.Id]))
+            .Should().Throw<InvalidOperationException>();
+
+        FluentActions
+            .Invoking(() => e.Window("w_1", partitionBy: [x => x.Int]).Select(x => SqlFunctions.Sql.row_number().Over("bad name")).ToList())
+            .Should().Throw<ArgumentException>();
+    }
 }

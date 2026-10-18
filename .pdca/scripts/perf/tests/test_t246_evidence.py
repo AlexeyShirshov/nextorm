@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import copy
+import contextlib
 import fcntl
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -74,7 +76,7 @@ class ThresholdAndRatioTests(unittest.TestCase):
 
 
 class LaunchStatisticsTests(T246TestCase):
-    def _stratum_fixture(self):
+    def _stratum_fixture(self, operations=1):
         counts = {
             "invocation_count": 64,
             "unroll_factor": 1,
@@ -90,9 +92,59 @@ class LaunchStatisticsTests(T246TestCase):
             method: 1000 for method in T246.STRATA["10k"]["methods"]
         }
         T246.build_stratum_fixture(
-            self.tmp / "10k", "10k", means, allocations, counts=counts
+            self.tmp / "10k", "10k", means, allocations, counts=counts,
+            operations=operations,
         )
         return self.tmp / "10k"
+
+    def test_operations_greater_than_one_is_normalised_once(self):
+        stratum_dir = self._stratum_fixture(operations=64)
+        json_path = next(
+            (stratum_dir / "results").glob("*-report-full-compressed.json")
+        )
+        document = json.loads(json_path.read_text(encoding="utf-8"))
+        for benchmark in document["Benchmarks"]:
+            workload = [
+                measurement
+                for measurement in benchmark["Measurements"]
+                if measurement["IterationMode"] == "Workload"
+                and measurement["IterationStage"] == "Result"
+            ]
+            self.assertEqual(len(workload), 30)
+            for measurement in workload:
+                self.assertEqual(measurement["Operations"], 64)
+                # The retained JSON value is the iteration total, not ns/op.
+                self.assertGreater(measurement["Nanoseconds"], 3.0e8)
+        view = T246.parse_stratum(stratum_dir, "10k", 64)
+        expected_launch_means = [5_000_000.0, 5_005_000.0, 5_010_000.0]
+        for method, benchmark in view["benchmarks"].items():
+            self.assertEqual(len(benchmark["launches"]), 3, method)
+            for launch, expected in zip(
+                benchmark["launches"], expected_launch_means
+            ):
+                # Exactly one division by 64: a missing or doubled division
+                # moves the mean by 64x / 1/64 and fails this bound.
+                self.assertLessEqual(
+                    abs(launch["mean_ns"] - expected) / expected, 0.002, method
+                )
+            self.assertLessEqual(
+                abs(benchmark["csv_mean_ns"] - 5_000_000.0) / 5_000_000.0, 0.002
+            )
+
+    def test_unnormalised_iteration_total_is_rejected(self):
+        stratum_dir = self._stratum_fixture(operations=64)
+        log_path = next(stratum_dir.glob("*.log"))
+        text = log_path.read_text(encoding="utf-8")
+        self.assertIn(" 64 op, ", text)
+        # Keep the raw iteration totals but claim one operation: the log then
+        # reports ~64x the JSON per-op mean and must be rejected.
+        log_path.write_text(text.replace(" 64 op, ", " 1 op, "), encoding="utf-8")
+        with self.assertRaises(T246.Reject) as caught:
+            T246.parse_stratum(stratum_dir, "10k", 64)
+        self.assertTrue(
+            caught.exception.reason.startswith("log-json-launch-mean-mismatch"),
+            caught.exception.reason,
+        )
 
     def test_three_launch_statistics_are_independently_recoverable(self):
         view = T246.parse_stratum(self._stratum_fixture(), "10k", 64)
@@ -132,6 +184,132 @@ class LaunchStatisticsTests(T246TestCase):
         with self.assertRaises(T246.Reject):
             T246.validate_requested_n(11, 64)
         self.assertEqual(T246.validate_requested_n(10, 64), None)
+
+
+class ResolvedJobTests(T246TestCase):
+    """H-N2: an out-of-process job is accepted by resolved settings, not name."""
+
+    COUNTS = {
+        "invocation_count": 64,
+        "unroll_factor": 1,
+        "launch_count": 3,
+        "warmup_count": 5,
+        "iteration_count": 10,
+    }
+    REQUIRED = {
+        "invocationcount": 64,
+        "iterationcount": 10,
+        "launchcount": 3,
+        "unrollfactor": 1,
+        "warmupcount": 5,
+    }
+
+    def _fixture(self, **overrides):
+        params = {
+            "job_id": "Job-NREBDM",
+            "csv_job": None,
+            "toolchain": "Default",
+            "job_header_override": None,
+            "job_setting_overrides": None,
+        }
+        params.update(overrides)
+        means = {
+            method: [5_000_000.0, 5_005_000.0, 5_010_000.0]
+            for method in T246.STRATA["10k"]["methods"]
+        }
+        allocations = {
+            method: 1000 for method in T246.STRATA["10k"]["methods"]
+        }
+        T246.build_stratum_fixture(
+            self.tmp / "10k", "10k", means, allocations, counts=self.COUNTS,
+            job_id=params["job_id"], csv_job=params["csv_job"],
+            toolchain=params["toolchain"],
+            job_header_override=params["job_header_override"],
+            job_setting_overrides=params["job_setting_overrides"],
+        )
+        return self.tmp / "10k"
+
+    def _view_and_reasons(self, **overrides):
+        view = T246.parse_stratum(self._fixture(**overrides), "10k", 64)
+        return view, T246.validate_stratum_view(view, "10k", 64)
+
+    def test_resolved_out_of_process_job_is_accepted(self):
+        view, reasons = self._view_and_reasons()
+        self.assertEqual(reasons, [])
+        self.assertTrue(view["job"]["is_default"])
+        self.assertTrue(view["job"]["out_of_process"])
+        self.assertEqual(view["job"]["resolved"]["job_id"], "Job-NREBDM")
+        self.assertEqual(view["job"]["resolved"]["settings"], self.REQUIRED)
+
+    def test_truncated_or_bare_header_is_rejected(self):
+        for header in ("Job-NREBDM", "Job-NREBDM()"):
+            view, reasons = self._view_and_reasons(job_header_override=header)
+            self.assertFalse(view["job"]["is_default"], header)
+            self.assertTrue(
+                any(reason.startswith("job-header-unresolved") for reason in reasons),
+                reasons,
+            )
+
+    def test_csv_log_job_mismatch_is_rejected(self):
+        view, reasons = self._view_and_reasons(csv_job="Job-OTHER")
+        self.assertFalse(view["job"]["is_default"])
+        self.assertIn("csv-log-job-mismatch:Job-OTHER!=Job-NREBDM", reasons)
+
+    def test_in_process_toolchain_is_rejected_even_with_resolved_settings(self):
+        view, reasons = self._view_and_reasons(toolchain="InProcessEmitToolchain")
+        self.assertFalse(view["job"]["out_of_process"])
+        self.assertFalse(view["job"]["is_default"])
+        self.assertIn("job-toolchain-inprocess:InProcessEmitToolchain", reasons)
+
+    def test_each_wrong_resolved_setting_is_named(self):
+        wrong_values = {
+            "InvocationCount": 32,
+            "IterationCount": 9,
+            "LaunchCount": 2,
+            "UnrollFactor": 4,
+            "WarmupCount": 0,
+        }
+        expected = {
+            "InvocationCount": 64,
+            "IterationCount": 10,
+            "LaunchCount": 3,
+            "UnrollFactor": 1,
+            "WarmupCount": 5,
+        }
+        for name, wrong in wrong_values.items():
+            view, reasons = self._view_and_reasons(
+                job_setting_overrides={name: wrong}
+            )
+            key = name.lower()
+            self.assertFalse(view["job"]["is_default"], name)
+            self.assertIn(
+                "job-setting-mismatch:%s:%d!=%d" % (key, wrong, expected[name]),
+                reasons,
+                name,
+            )
+            self.assertIn(
+                "job-settings-csv-mismatch:%s:%d!=%d" % (key, wrong, expected[name]),
+                reasons,
+                name,
+            )
+
+    def test_missing_resolved_setting_is_named(self):
+        view, reasons = self._view_and_reasons(
+            job_header_override=(
+                "Job-NREBDM(InvocationCount=64, IterationCount=10, "
+                "LaunchCount=3, UnrollFactor=1)"
+            )
+        )
+        self.assertFalse(view["job"]["is_default"])
+        self.assertIn("job-setting-missing:warmupcount", reasons)
+
+    def test_real_rv2_run1_header_parses_into_required_tuple(self):
+        header = T246.parse_job_header(
+            "// Job: Job-NREBDM(InvocationCount=64, IterationCount=10, "
+            "LaunchCount=3, UnrollFactor=1, WarmupCount=5)\n"
+        )
+        self.assertEqual(header["job_id"], "Job-NREBDM")
+        self.assertEqual(header["settings"], self.REQUIRED)
 
 
 class ModeDetectorTests(unittest.TestCase):
@@ -390,6 +568,160 @@ class GateFixtureTests(unittest.TestCase):
         self.assertGreaterEqual(len(payload["cases"]), 17)
         for case in payload["cases"]:
             self.assertTrue(case["pass"], case)
+
+
+class HostGuardTests(unittest.TestCase):
+    """H-N3: an idle compiler/build server is not contamination."""
+
+    ROOTS = {424242}
+
+    @staticmethod
+    def process(pid, pcpu, comm, args=""):
+        return {"pid": pid, "pcpu": pcpu, "comm": comm, "args": args}
+
+    def idle_server(self, pid=4100):
+        # ps %CPU is a lifetime average: a server that compiled once keeps a
+        # large value while being instantaneously idle.
+        return self.process(
+            pid, 38.5, "VBCSCompiler",
+            "dotnet exec /usr/share/dotnet/sdk/10.0.401/Roslyn/bincore/VBCSCompiler.dll",
+        )
+
+    def idle_msbuild_node(self, pid=4101):
+        return self.process(
+            pid, 2.0, "MSBuild",
+            "dotnet /usr/share/dotnet/sdk/10.0.401/MSBuild.dll /nodemode:1",
+        )
+
+    ACTIVE = (
+        ("csc", "csc.dll",
+         "dotnet exec /usr/share/dotnet/sdk/10.0.401/Roslyn/bincore/csc.dll /noconfig"),
+        ("testhost", "testhost", "testhost --port 4242 --endpoint 127.0.0.1"),
+        ("dotnet build", "dotnet", "dotnet build -c Release nextorm.slnx"),
+        ("dotnet test", "dotnet", "dotnet test tests/nextorm.core.tests -c Debug"),
+        ("dotnet publish", "dotnet", "dotnet publish -c Release -o out"),
+        ("dotnet-coverage", "dotnet-coverage", "dotnet-coverage collect dotnet test"),
+        ("BenchmarkDotNet", "dotnet",
+         "dotnet exec /home/u/.nuget/packages/benchmarkdotnet/0.15.8/lib/BenchmarkDotNet.dll"),
+    )
+
+    def test_idle_compiler_server_alone_is_not_contamination(self):
+        foreign = T246._foreign_processes(
+            [self.idle_server(), self.idle_msbuild_node()], self.ROOTS
+        )
+        self.assertEqual(foreign, [])
+
+    def test_each_active_competitor_is_rejected(self):
+        for index, (label, comm, args) in enumerate(self.ACTIVE, start=4200):
+            active = self.process(index, 55.0, comm, args)
+            foreign = T246._foreign_processes([active], self.ROOTS)
+            self.assertEqual([item["pid"] for item in foreign], [index], label)
+            self.assertEqual(foreign[0]["comm"], comm, label)
+
+    def test_active_process_alongside_idle_compiler_server_is_rejected(self):
+        for index, (label, comm, args) in enumerate(self.ACTIVE, start=4300):
+            active = self.process(index, 55.0, comm, args)
+            foreign = T246._foreign_processes(
+                [self.idle_server(), self.idle_msbuild_node(), active], self.ROOTS
+            )
+            self.assertEqual([item["pid"] for item in foreign], [index], label)
+
+    def test_idle_server_is_recorded_in_the_summary_observably(self):
+        samples = [
+            {
+                "monotonic": 1.0,
+                "stratum": "10k",
+                "ps_available": True,
+                "foreign_pids": [],
+                "foreign_cpu_percent": 0.0,
+                "freq_available": False,
+                "thermal_available": False,
+                "throttle_total": None,
+            }
+        ]
+        summary = T246.summarize_monitor(samples)
+        self.assertFalse(summary["contaminated"])
+        self.assertEqual(summary["foreign_pids"], [])
+
+
+class ParseCheckTests(T246TestCase):
+    """C-H-PARSE: offline reconciliation of captured log/JSON per-op values."""
+
+    COUNTS = {
+        "invocation_count": 64,
+        "unroll_factor": 1,
+        "launch_count": 3,
+        "warmup_count": 5,
+        "iteration_count": 10,
+    }
+
+    def _runs_root(self, operations=64):
+        means = {
+            method: [5_000_000.0, 5_005_000.0, 5_010_000.0]
+            for method in T246.STRATA["10k"]["methods"]
+        }
+        allocations = {
+            method: 1000 for method in T246.STRATA["10k"]["methods"]
+        }
+        T246.build_stratum_fixture(
+            self.tmp / "run-1" / "10k", "10k", means, allocations,
+            counts=self.COUNTS, operations=operations,
+        )
+        return self.tmp
+
+    def test_parse_check_accepts_operations_64_fixture(self):
+        root = self._runs_root()
+        entry = T246.parse_check_run(root / "run-1")
+        self.assertEqual(entry["verdict"], "pass", entry)
+        self.assertEqual(entry["operations"], 64)
+        self.assertLessEqual(entry["relative_diff"], 1e-9)
+        self.assertAlmostEqual(entry["unnormalised_ratio"], 64.0, delta=1e-6)
+        self.assertAlmostEqual(
+            entry["unnormalised_total_ns"] / entry["log_per_op_ns"], 64.0,
+            delta=1e-6,
+        )
+        for key in ("log", "json", "csv"):
+            self.assertTrue(Path(entry[key]).is_file(), key)
+
+    def test_parse_check_cli_accepts_fixture_and_prints_summary(self):
+        root = self._runs_root()
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            exit_code = T246.main(["parse-check", "--runs", str(root)])
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(buffer.getvalue())
+        self.assertEqual(
+            payload["summary"],
+            {"runs_checked": 1, "passed": 1, "failed": 0},
+        )
+        self.assertEqual(len(payload["runs"]), 1)
+        self.assertEqual(payload["runs"][0]["verdict"], "pass")
+
+    def test_parse_check_rejects_operation_count_mismatch(self):
+        root = self._runs_root()
+        log_path = next((root / "run-1" / "10k").glob("*.log"))
+        log_path.write_text(
+            log_path.read_text(encoding="utf-8").replace(" 64 op, ", " 1 op, "),
+            encoding="utf-8",
+        )
+        entry = T246.parse_check_run(root / "run-1")
+        self.assertEqual(entry["verdict"], "fail")
+        self.assertIn("ambiguous-operations", entry["reason"])
+
+    def test_parse_check_cli_fails_and_returns_nonzero(self):
+        root = self._runs_root()
+        csv_path = next((root / "run-1" / "10k" / "results").glob("*-report.csv"))
+        csv_path.unlink()
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            exit_code = T246.main(["parse-check", "--runs", str(root)])
+        self.assertEqual(exit_code, T246.EXIT_FAIL)
+        payload = json.loads(buffer.getvalue())
+        self.assertEqual(
+            payload["summary"],
+            {"runs_checked": 1, "passed": 0, "failed": 1},
+        )
+        self.assertIn("missing-measurement-data:csv", payload["runs"][0]["reason"])
 
 
 class DriverInvariantTests(T246TestCase):

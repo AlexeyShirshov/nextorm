@@ -1,3 +1,5 @@
+using System.Data;
+using System.Text.Json;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using NextORM.Core;
@@ -32,6 +34,14 @@ public class SqliteBenchmarkJsonFixedCost
     private readonly MemoryStream _destination = new(1 << 18);
     private long _sink;
 
+    // D247-01 narrowed compile-only spike: the shape is built in setup, the warm reusable entry is
+    // compiled once before any measurement, and the steady-writer arm drives that precompiled entry
+    // over a hand-written three-column record. Neither arm re-plans, prepares or rebuilds a shape.
+    private JsonShapePlan _shapePlan = null!;
+    private JsonRowWriter _warmWriter = null!;
+    private JsonRowWriter _compileSink = null!;
+    private FlatJsonRecord _flatRecord = null!;
+
     public SqliteBenchmarkJsonFixedCost()
     {
         var builder = new DataContextBuilder();
@@ -49,6 +59,35 @@ public class SqliteBenchmarkJsonFixedCost
     {
         _destination.SetLength(0);
         _destination.Position = 0;
+    }
+
+    /// <summary>
+    /// D247-01 setup: builds the three-column JSON shape plan once and compiles the warm reusable entry
+    /// once, so the compile-only arm measures <see cref="JsonRowWriterFactory.Build"/> itself (not the
+    /// first JIT of the compiled lambda) and the steady-writer arm measures only the row loop.
+    /// </summary>
+    [GlobalSetup]
+    public void SetupInstrumentation()
+    {
+        _shapePlan = JsonShapePlan.Build(
+            [
+                new SelectExpression(typeof(int)) { Index = 0, PropertyName = "Id" },
+                new SelectExpression(typeof(string)) { Index = 1, PropertyName = "Str" },
+                new SelectExpression(typeof(DateTime)) { Index = 2, PropertyName = "Dt" },
+            ],
+            oneColumn: false,
+            new JsonStreamOptions());
+
+        // Compile the warm reusable entry once, before any measurement.
+        _warmWriter = JsonRowWriterFactory.Build(_shapePlan);
+        _compileSink = _warmWriter;
+        _flatRecord = new FlatJsonRecord();
+
+        // Smoke the steady writer once: a rejected shape must fail setup, not the measured region.
+        using (var probe = new Utf8JsonWriter(new MemoryStream()))
+        {
+            _warmWriter(_flatRecord, probe);
+        }
     }
 
     /// <summary>Reference: a warmed buffered read of the three-column projection (no JSON, no re-plan).</summary>
@@ -115,5 +154,103 @@ public class SqliteBenchmarkJsonFixedCost
             })
             .WriteJson(_destination);
         _sink = _destination.Length;
+    }
+
+    /// <summary>
+    /// D247-01 compile-only spike: measures <see cref="JsonRowWriterFactory.Build"/> alone over the
+    /// setup-built shape plan. No preparation, no shape construction and no row loop run here, so the
+    /// public total can be decomposed into measured compile cost and an un-attributed residual.
+    /// </summary>
+    /// <returns>A stable value keeping the compiled delegate live (dead-code elimination guard).</returns>
+    [Benchmark]
+    public int Nextorm_CompileOnly_3Col()
+    {
+        _compileSink = JsonRowWriterFactory.Build(_shapePlan);
+        return _compileSink.GetHashCode();
+    }
+
+    /// <summary>
+    /// D247-01 steady writer: drives the precompiled warm reusable entry over a hand-written
+    /// three-column record for <see cref="Rows"/> rows. No preparation, no shape construction and no
+    /// compilation run here, so this is the writer-only share of the public total.
+    /// </summary>
+    /// <returns>The number of JSON bytes written.</returns>
+    [Benchmark]
+    public long Nextorm_SteadyWriter_3Col()
+    {
+        ResetDestination();
+        using (var writer = new Utf8JsonWriter(_destination, new JsonWriterOptions { SkipValidation = true }))
+        {
+            writer.WriteStartArray();
+            for (var i = 0; i < Rows; i++)
+                _warmWriter(_flatRecord, writer);
+            writer.WriteEndArray();
+        }
+
+        _sink = _destination.Length;
+        return _destination.Length;
+    }
+
+    /// <summary>A hand-written three-column record (int, string, DateTime) for the steady-writer arm.</summary>
+    private sealed class FlatJsonRecord : IDataRecord
+    {
+        private static readonly Type[] Types = [typeof(int), typeof(string), typeof(DateTime)];
+        private static readonly string[] Names = ["Id", "Str", "Dt"];
+        private readonly object[] _values = [42, "row", new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc)];
+
+        public int FieldCount => 3;
+
+        public object this[int i] => _values[i];
+
+        public object this[string name] => throw new NotSupportedException();
+
+        public bool GetBoolean(int i) => throw new NotSupportedException();
+
+        public byte GetByte(int i) => throw new NotSupportedException();
+
+        public long GetBytes(int i, long fieldOffset, byte[]? buffer, int bufferoffset, int length) => throw new NotSupportedException();
+
+        public char GetChar(int i) => throw new NotSupportedException();
+
+        public long GetChars(int i, long fieldoffset, char[]? buffer, int bufferoffset, int length) => throw new NotSupportedException();
+
+        public IDataReader GetData(int i) => throw new NotSupportedException();
+
+        public string GetDataTypeName(int i) => Types[i].Name;
+
+        public DateTime GetDateTime(int i) => (DateTime)_values[i];
+
+        public decimal GetDecimal(int i) => throw new NotSupportedException();
+
+        public double GetDouble(int i) => throw new NotSupportedException();
+
+        public Type GetFieldType(int i) => Types[i];
+
+        public float GetFloat(int i) => throw new NotSupportedException();
+
+        public Guid GetGuid(int i) => throw new NotSupportedException();
+
+        public short GetInt16(int i) => throw new NotSupportedException();
+
+        public int GetInt32(int i) => (int)_values[i];
+
+        public long GetInt64(int i) => throw new NotSupportedException();
+
+        public string GetName(int i) => Names[i];
+
+        public int GetOrdinal(string name) => throw new NotSupportedException();
+
+        public string GetString(int i) => (string)_values[i];
+
+        public object GetValue(int i) => _values[i];
+
+        public int GetValues(object[] values)
+        {
+            var count = Math.Min(values.Length, _values.Length);
+            Array.Copy(_values, values, count);
+            return count;
+        }
+
+        public bool IsDBNull(int i) => false;
     }
 }

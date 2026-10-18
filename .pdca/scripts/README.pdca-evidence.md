@@ -10,8 +10,8 @@ Standard library only (Python 3.8+). No pytest, no `pyproject`, no third-party d
 ## Usage
 
 ```
-python3 scripts/pdca_evidence.py generate --repo <root> --contract <contract.json> --output <dir>
-python3 scripts/pdca_evidence.py lint     --repo <root> --manifest <manifest.json> [--scope-root <dir>]
+python3 .pdca/scripts/pdca_evidence.py generate --repo <root> --contract <contract.json> --output <dir>
+python3 .pdca/scripts/pdca_evidence.py lint     --repo <root> --manifest <manifest.json> [--scope-root <dir>]
 ```
 
 `generate` writes one immutable receipt per required row under
@@ -36,7 +36,7 @@ including unreferenced ones) plus `results/`/`receipts/` directories when presen
   "task": "T234", "issue": "#234",
   "status_file": "docs/specs/status/D234-...md", "path": "artifacts/pdca/T234/rv2",
   "base_ref": "<40-hex>", "collection_baseline_ref": "<40-hex>",
-  "footprint": ["scripts/pdca_evidence.py", "scripts/tests/"],
+  "footprint": [".pdca/scripts/pdca_evidence.py", ".pdca/scripts/tests/"],
   "exclusions": ["artifacts/**", "docs/specs/status/**"],
   "contract_rv": 2, "supersedes": {"rv": 1, "artifacts": "none"},
   "required_rows": ["E234-01"], "rows": [ ... ]
@@ -74,16 +74,16 @@ Unrelated historical revisions are never scanned and never modified.
 ## Negative-case sample
 
 ```
-python3 scripts/tests/pdca_evidence_harness.py negative --output /tmp/nextorm-pdca-neg
-python3 scripts/tests/pdca_evidence_harness.py coverage --output /tmp/nextorm-pdca-cov
-python3 scripts/tests/pdca_evidence_harness.py mutate   --output /tmp/nextorm-pdca-mut
+python3 .pdca/scripts/tests/pdca_evidence_harness.py negative --output /tmp/nextorm-pdca-neg
+python3 .pdca/scripts/tests/pdca_evidence_harness.py coverage --output /tmp/nextorm-pdca-cov
+python3 .pdca/scripts/tests/pdca_evidence_harness.py mutate   --output /tmp/nextorm-pdca-mut
 ```
 
 The `negative` harness replays the tracked recipes in
-`scripts/tests/fixtures/pdca_evidence/cases.json` in a child process against a disposable Git
+`.pdca/scripts/tests/fixtures/pdca_evidence/cases.json` in a child process against a disposable Git
 repository, requiring child exit `2` with a diagnostic naming path + field, and proving the lint
 never modifies the publication. The `coverage` harness runs the unittest suite under the stdlib
-`trace` module (>= 90 % executable lines of `scripts/pdca_evidence.py`). The `mutate` harness
+`trace` module (>= 90 % executable lines of `.pdca/scripts/pdca_evidence.py`). The `mutate` harness
 kills a fixed set of source mutations disabling the equality, recomputation, enumeration,
 missing-file and pre-publication guards.
 

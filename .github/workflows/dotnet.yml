@@ -28,7 +28,7 @@ jobs:
       MIN_BRANCH_COVERAGE: 75
       # Dedicated gate for tests/nextorm.integration.tests (real databases only).
       # Branch threshold is a hard 75 %. Measured integration-only baseline after the
-      # NextORM.Core.InMemory* exclusion (unit-only by policy): 74.5 % line / 64.4 % branch —
+      # NextORM.Core.InMemory* exclusion (unit-only by policy): 77.0 % line / 68.3 % branch —
       # the gate is RED until the integration suite's branch coverage is raised to 75 %.
       MIN_INTEGRATION_LINE_COVERAGE: 65
       MIN_INTEGRATION_BRANCH_COVERAGE: 75
@@ -78,18 +78,18 @@ jobs:
             echo "::warning::Integration coverage below threshold (line ${LINE}% < ${MIN_INTEGRATION_LINE_COVERAGE}% or branch ${BRANCH}% < ${MIN_INTEGRATION_BRANCH_COVERAGE}%); hard-fails on main only"
           fi
       - name: Benchmark table generator self-tests
-        run: python3 -m unittest discover -s scripts/perf/tests -p 'test_update_benchmark_tables.py'
+        run: python3 -m unittest discover -s .pdca/scripts/perf/tests -p 'test_update_benchmark_tables.py'
       - name: Allocation regression gate
         timeout-minutes: 20
         run: |
           mkdir -p /tmp/nextorm-bench-gate
           export NEXTORM_BENCH_DB=/tmp/nextorm-bench-gate/test.db
-          python3 -m unittest discover -s scripts/perf/tests -p 'test_iteration14_gate.py'
-          python3 scripts/perf/iteration14_gate.py --timeout 1200
+          python3 -m unittest discover -s .pdca/scripts/perf/tests -p 'test_iteration14_gate.py'
+          python3 .pdca/scripts/perf/iteration14_gate.py --timeout 1200
       - name: PDCA evidence pipeline gate
         run: |
-          python3 -m unittest discover -s scripts/tests -p 'test_pdca_evidence.py'
-          python3 scripts/tests/pdca_evidence_harness.py negative --output /tmp/nextorm-pdca-evidence-negative
+          python3 -m unittest discover -s .pdca/scripts/tests -p 'test_pdca_evidence.py'
+          python3 .pdca/scripts/tests/pdca_evidence_harness.py negative --output /tmp/nextorm-pdca-evidence-negative
       - name: Coverage report
         run: |
           dotnet tool run reportgenerator \

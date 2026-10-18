@@ -6,8 +6,8 @@ reviewed. This gate makes every *new* skip (or a silently disappearing one) a bu
 budget is a snapshot of the reasons and their counts, checked into the repository.
 
 Usage:
-    python3 scripts/check-integration-skip-budget.py --log integration-run.log
-    python3 scripts/check-integration-skip-budget.py --log integration-run.log --update
+    python3 .pdca/scripts/check-integration-skip-budget.py --log integration-run.log
+    python3 .pdca/scripts/check-integration-skip-budget.py --log integration-run.log --update
 
 The log is the stdout of:
     DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- \

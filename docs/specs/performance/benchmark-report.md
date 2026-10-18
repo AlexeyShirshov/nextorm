@@ -1012,7 +1012,7 @@ Prepared выигрывает все четыре, как и раньше.
   промах кэша (проверено: 1.44M hits / 16 misses), а цена того, что не-prepared API заново собирает
   дерево и заново его ключует на каждый вызов. Безопасного локального рычага здесь нет: любое ускорение
   требует либо кэша prepared-артефактов по форме (широкая перестройка ядра), либо публичного
-  compiled/prepared-API — ровно вывод M12 (`performance-findings.md`, M12 п.3). Оценка: даже полное
+  compiled/prepared-API — ровно вывод M12 (`decisions-and-lessons.md`, R1–R3). Оценка: даже полное
   устранение plan-build не выведет эти фичи к Dapper, потому что warm-путь по построению платит за
   сборку выражения, а raw-Dapper — нет.
 - Регрессий нет: `nextorm.sln` Release 0 warnings / 0 errors; тесты core 192, sqlite 268, postgres 247,
@@ -1060,7 +1060,7 @@ NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
 
 > Итерация **не вносит правок в код**: она фиксирует свежий baseline в изолированном worktree на
 > `1.0.4-alpha` (HEAD `433aa51`) и закрывает пункт `todo_warm_path_plan_build.md` **решением**.
-> Итог вынесен в `performance-findings.md` (M12, раздел «Решение») и
+> Итог вынесен в `decisions-and-lessons.md` (R1–R3, находка M12) и
 > `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.19.
 
 ## Замер
@@ -1748,7 +1748,7 @@ dotnet-trace report warm.nettrace topN -n 25 --inclusive
 ### Iteration-14 fix: disposition (issue #165)
 
 HEAD-колонка этого отчёта — **pre-fix D1** (`713dcde`). После правок D2–D4 (см.
-`docs/specs/performance/iteration-14-fix-proposals.md`) принята следующая диспозиция:
+`decisions-and-lessons.md` R11) принята следующая диспозиция:
 
 - **CTE/Join4 prepare-арм'ы приняты в границах шума.** Оставшиеся 9 увеличений CTE/Join4
   `Prepare_*` на **11–16 % от базы v1.0.9-a** лежат внутри документированной полосы шума хоста
@@ -1853,14 +1853,20 @@ linq2db compiled — 0.21–0.66×, против EF compiled — EF медлен
 | First entity (10) | 290.3 µs | **268.0** | 863.3 | — | 1.08× |
 | Single (10) | 251.3 µs | **198.4** | 825.7 | 953.9 | 1.27× |
 | Join (10) | 516.5 µs | **277.8** | 575.3 | 1 132.9 | 1.86× |
-| Where for-loop (100) | **1 080.0 µs** | 1 353.1 | 3 638.5 | 7 918.2 | **0.80×** |
+| Where stream (100) | 2 087.6 µs | **1 693.2** | — | — | 1.23× |
 | Where list (100) | 2 546.7 µs | **1 353.1** | 3 638.5 | — | 1.88× |
 | Iteration list (1) | **15.40 µs** | 21.40 | 25.38 | — | **0.72×** |
 | LargeIteration list (1) | **22.30 ms** | 35.91 | 37.63 | 38.18 | **0.62×** |
 
+> **Коррекция (2026-10-17).** Прежняя строка `Where for-loop (100) | 1 080.0 µs` относилась к
+> `Nextorm_CachedForLoop_ToListAsync`, где `.Prepare()` вызывается один раз до 100-операционного
+> цикла: это prepared-vs-raw, а не fresh-cached. Заменена на fresh-cached stream-арм
+> (`Nextorm_Cached_AsyncStream` 2 087.6 µs / 734.65 KB против `Dapper_AsyncStream` 1 693.2 / 203.98;
+> linq2db/EF stream-арм'ы в этом прогоне не снимались). См. `decisions-and-lessons.md` L16.
+
 По времени nextorm обходит **linq2db и EF regular во всех девяти классах**, но проигрывает Dapper на
-точечных Any/First/Single/Join и `Where` list; выигрывает у Dapper на `Where` for-loop, `Iteration`,
-`LargeIteration`.
+точечных Any/First/Single/Join, `Where` stream и `Where` list; выигрывает у Dapper только на `Iteration`
+и `LargeIteration`.
 
 **Аллокации (regular-only):**
 
@@ -1876,9 +1882,9 @@ linq2db compiled — 0.21–0.66×, против EF compiled — EF медлен
 | Iteration list (×1) | 2 480 B | **1 904** | 2 792 | — | 1.30× |
 | LargeIteration list (×1) | **2.22 MB** | 2.84 | 2.39 | 4.53 | **0.78×** |
 
-По памяти `Nextorm_Cached` **проигрывает Dapper на всех девяти классах** (1.30–6.29×) и
+По памяти `Nextorm_Cached` **проигрывает Dapper на восьми из девяти классов** (1.30–6.29×) и
 **linq2db-regular на тяжёлых формах** (Any +41 %, Join +26 %, Where stream +34 %, Where list +32 %),
-выигрывая лишь у EF (везде) и у linq2db на First/Single/LargeIteration.
+выигрывая у Dapper только на `LargeIteration` (0.78×), у EF — везде и у linq2db на First/Single/LargeIteration.
 
 ## Cache — cold-plan (cached) против regular
 
@@ -1896,9 +1902,10 @@ I≈10; на точечном I=1 linq2db-regular ещё быстрее.
    (категория A) не при чём — по времени он масштабировался ×1.40, как Dapper; провалился именно
    cached-арм: ×1.77 от Итерации 10 (291.5 → 516.5 µs), потому что каждый вызов заново строит
    двухтабличный join + проекцию через implicit-путь.
-2. **Аллокации** — системно: `Nextorm_Cached` проигрывает Dapper **на всех девяти классах** (1.30–6.29×)
-   и linq2db-regular на тяжёлых формах (Any +41 %, Join +26 %, Where +32–34 %); выигрывает только у EF
-   (везде) и у linq2db на First/Single/LargeIteration. Аллокации детерминированы — это не шум хост-нагрузки.
+2. **Аллокации** — системно: `Nextorm_Cached` проигрывает Dapper **на восьми из девяти классов**
+   (1.30–6.29×), выигрывая только на `LargeIteration` (0.78×), и linq2db-regular на тяжёлых формах
+   (Any +41 %, Join +26 %, Where +32–34 %); выигрывает у EF (везде) и у linq2db на
+   First/Single/LargeIteration. Аллокации детерминированы — это не шум хост-нагрузки.
 
 По времени cached-путь при этом обходит linq2db и EF regular во всех классах; точечные
 Any/First/Single/Join и `Where` list остаются за Dapper.
@@ -1941,7 +1948,8 @@ NEXTORM_BENCH_FULL=1 NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
 ## Что проверялось
 
 Cached (fresh-fluent, implicit plan cache) путь — именно он деградировал в Итерациях 14–15: аллокации
-`Nextorm_Cached` проигрывали Dapper на всех девяти ядровых классах (1.30–6.29×), а `Join` по времени
+`Nextorm_Cached` проигрывали Dapper на восьми из девяти ядровых классов (1.30–6.29×; `LargeIteration`
+был и остаётся быстрее), а `Join` по времени
 показывал 1.86×. #183 ввёл B1 (структурное сравнение выражений в `ExpressionPlanEqualityComparer`) и
 B2 (неизменяемый `ParamRefreshRecipe` вместо пересборки на каждом hit'е); #166 убрал аллокацию `HashSet`
 на тёплом пути nested read-CTE (`QueryCommand.HasDataModifyingCte`). Ниже — свежий замер cached-пути на
@@ -2466,3 +2474,789 @@ python3 scripts/perf/iteration14_gate.py
 python3 scripts/perf/update_benchmark_tables.py
 python3 scripts/perf/update_benchmark_tables.py --check
 ```
+
+# Итерация 18 — D243: тёплые агрегаты `Count`/`Sum` (2026-10-17)
+
+> Task T243, issue [#243](https://github.com/AlexeyShirshov/nextorm/issues/243) (**CLOSED**), milestone
+> `1.0.9-rc3`. Дерево: ветка `1.0.9-rc3`, HEAD `3b0cd73`; `after` снят с рабочего дерева, несущего
+> незакоммиченный diff D243. Хост: WSL2, .NET 10.0.12, `InProcessEmitToolchain`, `Job.ShortRun`
+> (warmup 3 / iterations 3). Дизайн фикса, бюджеты и deferred register — `decisions-and-lessons.md` R12.
+
+## Происхождение чисел
+
+- **2026-10-10** — постановка #243 из committed-снимка `feature-benchmark-followups-2026-10-17.md`:
+  `Count` 3 824 B против 2 864 B у linq2db, `Sum` 4 226 против 3 490. Другая машина и другое дерево,
+  **не воспроизводились**.
+- **2026-10-17** — все числа этой итерации. Pre-fix дерево: `Count` 2 979.84 B, `Sum` 3 389.44 B.
+
+## Методика
+
+- Cached-путь: 3 раунда × 4 арма (`Count`/`Sum` nextorm cached + linq2db), по одному запуску на раунд
+  (`four-1..3`); `q` = `Mean(nextorm)/Mean(linq2db)` в том же раунде — контроль скорости хоста.
+- Prepared-контроль: 3 раунда (`prepared-1..3`), арм'ы `A_Nextorm_Prepared_*`.
+- Acceptance-набор: `--anyCategories=acceptance` (7 кейсов).
+- Байтовый оракул: SQLite-фикстура `SqliteWarmAggregateAllocationTests` (10 000 строк, свежий fluent и
+  свежий inline-селектор на каждый вызов), `GC.GetAllocatedBytesForCurrentThread()`, 64 прогрева +
+  3 серии по 256 вызовов, накладные пустого цикла 0 B не вычитаются.
+- Атрибуция: три невложенных цикла — A (построение запроса без терминала и БД), B (полный терминал),
+  C (prepared через `ExecuteScalar`), `stage_overlap = false`.
+- Все прогоны под `flock` хоста, `NEXTORM_BENCH_FULL` не установлена; артефакты —
+  `artifacts/pdca/D243/rv1/{before,after}/`.
+
+## Аллокации (идентичны во всех трёх раундах)
+
+| Арм | B/op before | B/op after |
+|---|---:|---:|
+| `B_Nextorm_Cached_Count` | 2 979.84 | **408** |
+| `B_Linq2Db_Count` | 2 867.20 | 2 864 |
+| `B_Nextorm_Cached_Sum` | 3 389.44 | **970** |
+| `B_Linq2Db_Sum` | 3 491.84 | 3 490 |
+
+`before`-значения получены из отображения BDN в KB (шаг 0.01 KB = 5.12 B), поэтому это интервал
+шириной ±5.12 B, а не целое измерение; `after`-CSV печатал сырые байты.
+
+## Время (медианы `q` по трём раундам)
+
+| Терминал | q before | q after |
+|---|---:|---:|
+| `Count` | 0.7567 | **0.6001** |
+| `Sum` | 0.9541 | **0.9256** |
+
+Prepared-контроль: аллокации не изменились байт в байт (408 / 410 / 4 736 B), время в полосе шума
+ShortRun — отношение к соответствующему раунду `before` не превышает 1.20 ни для одного арма.
+
+## Acceptance-набор
+
+7 кейсов, пропусков нет; wall 48 s → 44 s (`Global total time` 45.86 → 41.49 s), код выхода 0.
+`Cached_ToList / Prepared_ToList` по времени 1.619 → 1.630 (базовая линия 1.87, порог 2.244), по
+аллокациям 5.700 → 5.700 (базовая линия 7.42, порог 8.904). Пофакторные отношения после/до по времени
+0.989–1.081, аллокации всех семи кейсов не изменились.
+
+## Байтовый оракул
+
+`Count` 456 B/запрос (3 серии по 116 736 B), `Sum` 1 016 B (260 096 B × 3), пороги 2 864 / 3 490 —
+оба проходят; на pre-fix дереве тот же фикстур давал 3 272 / 3 672 B и падал по порогу (red → green).
+
+## Атрибуция по стадиям (B/вызов)
+
+| Стадия | Count before | Count after | Sum before | Sum after |
+|---|---:|---:|---:|---:|
+| A — построение | 1 784 | 1 784 | 1 624 | 1 624 |
+| B — полный терминал | 3 272 | **456** | 3 672 | **1 016** |
+| C — prepared-контроль | 456 | 456 | 456 | 455.06 |
+
+На исправленном дереве `B − A` и остаток отрицательны: стадии определены для pre-fix пути, где `B ≥ A`,
+а тёплый терминал больше не выполняет построение, которое измеряет A. Сопоставим только `B`; читать
+отрицательный остаток как «необъяснённые байты» или утечку нельзя.
+
+## Гейт
+
+`scripts/perf/d243_aggregate_gate.py` проверяет каждую строку каждого раунда отдельно (6 строк
+аллокаций и 2 строки времени) — `status: pass`, нарушений нет; на pre-fix данных падает по аллокациям.
+
+## Воспроизведение
+
+```bash
+# cached-путь: четыре арма, по одному запуску на раунд
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- \
+  --filter "*SqliteBenchmarkAggregates.B_Nextorm_Cached_Count" \
+           "*SqliteBenchmarkAggregates.B_Linq2Db_Count" \
+           "*SqliteBenchmarkAggregates.B_Nextorm_Cached_Sum" \
+           "*SqliteBenchmarkAggregates.B_Linq2Db_Sum" \
+  --artifacts artifacts/pdca/D243/rv1/{before|after}/four-N
+
+# prepared-контроль
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- \
+  --filter "*SqliteBenchmarkAggregates.A_Nextorm_Prepared_*" \
+  --artifacts artifacts/pdca/D243/rv1/{before|after}/prepared-N
+
+# acceptance-гейт
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- \
+  --anyCategories=acceptance --artifacts artifacts/pdca/D243/rv1/{before|after}/acceptance
+
+# байтовый оракул и атрибуция (SQLite, in-process)
+D243_ALLOCATION_REPORT=<abs>/allocation-probe.json \
+  dotnet test tests/nextorm.integration.tests -c Debug --no-build \
+  --filter "FullyQualifiedName~SqliteWarmAggregateAllocationTests"
+D243_ATTRIBUTION_REPORT=<abs>/after-attribution.json \
+  dotnet test tests/nextorm.integration.tests -c Debug --no-build \
+  --filter "FullyQualifiedName~SqliteWarmAggregateAllocationTests"
+
+# гейт
+python3 scripts/perf/d243_aggregate_gate.py
+```
+
+## Ограничения
+
+- ShortRun (3 итерации): `Error` в таблицах — не пригодный acceptance-интервал; выводы о времени
+  строятся на отношениях `q` и их медианах.
+- Один хост, один рантайм: абсолютные значения на другую машину не переносятся.
+- Байтовые пробы — только SQLite; контейнерный integration-прогон (`Total: 3991, Errors: 0,
+  Failed: 0, Skipped: 199`) подтверждает корректность поведения, а не байтовые числа. Пропуски —
+  отказы по возможностям провайдеров, а не недоступные контейнеры.
+- Prepared-путь не ускорялся и не заявляется: его аллокации остались 408 / 410 / 4 736 B.
+
+# LOB streaming vs buffered (PostgreSQL / SQL Server, 2026-09-27)
+
+> **Архив цикла #27** (milestone `1.0.8-b`, issue CLOSED). Замер снят временным харнессом
+> `tests/nextorm.integration.tests/LobPerfHarnessTests.cs` (`NEXTORM_LOB_PERF=1`), который **удалён** из
+> дерева — числа не перезапускаются. `Allocated` — точная дельта `GC.GetAllocatedBytesForCurrentThread()`
+> (2 прогрева, минимум из 3 сэмплов); `Time` — минимальный `Stopwatch`, справочно (зависит от
+> контейнера/сети). Streaming читает в переиспользуемый буфер 64 КиБ (`byte[]`/`char[]`), buffered —
+> материализация `.First()` в полный `byte[]`/`string`. Часть A того же цикла (7 acceptance-кейсов)
+> повторяла `acceptance-benchmarks.md` и здесь не сохраняется.
+
+| Провайдер | Тип | Размер | Streaming Allocated | Buffered Allocated | Buffered / Streaming |
+|---|---|---|---:|---:|---:|
+| PostgreSQL | BLOB | 1 МиБ | 74 208 B | 1 056 856 B | 14.2× |
+| PostgreSQL | BLOB | 8 МиБ | 77 704 B | 8 397 792 B | 108.1× |
+| PostgreSQL | CLOB | 1 МиБ | 142 832 B | 2 105 800 B | 14.7× |
+| PostgreSQL | CLOB | 8 МиБ | 142 832 B | 16 786 784 B | 117.5× |
+| SQL Server | BLOB | 1 МиБ | 75 776 B | 2 105 776 B | 27.8× |
+| SQL Server | BLOB | 8 МиБ | 80 576 B | 16 788 912 B | 208.4× |
+| SQL Server | CLOB | 1 МиБ | 272 072 B | 2 105 920 B | 7.7× |
+| SQL Server | CLOB | 8 МиБ | 293 960 B | 16 793 448 B | 57.1× |
+
+Масштабирование при ×8 данных:
+
+| Провайдер/тип | Streaming | Buffered |
+|---|---|---|
+| PostgreSQL BLOB | ×1.05 | ×8.0 |
+| PostgreSQL CLOB | ×1.00 | ×8.0 |
+| SQL Server BLOB | ×1.06 | ×8.0 |
+| SQL Server CLOB | ×1.08 | ×8.0 |
+
+Вывод: streaming — **O(буфера)**, buffered — **O(размера)**. См. `decisions-and-lessons.md` L18.
+
+# Acceptance runs and per-issue measurements (append-only log)
+
+> Перенесено из `acceptance-benchmarks.md` (2026-10-17): там остался только **контракт приёмки**
+> (7 кейсов, baseline, правила интерпретации). Здесь — датированные прогоны приёмки и сопутствующие
+> пер-issue замеры, включая микробенчмарки, которые не входят в acceptance-набор (#104, #106, #123,
+> #124, #147, #197). Записи ниже сохранены как есть; baseline контракта — 2026-09-26.
+
+## Results 2026-09-27
+
+Two in-cycle re-runs of the acceptance command on the same host/config/case set as the baseline
+(AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8,
+`Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`, **7** cases, **0** failures).
+Machine verified quiet of other builds/tests before each run.
+
+### Iteration 1 (earlier this cycle)
+
+External shell wall clock **48 s**; BDN `Global total time` **45.67 s** — both under the 4 min
+budget.
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.225 ms | 335.16 KB | -24% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 59.32 ms | 50 MB | -2.7% |
+| `Nextorm_Cached` | 1.834 ms | 534.43 KB | +3.5% |
+| `Prepared_ToList` | 901.9 us | 76.14 KB | -2.4% |
+| `Cached_ToList` | 1,779.1 us | 565.22 KB | +3.0% |
+| `Cached_PlanOnly_Param` | 514.8 us | 489.08 KB | -0.7% |
+| `Nextorm_Cached_ToListAsync` | 2.089 ms | 692.07 KB | -2.2% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.97** (baseline
+**1.87**, +5.5%); the corresponding allocated ratio is **7.42**, unchanged.
+
+### Iteration 2 (post-fix re-verification)
+
+External shell wall clock **50.69 s**; BDN `Global total time` **49.21 s**, **7** executed
+benchmarks, **0** failures — both under the 4 min budget. (BenchmarkDotNet logged its usual
+`Failed to set up priority High ... Permission denied` process warning; it is not a benchmark
+failure.)
+
+| Case | Mean | Allocated | Delta Mean vs baseline | Delta Mean vs iter 1 |
+|------|------|-----------|------------------------|----------------------|
+| `Nextorm_Count` | 2.201 ms | 335.16 KB | -24% (high-variance row, not an assertion) | -1.1% |
+| `Nextorm_GroupByCount` | 59.82 ms | 50.01 MB | -1.9% | +0.8% |
+| `Nextorm_Cached` | 1.801 ms | 534.42 KB | +1.6% | -1.8% |
+| `Prepared_ToList` | 904.8 us | 76.14 KB | -2.1% | +0.3% |
+| `Cached_ToList` | 1,735.6 us | 565.22 KB | +0.5% | -2.4% |
+| `Cached_PlanOnly_Param` | 498.4 us | 489.08 KB | -3.8% | -3.2% |
+| `Nextorm_Cached_ToListAsync` | 1.987 ms | 692.06 KB | -7.0% | -4.9% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.92** — vs baseline
+**1.87** (+2.7%) and vs iteration 1 **1.97** (-2.5%); the corresponding allocated ratio is
+**7.42**, unchanged. Both deltas are far below the 20% investigation threshold, so no re-run was
+required.
+
+Verdict (final, iteration 2): within noise, **no regression**; baseline numbers above left
+unchanged.
+
+### Iteration 3 (P1 plan/mapper fix re-verification)
+
+BDN `Global total time` **44.55 s**, **7** executed benchmarks, **0** failures — under the 4 min
+budget. (Same benign `Failed to set up priority High ... Permission denied` process warning.)
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.220 ms | 338.28 KB | -23.8% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 65.38 ms | 50.02 MB | +7.2% |
+| `Nextorm_Cached` | 2.310 ms | 537.58 KB | +30.4% (high-variance, CI ±191%) |
+| `Prepared_ToList` | 922.8 us | 76.14 KB | -0.1% |
+| `Cached_ToList` | 1,797.4 us | 569.90 KB | +4.1% |
+| `Cached_PlanOnly_Param` | 503.9 us | 493.76 KB | -2.8% |
+| `Nextorm_Cached_ToListAsync` | 2.195 ms | 717.07 KB | +2.7% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.95** — vs baseline
+**1.87** (+4.1%), far below the 20% threshold; allocated ratio **7.49** (baseline 7.42), unchanged.
+The Cached path adds two type comparisons per projected column during plan lookup (constant per
+command, not per row). Verdict: within noise, **no regression**.
+
+### Iteration 4 (ACT re-verification — ratio 2.61 is an outlier)
+
+Same host/config/case set (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12,
+BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`, **7**
+cases, **0** failures). External shell wall clock **~50 s**; BDN `Global total time` **~50 s** — both
+under the 4 min budget.
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **2.61** — vs baseline
+**1.87** (+39.6%), above the 20% investigation threshold. **The ratio is an outlier and the
+regression is NOT confirmed.** The other runs in this cycle measured **1.88 / 1.92 / 2.02**, and the
+`ShortRun` config is high-variance on this host (**N=3**; for some rows `Error` is ~3× `Mean`, so the
+`Cached_ToList` numerator carries a large CI). Per the interpretation rule above, a noisy difference
+on a run this variable must not be reported as a regression, and no path touched by #108 adds
+per-row work on the cached path (the filter scope is resolved once per command at plan time). Recorded
+as the cycle's acceptance run; **verdict: regression not confirmed — outlier**, consistent with the
+1.88–2.02 band of the cycle's other runs.
+
+## FilterFunc cached path (D6, #108 PR4)
+
+The builder-function (`FilterFunc`) filter path is **not** covered by the seven acceptance cases; it
+is measured separately by `SqliteBenchmarkQueryFilterFunc` (category `query-filter`). It is a
+focused cached-vs-prepared pair over the same SQL, so the delta is the cached-query overhead (plan
+lookup + `ExtractParams`) for the function form. Command:
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=query-filter
+```
+
+Measured 2026-09-28, same host/config as the baseline above (`Job.ShortRun`, `InProcessEmitToolchain`,
+`MemoryDiagnoser`, **2** executed benchmarks, **0** failures; BDN `Global total time` **12.29 s**).
+
+| Case | Mean | Allocated | Ratio (time) | Alloc ratio |
+|------|------|-----------|--------------|-------------|
+| `FuncFilter_Prepared_ToList` (baseline) | 1.466 ms | 75 KB | 1.00 | 1.00 |
+| `FuncFilter_Cached_ToList` | 4.640 ms | 1078.45 KB | **3.17** | **14.38** |
+
+**Reading.** The func cached path costs **3.17×** the prepared time and **14.38×** the allocation on
+this run, versus **1.87× / 7.42×** for the ordinary `Cached_ToList / Prepared_ToList` pair. The
+difference is real and expected: `GetPreparedQueryCommand` prepares every fresh command (and so
+invokes the builder function once) **before** the plan-cache lookup, which only avoids re-rendering
+SQL and rebuilding the mapper — the function is not memoized per plan. This is recorded as the
+measured cost of the function form; no "no regression" claim is made for this path. `Error` for both
+rows is large on `ShortRun` (`FuncFilter_Cached_ToList` `Error = 2.033 ms`), so the ratio is
+indicative, not a hard gate; any future optimisation (memoizing the injected predicate per plan
+shape) should re-run this focused case.
+
+## Results 2026-09-28 — issue #104 (dynamic-columns write side)
+
+Perf acceptance for #104 measured on the same host/config/case set as the baseline
+(AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8,
+`Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`). This is the re-run after the
+DML static-arm fix below. **7** cases selected, **0** failures. External shell wall clock
+**45.79 s**; BDN `Global total time` **44.49 s** — both under the 4 min budget.
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.191 ms | 339.84 KB | -24.8% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 59.59 ms | 50.01 MB | -2.2% |
+| `Nextorm_Cached` | 1.932 ms | 539.92 KB | +9.0% (high-variance row) |
+| `Prepared_ToList` | 956.1 us | 76.14 KB | +3.5% |
+| `Cached_ToList` | 1,802.9 us | 572.25 KB | +4.4% |
+| `Cached_PlanOnly_Param` | 500.5 us | 496.11 KB | -3.4% |
+| `Nextorm_Cached_ToListAsync` | 2.153 ms | 705.35 KB | +0.7% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.89** — vs documented
+baseline **1.87** (+0.9%) and vs the stated prior figure **2.07** (-8.6%); the corresponding
+allocated ratio is **7.52** (baseline **7.42**, +1.3%). Both time deltas are below the **20%**
+investigation threshold, so no >20% growth flag is raised. Verdict: within noise, no regression.
+
+## DML benchmark: static vs dynamic-columns insert (#104 write side)
+
+Command:
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkDynamicInsert*
+```
+
+Same host/config as above (`Job.ShortRun`, `InProcessEmitToolchain`, `MemoryDiagnoser`); **2**
+executed benchmarks, **0** failures (the logged `Failed to set up priority High ... Permission
+denied` is the known benign BDN process warning, not a benchmark failure). BDN `Global total time`
+**14.95 s**; external shell wall clock **16.69 s**.
+
+Each measured invocation is a real per-call `InsertInto<T>().Values(...).Insert()` build (store
+key extraction + ordinal sort) + SQL render + execute against a benchmark-owned SQLite database,
+inside a transaction that is rolled back, so the dynamic-key work is inside the measurement and
+the statement actually runs.
+
+Both arms execute the **same region** over the **same table** (`dynamic_insert_bench`), but on
+**different entity types**: `Insert_Static` uses `StaticInsertEntity`, which has only the two
+mapped columns (`id`, `name`) and **no `[DynamicColumns]` store at all**; `Insert_DynamicColumns`
+uses `DynamicInsertEntity` (mapped `id`/`name` plus a store) and populates two store keys (`age`,
+`city`). This matters: an earlier revision of this benchmark used the store-carrying entity in
+**both** arms (with an empty store on the "static" side), so the `FromEntities` / `MappedNames` /
+`ReadKeys` store plumbing still ran in the baseline arm and understated the real dynamic-path
+overhead — that figure is superseded by the numbers below.
+
+| Case | Mean | Allocated | Ratio (time) | Alloc ratio |
+|------|------|-----------|--------------|-------------|
+| `Insert_Static` | 614.2 us | 268.37 KB | 1.00 | 1.00 |
+| `Insert_DynamicColumns` | 892.0 us | 485.56 KB | **1.45** | **1.81** |
+
+**Caveat — this is not a before/after regression comparison.** The `Insert_Static` arm is the
+**store-less** baseline (the byte-identity-guarded mapped-only path), not a pre-#104 revision of
+the dynamic-columns path. With a genuinely store-less baseline the DML figure now quantifies the
+**true overhead of the dynamic-columns form relative to the static form**: **1.45×** time and
+**1.81×** allocation on this run (the dynamic arm's `Allocated` is unchanged at 485.56 KB, while
+the static arm dropped from 331.65 KB to 268.37 KB — exactly the store plumbing it no longer
+pays). It must not be reported as either a regression or an improvement introduced by #104.
+`Error` on both rows is large on `ShortRun` (`Insert_Static` `309.3 us`, `Insert_DynamicColumns`
+`394.4 us`, i.e. ≈ 50 %/44 % of `Mean`), so the ratio is indicative, not a gate.
+
+## Results 2026-09-28 — issue #110 (dynamic-columns read: qualified star)
+
+Perf acceptance for #110 (the dynamic-columns read must alias-qualify the appended `*` on
+MySQL/MariaDB). Same host/config/case set as the baseline (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS,
+.NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`,
+`Categories=acceptance`). **7** cases selected, **0** failures. External shell wall clock **45 s**;
+BDN `Global total time` **42.79 s** — both under the 4 min budget. (The host was not fully quiet:
+concurrent `opencode`/`roslyn` processes put the load average around 8–10, so the absolute means are
+higher than the 2026-09-26 baseline across the board and are not individually comparable; the tracked
+cached-vs-prepared ratio is computed within this run.)
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.736 ms | 339.84 KB | -6.1% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 71.80 ms | 50.02 MB | +17.8% (high-variance row) |
+| `Nextorm_Cached` | 2.249 ms | 539.9 KB | +26.9% (high-variance row) |
+| `Prepared_ToList` | 1,057.4 us | 76.14 KB | +14.5% |
+| `Cached_ToList` | 2,317.4 us | 572.26 KB | +34.1% |
+| `Cached_PlanOnly_Param` | 672.2 us | 496.1 KB | +29.7% |
+| `Nextorm_Cached_ToListAsync` | 2.714 ms | 705.35 KB | +27.0% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **2.19** — vs documented
+baseline **1.87** (+17.1%) and vs the stated prior figure **2.07** (+5.8%); the corresponding
+allocated ratio is **7.52** (baseline **7.42**). Both time deltas are below the **20%** investigation
+threshold; the `Cached_ToList` row's `Error` (4,836.9 us) is larger than twice its `Mean`, so the
+ratio is indicative only, not a gate.
+
+**No before/after comparison is available or claimed.** The change under acceptance is
+**dialect-gated**: the new `ISqlDialect.RequiresQualifiedSelectStar` capability defaults to `false`
+and is overridden only on MySQL (`MySqlDialect`, inherited by MariaDB), and the extra `hasDynamicStore`
+predicate in `SqlBuilder` is true only when the select list contains an `IsDynamicColumnsStore` item.
+The seven acceptance cases run on SQLite with ordinary queries and carry no dynamic-columns store, so
+neither branch is reachable on the acceptance path. The run is recorded as the cycle's acceptance
+evidence; the deltas above are **not** a regression or an improvement introduced by #110.
+
+## Results 2026-09-29 — issue #106 cycle 2 (D6: parameter-creation path)
+
+D6 changed the parameter-creation seam: the execution layer now receives
+`DataContext.CreateParam` as `Func<DbCommand, string, object?, DbParameter>` (the executing
+command is passed in), and `nextorm.mysql` mints its parameters through
+`command.CreateParameter()` so a `MySql.Data` connection gets `MySql.Data` parameters and a
+`MySqlConnector` connection gets `MySqlConnector` parameters. The public command-unaware
+`GetDbCommand` overload forwards its factory straight into the shared binding core with no
+capturing adapter (the earlier adapter was removed). Evidence: (a) the seven-case acceptance
+suite as query-path protection, (b) the current-tree `ParamsAllocationBenchmark` re-measure
+below.
+
+### Acceptance run (query-path protection)
+
+Command and host/config/case set as the baseline (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS,
+.NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`,
+`InProcessEmitToolchain`, `Categories=acceptance`). **7** cases selected, **0** failures.
+External shell wall clock **52.23 s**; BDN `Global total time` **49.39 s** — both under the
+4 min budget. The host was **not quiet**: concurrent `opencode`/`roslyn`/`VBCSCompiler`
+processes held the load average around 6–12 on 8 logical cores, so every absolute mean is
+inflated and the cached-vs-prepared ratio is dominated by run noise.
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 3.951 ms | 339.84 KB | +35.5% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 111.9 ms | 50.01 MB | +83.6% (high-variance row) |
+| `Nextorm_Cached` | 3.064 ms | 539.9 KB | +72.9% (high-variance row) |
+| `Prepared_ToList` | 2,065.7 us | 76.14 KB | +123.6% |
+| `Cached_ToList` | 2,844.4 us | 572.26 KB | +64.7% |
+| `Cached_PlanOnly_Param` | 934.3 us | 496.11 KB | +80.2% |
+| `Nextorm_Cached_ToListAsync` | 3.417 ms | 716.29 KB | +59.9% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.38** — vs
+documented baseline **1.87** (-26%) and vs the stated prior figure **2.07** (-33%); the
+corresponding allocated ratio is **7.52** (baseline **7.42**, unchanged). The time ratio is
+*below* baseline because `Prepared_ToList` itself measured ≈2.2× its baseline
+(2,065.7 us vs 923.8 us, `Error = 12,403.8 us`), so the ratio is compressed by host noise,
+not improved by D6. A second run of the same command on the same host measured a ratio of
+**3.89** (`Prepared_ToList` 1.372 ms, `Cached_ToList` 5.343 ms, `Cached_ToList`
+`Error = 22,596 us`) — a symmetric outlier in the other direction. The two runs
+(**1.38 / 3.89**) bracket the documented 1.87–2.07 band and confirm the host's `ShortRun`
+variance rather than a code change. **No regression can be established from the time ratio
+on this host; the allocated ratio is unchanged at 7.52, and no path touched by D6 adds
+per-row work** (the delegate carries one extra `DbCommand` argument and MySQL mints through
+`command.CreateParameter()`, both per-command, not per-row).
+
+### Parameter path — `ParamsAllocationBenchmark` (current tree, re-measured)
+
+Command (14 executed benchmarks, 0 failures; BDN `Global total time` **1 m 53 s**):
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *ParamsAllocation*
+```
+
+The D6 refactor removed the capturing adapter the public overload formerly built from the
+command-unaware factory: `GetDbCommand(span, factory, conn, tx)` now calls
+`GetDbCommandCore` with the factory as its `legacy` delegate, which the core invokes
+directly — the same way the internal command-aware overloads pass their `aware` factory. The
+public arm therefore carries **0 B/op extra** over the core/internal path. The benchmark
+binds the SQLite 2-arg factory once (`_createParam = _dbCtx.CreateParam`, no closure) and
+both `GetDbCommand_*` arms call the public overload. Mean in ns and `Allocated` per
+benchmark operation (BDN's unit; each of these arms loops 100 times internally) as BDN
+prints it:
+
+| Arm | Mean | Allocated (BDN, per op) |
+|-----|------|-------------------------|
+| `GetDbCommand_1Arg_Params` | 2,638.7 ns | 5,600 B |
+| `GetDbCommand_1Arg_ReusedArray` | 1,740.1 ns | 2,400 B |
+| `Nextorm_Any_1Arg_Params` | 996,486 ns | 87,209 B |
+| `Nextorm_Any_1Arg_ReusedArray` | 1,133,708 ns | 84,009 B |
+| `Nextorm_Any_2Arg_Params` | 1,190,554 ns | 124,009 B |
+| `Nextorm_Any_2Arg_ReusedArray` | 1,108,541 ns | 120,009 B |
+
+**Allocation.** The public arm allocates exactly the parameter array plus the boxed value
+and nothing else: `GetDbCommand_1Arg_Params` 5,600 B per 100-iteration op = 100 × (`object[1]`
+32 B + boxed `int` 24 B), while `GetDbCommand_1Arg_ReusedArray` (2,400 B = 100 × boxed
+`int` 24 B) drops the array and keeps only the box. A per-call capturing adapter would add a
+reference object on top of that; its absence is what "0 B/op extra" means here. This is
+**not a "byte-identical" claim**: the current-tree numbers match the earlier D2 run on every
+arm except one BDN rounding step — `Nextorm_Any_2Arg_Params` 124,018 B → **124,009 B**
+(−9 B, 0.007 %) and `EntityAnyCommand_BuildAndPrepare` 7,417 B → **7,418 B** (+1 B). The
+public 3-arg arm's allocation is unchanged (`5,600 B`), so removing the adapter changed no
+allocation.
+
+Raw times are host-noise-dominated (`Error ≈ Mean` or larger on several rows) and are not
+used to claim a regression or an improvement.
+
+For MySQL specifically (not exercised by this SQLite-based benchmark): `MySqlConnector`'s
+`MySqlCommand.CreateParameter()` returns `new MySqlParameter()`, the same allocation the
+previous `new MySqlParameter(name, value ?? DBNull.Value)` performed, and D6 only adds a
+`DbCommand` argument to an already-bound delegate — no per-call allocation on the MySQL
+path either.
+
+**Verdict: no regression** — the query-path acceptance is 7/7 with the allocated ratio
+unchanged (7.52 vs 7.42), and the current-tree parameter-path allocations match the earlier
+D2 run within BDN's one-unit rounding (no "byte-identical" claim); the MySQL
+`command.CreateParameter()` swap is allocation-neutral. The noisy acceptance time ratio
+(1.38 / 3.89) is reported as such and is not used to claim an improvement or a regression.
+
+## Results 2026-10-01 — issue #123 (MERGE/UPSERT target-filter isolation)
+
+Post-fix acceptance re-run on the same host/config/case set as the D2 pre-fix baseline
+(AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8,
+`Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`, **7** cases, **0** failures).
+External shell wall clock **51.95 s**; BDN `Global total time` under the 4 min budget.
+
+| Metric | D2 pre-fix baseline | Post-fix (#123) |
+|--------|---------------------|-----------------|
+| Wall clock | 43.14 s | 51.95 s |
+| Cached/prepared ratio (`Cached_ToList / Prepared_ToList`) | 1.89 | **1.93** |
+| Allocated ratio | 7.87 | **7.88** |
+
+Both runs are **same-host** and the deltas are within `ShortRun` noise: the tracked cached-vs-prepared
+ratio moves +2.1 % (time) and +0.1 % (allocation), far below the 20 % investigation threshold.
+Verdict: within noise, **no regression**; the target filter is added only when a filter is active and
+not `IgnoreFilters`, and the unsupported-form refusal is metadata-only (no DB round-trip).
+
+### Targeted `MergeTargetFilterBenchmark` (category `merge-filter`)
+
+Command `--filter '*MergeTargetFilterBenchmark*'` (SQL Server renders SQL only, placeholder connection,
+no connection opened; the in-memory arms use `InMemoryDataContext`). Post-fix the
+`FullMerge_Filtered_SqlBuild` arm is **~492 µs** (vs the pre-fix ~146 µs): the added cost is the new
+**one-time command-build work** that resolves the filter and renders the `target`-qualified predicate
+into `MERGE ... ON` — paid once per command, not per row. `FullMerge_IgnoreFilters_SqlBuild` and
+`InMemory_NoFilter` are **unchanged** (the filter render is skipped when inactive or `IgnoreFilters`);
+`InMemory_ActiveFilter` becomes the metadata capability refusal (no source read, no interceptor events).
+
+## Results 2026-10-01 — issue #124 (global filters on bound raw SQL sources)
+
+Final acceptance re-run on the same host/config/case set as the D0 pre-#124 baseline
+(AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8,
+`Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`, **7** cases, **0** failures).
+External shell wall clock **~51 s** (baseline 42.6 s); BDN `Global total time` under the 4 min budget.
+
+| Metric | D0 pre-#124 baseline | Final (#124) |
+|--------|----------------------|--------------|
+| Wall clock | 42.6 s | ~51 s |
+| Cached/prepared ratio (`Cached_ToList / Prepared_ToList`) | 1.94 | **2.03** |
+| Allocated ratio | 7.88 | **7.90** |
+| `Cached_PlanOnly_Param` ratio | 0.57 | **0.57** |
+
+Both runs are **same-host** and the deltas are within `ShortRun` noise: the tracked cached-vs-prepared
+ratio moves +4.6 % (time, 1.94 → 2.03), the allocated ratio +0.3 %, and the plan-only ratio is
+unchanged at 0.57 — all far below the 20 % investigation threshold. Verdict: within noise,
+**no regression**.
+
+### Raw-plan reuse — `RawSourcePlanReuseBenchmark` (category `raw-plan-reuse`)
+
+New focused, non-acceptance benchmark for the `FromExpressionPlanEqualityComparer` seam that #124
+tightened: a raw `FromSql(sql)` source is identified by **reference** in the plan key
+(`ReferenceEquals(x.RawSqlSource, y.RawSqlSource)`), so two independently-constructed
+`FromSql(sql)` sources no longer share a cached plan, while reusing the same builder instance still
+hits the cache. SQLite renders the statement only (`:memory:`, never opened). Reused warm
+(`Unbound_Reused_Warm` baseline) **111.4 µs / 158.0 KB**; bound reused warm **1.45×** time / 1.23×
+alloc; fresh unbound cold **2.46×** / 2.40×; fresh bound cold **3.00×** / 2.87× — a
+**1.45×–3.00×** conservative warm/cold spread. The conservative reference-identity key is the
+deliberate price of isolation: independent same-SQL sources are a guaranteed cache miss by
+construction. A `GlobalSetup` guard fails the run if independent raw sources share a cached command
+or a reused source misses. Command `--filter '*RawSourcePlanReuseBenchmark*'`.
+
+## Results 2026-10-02 — issue #147 (factory renames + query forwarders)
+
+Perf acceptance runs on the candidate tree (uncommitted #147) on the same host/config/case set as
+the baseline (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12,
+BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`, `MemoryDiagnoser`,
+`Categories=acceptance`). Command:
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance
+```
+
+### Run 1
+
+**7** cases selected, **0** failures; exit **0**. External shell wall clock **51.98 s**; BDN
+`Global total time` **49.19 s** (executed benchmarks: 7) — both under the 4 min budget. The host was
+**not quiet**: concurrent `opencode`/`roslynq`/`VBCSCompiler` processes held the load average around
+4.3–4.8 on 8 logical / 4 physical cores at run time, and the `Cached_ToList` row's `Error`
+(4,809.4 us) is larger than its `Mean` (2,548.0 us), so the absolute means and the tracked ratio are
+noise-dominated.
+
+| Case | Mean | Allocated |
+|------|------|-----------|
+| `Nextorm_Count` | 3.419 ms | 372.66 KB |
+| `Nextorm_GroupByCount` | 81.59 ms | 50.05 MB |
+| `Nextorm_Cached` | 2.634 ms | 571.15 KB |
+| `Prepared_ToList` | 1,152.7 us | 76.14 KB |
+| `Cached_ToList` | 2,548.0 us | 601.17 KB |
+| `Cached_PlanOnly_Param` | 747.2 us | 525.02 KB |
+| `Nextorm_Cached_ToListAsync` | 3.136 ms | 736.6 KB |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **2.21** (2548.0 / 1152.7)
+= **+18.2 %** vs the documented baseline **1.87**; the corresponding allocated ratio is **7.90**
+(601.17 / 76.14). The tracked rule is a **>20 %** deterioration, i.e. a ratio above
+**1.87 × 1.20 = 2.244**; **2.21 < 2.244**, so run 1 is **below the investigation threshold**. It is a
+noisy-host measurement (numerator `Error > Mean`), and `ShortRun` on this host is high-variance —
+recorded runs span **1.38–3.89** (`Interpretation`, above; the #106 cycle-2 entry above records the
+1.38 and 3.89 endpoints) — so it is not reported as a regression.
+
+### Run 2 (second consecutive run, same host/config/case set)
+
+**7** cases selected, **0** failures; exit **0**. External shell wall clock **50.49 s**; BDN
+`Global total time` **47.35 s** (executed benchmarks: 7) — both under the 4 min budget.
+
+| Case | Mean | Allocated |
+|------|------|-----------|
+| `Nextorm_Count` | 3.065 ms | 372.66 KB |
+| `Nextorm_GroupByCount` | 79.06 ms | 50.05 MB |
+| `Nextorm_Cached` | 2.487 ms | 571.15 KB |
+| `Prepared_ToList` | 1,222.7 us | 76.14 KB |
+| `Cached_ToList` | 2,435.6 us | 601.17 KB |
+| `Cached_PlanOnly_Param` | 778.8 us | 525.02 KB |
+| `Nextorm_Cached_ToListAsync` | 2.982 ms | 736.6 KB |
+
+Comparable ratio = **1.99** (2435.6 / 1222.7) = **+6.5 %** vs baseline **1.87** and **-9.9 %** vs
+run 1; allocated ratio **7.90** (601.17 / 76.14), unchanged. The two-run spread is **1.99–2.21**;
+neither run reaches the **2.244** trigger.
+
+**Change under acceptance is declaration-only.** #147 is the `Create…Builder` factory renames plus
+the additive `CreateQueryBuilder*` forwarders: the changed hunks in `DataContextExtensions.cs` are
+name/doc updates and one additive forwarder block, and the bodies at `:996`, `:1216`, `:1332` are
+untouched; `QueryPlanner`, `QueryCache`, `QueryExecutor` and the materialization path are unchanged
+(the only other product edit is a `DataContext.cs` error-message string rename at line 1144). The
+cached path therefore cannot have gained per-call work. The overlay's query-path class rule
+(`### Перф-приёмка cached path`, table row «изменение query-path / plan cache») mandates this ratio
+for query-path/plan-cache changes; a declaration-only change does not touch that class, so both runs
+are recorded as protection evidence, not as an improvement or a regression.
+
+**Verdict: no regression** — both runs **7/7**, **0** failures, exit **0**; run 1 **+18.2 %** and
+run 2 **+6.5 %** are each below the 20 % (**2.244**) investigation threshold, and the allocated ratio
+is unchanged across both runs and the baseline.
+
+Before run 1, one invocation of the same command aborted every SQLite case with
+`SQLite Error 14: unable to open database file` because the fixture path `/tmp/nextorm-bench/test.db`
+(`BenchDb`'s WSL fallback) was absent; the fixture was restored byte-for-byte from
+`benchmarks/nextorm.benchmark/data/test.db` (`PRAGMA integrity_check = ok`) and the command re-run,
+producing run 1 above. Raw logs: `/tmp/opencode/147/acceptance.log` (run 1) and
+`/tmp/opencode/147/acceptance-run2.log` (run 2).
+
+acceptance command exit code = 0 (7 cases, 0 failures) — logs `/tmp/opencode/147/acceptance.log`,
+`/tmp/opencode/147/acceptance-run2.log`.
+
+## Results 2026-10-03 — issue #165 (Iteration-14 allocation recovery)
+
+Acceptance re-run on the same host/config/case set as the Iteration-14 baseline (AMD Ryzen 7 5800HS,
+Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`,
+`InProcessEmitToolchain`, `MemoryDiagnoser`). Command:
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance
+```
+
+**7** cases selected, **0** failures, exit **0**; `NEXTORM_BENCH_FULL` unset; inner loop **100**.
+External shell wall clock **0:52.08** before → **0:53.22** after (limit ≤ 4 min).
+
+### Before (HEAD `713dcde`, pre-fix) and After (D2–D4 applied)
+
+| Case | Before Mean | Before Allocated | Before B/op | After Mean | After Allocated | After B/op |
+|------|------------:|-----------------:|------------:|-----------:|----------------:|-----------:|
+| `Nextorm_Count` | 2.408 ms | 381.25 KB | 3,904 | 2.268 ms | 354.69 KB | 3,632 |
+| `Nextorm_GroupByCount` | 57.94 ms | 50.09 MB | 525,232 | 59.38 ms | 50.05 MB | 524,812 |
+| `Nextorm_Cached` (Any) | 1.968 ms | 636.78 KB | 6,521 | 1.837 ms | 568.01 KB | 5,816 |
+| `Cached_PlanOnly_Param` | 646.5 µs | 581.27 KB | 5,952 | 554.4 µs | 520.33 KB | 5,328 |
+| `Prepared_ToList` | 940.9 µs | 76.14 KB | 780 | 902.2 µs | 76.14 KB | 780 |
+| `Cached_ToList` | 2341.5 µs | 657.42 KB | 6,732 | 1793.5 µs | 596.47 KB | 6,108 |
+| `Nextorm_Cached_ToListAsync` | 2.559 ms | 817.83 KB | 8,375 | 2.186 ms | 734.25 KB | 7,519 |
+
+`B/op = Allocated / 100` (inner loop). Cached/prepared ratio (`Cached_ToList / Prepared_ToList`):
+time **2.49 → 1.99**, allocated **8.63 → 7.83**.
+
+Comparability: both runs use the same SDK 10.0.401, the same host and the in-process toolchain; the
+prepared arm `Prepared_ToList` is **unchanged** at **76.14 KB / 780 B/op** across before/after. The
+`>= 20 %` time-ratio investigation rule is **not** triggered: after **1.99 < 2.244** (the documented
+**1.87** baseline × 1.20), so no investigation is required.
+
+The allocation gate that enforces these budgets is `scripts/perf/iteration14_gate.py` together with
+`scripts/perf/iteration14-budgets.json`; the warm CTE reuse rows (`Cte_Warm_Reused`,
+`RecursiveCte_Warm_Reused`) must be **0 B/op** after warm-up.
+
+## Results 2026-10-06 — issue #197 (D197: bare `JsonNode` native read)
+
+D197 adds a per-row accessor in `RowMapperFactory.GetReaderAccessor` for an exact `JsonNode` projection:
+the native `json`/`jsonb` column text is read with `DbDataReader.GetFieldValue<string>` and parsed with
+`JsonNode.Parse`. This touches the materialization path, so the seven-case acceptance suite was re-run on
+the baseline host/config/case set (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401,
+.NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`),
+plus a focused `D197JsonRead` micro-benchmark for the new parse-on-read cost.
+
+### Acceptance run
+
+**7** cases selected, **0** failures, exit **0**. External shell wall clock **53.87 s**; BDN
+`Global total time` **44.69 s** (`executed benchmarks: 7`) — both under the 4 min budget.
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.658 ms | 334.38 KB | -8.8% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 81.58 ms | 50.05 MB | +33.8% (high-variance row) |
+| `Nextorm_Cached` | 2.813 ms | 558.65 KB | +58.7% (high-variance row) |
+| `Prepared_ToList` | 1,154.5 us | 76.14 KB | +25.0% (host-noise-inflated) |
+| `Cached_ToList` | 2,273.4 us | 551.95 KB | +31.6% (host-noise-inflated) |
+| `Cached_PlanOnly_Param` | 687.4 us | 475.8 KB | +32.6% (host-noise-inflated) |
+| `Nextorm_Cached_ToListAsync` | 2.295 ms | 576.44 KB | +7.4% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.97** — vs documented
+baseline **1.87** (**+5.3%**), far below the **20%** investigation threshold; the corresponding
+allocated ratio is **7.25** (baseline **7.42**, **-2.3%**), unchanged. Absolute means are inflated
+across the board (including the prepared arm, `+25%`), i.e. a noisy host, so no individual row delta is
+read as a regression; the tracked within-run ratio is the only comparison and it is within noise.
+**Verdict: no regression.**
+
+### Targeted `D197JsonRead` micro-benchmark
+
+Command `--anyCategories=D197JsonRead` (category on `JsonNodeReadBenchmark`), **9** executed benchmarks
+(3 methods × 3 payloads), **0** failures, exit 0; BDN `Global total time` **63.02 s**. The payload text is
+built once in `GlobalSetup` (outside the measured region); `MemoryDiagnoser` on. `JsonDocument_Parse` is
+the driver-native baseline, `JsonNode_Parse` the requested DOM, and
+`CompiledAccessor_GetFieldValueString_JsonNodeParse` a delegate compiled once (no per-row reflection) that
+composes the reader string getter with the parse — the same shape the fix emits. No numeric SLA is
+asserted; sub-noise deltas are not reported as regressions.
+
+| Payload | Method | Mean | Allocated |
+|---------|--------|------|-----------|
+| 128 B | `JsonDocument_Parse` | 1.146 us | 72 B |
+| 128 B | `JsonNode_Parse` | 1.298 us | 848 B |
+| 128 B | `CompiledAccessor_...` | 1.285 us | 848 B |
+| 4 KiB | `JsonDocument_Parse` | 26.130 us | 72 B |
+| 4 KiB | `JsonNode_Parse` | 27.039 us | 16,816 B |
+| 4 KiB | `CompiledAccessor_...` | 29.731 us | 16,816 B |
+| 64 KiB | `JsonDocument_Parse` | 329.435 us | 74 B |
+| 64 KiB | `JsonNode_Parse` | 485.406 us | 219,287 B |
+| 64 KiB | `CompiledAccessor_...` | 468.359 us | 219,287 B |
+
+**Reading.** `JsonNode.Parse` materializes the full mutable DOM, so its allocation scales with the
+payload (848 B → 16.8 KB → 219 KB) while `JsonDocument` keeps the pooled ~72 B; the parse is
+~1.0–1.5× the `JsonDocument` Mean across sizes. The compiled accessor adds **no measurable overhead** over
+the bare `JsonNode.Parse` call: 1.285 vs 1.298 us (128 B), 29.7 vs 27.0 us (4 KiB, `Error` 53 us), and
+468 vs 485 us (64 KiB, `Error` 291 us) — the differences are inside `ShortRun` noise and have no
+consistent direction, confirming no per-row reflection and no extra allocation beyond the DOM itself.
+Raw log: `artifacts/pdca/D197/perf-jsonnode.log`; acceptance log: `artifacts/pdca/D197/perf-acceptance.log`.
+
+## Results 2026-10-10 — 1.0.9-rc2 milestone closure (baseline re-verification)
+
+Milestone `1.0.9-rc2` closed (all issues done); a full re-run of the seven-case acceptance suite on
+the baseline host/config/case set (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401,
+.NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`,
+`Categories=acceptance`). **7** cases selected, **0** failures, exit **0**. External shell wall clock
+**66 s** (includes a fresh `dotnet run -c Release` build); BDN `Global total time` **49.54 s**
+(`executed benchmarks: 7`) — both under the 4 min budget.
+
+Command: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance`.
+The only non-fatal log noise was `Failed to set up priority High ... Permission denied` (this host
+cannot raise process priority; appears in every run).
+
+| Case | Mean | Error | StdDev | Allocated | Gen0 | Delta Mean vs baseline | Delta Alloc |
+|------|------|-------|--------|-----------|------|------------------------|-------------|
+| `Nextorm_Count` | 2.383 ms | 0.5081 ms | 0.0278 ms | 375 KB | 42.9688 | -18.3% (high-variance row, not an assertion) | +11.9% |
+| `Nextorm_GroupByCount` | 58.92 ms | 4.518 ms | 0.248 ms | 50.1 MB | 6222.2222 | -3.3% | +0.2% |
+| `Nextorm_Cached` | 1.955 ms | 0.5433 ms | 0.0298 ms | 610.23 KB | 70.3125 | +10.3% | +14.2% |
+| `Prepared_ToList` | 892.2 us | 107.87 us | 5.91 us | 76.14 KB | 8.7891 | -3.4% | 0.0% |
+| `Cached_ToList` | 1,846.6 us | 353.68 us | 19.39 us | 583.97 KB | 70.3125 | +6.9% | +3.3% |
+| `Cached_PlanOnly_Param` | 558.5 us | 66.97 us | 3.67 us | 507.83 KB | 61.5234 | +7.8% | +3.8% |
+| `Nextorm_Cached_ToListAsync` | 1.929 ms | 0.1805 ms | 0.0099 ms | 608.46 KB | 74.2188 | -9.7% | -12.1% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`, same run) = **2.07** — vs
+documented baseline **1.87** (**+10.7%**), below the **20%** investigation threshold
+(**1.87 × 1.20 = 2.244 > 2.07**), so no investigation is required. The corresponding allocated ratio
+is **7.67** (baseline **7.42**, **+3.3%**). The prepared arm (the denominator) is unchanged in
+allocation at **76.14 KB** and its Mean is within noise (**-3.4%**), so the ratio movement is
+consistent with the cached arm's run-to-run variance rather than a prepared-path regression. Every
+individual Mean delta is within ±20% and no row shows a consistent, direction-consistent regression,
+so no row is reported as a regression.
+
+**Verdict: no regression.** Raw log:
+`benchmarks/BenchmarkDotNet.Artifacts/BenchmarkRun-20261010-191534.log`; per-class GitHub reports
+under `benchmarks/BenchmarkDotNet.Artifacts/results/` (regenerated each run, untracked).
+
+## Results 2026-10-15 — 1.0.9-rc3 CCORR-201 (raw-preparation eligibility guard)
+
+Appended measurement (the historical baseline above is unchanged). Context: corrective `CCORR-201`
+rv=1 on branch `1.0.9-rc3` — a fail-closed eligibility gate for raw pre-preparation reuse
+(`QueryPlanner.cs`, metadata-only filter probe, cold/raw-preparation path only; the cached path
+measured here is not modified by this fix).
+
+Same host/config/case set as the baseline (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401,
+.NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`,
+**7** cases, **0** failures). External shell wall clock **70 s** (includes the Release build of the
+benchmark project); BDN `Global total time` **47.23 s** — both under the 4 min budget.
+
+| Case | Mean | Error | StdDev | Allocated | Gen0 | Delta Mean vs baseline | Delta Allocated |
+|------|------|-------|--------|-----------|------|------------------------|-----------------|
+| `Nextorm_Count` | 2.217 ms | 0.4715 ms | 0.0258 ms | 382.81 KB | 42.9688 | -23.9% (high-variance row, not an assertion) | +14.2% |
+| `Nextorm_GroupByCount` | 57.58 ms | 5.350 ms | 0.293 ms | 50.11 MB | 6222.2222 | -5.5% | +0.2% |
+| `Nextorm_Cached` | 1.922 ms | 0.1962 ms | 0.0108 ms | 618.03 KB | 74.2188 | +8.5% | +15.6% |
+| `Prepared_ToList` | 888.2 us | 29.53 us | 1.62 us | 76.14 KB | 8.7891 | -3.9% | 0.0% |
+| `Cached_ToList` | 1,516.1 us | 198.16 us | 10.86 us | 455.06 KB | 54.6875 | -12.2% | -19.5% |
+| `Cached_PlanOnly_Param` | 388.6 us | 12.67 us | 0.69 us | 378.92 KB | 46.3867 | -25.0% | -22.5% |
+| `Nextorm_Cached_ToListAsync` | 2.049 ms | 0.6325 ms | 0.0347 ms | 666.28 KB | 78.1250 | -4.1% | -3.7% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`, same run) = **1.71**
+(1,516.1 us / 888.2 us = 1.707; the BDN `Ratio` column prints 1.71) — vs the documented baseline
+**1.87** (**-8.6%**), below the **20%** investigation threshold (**1.87 × 1.20 = 2.244 > 1.71**), so
+no investigation is required. The corresponding allocated ratio is **5.98** (baseline **7.42**). Both
+directions (time and allocation) are at or below the baseline, and every individual Mean delta is
+inside the ±20% ShortRun noise band, so no row is reported as a regression.
+
+**Verdict: no cached-path regression.** Evidence: `artifacts/pdca/CCORR-201/rv1/E/e09-benchmark.log`,
+`artifacts/pdca/CCORR-201/rv1/E/e09-comparison.md`; the run's BDN reports are archived under
+`artifacts/pdca/CCORR-201/rv1/E/benchmarks/` (the tracked `benchmarks/BenchmarkDotNet.Artifacts`
+files were restored to HEAD after the run).
+

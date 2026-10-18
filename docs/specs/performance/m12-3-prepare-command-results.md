@@ -1,5 +1,10 @@
 # M12 #3 — verified preparation reuse on the cached path: DO results and evidence (T201 / #201, D201-5)
 
+> **Статус (2026-10-17):** цикл закрыт — #201 `NOT_PLANNED`. Паритет `≤ 1.00` снят, residual переписан
+> в #240 (`1.20×`, принят) и продолжен в #244/#245. Числа ниже остаются **замороженным источником**
+> порогов D201-3 и across-round правила для `t240_evidence.py`; сводка и уроки —
+> `decisions-and-lessons.md` R14 и L17.
+
 **Status: provisional DO outcome only — no final PASS.** The five Category B parity rows are a
 **measured miss** (allocations FAIL) and the sixteen-row DO→CHECK manifest is therefore a truthful
 **diagnostic** manifest with five `open` rows. CHECK owns the verdict.

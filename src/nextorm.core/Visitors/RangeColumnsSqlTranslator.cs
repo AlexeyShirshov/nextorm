@@ -180,7 +180,7 @@ internal static class RangeColumnsSqlTranslator
         var props = metadata.Properties;
         for (var i = 0; i < props.Count; i++)
         {
-            if (props[i].PropertyInfo == pi && props[i].RangeColumns is not null)
+            if (MemberInfoExtensions.SameProperty(props[i].PropertyInfo, pi) && props[i].RangeColumns is not null)
             {
                 columns = props[i].RangeColumns;
                 break;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/perf/t201_evidence.py — T201 (#201) cached-path parity evidence runner.
+""".pdca/scripts/perf/t201_evidence.py — T201 (#201) cached-path parity evidence runner.
 
 Task-specific evidence wrapper for the approved M12 #3 plan (r=2, evidence contract rv1),
 unit D201-2.  One entry point per stage of the exact command registry in
@@ -22,7 +22,7 @@ Exit codes (every stage):
     2  inconclusive / operationally blocked (never fabricated results).
 
 This wrapper never changes benchmark query bodies, the LINQ to DB version, prepared status, data
-semantics, gate budgets, ``scripts/perf/iteration14_gate.py``, ``scripts/perf/iteration14-budgets.json`` or
+semantics, gate budgets, ``.pdca/scripts/perf/iteration14_gate.py``, ``.pdca/scripts/perf/iteration14-budgets.json`` or
 toolchain configuration.  It only runs them and records exactly what they produced.
 """
 from __future__ import annotations
@@ -41,12 +41,12 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_ROOT = "artifacts/pdca/T201/rv1"
 
 VALIDATOR = REPO_ROOT / "scripts" / "validate_inner_loop.py"
-GATE_REL = "scripts/perf/iteration14_gate.py"
-BUDGETS_REL = "scripts/perf/iteration14-budgets.json"
+GATE_REL = ".pdca/scripts/perf/iteration14_gate.py"
+BUDGETS_REL = ".pdca/scripts/perf/iteration14-budgets.json"
 BDN_RESULTS = REPO_ROOT / "benchmarks" / "BenchmarkDotNet.Artifacts" / "results"
 BDN_ARTIFACTS = REPO_ROOT / "benchmarks" / "BenchmarkDotNet.Artifacts"
 BENCH_PROJECT = "benchmarks/nextorm.benchmark"

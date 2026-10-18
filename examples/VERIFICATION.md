@@ -138,8 +138,25 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   (`Linq2DbVersion` in [`Directory.Packages.props`](Directory.Packages.props)). The nextorm package
   model is unchanged: postgres/clickhouse use the published `1.0.9-rc2` packages, mssql stays on
   `ProjectReference` for the typed `Pivot` surface.
-* **Benchmark smoke run** (Debug, `--filter '*RollingRevenueMetrics*'`): both arms executed and the
-  summary table was produced; use a Release build for numbers worth quoting.
+* **Full benchmark run (2026-10-17, Release, `ShortRun` + `InProcessEmitToolchain`, warm volumes).**
+  PostgreSQL 22/22 cases (28:53), MSSQL 22/22 (02:43), ClickHouse 19/21 (06:29; `Nextorm_DailyTraffic`
+  and `Linq2Db_Incremental` hit transient ClickHouse HTTP 120 s timeouts and were re-run successfully:
+  78.72 / 83.82 ms and 24.84 ms). Notable ratios (nextorm / linq2db, mean): PG
+  `BusinessOccupancyMatrix` 4.71 s / 19.86 s, `PassengerNoShowAnalysis` 4.90 s / 16.49 s,
+  `DelayPercentilesByModel` 45.05 / 45.04 ms (5.5 KB vs 31.3 KB allocated); MSSQL `RollingKpi`
+  19.2 / 32.6 ms, `ProductAbcXyz` 84.1 / 154.6 ms, `QuarterlyPivot` 181 / 109 ms, `TerritoryGrowthMoM`
+  13.3 / 32.8 ms; ClickHouse `Sessions` 1.27 s median / 1.05 s, `SessionDepth` 167 / 116 ms,
+  `TopLandingPages` 414 / 370 ms. Database execution dominates every case, so the ratios reflect the SQL
+  plans the two ORMs generate, not only materialisation overhead; `ShortRun` values are noisy and are
+  regression indicators, not published benchmark claims. Allocation regressions above 1.2× are tracked
+  in [#267](https://github.com/AlexeyShirshov/nextorm/issues/267) (PG `DelayPercentilesByModel` 5.67×),
+  [#268](https://github.com/AlexeyShirshov/nextorm/issues/268) (PG `AircraftDelayChains` 1.42×),
+  [#269](https://github.com/AlexeyShirshov/nextorm/issues/269) (PG `AirportOnTimePerformance` 1.23×),
+  [#270](https://github.com/AlexeyShirshov/nextorm/issues/270) (CH `Funnel` 3.04×),
+  [#271](https://github.com/AlexeyShirshov/nextorm/issues/271) (CH `Retention` 3.02×),
+  [#272](https://github.com/AlexeyShirshov/nextorm/issues/272) (CH `Sessions` 2.82×),
+  [#273](https://github.com/AlexeyShirshov/nextorm/issues/273) (CH `SessionDepth` 1.62×) and
+  [#274](https://github.com/AlexeyShirshov/nextorm/issues/274) (CH `RollingActivity` 1.22×).
 
 ## Known environment pitfalls (do not mistake for product failures)
 

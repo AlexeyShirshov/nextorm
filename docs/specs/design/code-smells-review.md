@@ -6177,6 +6177,8 @@ if (body is MemberExpression { Expression: ParameterExpression, Member: Property
 
 **Проверка:** `QueryPlanner.cs:102` (`out _`); `SqlSourceRenderer.cs:22,36-37`; `SqlBuilder.cs:64,498-509` (корректный образец); `DataContext.cs:449-453`.
 
+**Тикет:** [#275](https://github.com/AlexeyShirshov/nextorm/issues/275) (milestone `1.0.9-rc3`). Актуальная строка на 17.10.2026 — `QueryPlanner.cs:153` в `RenderSource`; затронуты также `MERGE`-источник, CTAS/`SELECT ... INTO` и источники батча, т.к. все они идут через `RenderSource`.
+
 ### ℹ️ Наблюдения (фикс не требуется)
 
 - **A. Хойст рендерит `WITH` ровно один раз, двойного рендера нет.** `SqlBuilder.MakeDeleteJoin`/`MakeUpdateJoin` (`DataContext/SqlBuilder.cs:543,637`) не читают `source.Ctes` вовсе и возвращают `_ctx.Params`; `RenderDeleteJoin`/`RenderUpdateJoin` — **единственные** читатели `source.Ctes` на мутационном пути (`grep .Ctes` — `SqlBuilder.cs:46` только в `MakeSelect`; `QueryPlanner.cs:100,297,335`). Поэтому `withSql + sql` не может задублировать `WITH`; в отличие от `RenderSource` (`:104-106`), клон/стрип `source.Ctes` тут не нужен.

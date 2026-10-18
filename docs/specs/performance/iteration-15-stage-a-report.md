@@ -2,7 +2,8 @@
 
 - Task: #183 (cycle 2, Stage A). Base commit: `01f3e9202ed710f6a459012e80fd2bcfa4c19708`.
 - Branch / worktree: `collection/1.0.9-b-5/group-1` / `nextorm-worktrees/1.0.9-b-5/group-1`.
-- Design: `docs/specs/performance/iteration-15-cached-path-design.md` (approval `5137ec8`).
+- Design: закрыт вместе с #183; исходный дизайн (`iteration-15-cached-path-design.md`) удалён, итог —
+  `decisions-and-lessons.md` R13 и `iteration-15-cached-path-results.md` (approval `5137ec8`).
 - Machine-readable evidence: `docs/specs/performance/iteration-15-stage-a-manifest.json`.
 - **No `src/nextorm.core` edit in Stage A**: `git diff --exit-code 01f3e92 -- src/nextorm.core` exits `0`
   (empty diff). `CteHoister` predicate: `git diff --exit-code 01f3e92 -- src/nextorm.core/Builders/CteHoister.cs`

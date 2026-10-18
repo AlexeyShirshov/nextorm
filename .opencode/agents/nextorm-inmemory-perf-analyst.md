@@ -44,8 +44,8 @@ connection. Stay on this path:
 
 ## Known in-memory results (`docs/specs/performance/benchmark-report.md`)
 
-Read `docs/specs/performance/performance-findings.md`, `docs/specs/performance/benchmark-report.md` and
-`docs/specs/performance/performance optimizations.md` first. Comparison is against raw LINQ and EF Core
+Read `docs/specs/performance/decisions-and-lessons.md` and `docs/specs/performance/benchmark-report.md` first.
+Comparison is against raw LINQ and EF Core
 InMemory (Compiled); read the **Ratio** column.
 
 - **Methodology:** void benchmarks must consume the result — JIT dead-code
@@ -85,13 +85,13 @@ InMemory (Compiled); read the **Ratio** column.
   `InMemoryJoinTests`, `InMemorySelectManyTests`):
   `dotnet test tests/nextorm.core.tests -c Debug` — no database needed.
 - Methodology caveats (WSL cannot raise process priority, Concurrent Workstation
-  GC, ~30% session drift) are in `docs/specs/performance/performance-findings.md`.
+  GC, ~30% session drift) are in `docs/specs/performance/decisions-and-lessons.md` §4.1.
 - Artifacts: `benchmarks/BenchmarkDotNet.Artifacts`.
 
 ## Workflow
 
 1. Classify: allocation/GC-bound vs CPU-bound vs a benchmark regression.
-2. Read the in-memory section of `docs/specs/performance/performance-findings.md` first.
+2. Read `docs/specs/performance/decisions-and-lessons.md` (lessons) first.
 3. Measure with the matching `InMemoryBenchmark*` class (ShortRun, or
    `NEXTORM_BENCH_FULL=1`).
 4. Interpret Mean/Ratio/Allocated/Gen0/Gen1 and check confidence intervals.

@@ -14,7 +14,7 @@ Modes::
   never modifies the publication (before/after digests).  Harness rc 0 only when every case
   behaves.
 * ``coverage`` - runs the unittest suite in-process under the stdlib ``trace`` module and
-  measures line coverage of ``scripts/pdca_evidence.py``.  rc 0 only at >= 90% executable
+  measures line coverage of ``.pdca/scripts/pdca_evidence.py``.  rc 0 only at >= 90% executable
   lines; the summary maps every changed decision outcome to a test or an explicit guard.
 * ``mutate`` - applies a fixed set of source mutations to a temp copy of the toolkit (disable
   the tree-equality check, the tree recomputation, the receipt enumeration, the missing-file
@@ -44,7 +44,7 @@ if SCRIPTS not in sys.path:
 import pdca_evidence as pdca  # noqa: E402  (path bootstrap above)
 
 CASES_PATH = os.path.join(HERE, "fixtures", "pdca_evidence", "cases.json")
-TARGET = "scripts/pdca_evidence.py"
+TARGET = ".pdca/scripts/pdca_evidence.py"
 COVERAGE_THRESHOLD = 90.0
 
 # Changed decision outcomes -> a covering test (validated to exist) or an explicit guard.
@@ -68,7 +68,7 @@ DECISION_MAP = [
     ("lock contention -> rc1 without clobber", "PublicationTests::test_lock_contention"),
     ("rv2 while rv1 exists -> rv1 intact", "ScopeTests::test_rv2_preserves_rv1"),
     ("idempotent publication byte-identical", "CleanGenerationTests::test_idempotent_generation"),
-    ("manifest schema guards", "guard:scripts/validate_inner_loop.py manifest mode"),
+    ("manifest schema guards", "guard:.pdca/scripts/validate_inner_loop.py manifest mode"),
     ("argparse usage error -> rc1", "guard:_ArgumentParser.error maps to exit 1"),
 ]
 

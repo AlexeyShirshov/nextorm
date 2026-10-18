@@ -50,9 +50,9 @@ is not 1 all fail closed.
 
 Usage
 -----
-    python3 scripts/perf/iteration14_gate.py                 # full run + check
-    python3 scripts/perf/iteration14_gate.py --no-run        # parse existing reports
-    python3 scripts/perf/iteration14_gate.py --reports-dir D # custom artifacts dir
+    python3 .pdca/scripts/perf/iteration14_gate.py                 # full run + check
+    python3 .pdca/scripts/perf/iteration14_gate.py --no-run        # parse existing reports
+    python3 .pdca/scripts/perf/iteration14_gate.py --reports-dir D # custom artifacts dir
 
 Exit code 0 only when every row/job is within budget and every report is complete.
 """
@@ -71,7 +71,7 @@ import tempfile
 import time
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 GATE_DIR = Path(__file__).resolve().parent
 MANIFEST_PATH = GATE_DIR / "iteration14-budgets.json"
 # BenchmarkDotNet artifacts are pinned to benchmarks/BenchmarkDotNet.Artifacts by

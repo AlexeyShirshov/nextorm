@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """pdca_evidence.py - atomic PDCA evidence generator + strict scoped lint.
 
-T234 (#234), evidence contract rv=2.  Standard library only (Python 3.8+); no pytest,
-no pyproject, no third-party dependency.
+Implements the mechanical side of the skill's "Versioned evidence contract".  Standard
+library only (Python 3.8+); no pytest, no pyproject, no third-party dependency.
 
 Two subcommands::
 
@@ -18,10 +18,13 @@ directory).  It never invents executions and never turns an ``open`` row into ``
 
 ``lint`` recomputes the frozen tree with the same recipe and requires
 ``manifest.tree == recomputed == every receipt's tree == every receipt's tree_binding``.
-It enumerates *every* ``*.json`` under the selected revision's ``generations/**/results/``
-(recursively, including unreferenced ones) plus ``results/``/``receipts/`` directories when
-present.  The lint targets exactly one explicitly selected revision directory (default: the
-manifest's own directory); unrelated historical revisions are never scanned or modified.
+It also requires the manifest's ``required_rows`` and ``rows[]`` to cover each other
+exactly: a required row without a row entry and a row entry not declared in
+``required_rows`` are both violations.  It enumerates *every* ``*.json`` under the selected
+revision's ``generations/**/results/`` (recursively, including unreferenced ones) plus
+``results/``/``receipts/`` directories when present.  The lint targets exactly one
+explicitly selected revision directory (default: the manifest's own directory); unrelated
+historical revisions are never scanned or modified.
 
 Exit codes: ``0`` success; ``2`` validation violation (diagnostic names offending path +
 field); ``1`` usage/operational error.
@@ -44,16 +47,16 @@ ZERO40 = "0" * 40
 TREE_METHOD = (
     "Synthetic tree: seed an isolated index with `git read-tree <base_ref>^{tree}`, "
     "run `git add -A -- <recorded footprint paths>` using the evaluated contents, then "
-    "`git write-tree`. `artifacts/**` and `docs/specs/status/**` are excluded from the "
+    "`git write-tree`. `.pdca/**` is excluded from the "
     "overlay, not removed from the base tree. Reconcile by repeating this recipe; after ACT, "
     "use committed footprint contents. The resulting tree is not asserted to equal "
     "`HEAD^{tree}`."
 )
 
-DEFAULT_EXCLUSIONS = ("artifacts/**", "docs/specs/status/**")
+DEFAULT_EXCLUSIONS = (".pdca/**",)
 
 # Environment hook used only by tests to simulate a pre-publication candidate-check failure.
-FAIL_BEFORE_PUBLISH_ENV = "NEXTORM_PDCA_EVIDENCE_FAIL_BEFORE_PUBLISH"
+FAIL_BEFORE_PUBLISH_ENV = "PDCA_EVIDENCE_FAIL_BEFORE_PUBLISH"
 
 
 class EvidenceError(Exception):
@@ -166,7 +169,7 @@ def compute_frozen_tree(repo, base_ref, footprint, exclusions):
     """Frozen synthetic tree: isolated index <- base tree, overlay footprint, write-tree."""
     validate_footprint(footprint, exclusions)
     base_tree = resolve_base_tree(repo, base_ref)
-    handle, index_path = tempfile.mkstemp(prefix="nextorm-t234-index-")
+    handle, index_path = tempfile.mkstemp(prefix="pdca-evidence-index-")
     os.close(handle)
     os.unlink(index_path)
     env = dict(os.environ)
@@ -420,6 +423,22 @@ def _lint_manifest_doc(repo, manifest_path, manifest, scope, diags):
 
     _check_no_head_tree_claim(manifest, manifest_path, diags)
 
+    required = manifest.get("required_rows")
+    required_set = None
+    if not isinstance(required, list) or not required:
+        diags.add(manifest_path, "required_rows", "required_rows must be a nonempty list")
+        required = []
+    elif not all(_nonempty_str(item) for item in required):
+        diags.add(
+            manifest_path, "required_rows", "required_rows entries must be non-empty strings"
+        )
+        required = []
+    elif len(set(required)) != len(required):
+        diags.add(manifest_path, "required_rows", "required_rows contains duplicate ids")
+        required = []
+    else:
+        required_set = set(required)
+
     rows = manifest.get("rows")
     seen_row_ids = {}
     if not isinstance(rows, list):
@@ -452,6 +471,22 @@ def _lint_manifest_doc(repo, manifest_path, manifest, scope, diags):
             )
             if resolved is not None:
                 _check_file_exists(resolved, manifest_path, "rows[%d].result" % index, diags)
+
+    if required_set is not None:
+        for row_id in required:
+            if row_id not in seen_row_ids:
+                diags.add(
+                    manifest_path,
+                    "required_rows",
+                    "required row missing from manifest: %r" % (row_id,),
+                )
+        for row_id in seen_row_ids:
+            if row_id not in required_set:
+                diags.add(
+                    manifest_path,
+                    "rows",
+                    "manifest row not declared in required_rows: %r" % (row_id,),
+                )
 
     discovered = _discover_scope_json(scope)
     seen_receipt_ids = {}
@@ -686,7 +721,7 @@ class _ArgumentParser(argparse.ArgumentParser):
 def build_parser():
     parser = _ArgumentParser(
         prog="pdca_evidence.py",
-        description="Atomic PDCA evidence generator + strict scoped lint (T234).",
+        description="Atomic PDCA evidence generator + strict scoped lint.",
     )
     sub = parser.add_subparsers(dest="command")
     sub.required = True

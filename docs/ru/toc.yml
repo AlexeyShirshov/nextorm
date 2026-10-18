@@ -96,6 +96,8 @@
       href: guide/30-streaming-data.md
     - name: Специфичные для провайдеров возможности
       href: guide/31-provider-specific-features.md
+    - name: Наследование и производные сущности
+      href: guide/32-inheritance-and-derived-entities.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор

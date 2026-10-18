@@ -48,7 +48,7 @@ Exit codes
 
 Usage
 -----
-    python3 scripts/perf/d243_aggregate_gate.py \
+    python3 .pdca/scripts/perf/d243_aggregate_gate.py \
         --before artifacts/pdca/D243/rv1/before \
         --after  artifacts/pdca/D243/rv1/after \
         --output artifacts/pdca/D243/rv1/gate.json \

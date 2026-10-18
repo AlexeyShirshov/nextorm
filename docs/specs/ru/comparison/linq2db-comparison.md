@@ -278,9 +278,8 @@ linq2db квотирует по умолчанию и фиксирует име�
 ## См. также
 
 - [Матрица возможностей: nextorm vs EF Core и linq2db](../../comparison/capability-matrix.md) — исчерпывающая матрица по конструкциям.
-- [Gap-анализ открытого backlog linq2db](../../comparison/linq2db-backlog-gap-analysis.md) — что linq2db *планирует добавить* и чего из этого не хватает nextorm.
+- [Ограничения и возможности вне области охвата](../../../advanced/limitations.md) — осознанные границы и их обоснование.
 - [SQL capabilities gap analysis](../../roadmap/sql-capabilities-gap-analysis.md) — nextorm vs EF Core и linq2db, по конструкциям.
-- [Ограничения и возможности вне области охвата](../../../advanced/limitations.md)
 - [Соединения](../../../guide/04-joins.md) — `CrossApply`/`OuterApply`.
 - [Range-колонки](../../../guide/27-range-columns.md) — `Range<T>`, хранимый как пара скалярных колонок.
 - [Хинты запросов](../../../guide/15-query-hints.md)

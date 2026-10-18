@@ -52,8 +52,8 @@ explain, and apply the minimal fix when the evidence supports it.
 
 ## Known settled results
 
-Read `docs/specs/performance/performance-findings.md`, `docs/specs/performance/prepared-vs-cached.md`,
-`docs/specs/performance/benchmark-report.md` and `docs/specs/performance/performance optimizations.md` first.
+Read `docs/specs/performance/decisions-and-lessons.md`, `docs/specs/performance/prepared-vs-cached.md` and
+`docs/specs/performance/benchmark-report.md` first.
 
 Reuse paths — `docs/specs/performance/prepared-vs-cached.md` is the authoritative spec:
 
@@ -105,7 +105,7 @@ Do not reopen a settled finding without a new measurement.
 
 1. Classify: SQL-build cost, plan-cache hit/miss, allocation/GC, ADO I/O, or a
    benchmark regression.
-2. Read the matching section of `docs/specs/performance/performance-findings.md` first.
+2. Read the matching section of `docs/specs/performance/decisions-and-lessons.md` first.
 3. Measure with the right `SqliteBenchmark*` class (`NEXTORM_BENCH_FULL=1` for
    micro).
 4. Interpret Mean/Ratio/Allocated/Gen0/Gen1 and confidence intervals.

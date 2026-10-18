@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Security.Cryptography;
 using System.Text.Json;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
@@ -102,7 +103,40 @@ public class SqliteBenchmarkWriteJson
         _efCtx = new JsonBenchDbContext(efBuilder.Options);
 
         ValidateCompetitorJson();
+        ValidateR247ByteControl();
         _sink.SetLength(0);
+    }
+
+    /// <summary>
+    /// R247-02 byte-equality control, run OUTSIDE the timed region: the streaming <c>WriteJson</c> bytes
+    /// must equal the materialize + <see cref="JsonSerializer"/> bytes for the same DTO projection. The
+    /// outcome is printed as a machine-readable marker the T247 perf driver consumes; a mismatch is a
+    /// recorded finding, not a thrown error, so the benchmark still produces evidence.
+    /// </summary>
+    private void ValidateR247ByteControl()
+    {
+        using var streamed = new MemoryStream();
+        _entities.Select(x => new JsonBenchDto { Id = x.Id, Name = x.Name }).WriteJson(streamed);
+        var streamedBytes = streamed.ToArray();
+
+        var rows = _entities.Select(x => new JsonBenchDto { Id = x.Id, Name = x.Name }).ToList();
+        var materializedBytes = JsonSerializer.SerializeToUtf8Bytes(rows);
+
+        var equal = streamedBytes.AsSpan().SequenceEqual(materializedBytes);
+        var firstDiff = equal ? -1 : FirstDifference(streamedBytes, materializedBytes);
+        Console.WriteLine(
+            $"R247_02_BYTE_CONTROL equal={equal.ToString().ToLowerInvariant()} rows={RowCount} " +
+            $"streamedSha256={Convert.ToHexString(SHA256.HashData(streamedBytes))} " +
+            $"materializedSha256={Convert.ToHexString(SHA256.HashData(materializedBytes))} firstDiff={firstDiff}");
+    }
+
+    private static int FirstDifference(byte[] left, byte[] right)
+    {
+        var limit = Math.Min(left.Length, right.Length);
+        for (var i = 0; i < limit; i++)
+            if (left[i] != right[i])
+                return i;
+        return left.Length == right.Length ? -1 : limit;
     }
 
     /// <summary>
@@ -240,6 +274,23 @@ public class SqliteBenchmarkWriteJson
         foreach (var row in _entities.Select(x => new JsonBenchDto { Id = x.Id, Name = x.Name }).ToList())
             sum += row.Id;
         return sum;
+    }
+
+    /// <summary>
+    /// R247-02 control: materialize the DTO rows with the buffered terminal and then serialize them with
+    /// <see cref="System.Text.Json"/> (materialize -&gt; serialize, deliberately not zero-materialization).
+    /// Byte-equal to <see cref="WriteJson_Array_Dto"/> (checked outside the timed region by
+    /// <see cref="ValidateR247ByteControl"/>); measured at all three row counts.
+    /// </summary>
+    /// <returns>The number of JSON bytes written.</returns>
+    [Benchmark]
+    public long Nextorm_ToList_Dto_Json()
+    {
+        _sink.SetLength(0);
+        _sink.Position = 0;
+        var rows = _entities.Select(x => new JsonBenchDto { Id = x.Id, Name = x.Name }).ToList();
+        JsonSerializer.Serialize(_sink, rows);
+        return _sink.Length;
     }
 
     /// <summary>Closest equivalent for Dapper: materialize the DTO rows, then serialize the list.</summary>

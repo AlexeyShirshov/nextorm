@@ -18,10 +18,10 @@ Targets:
 
 Usage::
 
-    python3 scripts/perf/update_benchmark_tables.py                    # rewrite the tables
-    python3 scripts/perf/update_benchmark_tables.py --check            # exit 1 if any table is stale
-    python3 scripts/perf/update_benchmark_tables.py --date 2026-10-17 # pin the "as of" date
-    python3 scripts/perf/update_benchmark_tables.py --check --date 2026-10-17
+    python3 .pdca/scripts/perf/update_benchmark_tables.py                    # rewrite the tables
+    python3 .pdca/scripts/perf/update_benchmark_tables.py --check            # exit 1 if any table is stale
+    python3 .pdca/scripts/perf/update_benchmark_tables.py --date 2026-10-17 # pin the "as of" date
+    python3 .pdca/scripts/perf/update_benchmark_tables.py --check --date 2026-10-17
 
 Fail-closed rules (a table is never generated from a partial run):
 
@@ -42,7 +42,7 @@ import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_RESULTS_DIR = REPO_ROOT / "benchmarks" / "BenchmarkDotNet.Artifacts" / "results"
 BENCH_SRC_DIR = REPO_ROOT / "benchmarks" / "nextorm.benchmark"
 GITHUB_BLOB_PREFIX = "https://github.com/AlexeyShirshov/nextorm/blob/main"
@@ -561,7 +561,7 @@ def main(argv=None) -> int:
             for path in stale:
                 print(f"stale {path.relative_to(REPO_ROOT)}", file=sys.stderr)
             if stale:
-                print("benchmark tables are out of date; run scripts/perf/update_benchmark_tables.py", file=sys.stderr)
+                print("benchmark tables are out of date; run .pdca/scripts/perf/update_benchmark_tables.py", file=sys.stderr)
                 return 1
         print("benchmark tables are up to date" if not stale else f"updated {len(stale)} file(s)")
         return 0

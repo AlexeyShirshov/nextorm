@@ -776,7 +776,7 @@ def _rv2_manifest_rows(evidence: str, source_evidence: str) -> list:
             _ev("negative-receipt", U + "/negative/receipt.md"),
         ], "notes": "Corrupted /tmp ledger copy (killedBy forged, sha256 recorded in the receipt) makes verify-ledger exit nonzero with a raw-field divergence while ledger_sha256_ok/raw_hashes_ok stay true."},
         {"id": "R-LOOP", "status": "met", "evidence": [
-            _ev("validator", "scripts/validate_inner_loop.py"),
+            _ev("validator", ".pdca/scripts/validate_inner_loop.py"),
             _ev("inner-loop-manifest", C + "/inner-loop-manifest.json"),
             _ev("inner-loop-check-log", C + "/inner-loop-check.log", 0),
             _ev("verifier-script", "tools/stryker/d151-evidence.py"),

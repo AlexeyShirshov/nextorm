@@ -228,7 +228,7 @@ internal static class MemberTranslator
         var properties = metadata.Properties;
         for (var i = 0; i < properties.Count; i++)
         {
-            if (properties[i].PropertyInfo == property)
+            if (MemberInfoExtensions.SameProperty(properties[i].PropertyInfo, property))
                 return properties[i];
         }
 
@@ -249,7 +249,11 @@ internal static class MemberTranslator
     internal static IPropertyMetadata? ResolveProperty(PropertyInfo property, IEntityMetadata? fallbackMetadata)
     {
         if (property.DeclaringType is not null && DataContextCache.Metadata.TryGetValue(property.DeclaringType, out var byDeclaring))
-            return FindProperty(byDeclaring, property);
+        {
+            var byDeclaringProperty = FindProperty(byDeclaring, property);
+            if (byDeclaringProperty is not null)
+                return byDeclaringProperty;
+        }
 
         return fallbackMetadata is null ? null : FindProperty(fallbackMetadata, property);
     }
@@ -268,11 +272,11 @@ internal static class MemberTranslator
         if (expression is not MemberExpression { Member: PropertyInfo pi })
             return null;
 
-        IPropertyMetadata? property;
+        IPropertyMetadata? property = null;
         if (pi.DeclaringType is not null && DataContextCache.Metadata.TryGetValue(pi.DeclaringType, out var byDeclaring))
             property = FindProperty(byDeclaring, pi);
-        else
-            property = FindProperty(visitor.EntityType, pi);
+
+        property ??= FindProperty(visitor.EntityType, pi);
 
         if (property?.Converter is not { } converter)
             return null;
@@ -361,7 +365,7 @@ internal static class MemberTranslator
                 if (!visitor.IsParamMode)
                 {
                     var colName = ResolveRangeColumnsMember(visitor, node.Member)
-                        ?? node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
+                        ?? node.Member.GetPropertyColumnName(visitor.Options.NamingConvention, visitor.EntityType);
                     if (!string.IsNullOrEmpty(colName))
                     {
                         if (TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn: false))
@@ -474,7 +478,9 @@ internal static class MemberTranslator
 
                 visitor.Builder!.Append(tableAliasForColumn).Append('.');
 
-                var colName = memberAccessExp.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
+                var colName = memberAccessExp.Member.GetPropertyColumnName(
+                    visitor.Options.NamingConvention,
+                    (memberAccessExp.Expression as ParameterExpression)?.Type);
                 if (!string.IsNullOrEmpty(colName))
                 {
                         visitor.AppendIdentifier(colName);
@@ -638,7 +644,9 @@ internal static class MemberTranslator
                         return node;
 
                     var colName = ResolveRangeColumnsMember(visitor, node.Member)
-                        ?? node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
+                        ?? node.Member.GetPropertyColumnName(
+                            visitor.Options.NamingConvention,
+                            lambdaParameter.Type!.IsAssignableTo(typeof(IProjection)) ? null : lambdaParameter.Type);
                     if (!string.IsNullOrEmpty(colName))
                     {
                         if (TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn))

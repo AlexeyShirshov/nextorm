@@ -955,7 +955,7 @@ internal static class SqlSourceRenderer
         var props = rowType.GetProperties(BindingFlags.Instance | BindingFlags.Public);
         for (var (i, cnt) = (0, props.Length); i < cnt; i++)
         {
-            var name = props[i].GetPropertyColumnName(convention);
+            var name = props[i].GetPropertyColumnName(convention, rowType);
             if (!string.IsNullOrEmpty(name))
                 return name;
         }
@@ -1105,7 +1105,7 @@ internal static class SqlSourceRenderer
     {
         if (target is MemberExpression { Member: PropertyInfo pi }
             && DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
-            return metadata.Properties.FirstOrDefault(p => p.PropertyInfo == pi);
+            return metadata.Properties.FirstOrDefault(p => MemberInfoExtensions.SameProperty(p.PropertyInfo, pi));
 
         return null;
     }

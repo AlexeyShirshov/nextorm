@@ -63,7 +63,7 @@ constrain the **fix**, not just the review:
 3. **Measure, never assert.** "This allocates / this is slower" must be evident
    from code (allocation on a per-row path) or handed to a perf analyst. Sub-~20%
    benchmark deltas are noise on this machine (между-прогонный разброс до 19%;
-   see `docs/specs/performance/performance-findings.md`).
+   see `docs/specs/performance/decisions-and-lessons.md`).
 4. **Do not reopen a settled finding without a new measurement.** Consult the
    registers on demand via the `specs` reference (open only the relevant finding):
    - `docs/specs/design/solid-review.md` — design findings `F1..F13` and their current status;

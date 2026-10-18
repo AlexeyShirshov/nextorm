@@ -1,6 +1,6 @@
 # nextorm vs linq2db: per-provider feature comparison
 
-Internal engineering spec. Date: 2026-10-04. Status: evidence-backed; citations refreshed against HEAD 2026-10-17.
+Internal engineering spec. Date: 2026-10-04. Status: evidence-backed; citations refreshed against HEAD 2026-10-18.
 
 ## Purpose
 
@@ -20,6 +20,7 @@ at file level, with absence claims explicitly marked as source-search findings.
 - `partial` — present with a named limitation, or reachable only through a generic mechanism.
 - `no` — no dedicated provider API found.
 - `n/a` — feature does not exist on that engine.
+- Each status table ends with a `Total` row summing its `yes`/`partial`/`no`/`n/a` cells per library column.
 
 ## Provider footprint
 
@@ -33,6 +34,7 @@ at file level, with absence claims explicitly marked as source-search findings.
 | ClickHouse | yes, own provider (`src/nextorm.clickhouse`) | yes (Octonica/Driver/MySql), `Source/LinqToDB/DataProvider/ClickHouse` |
 | In-memory object context | yes (`src/nextorm.core` in-memory context) | no provider |
 | Oracle / Firebird / DB2 / SAP HANA / Informix / Sybase / Access / SQL CE / DuckDB / Ydb | no | yes |
+| **Total** (8 engines) | yes 7<br>no 1 | yes 6<br>partial 1<br>no 1 |
 
 Note: linq2db's ClickHouse/DuckDB/Ydb providers were added after the first draft of
 `linq2db-comparison.md`; that document's provider list and its ClickHouse-derived cells have since been
@@ -42,18 +44,21 @@ corrected. linq2db does **not** ship an in-memory object provider.
 
 **nextorm covers provider-specific features more broadly.** Across the six SQL engines both libraries
 support, nextorm exposes a dedicated provider-specific API on a wider set of surfaces than linq2db — a
-per-provider scalar-function library for every engine, the ClickHouse clause/aggregate/table-function
-surface, PostgreSQL full-text/regex/`jsonb_path_*`/range/data-modifying CTE, MySQL/MariaDB JSON/regex/
-sequences, and SQLite JSON1/regex/aggregates/LOB — all wired to the query builder rather than raw SQL
+per-provider scalar-function library for every engine, the ClickHouse clause/aggregate/table-function/
+tuple/native-JSON surface, PostgreSQL full-text/regex/`jsonb_path_*`/range/data-modifying CTE/table
+functions, SQL Server sequences and row locking, MySQL/MariaDB JSON/regex/sequences, and SQLite
+JSON1/regex/aggregates/LOB/FTS5-maintenance — all wired to the query builder rather than raw SQL
 (see the per-provider sections and Net assessment).
 
 This is a statement about **per-engine feature depth, not the number of engines**: linq2db connects to
 more database products (it adds Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE,
 DuckDB and Ydb), while nextorm adds an in-memory object context and splits MySQL/MariaDB into separate
-providers. linq2db is ahead on SQL Server scalar-function breadth/hints (residual gap
-[#182](https://github.com/AlexeyShirshov/nextorm/issues/182)); the SQLite full-text **query + FROM**
-surface shipped in [#181](https://github.com/AlexeyShirshov/nextorm/issues/181), leaving only FTS5
-maintenance/control to [#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196).
+providers. linq2db is ahead on SQL Server scalar-function breadth and hint variety (residual gap
+[#182](https://github.com/AlexeyShirshov/nextorm/issues/182)). SQLite full-text **query + FROM**
+shipped in [#181](https://github.com/AlexeyShirshov/nextorm/issues/181) and the **FTS5 maintenance/control**
+command builder (`automerge`/`crisismerge`/`merge`/`optimize`/`rebuild`/`integrity-check`) in
+[#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196);
+linq2db keeps only FTS3/FTS4 maintenance and the FTS5 `delete`/`delete-all`/`pgsz`/`usermerge` commands.
 
 ## How linq2db models provider specifics
 
@@ -93,7 +98,10 @@ claim tested here is width of the *dedicated provider API*.
 | Table-valued parameters (array / `jsonb_to_recordset`) | yes | no | `PostgresDialect.cs:88,316`; `SqlFunctions.Postgres.cs:716,728` | no TVP support (`SqlProviderFlags`) |
 | Named windows / `GROUPS` / `EXCLUDE` | yes | yes | `PostgresDialect.cs:369,372,375` | `Sql.Window` (`WindowFunctions.FeatureMatrix.md`) |
 | `DISTINCT ON`, `TABLESAMPLE`, `WITH TIES` | yes | no | `PostgresDialect.cs:437,451,590` | no dedicated API found |
+| Table functions / set-returning functions (`generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat`) | yes | partial | `SqlFunctions.Postgres.cs:628+` (`[SqlTableFunction]` on `PostgresFunctions`; row shapes `SqlFunctions.cs:105-199`), auto-mapped as a `FROM` source | `PostgreSQLExtensions.cs` (`Unnest`, `UnnestWithOrdinality`, `GenerateSeries`, `GenerateSubscripts`); no `jsonb_*`/`regexp_matches`/`ts_stat` helper |
+| Row locking (`FOR UPDATE` / `FOR SHARE`, per-source `OF`, `LockWaitMode`) | yes | yes | `FromOptions.ForUpdate/ForShare` (`DataContext/FromOptions.cs:182-214`); `ISqlDialect.Lock` / `ILockRenderer` | `PostgreSQLHints.generated.cs` (`ForUpdateHint`, `ForNoKeyUpdate*`, `ForShare*`, `ForKeyShare*`, plus `*NoWait`/`*SkipLocked`) |
 | Session/server identity (`pg_backend_pid`, `inet_server_addr/port`, `inet_client_addr/port`) | yes (5; `connection_id`/`user` are MySQL/ClickHouse-only) | no dedicated API found | `SqlFunctions.cs:464,472,479,486,493`; `PostgresDialect.cs:638` | `PostgreSQLExtensions.cs` exposes only `Version`/`Current*` |
+| **Total** | yes 20<br>partial 0<br>no 0<br>n/a 0 | yes 8<br>partial 5<br>no 7<br>n/a 0 | — | — |
 
 Net: **nextorm leads** — full-text, regex, `jsonb_path_*`, range operators, data-modifying CTE,
 sequences/settings, TVP and the aggregate families have dedicated nextorm APIs but no linq2db ones.
@@ -120,7 +128,10 @@ sequences/settings, TVP and the aggregate families have dedicated nextorm APIs b
 | Stored procedures | yes | yes | `SqlServerDialect.cs:61` | `QueryProc`/`ExecuteProc` |
 | Window percentiles (`WITHIN GROUP ... OVER`) | yes | partial | `SqlServerDialect.cs:365` | 2012+ windows; no `GROUPS`/`EXCLUDE`; `NTH_VALUE` absent |
 | Provider scalar-function breadth | yes | yes | `SqlFunctions.SqlServer.cs` (827 lines); 61 pinned T-SQL scalars audited = 51 covered + 10 excluded ([#182](https://github.com/AlexeyShirshov/nextorm/issues/182)) | `SqlFn.cs` 295 KB, 156 `[Sql.Function]` declarations |
+| Sequences (`NEXT VALUE FOR`) | yes | yes | `SqlFunctions.SqlServer.cs:339,346` (`next_value_for`/`nextval`, [#218](https://github.com/AlexeyShirshov/nextorm/issues/218)) | `SqlFn.cs` `NextValueFor` (`[Sql.Extension(ProviderName.SqlServer, "NEXT VALUE FOR {sequence_name}", ...)]`) |
+| Row locking (`ForUpdate`/`ForShare`, `LockWaitMode` → `with (updlock)`/`with (holdlock)`, `nowait`/`readpast`) | yes | yes | `FromOptions.ForUpdate/ForShare` (`DataContext/FromOptions.cs:182-214`); `docs/connecting-providers/sqlserver.md:317` ([#216](https://github.com/AlexeyShirshov/nextorm/issues/216)) | `SqlServerHints.generated.cs` (`WithUpdLock`/`WithHoldLock`/`WithNoLock`/`WithRowLock`/`WithPagLock`/`WithTabLock`/…, table + in-scope) |
 | Session/server identity (`@@SERVERNAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) | yes (6, gated by `ISqlServerFunctions.SupportsSessionIdentity`) | yes (`SqlFn.cs` declares the same T-SQL state functions) | `SqlFunctions.SqlServer.cs:23,30,39,46,53,60`; `SqlServerDialect.cs:773,1037`; `DialectCapabilities.cs:739` | `SqlFn.cs` `[Sql.Function]` declarations |
+| **Total** | yes 19<br>partial 0<br>no 0<br>n/a 0 | yes 13<br>partial 4<br>no 2<br>n/a 0 | — | — |
 
 Net: **parity on the audited T-SQL scalar catalogue, with linq2db still wider overall** — issue
 [#182](https://github.com/AlexeyShirshov/nextorm/issues/182) reconciled 61 pinned linq2db v6.5.0
@@ -145,7 +156,7 @@ nextorm leads on first-class builders for `PIVOT`/`UNPIVOT`, `FOR JSON`/`FOR XML
 | Upsert `ON DUPLICATE KEY UPDATE` + `INSERT IGNORE` | yes | yes | `MySqlDialect.cs:96,98,60,63` | `IsInsertOrUpdateSupported` |
 | Index hints `USE`/`FORCE`/`IGNORE INDEX` | yes | yes | `MySqlDialect.cs:531,654-671` | `MySqlHints.generated.cs` (`Table.*`, `Query.*`) |
 | Query hints `/*+ ... */` | yes | yes | `MySqlDialect.cs:109,112,115` | `MySqlHints.cs` (`QueryBlockHint`, `SemiJoinHint`, ...) |
-| DML `RETURNING` / `OUTPUT` | no | no | `SqlProviderFlags` defaults | output flags default false |
+| DML `RETURNING` / `OUTPUT` | partial (MariaDB `UPDATE ... RETURNING`, 13.0+, `SupportsUpdateReturning`; MySQL none) | no | `MariaDbDialect.cs:40`; `ISqlDialect.SupportsUpdateReturning` | output flags default false |
 | `MERGE` | no | no | n/a | `IsUpsertWithMergeLoweringSupported = false` |
 | CTAS / temporary / column list | yes | yes | `MySqlDialect.cs:537-543` | `DataExtensions.CreateTable`, `TempTable.cs` |
 | Table-valued parameters (`JSON_TABLE`) | yes | no | `MySqlDialect.cs:57` | no TVP support |
@@ -156,7 +167,10 @@ nextorm leads on first-class builders for `PIVOT`/`UNPIVOT`, `FOR JSON`/`FOR XML
 | **MariaDB** sequences (`NEXT VALUE FOR`, `nextval`/`setval`/`lastval`) | yes | no | `SqlFunctions.MySql.cs:238-256`; `MariaDbDialect.cs:143-146` | no MariaDB-specific sequence API found |
 | **MariaDB** `NVL`/`NVL2`/`ADD_MONTHS`/`MONTHS_BETWEEN`/`TO_CHAR`/`JSON_DETAILED`/`XXH3` | yes | no | `MariaDbDialect.cs:97,108-150`; `SqlFunctions.MySql.cs:145-232` | no dedicated MariaDB API found |
 | **MariaDB** `INTERSECT ALL` / `EXCEPT ALL` | yes | partial | `MariaDbDialect.cs:60` | no per-provider gate found |
+| Arbitrary-value aggregate (`any` → `ANY_VALUE(x)` on MySQL; MariaDB rejects) | yes | no | `SqlFunctions.cs:554` (`CommonFunctions.any`); `docs/connecting-providers/mysql.md:101`, `mariadb.md:107` | no `ANY_VALUE` API found in `MySqlExtensions.cs` |
+| Row locking (`FOR UPDATE`/`FOR SHARE`; MariaDB source-level `OF` unsupported by design, fail-closed) | partial | yes | `FromOptions.ForUpdate/ForShare` (`DataContext/FromOptions.cs:182-214`); [#216](https://github.com/AlexeyShirshov/nextorm/issues/216); `docs/connecting-providers/mariadb.md` | `MySqlHints.generated.cs` (`ForUpdateHint`, `ForUpdateNoWaitHint`, `ForUpdateSkipLockedHint`, `ForShareHint`, `ForShare*`) |
 | Session/server identity (`CONNECTION_ID()`, `USER()`) | yes (2; MariaDB inherits the MySQL surface) | no dedicated API found | `SqlFunctions.cs:501,509`; `MySqlDialect.cs:580` | `MySqlExtensions.cs` is FTS-only |
+| **Total** | yes 17<br>partial 2<br>no 1<br>n/a 0 | yes 6<br>partial 3<br>no 11<br>n/a 0 | — | — |
 
 Net: **nextorm leads** — JSON, regex, UUID helpers, TVP and the MariaDB-specific families (temporal,
 sequences, string/date functions, set-op `ALL`) have no linq2db provider API; linq2db is ahead only
@@ -178,16 +192,18 @@ on hint variety.
 | Named windows / `GROUPS` / `EXCLUDE`, `percent_rank`/`cume_dist`/`nth_value` | yes | partial | `SqliteDialect.cs:153,156,159,165,168` | `Sql.Window`; RANGE/GROUPS/EXCLUDE per matrix; no statistical |
 | Table-valued parameters (`json_each`) | yes | no | `SqliteDialect.cs:27` | no TVP support |
 | CTAS / temporary table | yes | yes | `SqliteDialect.cs:364,367` | `DataExtensions.CreateTable`, `TempTable.cs` |
-| Full-text FTS3 / FTS4 / FTS5 | yes (query + FROM, #181; FTS5 maintenance/control open in #195/#196) | yes (extensive) | `SqlFunctions.Sqlite.cs` FTS members; `SqliteFunctionRenderer.cs:26-27,44-53`; `SqliteDialect.cs` `SupportsTableFunction`/`WrapTableFunction` | `SQLiteExtensions.cs` (900 lines: `FTS3Offsets/MatchInfo/Snippet/Optimize/...`, `FTS5bm25/Highlight/Snippet/CrisisMerge/...`, `Match`/`MatchTable`/`Rank`) |
+| Full-text query + FROM (FTS3 / FTS4 / FTS5) | yes ([#181](https://github.com/AlexeyShirshov/nextorm/issues/181)) | yes (extensive) | `SqlFunctions.Sqlite.cs` FTS members (`Match`, FTS5 `FTS5bm25`/`Highlight`/`Snippet`/`Rank`, FTS3/4 helpers, FTS5 table-valued `MatchTable`); `SqliteFunctionRenderer.cs:26-27,44-53`; `SqliteDialect.cs` `SupportsTableFunction`/`WrapTableFunction` | `SQLiteExtensions.cs` (`Match`/`MatchTable`/`Rank`, `FTS3Offsets`/`MatchInfo`/`Snippet`, `FTS5bm25`/`Highlight`/`Snippet`) |
+| FTS5 maintenance/control (automerge / crisismerge / merge / optimize / rebuild / integrity-check) | yes ([#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196)) | yes (also FTS3/4) | `IDataContext.CreateSqliteFts5CommandBuilder` (`DataContext/DataContextExtensions.cs:1022`); `Builders/SqliteFts5CommandBuilder.cs`; `Query/Mutations/SqliteFts5Command.cs` | `SQLiteExtensions.cs` (`FTS5Optimize`/`FTS5Rebuild`/`FTS5IntegrityCheck`/`FTS5Merge`/`FTS5AutoMerge`/`FTS5CrisisMerge`, the `FTS3*` equivalents, plus `FTS5Delete`/`FTS5DeleteAll`/`FTS5Pgsz`/`FTS5UserMerge`) |
 | Provider scalar-function library | yes | no (FTS-only) | `SqlFunctions.Sqlite.cs` (355 lines; core scalars/JSON1/date/math + FTS3/4/5 query) | `SQLiteExtensions.cs` contains no JSON/regex; FTS only |
 | Session/server identity (`pg_backend_pid`, `inet_*`, `connection_id`, `user`, `host_name`, `tcp_port`) | no — fails closed at translation (only `version()` is rendered) | no dedicated API found | `SqliteDialect.cs:404`; `SqlFunctions.cs:464-509` gate | no identity API found |
+| **Total** | yes 13<br>partial 0<br>no 1<br>n/a 0 | yes 6<br>partial 1<br>no 7<br>n/a 0 | — | — |
 
 Net: **mixed, net nextorm broader** — nextorm adds JSON1, regex, custom aggregates, window frame
-`GROUPS`/`EXCLUDE`, TVP and LOB streaming; **SQLite full-text query/FROM shipped in
-[#181](https://github.com/AlexeyShirshov/nextorm/issues/181)**, so linq2db now leads only on FTS5
-**maintenance/control** (`AutoMerge`/`CrisisMerge`/`Merge`/`Optimize`/`Rebuild`/`IntegrityCheck`),
-deferred to nextorm
-[#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196).
+`GROUPS`/`EXCLUDE`, TVP, LOB streaming, the SQLite full-text **query + FROM** surface
+([#181](https://github.com/AlexeyShirshov/nextorm/issues/181)) and the **FTS5 maintenance/control**
+command builder ([#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196)).
+linq2db still leads only on **FTS3/FTS4 maintenance** and the FTS5
+`delete`/`delete-all`/`pgsz`/`usermerge` commands.
 
 ---
 
@@ -195,7 +211,7 @@ deferred to nextorm
 
 | Feature | nextorm | linq2db | nextorm evidence | linq2db evidence |
 |---|---|---|---|---|
-| String JSON (`JSONExtract*`/`visitParamExtract*`) + `JSONAllPaths`/`toJSONString` | yes | no | `ClickHouseDialect.cs:320,327`; `docs/connecting-providers/clickhouse.md:228,229` | no JSON API in `ClickHouseSpecificExtensions.cs` |
+| String JSON (`JSONExtract*`/`visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS`) + `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString` | yes | no | `ClickHouseDialect.cs:320,327`; `SqlFunctions.ClickHouse.cs:252,263,270`; `docs/connecting-providers/clickhouse.md:228,229` | no JSON API in `ClickHouseSpecificExtensions.cs` |
 | Arrays + higher-order (lambda) functions | yes | partial | `ClickHouseDialect.cs:143,150,169`; `SqlFunctions.ClickHouse.cs:491-655` | array functions used only internally in the member translator, no public API |
 | `ARRAY JOIN` clause | yes | no | `ClickHouseDialect.cs:159,500`; `Extensions/ClickHouseEntityBuilderExtensions.cs:61-73` | no public API found |
 | Regex (`match`/`replaceRegexpAll`, RE2) | yes | partial | `ClickHouseDialect.cs:598,601,605`; `SqlFunctions.ClickHouse.cs:829-863` | internal `replaceRegexpAll` only |
@@ -215,7 +231,11 @@ deferred to nextorm
 | DML mutations (`ALTER TABLE ... UPDATE`/`DELETE`) | yes | no | `ClickHouseDialect.cs:81-97` | not exposed as dedicated API found |
 | TVP (`Array(T)`/`Array(Tuple)` + `arrayJoin`) | yes | no | `ClickHouseDialect.cs:62` | no TVP support |
 | Stored procedures / bulk copy / transactions / LOB streaming | no | no | `ClickHouseDialect.cs:70,416`; `docs/connecting-providers/clickhouse.md:239` | same engine limits |
+| Tuple surface (`tuple(...)`, `tupleElement`, arity 1–7) | yes | no | `ITupleRenderer`; `ClickHouseTupleRenderer` (`ClickHouseDialect.cs:1019`); `ISqlDialect.SupportsTupleFunctions` (`ISqlDialect.cs:254`); `docs/connecting-providers/clickhouse.md:237` | no tuple API in `ClickHouseSpecificExtensions.cs`/`ClickHouseHints.generated.cs` |
+| Native JSON column type (`[JsonColumn]` native `JSON`; `JsonObject`/`JsonDocument`/`JsonElement`) | yes | no | `docs/connecting-providers/clickhouse.md:238`; `ISqlDialect` JSON column surface | `ClickHouseSpecificExtensions.cs` is `AsClickHouse` only |
+| `any` / `anyLast` overloads + `multi_if` (multi-branch conditional) | yes | no | `SqlFunctions.ClickHouse.cs:121,742,771`; `SqlFunctions.cs:554` (`CommonFunctions.any`); `docs/connecting-providers/clickhouse.md:224,226` | no API in `ClickHouseSpecificExtensions.cs`/`ClickHouseHints.generated.cs` |
 | Session/server identity (`connectionId()` → `ulong`, `hostName()` → `string`, `tcpPort()` → `int`) | yes (3) | no dedicated API found | `SqlFunctions.cs:501`; `SqlFunctions.ClickHouse.cs:41,47`; `ClickHouseDialect.cs:849` | `ClickHouseSpecificExtensions.cs` has no identity API |
+| **Total** | yes 23<br>partial 0<br>no 1<br>n/a 0 | yes 1<br>partial 7<br>no 16<br>n/a 0 | — | — |
 
 Net: **nextorm leads decisively** — linq2db's public ClickHouse-specific surface is essentially
 `AsClickHouse` (`ClickHouseSpecificExtensions.cs`) plus hints (`ClickHouseHints.cs`/generated), while
@@ -233,27 +253,32 @@ surfaces. The strongest nextorm-only areas, with no linq2db equivalent found:
   shared session-info gate (`ISqlDialect.SessionInfoFunctions`) that carries the 15 identity scalars of
   [#219](https://github.com/AlexeyShirshov/nextorm/issues/219) across four providers, with SQL Server's six
   additionally gated by `ISqlServerFunctions.SupportsSessionIdentity`.
-- PostgreSQL: full-text, regex, `jsonb_path_*`, range operators, data-modifying CTE, sequences/settings,
-  boolean/bit/statistical/regression aggregates, ordered-set percentiles, TVP.
-- MySQL/MariaDB: JSON, regex, binary UUID, and the whole MariaDB-specific family (temporal, sequences,
-  `NVL`/`ADD_MONTHS`/`TO_CHAR`/`JSON_DETAILED`/`XXH3`, set-op `ALL`).
-- SQLite: JSON1, regex, custom aggregates, window frame `GROUPS`/`EXCLUDE`, TVP, `rowid` LOB streaming.
+- PostgreSQL: full-text, regex, `jsonb_path_*`, range operators, data-modifying CTE, table functions
+  (`generate_series`/`unnest`/`jsonb_*`/`ts_stat`), sequences/settings, boolean/bit/statistical/regression
+  aggregates, ordered-set percentiles, TVP.
+- MySQL/MariaDB: JSON, regex, binary UUID, the arbitrary-value aggregate (`any` → `ANY_VALUE`), and the
+  whole MariaDB-specific family (temporal, sequences, `NVL`/`ADD_MONTHS`/`TO_CHAR`/`JSON_DETAILED`/`XXH3`,
+  set-op `ALL`).
+- SQLite: JSON1, regex, custom aggregates, window frame `GROUPS`/`EXCLUDE`, TVP, `rowid` LOB streaming,
+  FTS5 maintenance/control.
 - ClickHouse: the clause set (`FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS`/`LIMIT BY`/`ARRAY JOIN`/`WITH TOTALS`/
-  `GLOBAL IN`), aggregate families with `-If` combinators, dictionaries, table functions, scalar library.
+  `GLOBAL IN`), aggregate families with `-If` combinators and `any`/`anyLast`, dictionaries, table
+  functions, the tuple surface, native `JSON` columns, `multi_if`, scalar library.
 - First-class fluent builders wired to the query builder (`OUTPUT INTO`, `MERGE`, `PIVOT`/`UNPIVOT`,
   `FOR JSON`/`FOR XML`, temporal, `WITH TOTALS`) rather than raw SQL.
 
 Where linq2db leads or matches:
 
 - SQL Server scalar-function breadth (`SqlFn.cs`, 156 `[Sql.Function]` declarations) and hint variety.
-- SQLite full-text (FTS3/4/5) maintenance/control (`AutoMerge`/`CrisisMerge`/`Merge`/`Optimize`/
-  `Rebuild`/`IntegrityCheck`); nextorm shipped the **query + FROM** surface in
-  [#181](https://github.com/AlexeyShirshov/nextorm/issues/181) and defers maintenance/control to
+- SQLite full-text **FTS3/FTS4 maintenance** and the FTS5 `delete`/`delete-all`/`pgsz`/`usermerge`
+  commands; nextorm shipped the **query + FROM** surface in
+  [#181](https://github.com/AlexeyShirshov/nextorm/issues/181) and the **FTS5 maintenance/control**
+  command builder in
   [#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196).
 - A broader engine list (Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB, Ydb).
 
 Parity (both, engine permitting): core DML `RETURNING`/`OUTPUT`/`MERGE`/upsert, bulk copy, stored
-procedures, generic CTAS/temp tables, index/query hints, named windows.
+procedures, sequences, row locking, generic CTAS/temp tables, index/query hints, named windows.
 
 ## Caveats
 
@@ -270,7 +295,8 @@ procedures, generic CTAS/temp tables, index/query hints, named windows.
 ## Sources
 
 - nextorm: `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`, `src/nextorm.<provider>/*Dialect.cs`,
-  `src/nextorm.core/Query/SqlFunctions.*.cs`, `src/nextorm.sqlite/SQLiteFunctions.cs`,
+  `src/nextorm.core/Query/SqlFunctions.*.cs`, `src/nextorm.core/Builders/SqliteFts5CommandBuilder.cs`,
+  `src/nextorm.core/DataContext/FromOptions.cs`, `src/nextorm.sqlite/SQLiteFunctions.cs`,
   `docs/connecting-providers/*.md`, `docs/guide/provider-specific-sql/*.md`.
 - linq2db: `Source/LinqToDB/DataProvider/<Provider>/*.cs`, `Source/LinqToDB/LinqExtensions/*.cs`,
   `Source/LinqToDB/Sql/WindowFunctions.FeatureMatrix.md`, `Source/LinqToDB/ProviderName.cs`.

@@ -60,6 +60,8 @@
   href: 30-streaming-data.md
 - name: Provider-specific features
   href: 31-provider-specific-features.md
+- name: Inheritance and derived entities
+  href: 32-inheritance-and-derived-entities.md
 - name: Provider-specific SQL
   items:
     - name: Overview

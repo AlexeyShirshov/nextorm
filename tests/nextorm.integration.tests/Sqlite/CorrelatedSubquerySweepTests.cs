@@ -96,4 +96,37 @@ public sealed class CorrelatedSubquerySweepTests : ProviderTestSuite
             .ToList();
         grouped.Should().HaveCount(1);
     }
+
+    [Fact]
+    public void CorrelatedVarianceTerminals_ShouldExecute()
+    {
+        var rows = _sut.ComplexEntity
+            .OrderBy(x => x.Id)
+            .Select(x => new
+            {
+                x.Id,
+                Stdev = _sut.SimpleEntity.Where(s => s.Id <= x.Id + 1).Stdev(s => (double)s.Id),
+                Stdevp = _sut.SimpleEntity.Where(s => s.Id <= x.Id + 1).Stdevp(s => (double)s.Id),
+                Var = _sut.SimpleEntity.Where(s => s.Id <= x.Id + 1).Var(s => (double)s.Id),
+                Varp = _sut.SimpleEntity.Where(s => s.Id <= x.Id + 1).Varp(s => (double)s.Id)
+            })
+            .ToList();
+
+        rows.Should().HaveCount(3);
+
+        // {1, 2}: sample variance 0.5, population variance 0.25.
+        rows[0].Var.Should().BeApproximately(0.5, 1e-9);
+        rows[0].Stdev.Should().BeApproximately(Math.Sqrt(0.5), 1e-9);
+        rows[0].Varp.Should().BeApproximately(0.25, 1e-9);
+
+        // {1, 2, 3}: sample variance 1, population variance 2/3.
+        rows[1].Var.Should().BeApproximately(1.0, 1e-9);
+        rows[1].Stdev.Should().BeApproximately(1.0, 1e-9);
+        rows[1].Varp.Should().BeApproximately(2.0 / 3.0, 1e-9);
+        rows[1].Stdevp.Should().BeApproximately(Math.Sqrt(2.0 / 3.0), 1e-9);
+
+        // {1, 2, 3, 4}: sample variance 5/3, population variance 1.25.
+        rows[2].Var.Should().BeApproximately(5.0 / 3.0, 1e-9);
+        rows[2].Varp.Should().BeApproximately(1.25, 1e-9);
+    }
 }

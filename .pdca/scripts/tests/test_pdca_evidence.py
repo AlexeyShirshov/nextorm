@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Stdlib unittest suite for scripts/pdca_evidence.py (T234, evidence contract rv=2).
+"""Stdlib unittest suite for .pdca/scripts/pdca_evidence.py (T234, evidence contract rv=2).
 
 Run with::
 
-    python3 -m unittest discover -s scripts/tests -p 'test_pdca_evidence.py'
+    python3 -m unittest discover -s .pdca/scripts/tests -p 'test_pdca_evidence.py'
 
 Every test builds a disposable Git repository under ``tempfile.mkdtemp(prefix="nextorm-t234-")``
 at runtime and removes it afterwards; the real repository history is never touched.

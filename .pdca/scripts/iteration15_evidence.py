@@ -7,7 +7,7 @@ Validates the Stage A evidence already recorded under
 re-runs the benchmark suite: it verifies the recorded acceptance log, the
 diagnostics / correctness JSON batches and the Stage A scope (no
 ``src/nextorm.core`` diff).  It is **not** a replacement for the absent
-``scripts/validate_inner_loop.py``.
+``.pdca/scripts/validate_inner_loop.py``.
 
 Missing, short or failed evidence is never converted into success.
 
@@ -33,7 +33,7 @@ import sys
 import time
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = (
     REPO_ROOT / "docs" / "specs" / "performance" / "iteration-15-stage-a-manifest.json"
 )

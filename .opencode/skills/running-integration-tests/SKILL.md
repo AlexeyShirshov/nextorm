@@ -34,7 +34,7 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
   dotnet run --project tests/nextorm.integration.tests -c Debug -- \
   -noColor -notrait "Category=Diagnostic" > /tmp/opencode/integration.log 2>&1
 
-python3 scripts/check-integration-skip-budget.py --log /tmp/opencode/integration.log
+python3 .pdca/scripts/check-integration-skip-budget.py --log /tmp/opencode/integration.log
 ```
 
 Single provider (much faster — only that provider's container starts; the first run initializes the database, later runs reuse the stopped container and start in a second or two):
@@ -83,7 +83,7 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
 - **Explicit opt-out.** `NEXTORM_SKIP_PROVIDERS=postgres,sqlserver,mysql,clickhouse` (case-insensitive, comma/semicolon separated) is the only way to skip an unavailable provider. Use it for SQLite-only local runs, never for evidence.
 - **Diagnostic harnesses.** `LobCapabilityProbeTests`, `LobPerfHarnessTests` and `SqliteWarmAggregateAllocationTests` carry `[Trait("Category", "Diagnostic")]` and are opt-in via `NEXTORM_LOB_PROBE` / `NEXTORM_LOB_PERF` / `D243_ATTRIBUTION_REPORT`. Exclude them with `-notrait "Category=Diagnostic"`.
 - **Skip budget.** `tests/nextorm.integration.tests/skip-budget.json` pins the capability skips by reason. After a full run, check it with
-  `python3 scripts/check-integration-skip-budget.py --log <log>`; the gate fails on any new or vanished skip. Intentional changes require updating the pinned matrix first, then `--update`. Diagnostic skips are ignored by the script, so the gate works with or without `-notrait`.
+  `python3 .pdca/scripts/check-integration-skip-budget.py --log <log>`; the gate fails on any new or vanished skip. Intentional changes require updating the pinned matrix first, then `--update`. Diagnostic skips are ignored by the script, so the gate works with or without `-notrait`.
 - Containers start lazily per provider; each is built with `WithReuse(true)` + a `reuse-id` label, so at the end of the run it is **stopped but kept** and the next run starts the same container (skipping PostgreSQL/SQL Server/MySQL/ClickHouse initialization — the heavy disk I/O that can stall WSL). The `DatabaseContainers` assembly fixture performs the stop.
 - To force a clean database, delete the reused containers. `podman.exe` defaults to the **rootful** connection and will not list them; use the rootless connection (the one the socket exposes): `"/mnt/c/Program Files/RedHat/Podman/podman.exe" --connection podman-machine-default ps -a --filter label=reuse-id`, then `... rm -f <id>`. Changing a builder configuration (image, env, port bindings) changes the reuse hash and creates a **new** container, leaving the previous one behind — purge from time to time.
 - Reuse does **not** leak rows between runs: every provider's `EnsureSeeded` runs `drop table if exists …` before `create table`. Do not rely on a dirty container in a test.

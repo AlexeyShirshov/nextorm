@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>NextORM.Benchmark.SqliteBenchmarkWarmDecompose-20261017-152545</title>
+<title>NextORM.Benchmark.SqliteBenchmarkWarmDecompose-20261018-053529</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -24,54 +24,104 @@ LaunchCount=1  WarmupCount=3
 </code></pre>
 
 <table>
-<thead><tr><th>Method                  </th><th>Toolchain       </th><th>Mean  </th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+<thead><tr><th>Method                    </th><th>Toolchain       </th><th>Mean  </th><th>Median</th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>InAtIn_Inline_Warm_Reused</td><td>Default</td><td>3.775 &mu;s</td><td>0.007</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
-</tr><tr><td>Join4_Warm_Reused</td><td>Default</td><td>4.333 &mu;s</td><td>0.008</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
-</tr><tr><td>RecursiveCte_Warm_Reused</td><td>Default</td><td>4.693 &mu;s</td><td>0.009</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
-</tr><tr><td>Cte_Warm_Reused</td><td>Default</td><td>4.871 &mu;s</td><td>0.009</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
-</tr><tr><td>InAtIn_Captured_Construct</td><td>Default</td><td>166.313 &mu;s</td><td>0.314</td><td>34.6680</td><td>-</td><td>291200 B</td><td>0.36</td>
-</tr><tr><td>InAtIn_Inline_Construct</td><td>Default</td><td>177.767 &mu;s</td><td>0.335</td><td>37.1094</td><td>-</td><td>310400 B</td><td>0.38</td>
-</tr><tr><td>InAtIn_Captured_Prepare_NoHash</td><td>Default</td><td>326.456 &mu;s</td><td>0.615</td><td>50.7813</td><td>-</td><td>428800 B</td><td>0.52</td>
-</tr><tr><td>InAtIn_Inline_Prepare_NoHash</td><td>Default</td><td>374.420 &mu;s</td><td>0.706</td><td>55.1758</td><td>-</td><td>462400 B</td><td>0.56</td>
-</tr><tr><td>RecursiveCte_Construct</td><td>Default</td><td>439.208 &mu;s</td><td>0.828</td><td>114.7461</td><td>0.4883</td><td>960019 B</td><td>1.17</td>
-</tr><tr><td>InAtIn_Captured_Prepare_Hash</td><td>Default</td><td>464.514 &mu;s</td><td>0.876</td><td>63.9648</td><td>0.4883</td><td>538400 B</td><td>0.66</td>
-</tr><tr><td>InAtIn_Inline_Prepare_Hash</td><td>Default</td><td>503.825 &mu;s</td><td>0.950</td><td>66.4063</td><td>-</td><td>562400 B</td><td>0.69</td>
-</tr><tr><td>Cte_Construct</td><td>Default</td><td>530.426 &mu;s</td><td>1.000</td><td>97.6563</td><td>-</td><td>820068 B</td><td>1.00</td>
-</tr><tr><td>Join4_Construct</td><td>Default</td><td>593.773 &mu;s</td><td>1.119</td><td>101.5625</td><td>-</td><td>854486 B</td><td>1.04</td>
-</tr><tr><td>InAtIn_Inline_Warm_PlanOnly</td><td>Default</td><td>767.121 &mu;s</td><td>1.446</td><td>70.3125</td><td>-</td><td>633600 B</td><td>0.77</td>
-</tr><tr><td>RecursiveCte_Prepare_NoHash</td><td>Default</td><td>975.822 &mu;s</td><td>1.840</td><td>140.6250</td><td>-</td><td>1197625 B</td><td>1.46</td>
-</tr><tr><td>Join4_Prepare_NoHash</td><td>Default</td><td>991.429 &mu;s</td><td>1.869</td><td>125.0000</td><td>-</td><td>1088912 B</td><td>1.33</td>
-</tr><tr><td>Cte_Prepare_NoHash</td><td>Default</td><td>1,091.062 &mu;s</td><td>2.057</td><td>125.0000</td><td>-</td><td>1098489 B</td><td>1.34</td>
-</tr><tr><td>RecursiveCte_Warm_PlanOnly</td><td>Default</td><td>1,352.764 &mu;s</td><td>2.550</td><td>156.2500</td><td>-</td><td>1313629 B</td><td>1.60</td>
-</tr><tr><td>Cte_Warm_PlanOnly</td><td>Default</td><td>1,840.750 &mu;s</td><td>3.470</td><td>109.3750</td><td>-</td><td>1036084 B</td><td>1.26</td>
-</tr><tr><td>Join4_Prepare_Hash</td><td>Default</td><td>1,878.946 &mu;s</td><td>3.542</td><td>125.0000</td><td>-</td><td>1140118 B</td><td>1.39</td>
-</tr><tr><td>RecursiveCte_Prepare_Hash</td><td>Default</td><td>2,084.684 &mu;s</td><td>3.930</td><td>156.2500</td><td>-</td><td>1352829 B</td><td>1.65</td>
-</tr><tr><td>Join4_Warm_PlanOnly</td><td>Default</td><td>2,171.734 &mu;s</td><td>4.094</td><td>109.3750</td><td>-</td><td>992905 B</td><td>1.21</td>
-</tr><tr><td>Cte_Prepare_Hash</td><td>Default</td><td>2,626.746 &mu;s</td><td>4.952</td><td>140.6250</td><td>-</td><td>1187305 B</td><td>1.45</td>
-</tr><tr><td>InAtIn_Inline_Warm_Reused</td><td>InProcessEmitToolchain</td><td>5.106 &mu;s</td><td>0.009</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
-</tr><tr><td>Join4_Warm_Reused</td><td>InProcessEmitToolchain</td><td>6.194 &mu;s</td><td>0.010</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
-</tr><tr><td>RecursiveCte_Warm_Reused</td><td>InProcessEmitToolchain</td><td>7.273 &mu;s</td><td>0.012</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
-</tr><tr><td>Cte_Warm_Reused</td><td>InProcessEmitToolchain</td><td>8.321 &mu;s</td><td>0.014</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
-</tr><tr><td>InAtIn_Captured_Construct</td><td>InProcessEmitToolchain</td><td>170.358 &mu;s</td><td>0.287</td><td>34.6680</td><td>-</td><td>291202 B</td><td>0.35</td>
-</tr><tr><td>InAtIn_Inline_Construct</td><td>InProcessEmitToolchain</td><td>200.390 &mu;s</td><td>0.338</td><td>37.1094</td><td>-</td><td>310402 B</td><td>0.37</td>
-</tr><tr><td>InAtIn_Captured_Prepare_NoHash</td><td>InProcessEmitToolchain</td><td>372.675 &mu;s</td><td>0.628</td><td>51.2695</td><td>-</td><td>428804 B</td><td>0.52</td>
-</tr><tr><td>InAtIn_Inline_Prepare_NoHash</td><td>InProcessEmitToolchain</td><td>404.398 &mu;s</td><td>0.682</td><td>53.2227</td><td>-</td><td>448003 B</td><td>0.54</td>
-</tr><tr><td>RecursiveCte_Construct</td><td>InProcessEmitToolchain</td><td>444.346 &mu;s</td><td>0.749</td><td>112.7930</td><td>0.4883</td><td>945622 B</td><td>1.14</td>
-</tr><tr><td>InAtIn_Captured_Prepare_Hash</td><td>InProcessEmitToolchain</td><td>550.659 &mu;s</td><td>0.928</td><td>63.4766</td><td>-</td><td>538407 B</td><td>0.65</td>
-</tr><tr><td>Cte_Construct</td><td>InProcessEmitToolchain</td><td>593.385 &mu;s</td><td>1.000</td><td>98.6328</td><td>0.9766</td><td>828073 B</td><td>1.00</td>
-</tr><tr><td>InAtIn_Inline_Prepare_Hash</td><td>InProcessEmitToolchain</td><td>639.297 &mu;s</td><td>1.077</td><td>66.4063</td><td>-</td><td>562407 B</td><td>0.68</td>
-</tr><tr><td>Join4_Construct</td><td>InProcessEmitToolchain</td><td>708.718 &mu;s</td><td>1.194</td><td>104.4922</td><td>-</td><td>874495 B</td><td>1.06</td>
-</tr><tr><td>InAtIn_Inline_Warm_PlanOnly</td><td>InProcessEmitToolchain</td><td>961.509 &mu;s</td><td>1.620</td><td>75.1953</td><td>0.9766</td><td>633607 B</td><td>0.77</td>
-</tr><tr><td>RecursiveCte_Prepare_NoHash</td><td>InProcessEmitToolchain</td><td>1,037.703 &mu;s</td><td>1.749</td><td>142.5781</td><td>-</td><td>1197637 B</td><td>1.45</td>
-</tr><tr><td>Join4_Prepare_NoHash</td><td>InProcessEmitToolchain</td><td>1,186.580 &mu;s</td><td>2.000</td><td>132.8125</td><td>-</td><td>1112126 B</td><td>1.34</td>
-</tr><tr><td>Cte_Prepare_NoHash</td><td>InProcessEmitToolchain</td><td>1,288.320 &mu;s</td><td>2.171</td><td>130.8594</td><td>-</td><td>1106502 B</td><td>1.34</td>
-</tr><tr><td>Join4_Warm_PlanOnly</td><td>InProcessEmitToolchain</td><td>1,310.752 &mu;s</td><td>2.209</td><td>119.1406</td><td>-</td><td>1004915 B</td><td>1.21</td>
-</tr><tr><td>Join4_Prepare_Hash</td><td>InProcessEmitToolchain</td><td>1,350.230 &mu;s</td><td>2.276</td><td>134.7656</td><td>1.9531</td><td>1143328 B</td><td>1.38</td>
-</tr><tr><td>RecursiveCte_Prepare_Hash</td><td>InProcessEmitToolchain</td><td>1,402.793 &mu;s</td><td>2.364</td><td>160.1563</td><td>1.9531</td><td>1341640 B</td><td>1.62</td>
-</tr><tr><td>RecursiveCte_Warm_PlanOnly</td><td>InProcessEmitToolchain</td><td>1,409.027 &mu;s</td><td>2.375</td><td>152.3438</td><td>-</td><td>1284839 B</td><td>1.55</td>
-</tr><tr><td>Cte_Warm_PlanOnly</td><td>InProcessEmitToolchain</td><td>1,455.449 &mu;s</td><td>2.453</td><td>123.0469</td><td>-</td><td>1040897 B</td><td>1.26</td>
-</tr><tr><td>Cte_Prepare_Hash</td><td>InProcessEmitToolchain</td><td>1,676.369 &mu;s</td><td>2.825</td><td>142.5781</td><td>1.9531</td><td>1198510 B</td><td>1.45</td>
+</thead><tbody><tr><td>Gen_P0_From</td><td>Default</td><td>2.527 &mu;s</td><td>2.691 &mu;s</td><td>0.004</td><td>4.7798</td><td>-</td><td>40000 B</td><td>0.05</td>
+</tr><tr><td>InAtIn_Inline_Warm_Reused</td><td>Default</td><td>4.037 &mu;s</td><td>4.035 &mu;s</td><td>0.007</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>Join4_Warm_Reused</td><td>Default</td><td>4.637 &mu;s</td><td>4.642 &mu;s</td><td>0.008</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>RecursiveCte_Warm_Reused</td><td>Default</td><td>5.091 &mu;s</td><td>5.090 &mu;s</td><td>0.008</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>Cte_Warm_Reused</td><td>Default</td><td>5.551 &mu;s</td><td>5.596 &mu;s</td><td>0.009</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>Gen_P1_Where</td><td>Default</td><td>85.888 &mu;s</td><td>85.494 &mu;s</td><td>0.142</td><td>20.9961</td><td>-</td><td>176004 B</td><td>0.21</td>
+</tr><tr><td>RecursiveCte_P0_Anchor</td><td>Default</td><td>125.133 &mu;s</td><td>126.317 &mu;s</td><td>0.207</td><td>31.4941</td><td>-</td><td>264005 B</td><td>0.31</td>
+</tr><tr><td>Gen_P2_Select</td><td>Default</td><td>132.811 &mu;s</td><td>134.742 &mu;s</td><td>0.220</td><td>39.7949</td><td>-</td><td>333607 B</td><td>0.40</td>
+</tr><tr><td>InAtIn_Captured_Construct</td><td>Default</td><td>174.032 &mu;s</td><td>173.225 &mu;s</td><td>0.288</td><td>34.6680</td><td>-</td><td>291200 B</td><td>0.35</td>
+</tr><tr><td>InAtIn_Inline_Construct</td><td>Default</td><td>187.567 &mu;s</td><td>190.778 &mu;s</td><td>0.310</td><td>37.1094</td><td>-</td><td>310400 B</td><td>0.37</td>
+</tr><tr><td>RecursiveCte_P1_Step</td><td>Default</td><td>191.097 &mu;s</td><td>189.733 &mu;s</td><td>0.316</td><td>45.1660</td><td>-</td><td>379208 B</td><td>0.45</td>
+</tr><tr><td>Cte_P1_With</td><td>Default</td><td>224.920 &mu;s</td><td>215.136 &mu;s</td><td>0.372</td><td>40.0391</td><td>-</td><td>338414 B</td><td>0.40</td>
+</tr><tr><td>Cte_P0_Body</td><td>Default</td><td>237.071 &mu;s</td><td>232.836 &mu;s</td><td>0.392</td><td>38.0859</td><td>-</td><td>326413 B</td><td>0.39</td>
+</tr><tr><td>Cte_P2_From</td><td>Default</td><td>237.528 &mu;s</td><td>237.877 &mu;s</td><td>0.393</td><td>44.9219</td><td>-</td><td>378415 B</td><td>0.45</td>
+</tr><tr><td>InAtIn_Captured_Prepare_NoHash</td><td>Default</td><td>337.908 &mu;s</td><td>332.902 &mu;s</td><td>0.559</td><td>50.7813</td><td>-</td><td>428800 B</td><td>0.51</td>
+</tr><tr><td>Cte_P3_Join</td><td>Default</td><td>350.230 &mu;s</td><td>350.497 &mu;s</td><td>0.579</td><td>64.4531</td><td>-</td><td>542433 B</td><td>0.64</td>
+</tr><tr><td>RecursiveCte_P2_Operands</td><td>Default</td><td>356.989 &mu;s</td><td>356.224 &mu;s</td><td>0.590</td><td>78.1250</td><td>-</td><td>654413 B</td><td>0.78</td>
+</tr><tr><td>InAtIn_Inline_Prepare_NoHash</td><td>Default</td><td>385.658 &mu;s</td><td>385.880 &mu;s</td><td>0.638</td><td>55.1758</td><td>-</td><td>462400 B</td><td>0.55</td>
+</tr><tr><td>RecursiveCte_P3_UnionAll</td><td>Default</td><td>388.219 &mu;s</td><td>385.909 &mu;s</td><td>0.642</td><td>87.8906</td><td>-</td><td>739215 B</td><td>0.88</td>
+</tr><tr><td>RecursiveCte_Construct</td><td>Default</td><td>425.570 &mu;s</td><td>422.494 &mu;s</td><td>0.704</td><td>112.7930</td><td>0.4883</td><td>945619 B</td><td>1.12</td>
+</tr><tr><td>RecursiveCte_P4_Declared</td><td>Default</td><td>483.444 &mu;s</td><td>488.293 &mu;s</td><td>0.799</td><td>115.2344</td><td>0.9766</td><td>964819 B</td><td>1.15</td>
+</tr><tr><td>InAtIn_Captured_Prepare_Hash</td><td>Default</td><td>490.703 &mu;s</td><td>489.579 &mu;s</td><td>0.811</td><td>65.4297</td><td>0.9766</td><td>553600 B</td><td>0.66</td>
+</tr><tr><td>Cte_P4_Select</td><td>Default</td><td>555.709 &mu;s</td><td>555.149 &mu;s</td><td>0.919</td><td>97.6563</td><td>-</td><td>828068 B</td><td>0.98</td>
+</tr><tr><td>InAtIn_Inline_Prepare_Hash</td><td>Default</td><td>562.570 &mu;s</td><td>562.996 &mu;s</td><td>0.930</td><td>66.4063</td><td>-</td><td>562400 B</td><td>0.67</td>
+</tr><tr><td>Join4_Construct</td><td>Default</td><td>601.926 &mu;s</td><td>603.465 &mu;s</td><td>0.995</td><td>101.5625</td><td>-</td><td>854486 B</td><td>1.01</td>
+</tr><tr><td>Cte_Construct</td><td>Default</td><td>606.475 &mu;s</td><td>600.917 &mu;s</td><td>1.003</td><td>97.6563</td><td>-</td><td>842468 B</td><td>1.00</td>
+</tr><tr><td>InAtIn_Inline_Warm_PlanOnly</td><td>Default</td><td>779.112 &mu;s</td><td>780.237 &mu;s</td><td>1.288</td><td>70.3125</td><td>-</td><td>633600 B</td><td>0.75</td>
+</tr><tr><td>Cte_RawHit_P2_Comparers</td><td>Default</td><td>916.857 &mu;s</td><td>927.633 &mu;s</td><td>1.516</td><td>117.1875</td><td>-</td><td>1006484 B</td><td>1.19</td>
+</tr><tr><td>Cte_RawHit_P0_Capture</td><td>Default</td><td>929.956 &mu;s</td><td>947.618 &mu;s</td><td>1.538</td><td>117.1875</td><td>-</td><td>984884 B</td><td>1.17</td>
+</tr><tr><td>Cte_RawHit</td><td>Default</td><td>947.864 &mu;s</td><td>977.782 &mu;s</td><td>1.567</td><td>117.1875</td><td>-</td><td>984884 B</td><td>1.17</td>
+</tr><tr><td>RecursiveCte_Prepare_NoHash</td><td>Default</td><td>959.666 &mu;s</td><td>965.231 &mu;s</td><td>1.587</td><td>140.6250</td><td>-</td><td>1197625 B</td><td>1.42</td>
+</tr><tr><td>RecursiveCte_RawHit</td><td>Default</td><td>987.112 &mu;s</td><td>981.358 &mu;s</td><td>1.632</td><td>148.4375</td><td>-</td><td>1256026 B</td><td>1.49</td>
+</tr><tr><td>RecursiveCte_RawHit_P0_Capture</td><td>Default</td><td>1,026.395 &mu;s</td><td>1,034.647 &mu;s</td><td>1.697</td><td>148.4375</td><td>-</td><td>1256026 B</td><td>1.49</td>
+</tr><tr><td>Join4_Prepare_NoHash</td><td>Default</td><td>1,028.916 &mu;s</td><td>1,019.920 &mu;s</td><td>1.701</td><td>125.0000</td><td>-</td><td>1088912 B</td><td>1.29</td>
+</tr><tr><td>RecursiveCte_RawHit_P2_Comparers</td><td>Default</td><td>1,088.651 &mu;s</td><td>1,121.852 &mu;s</td><td>1.800</td><td>148.4375</td><td>-</td><td>1277626 B</td><td>1.52</td>
+</tr><tr><td>Cte_Prepare_NoHash</td><td>Default</td><td>1,112.746 &mu;s</td><td>1,113.096 &mu;s</td><td>1.840</td><td>125.0000</td><td>-</td><td>1098489 B</td><td>1.30</td>
+</tr><tr><td>Cte_RawHit_Lookup</td><td>Default</td><td>1,181.279 &mu;s</td><td>1,176.620 &mu;s</td><td>1.953</td><td>117.1875</td><td>-</td><td>1025684 B</td><td>1.22</td>
+</tr><tr><td>RecursiveCte_Warm_PlanOnly</td><td>Default</td><td>1,545.002 &mu;s</td><td>1,563.871 &mu;s</td><td>2.554</td><td>140.6250</td><td>-</td><td>1299226 B</td><td>1.54</td>
+</tr><tr><td>RecursiveCte_PlanKey</td><td>Default</td><td>1,738.050 &mu;s</td><td>1,796.885 &mu;s</td><td>2.874</td><td>140.6250</td><td>-</td><td>1302426 B</td><td>1.55</td>
+</tr><tr><td>Join4_Warm_PlanOnly</td><td>Default</td><td>1,824.943 &mu;s</td><td>1,817.857 &mu;s</td><td>3.017</td><td>109.3750</td><td>-</td><td>1008905 B</td><td>1.20</td>
+</tr><tr><td>RecursiveCte_RawHit_Lookup</td><td>Default</td><td>1,844.905 &mu;s</td><td>1,812.468 &mu;s</td><td>3.050</td><td>156.2500</td><td>-</td><td>1367229 B</td><td>1.62</td>
+</tr><tr><td>Cte_Warm_PlanOnly</td><td>Default</td><td>2,139.203 &mu;s</td><td>2,226.068 &mu;s</td><td>3.537</td><td>109.3750</td><td>-</td><td>1036084 B</td><td>1.23</td>
+</tr><tr><td>Cte_PlanKey</td><td>Default</td><td>2,174.567 &mu;s</td><td>1,788.856 &mu;s</td><td>3.595</td><td>109.3750</td><td>-</td><td>1036084 B</td><td>1.23</td>
+</tr><tr><td>RecursiveCte_Prepare_Hash</td><td>Default</td><td>2,210.228 &mu;s</td><td>1,702.054 &mu;s</td><td>3.654</td><td>156.2500</td><td>-</td><td>1344829 B</td><td>1.60</td>
+</tr><tr><td>Cte_Prepare_Hash</td><td>Default</td><td>2,296.302 &mu;s</td><td>2,515.629 &mu;s</td><td>3.797</td><td>140.6250</td><td>-</td><td>1190505 B</td><td>1.41</td>
+</tr><tr><td>Join4_Prepare_Hash</td><td>Default</td><td>2,690.731 &mu;s</td><td>2,738.057 &mu;s</td><td>4.449</td><td>125.0000</td><td>-</td><td>1163318 B</td><td>1.38</td>
+</tr><tr><td>Cte_Warm_EndToEnd</td><td>Default</td><td>3,110.853 &mu;s</td><td>3,116.062 &mu;s</td><td>5.143</td><td>125.0000</td><td>-</td><td>1124094 B</td><td>1.33</td>
+</tr><tr><td>RecursiveCte_Warm_EndToEnd</td><td>Default</td><td>6,170.467 &mu;s</td><td>6,233.974 &mu;s</td><td>10.202</td><td>156.2500</td><td>-</td><td>1360032 B</td><td>1.61</td>
+</tr><tr><td>Gen_P0_From</td><td>InProcessEmitToolchain</td><td>2.664 &mu;s</td><td>2.757 &mu;s</td><td>0.005</td><td>4.7798</td><td>-</td><td>40000 B</td><td>0.05</td>
+</tr><tr><td>InAtIn_Inline_Warm_Reused</td><td>InProcessEmitToolchain</td><td>5.007 &mu;s</td><td>5.013 &mu;s</td><td>0.009</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>Join4_Warm_Reused</td><td>InProcessEmitToolchain</td><td>5.065 &mu;s</td><td>5.057 &mu;s</td><td>0.009</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>Cte_Warm_Reused</td><td>InProcessEmitToolchain</td><td>7.078 &mu;s</td><td>7.068 &mu;s</td><td>0.012</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>RecursiveCte_Warm_Reused</td><td>InProcessEmitToolchain</td><td>7.399 &mu;s</td><td>7.365 &mu;s</td><td>0.013</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>Gen_P1_Where</td><td>InProcessEmitToolchain</td><td>66.142 &mu;s</td><td>66.856 &mu;s</td><td>0.113</td><td>19.2871</td><td>-</td><td>161604 B</td><td>0.19</td>
+</tr><tr><td>RecursiveCte_P0_Anchor</td><td>InProcessEmitToolchain</td><td>113.460 &mu;s</td><td>113.061 &mu;s</td><td>0.193</td><td>31.4941</td><td>-</td><td>264006 B</td><td>0.31</td>
+</tr><tr><td>Gen_P2_Select</td><td>InProcessEmitToolchain</td><td>137.418 &mu;s</td><td>136.918 &mu;s</td><td>0.234</td><td>39.7949</td><td>-</td><td>333608 B</td><td>0.40</td>
+</tr><tr><td>InAtIn_Captured_Construct</td><td>InProcessEmitToolchain</td><td>164.453 &mu;s</td><td>163.913 &mu;s</td><td>0.280</td><td>34.6680</td><td>-</td><td>291201 B</td><td>0.35</td>
+</tr><tr><td>InAtIn_Inline_Construct</td><td>InProcessEmitToolchain</td><td>185.761 &mu;s</td><td>185.669 &mu;s</td><td>0.317</td><td>37.1094</td><td>-</td><td>310401 B</td><td>0.37</td>
+</tr><tr><td>RecursiveCte_P1_Step</td><td>InProcessEmitToolchain</td><td>187.180 &mu;s</td><td>186.634 &mu;s</td><td>0.319</td><td>45.1660</td><td>0.2441</td><td>379209 B</td><td>0.45</td>
+</tr><tr><td>Cte_P0_Body</td><td>InProcessEmitToolchain</td><td>208.636 &mu;s</td><td>207.387 &mu;s</td><td>0.356</td><td>38.8184</td><td>-</td><td>326414 B</td><td>0.39</td>
+</tr><tr><td>Cte_P1_With</td><td>InProcessEmitToolchain</td><td>215.950 &mu;s</td><td>217.022 &mu;s</td><td>0.368</td><td>40.2832</td><td>-</td><td>338415 B</td><td>0.40</td>
+</tr><tr><td>Cte_P2_From</td><td>InProcessEmitToolchain</td><td>220.281 &mu;s</td><td>221.229 &mu;s</td><td>0.375</td><td>45.1660</td><td>-</td><td>378416 B</td><td>0.45</td>
+</tr><tr><td>RecursiveCte_P2_Operands</td><td>InProcessEmitToolchain</td><td>319.543 &mu;s</td><td>317.717 &mu;s</td><td>0.545</td><td>76.6602</td><td>-</td><td>643215 B</td><td>0.77</td>
+</tr><tr><td>Cte_P3_Join</td><td>InProcessEmitToolchain</td><td>349.185 &mu;s</td><td>350.610 &mu;s</td><td>0.595</td><td>64.4531</td><td>-</td><td>542435 B</td><td>0.65</td>
+</tr><tr><td>RecursiveCte_P3_UnionAll</td><td>InProcessEmitToolchain</td><td>350.480 &mu;s</td><td>352.013 &mu;s</td><td>0.597</td><td>86.4258</td><td>0.4883</td><td>724817 B</td><td>0.86</td>
+</tr><tr><td>InAtIn_Captured_Prepare_NoHash</td><td>InProcessEmitToolchain</td><td>386.965 &mu;s</td><td>386.740 &mu;s</td><td>0.660</td><td>50.7813</td><td>-</td><td>428802 B</td><td>0.51</td>
+</tr><tr><td>InAtIn_Inline_Prepare_NoHash</td><td>InProcessEmitToolchain</td><td>407.395 &mu;s</td><td>409.193 &mu;s</td><td>0.694</td><td>53.2227</td><td>-</td><td>448002 B</td><td>0.53</td>
+</tr><tr><td>RecursiveCte_Construct</td><td>InProcessEmitToolchain</td><td>444.142 &mu;s</td><td>444.238 &mu;s</td><td>0.757</td><td>112.7930</td><td>0.4883</td><td>945621 B</td><td>1.13</td>
+</tr><tr><td>RecursiveCte_P4_Declared</td><td>InProcessEmitToolchain</td><td>451.283 &mu;s</td><td>453.594 &mu;s</td><td>0.769</td><td>113.2813</td><td>0.4883</td><td>948822 B</td><td>1.13</td>
+</tr><tr><td>Cte_P4_Select</td><td>InProcessEmitToolchain</td><td>559.734 &mu;s</td><td>566.738 &mu;s</td><td>0.954</td><td>99.6094</td><td>-</td><td>839272 B</td><td>1.00</td>
+</tr><tr><td>InAtIn_Captured_Prepare_Hash</td><td>InProcessEmitToolchain</td><td>573.053 &mu;s</td><td>573.293 &mu;s</td><td>0.977</td><td>63.4766</td><td>-</td><td>538405 B</td><td>0.64</td>
+</tr><tr><td>Cte_Construct</td><td>InProcessEmitToolchain</td><td>586.653 &mu;s</td><td>585.457 &mu;s</td><td>1.000</td><td>97.6563</td><td>-</td><td>839268 B</td><td>1.00</td>
+</tr><tr><td>Join4_Construct</td><td>InProcessEmitToolchain</td><td>658.924 &mu;s</td><td>653.555 &mu;s</td><td>1.123</td><td>101.5625</td><td>-</td><td>854491 B</td><td>1.02</td>
+</tr><tr><td>InAtIn_Inline_Prepare_Hash</td><td>InProcessEmitToolchain</td><td>691.595 &mu;s</td><td>658.775 &mu;s</td><td>1.179</td><td>66.4063</td><td>-</td><td>562405 B</td><td>0.67</td>
+</tr><tr><td>Cte_RawHit_P0_Capture</td><td>InProcessEmitToolchain</td><td>893.652 &mu;s</td><td>898.260 &mu;s</td><td>1.523</td><td>119.1406</td><td>1.9531</td><td>1004086 B</td><td>1.20</td>
+</tr><tr><td>Cte_RawHit</td><td>InProcessEmitToolchain</td><td>910.053 &mu;s</td><td>920.369 &mu;s</td><td>1.551</td><td>119.1406</td><td>1.9531</td><td>1004086 B</td><td>1.20</td>
+</tr><tr><td>Cte_RawHit_P2_Comparers</td><td>InProcessEmitToolchain</td><td>912.351 &mu;s</td><td>916.014 &mu;s</td><td>1.555</td><td>122.0703</td><td>2.9297</td><td>1025688 B</td><td>1.22</td>
+</tr><tr><td>InAtIn_Inline_Warm_PlanOnly</td><td>InProcessEmitToolchain</td><td>994.096 &mu;s</td><td>992.306 &mu;s</td><td>1.695</td><td>74.2188</td><td>-</td><td>633610 B</td><td>0.75</td>
+</tr><tr><td>RecursiveCte_Prepare_NoHash</td><td>InProcessEmitToolchain</td><td>1,003.166 &mu;s</td><td>998.241 &mu;s</td><td>1.710</td><td>142.5781</td><td>-</td><td>1197634 B</td><td>1.43</td>
+</tr><tr><td>RecursiveCte_RawHit_P0_Capture</td><td>InProcessEmitToolchain</td><td>1,043.334 &mu;s</td><td>1,029.394 &mu;s</td><td>1.778</td><td>148.4375</td><td>3.9063</td><td>1256034 B</td><td>1.50</td>
+</tr><tr><td>RecursiveCte_RawHit</td><td>InProcessEmitToolchain</td><td>1,054.447 &mu;s</td><td>1,053.493 &mu;s</td><td>1.797</td><td>148.4375</td><td>3.9063</td><td>1256035 B</td><td>1.50</td>
+</tr><tr><td>Join4_Prepare_NoHash</td><td>InProcessEmitToolchain</td><td>1,074.504 &mu;s</td><td>1,075.606 &mu;s</td><td>1.832</td><td>128.9063</td><td>-</td><td>1092120 B</td><td>1.30</td>
+</tr><tr><td>RecursiveCte_RawHit_P2_Comparers</td><td>InProcessEmitToolchain</td><td>1,095.230 &mu;s</td><td>1,060.763 &mu;s</td><td>1.867</td><td>152.3438</td><td>3.9063</td><td>1277636 B</td><td>1.52</td>
+</tr><tr><td>Cte_Prepare_NoHash</td><td>InProcessEmitToolchain</td><td>1,164.454 &mu;s</td><td>1,165.007 &mu;s</td><td>1.985</td><td>132.8125</td><td>-</td><td>1117700 B</td><td>1.33</td>
+</tr><tr><td>Cte_RawHit_Lookup</td><td>InProcessEmitToolchain</td><td>1,191.375 &mu;s</td><td>1,181.581 &mu;s</td><td>2.031</td><td>123.0469</td><td>1.9531</td><td>1036894 B</td><td>1.24</td>
+</tr><tr><td>Join4_Warm_PlanOnly</td><td>InProcessEmitToolchain</td><td>1,199.884 &mu;s</td><td>1,199.045 &mu;s</td><td>2.045</td><td>117.1875</td><td>-</td><td>984910 B</td><td>1.17</td>
+</tr><tr><td>Cte_PlanKey</td><td>InProcessEmitToolchain</td><td>1,229.575 &mu;s</td><td>1,229.308 &mu;s</td><td>2.096</td><td>123.0469</td><td>1.9531</td><td>1044094 B</td><td>1.24</td>
+</tr><tr><td>Join4_Prepare_Hash</td><td>InProcessEmitToolchain</td><td>1,262.809 &mu;s</td><td>1,258.955 &mu;s</td><td>2.153</td><td>132.8125</td><td>1.9531</td><td>1123323 B</td><td>1.34</td>
+</tr><tr><td>RecursiveCte_Prepare_Hash</td><td>InProcessEmitToolchain</td><td>1,331.873 &mu;s</td><td>1,335.529 &mu;s</td><td>2.270</td><td>160.1563</td><td>1.9531</td><td>1341636 B</td><td>1.60</td>
+</tr><tr><td>Cte_Warm_PlanOnly</td><td>InProcessEmitToolchain</td><td>1,340.352 &mu;s</td><td>1,344.518 &mu;s</td><td>2.285</td><td>125.0000</td><td>-</td><td>1052095 B</td><td>1.25</td>
+</tr><tr><td>RecursiveCte_RawHit_Lookup</td><td>InProcessEmitToolchain</td><td>1,382.743 &mu;s</td><td>1,383.353 &mu;s</td><td>2.357</td><td>152.3438</td><td>1.9531</td><td>1277636 B</td><td>1.52</td>
+</tr><tr><td>RecursiveCte_PlanKey</td><td>InProcessEmitToolchain</td><td>1,397.589 &mu;s</td><td>1,397.209 &mu;s</td><td>2.382</td><td>152.3438</td><td>-</td><td>1284836 B</td><td>1.53</td>
+</tr><tr><td>RecursiveCte_Warm_PlanOnly</td><td>InProcessEmitToolchain</td><td>1,431.973 &mu;s</td><td>1,432.587 &mu;s</td><td>2.441</td><td>152.3438</td><td>-</td><td>1284835 B</td><td>1.53</td>
+</tr><tr><td>Cte_Prepare_Hash</td><td>InProcessEmitToolchain</td><td>1,438.777 &mu;s</td><td>1,436.890 &mu;s</td><td>2.453</td><td>144.5313</td><td>1.9531</td><td>1209708 B</td><td>1.44</td>
+</tr><tr><td>Cte_Warm_EndToEnd</td><td>InProcessEmitToolchain</td><td>3,214.744 &mu;s</td><td>3,216.013 &mu;s</td><td>5.480</td><td>132.8125</td><td>-</td><td>1131292 B</td><td>1.35</td>
+</tr><tr><td>RecursiveCte_Warm_EndToEnd</td><td>InProcessEmitToolchain</td><td>3,643.894 &mu;s</td><td>3,642.234 &mu;s</td><td>6.211</td><td>160.1563</td><td>-</td><td>1360047 B</td><td>1.62</td>
 </tr></tbody></table>
 </body>
 </html>

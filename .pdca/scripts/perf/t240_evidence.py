@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/perf/t240_evidence.py — T240 (#240) construction-allocation ratio reader.
+""".pdca/scripts/perf/t240_evidence.py — T240 (#240) construction-allocation ratio reader.
 
 Reader/computator over BenchmarkDotNet JSON exports only.  It introduces **no new
 measurement methodology**: the measurement stays BenchmarkDotNet plus the same-round

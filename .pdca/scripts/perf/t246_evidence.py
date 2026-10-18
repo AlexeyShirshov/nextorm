@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/perf/t246_evidence.py — T246 rv2 measurement-protocol driver and fail-closed gate.
+""".pdca/scripts/perf/t246_evidence.py — T246 rv2 measurement-protocol driver and fail-closed gate.
 
 Python 3 standard library only.  The tool implements the planned rv2 CLI of
 ``docs/specs/status/D246-raw-datareader-2.md`` ("Exact command registry"):
@@ -11,6 +11,7 @@ Python 3 standard library only.  The tool implements the planned rv2 CLI of
     modes      fixed 15 % launch-median mode detector with run replication
     gate       fail-closed final gate over the frozen protocol lock
     self-test  negative fixtures proving fail-closed rejection
+    parse-check  read-only log/JSON per-op reconciliation of captured runs
     replay     run exactly one pinned recipe command
 
 Evidence is written under ``--root`` (normally ``artifacts/pdca/T246/rv2``).
@@ -88,8 +89,8 @@ BENCH_PROJECT = "benchmarks/nextorm.benchmark"
 BENCH_TYPE = "SqliteBenchmarkStreaming"
 HARNESS_PATH = "benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStreaming.cs"
 CONFIG_PATH = "benchmarks/nextorm.benchmark/Infrastructure/NextormConfig.cs"
-DRIVER_PATH = "scripts/perf/t246_evidence.py"
-BUDGETS_PATH = "scripts/perf/t246-budgets.json"
+DRIVER_PATH = ".pdca/scripts/perf/t246_evidence.py"
+BUDGETS_PATH = ".pdca/scripts/perf/t246-budgets.json"
 
 RUNTIME_DIR = Path("/tmp/opencode/T246/rv2")
 EXIT_OK = 0
@@ -240,7 +241,7 @@ def rel(path):
 
 
 def repo_root():
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[3]
 
 
 # ---------------------------------------------------------------------------
@@ -549,6 +550,152 @@ def _parse_int_field(row, key):
         raise Reject("invalid-csv-count:%s=%r" % (CSV_COLUMNS[key], raw)) from exc
 
 
+# ---------------------------------------------------------------------------
+# Resolved out-of-process job (H-N2)
+# ---------------------------------------------------------------------------
+# The required settings tuple of the effective default toolchain.  BDN names the
+# auto-generated job differently on every machine (``Job-NREBDM`` in the rv2
+# capture), so a literal ``Job=Default`` display name is neither necessary nor
+# sufficient: the job is resolved from the retained full log header instead.
+JOB_SETTING_ORDER = (
+    "invocationcount",
+    "iterationcount",
+    "launchcount",
+    "unrollfactor",
+    "warmupcount",
+)
+JOB_SETTING_COUNTS = {
+    "invocationcount": "invocation_count",
+    "iterationcount": "iteration_count",
+    "launchcount": "launch_count",
+    "unrollfactor": "unroll_factor",
+    "warmupcount": "warmup_count",
+}
+_JOB_HEADER_RE = re.compile(r"^\s*//\s*Job:\s*(?P<decl>.+?)\s*$")
+_JOB_DECLARATION_RE = re.compile(
+    r"^(?P<job_id>[A-Za-z0-9_.\-]+)\((?P<settings>[^()]*)\)$"
+)
+# ``WorkloadResult   1: 64 op, 259854520.00 ns, 4.0602 ms/op``: the retained
+# value is the **iteration total**; per-op requires exactly one division by the
+# logged operation count.
+WORKLOAD_RESULT_RE = re.compile(
+    r"^WorkloadResult\s+\d+:\s+(\d+)\s+op,\s+([0-9.]+)\s+ns,\s+[0-9.]+\s+(?:ns|μs|ms|s)/op"
+)
+
+
+def _parse_job_settings(settings_text):
+    settings = {}
+    for part in settings_text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            raise Reject("job-setting-unparseable:%s" % part)
+        name, value = part.split("=", 1)
+        name = name.strip().lower()
+        value = value.strip()
+        try:
+            settings[name] = int(value)
+        except ValueError as exc:
+            raise Reject("job-setting-not-integer:%s=%s" % (name, value)) from exc
+    return settings
+
+
+def parse_job_header(log_text):
+    """Return the first retained ``// Job:`` declaration of a BDN log.
+
+    The full header is the only evidence that names the resolved settings:
+    ``Job-NREBDM(InvocationCount=64, IterationCount=10, LaunchCount=3,
+    UnrollFactor=1, WarmupCount=5)``.  A bare or truncated declaration returns
+    an empty ``settings`` mapping so the caller can reject it explicitly.
+    """
+    if not log_text:
+        return None
+    for line in log_text.splitlines():
+        match = _JOB_HEADER_RE.match(line)
+        if not match:
+            continue
+        declaration = match.group("decl").strip()
+        parsed = _JOB_DECLARATION_RE.match(declaration)
+        if not parsed:
+            return {
+                "raw": declaration,
+                "job_id": declaration.split("(", 1)[0].strip(),
+                "settings": {},
+            }
+        return {
+            "raw": declaration,
+            "job_id": parsed.group("job_id"),
+            "settings": _parse_job_settings(parsed.group("settings")),
+        }
+    return None
+
+
+def resolve_job_view(job, toolchain, display_info, log_text, counts,
+                     expected_invocation_count):
+    """Resolve the effective job from the log header instead of its name.
+
+    Accepted only when the retained log header resolves to the required
+    settings tuple, the execution is out-of-process and the CSV ``Job`` cell
+    agrees with the header's job id.  Every wrong or missing setting is named
+    individually so the failure is observable in evidence.
+    """
+    expected = {
+        "invocationcount": expected_invocation_count,
+        "iterationcount": ITERATION_COUNT,
+        "launchcount": LAUNCH_COUNT,
+        "unrollfactor": UNROLL_FACTOR,
+        "warmupcount": WARMUP_COUNT,
+    }
+    errors = []
+    out_of_process = (
+        "inprocess" not in (job + " " + toolchain).lower().replace(" ", "")
+    )
+    if not out_of_process:
+        errors.append("job-toolchain-inprocess:%s" % toolchain)
+    header = parse_job_header(log_text)
+    resolved = None
+    if header is None:
+        errors.append("job-header-unresolved:no-log-job-header")
+    else:
+        settings = dict(header["settings"])
+        if not settings:
+            errors.append("job-header-unresolved:no-settings:%s" % header["raw"])
+        for name in JOB_SETTING_ORDER:
+            if name not in settings:
+                errors.append("job-setting-missing:%s" % name)
+                continue
+            if settings[name] != expected[name]:
+                errors.append(
+                    "job-setting-mismatch:%s:%d!=%d"
+                    % (name, settings[name], expected[name])
+                )
+            csv_value = (counts or {}).get(JOB_SETTING_COUNTS[name])
+            if csv_value != settings[name]:
+                errors.append(
+                    "job-settings-csv-mismatch:%s:%d!=%r"
+                    % (name, settings[name], csv_value)
+                )
+        if header["job_id"] != job:
+            errors.append(
+                "csv-log-job-mismatch:%s!=%s" % (job, header["job_id"])
+            )
+        resolved = {
+            "job_id": header["job_id"],
+            "settings": settings,
+            "header": header["raw"],
+        }
+    return {
+        "job": job,
+        "toolchain": toolchain,
+        "display_info": display_info,
+        "out_of_process": out_of_process,
+        "is_default": not errors,
+        "resolved": resolved,
+        "resolution_errors": errors,
+    }
+
+
 def _parse_log_launches(log_text):
     """Recover per-launch WorkloadResult values from the BDN log.
 
@@ -561,9 +708,6 @@ def _parse_log_launches(log_text):
     launches = {}
     current = 0
     launch_re = re.compile(r"^//\s*Launch:\s*(\d+)\s*/\s*(\d+)\s*$")
-    result_re = re.compile(
-        r"^WorkloadResult\s+\d+:\s+(\d+)\s+op,\s+([0-9.]+)\s+ns,\s+[0-9.]+\s+(?:ns|μs|ms|s)/op"
-    )
     declared = None
     for line in log_text.splitlines():
         match = launch_re.match(line.strip())
@@ -576,7 +720,7 @@ def _parse_log_launches(log_text):
                 raise Reject("log-launch-count-drift:%s!=%s" % (declared, count))
             launches.setdefault(current, [])
             continue
-        match = result_re.match(line.strip())
+        match = WORKLOAD_RESULT_RE.match(line.strip())
         if match and current:
             operations = int(match.group(1))
             if operations <= 0:
@@ -810,15 +954,6 @@ def parse_stratum(stratum_dir, stratum, invocation_count, require_log=True):
     job = (job_row.get(CSV_COLUMNS["job"]) or "").strip()
     toolchain = (job_row.get(CSV_COLUMNS["toolchain"]) or "").strip()
     display = benchmarks_raw[0].get("DisplayInfo") or ""
-    job_view = {
-        "job": job,
-        "toolchain": toolchain,
-        "display_info": display,
-        "out_of_process": (
-            "inprocess" not in (job + toolchain + display).lower().replace(" ", "")
-        ),
-        "is_default": job.lower().startswith("default"),
-    }
 
     counts = {
         "invocation_count": _parse_int_field(job_row, "invocation_count"),
@@ -827,6 +962,15 @@ def parse_stratum(stratum_dir, stratum, invocation_count, require_log=True):
         "warmup_count": _parse_int_field(job_row, "warmup_count"),
         "iteration_count": _parse_int_field(job_row, "iteration_count"),
     }
+    log_text = read_text(files["log"]) if files["log"] else None
+    job_view = resolve_job_view(
+        job,
+        toolchain,
+        display,
+        log_text,
+        counts,
+        invocation_count,
+    )
 
     benchmarks = {}
     csv_errors = {}
@@ -886,7 +1030,6 @@ def parse_stratum(stratum_dir, stratum, invocation_count, require_log=True):
     parity_rows = {}
     warning = None
     if files["log"]:
-        log_text = read_text(files["log"])
         parity_rows = _log_parity(log_text)
         warning = duration_warning_line(log_text)
         method_blocks = _parse_log_method_blocks(log_text)
@@ -920,23 +1063,19 @@ def parse_stratum(stratum_dir, stratum, invocation_count, require_log=True):
     }
 
 
-def _parse_log_method_blocks(log_text):
-    """Recover ``method -> launch -> [ns]`` from a BDN log.
+def parse_log_workload_records(log_text):
+    """Recover ``method -> [record]`` from a BDN log without dividing.
 
     BDN logs a ``// Benchmark: <type>.<method>: Job-...`` header before each
     benchmark and ``// Launch: i / N`` before each child launch.  Each
     ``WorkloadResult`` line carries the iteration total in ns and the operation
-    count, so it is normalised to ns/op to be comparable with the JSON
-    ``Nanoseconds / Operations`` launch means.
+    count; the record keeps both so every caller can divide exactly once.
     """
     blocks = {}
     current_method = None
     current_launch = 0
     header_re = re.compile(r"^//\s*Benchmark:\s*([A-Za-z0-9_.]+)")
     launch_re = re.compile(r"^//\s*Launch:\s*(\d+)\s*/\s*(\d+)\s*$")
-    result_re = re.compile(
-        r"^WorkloadResult\s+\d+:\s+(\d+)\s+op,\s+([0-9.]+)\s+ns,\s+[0-9.]+\s+(?:ns|μs|ms|s)/op"
-    )
     for line in log_text.splitlines():
         stripped = line.strip()
         match = header_re.match(stripped)
@@ -949,13 +1088,33 @@ def _parse_log_method_blocks(log_text):
         if match:
             current_launch = int(match.group(1))
             continue
-        match = result_re.match(stripped)
+        match = WORKLOAD_RESULT_RE.match(stripped)
         if match and current_method and current_launch:
             operations = int(match.group(1))
             if operations <= 0:
                 raise Reject("log-operations-nonpositive:%d" % operations)
-            blocks.setdefault(current_method, {}).setdefault(current_launch, []).append(
-                float(match.group(2)) / operations
+            blocks.setdefault(current_method, []).append(
+                {
+                    "launch": current_launch,
+                    "operations": operations,
+                    "nanoseconds": float(match.group(2)),
+                }
+            )
+    return blocks
+
+
+def _parse_log_method_blocks(log_text):
+    """Recover ``method -> launch -> [ns/op]`` from a BDN log.
+
+    Each ``WorkloadResult`` line carries the iteration total in ns and the
+    operation count, so it is normalised to ns/op exactly once to be comparable
+    with the JSON ``Nanoseconds / Operations`` launch means.
+    """
+    blocks = {}
+    for method, records in parse_log_workload_records(log_text).items():
+        for record in records:
+            blocks.setdefault(method, {}).setdefault(record["launch"], []).append(
+                record["nanoseconds"] / record["operations"]
             )
     return blocks
 
@@ -969,6 +1128,8 @@ def validate_stratum_view(view, stratum, expected_invocation_count,
     job = view.get("job") or {}
     if not job.get("out_of_process"):
         reasons.append("job-not-out-of-process:%s" % job.get("toolchain"))
+    for reason in job.get("resolution_errors") or []:
+        reasons.append(reason)
     if not job.get("is_default"):
         reasons.append("job-not-default:%s" % job.get("job"))
     counts = view.get("counts") or {}
@@ -1541,7 +1702,8 @@ __FIXTURE_OS = "Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)"
 __FIXTURE_SDK = "10.0.401"
 
 
-def _csv_row(method, categories, counts, mean_ns, error_ns, stddev_ns, alloc_bytes):
+def _csv_row(method, categories, counts, mean_ns, error_ns, stddev_ns, alloc_bytes,
+             job="Default", toolchain="Default"):
     def time_cell(value_ns):
         if value_ns >= 1e6:
             return "%.1f ms" % (value_ns / 1e6)
@@ -1551,8 +1713,8 @@ def _csv_row(method, categories, counts, mean_ns, error_ns, stddev_ns, alloc_byt
 
     return {
         "Method": method,
-        "Job": "Default",
-        "Toolchain": "Default",
+        "Job": job,
+        "Toolchain": toolchain,
         "Categories": categories,
         "InvocationCount": str(counts["invocation_count"]),
         "UnrollFactor": str(counts["unroll_factor"]),
@@ -1575,7 +1737,10 @@ def _launch_values(launch_mean):
 
 
 def _benchmark_json(method, launch_means, level_ordinal=CONFIDENCE_LEVEL_ORDINAL,
-                    alloc_bytes=1000, launch_values=None):
+                    alloc_bytes=1000, launch_values=None, operations=1,
+                    display_job=None):
+    if not isinstance(operations, int) or operations < 1:
+        raise Reject("fixture-operations-invalid:%r" % (operations,))
     values = []
     measurements = []
     for index, launch_mean in enumerate(launch_means, start=1):
@@ -1591,8 +1756,10 @@ def _benchmark_json(method, launch_means, level_ordinal=CONFIDENCE_LEVEL_ORDINAL
                     "IterationStage": "Result",
                     "LaunchIndex": index,
                     "IterationIndex": iteration,
-                    "Operations": 1,
-                    "Nanoseconds": value,
+                    "Operations": operations,
+                    # BDN exports the iteration total; the per-operation value
+                    # is ``Nanoseconds / Operations`` (see _attach_values).
+                    "Nanoseconds": value * operations,
                 }
             )
     pooled = pooled_statistics(values)
@@ -1621,8 +1788,12 @@ def _benchmark_json(method, launch_means, level_ordinal=CONFIDENCE_LEVEL_ORDINAL
         "ConfidenceInterval": interval,
     }
     return {
-        "DisplayInfo": "%s.%s: Job-ABC(InvocationCount=%d, UnrollFactor=1)"
-        % (BENCH_TYPE, method, 64),
+        "DisplayInfo": "%s.%s: %s"
+        % (
+            BENCH_TYPE,
+            method,
+            display_job or "Default(InvocationCount=64, UnrollFactor=1)",
+        ),
         "Namespace": "NextORM.Benchmark",
         "Type": BENCH_TYPE,
         "Method": method,
@@ -1630,14 +1801,20 @@ def _benchmark_json(method, launch_means, level_ordinal=CONFIDENCE_LEVEL_ORDINAL
         "Parameters": "",
         "FullName": "NextORM.Benchmark.%s.%s" % (BENCH_TYPE, method),
         "Statistics": statistics,
-        "Memory": {"BytesAllocatedPerOperation": int(alloc_bytes), "TotalOperations": 1},
+        "Memory": {
+            "BytesAllocatedPerOperation": int(alloc_bytes),
+            "TotalOperations": operations,
+        },
         "Measurements": measurements,
     }
 
 
 def build_stratum_fixture(stratum_dir, stratum, method_means, method_allocations,
                           counts=None, level_ordinal=CONFIDENCE_LEVEL_ORDINAL,
-                          write_log=True, launch_values=None, labels=None):
+                          write_log=True, launch_values=None, labels=None,
+                          operations=1, log_header_job=None, job_id="Default",
+                          csv_job=None, toolchain="Default",
+                          job_header_override=None, job_setting_overrides=None):
     """Write a synthetic BDN JSON/CSV/log triple for one stratum."""
     stratum_dir = ensure_dir(stratum_dir)
     results = ensure_dir(stratum_dir / "results")
@@ -1649,6 +1826,22 @@ def build_stratum_fixture(stratum_dir, stratum, method_means, method_allocations
         "warmup_count": WARMUP_COUNT,
         "iteration_count": ITERATION_COUNT,
     }
+    if not isinstance(operations, int) or operations < 1:
+        raise Reject("fixture-operations-invalid:%r" % (operations,))
+    job_id = job_id or log_header_job or "Default"
+    csv_job = job_id if csv_job is None else csv_job
+    settings = {
+        "InvocationCount": counts["invocation_count"],
+        "IterationCount": counts["iteration_count"],
+        "LaunchCount": counts["launch_count"],
+        "UnrollFactor": counts["unroll_factor"],
+        "WarmupCount": counts["warmup_count"],
+    }
+    settings.update(job_setting_overrides or {})
+    declaration = job_header_override or "%s(%s)" % (
+        job_id,
+        ", ".join("%s=%s" % (name, value) for name, value in settings.items()),
+    )
     benchmarks = []
     rows = []
     for method in spec["methods"]:
@@ -1660,6 +1853,8 @@ def build_stratum_fixture(stratum_dir, stratum, method_means, method_allocations
             level_ordinal=level_ordinal,
             alloc_bytes=alloc,
             launch_values=launch_values,
+            operations=operations,
+            display_job=declaration,
         )
         benchmarks.append(benchmark)
         rows.append(
@@ -1671,6 +1866,8 @@ def build_stratum_fixture(stratum_dir, stratum, method_means, method_allocations
                 benchmark["Statistics"]["ConfidenceInterval"]["Margin"],
                 benchmark["Statistics"]["StandardDeviation"],
                 alloc,
+                job=csv_job,
+                toolchain=toolchain,
             )
         )
     document = {
@@ -1710,20 +1907,22 @@ def build_stratum_fixture(stratum_dir, stratum, method_means, method_allocations
     if write_log:
         lines = [
             "// BenchmarkDotNet v0.15.8",
-            "Job=Default  Runtime=.NET 10.0  Toolchain=Default",
+            "Job=%s  Runtime=.NET 10.0  Toolchain=%s" % (job_id, toolchain),
+            "// Job: %s" % declaration,
             "IterationCount=10  LaunchCount=3  WarmupCount=5",
         ]
         for method in spec["methods"]:
-            lines.append("// Benchmark: %s.%s: Job-ABC(InvocationCount=%s, UnrollFactor=1)"
-                         % (BENCH_TYPE, method, counts["invocation_count"]))
+            lines.append("// Benchmark: %s.%s: %s"
+                         % (BENCH_TYPE, method, declaration))
             for launch_index, launch_mean in enumerate(method_means[method], start=1):
                 lines.append("// Launch: %d / %d" % (launch_index, LAUNCH_COUNT))
                 for iteration, value in enumerate(
                     _launch_values(launch_mean), start=1
                 ):
                     lines.append(
-                        "WorkloadResult %3d: 1 op, %.2f ns, %.4f ms/op"
-                        % (iteration, value, value / 1e6)
+                        "WorkloadResult %3d: %d op, %.2f ns, %.4f ms/op"
+                        % (iteration, operations, value * operations,
+                           value / 1e6)
                     )
         lines.extend(
             [
@@ -2405,6 +2604,99 @@ def self_test_cases():
         "unreplicated-mode",
         "fast mode reproduced only in run 1",
         unreplicated_mode,
+    )
+
+    fixture_counts = {
+        "invocation_count": 64,
+        "unroll_factor": UNROLL_FACTOR,
+        "launch_count": LAUNCH_COUNT,
+        "warmup_count": WARMUP_COUNT,
+        "iteration_count": ITERATION_COUNT,
+    }
+    fixture_means = {
+        method: [5_000_000.0, 5_005_000.0, 5_010_000.0]
+        for method in STRATA["10k"]["methods"]
+    }
+    fixture_allocations = {method: 1000 for method in STRATA["10k"]["methods"]}
+
+    def unnormalised_iteration_total(inputs):
+        fixture_root = temp_root / "unnormalised-64"
+        build_stratum_fixture(
+            fixture_root, "10k", fixture_means, fixture_allocations,
+            counts=fixture_counts, operations=64,
+        )
+        log_path = next(fixture_root.glob("*.log"))
+        log_path.write_text(
+            log_path.read_text(encoding="utf-8").replace(" 64 op, ", " 1 op, "),
+            encoding="utf-8",
+        )
+        try:
+            parse_stratum(fixture_root, "10k", 64)
+        except Reject as exc:
+            if exc.reason.startswith("log-json-launch-mean-mismatch"):
+                return [exc.reason]
+            return []
+        return []
+
+    add_case(
+        "unnormalised-iteration-total",
+        "64-op WorkloadResult relabelled as 1 op, raw totals kept",
+        unnormalised_iteration_total,
+    )
+
+    def job_reasons(case_name, **overrides):
+        fixture_root = temp_root / case_name
+        build_stratum_fixture(
+            fixture_root, "10k", fixture_means, fixture_allocations,
+            counts=fixture_counts, job_id="Job-NREBDM", **overrides
+        )
+        view = parse_stratum(fixture_root, "10k", 64)
+        return validate_stratum_view(view, "10k", 64)
+
+    def truncated_job_header(inputs):
+        reasons = job_reasons("truncated-job", job_header_override="Job-NREBDM")
+        if any(reason.startswith("job-header-unresolved") for reason in reasons):
+            return reasons
+        return []
+
+    add_case(
+        "resolved-job-truncated",
+        "// Job: Job-NREBDM without the resolved settings tuple",
+        truncated_job_header,
+    )
+
+    def csv_log_job_mismatch(inputs):
+        reasons = job_reasons("csv-job-mismatch", csv_job="Job-OTHER")
+        if "csv-log-job-mismatch:Job-OTHER!=Job-NREBDM" in reasons:
+            return reasons
+        return []
+
+    add_case(
+        "csv-log-job-mismatch",
+        "CSV Job=Job-OTHER while the log header resolves Job-NREBDM",
+        csv_log_job_mismatch,
+    )
+
+    def active_testhost_with_idle_compiler_server(inputs):
+        processes = [
+            {
+                "pid": 4100, "pcpu": 38.5, "comm": "VBCSCompiler",
+                "args": "dotnet exec VBCSCompiler.dll",
+            },
+            {
+                "pid": 4200, "pcpu": 55.0, "comm": "testhost",
+                "args": "testhost --port 4242",
+            },
+        ]
+        foreign = _foreign_processes(processes, {424242})
+        if [item["pid"] for item in foreign] == [4200]:
+            return ["foreign-process:%d" % foreign[0]["pid"]]
+        return []
+
+    add_case(
+        "active-testhost-with-idle-compiler-server",
+        "active testhost alongside an idle VBCSCompiler",
+        active_testhost_with_idle_compiler_server,
     )
 
     payload = {
@@ -3259,16 +3551,23 @@ def _verify_db_seed(seed_path):
     return {"path": str(seed), "size": size, "sha256": digest}
 
 
-def _build_treatment(runtime, counts, invocation_counts, parity, db_sha):
+def _build_treatment(runtime, counts, invocation_counts, parity, db_sha, job=None):
+    job = job or {}
+    resolved = job.get("resolved") or {}
     return {
-        "job": "Default",
-        "toolchain": "Default",
+        "job": resolved.get("job_id") or job.get("job") or "Default",
+        "toolchain": job.get("toolchain") or "Default",
         "runtime": runtime,
         "db_sha256": db_sha,
         "db_size": DB_SEED_SIZE,
         "parity": parity,
         "invocation_counts": dict(invocation_counts),
         "counts": dict(counts),
+        "resolved_job": {
+            "job_id": resolved.get("job_id"),
+            "settings": dict(resolved.get("settings") or {}),
+            "out_of_process": job.get("out_of_process"),
+        },
         "method_sets": {stratum: list(STRATA[stratum]["methods"]) for stratum in STRATA},
     }
 
@@ -3405,6 +3704,7 @@ def execute_complete_run(config, attempt_index, invocation_counts):
     runtime = {}
     counts = {}
     parity = {}
+    job = {}
     if not reasons:
         first_view = parse_stratum(
             run_dir / STRATUM_ORDER[0], STRATUM_ORDER[0],
@@ -3417,10 +3717,11 @@ def execute_complete_run(config, attempt_index, invocation_counts):
             "os_version": host.get("OsVersion"),
         }
         counts = dict(first_view.get("counts") or {})
+        job = first_view.get("job") or {}
         parity = {"rows": PARITY_ROWS, "checksum": PARITY_CHECKSUM}
 
     treatment = _build_treatment(
-        runtime, counts, invocation_counts, parity, DB_SHA256
+        runtime, counts, invocation_counts, parity, DB_SHA256, job=job
     ) if runtime else {}
     lock = config.get("lock_treatment")
     if lock and treatment and treatment_hash(treatment) != treatment_hash(lock):
@@ -4610,6 +4911,191 @@ def cmd_replay(args):
 
 
 # ---------------------------------------------------------------------------
+# parse-check (read-only reconciliation of captured runs)
+# ---------------------------------------------------------------------------
+PARSE_CHECK_RELATIVE_TOLERANCE = 1e-9
+
+
+def _resolve_parse_runs(runs_path):
+    """Accept a parent with ``run-*`` directories or a single run directory."""
+    root = Path(runs_path)
+    if not root.is_dir():
+        raise Reject("missing-runs-directory:%s" % root)
+    if (root / "10k").is_dir():
+        return [root]
+    indexed = []
+    for path in root.glob("run-*"):
+        if not path.is_dir():
+            continue
+        try:
+            index = int(path.name.split("-")[1])
+        except (IndexError, ValueError) as exc:
+            raise Reject("invalid-run-directory:%s" % path) from exc
+        indexed.append((index, path))
+    return [path for _, path in sorted(indexed)]
+
+
+def parse_check_run(run_dir):
+    """Check one captured run's ``10k`` log/JSON/csv triple; never executes BDN.
+
+    The check proves that the log's iteration totals are divided exactly once
+    by the logged operation count: the per-op mean recovered from the log must
+    match the JSON per-op mean within ``1e-9``, while the unnormalised total is
+    ~``Operations`` times the JSON mean.
+    """
+    run_dir = Path(run_dir)
+    entry = {
+        "run": run_dir.name,
+        "log": None,
+        "json": None,
+        "csv": None,
+        "operations": None,
+        "log_per_op_ns": None,
+        "json_per_op_ns": None,
+        "relative_diff": None,
+        "unnormalised_total_ns": None,
+        "unnormalised_ratio": None,
+        "verdict": "fail",
+        "reason": None,
+    }
+    try:
+        _check_captured_run(run_dir, entry)
+    except Reject as exc:
+        entry["reason"] = exc.reason
+        return entry
+    entry["verdict"] = "pass"
+    return entry
+
+
+def _check_captured_run(run_dir, entry):
+    stratum_dir = run_dir / "10k"
+    if not stratum_dir.is_dir():
+        raise Reject("missing-stratum-directory:10k")
+    files = discover_report_files(stratum_dir)
+    entry["log"] = files["log"]
+    entry["json"] = files["json"]
+    entry["csv"] = files["csv"]
+    missing = [key for key in ("log", "json", "csv") if not files[key]]
+    if missing:
+        raise Reject("missing-measurement-data:%s" % ",".join(missing))
+    document = read_json(files["json"])
+    benchmarks = document.get("Benchmarks")
+    if not isinstance(benchmarks, list) or not benchmarks:
+        raise Reject("empty-bdn-json")
+    records_by_method = parse_log_workload_records(read_text(files["log"]))
+    if not records_by_method:
+        raise Reject("missing-log-workload-results")
+
+    operations_seen = set()
+    json_per_op = {}
+    for benchmark in benchmarks:
+        if not isinstance(benchmark, dict):
+            raise Reject("malformed-benchmark-row")
+        method = benchmark.get("Method") or "<unknown>"
+        statistics = benchmark.get("Statistics") or {}
+        json_mean = statistics.get("Mean")
+        if (
+            not isinstance(json_mean, (int, float))
+            or isinstance(json_mean, bool)
+            or json_mean <= 0
+        ):
+            raise Reject("missing-json-mean:%s" % method)
+        measurements = [
+            measurement
+            for measurement in (benchmark.get("Measurements") or [])
+            if isinstance(measurement, dict)
+            and measurement.get("IterationMode") == "Workload"
+            and measurement.get("IterationStage") == "Result"
+        ]
+        if not measurements:
+            raise Reject("missing-workload-measurements:%s" % method)
+        for measurement in measurements:
+            operations = measurement.get("Operations")
+            if (
+                not isinstance(operations, int)
+                or isinstance(operations, bool)
+                or operations <= 0
+            ):
+                raise Reject("malformed-operations:%s" % method)
+            if measurement.get("Nanoseconds") is None:
+                raise Reject("missing-nanoseconds:%s" % method)
+            operations_seen.add(operations)
+        json_per_op[method] = float(json_mean)
+        if method not in records_by_method:
+            raise Reject("missing-log-method:%s" % method)
+    extra_methods = sorted(set(records_by_method) - set(json_per_op))
+    if extra_methods:
+        raise Reject("log-method-not-in-json:%s" % ",".join(extra_methods))
+
+    log_per_op = {}
+    raw_totals = {}
+    for method, records in records_by_method.items():
+        if not records:
+            raise Reject("missing-log-workload-results:%s" % method)
+        for record in records:
+            operations_seen.add(record["operations"])
+        log_per_op[method] = mean(
+            [record["nanoseconds"] / record["operations"] for record in records]
+        )
+        raw_totals[method] = mean(
+            [record["nanoseconds"] for record in records]
+        )
+    if len(operations_seen) != 1:
+        raise Reject("ambiguous-operations:%s" % sorted(operations_seen))
+    operations = operations_seen.pop()
+    entry["operations"] = operations
+    required = STRATA["10k"]["invocation_count"]
+    if operations != required:
+        raise Reject("operations-not-%d:%d" % (required, operations))
+
+    methods = sorted(json_per_op)
+    entry["log_per_op_ns"] = mean([log_per_op[method] for method in methods])
+    entry["json_per_op_ns"] = mean([json_per_op[method] for method in methods])
+    entry["relative_diff"] = relative_diff(
+        entry["log_per_op_ns"], entry["json_per_op_ns"]
+    )
+    entry["unnormalised_total_ns"] = mean(
+        [raw_totals[method] for method in methods]
+    )
+    entry["unnormalised_ratio"] = (
+        entry["unnormalised_total_ns"] / entry["json_per_op_ns"]
+    )
+    if entry["relative_diff"] > PARSE_CHECK_RELATIVE_TOLERANCE:
+        raise Reject("log-json-per-op-mismatch:%.12g" % entry["relative_diff"])
+    if not (
+        operations / 2.0
+        <= entry["unnormalised_ratio"]
+        <= operations * 2.0
+    ):
+        raise Reject(
+            "unnormalised-ratio-not-%dx:%.6f"
+            % (operations, entry["unnormalised_ratio"])
+        )
+
+
+def cmd_parse_check(args):
+    run_dirs = _resolve_parse_runs(args.runs)
+    if not run_dirs:
+        raise Reject("no-run-directories:%s" % args.runs)
+    entries = [parse_check_run(run_dir) for run_dir in run_dirs]
+    passed = sum(1 for entry in entries if entry["verdict"] == "pass")
+    payload = {
+        "task": TASK,
+        "schema": SCHEMA_VERSION,
+        "command": "parse-check",
+        "runs_root": str(Path(args.runs)),
+        "runs": entries,
+        "summary": {
+            "runs_checked": len(entries),
+            "passed": passed,
+            "failed": len(entries) - passed,
+        },
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False))
+    return EXIT_OK if passed == len(entries) else EXIT_FAIL
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 def build_parser():
@@ -4659,6 +5145,13 @@ def build_parser():
     self_test = sub.add_parser("self-test", help="negative fixtures for the gate")
     self_test.add_argument("--output", required=True)
     self_test.set_defaults(handler=cmd_self_test)
+
+    parse_check = sub.add_parser(
+        "parse-check",
+        help="read-only log/JSON per-op reconciliation of captured runs",
+    )
+    parse_check.add_argument("--runs", required=True)
+    parse_check.set_defaults(handler=cmd_parse_check)
 
     replay = sub.add_parser("replay", help="run exactly one pinned recipe command")
     replay.add_argument("--recipe", required=True)

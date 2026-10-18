@@ -179,6 +179,6 @@ internal static class SqliteFunctionTranslator
             return false;
 
         return member.Expression.Type == visitor.EntityType
-            && !string.IsNullOrEmpty(member.Member.GetPropertyColumnName(visitor.Options.NamingConvention));
+            && !string.IsNullOrEmpty(member.Member.GetPropertyColumnName(visitor.Options.NamingConvention, visitor.EntityType));
     }
 }
