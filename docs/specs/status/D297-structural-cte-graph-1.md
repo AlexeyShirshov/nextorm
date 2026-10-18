@@ -380,3 +380,26 @@ BDN-канал завышает controls на константу **+64 B** (`G8_
 ALLOWED новый `benchmarks/nextorm.benchmark/Program.cs`, разрешённый D1 (verifier не правился);
 (3) `shape` не находит фрагмент `cte_projection` в oracle/WarmDecompose (в benchmark-файле он есть).
 
+## rv2 — PLAN note (2026-10-18): unfreeze override and new acceptance
+
+**(a) Решение owner'а.** В issue #297 (comment 3, «Reopened — owner decision: ship the reduction», 2026-10-18) owner переоткрыл D297-02/03: «Pre-release: no project-level freeze applies». Граница `§13` была **task-scoped** (только для задачи D297 спайка) и теперь **перекрыта owner'ом**; отдельного project-level freeze не существует.
+
+**(b) Состояние единиц.** D297-02 и D297-03 разблокированы и реализуются в цикле `T297-cow`: compact shared-description + copy-on-write на structural CTE construction path (`EntityBuilder` / `QueryBuilder` / `CteHoister` / `QueryCommand` construction). D297-04 остаётся как записан в rv1 (provider boundary, regression suite, coverage, финальные измерения) — не запускается и не переквалифицируется этой заметкой.
+
+**(c) Новые критерии приёмки (verbatim из sealed-плана) и старые пороги.**
+
+1. Measured allocation reduction on the real `SqliteBenchmarkFeaturesFairCached` arms, two valid same-round rounds, same protocol as T244/T247.
+2. Cte ≤1.20× (expected ~1.09–1.13×).
+3. RecursiveCte improves vs its own baseline (currently 1.586–1.605×).
+4. No time regression: each CTE row candidate time within +20 % of its job-matched pre-T244/current group baseline (`WARM_TIME_TOLERANCE = 1.20`); the recorded 0.55–0.61× band is a measured ratio, not a tolerance.
+5. No allocation regression on any other FairCached arm ("candidate allocation not above pre-change same-host baseline"; prepared `A_*` ≤1.03×).
+6. Public API unchanged; cache policy untouched (no `Cache=false`, no sticky `_dontCache`); full suites green; `dotnet build nextorm.slnx -c Debug` 0W/0E.
+
+Исходные пороги входа/checkpoint/parity **2,640 / 3,482 / 5,199 B** остаются записанными как **UNMET**; они не понижаются, не пересчитываются и не объявляются достигнутыми.
+
+**(d) Ожидаемая модель (гипотеза, не обещание).** Заменяемый узел **1,056 B → ~128 B** (COW core 88 B + node 40 B); ожидаемая экономия ≈**840 B/query** (Cte) и ≈**2,456 B/query** (RecursiveCte) на реальной warm-форме (`R=1/D=1` и `R=3/D=2`). Числа подлежат проверке измерением, а не принимаются на веру; измерительный вердикт может их опровергнуть.
+
+**(e) Артефакты цикла.** Evidence root — `.pdca/T297/rv2/`; status-файл цикла — `.pdca/status/T297-cow-1.md` (task `T297-cow`, cycle N=1, plan revision r=1, attempt n=1, contract rv=2). rv1 evidence остаётся неизменным историческим свидетельством и не переписывается.
+
+**(f) Протокол измерения (pointer).** Canonical host lock `/tmp/opencode/nextorm-bdn-host.lock` берётся снаружи и ровно один раз; БД pinned sha256 `32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295`; требуются **два валидных same-round раунда** baseline и два candidate (не более трёх пар, невалидные раунды сохраняются и исключаются, а не вычеркиваются); измеряется **весь** family `SqliteBenchmarkFeaturesFairCached` (все 15 non-CTE arm'ов + Cte/RecursiveCte), а не только две CTE-строки; тот же wrapper/protocol, что T244/T247; FairCached bytes делятся на 10, WarmDecompose — на 100. Детали — `.pdca/T297/rv2/README.md`.
+
