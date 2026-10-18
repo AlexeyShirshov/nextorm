@@ -44,6 +44,21 @@ TOTAL = t247.PUBLIC_TOTAL_ARM
 COMPILE = t247.COMPILE_ONLY_ARM
 STEADY = t247.STEADY_WRITER_ARM
 
+#: Synthetic final HEAD for fixtures.  The declared-diff provider is patched in the tests, so the
+#: value only has to be stable across the two rounds of a phase.
+FIXTURE_FINAL_HEAD = "d24702fixturefinalhead000000000000000000000000"
+
+
+def patch_src_diff(case):
+    """Patch the declared-diff provider so fixtures never depend on the live worktree."""
+    patcher = mock.patch.object(
+        t247,
+        "SRC_DIFF_PROVIDER",
+        lambda repo, base, head: (0, sorted(t247.DECLARED_T247_SRC_PATHS)),
+    )
+    patcher.start()
+    case.addCleanup(patcher.stop)
+
 
 def case(cls, method, rows, mean, allocated, state="Success"):
     return {
@@ -112,6 +127,8 @@ def write_round(root, phase, round_id, cases, byte_marker=True):
         console = round_dir / "public-json.console.log"
         console.write_text(BYTE_MARKER + "\n", encoding="utf-8")
         invocations.append({"tag": "public-json", "console_log": str(console), "exit_code": 0})
+    head = t247.PAIRED_BASELINE_HEAD if phase == "baseline" else FIXTURE_FINAL_HEAD
+    fingerprint = {"head": head, "dirty_paths": 0, "porcelain_sha256": "fixture"}
     record = {
         "round": round_id,
         "subcommand": phase,
@@ -121,6 +138,8 @@ def write_round(root, phase, round_id, cases, byte_marker=True):
         "invocations": invocations,
         "discovered_case_count": len(cases),
         "executed_case_count": len(cases),
+        "fingerprint_before": fingerprint,
+        "fingerprint_after": dict(fingerprint),
     }
     (round_dir / "round.json").write_text(json.dumps(record), encoding="utf-8")
 
@@ -160,6 +179,7 @@ class CompareFixtureTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
+        patch_src_diff(self)
 
     def tearDown(self):
         self._tmp.cleanup()
@@ -174,6 +194,7 @@ class CompareFixtureTests(unittest.TestCase):
         self.assertEqual(check(result, "R247-12-100row")["verdict"], "pass")
         self.assertEqual(check(result, "R247-12-intercept")["verdict"], "pass")
         self.assertEqual(check(result, "R247-02-byte-control")["verdict"], "pass")
+        self.assertEqual(check(result, "R247-declared-src-diff")["verdict"], "pass")
         self.assertEqual(check(result, "R247-09-acceptance")["verdict"], "pass")
 
     def test_ratio_failure(self):
@@ -212,11 +233,32 @@ class CompareFixtureTests(unittest.TestCase):
         with self.assertRaises(t247.InputError):
             t247.evaluate_compare(self.root, REPO)
 
-    def test_missing_acceptance_evidence_is_input_error(self):
+    def test_foreign_src_path_is_reported_as_declared_difference(self):
+        good_fixture(self.root)
+        foreign = mock.patch.object(
+            t247,
+            "SRC_DIFF_PROVIDER",
+            lambda repo, base, head: (
+                0,
+                sorted(t247.DECLARED_T247_SRC_PATHS) + ["src/nextorm.core/Foreign.cs"],
+            ),
+        )
+        with foreign:
+            result = t247.evaluate_compare(self.root, REPO)
+        declared = check(result, "R247-declared-src-diff")
+        self.assertEqual(declared["verdict"], "fail")
+        self.assertEqual(declared["rounds"]["round-1"]["foreign"], ["src/nextorm.core/Foreign.cs"])
+        self.assertEqual(result["status"], "fail")
+
+    def test_missing_acceptance_evidence_is_a_failing_check(self):
         good_fixture(self.root)
         (self.root / "acceptance" / "acceptance.json").unlink()
-        with self.assertRaises(t247.InputError):
-            t247.evaluate_compare(self.root, REPO)
+        result = t247.evaluate_compare(self.root, REPO)
+        self.assertEqual(result["status"], "fail")
+        acceptance = check(result, "R247-09-acceptance")
+        self.assertEqual(acceptance["verdict"], "fail")
+        self.assertEqual(acceptance["rounds"]["round-1"]["case_count"], 0)
+        self.assertIn("never skipped", acceptance["detail"])
 
     def test_fewer_than_two_rounds_is_input_error(self):
         good_fixture(self.root)
@@ -347,6 +389,7 @@ class CommandTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
+        patch_src_diff(self)
 
     def tearDown(self):
         self._tmp.cleanup()

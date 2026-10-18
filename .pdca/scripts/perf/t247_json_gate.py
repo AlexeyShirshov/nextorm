@@ -165,6 +165,17 @@ LINQ2DB_ARM = "Linq2Db_ToList_Json"
 #: E247-02: 3 row counts x 11 control-inclusive arms of SqliteBenchmarkWriteJson = 33 cases.
 EXPECTED_PUBLIC_JSON_CASES = 33
 
+#: The pinned pre-change anchor of the paired baseline block (see the D247-01 decision in
+#: docs/specs/status/D247-json-streaming-2.md): the final tree must differ from it only by the
+#: declared T247 production change set.  A foreign ``src`` path is reported, never absorbed.
+PAIRED_BASELINE_HEAD = "c99cc512"
+DECLARED_T247_SRC_PATHS = (
+    "src/nextorm.core/DataContext/DataContext.cs",
+    "src/nextorm.core/DataContext/DataContextCache.cs",
+    "src/nextorm.core/Query/Json/JsonRowWriterCache.cs",
+    "src/nextorm.core/Query/Json/JsonRowWriterFactory.cs",
+)
+
 R247_01_ROWS = (1000, 10000, 100000)
 SMALL_ROW_ROWS = (1, 10, 100)
 
@@ -941,6 +952,74 @@ def _check(check_id, kind, threshold, per_round, detail=None):
     }
 
 
+def _round_head(record):
+    """HEAD recorded by the round fingerprint (the driver always writes both before and after)."""
+    for key in ("fingerprint_after", "fingerprint_before"):
+        fingerprint = record.get(key)
+        if isinstance(fingerprint, dict) and fingerprint.get("head"):
+            return str(fingerprint["head"])
+    return None
+
+
+def _git_src_diff(repo, base, head):
+    """``git diff --name-only <base> <head> -- src`` as ``(code, paths)``."""
+    code, output = git_capture(["diff", "--name-only", base, head, "--", "src"], repo)
+    paths = [line.strip() for line in output.splitlines() if line.strip()]
+    return code, paths
+
+
+#: Injection seam for tests: the declared-diff check must not depend on the live worktree inside a
+#: fixture, while the real ``compare`` always consults git through this provider.
+SRC_DIFF_PROVIDER = _git_src_diff
+
+
+def evaluate_declared_src_diff(final, repo):
+    """Every final round must sit on ONE HEAD whose src diff vs the baseline is the declared set."""
+    heads = {}
+    for rid in sorted(final):
+        head = _round_head(final[rid])
+        if head:
+            heads[rid] = head
+    if not heads:
+        detail = "final round records carry no HEAD fingerprint; declared-diff validation could not run"
+        return {
+            "heads": heads, "baseline_head": PAIRED_BASELINE_HEAD, "final_head": None,
+            "changed": None, "foreign": None, "missing": list(DECLARED_T247_SRC_PATHS),
+            "detail": detail, "pass": False,
+        }
+    unique = sorted(set(heads.values()))
+    if len(unique) != 1:
+        detail = "final rounds do not share one HEAD: %s" % (heads,)
+        return {
+            "heads": heads, "baseline_head": PAIRED_BASELINE_HEAD, "final_head": None,
+            "changed": None, "foreign": None, "missing": None,
+            "detail": detail, "pass": False,
+        }
+    final_head = unique[0]
+    code, changed = SRC_DIFF_PROVIDER(repo, PAIRED_BASELINE_HEAD, final_head)
+    declared = sorted(DECLARED_T247_SRC_PATHS)
+    foreign = sorted(set(changed) - set(declared))
+    missing = sorted(set(declared) - set(changed))
+    ok = code == 0 and not foreign and not missing
+    if code != 0:
+        detail = "git diff %s %s -- src failed (code %r)" % (PAIRED_BASELINE_HEAD, final_head, code)
+    elif foreign or missing:
+        detail = "declared-diff mismatch: foreign=%s missing=%s" % (foreign, missing)
+    else:
+        detail = "baseline %s -> final %s differs by exactly the declared T247 src paths" % (
+            PAIRED_BASELINE_HEAD, final_head)
+    return {
+        "heads": heads,
+        "baseline_head": PAIRED_BASELINE_HEAD,
+        "final_head": final_head,
+        "changed": changed,
+        "foreign": foreign,
+        "missing": missing,
+        "detail": detail,
+        "pass": ok,
+    }
+
+
 def _ratio_check(index_b, index_f, cls_num, method_num, cls_den, method_den, rows, round_id, threshold):
     where = "round %s" % round_id
     numerator = case_mean(index_f, cls_num, method_num, rows, where)
@@ -1017,6 +1096,28 @@ def evaluate_compare(root, repo):
         }
     checks.append(_check("R247-01-100k-paired-ratio", "paired-ratio", None, per_round))
 
+    # Declared change set: the paired baseline -> final src diff must be exactly T247's paths.
+    # A foreign src path is reported as a declared difference, never silently absorbed.
+    declared = evaluate_declared_src_diff(final, repo)
+    declared_rounds = {}
+    for rid in round_ids:
+        declared_rounds[rid] = {
+            "value": len(declared["changed"]) if declared["changed"] is not None else None,
+            "threshold": len(DECLARED_T247_SRC_PATHS),
+            "baseline_head": declared["baseline_head"],
+            "final_head": declared["final_head"],
+            "changed": declared["changed"],
+            "foreign": declared["foreign"],
+            "missing": declared["missing"],
+            "pass": declared["pass"],
+        }
+    checks.append(
+        _check(
+            "R247-declared-src-diff", "declared-diff", len(DECLARED_T247_SRC_PATHS),
+            declared_rounds, detail=declared["detail"],
+        )
+    )
+
     # R247-02: byte-equality control outside timing (setup-time marker, never inside the timed region).
     byte_rounds = {}
     for rid in round_ids:
@@ -1082,28 +1183,44 @@ def evaluate_compare(root, repo):
     )
 
     # R247-09: the seven-case acceptance inventory (produced by the `acceptance` subcommand).
+    # Missing evidence is reported as a FAILING check, never as a skip and never as a pass: the
+    # rest of the measured checks stay visible so the orchestrator can route the exact numbers.
     acceptance_path = Path(root) / "acceptance" / "acceptance.json"
+    acceptance_detail = None
     if not acceptance_path.exists():
-        raise InputError(
-            "missing %s: the R247-09 seven-case acceptance evidence is required" % acceptance_path
+        acceptance_detail = (
+            "missing %s: the R247-09 acceptance evidence was not produced; "
+            "reported as a failing check, never skipped" % acceptance_path
         )
-    acceptance = read_json(acceptance_path, "acceptance")
-    acceptance_rounds = {}
-    for entry in acceptance.get("rounds", []):
-        rid = entry.get("round")
-        cases = entry.get("cases") or []
-        count_ok = len(cases) == THRESHOLDS["r247_09_acceptance_cases"]
-        ratios_ok = all(c.get("pass") for c in cases) and bool(cases)
-        acceptance_rounds[rid] = {
-            "case_count": len(cases),
-            "value": len(cases),
-            "threshold": THRESHOLDS["r247_09_acceptance_cases"],
-            "pass": count_ok and ratios_ok,
-        }
-    if not acceptance_rounds:
-        raise InputError("acceptance evidence has no rounds")
+        acceptance_rounds = {}
+        for rid in round_ids:
+            acceptance_rounds[rid] = {
+                "case_count": 0,
+                "value": 0,
+                "threshold": THRESHOLDS["r247_09_acceptance_cases"],
+                "pass": False,
+            }
+    else:
+        acceptance = read_json(acceptance_path, "acceptance")
+        acceptance_rounds = {}
+        for entry in acceptance.get("rounds", []):
+            rid = entry.get("round")
+            cases = entry.get("cases") or []
+            count_ok = len(cases) == THRESHOLDS["r247_09_acceptance_cases"]
+            ratios_ok = all(c.get("pass") for c in cases) and bool(cases)
+            acceptance_rounds[rid] = {
+                "case_count": len(cases),
+                "value": len(cases),
+                "threshold": THRESHOLDS["r247_09_acceptance_cases"],
+                "pass": count_ok and ratios_ok,
+            }
+        if not acceptance_rounds:
+            raise InputError("acceptance evidence has no rounds")
     checks.append(
-        _check("R247-09-acceptance", "acceptance", THRESHOLDS["r247_09_acceptance_cases"], acceptance_rounds)
+        _check(
+            "R247-09-acceptance", "acceptance", THRESHOLDS["r247_09_acceptance_cases"],
+            acceptance_rounds, detail=acceptance_detail,
+        )
     )
 
     verdicts = [c["verdict"] for c in checks]
