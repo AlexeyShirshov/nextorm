@@ -131,3 +131,34 @@ empty; §13 frozen; #297/#244/#245 untouched.
 2026-10-18T15:26:30Z | DO | revision r1 | iteration n1/3 | D3 commit `ee9549c5` "Fix G8 probe-only evidence collection (benchmark harness)" (only the two benchmark paths; no push) | `git show --stat ee9549c5`
 2026-10-18T15:27:40Z | DO | revision r1 | iteration n1/3 | D4 outcome: D/R Cte 1/1, RecursiveCte 3/2; delta opt/cons/pess 840/752/152 and 2 456/2 280/1 680; gates RecursiveCte entry/checkpoint/parity all not-reachable (-184/-1 026/-2 743), Cte checkpoint borderline (+624/-64), parity not-reachable (-1 233); BDN cross-check 8 297 vs 8 824 and 9 520 vs 10 208 (-5.97 % / -6.74 %, within the 15 % band); evidence section appended to the D297 status | `docs/specs/status/D297-structural-cte-graph-1.md`
 2026-10-18T15:27:45Z | DO | revision r1 | iteration n1/3 | D5 manifest pinned (contract_rv 1 = rv1; rows 01-04 and 09 open, 05-08 met): `validate_inner_loop.py manifest` exit 0, `pdca_evidence.py lint --repo . --manifest ...` exit 0 | `.pdca/T297/rv1/manifest.json`, `/tmp/opencode/t297-g8-gate-{manifest,lint}.log`
+2026-10-18T15:32:52Z | ACT | revision r1 | iteration n1/3 | CHECK PASS-WITH-CAVEATS closed with no loop-back; F1/F2/F3 disposed: `verify-goal.log` (rc 1) added to EC-G8-05/06 evidence with an explicit reason, EC-G8-01..04/09 stay `open` with `disposition` fields, both gates re-run rc 0 into non-empty `probe-1/gate-{manifest,lint}.log`, F3 reason now cites fragment key `cte_projection` (verify.py:368); no product change (`git status src` empty) | `.pdca/T297/rv1/manifest.json`, `.pdca/T297/rv1/shape/probe-1/gate-{manifest,lint}.log`
+
+## ACT (CHECK PASS-WITH-CAVEATS -> close the lane)
+
+CHECK verdict: **PASS-WITH-CAVEATS** on the rv1 manifest. Iteration `n=1/3` is closed with
+**no loop-back**: no plan revision bump, no new attempt, no 4th iteration.
+
+Per-row dispositions (final):
+
+| Row | Final status | Disposition |
+|---|---|---|
+| EC-G8-05 | met | R/D measured for both families (Cte 1/1, RecursiveCte 3/2) and cross-checked; the `verify-goal.log` rc 1 is verifier-input lag only (3-round BDN protocol plus oracle-literal fragment), recorded in the row's evidence `reason`. |
+| EC-G8-06 | met | Closure Pass true for both families (residual 0: 10 208 / 8 824, tolerances 511 / 442); same `verify-goal.log` rc 1 provenance. |
+| EC-G8-07 | met | `verify-model` rc 0; the published examples reproduced exactly, real-shape opt/cons/pess computed. |
+| EC-G8-08 | met | `verify-verdict` rc 0; `eps=max(64 B, 5 %)` with signed margins per gate and per family. |
+| EC-G8-01..04, 09 | open | Substantively satisfied (src gate rc 0, round-1 environment/CPU/DB pin, 32/32 probes, exact node pins, ladder cross-check); open **only** because the frozen verifier inputs lag the authorized harness change (`boundary` allowlist omits `benchmarks/nextorm.benchmark/Program.cs`) and enforce the 3-round BDN protocol / the `cte_projection` oracle literal. Verifier-input lag, **not** product failure. |
+
+Finding dispositions:
+
+- **F1** — `verify-goal.log` (rc 1) added to the `EC-G8-05` / `EC-G8-06` `evidence[]` with an explicit `reason`; `EC-G8-01..04` / `09` stay `open` (not `met`, not `na`) with a `disposition` naming the satisfying evidence and the verifier-input reason; `required_rows` unchanged. The met rows are met from `probe-1/steps.json` (32/32 probes, 1 001 samples each, closure Pass true) plus the D297 `## Real graph shape (G8)` section.
+- **F2** — both gates re-run with stdout+stderr captured: `probe-1/gate-manifest.log` and `probe-1/gate-lint.log` are non-empty (228 / 248 B) and each ends `exit=0`; no threshold, tolerance or row schema changed.
+- **F3** — the reason text now cites fragment key `cte_projection` (`verify.py:368`) and notes the oracle writes the projection in the fluent `.Select(...)` continuation instead of the non-existent `joined.Select(...)` literal.
+
+Deliberate non-runs: BDN rounds 2-3 (the single probe-only round is the authorized evidence; the
+3-round requirement belongs to the BDN protocol, not to this probe run); no BDN re-run (round-1
+evidence is complete and the probe fix does not touch the BDN path); no worktree, no merge, no push.
+
+Commits (branch `1.0.9-rc3`): `ee9549c5` (probe-only evidence collection, benchmark harness),
+`279eb9d8` (real CTE graph shape G8 in the D297 status), plus this ACT commit (status only).
+
+Verdict: measurement complete; §13 stays frozen; no gate claimed; no product change.
