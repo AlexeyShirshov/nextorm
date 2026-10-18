@@ -1,0 +1,50 @@
+{
+  "block": "controls-entry",
+  "valid": true,
+  "validity_basis": "brief admission procedure: DB pin 2/2, quiet probe admitted (attempt 4), HEAD + status + dll fingerprints stable, rc=0, both requested arms present",
+  "reason_codes": [],
+  "head_before": "d44c88c17e653890dd1781748b3f6e34dacb8aac",
+  "head_after": "d44c88c17e653890dd1781748b3f6e34dacb8aac",
+  "binary_sha_before": "19528c5e88675191ccaba150532a11e38270130cbd422e109c15c09ffc67be30",
+  "binary_sha_after": "19528c5e88675191ccaba150532a11e38270130cbd422e109c15c09ffc67be30",
+  "binary_stable": true,
+  "rc": 0,
+  "wall_seconds": 13,
+  "run_start_utc": "2026-10-18T18:49:05Z",
+  "run_end_utc": "2026-10-18T18:49:18Z",
+  "lock": {
+    "lock_file": "/tmp/opencode/nextorm-bdn-host.lock",
+    "lock_wait_seconds": 0,
+    "owner_interval": "2026-10-18T18:42:35Z..2026-10-18T19:02:32Z",
+    "single_interval_for_both_invocations": true
+  },
+  "db_pin": {
+    "path1": "/tmp/nextorm-bench/test.db",
+    "path2": "benchmarks/nextorm.benchmark/data/test.db",
+    "sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+    "match": "2/2"
+  },
+  "quiet": {
+    "attempts": 4,
+    "median_pct": 5.94,
+    "p95_pct": 10.7,
+    "thresholds": {
+      "median_max_pct": 8.4,
+      "p95_max_pct": 11.4
+    }
+  },
+  "arms_present": [
+    "Nextorm_Prepared_Except",
+    "Nextorm_Prepared_Intersect"
+  ],
+  "arms_required": 2,
+  "iterations_per_invocation": 25,
+  "foreign_activity_during_interval": false,
+  "observations": [
+    "admitted on quiet probe attempt 4 (attempts 1-3 rejected: 16.59/24.50, 22.63/39.97, 6.59/81.38 median/p95 %); 90 s sleeps between attempts",
+    "no foreign build/test/benchmark/coverage process executed inside 18:49:05Z..18:49:18Z (monitor + ps snapshots); foreign Debug builds/tests at 18:46:57Z..18:47:39Z ended before the run start, next foreign build starts 18:51:44Z (after the invocation)",
+    "head/status fingerprints identical before and after the invocation (full sha 51f50608..., scoped sha 5ef2feeb...)",
+    "Release benchmark dll sha256 19528c5e...67be30 identical before and after",
+    "filter returned exactly the two requested arms; no linq2db arm matches the class-qualified filter"
+  ]
+}

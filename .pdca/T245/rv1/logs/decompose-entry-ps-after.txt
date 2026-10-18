@@ -1,0 +1,120 @@
+    PID    PPID ELAPSED %CPU COMMAND         COMMAND
+2146643 1961192    2504 38.5 VBCSCompiler    /home/alex/.dotnet/sdk/10.0.401/Roslyn/bincore/VBCSCompiler -pipename:M+KMsHyl5r4zCzaG9m1LzxYTPX1eOsKCiPzp3joPMBE
+2114532     669    4337 17.4 roslynq         /home/alex/.dotnet/tools/roslynq /home/alex/sources/nextorm/nextorm.slnx serve
+ 612317     671   86104 12.0 opencode        opencode -c
+1948512  612317   11959 11.2 opencode        /home/alex/.opencode/bin/opencode serve --service
+  57192   57048  109106  3.3 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node --dns-result-order=ipv4first /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/out/bootstrap-fork --type=extensionHost --transformURIs --useHostProxy=true
+1917192 1669877   13546  2.5 opencode        opencode -c
+1671157   57048   25765  2.2 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node --dns-result-order=ipv4first /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/out/bootstrap-fork --type=extensionHost --transformURIs --useHostProxy=true
+ 993873  419585   56880  2.1 opencode        opencode -c
+  57513   57192  109100  0.7 Microsoft.CodeA /home/alex/.vscode-server/extensions/ms-dotnettools.csharp-2.160.4-linux-x64/.roslyn/Microsoft.CodeAnalysis.LanguageServer --logLevel Information --sourceGeneratorExecutionPreference Balanced --csharpDesignTimePath /home/alex/.vscode-server/extensions/ms-dotnettools.csharp-2.160.4-linux-x64/.roslyn/Targets/Microsoft.CSharpExtension.DesignTime.targets --telemetryLevel all --extensionLogDirectory /home/alex/.vscode-server/data/logs/20261017T173221/exthost1/ms-dotnettools.csharp --clientProcessId=57192 --pipe=/run/user/1000/lsp-1e3f9d81550e53d1c04d2d2ac3200186.sock
+2072616     669    6480  0.7 dotnet          /home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false
+ 585029     669   87772  0.6 opencode        /home/alex/.opencode/bin/opencode serve --service
+1961191     669   11354  0.5 dotnet          /home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false
+1961192     669   11354  0.5 dotnet          /home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false
+1961194     669   11354  0.5 dotnet          /home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false
+1961196     669   11354  0.5 dotnet          /home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false
+1961214     669   11354  0.5 dotnet          /home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false
+2044759     669    8062  0.5 dotnet          /home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false
+    669     667  112042  0.2 Relay(671)      /init
+  57048   57044  109108  0.1 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/out/server-main.js --host=127.0.0.1 --port=0 --connection-token=289625863-206977309-3820842287-2961372480 --use-host-proxy --without-browser-env-var --disable-websocket-compression --accept-server-license-terms --telemetry-level=all
+  57096   57048  109107  0.1 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/out/bootstrap-fork --type=fileWatcher
+1669542     669   25824  0.1 dotnet          /home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false
+1961220     669   11354  0.1 dotnet          /home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false
+2174346 2174308    1193  0.1 python3         python3 /tmp/opencode/t245_r2_monitor.py /home/alex/sources/nextorm 2174308 .pdca/T245/rv1/logs/entry-blocks-foreign-monitor.txt /tmp/opencode/t245_blocks_monitor.stop
+2184005 2184004     662  0.1 node            node /tmp/bunx-1000-@modelcontextprotocol/server-memory@latest/node_modules/.bin/mcp-server-memory
+2189741 2189740     362  0.1 node            node /tmp/bunx-1000-@modelcontextprotocol/server-memory@latest/node_modules/.bin/mcp-server-memory
+      1       0  112050  0.0 systemd         /sbin/init
+      2       1  112050  0.0 init-systemd(Ub /init
+      6       2  112050  0.0 init            plan9 --control-socket 7 --log-level 4 --server-fd 8 --pipe-fd 10 --log-truncate
+     60       1  112050  0.0 systemd-journal /lib/systemd/systemd-journald
+     81       1  112050  0.0 systemd-udevd   /lib/systemd/systemd-udevd
+     92       1  112050  0.0 snapfuse        snapfuse /var/lib/snapd/snaps/bare_5.snap /snap/bare/5 -o ro,nodev,allow_other,suid
+     96       1  112050  0.0 snapfuse        snapfuse /var/lib/snapd/snaps/core22_2955.snap /snap/core22/2955 -o ro,nodev,allow_other,suid
+     99       1  112050  0.0 snapfuse        snapfuse /var/lib/snapd/snaps/core22_864.snap /snap/core22/864 -o ro,nodev,allow_other,suid
+    109       1  112050  0.0 snapfuse        snapfuse /var/lib/snapd/snaps/gtk-common-themes_1535.snap /snap/gtk-common-themes/1535 -o ro,nodev,allow_other,suid
+    113       1  112050  0.0 snapfuse        snapfuse /var/lib/snapd/snaps/snapd_28254.snap /snap/snapd/28254 -o ro,nodev,allow_other,suid
+    114       1  112050  0.0 snapfuse        snapfuse /var/lib/snapd/snaps/snapd_27738.snap /snap/snapd/27738 -o ro,nodev,allow_other,suid
+    215       1  112049  0.0 systemd-resolve /lib/systemd/systemd-resolved
+    216       1  112049  0.0 systemd-timesyn /lib/systemd/systemd-timesyncd
+    221       1  112049  0.0 cron            /usr/sbin/cron -f -P
+    223       1  112049  0.0 dbus-daemon     @dbus-daemon --system --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+    228       1  112049  0.0 networkd-dispat /usr/bin/python3 /usr/bin/networkd-dispatcher --run-startup-triggers
+    229       1  112049  0.0 rsyslogd        /usr/sbin/rsyslogd -n -iNONE
+    231       1  112049  0.0 snapd           /snap/snapd/current/usr/lib/snapd/snapd
+    232       1  112049  0.0 systemd-logind  /lib/systemd/systemd-logind
+    256       1  112049  0.0 agetty          /sbin/agetty -o -p -- \u --noclear tty1 linux
+    276       1  112049  0.0 unattended-upgr /usr/bin/python3 /usr/share/unattended-upgrades/unattended-upgrade-shutdown --wait-for-signal
+    380       2  112048  0.0 login           /bin/login -f
+    432       1  112047  0.0 systemd         /lib/systemd/systemd --user
+    433     432  112047  0.0 (sd-pam)        (sd-pam)
+    444     380  112047  0.0 bash            -bash
+    667       2  112042  0.0 SessionLeader   /init
+    671     669  112042  0.0 bash            -bash
+    980     671  112032  0.0 bun             /home/alex/.bun/bin/bun /home/alex/.config/opencode/tools/zen-cache-proxy.mjs
+  57035       2  109108  0.0 SessionLeader   /init
+  57036   57035  109108  0.0 Relay(57037)    /init
+  57037   57036  109108  0.0 sh              sh -c "$VSCODE_WSL_EXT_LOCATION/scripts/wslServer.sh" 6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1 stable code-server .vscode-server --host=127.0.0.1 --port=0 --connection-token=289625863-206977309-3820842287-2961372480 --use-host-proxy --without-browser-env-var --disable-websocket-compression --accept-server-license-terms --telemetry-level=all
+  57038   57037  109108  0.0 sh              sh /mnt/c/Users/user/.vscode/extensions/ms-vscode-remote.remote-wsl-0.104.3/scripts/wslServer.sh 6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1 stable code-server .vscode-server --host=127.0.0.1 --port=0 --connection-token=289625863-206977309-3820842287-2961372480 --use-host-proxy --without-browser-env-var --disable-websocket-compression --accept-server-license-terms --telemetry-level=all
+  57044   57038  109108  0.0 sh              sh /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/bin/code-server --host=127.0.0.1 --port=0 --connection-token=289625863-206977309-3820842287-2961372480 --use-host-proxy --without-browser-env-var --disable-websocket-compression --accept-server-license-terms --telemetry-level=all
+  57324   57192  109103  0.0 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/extensions/markdown-language-features/dist/serverWorkerMain --node-ipc --clientProcessId=57192
+  57353       2  109102  0.0 SessionLeader   /init
+  57354   57353  109102  0.0 Relay(57355)    /init
+  57355   57354  109102  0.0 sh              /bin/sh -c cd '/home/alex/sources/nextorm' && /bin/sh
+  57356   57355  109102  0.0 sh              /bin/sh
+  57378   57356  109102  0.0 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node /home/alex/.vscode-remote-containers/dist/vscode-remote-containers-server-0.469.0.js
+  57455   57378  109101  0.0 sh              /bin/sh
+ 334668       1   96682  0.0 Relay           /init
+ 419575       2   93714  0.0 SessionLeader   /init
+ 419577  419575   93714  0.0 Relay(419585)   /init
+ 419585  419577   93714  0.0 bash            -bash
+ 440982   57192   92967  0.0 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/extensions/json-language-features/server/dist/node/jsonServerMain --node-ipc --clientProcessId=57192
+ 441260   57048   92958  0.0 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/out/bootstrap-fork --type=ptyHost --logsPath /home/alex/.vscode-server/data/logs/20261017T173221
+ 799547     669   71699  0.0 dotnet          /home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false
+1219044       1   46487  0.0 packagekitd     /usr/libexec/packagekitd
+1219048       1   46487  0.0 polkitd         /usr/libexec/polkitd --no-debug
+1346606  441260   39280  0.0 bash            /bin/bash --init-file /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/out/vs/workbench/contrib/terminal/common/scripts/shellIntegration-bash.sh
+1669873       2   25810  0.0 SessionLeader   /init
+1669875 1669873   25810  0.0 Relay(1669877)  /init
+1669877 1669875   25810  0.0 bash            -bash
+1671148   57048   25765  0.0 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/out/bootstrap-fork --type=fileWatcher
+1671311 1671157   25759  0.0 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/extensions/markdown-language-features/dist/serverWorkerMain --node-ipc --clientProcessId=1671157
+1671389       2   25758  0.0 SessionLeader   /init
+1671390 1671389   25758  0.0 Relay(1671397)  /init
+1671397 1671390   25758  0.0 sh              /bin/sh -c cd '/home/alex/sources/skills' && /bin/sh
+1671400 1671397   25758  0.0 sh              /bin/sh
+1671428 1671400   25758  0.0 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node /home/alex/.vscode-remote-containers/dist/vscode-remote-containers-server-0.469.0.js
+1671490  441260   25757  0.0 bash            /bin/bash --init-file /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/out/vs/workbench/contrib/terminal/common/scripts/shellIntegration-bash.sh
+1671538 1671428   25757  0.0 sh              /bin/sh
+1705306       2   24484  0.0 SessionLeader   /init
+1705308 1705306   24484  0.0 Relay(1705310)  /init
+1705310 1705308   24484  0.0 bash            -bash
+1729641     669   23481  0.0 dotnet          /home/alex/.dotnet/dotnet --roll-forward LatestMajor /home/alex/.dotnet/tools/.store/opencode-roslyn/1.0.0/opencode-roslyn/1.0.0/tools/net10.0/any/BuildHost-netcore/Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.dll 5f1fb8ec-1239-40b6-84cb-92ebb49d070e
+1889060       2   15030  0.0 SessionLeader   /init
+1889061 1889060   15030  0.0 Relay(1889062)  /init
+1889062 1889061   15030  0.0 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node -e const net = require('net'); process.stdin.pause(); const client = net.createConnection({ host: '127.0.0.1', port: 44819 }, () => { client.pipe(process.stdout); process.stdin.pipe(client); }); client.on('close', function (hadError) { console.error(hadError ? 'Remote close with error' : 'Remote close'); process.exit(hadError ? 1 : 0); }); client.on('error', function (err) { process.stderr.write(err && (err.stack || err.message) || String(err)); });
+1889081       2   15029  0.0 SessionLeader   /init
+1889082 1889081   15029  0.0 Relay(1889083)  /init
+1889083 1889082   15029  0.0 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node -e const net = require('net'); process.stdin.pause(); const client = net.createConnection({ host: '127.0.0.1', port: 44819 }, () => { client.pipe(process.stdout); process.stdin.pipe(client); }); client.on('close', function (hadError) { console.error(hadError ? 'Remote close with error' : 'Remote close'); process.exit(hadError ? 1 : 0); }); client.on('error', function (err) { process.stderr.write(err && (err.stack || err.message) || String(err)); });
+1889090       2   15029  0.0 SessionLeader   /init
+1889091 1889090   15029  0.0 Relay(1889092)  /init
+1889092 1889091   15029  0.0 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node -e const net = require('net'); process.stdin.pause(); const client = net.createConnection({ host: '127.0.0.1', port: 44819 }, () => { client.pipe(process.stdout); process.stdin.pipe(client); }); client.on('close', function (hadError) { console.error(hadError ? 'Remote close with error' : 'Remote close'); process.exit(hadError ? 1 : 0); }); client.on('error', function (err) { process.stderr.write(err && (err.stack || err.message) || String(err)); });
+1889104       2   15029  0.0 SessionLeader   /init
+1889110 1889104   15029  0.0 Relay(1889111)  /init
+1889111 1889110   15029  0.0 MainThread      /home/alex/.vscode-server/bin/6d62b1d5dace93a33b3a6d3eca1317bd5e15bcb1/node -e const net = require('net'); process.stdin.pause(); const client = net.createConnection({ host: '127.0.0.1', port: 44819 }, () => { client.pipe(process.stdout); process.stdin.pipe(client); }); client.on('close', function (hadError) { console.error(hadError ? 'Remote close with error' : 'Remote close'); process.exit(hadError ? 1 : 0); }); client.on('error', function (err) { process.stderr.write(err && (err.stack || err.message) || String(err)); });
+1948791 1948512   11948  0.0 bun             /home/alex/.bun/bin/bun x @modelcontextprotocol/server-memory
+1948792 1948791   11948  0.0 node            node /tmp/bunx-1000-@modelcontextprotocol/server-memory@latest/node_modules/.bin/mcp-server-memory
+2130883 1948512    3367  0.0 bun             /home/alex/.bun/bin/bun x @modelcontextprotocol/server-memory
+2130884 2130883    3367  0.0 node            node /tmp/bunx-1000-@modelcontextprotocol/server-memory@latest/node_modules/.bin/mcp-server-memory
+2152748 1948512    2247  0.0 bash            /bin/bash -c cd /home/alex/sources/nextorm && deadline=$(( $(date +%s) + 3000 )); while [ $(date +%s) -lt $deadline ]; do if flock -n /tmp/opencode/nextorm-bdn-host.lock -c 'exit 0' 2>/dev/null && ! pgrep -f 'nextorm\.benchmark' >/dev/null && ! pgrep -f 't245-entry-blocks' >/dev/null; then echo "FREE $(date -u +%H:%M:%SZ)"; exit 0; fi; sleep 20; done; echo "TIMEOUT $(date -u +%H:%M:%SZ)"; exit 3
+2169898 1948512    1404  0.0 bash            /bin/bash -c bash /tmp/opencode/t245-entry-blocks-outer.sh; echo "OUTER_RC=$?"
+2169899 2169898    1404  0.0 bash            bash /tmp/opencode/t245-entry-blocks-outer.sh
+2170084 1948512    1397  0.0 bash            /bin/bash -c pid=$(pgrep -f 'bash /tmp/opencode/t245-entry-blocks-outer.sh' | head -1); echo "outer_pid=$pid"; if [ -n "$pid" ]; then while kill -0 "$pid" 2>/dev/null; do sleep 10; done; fi; echo "outer finished at $(date -u +%Y-%m-%dT%H:%M:%SZ)"; cd /home/alex/sources/nextorm && cat .pdca/T245/rv1/logs/entry-blocks-block.txt; echo '=== result ==='; cat .pdca/T245/rv1/logs/entry-blocks-block-result.txt; echo '=== outer ==='; cat /tmp/opencode/t245-entry-blocks-outer-result.txt; echo '=== preflight ==='; cat /tmp/opencode/t245-blocks-preflight/verdict.txt
+2174307 2169899    1194  0.0 flock           flock -x --close -w 2400 /tmp/opencode/nextorm-bdn-host.lock bash -lc bash /tmp/opencode/t245-entry-blocks.sh
+2174308 2174307    1194  0.0 bash            bash /tmp/opencode/t245-entry-blocks.sh
+2184004 1948512     662  0.0 bun             /home/alex/.bun/bin/bun x @modelcontextprotocol/server-memory
+2189740 1948512     362  0.0 bun             /home/alex/.bun/bin/bun x @modelcontextprotocol/server-memory
+2192894       1     189  0.0 wsl-pro-service /usr/libexec/wsl-pro-service
+2196403 2170084       7  0.0 sleep           sleep 10
+2196411 2152748       7  0.0 sleep           sleep 20
+2196540 2174308       0  0.0 ps              ps -eo pid,ppid,etimes,pcpu,comm,args --sort=-pcpu
