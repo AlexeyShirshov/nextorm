@@ -8,6 +8,7 @@ labels: enhancement
 collection: 1.0.9-rc3-open-3
 collection_status_path: docs/specs/status/collection-1.0.9-rc3-open-3.md
 selected_variant: pdca-dotnet
+| Plan state | Evidence contract rv=1 superseded by rv=2 in D247-json-streaming-2.md; historical content retained verbatim; N=1, r=1, n=1 unchanged; no DO executed. |
 
 # T247 / #247 — JSON streaming performance
 
