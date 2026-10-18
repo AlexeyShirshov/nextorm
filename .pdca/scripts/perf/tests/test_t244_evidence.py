@@ -190,6 +190,81 @@ def run_main(argv):
     return code, out.getvalue(), err.getvalue()
 
 
+# --- D244-05 targeted re-gather ladder fixtures ----------------------------------------------------
+
+def warm_ladder_family_values(
+    family,
+    *,
+    construct_top=8000.0,
+    capture_delta=400.0,
+    comparers_delta=500.0,
+    lookup_delta=600.0,
+    tail=200.0,
+    plan_key=0.0,
+    construct_override=None,
+    warm_override=None,
+    rawhit_override=None,
+):
+    """Per-query B/query for every arm of one family's D244-05 ladder.
+
+    The construct rungs are the linear prefixes of ``construct_top`` so each signed increment is
+    positive; the raw ladder nests on top of the construct top (every raw arm rebuilds the command).
+    """
+    rungs = t244.CONSTRUCT_LADDERS[family]
+    total = len(rungs)
+    values = {
+        rung: (construct_top * index) / total for index, rung in enumerate(rungs, start=1)
+    }
+    if construct_override is not None:
+        # Deliberately breaks the ladder-top/closure-target agreement (closure test fixtures).
+        values[rungs[-1]] = construct_override
+    values[t244.CONSTRUCT_CLOSURE_TARGET[family]] = construct_top
+    raw_rungs = t244.RAWHIT_LADDERS[family]
+    capture = construct_top + capture_delta
+    comparers = capture + comparers_delta
+    lookup = comparers + lookup_delta
+    if rawhit_override is not None:
+        capture, comparers, lookup = rawhit_override
+    values[raw_rungs[0]] = capture
+    values[raw_rungs[1]] = comparers
+    values[raw_rungs[2]] = lookup
+    values[t244.RAWHIT_CLOSURE_TARGET[family]] = capture
+    values[f"{family}_Prepare_NoHash"] = construct_top + 1000.0
+    values[f"{family}_Prepare_Hash"] = construct_top + 2000.0
+    values[f"{family}_Warm_PlanOnly"] = lookup + tail if warm_override is None else warm_override
+    values[f"{family}_Warm_Reused"] = plan_key
+    return values
+
+
+def warm_ladder_entries(families=("Cte", "RecursiveCte"), toolchains=TOOLCHAINS, mutator=None):
+    entries = []
+    for toolchain in toolchains:
+        merged = {}
+        for family in families:
+            merged.update(warm_ladder_family_values(family))
+        merged["Gen_P0_From"] = 300.0
+        merged["Gen_P1_Where"] = 900.0
+        merged["Gen_P2_Select"] = 1100.0
+        if mutator:
+            mutator(merged)
+        for method, value in merged.items():
+            entries.append(row(TYPE_WARM, method, int(round(value * 100)), toolchain=toolchain))
+    return entries
+
+
+def write_ladder_round(round_dir, *, valid=True, toolchains=TOOLCHAINS, mutator=None):
+    round_dir = Path(round_dir)
+    round_dir.mkdir(parents=True, exist_ok=True)
+    (round_dir / "round-validity.json").write_text(
+        json.dumps({"valid": valid, "reasons": [], "scope": "warm-decompose"}), encoding="utf-8"
+    )
+    write_report(
+        round_dir / "results" / f"{NAMESPACE}.{TYPE_WARM}-report-full.json",
+        warm_ladder_entries(toolchains=toolchains, mutator=mutator),
+    )
+    return round_dir
+
+
 def read(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
@@ -1265,7 +1340,7 @@ class MeasureTests(T244TestCase):
             "inventory_size_after": 2,
         }
 
-    def run_measure(self, *, collect, validation=None):
+    def run_measure(self, *, collect, validation=None, extra=()):
         output = self.tmp / "baseline" / "round-01"
         lock = self.FakeLock()
         patches = [
@@ -1295,6 +1370,7 @@ class MeasureTests(T244TestCase):
                 "1",
                 "--output",
                 str(output),
+                *extra,
             ]
         )
         return code, output, lock, stdout + stderr
@@ -1390,6 +1466,221 @@ class ProviderFailureTests(unittest.TestCase):
         signed = buckets["End"] - buckets["Construct"]
         self.assertGreaterEqual(signed, -max(16.0, 0.02 * buckets["End"]))
         self.assertEqual(max(0.0, signed), 0.0)
+
+
+class MeasureScopeTests(MeasureTests):
+    """D244-05: the diagnostic scope keeps the full round's machinery, but runs one invocation."""
+
+    def test_scope_defaults_to_full_and_keeps_three_invocations(self):
+        args = t244.build_parser().parse_args(
+            ["measure", "--phase", "baseline", "--round", "1", "--output", "x"]
+        )
+        self.assertEqual(args.scope, "full")
+        self.assertEqual(t244.invocations_for_scope("full"), tuple(t244.INVOCATIONS))
+        self.assertEqual(len(t244.invocations_for_scope("full")), 3)
+
+    def test_warm_decompose_scope_selects_only_the_warm_invocation(self):
+        selected = t244.invocations_for_scope("warm-decompose")
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(selected[0]["tag"], "warm-decompose")
+        self.assertEqual(selected[0]["expected_class"], TYPE_WARM)
+
+    def test_unknown_scope_is_rejected(self):
+        with self.assertRaises(t244.Reject):
+            t244.invocations_for_scope("bogus")
+
+    def test_full_round_behaviour_is_unchanged(self):
+        code, output, lock, log = self.run_measure(
+            collect=lambda *a, **k: self.fake_collect(
+                staged=[{"rel": "results/x-report.json", "sha256": "s", "size": 1}]
+            ),
+            validation=lambda *args, **kwargs: {"methods": 1},
+        )
+        self.assertEqual(code, 0, log)
+        payload = read(output / "provenance.json")
+        self.assertEqual(payload["scope"], "full")
+        self.assertEqual(len(payload["invocations"]), 3)
+        self.assertEqual(
+            [inv["tag"] for inv in payload["invocations"]],
+            ["faircached", "fair-prepared", "warm-decompose"],
+        )
+
+    def test_warm_decompose_scope_runs_one_invocation_and_records_the_scope(self):
+        code, output, lock, log = self.run_measure(
+            collect=lambda *a, **k: self.fake_collect(
+                staged=[{"rel": "results/x-report.json", "sha256": "s", "size": 1}]
+            ),
+            validation=lambda *args, **kwargs: {"methods": 1},
+            extra=["--scope", "warm-decompose"],
+        )
+        self.assertEqual(code, 0, log)
+        payload = read(output / "provenance.json")
+        self.assertEqual(payload["scope"], "warm-decompose")
+        self.assertEqual(len(payload["invocations"]), 1)
+        invocation = payload["invocations"][0]
+        self.assertEqual(invocation["tag"], "warm-decompose")
+        self.assertEqual(invocation["filter"], "*SqliteBenchmarkWarmDecompose*")
+        commands = (output / "commands.log").read_text(encoding="utf-8")
+        self.assertIn("--job short", commands)
+        self.assertNotIn("SqliteBenchmarkFeaturesFairCached", commands)
+        self.assertTrue(read(output / "round-validity.json")["valid"])
+        self.assertEqual(read(output / "round-validity.json")["scope"], "warm-decompose")
+
+
+class RankTests(T244TestCase):
+    def run_rank(self, round_dir, *, extra=()):
+        output = self.tmp / "ranking.json"
+        code, stdout, stderr = run_main(
+            ["rank", "--round", str(round_dir), "--output", str(output), *extra]
+        )
+        payload = read(output) if output.exists() else {}
+        return code, payload, stdout + stderr
+
+    def test_rank_closes_on_the_original_arms_and_reports_signed_increments(self):
+        round_dir = write_ladder_round(self.tmp / "round-01")
+        code, payload, log = self.run_rank(round_dir)
+        self.assertEqual(code, 0, log)
+        self.assertEqual(payload["status"], "closed")
+        self.assertEqual(len(payload["families"]), 4)  # 2 families x 2 jobs
+        family = payload["families"][0]
+        steps = family["construct_steps"]
+        self.assertEqual(len(steps), len(t244.CONSTRUCT_LADDERS["Cte"]) - 1)
+        for step in steps:
+            self.assertTrue(step["monotone"], step)
+            self.assertGreater(step["delta_bytes_per_query"], 0.0)
+            self.assertAlmostEqual(
+                step["delta_bytes_per_query"],
+                step["to_bytes_per_query"] - step["from_bytes_per_query"],
+                places=6,
+            )
+        # Per-arm B/query is reported raw and per-query (WarmDecompose divisor 100).
+        arm = family["arms"]["Cte_Construct"]
+        self.assertAlmostEqual(arm["raw_bytes"], arm["bytes_per_query"] * 100, places=6)
+        self.assertEqual(payload["not_separable_arms"][0]["arm"], "RawHit_P1_Fingerprint")
+        self.assertIn("not a separable step", payload["not_separable_arms"][0]["reason"].lower())
+
+    def test_rank_reports_closure_error_against_the_original_arm(self):
+        round_dir = write_ladder_round(self.tmp / "round-01")
+        _, payload, _ = self.run_rank(round_dir)
+        closures = {(c["family"], c["closure_target"]): c for c in payload["closures"]}
+        construct = closures[("Cte", "Cte_Construct")]
+        self.assertTrue(construct["closed"])
+        self.assertAlmostEqual(construct["closure_error_bytes_per_query"], 0.0, places=6)
+        raw = closures[("RecursiveCte", "RecursiveCte_RawHit")]
+        self.assertTrue(raw["closed"])
+        self.assertAlmostEqual(raw["closure_error_bytes_per_query"], 0.0, places=6)
+
+    def test_closure_failure_is_insufficient_attribution(self):
+        def break_closure(values):
+            rung = t244.CONSTRUCT_LADDERS["Cte"][-1]
+            values[rung] = values[rung] * 1.5
+
+        round_dir = write_ladder_round(self.tmp / "round-01", mutator=break_closure)
+        code, payload, log = self.run_rank(round_dir)
+        self.assertEqual(code, 2, log)
+        self.assertEqual(payload["status"], "insufficient-attribution")
+        self.assertTrue(payload["open_closures"])
+        self.assertEqual(payload["open_closures"][0]["family"], "Cte")
+
+    def test_non_monotone_ladder_is_reported_and_forbids_ranking(self):
+        def break_monotone(values):
+            # P1 is far below P0: a negative delta well beyond the noise floor.
+            values[t244.CONSTRUCT_LADDERS["Cte"][1]] = 100.0
+
+        round_dir = write_ladder_round(self.tmp / "round-01", mutator=break_monotone)
+        code, payload, log = self.run_rank(round_dir)
+        self.assertEqual(code, 2, log)
+        self.assertEqual(payload["status"], "insufficient-attribution")
+        bad = [
+            step
+            for family in payload["families"]
+            for step in family["non_monotone_steps"]
+        ]
+        self.assertTrue(bad, payload["families"][0])
+        self.assertLess(bad[0]["delta_bytes_per_query"], 0.0)
+        for row in payload["ranking"]:
+            self.assertFalse(row["eligible"], row)
+            self.assertIn("ranking forbidden", row["reason"])
+
+    def test_negative_delta_within_the_noise_floor_is_tolerated(self):
+        def tiny_dip(values):
+            # A -2 B/query dip is inside max(16 B/query, 2 %) and must not forbid ranking.
+            rungs = t244.CONSTRUCT_LADDERS["Cte"]
+            values[rungs[1]] = values[rungs[0]] - 2.0
+
+        round_dir = write_ladder_round(self.tmp / "round-01", mutator=tiny_dip)
+        code, payload, log = self.run_rank(round_dir)
+        self.assertEqual(code, 0, log)
+        self.assertEqual(payload["status"], "closed")
+        self.assertFalse(
+            [
+                step
+                for family in payload["families"]
+                for step in family["non_monotone_steps"]
+            ]
+        )
+
+    def test_residual_over_bound_is_insufficient_attribution(self):
+        def big_tail(values):
+            values["Cte_Warm_PlanOnly"] = values["Cte_RawHit_Lookup"] + 5000.0
+
+        round_dir = write_ladder_round(self.tmp / "round-01", mutator=big_tail)
+        code, payload, log = self.run_rank(round_dir)
+        self.assertEqual(code, 2, log)
+        self.assertEqual(payload["status"], "insufficient-attribution")
+        self.assertFalse(payload["residual"]["within_bound"])
+
+    def test_residual_within_bound_closes(self):
+        round_dir = write_ladder_round(self.tmp / "round-01")
+        code, payload, log = self.run_rank(round_dir)
+        self.assertEqual(code, 0, log)
+        self.assertTrue(payload["residual"]["within_bound"])
+        for family in payload["families"]:
+            self.assertTrue(family["residual_within_bound"], family)
+            bound = max(128.0, 0.10 * family["warm_bytes_per_query"])
+            self.assertAlmostEqual(family["residual_bound_bytes_per_query"], bound, places=6)
+
+    def test_missing_ladder_arm_is_malformed(self):
+        round_dir = write_ladder_round(
+            self.tmp / "round-01", mutator=lambda values: values.pop("Cte_P3_Join")
+        )
+        code, payload, log = self.run_rank(round_dir)
+        self.assertEqual(code, 1, log)
+        self.assertEqual(payload["status"], "malformed")
+        self.assertIn("Cte_P3_Join", payload["error"])
+
+    def test_ranking_uses_the_frozen_selection_rule(self):
+        round_dir = write_ladder_round(self.tmp / "round-01")
+        code, payload, log = self.run_rank(round_dir)
+        self.assertEqual(code, 0, log)
+        rows = payload["ranking"]
+        construct = [r for r in rows if r["component"] == "Construct"]
+        self.assertTrue(construct and all(r["eligible"] for r in construct), construct)
+        self.assertTrue(all(r["unit"] == "D244-02" for r in construct))
+        raw = [r for r in rows if r["raw_recipe"]]
+        self.assertTrue(raw)
+        for row in raw:
+            self.assertFalse(row["eligible"], row)
+            self.assertIn("frozen", row["reason"])
+        plan_key = [r for r in rows if r["component"] == "PlanKey"]
+        self.assertTrue(plan_key)
+        for row in plan_key:
+            self.assertFalse(row["eligible"], row)
+            self.assertEqual(row["unit"], "D244-03")
+
+    def test_rank_exit_classes(self):
+        round_dir = write_ladder_round(self.tmp / "round-01")
+        self.assertEqual(self.run_rank(round_dir)[0], 0)
+        bad = write_ladder_round(
+            self.tmp / "round-02",
+            mutator=lambda values: values.__setitem__(
+                "Cte_Warm_PlanOnly", values["Cte_RawHit_Lookup"] + 5000.0
+            ),
+        )
+        self.assertEqual(self.run_rank(bad)[0], 2)
+        empty = self.tmp / "round-03"
+        empty.mkdir(parents=True, exist_ok=True)
+        self.assertEqual(self.run_rank(empty)[0], 1)
 
 
 if __name__ == "__main__":

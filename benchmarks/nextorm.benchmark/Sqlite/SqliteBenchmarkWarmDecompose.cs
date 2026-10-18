@@ -443,6 +443,227 @@ public class SqliteBenchmarkWarmDecompose
         }
     }
 
+    // =============================================================================================
+    // T244 (#244) D244-05 targeted re-gather ladder — measurement only, no product change.
+    //
+    // Every rung is a genuine PREFIX of the same graph, rebuilt fresh on every iteration (no rung
+    // shares state with another and nothing is cached between iterations). The signed increment
+    // between two consecutive rungs is therefore the isolated cost of the single step that
+    // separates them:
+    //   Cte:          body -> +With -> +From -> +Join -> +Select(full)     (existing Cte_Construct   = closure target)
+    //   RecursiveCte: anchor -> step -> operands -> UnionAll -> full      (existing RecursiveCte_Construct = closure target)
+    //   Gen:          From("nums") -> +Where -> +Select                   (control ladder, no residual/eligibility claim)
+    // The full rungs (Cte_P4_Select / RecursiveCte_P4_Declared) build exactly what BuildCte() /
+    // BuildRecursiveCte() build, so the ladder closes on the original arms.
+    //
+    // Raw-hit ladder on one-shot fresh never-prepared commands (the only capture entry point is
+    // QueryCommand.CaptureRawShape, QueryCommand.QueryPreparer.cs:3889):
+    //   RawHit_P0_Capture   = construct + CaptureRawShape (no field read).
+    //   RawHit_P2_Comparers = P0 + the four expression comparers the full raw lookup creates while
+    //                         RawShape.Matches verifies a candidate (QueryCommand.QueryPreparer.cs:3745-3753:
+    //                         Expression, Sorting, Join and From plan comparers; a fresh command
+    //                         creates them once per iteration).
+    //   {family}_RawHit_Lookup = the pre-existing full raw seam rung; {family}_RawHit = the
+    //                         pre-existing capture+fingerprint arm and the closure target of P0.
+    // NOT SEPARABLE: a distinct "RawHit_P1_Fingerprint" rung cannot exist — RawShape.Fingerprint is a
+    // plain FIELD assigned inside CaptureRawShape (QueryCommand.QueryPreparer.cs:4028), so reading it
+    // adds a field load and no measurable work. It is therefore skipped, not faked.
+    // =============================================================================================
+
+    [Benchmark]
+    public object Cte_P0_Body()
+    {
+        object? result = null;
+        for (var i = 0; i < Iterations; i++)
+            result = _ctx.ComplexEntity.Where(c => c.Id > 1).Select(c => new { c.Id, c.RequiredString });
+        return result!;
+    }
+
+    [Benchmark]
+    public object Cte_P1_With()
+    {
+        object? result = null;
+        for (var i = 0; i < Iterations; i++)
+        {
+            var recent = _ctx.ComplexEntity.Where(c => c.Id > 1).Select(c => new { c.Id, c.RequiredString });
+            result = _db.With("recent", recent);
+        }
+        return result!;
+    }
+
+    [Benchmark]
+    public object Cte_P2_From()
+    {
+        object? result = null;
+        for (var i = 0; i < Iterations; i++)
+        {
+            var recent = _ctx.ComplexEntity.Where(c => c.Id > 1).Select(c => new { c.Id, c.RequiredString });
+            result = _db.With("recent", recent).From("recent");
+        }
+        return result!;
+    }
+
+    [Benchmark]
+    public object Cte_P3_Join()
+    {
+        object? result = null;
+        for (var i = 0; i < Iterations; i++)
+        {
+            var recent = _ctx.ComplexEntity.Where(c => c.Id > 1).Select(c => new { c.Id, c.RequiredString });
+            result = _db.With("recent", recent)
+                .From("recent")
+                .Join(_ctx.SimpleEntity, (row, s) => row["id"].AsInt == s.Id);
+        }
+        return result!;
+    }
+
+    [Benchmark]
+    public QueryCommand<CteJoinRow> Cte_P4_Select()
+    {
+        QueryCommand<CteJoinRow>? result = null;
+        for (var i = 0; i < Iterations; i++) result = BuildCte();
+        return result!;
+    }
+
+    [Benchmark]
+    public QueryCommand<CteNumberRow> RecursiveCte_P0_Anchor()
+    {
+        QueryCommand<CteNumberRow>? result = null;
+        for (var i = 0; i < Iterations; i++)
+            result = _ctx.SimpleEntity.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+        return result!;
+    }
+
+    [Benchmark]
+    public QueryCommand<CteNumberRow> RecursiveCte_P1_Step()
+    {
+        QueryCommand<CteNumberRow>? result = null;
+        for (var i = 0; i < Iterations; i++)
+            result = _db.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+        return result!;
+    }
+
+    [Benchmark]
+    public object RecursiveCte_P2_Operands()
+    {
+        object? result = null;
+        for (var i = 0; i < Iterations; i++)
+        {
+            var anchor = _ctx.SimpleEntity.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+            var step = _db.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+            result = anchor;
+            if (step is not null) _sink++;
+        }
+        return result!;
+    }
+
+    [Benchmark]
+    public QueryCommand<CteNumberRow> RecursiveCte_P3_UnionAll()
+    {
+        QueryCommand<CteNumberRow>? result = null;
+        for (var i = 0; i < Iterations; i++)
+        {
+            var anchor = _ctx.SimpleEntity.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+            var step = _db.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+            result = anchor.UnionAll(step);
+        }
+        return result!;
+    }
+
+    [Benchmark]
+    public QueryCommand<int> RecursiveCte_P4_Declared()
+    {
+        QueryCommand<int>? result = null;
+        for (var i = 0; i < Iterations; i++)
+        {
+            var anchor = _ctx.SimpleEntity.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+            var step = _db.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+            result = _db.WithRecursive("nums", anchor.UnionAll(step)).From("nums").Select(t => t["n"].AsInt);
+        }
+        return result!;
+    }
+
+    [Benchmark]
+    public object Gen_P0_From()
+    {
+        object? result = null;
+        for (var i = 0; i < Iterations; i++) result = _db.From("nums");
+        return result!;
+    }
+
+    [Benchmark]
+    public object Gen_P1_Where()
+    {
+        object? result = null;
+        for (var i = 0; i < Iterations; i++) result = _db.From("nums").Where(t => t["n"].AsInt < 5);
+        return result!;
+    }
+
+    [Benchmark]
+    public QueryCommand<int> Gen_P2_Select()
+    {
+        QueryCommand<int>? result = null;
+        for (var i = 0; i < Iterations; i++)
+            result = _db.From("nums").Where(t => t["n"].AsInt < 5).Select(t => t["n"].AsInt);
+        return result!;
+    }
+
+    [Benchmark]
+    public object? Cte_RawHit_P0_Capture()
+    {
+        object? result = null;
+        for (var i = 0; i < Iterations; i++) result = QueryCommand.CaptureRawShape(BuildCte());
+        return result;
+    }
+
+    [Benchmark]
+    public object? RecursiveCte_RawHit_P0_Capture()
+    {
+        object? result = null;
+        for (var i = 0; i < Iterations; i++) result = QueryCommand.CaptureRawShape(BuildRecursiveCte());
+        return result;
+    }
+
+    [Benchmark]
+    public object? Cte_RawHit_P2_Comparers()
+    {
+        object? result = null;
+        for (var i = 0; i < Iterations; i++)
+        {
+            var command = BuildCte();
+            var shape = QueryCommand.CaptureRawShape(command);
+            if (shape is not null)
+            {
+                if (command.GetExpressionPlanEqualityComparer() is not null) _sink++;
+                if (command.GetSortingExpressionPlanEqualityComparer() is not null) _sink++;
+                if (command.GetJoinExpressionPlanEqualityComparer() is not null) _sink++;
+                if (command.GetFromExpressionPlanEqualityComparer() is not null) _sink++;
+                result = shape;
+            }
+        }
+        return result;
+    }
+
+    [Benchmark]
+    public object? RecursiveCte_RawHit_P2_Comparers()
+    {
+        object? result = null;
+        for (var i = 0; i < Iterations; i++)
+        {
+            var command = BuildRecursiveCte();
+            var shape = QueryCommand.CaptureRawShape(command);
+            if (shape is not null)
+            {
+                if (command.GetExpressionPlanEqualityComparer() is not null) _sink++;
+                if (command.GetSortingExpressionPlanEqualityComparer() is not null) _sink++;
+                if (command.GetJoinExpressionPlanEqualityComparer() is not null) _sink++;
+                if (command.GetFromExpressionPlanEqualityComparer() is not null) _sink++;
+                result = shape;
+            }
+        }
+        return result;
+    }
+
     /// <summary>
     /// The exact raw-recipe seam the product takes for a fresh cacheable command: capture, index
     /// lookup, replay. It deliberately does not replay the product's reject-and-discard branch — the

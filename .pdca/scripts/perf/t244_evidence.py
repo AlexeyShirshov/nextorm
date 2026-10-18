@@ -16,6 +16,10 @@ acceptance evidence required by ``docs/specs/status/D244-warm-cte-1.md`` §3/§4
               (exit 2, everything still recorded) for wrong source/build/DB hash, mixed
               artifacts, external overlap, wrong environment, a missing job/reference or
               malformed output — never for a merely unfavorable valid result.
+              ``--scope warm-decompose`` (diagnostic, D244-05) runs only the
+              ``*SqliteBenchmarkWarmDecompose*`` invocation with the identical lock,
+              provenance, source-state fingerprint, DB-hash and round-validity machinery;
+              the default ``--scope full`` keeps today's three-invocation behaviour.
 ``evaluate``  pairs same scenario/class/job/round NextORM and linq2db arms, applies the
               per-class logical-operation divisor (FairCached /10, WarmDecompose /100)
               and the tier (final <= 1.00, checkpoint <= 1.20), checks the prepared
@@ -28,6 +32,14 @@ acceptance evidence required by ``docs/specs/status/D244-warm-cte-1.md`` §3/§4
               (PlanKey) / RawHit / end-to-end, ranks the eligible non-frozen components
               and checks the unattributed residual bound.  Emits ``attribution.json`` +
               ``attribution.md``.
+``rank``      consumes one diagnostic round (both jobs) and turns the D244-05 ladder into
+              per-arm B/query (raw and per-query), the signed increment between
+              consecutive rungs, the closure error against the original
+              ``Construct``/``RawHit`` arms, the unattributed residual against
+              ``max(128 B/query, 10 % of warm)`` and the frozen-selection-rule
+              eligible/rejected list.  Exit 0 = closed and within bound,
+              2 = residual over bound / no closure / non-monotone ladder (insufficient
+              attribution), 1 = malformed/missing evidence.
 ``docs-check`` verifies that the §9 docs mapping is consistent with the measured
               acceptance tier (no final/success claim for a checkpoint).
 ``invariants`` hashes the frozen regions (``CteHoister.cs``, frozen recipe /
@@ -135,6 +147,71 @@ WARM_METHODS = (
     "Warm_PlanOnly",
     "Warm_Reused",
 )
+
+#: D244-05 targeted re-gather. Each tuple is a genuine prefix ladder of the same graph; the arm at
+#: index i+1 = the arm at index i plus exactly one step, so the signed increment between two
+#: consecutive rungs is the isolated cost of the step separating them (a negative delta beyond the
+#: noise floor means the rungs are not nested and forbids the ranking).
+CONSTRUCT_LADDERS = {
+    "Cte": (
+        "Cte_P0_Body",
+        "Cte_P1_With",
+        "Cte_P2_From",
+        "Cte_P3_Join",
+        "Cte_P4_Select",
+    ),
+    "RecursiveCte": (
+        "RecursiveCte_P0_Anchor",
+        "RecursiveCte_P1_Step",
+        "RecursiveCte_P2_Operands",
+        "RecursiveCte_P3_UnionAll",
+        "RecursiveCte_P4_Declared",
+    ),
+}
+#: The original arm each construct ladder must close on (its top rung builds exactly this graph).
+CONSTRUCT_CLOSURE_TARGET = {
+    "Cte": "Cte_Construct",
+    "RecursiveCte": "RecursiveCte_Construct",
+}
+#: Control ladder on a trivial ``From("nums")`` graph — measured, never ranked.
+GENERIC_LADDER = ("Gen_P0_From", "Gen_P1_Where", "Gen_P2_Select")
+#: Raw-hit ladder on fresh never-prepared commands.
+RAWHIT_LADDERS = {
+    "Cte": ("Cte_RawHit_P0_Capture", "Cte_RawHit_P2_Comparers", "Cte_RawHit_Lookup"),
+    "RecursiveCte": (
+        "RecursiveCte_RawHit_P0_Capture",
+        "RecursiveCte_RawHit_P2_Comparers",
+        "RecursiveCte_RawHit_Lookup",
+    ),
+}
+#: The original raw-hit arm each raw ladder closes on (capture + fingerprint read).
+RAWHIT_CLOSURE_TARGET = {
+    "Cte": "Cte_RawHit",
+    "RecursiveCte": "RecursiveCte_RawHit",
+}
+#: Ladder steps that could not be isolated, with the verified reason.  They are never faked: the
+#: ranking must not invent a rung the product does not actually expose.
+NOT_SEPARABLE_ARMS = (
+    {
+        "arm": "RawHit_P1_Fingerprint",
+        "reason": (
+            "RawShape.Fingerprint is a plain field assigned inside CaptureRawShape "
+            "(QueryCommand.QueryPreparer.cs:4028); reading it is a field load, so 'capture without "
+            "fingerprint' is not a separable step and the rung is skipped, not faked."
+        ),
+    },
+)
+
+#: A negative signed increment beyond this floor means the rungs are not genuinely nested.
+LADDER_NOISE_ABS_BYTES = NEGATIVE_RESIDUAL_ABS_BYTES
+LADDER_NOISE_FRACTION = NEGATIVE_RESIDUAL_FRACTION
+#: A ladder top must reproduce the original arm it closes on within this band (two BDN measurements
+#: of the same graph may differ by jit/layout noise; a real mis-nesting is far larger).
+CLOSURE_ABS_BYTES = 64.0
+CLOSURE_FRACTION = 0.05
+
+#: The warm-decompose-only diagnostic invocation of ``measure --scope warm-decompose``.
+WARM_DECOMPOSE_TAG = "warm-decompose"
 
 #: §9 documents that must stay consistent with the measured tier.  The token is the
 #: minimum content the mapping requires so a missing/renamed page cannot pass silently.
@@ -868,6 +945,21 @@ def stage_invocation_artifacts(artifact_root, before, staged_dir) -> tuple:
     return staged, after, stale
 
 
+def invocations_for_scope(scope: str) -> tuple:
+    """The pinned invocations of one round, by scope.
+
+    ``full`` (the default, unchanged behaviour) runs all three invocations in order.  The
+    ``warm-decompose`` diagnostic scope runs only the ``*SqliteBenchmarkWarmDecompose*``
+    invocation with the identical lock/provenance/validity machinery — used by the D244-05
+    targeted re-gather, which needs no FairCached/prepared invocation.
+    """
+    if scope == "full":
+        return tuple(INVOCATIONS)
+    if scope == "warm-decompose":
+        return tuple(inv for inv in INVOCATIONS if inv["tag"] == WARM_DECOMPOSE_TAG)
+    raise Reject(f"unknown measure scope: {scope!r}")
+
+
 def expected_arms(short_type) -> tuple:
     if short_type == FAIR_CACHED_TYPE:
         arms = []
@@ -882,6 +974,15 @@ def expected_arms(short_type) -> tuple:
         for family in FAMILIES:
             for suffix in WARM_METHODS:
                 arms.append(f"{family}_{suffix}")
+        # D244-05 targeted re-gather ladders: every arm the class now exposes must be present in a
+        # staged report, so a dropped/renamed rung fails closed instead of silently shrinking the
+        # ranking to whatever happened to run.
+        for rungs in CONSTRUCT_LADDERS.values():
+            arms.extend(rungs)
+        arms.extend(GENERIC_LADDER)
+        for family in FAMILIES:
+            arms.append(RAWHIT_CLOSURE_TARGET[family])
+            arms.extend(RAWHIT_LADDERS[family])
         return tuple(arms)
     return ()
 
@@ -1064,12 +1165,14 @@ def measure(args) -> int:
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     artifact_root = repo / ARTIFACTS_REL
+    scope = getattr(args, "scope", "full") or "full"
     record = {
         "tool": "t244_evidence/measure",
         "task": "T244",
         "issue": 244,
         "phase": args.phase,
         "round": args.round,
+        "scope": scope,
         "repo": str(repo),
         "artifact_root": str(artifact_root),
         "output": str(output),
@@ -1096,6 +1199,7 @@ def measure(args) -> int:
         write_json(output / "round-validity.json", {
             "phase": args.phase,
             "round": args.round,
+            "scope": scope,
             "valid": not reasons,
             "reasons": list(reasons),
             "checked_at": record["finished_at"],
@@ -1143,7 +1247,7 @@ def measure(args) -> int:
 
     head = record["source_state_start"]
     invocation_timeout = getattr(args, "invocation_timeout", None)
-    for number, invocation in enumerate(INVOCATIONS, start=1):
+    for number, invocation in enumerate(invocations_for_scope(scope), start=1):
         tag = invocation["tag"]
         staged_dir = output / f"{number}-{tag}"
         argv = benchmark_argv(invocation["filter"])
@@ -2197,6 +2301,415 @@ def write_attribution_markdown(path, payload) -> Path:
 
 
 # ------------------------------------------------------------------------------------------------
+# rank — D244-05 targeted re-gather: signed ladder increments, closure and the residual bound
+# ------------------------------------------------------------------------------------------------
+def ladder_steps(rungs, values, family, job) -> list:
+    """Signed increments between consecutive ladder rungs.
+
+    ``monotone`` is False when a rung is *smaller* than its predecessor by more than the noise
+    floor — the rungs are then not genuinely nested.  The signed delta is always reported as
+    measured (never clamped/zeroed); the caller forbids ranking on a non-monotone ladder.
+    """
+    steps = []
+    for previous, following in zip(rungs, rungs[1:]):
+        before = values[previous]
+        delta = values[following] - before
+        floor = max(LADDER_NOISE_ABS_BYTES, LADDER_NOISE_FRACTION * before)
+        steps.append(
+            {
+                "family": family,
+                "job": job,
+                "from": previous,
+                "to": following,
+                "from_bytes_per_query": before,
+                "to_bytes_per_query": values[following],
+                "delta_bytes_per_query": delta,
+                "noise_floor_bytes_per_query": floor,
+                "monotone": delta >= -floor,
+            }
+        )
+    return steps
+
+
+def closure_check(top_arm, target_arm, top_value, target_value, family, job) -> dict:
+    tolerance = max(CLOSURE_ABS_BYTES, CLOSURE_FRACTION * target_value)
+    error = abs(target_value - top_value)
+    return {
+        "family": family,
+        "job": job,
+        "ladder_top": top_arm,
+        "closure_target": target_arm,
+        "ladder_top_bytes_per_query": top_value,
+        "closure_target_bytes_per_query": target_value,
+        "closure_error_bytes_per_query": error,
+        "closure_tolerance_bytes_per_query": tolerance,
+        "closed": error <= tolerance,
+    }
+
+
+def gap_from_reference(round_dir, family, evaluation_path, identity):
+    reference = reference_bytes(round_dir, family, evaluation_path, identity)
+    if reference is None:
+        return None
+    return reference
+
+
+def classify(removable, gap, frozen, ranking_forbidden) -> tuple:
+    if ranking_forbidden:
+        return False, "ranking forbidden: non-monotone ladder (negative delta beyond noise is never zeroed)"
+    if frozen:
+        return False, "frozen raw-recipe component (D201-3 recipe; §2/§4 — never eligible in T244)"
+    if removable >= ELIGIBLE_ABS_BYTES:
+        return True, f"eligible: removable >= {ELIGIBLE_ABS_BYTES:.0f} B/query"
+    if gap is not None and removable >= ELIGIBLE_FRACTION * gap:
+        return True, f"eligible: removable >= {ELIGIBLE_FRACTION:.0%} of the same-round gap"
+    if gap is None:
+        return (
+            False,
+            "below the eligibility floor (removable < 64 B/query); the same-round gap is "
+            "unavailable in this round, so the 10 % rule could not be applied",
+        )
+    return (
+        False,
+        "below the eligibility floor (removable < 64 B/query and < 10 % of the same-round gap)",
+    )
+
+
+def rank(args) -> int:
+    output = Path(args.output)
+    markdown = output.with_suffix(".md")
+    round_dir = Path(args.round)
+    payload = {
+        "tool": "t244_evidence/rank",
+        "task": "T244",
+        "issue": 244,
+        "generated_at": utc_now(),
+        "round": str(round_dir),
+        "divisor": CLASS_DIVISORS[WARM_TYPE],
+        "not_separable_arms": list(NOT_SEPARABLE_ARMS),
+        "families": [],
+        "generic_ladder": {},
+        "closures": [],
+        "ranking": [],
+        "residual": {},
+        "status": "malformed",
+        "exit_code": EXIT_MALFORMED,
+    }
+    try:
+        reports = discover_reports(round_dir)
+        records = [
+            record for record in load_records(reports) if record["short_type"] == WARM_TYPE
+        ]
+        if not records:
+            raise Reject(f"no {WARM_TYPE} results under {round_dir}")
+        for record in records:
+            require_operation_count(record)
+            require_short_run(record, record["method"])
+        index_records(records)
+        by_method = {}
+        for record in records:
+            by_method.setdefault(record["method"], {})[record["identity"]] = record
+        identities = sorted({record["identity"] for record in records})
+        if not identities:
+            raise Reject(f"no job identity in {round_dir} (both jobs are required)")
+        divisor = CLASS_DIVISORS[WARM_TYPE]
+
+        def arm(method, identity):
+            record = by_method.get(method, {}).get(identity)
+            if record is None:
+                raise Reject(
+                    f"missing ladder arm {method}/{identity} under {round_dir} "
+                    "(the diagnostic round must carry the full ladder for both jobs)"
+                )
+            allocated, mean = require_numbers(record, f"{method}/{identity}")
+            return {
+                "method": method,
+                "job": identity,
+                "raw_bytes": allocated,
+                "bytes_per_query": allocated / divisor,
+                "mean": mean,
+                "source": record["source"],
+            }
+
+        methods = []
+        for family in FAMILIES:
+            methods.extend(CONSTRUCT_LADDERS[family])
+            methods.append(CONSTRUCT_CLOSURE_TARGET[family])
+            methods.extend(RAWHIT_LADDERS[family])
+            methods.append(RAWHIT_CLOSURE_TARGET[family])
+            methods.extend(f"{family}_{suffix}" for suffix in WARM_METHODS)
+        methods.extend(GENERIC_LADDER)
+        methods = list(dict.fromkeys(methods))
+
+        closure_ok = True
+        residual_ok = True
+        ranking_forbidden = False
+        for identity in identities:
+            arms = {method: arm(method, identity) for method in methods}
+            values = {method: arms[method]["bytes_per_query"] for method in methods}
+            payload["generic_ladder"][identity] = {
+                "arms": {method: arms[method] for method in GENERIC_LADDER},
+                "steps": ladder_steps(GENERIC_LADDER, values, "Gen", identity),
+            }
+            for family in FAMILIES:
+                construct_rungs = CONSTRUCT_LADDERS[family]
+                rawhit_rungs = RAWHIT_LADDERS[family]
+                construct_steps = ladder_steps(construct_rungs, values, family, identity)
+                rawhit_steps = ladder_steps(rawhit_rungs, values, family, identity)
+                non_monotone = [
+                    step for step in construct_steps + rawhit_steps if not step["monotone"]
+                ]
+                if non_monotone:
+                    ranking_forbidden = True
+
+                construct_closure = closure_check(
+                    construct_rungs[-1],
+                    CONSTRUCT_CLOSURE_TARGET[family],
+                    values[construct_rungs[-1]],
+                    values[CONSTRUCT_CLOSURE_TARGET[family]],
+                    family,
+                    identity,
+                )
+                rawhit_closure = closure_check(
+                    rawhit_rungs[0],
+                    RAWHIT_CLOSURE_TARGET[family],
+                    values[rawhit_rungs[0]],
+                    values[RAWHIT_CLOSURE_TARGET[family]],
+                    family,
+                    identity,
+                )
+                payload["closures"].extend([construct_closure, rawhit_closure])
+                closure_ok = closure_ok and construct_closure["closed"] and rawhit_closure["closed"]
+
+                warm = values[f"{family}_Warm_PlanOnly"]
+                construct = values[CONSTRUCT_CLOSURE_TARGET[family]]
+                rawhit_path = values[rawhit_rungs[-1]]
+                plan_key = values[f"{family}_Warm_Reused"]
+                residual_signed = warm - rawhit_path - plan_key
+                residual = max(0.0, residual_signed)
+                bound = max(RESIDUAL_ABS_BYTES, RESIDUAL_FRACTION * warm)
+                within_bound = residual <= bound
+                overlap_suspected = residual_signed < -max(
+                    NEGATIVE_RESIDUAL_ABS_BYTES, NEGATIVE_RESIDUAL_FRACTION * warm
+                )
+                residual_ok = residual_ok and within_bound and not overlap_suspected
+
+                reference = gap_from_reference(round_dir, family, args.evaluation, identity)
+                gap = None if reference is None else max(0.0, warm - reference["bytes_per_query"])
+
+                entries = []
+                candidates = [("Construct", construct, False)] + [
+                    (f"Construct:{step['from']}->{step['to']}", step["delta_bytes_per_query"], False)
+                    for step in construct_steps
+                ]
+                for component, removable, frozen in candidates:
+                    eligible, reason = classify(removable, gap, frozen, ranking_forbidden)
+                    entries.append(
+                        {
+                            "family": family,
+                            "job": identity,
+                            "component": component,
+                            "unit": "D244-02",
+                            "removable_bytes_per_query": removable,
+                            "raw_recipe": False,
+                            "eligible": eligible,
+                            "reason": reason,
+                        }
+                    )
+                for step in rawhit_steps:
+                    eligible, reason = classify(
+                        step["delta_bytes_per_query"], gap, True, ranking_forbidden
+                    )
+                    entries.append(
+                        {
+                            "family": family,
+                            "job": identity,
+                            "component": f"RawHit:{step['from']}->{step['to']}",
+                            "unit": None,
+                            "removable_bytes_per_query": step["delta_bytes_per_query"],
+                            "raw_recipe": True,
+                            "eligible": eligible,
+                            "reason": reason,
+                        }
+                    )
+                eligible, reason = classify(plan_key, gap, False, ranking_forbidden)
+                entries.append(
+                    {
+                        "family": family,
+                        "job": identity,
+                        "component": "PlanKey",
+                        "unit": "D244-03",
+                        "removable_bytes_per_query": plan_key,
+                        "raw_recipe": False,
+                        "eligible": eligible,
+                        "reason": reason,
+                    }
+                )
+                eligible, reason = classify(residual, gap, True, ranking_forbidden)
+                entries.append(
+                    {
+                        "family": family,
+                        "job": identity,
+                        "component": "Unattributed",
+                        "unit": None,
+                        "removable_bytes_per_query": residual,
+                        "raw_recipe": False,
+                        "eligible": eligible,
+                        "reason": reason,
+                    }
+                )
+                payload["ranking"].extend(entries)
+                payload["families"].append(
+                    {
+                        "family": family,
+                        "job": identity,
+                        "arms": {method: arms[method] for method in sorted(arms)},
+                        "construct_ladder": construct_rungs,
+                        "construct_steps": construct_steps,
+                        "construct_closure": construct_closure,
+                        "rawhit_ladder": rawhit_rungs,
+                        "rawhit_steps": rawhit_steps,
+                        "rawhit_closure": rawhit_closure,
+                        "non_monotone_steps": non_monotone,
+                        "warm_bytes_per_query": warm,
+                        "construct_bytes_per_query": construct,
+                        "rawhit_path_bytes_per_query": rawhit_path,
+                        "plan_key_bytes_per_query": plan_key,
+                        "residual_bytes_per_query": residual,
+                        "residual_signed": residual_signed,
+                        "residual_bound_bytes_per_query": bound,
+                        "residual_within_bound": within_bound,
+                        "overlap_suspected": overlap_suspected,
+                        "gap_bytes_per_query": gap,
+                        "linq2db_reference": reference,
+                        "ranking": entries,
+                    }
+                )
+        payload["ranking"].sort(
+            key=lambda row: row["removable_bytes_per_query"], reverse=True
+        )
+        payload["open_closures"] = [row for row in payload["closures"] if not row["closed"]]
+        payload["residual"] = {
+            "within_bound": residual_ok,
+            "formula": "Warm_PlanOnly - RawHit_Lookup - Warm_Reused",
+            "bound": "max(128 B/query, 10% of measured warm bytes)",
+            "note": (
+                "the raw-recipe share (RawHit_Lookup - Construct) is measured by the ladder and is "
+                "therefore no longer part of the unattributed residual"
+            ),
+        }
+        if ranking_forbidden:
+            payload["status"] = "insufficient-attribution"
+            payload["exit_code"] = EXIT_NUMERIC
+        elif not closure_ok:
+            payload["status"] = "insufficient-attribution"
+            payload["exit_code"] = EXIT_NUMERIC
+        elif not residual_ok:
+            payload["status"] = "insufficient-attribution"
+            payload["exit_code"] = EXIT_NUMERIC
+        else:
+            payload["status"] = "closed"
+            payload["exit_code"] = EXIT_OK
+    except Reject as exc:
+        payload["status"] = "malformed"
+        payload["exit_code"] = EXIT_MALFORMED
+        payload["error"] = str(exc)
+    write_json(output, payload)
+    write_ranking_markdown(markdown, payload)
+    print(f"rank: {payload['status']} -> {output}")
+    if payload["status"] == "malformed":
+        print(f"ERROR: {payload.get('error')}", file=sys.stderr)
+    return payload["exit_code"]
+
+
+def write_ranking_markdown(path, payload) -> Path:
+    lines = [
+        "# T244 D244-05 targeted re-gather ranking",
+        "",
+        f"- round: `{payload.get('round')}`",
+        f"- WarmDecompose divisor: {payload.get('divisor')}",
+        f"- status: **{payload.get('status')}**",
+        f"- residual check: {'ok' if payload.get('residual', {}).get('within_bound') else 'FAILED'}",
+        "",
+    ]
+    if payload.get("not_separable_arms"):
+        lines.append("## Not separable (skipped, never faked)")
+        lines.append("")
+        for item in payload["not_separable_arms"]:
+            lines.append(f"- `{item['arm']}`: {item['reason']}")
+        lines.append("")
+    for family in payload.get("families", []):
+        lines.append(f"## {family['family']} / {family['job']}")
+        lines.append("")
+        lines.append("| rung | B/query | signed increment | noise floor | monotone |")
+        lines.append("|---|---|---|---|---|")
+        for step in family["construct_steps"] + family["rawhit_steps"]:
+            lines.append(
+                "| {a} -> {b} | {to:.2f} | {delta:+.2f} | {floor:.2f} | {mono} |".format(
+                    a=step["from"],
+                    b=step["to"],
+                    to=step["to_bytes_per_query"],
+                    delta=step["delta_bytes_per_query"],
+                    floor=step["noise_floor_bytes_per_query"],
+                    mono="yes" if step["monotone"] else "NO",
+                )
+            )
+        lines.append("")
+        construct_closure = family["construct_closure"]
+        rawhit_closure = family["rawhit_closure"]
+        lines.append(
+            "closure: `{a}` {value:.2f} vs `{b}` {target:.2f} -> error {err:.2f} "
+            "(tol {tol:.2f}, {ok}); raw closure: `{ra}` vs `{rb}` -> error {rerr:.2f} "
+            "(tol {rtol:.2f}, {rok})".format(
+                a=construct_closure["ladder_top"],
+                value=construct_closure["ladder_top_bytes_per_query"],
+                b=construct_closure["closure_target"],
+                target=construct_closure["closure_target_bytes_per_query"],
+                err=construct_closure["closure_error_bytes_per_query"],
+                tol=construct_closure["closure_tolerance_bytes_per_query"],
+                ok="closed" if construct_closure["closed"] else "OPEN",
+                ra=rawhit_closure["ladder_top"],
+                rb=rawhit_closure["closure_target"],
+                rerr=rawhit_closure["closure_error_bytes_per_query"],
+                rtol=rawhit_closure["closure_tolerance_bytes_per_query"],
+                rok="closed" if rawhit_closure["closed"] else "OPEN",
+            )
+        )
+        lines.append(
+            "residual: warm {warm:.2f} - RawHit_Lookup {rawhit:.2f} - PlanKey {plan:.2f} = "
+            "{residual:.2f} (signed {signed:.2f}, bound {bound:.2f}) -> {verdict}".format(
+                warm=family["warm_bytes_per_query"],
+                rawhit=family["rawhit_path_bytes_per_query"],
+                plan=family["plan_key_bytes_per_query"],
+                residual=family["residual_bytes_per_query"],
+                signed=family["residual_signed"],
+                bound=family["residual_bound_bytes_per_query"],
+                verdict="within bound" if family["residual_within_bound"] else "OVER BOUND",
+            )
+        )
+        lines.append("")
+    lines.append("## Ranking (frozen selection rule §4)")
+    lines.append("")
+    lines.append("| row/job | component | unit | removable B/query | eligible | reason |")
+    lines.append("|---|---|---|---|---|---|")
+    for row in payload.get("ranking", []):
+        lines.append(
+            "| {family}/{job} | {component} | {unit} | {removable:.2f} | {eligible} | {reason} |".format(
+                family=row["family"],
+                job=row["job"],
+                component=row["component"],
+                unit=row["unit"] or "frozen",
+                removable=row["removable_bytes_per_query"],
+                eligible="yes" if row["eligible"] else "no",
+                reason=row["reason"],
+            )
+        )
+    lines.append("")
+    Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\r\n")
+    return Path(path)
+
+
+# ------------------------------------------------------------------------------------------------
 # docs-check — tier wording vs §9 docs mapping
 # ------------------------------------------------------------------------------------------------
 def scan_claims(text, patterns):
@@ -2439,6 +2952,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=3600.0,
         help="per-invocation wall-clock limit in seconds (default: 3600)",
     )
+    measure_parser.add_argument(
+        "--scope",
+        choices=("full", "warm-decompose"),
+        default="full",
+        help=(
+            "invocation scope: 'full' runs all three pinned invocations (default, unchanged); "
+            "'warm-decompose' runs only the *SqliteBenchmarkWarmDecompose* invocation for the "
+            "D244-05 diagnostic re-gather, with the same lock/provenance/validity machinery"
+        ),
+    )
 
     evaluate_parser = subparsers.add_parser(
         "evaluate",
@@ -2480,6 +3003,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--evaluation", default=None, help="evaluation.json fallback for the linq2db reference"
     )
 
+    rank_parser = subparsers.add_parser(
+        "rank",
+        help="rank the D244-05 targeted re-gather ladder of one diagnostic round",
+        description=(
+            "Consume a diagnostic (measure --scope warm-decompose) round and emit per-arm B/query, "
+            "the signed increment between consecutive ladder rungs, the closure error against the "
+            "original Construct/RawHit arms, the unattributed residual vs "
+            "max(128 B/query, 10% of warm) and the frozen-selection-rule eligible/rejected list. "
+            "Exit 0 = closed and within bound, 2 = residual over bound / no closure / non-monotone "
+            "ladder (insufficient attribution), 1 = malformed/missing evidence."
+        ),
+    )
+    rank_parser.add_argument("--round", required=True, help="diagnostic round directory")
+    rank_parser.add_argument("--output", required=True, help="ranking.json path")
+    rank_parser.add_argument(
+        "--evaluation", default=None, help="evaluation.json fallback for the linq2db gap reference"
+    )
+
     docs_parser = subparsers.add_parser(
         "docs-check",
         help="verify the docs mapping matches the measured acceptance tier",
@@ -2516,6 +3057,8 @@ def main(argv=None) -> int:
             return evaluate(args)
         if args.command == "attribute":
             return attribute(args)
+        if args.command == "rank":
+            return rank(args)
         if args.command == "docs-check":
             return docs_check(args)
         if args.command == "invariants":
