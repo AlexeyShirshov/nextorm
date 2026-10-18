@@ -1,0 +1,207 @@
+{
+  "task": "T245",
+  "unit": "D245-1",
+  "captured_at_head": "f82edf36437429e7a96d8a1525059934303f2567",
+  "note": "expected sequences/multisets read from test sources; no integration execution in this preflight",
+  "cases": [
+    {
+      "case": "Union_ShouldRemoveDuplicates",
+      "in_memory_sequence": "Seed1To10: ids 1..10; right operand ids 1..3",
+      "ops": [
+        "Union"
+      ],
+      "assertion": "BeEquivalentTo",
+      "expected_values": "Enumerable.Range(1, 10)",
+      "expected_count": null,
+      "file": "tests/nextorm.core.tests/InMemory/InMemoryTests.cs",
+      "line": 897
+    },
+    {
+      "case": "UnionAll_ShouldKeepDuplicates",
+      "in_memory_sequence": "Seed1To10: ids 1..10; right operand ids 1..3",
+      "ops": [
+        "UnionAll"
+      ],
+      "assertion": "HaveCount",
+      "expected_values": "13",
+      "expected_count": 13,
+      "file": "tests/nextorm.core.tests/InMemory/InMemoryTests.cs",
+      "line": 906
+    },
+    {
+      "case": "Intersect_ShouldReturnOnlyCommonRows",
+      "in_memory_sequence": "Seed1To10: ids 1..10; right operand ids 1..3",
+      "ops": [
+        "Intersect"
+      ],
+      "assertion": "BeEquivalentTo",
+      "expected_values": "[1, 2, 3]",
+      "expected_count": null,
+      "file": "tests/nextorm.core.tests/InMemory/InMemoryTests.cs",
+      "line": 915
+    },
+    {
+      "case": "Except_ShouldReturnOnlyLeftRows",
+      "in_memory_sequence": "Seed1To10: ids 1..10; right operand ids 1..3",
+      "ops": [
+        "Except"
+      ],
+      "assertion": "BeEquivalentTo",
+      "expected_values": "Enumerable.Range(4, 7)",
+      "expected_count": null,
+      "file": "tests/nextorm.core.tests/InMemory/InMemoryTests.cs",
+      "line": 924
+    },
+    {
+      "case": "IntersectAll_ShouldReturnCommonRows",
+      "in_memory_sequence": "Seed1To10: ids 1..10; right operand ids 1..3",
+      "ops": [
+        "IntersectAll"
+      ],
+      "assertion": "BeEquivalentTo",
+      "expected_values": "[1, 2, 3]",
+      "expected_count": null,
+      "file": "tests/nextorm.core.tests/InMemory/InMemoryTests.cs",
+      "line": 933
+    },
+    {
+      "case": "ExceptAll_ShouldReturnOnlyLeftRows",
+      "in_memory_sequence": "Seed1To10: ids 1..10; right operand ids 1..3",
+      "ops": [
+        "ExceptAll"
+      ],
+      "assertion": "BeEquivalentTo",
+      "expected_values": "Enumerable.Range(4, 7)",
+      "expected_count": null,
+      "file": "tests/nextorm.core.tests/InMemory/InMemoryTests.cs",
+      "line": 942
+    },
+    {
+      "case": "SetOperations_WhenChained_ShouldApplyLeftToRight",
+      "in_memory_sequence": "Seed1To10: ids 1..10; right operand ids 1..3",
+      "ops": [
+        "Except",
+        "Intersect"
+      ],
+      "assertion": "BeEquivalentTo",
+      "expected_values": "Enumerable.Range(4, 7)",
+      "expected_count": null,
+      "file": "tests/nextorm.core.tests/InMemory/InMemoryTests.cs",
+      "line": 952
+    },
+    {
+      "case": "SetOperation_AsSubquery_Count_ShouldReturnRowCount",
+      "in_memory_sequence": "Seed1To10: ids 1..10; right operand ids 1..3",
+      "ops": [
+        "Except"
+      ],
+      "assertion": "CountBe",
+      "expected_values": "7",
+      "expected_count": 7,
+      "file": "tests/nextorm.core.tests/InMemory/InMemoryTests.cs",
+      "line": 978
+    },
+    {
+      "case": "Intersect_ShouldReturnOnlyCommonRows",
+      "in_memory_sequence": null,
+      "ops": [
+        "Intersect"
+      ],
+      "assertion": "CountBe",
+      "expected_values": "3",
+      "expected_count": 3,
+      "skip_unless_supports_intersect_except_all": false,
+      "file": "tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SetOperations.cs",
+      "line": 14
+    },
+    {
+      "case": "Except_ShouldReturnOnlyLeftRows",
+      "in_memory_sequence": null,
+      "ops": [
+        "Except"
+      ],
+      "assertion": "CountBe",
+      "expected_values": "7",
+      "expected_count": 7,
+      "skip_unless_supports_intersect_except_all": false,
+      "file": "tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SetOperations.cs",
+      "line": 24
+    },
+    {
+      "case": "SetOperations_WhenChained_ShouldApplyLeftToRight",
+      "in_memory_sequence": null,
+      "ops": [
+        "Except",
+        "Intersect"
+      ],
+      "assertion": "CountBe",
+      "expected_values": "7",
+      "expected_count": 7,
+      "skip_unless_supports_intersect_except_all": false,
+      "file": "tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SetOperations.cs",
+      "line": 35
+    },
+    {
+      "case": "IntersectAll_WhenSupported_ShouldReturnCommonRows",
+      "in_memory_sequence": null,
+      "ops": [
+        "IntersectAll"
+      ],
+      "assertion": "CountBe",
+      "expected_values": "3",
+      "expected_count": 3,
+      "skip_unless_supports_intersect_except_all": true,
+      "file": "tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SetOperations.cs",
+      "line": 47
+    },
+    {
+      "case": "ExceptAll_WhenSupported_ShouldReturnOnlyLeftRows",
+      "in_memory_sequence": null,
+      "ops": [
+        "ExceptAll"
+      ],
+      "assertion": "CountBe",
+      "expected_values": "7",
+      "expected_count": 7,
+      "skip_unless_supports_intersect_except_all": true,
+      "file": "tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SetOperations.cs",
+      "line": 59
+    },
+    {
+      "case": "IntersectAll_WhenUnsupported_ShouldThrow",
+      "in_memory_sequence": null,
+      "ops": [
+        "IntersectAll"
+      ],
+      "assertion": "ThrowsNotSupported",
+      "expected_values": null,
+      "expected_count": null,
+      "skip_unless_supports_intersect_except_all": true,
+      "file": "tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SetOperations.cs",
+      "line": 64
+    },
+    {
+      "case": "ExceptAll_WhenUnsupported_ShouldThrow",
+      "in_memory_sequence": null,
+      "ops": [
+        "ExceptAll"
+      ],
+      "assertion": "ThrowsNotSupported",
+      "expected_values": null,
+      "expected_count": null,
+      "skip_unless_supports_intersect_except_all": true,
+      "file": "tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SetOperations.cs",
+      "line": 78
+    }
+  ],
+  "source_files": [
+    {
+      "file": "tests/nextorm.core.tests/InMemory/InMemoryTests.cs",
+      "sha256": "0e47b9a6a4558e01a37a10dadde7642dd547f014f5aad4acce98f3c2e332d0c8"
+    },
+    {
+      "file": "tests/nextorm.integration.tests/CommonTestSuite/Queries/CommonTestSuite.SetOperations.cs",
+      "sha256": "94d492eb661c3ed9a8e160b2ff50ee02d1781c17de4d248531c43659f9f68542"
+    }
+  ]
+}

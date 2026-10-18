@@ -1,0 +1,121 @@
+{
+  "task": "T245",
+  "cycle": 1,
+  "plan_revision": 1,
+  "unit": "D245-1",
+  "step": "preflight",
+  "captured_at_utc": "2026-10-18T15:57:18Z",
+  "repo": "/home/alex/sources/nextorm",
+  "git": {
+    "head": "f82edf36437429e7a96d8a1525059934303f2567",
+    "head_expected": "f82edf36",
+    "head_matches_expected": true,
+    "branch": "1.0.9-rc3",
+    "status_porcelain_path": ".pdca/T245/rv1/logs/git-status-entry.txt",
+    "status_porcelain_entry_count": 36,
+    "status_porcelain_note": "pre-existing modified/untracked files present at entry; no files were modified by this step before capture",
+    "base_ref": "01815f3aedbacdb75ac4c0b897c691cae808b550",
+    "base_ref_exists": true,
+    "base_ref_type": "commit"
+  },
+  "dotnet": {
+    "sdk_version": "10.0.401",
+    "sdk_base_path": "/home/alex/.dotnet/sdk/10.0.401/",
+    "runtime_version": "10.0.12",
+    "runtimes": {
+      "Microsoft.NETCore.App": "10.0.12",
+      "Microsoft.AspNetCore.App": "10.0.12"
+    },
+    "raw_log": ".pdca/T245/rv1/logs/dotnet-info.txt"
+  },
+  "python": {
+    "command": "python3",
+    "version": "Python 3.10.12"
+  },
+  "os": {
+    "uname": "Linux alex-asus 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "distro": "Ubuntu 22.04 (per dotnet --info OS Name/Version)"
+  },
+  "cpu": {
+    "model_name": "AMD Ryzen 7 5800HS with Radeon Graphics",
+    "logical_cpus": 8
+  },
+  "memory": {
+    "total_kb": 12248700,
+    "available_kb": 6569700,
+    "swap_total_kb": 4194304,
+    "swap_free_kb": 749476,
+    "free_h": "              total        used        free      shared  buff/cache   available\nMem:            11Gi       4.4Gi       855Mi       437Mi       6.4Gi       6.6Gi\nSwap:          4.0Gi       3.3Gi       731Mi",
+    "note": "free -h captured at step start; load was already high (see load_average)"
+  },
+  "load_average": {
+    "one_five_fifteen": "13.10 7.26 5.33",
+    "runnable_total": "4/1008",
+    "first_capture": "10.45 6.27 4.97 7/1009 1962294",
+    "second_capture": "13.10 7.26 5.33 4/1008 1962877",
+    "foreign_load_expected": true,
+    "note": "load average far above 8 logical CPUs at entry; quiet-window probe records the foreign-process verdict"
+  },
+  "tools": {
+    "dotnet-coverage": {
+      "on_path": false,
+      "local_tool_manifest": true,
+      "manifest_version": "18.11.2",
+      "source": ".config/dotnet-tools.json"
+    },
+    "reportgenerator": {
+      "on_path": false,
+      "local_tool_manifest": true,
+      "manifest_package": "dotnet-reportgenerator-globaltool",
+      "manifest_version": "5.5.11",
+      "source": ".config/dotnet-tools.json"
+    },
+    "dotnet-trace": {
+      "on_path": true,
+      "path": "/home/alex/.dotnet/tools/dotnet-trace",
+      "version": "10.0.745401+cef304c50763bf24f99566cb31d55540842e7ae9"
+    },
+    "dotnet-counters": {
+      "on_path": false,
+      "note": "not installed globally or in the local tool manifest"
+    },
+    "perf": {
+      "on_path": false,
+      "note": "linux perf not installed in this WSL2 image"
+    },
+    "flock": {
+      "on_path": true,
+      "path": "/usr/bin/flock",
+      "version": "flock from util-linux 2.37.2"
+    }
+  },
+  "benchmark_config": {
+    "config_file": "benchmarks/nextorm.benchmark/Infrastructure/NextormConfig.cs",
+    "job_excerpt": {
+      "lines": "22-25",
+      "code": "// Set NEXTORM_BENCH_FULL=1 to get the full out-of-process run.\nAddJob(Environment.GetEnvironmentVariable(\"NEXTORM_BENCH_FULL\") == \"1\"\n    ? Job.Default\n    : Job.ShortRun.WithToolchain(InProcessEmitToolchain.Instance));"
+    },
+    "artifact_path_line": {"line": 15, "code": "ArtifactsPath = BenchmarkArtifacts.Path;"},
+    "orderer_line": {"line": 18, "code": "Orderer = new DefaultOrderer(SummaryOrderPolicy.FastestToSlowest);"},
+    "default_job": "Job.ShortRun with InProcessEmitToolchain (warmup 3 / iterations 3 per comment at lines 20-21) unless NEXTORM_BENCH_FULL=1, then Job.Default (out-of-process)",
+    "db_resolution": {
+      "file": "benchmarks/nextorm.benchmark/Infrastructure/BenchDb.cs",
+      "lines": {
+        "env_override": "11: NEXTORM_BENCH_DB",
+        "wsl_path": "15-17: const string wslPath = \"/tmp/nextorm-bench/test.db\"; if (File.Exists(wslPath)) return wslPath;",
+        "fallback": "19: Path.Combine(Directory.GetCurrentDirectory(), \"data\", \"test.db\")"
+      },
+      "order": ["NEXTORM_BENCH_DB env var", "/tmp/nextorm-bench/test.db if it exists", "<cwd>/data/test.db"]
+    }
+  },
+  "db_pin": {
+    "expected_sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+    "paths": [
+      {"path": "/tmp/nextorm-bench/test.db", "sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295", "size": 753664, "match": 1, "existed_at_entry": true, "copied_by_step": false},
+      {"path": "benchmarks/nextorm.benchmark/data/test.db", "sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295", "size": 753664, "match": 1, "existed_at_entry": true, "copied_by_step": false}
+    ],
+    "match": "2/2",
+    "raw_log": ".pdca/T245/rv1/logs/db-sha256.txt"
+  }
+}

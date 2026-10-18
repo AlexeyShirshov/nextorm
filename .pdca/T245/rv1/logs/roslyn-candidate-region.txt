@@ -1,0 +1,49 @@
+T245 D245-1 — Roslyn re-resolution of the candidate region
+head: f82edf36437429e7a96d8a1525059934303f2567
+solution: /home/alex/sources/nextorm/nextorm.slnx
+tool calls: tools.roslyn action=members target="NextORM.Core.QueryCommand`1"; action=refs/callers target="NextORM.Core.QueryCommand.SetOperation"
+full verbatim results: .pdca/T245/rv1/api/entry.json
+
+== six set-operation methods actually present on NextORM.Core.QueryCommand<TResult> (src/nextorm.core/Query/QueryCommand.TResult.cs) ==
+  Union<T>: declaration src/nextorm.core/Query/QueryCommand.TResult.cs:1042:34, body span 1042-1053, length 12 lines
+  UnionAll<T>: declaration src/nextorm.core/Query/QueryCommand.TResult.cs:1058:34, body span 1058-1069, length 12 lines
+  Intersect<T>: declaration src/nextorm.core/Query/QueryCommand.TResult.cs:1074:34, body span 1074-1085, length 12 lines
+  IntersectAll<T>: declaration src/nextorm.core/Query/QueryCommand.TResult.cs:1090:34, body span 1090-1101, length 12 lines
+  Except<T>: declaration src/nextorm.core/Query/QueryCommand.TResult.cs:1106:34, body span 1106-1117, length 12 lines
+  ExceptAll<T>: declaration src/nextorm.core/Query/QueryCommand.TResult.cs:1122:34, body span 1122-1133, length 12 lines
+
+  historical/stale citation :1042-1122 -> resolved: declarations 1042..1122, bodies 1042..1133 (last body ExceptAll ends at 1133);
+  the stale range still contains all six declarations but under-covers the ExceptAll body and is superseded by the spans above.
+
+== shared-tail guard: NextORM.Core.QueryCommand.SetOperation ==
+  definition: src/nextorm.core/Query/QueryCommand.cs:1164:20 (protected method SetOperation(QueryCommand queryCommand, UnionType unionType))
+  body span src/nextorm.core/Query/QueryCommand.cs:1164-1182
+  plan guard region QueryCommand.cs:1171-1181 lies inside this method; it is NOT removed or weakened by T245.
+
+== refs NextORM.Core.QueryCommand.SetOperation ==
+def src/nextorm.core/Query/QueryCommand.cs:1164:20  NextORM.Core.QueryCommand.SetOperation(NextORM.Core.QueryCommand, NextORM.Core.UnionType)
+  src/nextorm.core/Query/QueryCommand.TResult.cs:1051:13
+  src/nextorm.core/Query/QueryCommand.TResult.cs:1067:13
+  src/nextorm.core/Query/QueryCommand.TResult.cs:1083:13
+  src/nextorm.core/Query/QueryCommand.TResult.cs:1099:13
+  src/nextorm.core/Query/QueryCommand.TResult.cs:1115:13
+  src/nextorm.core/Query/QueryCommand.TResult.cs:1131:13
+  src/nextorm.core/Query/QueryCommand.cs:1180:20
+7 reference(s)
+
+== callers NextORM.Core.QueryCommand.SetOperation ==
+NextORM.Core.QueryCommand.SetOperation(NextORM.Core.QueryCommand, NextORM.Core.UnionType)
+  src/nextorm.core/Query/QueryCommand.cs:1180:20
+NextORM.Core.QueryCommand<TResult>.Union<T>(NextORM.Core.QueryCommand<T>)
+  src/nextorm.core/Query/QueryCommand.TResult.cs:1051:13
+NextORM.Core.QueryCommand<TResult>.UnionAll<T>(NextORM.Core.QueryCommand<T>)
+  src/nextorm.core/Query/QueryCommand.TResult.cs:1067:13
+NextORM.Core.QueryCommand<TResult>.Intersect<T>(NextORM.Core.QueryCommand<T>)
+  src/nextorm.core/Query/QueryCommand.TResult.cs:1083:13
+NextORM.Core.QueryCommand<TResult>.IntersectAll<T>(NextORM.Core.QueryCommand<T>)
+  src/nextorm.core/Query/QueryCommand.TResult.cs:1099:13
+NextORM.Core.QueryCommand<TResult>.Except<T>(NextORM.Core.QueryCommand<T>)
+  src/nextorm.core/Query/QueryCommand.TResult.cs:1115:13
+NextORM.Core.QueryCommand<TResult>.ExceptAll<T>(NextORM.Core.QueryCommand<T>)
+  src/nextorm.core/Query/QueryCommand.TResult.cs:1131:13
+7 call site(s)
