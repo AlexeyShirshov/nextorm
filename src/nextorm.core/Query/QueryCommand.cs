@@ -274,11 +274,41 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
 
     /// <summary>
     /// Snapshot of this command's shape as a <see cref="QueryDefinition"/>, used by external readers and
-    /// the test surface. The record is materialised once per description and memoised there; any raw
-    /// write installs a fresh description (copy-on-write), whose empty cache yields the new value. The
-    /// internal clone paths do not read it — they transfer state directly and allocate no record.
+    /// the test surface. The record is materialised once per (description, paging) pair and memoised on
+    /// the description; any raw write installs a fresh description (copy-on-write) and clears the memo.
+    /// Paging is a node-owned public field, so the memo also records the paging it was built from: a
+    /// sibling that shares the description with a different limit/offset never receives this node's
+    /// snapshot. The internal clone paths do not read it — they transfer state directly and allocate no
+    /// record.
     /// </summary>
-    internal QueryDefinition Definition => Description.DefinitionCache ??= BuildDefinition();
+    internal QueryDefinition Definition
+    {
+        get
+        {
+            var description = Description;
+            var paging = Paging;
+            if (description.DefinitionCache is { } memo
+                && PagingEquals(memo.Paging, paging))
+            {
+                return memo.Definition;
+            }
+
+            var definition = BuildDefinition();
+            description.DefinitionCache = new DefinitionMemo(definition, paging);
+            return definition;
+        }
+    }
+
+    /// <summary>
+    /// Compares the paging snapshot a memoised definition was built from with the command's current
+    /// paging. <see cref="Paging"/> is node state rather than description state, so writing the public
+    /// field cannot clear the description's memo directly; this comparison is that invalidation.
+    /// </summary>
+    private static bool PagingEquals(in Paging left, in Paging right)
+        => left.Limit == right.Limit
+            && left.Offset == right.Offset
+            && left.HasWithTies == right.HasWithTies;
+
     /// <summary>Materialises the shape record from the current description and memoizes it there.</summary>
     private QueryDefinition BuildDefinition() => new()
         {

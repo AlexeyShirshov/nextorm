@@ -67,6 +67,39 @@ public class CteDescriptionCowTests
             "the two nodes are different plans");
     }
 
+    /// <summary>
+    /// Pins D-COW-1: paging is node-owned state, so each command in a fluent chain materialises its own
+    /// <see cref="QueryDefinition"/> snapshot even while the chain shares one raw description. A memoised
+    /// snapshot built for a sibling's limit/offset must never be served to this command.
+    /// </summary>
+    [Fact]
+    public void Descriptions_IntermediateChain_EachDefinitionKeepsItsOwnPaging()
+    {
+        using var ctx = CreateSqlServerContext();
+
+        var root = ctx.From<SimpleEntity>().Where(x => x.Id > 0).Select(x => x.Id);
+        var ordered = root.OrderBy(1);
+        var limited = ordered.Limit(3);
+        var paged = limited.Offset(1);
+
+        // Reading a sibling's snapshot in between must not move another command's snapshot.
+        ordered.Definition.Paging.Limit.Should().Be(0);
+        limited.Definition.Paging.Limit.Should().Be(3);
+        paged.Definition.Paging.Should().Match<Paging>(p => p.Limit == 3 && p.Offset == 1);
+        limited.Definition.Paging.Offset.Should().Be(0);
+        ordered.Definition.Paging.Limit.Should().Be(0,
+            "the memo must not be shared across commands with different paging");
+
+        // The memo keeps returning equal values for the same command, even after a sibling read.
+        var first = limited.Definition;
+        _ = paged.Definition;
+        var second = limited.Definition;
+        second.Paging.Limit.Should().Be(first.Paging.Limit);
+        second.Paging.Offset.Should().Be(first.Paging.Offset);
+        second.Should().Be(first, "a repeated read of the same command's definition is value-equal");
+        ordered.Definition.Paging.Limit.Should().Be(0);
+    }
+
     /// <summary>Pins that a prepared command keeps its own preparation state when a clone (sharing its description) is mutated and reset.</summary>
     [Fact]
     public void Sharing_CloneMutationAndReset_LeavePreparedOriginalWarm()

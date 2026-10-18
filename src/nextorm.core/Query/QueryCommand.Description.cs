@@ -201,6 +201,23 @@ internal sealed class QueryOptions
 }
 
 /// <summary>
+/// Immutable memo of a <see cref="QueryDefinition"/> snapshot together with the node-owned paging it was
+/// built from. The description holds one reference to the memo, so a reader of a shared description can
+/// never observe a definition and a paging snapshot from two different writes.
+/// </summary>
+internal sealed class DefinitionMemo
+{
+    internal DefinitionMemo(QueryDefinition definition, Paging paging)
+    {
+        Definition = definition;
+        Paging = paging;
+    }
+
+    internal QueryDefinition Definition { get; }
+    internal Paging Paging { get; }
+}
+
+/// <summary>
 /// Immutable-by-contract raw description of a <see cref="QueryCommand"/>: the projection/source, the eight
 /// grouped raw blocks and a flag word for the remaining raw booleans. A node owns at most one description;
 /// a description is shared with other nodes only on copy-on-write terms (every mutation replaces the
@@ -229,7 +246,12 @@ internal sealed class QueryDescription
     internal QueryOrdering Ordering = QueryOrdering.Empty;
     internal QueryClauses Clauses = QueryClauses.Empty;
     internal QueryOptions Options = QueryOptions.Empty;
-    internal QueryDefinition? DefinitionCache;
+    /// <summary>
+    /// The memoised <see cref="QueryDefinition"/> snapshot together with the paging it was built from.
+    /// One immutable object per memo keeps the pair consistent under concurrent reads of a shared
+    /// description: a single reference write publishes both values, never a torn <see cref="Paging"/>.
+    /// </summary>
+    internal DefinitionMemo? DefinitionCache;
 
     /// <summary>Marks this description and every block it references as shared by more than one node.</summary>
     internal void MarkShared()
