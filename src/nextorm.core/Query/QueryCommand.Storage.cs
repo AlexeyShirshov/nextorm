@@ -109,24 +109,11 @@ internal sealed class QueryCommandPreparation
     }
 }
 
-/// <summary>
-/// Node-owned binding and cache-policy state of a <see cref="QueryCommand"/>. Allocated only when one of
-/// the non-default values is written and never shared between commands.
-/// </summary>
-internal sealed class QueryCommandBinding
-{
-    internal bool DontCache;
-    internal bool HasEverPrepared;
-    internal CteReference? TypedRecursiveAnchor;
-}
-
 public partial class QueryCommand
 {
     private QueryCommandPreparation? _preparation;
-    private QueryCommandBinding? _binding;
 
     private QueryCommandPreparation Preparation => _preparation ??= new QueryCommandPreparation();
-    private QueryCommandBinding Binding => _binding ??= new QueryCommandBinding();
 
     /// <summary>The prepared projection columns after <c>PrepareCommand</c>, or <c>null</c> before preparation.</summary>
     protected SelectExpression[]? _selectList
@@ -619,30 +606,6 @@ public partial class QueryCommand
         {
             if (value == (_preparation?.PlanKeyPreWhereShapeHash ?? 0)) return;
             Preparation.PlanKeyPreWhereShapeHash = value;
-        }
-    }
-
-    /// <summary>
-    /// Whether this command instance has ever completed a preparation. Unlike <see cref="_isPrepared"/> it
-    /// is not cleared by <see cref="ResetPreparation"/>.
-    /// </summary>
-    internal bool HasEverPrepared
-    {
-        get => _binding?.HasEverPrepared ?? false;
-        set
-        {
-            if (value == (_binding?.HasEverPrepared ?? false)) return;
-            Binding.HasEverPrepared = value;
-        }
-    }
-
-    private bool _dontCache
-    {
-        get => _binding?.DontCache ?? false;
-        set
-        {
-            if (value == (_binding?.DontCache ?? false)) return;
-            Binding.DontCache = value;
         }
     }
 }
