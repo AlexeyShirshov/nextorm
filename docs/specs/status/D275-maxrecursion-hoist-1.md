@@ -273,6 +273,57 @@ CHECK re-gather budget: **2 точечных request суммарно**, owner �
 6. Бенчмарки не запускаются; `docs/specs/design/code-smells-review.md` не трогается.
 7. Первый шаг: D275-00 — preflight-факты, scope JSON, baseline-класс и baseline-артефакты.
 
+## Done / Verified (ACT, после CHECK PASS)
+
+| Проверка | Результат |
+|---|---|
+| Commit | `41bec51c` — `#275 preserve OPTION (MAXRECURSION n) when a recursive CTE is hoisted` |
+| Контракт | `QueryPlanner.RenderSource` возвращает 4-й элемент кортежа `MaxRecursionStmt` во всех трёх overload'ах; `MakeWithClause` не изменён |
+| Шесть потребителей | каждый приклеивает опцию в tail statement'а ровно один раз: `DataContext.cs:1200,1265,1307,1333,1418,1428` (`AppendMaxRecursionStmt`, `:1342`; для MERGE — перед терминатором `;`) |
+| Build | `dotnet build nextorm.slnx -c Debug` — exit 0, 0 warnings / 0 errors (`.pdca/D275/rv1/check/build.log`) |
+| Scoped `~T275` | sqlserver 12/12, postgres 3/3, sqlite 2/2, mysql 2/2 — все exit 0 (`.pdca/D275/rv1/check/t275-*.log`) |
+| Full sqlserver | 1000 total — 992 passed, 0 failed, 8 skipped; все 8 — предсуществующие `[Fact(Explicit = true)]`, не `Assert.Skip*` (`.pdca/D275/rv1/check/unfiltered-sqlserver.log`) |
+| Full postgres | 987/987 passed, 0 failed, 0 skipped, exit 0 (`.pdca/D275/rv1/check/unfiltered-postgres.log`) |
+| Full sqlite | 1793 total — 1792 passed, 0 failed, 1 skipped; предсуществующий env-пробник (`NEXTORM_LOB_SQLITE_PROBE=1`) (`.pdca/D275/rv1/check/unfiltered-sqlite.log`) |
+| Regression | `TypedCteSqlGenerationTests` 6/6, `UpdateJoinSqlGenerationTests` 7/7, exit 0 (`.pdca/D275/rv1/check/regression-*.log`) |
+| Validators | `validate_inner_loop.py report --journal` exit 0; `validate_inner_loop.py manifest` exit 0; `pdca_evidence.py lint` exit 0 |
+| Suppressions/skips | 0/0 новых: `#pragma warning disable` / `[Fact(Skip` / `Assert.Skip` в diff — none (`.pdca/D275/rv1/audit.log`) |
+| EOL | CRLF во всех затронутых файлах (CR == lines; `.pdca/D275/rv1/audit.log`) |
+| Footprint | 6 путей коммита — §13 соблюдён; чужие изменения не тронуты (`.pdca/D275/rv1/footprint.log`) |
+| Byte-identity | PostgreSQL/SQLite full-string baselines и `delta` 6/6 IDENTICAL (`.pdca/D275/rv1/delta.log`) |
+| red→green | `.pdca/D275/rv1/tests/red-sqlserver.log` exit 2, 6 failed (pre-fix) → те же тесты 12/12 green (post-fix) |
+
+## CHECK-адъюдикации (rv=1, PASS)
+
+- **MERGE key path — недостижим**: query source отвергается на `MergeBuilder.cs:659` (`NotSupportedException`), поэтому место `DataContext.cs:1265` правится структурно (единый кортеж), а тест фиксирует существующий guard — принято как guard, не дефект.
+- **Non-default limit 3**: в `Batch_MultipleSteps_DoesNotDuplicateOrLeakMaxRecursion` шаги идут affected(7) + unaffected + affected(3), поэтому хардкод значения (7/100) убивается контрактом теста.
+- **MySQL/MariaDB byte-identity** закрыто структурно: `SqlDialectBase.MakeMaxRecursion` возвращает `null` (`SqlDialectBase.cs:397`), а общий return-путь не тронут — дельта невозможна без override'а.
+- **`TrimEnd()` — только defensive**: вызывается лишь при непустом `MaxRecursionStmt` (SQL Server); на диалектах с `null` строка возвращается как есть.
+- **Дерево manifest ≠ дерево коммита** — объявленная дельта `exclusions` (`.pdca/**`, `docs/specs/status/**`), не незаявленный footprint.
+
+## Changed files
+
+| # | Path | Kind |
+|---|---|---|
+| 1 | `src/nextorm.core/DataContext/QueryPlanner.cs` | src — 4-й элемент кортежа `MaxRecursionStmt` во всех трёх overload'ах |
+| 2 | `src/nextorm.core/DataContext/DataContext.cs` | src — `AppendMaxRecursionStmt` + шесть мест приклеивания |
+| 3 | `tests/nextorm.sqlserver.tests/Cte/T275MaxRecursionHoistTests.cs` | test — шесть форм, batch, no-limit, non-hoisted, tail-якоря |
+| 4 | `docs/guide/10-cte.md` | docs EN — сохранение лимита при hoisting |
+| 5 | `docs/ru/guide/10-cte.md` | docs RU — зеркало |
+| 6 | `docs/specs/status/D275-maxrecursion-hoist-1.md` | status — этот файл |
+
+## Pointers
+
+- Evidence root: `.pdca/D275/rv1/`
+- Manifest: `.pdca/D275/rv1/manifest.json` (frozen на DO→CHECK, оба валидатора exit 0)
+- Baseline: `.pdca/D275/rv1/baseline/` (+ `README.md` с sha256); delta — `.pdca/D275/rv1/delta.log` (6/6 IDENTICAL)
+- CHECK evidence: `.pdca/D275/rv1/check/`
+- DO evidence: `.pdca/D275/rv1/tests/`, `.pdca/D275/rv1/{build,footprint,audit,docs}.log`
+
+## Next plan
+
+`— (flow closed)`. Lane G6 complete: T265 done, T275 done; next work outside this lane (#297 is out of scope, §13).
+
 ## Журнал прогресса (append-only)
 
 2026-10-18T11:37:24Z | PLAN | r=1 | n=1/3 | PLAN ready — DO started (autonomous lane, no user approval) | docs/specs/status/D275-maxrecursion-hoist-1.md
@@ -283,3 +334,7 @@ CHECK re-gather budget: **2 точечных request суммарно**, owner �
 2026-10-18T11:49:30Z | DO | r=1 | n=1/3 | D275-04 closed — no-limit / non-hoisted / PostgreSQL / SQLite / MySQL shapes byte-identical to pre-change baselines; delete-join and update-join tails unchanged | .pdca/D275/rv1/delta.log (6/6 IDENTICAL), .pdca/D275/rv1/tests/boundary/{postgres,sqlite,mysql}-filtered.log
 2026-10-18T11:50:30Z | DO | r=1 | n=1/3 | D275-05 closed — EN+RU guide updated, footprint within §13, CRLF preserved, build 0W/0E, both validators exit 0 | .pdca/D275/rv1/{build.log,footprint.log,audit.log,docs.log,manifest-validation.log,evidence-lint.log}
 2026-10-18T11:51:45Z | DO->CHECK | r=1 | n=1/3 | boundary sweep green — four `~T275` filtered runs (12/3/2/2), full sqlserver/postgres/sqlite (1000/987/1793, 0 failed), regression selectors TypedCte 6/6 and UpdateJoin 7/7, solution build 0W/0E | .pdca/D275/rv1/tests/boundary/, .pdca/D275/rv1/evidence.json
+2026-10-18T11:53:05Z | DO | r=1 | n=1/3 | coder gather report — evidence pack for CHECK assembled: build log, four `~T275` runs, unfiltered sqlserver/postgres/sqlite, both regression selectors, all three validator logs | .pdca/D275/rv1/check/
+2026-10-18T11:54:00Z | DO | r=1 | n=1/3 | scout diff-facts report — diff facts across the 6 committed paths: `RenderSource` 4-tuple through three overloads, `AppendMaxRecursionStmt` + six attachment sites (`:1200,1265,1307,1333,1418,1428`), no construction-path edits | .pdca/D275/rv1/footprint.log, .pdca/D275/rv1/audit.log
+2026-10-18T11:55:10Z | CHECK | r=1 | n=1/3 | CHECK verdict: PASS (r=1, n=1/3, rv=1, 11/11 rows) — all binding rows met on both halves, 5 adjudications closed, 0 open rows, re-gather 0/2 | .pdca/D275/rv1/check/
+2026-10-18T11:57:00Z | ACT | r=1 | n=1/3 | ACT closed; lane complete — issue #275 closed with evidence comment; finding 150 fix commit `41bec51c` recorded for the auditor | docs/specs/status/D275-maxrecursion-hoist-1.md
