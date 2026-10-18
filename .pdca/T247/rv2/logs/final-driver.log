@@ -1,0 +1,6 @@
+=== final launch pid=1427083 start=2026-10-18T09:13:01Z argv=final --rounds 2 --evidence-root .pdca/T247/rv2
+/usr/bin/env: ‘python3\r’: No such file or directory
+FINAL_RC=127
+=== final launch pid=1428111 start=2026-10-18T09:13:20Z argv=final --rounds 2 --evidence-root .pdca/T247/rv2
+final: PASS (146 case(s) over 2 round(s))
+FINAL_RC=0

@@ -1,0 +1,497 @@
+{
+  "tool": "t247_json_gate",
+  "task": "T247",
+  "issue": 247,
+  "subcommand": "compare",
+  "generated_utc": "2026-10-18T10:37:52Z",
+  "repo": "/home/alex/sources/nextorm",
+  "evidence_root": ".pdca/T247/rv2",
+  "output_dir": ".pdca/T247/rv2/compare",
+  "source_fingerprint": {
+    "head": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+    "porcelain_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "dirty_paths": 0,
+    "pathspec": [
+      "src",
+      "benchmarks/nextorm.benchmark",
+      "Directory.Build.props",
+      "Directory.Packages.props",
+      "global.json",
+      "nextorm.slnx",
+      ".editorconfig"
+    ]
+  },
+  "children": [],
+  "discovered_case_count": 2,
+  "executed_case_count": 2,
+  "reason_code": "gate-fail",
+  "status": "fail",
+  "rounds": [
+    "round-1",
+    "round-2"
+  ],
+  "checks": [
+    {
+      "id": "R247-01-1k-ratio",
+      "kind": "ratio",
+      "threshold": 1.2,
+      "rounds": {
+        "round-1": {
+          "value": 1.0710856715033603,
+          "threshold": 1.2,
+          "pass": true,
+          "numerator_ns": 688662.3297061012,
+          "denominator_ns": 642957.2797286185
+        },
+        "round-2": {
+          "value": 1.0312973761413897,
+          "threshold": 1.2,
+          "pass": true,
+          "numerator_ns": 684666.76398577,
+          "denominator_ns": 663888.7869059244
+        }
+      },
+      "verdict": "pass",
+      "detail": null
+    },
+    {
+      "id": "R247-01-10k-ratio",
+      "kind": "ratio",
+      "threshold": 1.0,
+      "rounds": {
+        "round-1": {
+          "value": 0.9932310849663136,
+          "threshold": 1.0,
+          "pass": true,
+          "numerator_ns": 8887744.769657258,
+          "denominator_ns": 8948315.15463362
+        },
+        "round-2": {
+          "value": 1.0454579813469485,
+          "threshold": 1.0,
+          "pass": false,
+          "numerator_ns": 9799328.133054124,
+          "denominator_ns": 9373239.582932692
+        }
+      },
+      "verdict": "inconclusive",
+      "detail": null
+    },
+    {
+      "id": "R247-01-10k-alloc",
+      "kind": "allocation",
+      "threshold": 446095,
+      "rounds": {
+        "round-1": {
+          "value": 408828.0,
+          "threshold": 446095,
+          "pass": true
+        },
+        "round-2": {
+          "value": 408828.0,
+          "threshold": 446095,
+          "pass": true
+        }
+      },
+      "verdict": "pass",
+      "detail": null
+    },
+    {
+      "id": "R247-01-100k-paired-ratio",
+      "kind": "paired-ratio",
+      "threshold": null,
+      "rounds": {
+        "round-1": {
+          "value": 0.919167388278482,
+          "paired_baseline_ratio": 0.8107923876099158,
+          "threshold": 0.8107923876099158,
+          "pass": false
+        },
+        "round-2": {
+          "value": 0.9633502394357333,
+          "paired_baseline_ratio": 1.0440907020460906,
+          "threshold": 1.0440907020460906,
+          "pass": true
+        }
+      },
+      "verdict": "inconclusive",
+      "detail": null
+    },
+    {
+      "id": "R247-declared-src-diff",
+      "kind": "declared-diff",
+      "threshold": 4,
+      "rounds": {
+        "round-1": {
+          "value": 4,
+          "threshold": 4,
+          "baseline_head": "c99cc512",
+          "final_head": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+          "changed": [
+            "src/nextorm.core/DataContext/DataContext.cs",
+            "src/nextorm.core/DataContext/DataContextCache.cs",
+            "src/nextorm.core/Query/Json/JsonRowWriterCache.cs",
+            "src/nextorm.core/Query/Json/JsonRowWriterFactory.cs"
+          ],
+          "foreign": [],
+          "missing": [],
+          "pass": true
+        },
+        "round-2": {
+          "value": 4,
+          "threshold": 4,
+          "baseline_head": "c99cc512",
+          "final_head": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+          "changed": [
+            "src/nextorm.core/DataContext/DataContext.cs",
+            "src/nextorm.core/DataContext/DataContextCache.cs",
+            "src/nextorm.core/Query/Json/JsonRowWriterCache.cs",
+            "src/nextorm.core/Query/Json/JsonRowWriterFactory.cs"
+          ],
+          "foreign": [],
+          "missing": [],
+          "pass": true
+        }
+      },
+      "verdict": "pass",
+      "detail": "baseline c99cc512 -> final c9aa86906c900130f5ec21bb80d63439aff4e35f differs by exactly the declared T247 src paths"
+    },
+    {
+      "id": "R247-02-byte-control",
+      "kind": "byte-control",
+      "threshold": true,
+      "rounds": {
+        "round-1": {
+          "value": {
+            "?": true
+          },
+          "threshold": true,
+          "pass": true,
+          "detail": "markers present"
+        },
+        "round-2": {
+          "value": {
+            "?": true
+          },
+          "threshold": true,
+          "pass": true,
+          "detail": "markers present"
+        }
+      },
+      "verdict": "pass",
+      "detail": null
+    },
+    {
+      "id": "R247-12-100row",
+      "kind": "small-row",
+      "threshold": 0.5,
+      "rounds": {
+        "round-1": {
+          "baseline_mean_ns": 2049558.3831163195,
+          "final_mean_ns": 171540.1306437703,
+          "value": 0.08369614257240449,
+          "threshold": 0.5,
+          "pass": true
+        },
+        "round-2": {
+          "baseline_mean_ns": 1858525.9176682692,
+          "final_mean_ns": 164845.40185546875,
+          "value": 0.08869685393587942,
+          "threshold": 0.5,
+          "pass": true
+        }
+      },
+      "verdict": "pass",
+      "detail": null
+    },
+    {
+      "id": "R247-12-intercept",
+      "kind": "intercept",
+      "threshold": 0.5,
+      "rounds": {
+        "round-1": {
+          "baseline": {
+            "a": 2197186.589607366,
+            "b": -1773.6288023675836,
+            "residuals": [
+              297346.7374571189,
+              -327081.4112028307,
+              29734.673745712033
+            ],
+            "points": [
+              [
+                1,
+                2492759.6982621173
+              ],
+              [
+                10,
+                1852368.8903808594
+              ],
+              [
+                100,
+                2049558.3831163195
+              ]
+            ]
+          },
+          "final": {
+            "a": 48892.233628075315,
+            "b": 1227.337154872189,
+            "residuals": [
+              -858.184715239171,
+              944.0031867630605,
+              -85.81847152393311
+            ],
+            "points": [
+              [
+                1,
+                49261.386067708336
+              ],
+              [
+                10,
+                62109.60836356027
+              ],
+              [
+                100,
+                171540.1306437703
+              ]
+            ]
+          },
+          "both_intercepts_positive": true,
+          "a_ratio": 0.022252199180230883,
+          "threshold": 0.5,
+          "pass": true
+        },
+        "round-2": {
+          "baseline": {
+            "a": 1851476.33390145,
+            "b": 114.43327912761565,
+            "residuals": [
+              -43937.44145942386,
+              48331.18560536648,
+              -4393.744145942386
+            ],
+            "points": [
+              [
+                1,
+                1807653.3257211538
+              ],
+              [
+                10,
+                1900951.8522980926
+              ],
+              [
+                100,
+                1858525.9176682692
+              ]
+            ]
+          },
+          "final": {
+            "a": 78669.28551307383,
+            "b": 886.3352915130109,
+            "residuals": [
+              -24574.12808906177,
+              27031.540897967934,
+              -2457.4128089061705
+            ],
+            "points": [
+              [
+                1,
+                54981.49271552507
+              ],
+              [
+                10,
+                114564.17932617187
+              ],
+              [
+                100,
+                164845.40185546875
+              ]
+            ]
+          },
+          "both_intercepts_positive": true,
+          "a_ratio": 0.04249003029236734,
+          "threshold": 0.5,
+          "pass": true
+        }
+      },
+      "verdict": "pass",
+      "detail": null
+    },
+    {
+      "id": "R247-09-acceptance",
+      "kind": "acceptance",
+      "threshold": 7,
+      "rounds": {
+        "round-1": {
+          "case_count": 0,
+          "value": 0,
+          "threshold": 7,
+          "pass": false
+        },
+        "round-2": {
+          "case_count": 0,
+          "value": 0,
+          "threshold": 7,
+          "pass": false
+        }
+      },
+      "verdict": "fail",
+      "detail": "missing .pdca/T247/rv2/acceptance/acceptance.json: the R247-09 acceptance evidence was not produced; reported as a failing check, never skipped"
+    }
+  ],
+  "small_row": {
+    "round-1": {
+      "baseline_mean_ns": 2049558.3831163195,
+      "final_mean_ns": 171540.1306437703,
+      "value": 0.08369614257240449,
+      "threshold": 0.5,
+      "pass": true
+    },
+    "round-2": {
+      "baseline_mean_ns": 1858525.9176682692,
+      "final_mean_ns": 164845.40185546875,
+      "value": 0.08869685393587942,
+      "threshold": 0.5,
+      "pass": true
+    }
+  },
+  "intercept_fit": {
+    "round-1": {
+      "baseline": {
+        "a": 2197186.589607366,
+        "b": -1773.6288023675836,
+        "residuals": [
+          297346.7374571189,
+          -327081.4112028307,
+          29734.673745712033
+        ],
+        "points": [
+          [
+            1,
+            2492759.6982621173
+          ],
+          [
+            10,
+            1852368.8903808594
+          ],
+          [
+            100,
+            2049558.3831163195
+          ]
+        ]
+      },
+      "final": {
+        "a": 48892.233628075315,
+        "b": 1227.337154872189,
+        "residuals": [
+          -858.184715239171,
+          944.0031867630605,
+          -85.81847152393311
+        ],
+        "points": [
+          [
+            1,
+            49261.386067708336
+          ],
+          [
+            10,
+            62109.60836356027
+          ],
+          [
+            100,
+            171540.1306437703
+          ]
+        ]
+      },
+      "both_intercepts_positive": true,
+      "a_ratio": 0.022252199180230883,
+      "threshold": 0.5,
+      "pass": true
+    },
+    "round-2": {
+      "baseline": {
+        "a": 1851476.33390145,
+        "b": 114.43327912761565,
+        "residuals": [
+          -43937.44145942386,
+          48331.18560536648,
+          -4393.744145942386
+        ],
+        "points": [
+          [
+            1,
+            1807653.3257211538
+          ],
+          [
+            10,
+            1900951.8522980926
+          ],
+          [
+            100,
+            1858525.9176682692
+          ]
+        ]
+      },
+      "final": {
+        "a": 78669.28551307383,
+        "b": 886.3352915130109,
+        "residuals": [
+          -24574.12808906177,
+          27031.540897967934,
+          -2457.4128089061705
+        ],
+        "points": [
+          [
+            1,
+            54981.49271552507
+          ],
+          [
+            10,
+            114564.17932617187
+          ],
+          [
+            100,
+            164845.40185546875
+          ]
+        ]
+      },
+      "both_intercepts_positive": true,
+      "a_ratio": 0.04249003029236734,
+      "threshold": 0.5,
+      "pass": true
+    }
+  },
+  "acceptance": {
+    "path": ".pdca/T247/rv2/acceptance/acceptance.json",
+    "rounds": {
+      "round-1": {
+        "case_count": 0,
+        "value": 0,
+        "threshold": 7,
+        "pass": false
+      },
+      "round-2": {
+        "case_count": 0,
+        "value": 0,
+        "threshold": 7,
+        "pass": false
+      }
+    }
+  },
+  "thresholds": {
+    "r247_01_ratio_1k_max": 1.2,
+    "r247_01_ratio_10k_max": 1.0,
+    "r247_01_alloc_10k_max_bytes": 446095,
+    "r247_12_100row_fraction_max": 0.5,
+    "r247_12_intercept_fraction_max": 0.5,
+    "r247_09_acceptance_cases": 7,
+    "r247_09_acceptance_max_wall_s": 240,
+    "r247_09_acceptance_case_ratio_max": 1.2,
+    "main_line_coverage_min": 85.0,
+    "main_branch_coverage_min": 75.0,
+    "integration_line_coverage_min": 65.0,
+    "integration_branch_coverage_min": 75.0,
+    "integration_baseline_line": 74.8,
+    "integration_baseline_branch": 64.8
+  }
+}

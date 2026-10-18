@@ -172,6 +172,51 @@
       "source_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
       "started_at": "2026-10-18T09:07:57Z",
       "state": "finished"
+    },
+    {
+      "artifact_revision": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+      "command": [
+        "python3",
+        ".pdca/scripts/perf/t247_measure.py",
+        "final",
+        "--rounds",
+        "2",
+        "--evidence-root",
+        ".pdca/T247/rv2"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-10-18T10:37:46Z",
+      "id": "d4-final-rv2",
+      "kind": "other",
+      "log": ".pdca/T247/rv2/logs/final-driver.log",
+      "phase": "boundary",
+      "selected_count": 146,
+      "source_revision": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+      "started_at": "2026-10-18T09:13:20Z",
+      "state": "finished"
+    },
+    {
+      "artifact_revision": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".pdca/scripts/perf/tests",
+        "-p",
+        "test_t247_json_gate.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-10-18T10:39:02Z",
+      "id": "d4-driver-tests-final-compare",
+      "kind": "other",
+      "log": ".pdca/T247/rv2/logs/t247_driver_tests-final-compare.log",
+      "phase": "inner",
+      "selected_count": 34,
+      "source_revision": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+      "started_at": "2026-10-18T10:39:00Z",
+      "state": "finished"
     }
   ],
   "scope": {
