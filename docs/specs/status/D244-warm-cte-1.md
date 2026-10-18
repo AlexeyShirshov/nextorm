@@ -428,3 +428,48 @@ Attribution detail (measurement-only; both rounds rc 2 `bounded-re-gather-requir
 2026-10-18T00:49:12Z | DO/T244 | revision r=2 | iteration n=1/3 | diagnostic round 2: valid — tool rc=0, 0 reason codes, 48 arms x 2 jobs (ShortRun/Default + ShortRun/InProcessEmitToolchain), 555.2 s; HEAD 918e3e86, scoped fingerprint 0 dirty paths, assembly 9dc9ef39 and db 32bf10a0 stable across the invocation → both diagnostic rounds share one `source_state_start` (phase identity); window=quiet (two consecutive clean 90 s samples; log artifacts/pdca/D244/rv1/diagnostic/quiet-window-round-02.log); no foreign dotnet workload in-window; commit deferred to keep source_state stable across the phase | artifacts/pdca/D244/rv1/diagnostic/round-02/
 
 2026-10-18T00:49:12Z | DO/T244 | revision r=2 | iteration n=1/3 | D244-05 step B ranking — `rank` rc=2 (`insufficient-attribution`) in **both** rounds: closure closed 8/8 (construct err 0.00–192.00 ≤ tol 415.6–481.2; raw closure 0.00–80.00 ≤ tol 492.4–635.2), all 24 ladder steps monotone (no negative delta beyond noise), and the undecomposed residual is within bound in 8/8 row×job (104.00–264.00 B/query vs bound max(128 B, 10 %) = 1 036.08–1 313.23); the rc=2 driver is `overlap_suspected` for **RecursiveCte/Default only**, in both rounds (signed residual −552.00 / −680.03 below the −2 % floor: `RecursiveCte_RawHit_Lookup` 13 672.29 B/query > end-to-end warm 13 120.29 / 12 992.26) → the tool refuses closure for that one row×job; the residual bound itself is not violated. Eligible (frozen rule §4, absolute floor, per family/job): fresh-command `Construct` 8 312.68–9 600.24 B/query plus every construct rung ≥64 B/query (Cte: 120.01 With / 400.01 From / 1 640–1 720 Join / 2 856–2 968 final Select; RecursiveCte: 1 152 Step / 2 640–2 752 operands / 816–848 UnionAll / 2 240–2 384 WithRecursive+Select), all tool-mapped to **D244-02**. Rejected: every RawHit rung (frozen raw-recipe, §2/§4), `PlanKey` 0.00 B/query ×4 (→ **D244-03 still not authorized** on a zero signal), `Unattributed` (frozen; within bound, so not a ranking item). The ≥10 %-of-gap half cannot be computed inside the diagnostic scope (no same-round linq2db arm → `gap_bytes_per_query: null` on every row, stated by the tool); against the pre-fix baseline same-round gaps (Cte 1 048.64 / 856.24 → 10 % = 104.9 / 85.6 B/query; RecursiveCte 4 608.09 / 4 367.66 → 460.8 / 436.8) the largest rungs clear **both** ≥64 B/query and ≥10 % of gap; candidate anchors (Roslyn-located members inside the declared D244-02 footprint — `CteQuery.cs:110` With, `:117` WithRecursive, `:135`/`:140` From/Append, `CteMerge.cs:17` Merge; the call path from each rung to its anchor is **not yet proven**). Cross-round agreement: 22/24 signed increments agree within the noise floor; 2 do not — RecursiveCte/Default `P1_Step→P2_Operands` 2 640.05 vs 2 752.05 (Δ112.00 > floor 75.84) and Cte/InProcessEmitToolchain `P2_From→P3_Join` 1 720.15 vs 1 640.19 (Δ79.96 > floor 75.68). Journaling: `journal`/`project`/`report` rc 0/0/0 with both measurement runs recorded (phase inner, kind other, exact argv, rc 0, `selected_count` 96 each). Harness deviation recorded: `measure --phase` choices extended with `diagnostic` so the issued command works as written; the harness file is outside `SOURCE_STATE_PATHSPEC`, so the round's source-state identity is untouched; 96 perf-tool tests rc=0. Verdict: step B complete (2/2 valid diagnostic rounds) — no product file touched; D244-02 unblocked by the delivered re-gather, D244-03 unchanged (zero signal), fix choice is a planner decision. | artifacts/pdca/D244/rv1/diagnostic/rank-01.json, rank-02.json
+
+## Terminal disposition (2026-10-18) — incomplete (unsuccessful optimization)
+
+T244 is terminal **`incomplete`** — an unsuccessful optimization: **neither acceptance nor a checkpoint**. No bounded, non-frozen change can bring **both** CTE rows to ≤1.20×; the path that could (the structural CTE graph construction path, builder + command) is **§13-frozen**. Counters: `N=1, r=2, rv=1, n=1/3` — the attempt budget on r=2 is **not consumed**.
+
+### Reason
+Both rows ≤1.20× not reached. No candidate is eligible under the §4 frozen selection rule: every eligible removable component sits inside the **required fluent command construction** (§4-eligible, tagged D244-02), and the required saving on the RecursiveCte row (≥2,640 B/query at the smallest structural rung) is not removable by any bounded per-call slice. `PlanKey` = 0.00 B/query → D244-03 not eligible; the frozen `RawHit` residual is within bound 8/8; `CteQuery.Append` / `CteMerge.Merge` / `ValidateRecursiveOwners` are proven inert on the measured path. Reaching the target requires an **explicit §13 unfreeze + a separate plan revision**, which this cycle is not authorized to perform (the `escalate` decision is final).
+
+### Escalate decision (pointer; final, recorded only)
+Terminal `incomplete` (unsuccessful optimization); neither acceptance nor checkpoint; attempt budget not consumed. Consequences: **T245** and **T247** are marked `incomplete` («группа остановлена») and are **not executed**; lane **G4 stops**. No `src/**` change exists and none may be left. Pointer: this section + `docs/specs/status/collection-1.0.9-rc3-open-3.md` (G4 stop).
+
+### Follow-up
+**#297** — "Perf: structural CTE graph construction path (builder+command) — RecursiveCte needs ≥2,640 B/query removed" (milestone `1.0.9-rc3`, OPEN): https://github.com/AlexeyShirshov/nextorm/issues/297. It requires the explicit §13 unfreeze + a separate plan revision, with a ≥2,640 B/query demonstration threshold for the RecursiveCte row. **#244 stays open** (comment https://github.com/AlexeyShirshov/nextorm/issues/244#issuecomment-6243950629); #244 is not closed.
+
+### Ladder + residuals
+
+Construct ladder (D244-05 diagnostic, signed increments; closure on the existing end-to-end arms):
+
+| Family | rung 0 | +step 1 | +step 2 | +step 3 | +final |
+|---|---|---|---|---|---|
+| Cte | `P0_Body` 3,264 | `+With` +120 | `+From` +400 | `+Join` +1,640–1,720 | `+Select` +2,856–2,969 |
+| RecursiveCte | `P0_Anchor` 2,640 | `+Step` +1,152 | `+operands` +2,640–2,752 | `+UnionAll` +816–848 | `+WithRecursive/Select` +2,240–2,384 |
+
+Residuals (same-round Nextorm/linq2db, worst job/round):
+
+| Row | alloc ratio | to checkpoint (≤1.20×) | to final (≤1.00×) | Warm_Reused | time |
+|---|---:|---:|---:|---:|---:|
+| Cte | 1.18–1.22 | −216 B/query | −2,073 B/query | 0 B | 0.55–0.61× |
+| RecursiveCte | 1.59–1.61 | −3,482 B/query | −5,199 B/query | 0 B | 0.55–0.61× |
+
+### Evidence pointers
+- Baseline (2 valid same-state rounds, plus 1 invalid and 1 superseded): `artifacts/pdca/D244/rv1/baseline/**`.
+- Diagnostic (2 valid rounds): `artifacts/pdca/D244/rv1/diagnostic/**`; ranking `.../rank-01.json`, `.../rank-02.json`.
+- Attribution: `artifacts/pdca/D244/rv1/attribution.md`; re-gather report: `artifacts/pdca/D244/rv1/report-D244-05.json`.
+
+### Diagnostic-arms note
+The **17 diagnostic arms** (commit `918e3e86`) were explicitly in scope under the r=2 D244-05 plan (benchmark-only, `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWarmDecompose.cs`) and **stay in the tree** as the re-gather evidence. **No `src/**` change was made** in T244 (no `src/**` modification exists or may be left).
+
+## Done / Verified / Incomplete
+
+- **Done:** D244-01 (attribution on both valid baseline rounds) — `artifacts/pdca/D244/rv1/attribution.md` + `attribution-baseline{,-r2}.json`; D244-05 re-gather instrumentation (17 benchmark-only ladder arms + harness `measure --scope full|warm-decompose` / `rank`) — commit `918e3e86`, `artifacts/pdca/D244/rv1/report-D244-05.json`.
+- **Verified:** the two valid baseline rounds (`baseline/round-01`, `baseline/round-02`, one `source_state_start` `cc8113f7`) and the two valid diagnostic rounds (`diagnostic/round-01`, `diagnostic/round-02` at `918e3e86`, 48 arms × 2 jobs, quiet windows). Ranking `rank` rc=2 (`insufficient-attribution`) in both rounds, driven solely by the single documented `overlap_suspected` recursive raw-hit rung (`RecursiveCte/Default` only); residual within bound 8/8 and closure closed 8/8 otherwise. Verification = evidence integrity, **not** acceptance.
+- **Incomplete:** R244-01 (final Cte, measured residual −2,073 B/query), R244-02 (final RecursiveCte, −5,199 B/query), R244-03 (checkpoint; Cte −216 / RecursiveCte −3,482 B/query) — target not reached with the measured residuals above; **D244-02** unblocked-but-not-implemented (no bounded eligible candidate); **D244-03** unauthorized (0.00 B/query). **T245** and **T247** incomplete («группа остановлена»), not executed.
+
+2026-10-18T00:55:47Z | ACT/T244 | revision r=2 | iteration n=1/3 | terminal incomplete — escalate decision (no bounded candidate; structural path §13-frozen); #244 open; follow-up #297 | docs/specs/status/D244-warm-cte-1.md
