@@ -284,3 +284,99 @@ flock -n /tmp/opencode/t247-measure.guard \
 **Evidence note:** evidence лежит в `.pdca/T297/rv1/spike/**` и намеренно оставлен **uncommitted** (local evidence policy); он несёт **39 sha256 receipts** и `verify-evidence.sh` rc **0**; `pdca_evidence.py lint` rc **2** — документированный gap tree-receipt (в этом lane нет non-`.pdca` footprint), не pass.
 
 2026-10-18T12:51:42Z | CHECK | revision r=1 | iteration n=1/3 | D297-01 spike closed: CHECK PASS-WITH-FINDINGS, R01–R05 met (R05 baseline-validated/candidate-open), no loop-back; status finalized, STOP at §13 gate G13-OWNER | `.pdca/T297/rv1/spike/{decision.md,check.md,ablate.json,graphs.json,delta.json,manifest.json}`
+
+## Real graph shape (G8)
+
+**Дата:** 2026-10-18. **Host:** WSL2, AMD Ryzen 7 5800HS (8 logical / 4 physical), .NET SDK 10.0.401, runtime 10.0.12. **HEAD:** `ee9549c5` (benchmark harness) поверх baseline `9ffb8bdc`, branch `1.0.9-rc3`. **DB pin:** `32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295` совпал на обоих путях (`/tmp/nextorm-bench/test.db`, `benchmarks/nextorm.benchmark/data/test.db`). **CPU admission** (30×1 s `/proc/stat`, формула `run.sh:45-84`): median **4.99 %**, p95 **7.58 %** — admitted (порог median ≤ 8.4, p95 ≤ 11.4); отклонение от G7-floor 6.2–6.4 %: **−1.31 pp** ниже пола, зафиксировано.
+
+**Источник чисел:** probe-only одиночный процесс (`NEXTORM_G8_PROBE_ONLY=1`, benchmark-project-only entry point) — 32/32 probes × 1 001 samples, `Complete: true`, `samples.csv` = 32 033 строки (header + 32×1001). Медианы — `GC.GetAllocatedBytesForCurrentThread` вокруг только конструкции; 64 B BDN-пол **не** вычитается, builder-control = **400 B** по спецификации (не 0). Evidence: `.pdca/T297/rv1/shape/probe-1/{steps.json,samples.csv,stdout.log}`; BDN round-1 не перезапускался.
+
+### D/R по семействам
+
+| Семейство | commands (всего) | definitions (всего) | R | D | Вывод (construction sites) |
+|---|---:|---:|---:|---:|---|
+| Cte | 2 | 2 | **1** | **1** | body `Select` = 1 command + 1 `QueryDefinition`; `With` = 120 B декларация, 0 command/definition; `From`/`Join` = builder'ы (400 / 1 640 B), 0/0; финальный `Select` из R/D исключён |
+| RecursiveCte | 4 | 3 | **3** | **2** | anchor `Select` + step `Select` = 2 command + 2 definition; `UnionAll` = 1 command (clone), 0 definition; `WithRecursive` = 120 B, 0/0; `From` = builder (400 B); финальный `Select` исключён |
+
+**Измеренная база (медианы probe-1, B):**
+
+| Rung | Медиана | Что доказывает |
+|---|---:|---|
+| `control.noop` / `control.object` / `control.builder` | **0 / 24 / 400** | контроли; builder = 400 B, command/definition не появляются |
+| `node.definition` | **240** | `QueryDefinition` = 240 B |
+| `rec.iso.union` | **816** | `UnionAll` = 1 command (clone), definition не платит |
+| `rec.union_body` − `rec.anchor` − `rec.iso.step` | **7 728 − 2 880 − 4 032 = 816** | clone ровно 816 B в составе цепочки |
+| `node.tocommand_fresh_builder` − `control.builder` | **1 456 − 400 = 1 056** | terminal `Select`/`ToCommand` = 240 (definition) + 816 (command) |
+| `node.select_cached_fresh_builder` | **1 456** | definition **не** элидируется (см. расхождение ниже) |
+| `rec.iso.with_recursive` / `cte.iso.with` | **120 / 120** | `With`/`WithRecursive` — декларация, 0 command/definition |
+| `rec.iso.from` / `cte.iso.from` / `cte.iso.join` | **400 / 400 / 1 640** | `From`/`Join` — builder'ы, не command/definition |
+| `rec.iso.final_select` / `cte.iso.final_select` | **1 960 / 3 048** | финальный `Select` (исключён из R/D) |
+
+**Расхождение с ожиданием `verify.py`:** verifier ожидает `node.select_cached_fresh_builder = 1 216`
+(«isolated Select элидирует 240 B definition») и `node.select_cached = 816`. Измерено **1 456** и
+**1 056** — definition платится в обоих случаях; в этом probe изолированный `Select` definition
+**не** элидирует. Измеренное значение принято как авторитетное (EC-G8-05), verifier не правился.
+
+### Closure (whole vs Σ parts)
+
+`tolerance = max(64, ceil(0.05 × whole))`.
+
+| Семейство | whole | Σ parts | diff | tolerance | Pass |
+|---|---:|---:|---:|---:|---|
+| RecursiveCte | 10 208 | 10 208 (2 880 + 4 032 + 816 + 120 + 400 + 1 960) | 0 | 511 | **да** |
+| Cte | 8 824 | 8 824 (3 616 + 120 + 400 + 1 640 + 3 048) | 0 | 442 | **да** |
+
+Нулевой остаток — свойство детерминированного счётчика аллокаций: каждая стадия измерена как
+константа, и сумма стадий равна целому байт-в-байт.
+
+### D297-модель на измеренной форме
+
+`δopt = 776·R + 64·D`, `δcons = 776·R − 24·D`, `δpess = δcons − 600`.
+
+| Семейство | R | D | δopt | δcons | δpess |
+|---|---:|---:|---:|---:|---:|
+| Cte | 1 | 1 | **840** | **752** | **152** |
+| RecursiveCte | 3 | 2 | **2 456** | **2 280** | **1 680** |
+
+`eps = max(64, 0.05 × gate)`; строгие ветви verifier'а (`verify.py:223-228`): reachable-with-margin
+если `δpess > gate+eps`; not-reachable если `δopt < gate−eps`; иначе borderline.
+
+| Семейство | Gate | eps | δopt / δcons / δpess | margin opt | margin cons | margin pess | Вердикт |
+|---|---:|---:|---|---:|---:|---:|---|
+| RecursiveCte | entry 2 640 | 132 | 2 456 / 2 280 / 1 680 | **−184** | −360 | −960 | **not-reachable** |
+| RecursiveCte | checkpoint 3 482 | 174.1 | 2 456 / 2 280 / 1 680 | **−1 026** | −1 202 | −1 802 | **not-reachable** |
+| RecursiveCte | parity 5 199 | 259.95 | 2 456 / 2 280 / 1 680 | **−2 743** | −2 919 | −3 519 | **not-reachable** |
+| Cte | checkpoint 216 | 64 | 840 / 752 / 152 | **+624** | +536 | **−64** | **borderline** (δpess = gate−eps = 152 ровно) |
+| Cte | parity 2 073 | 103.65 | 840 / 752 / 152 | **−1 233** | −1 321 | −1 921 | **not-reachable** |
+
+**Итог по семействам (verifier `family_verdicts`):** RecursiveCte — **not-reachable**;
+Cte — **not-reachable** (checkpoint при этом borderline). Это не acceptance: строка §13 остаётся
+замороженной, приёмка T244 не перезапускалась.
+
+### BDN cross-check (существующие round-1 артефакты, без перезапуска)
+
+| Канал | Cte | RecursiveCte |
+|---|---:|---:|
+| probe-1 median (`cte.whole` / `rec.whole`) | 8 824 | 10 208 |
+| BDN round-1 `G8_Cte_Whole` / `G8_RecursiveCte_Whole` (Allocated) | 8 297 | 9 520 |
+| относительная разница (BDN − probe) | **−5.97 %** | **−6.74 %** |
+| WarmDecompose `Construct/100` (round-1) | 8 200.70 | 9 616.18 |
+| относительная разница (Construct/100 − probe) | −7.06 % | −5.80 % |
+
+BDN-канал завышает controls на константу **+64 B** (`G8_Control_Noop` 64 vs probe 0,
+`G8_Control_Object` 88 vs 24, `G8_Control_Builder` 464 vs 400), поэтому согласие оценивается в
+полосе verifier'а `consistent_within_15pct` — **согласуются** (|Δ| ≤ 7.1 %). В 5 % closure-допуск
+разница **не** укладывается; это независимые каналы, а не одна и та же величина.
+
+### Границы
+
+- **`src/**` не изменён:** tracked-fingerprint `b7ccf93b…` совпадает с baseline, `git status --porcelain src` пуст (verifier `src` rc 0). Продуктового изменения нет.
+- **§13 заморожен:** D297-02/03/04 не запускались, description/COW не реализовывались, пороги/допуски не менялись, #297/#244/#245 не закрывались.
+- **Опубликованная цепочка модели отделена от измеренных arm'ов:** `(R=2,D=2) → 1 680/1 504/904` и `(R=5,D=3) → 4 072/3 808/3 208` воспроизведены verifier'ом как published examples; измеренная форма — `(1,1)` и `(3,2)`; смешивать их нельзя.
+
+**Verifier rc (byte-identical копия, `.pdca/T297/rv1/verify/verify.py`):** `shape` 1, `nodes` 1,
+`goal` 1, `model` 0, `verdict` 0, `environment` 1, `boundary` 1, `src` 0. Причины: (1) probe — один
+прогон, а `shape/nodes/goal/environment` требуют 3/3 BDN-раунда; (2) `boundary` не содержит в
+ALLOWED новый `benchmarks/nextorm.benchmark/Program.cs`, разрешённый D1 (verifier не правился);
+(3) `shape` не находит фрагмент `cte_projection` в oracle/WarmDecompose (в benchmark-файле он есть).
+
