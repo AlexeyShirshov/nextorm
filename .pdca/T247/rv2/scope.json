@@ -1,0 +1,25 @@
+{
+  "unit": "D247-01",
+  "scope": {
+    "projects": [
+      ".pdca/scripts/perf"
+    ],
+    "selectors": [
+      "test_t247_json_gate.py"
+    ],
+    "files": [
+      ".pdca/scripts/perf/t247_json_gate.py",
+      ".pdca/scripts/perf/tests/test_t247_json_gate.py",
+      "benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkJsonFixedCost.cs",
+      "benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWriteJson.cs",
+      "docs/specs/status/D247-json-streaming-2.md"
+    ],
+    "rebuild": "affected",
+    "boundary": "python3 -m unittest discover -s .pdca/scripts/perf/tests -p 'test_t247_json_gate.py'",
+    "rationale": "D247-01 is a benchmark-only + driver-only unit: the perf-gate driver .pdca/scripts/perf/t247_json_gate.py, its stdlib unittest suite .pdca/scripts/perf/tests/test_t247_json_gate.py, and two benchmark-project files (compile-only spike arm + R247-02 ToList_Dto+JsonSerializer control). No production source (src/**) is touched, so the only executable inner-loop suite is the Python unittest driver test (the affected non-integration .NET suites are measured at the flow boundary, not here). scope.rebuild stays 'affected' because two .cs benchmark files change; the affected benchmark build is deferred to the measurement unit and no inner dotnet test runs in this unit.",
+    "integration_projects": [
+      "tests/nextorm.integration.tests"
+    ],
+    "integration_boundary_runs": 1
+  }
+}

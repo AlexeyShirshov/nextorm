@@ -1,0 +1,163 @@
+{
+  "events": [
+    {
+      "artifact_revision": "1b140d23cd12ecc19af4bfbad3563b6e8281aa63",
+      "at": "2026-10-18T03:02:11Z",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".pdca/scripts/perf/tests",
+        "-p",
+        "test_t247_json_gate.py"
+      ],
+      "event": "start",
+      "id": "d1-driver-tests",
+      "kind": "other",
+      "phase": "inner",
+      "source_revision": "1b140d23cd12ecc19af4bfbad3563b6e8281aa63"
+    },
+    {
+      "at": "2026-10-18T03:02:12Z",
+      "event": "finish",
+      "exit_code": 0,
+      "id": "d1-driver-tests",
+      "log": ".pdca/T247/rv2/logs/t247_driver_tests.log",
+      "selected_count": 30,
+      "state": "finished"
+    },
+    {
+      "artifact_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "at": "2026-10-18T05:45:24Z",
+      "command": [
+        "python3",
+        ".pdca/scripts/perf/t247_json_gate.py",
+        "baseline",
+        "--rounds",
+        "2",
+        "--evidence-root",
+        ".pdca/T247/rv2"
+      ],
+      "event": "start",
+      "id": "d1-baseline-rv2",
+      "kind": "other",
+      "phase": "boundary",
+      "source_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6"
+    },
+    {
+      "at": "2026-10-18T07:29:28Z",
+      "event": "finish",
+      "exit_code": 0,
+      "id": "d1-baseline-rv2",
+      "log": ".pdca/T247/rv2/logs/baseline-driver.log",
+      "selected_count": 146,
+      "state": "finished"
+    },
+    {
+      "artifact_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "at": "2026-10-18T07:29:41Z",
+      "command": [
+        "python3",
+        ".pdca/scripts/perf/t247_json_gate.py",
+        "phase",
+        "--rounds",
+        "2",
+        "--evidence-root",
+        ".pdca/T247/rv2"
+      ],
+      "event": "start",
+      "id": "d1-phase-rv2",
+      "kind": "other",
+      "phase": "boundary",
+      "source_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6"
+    },
+    {
+      "at": "2026-10-18T08:58:48Z",
+      "event": "finish",
+      "exit_code": 0,
+      "id": "d1-phase-rv2",
+      "log": ".pdca/T247/rv2/logs/phase-driver.log",
+      "selected_count": 128,
+      "state": "finished"
+    },
+    {
+      "id": "d1-phases-rv2",
+      "event": "start",
+      "phase": "boundary",
+      "kind": "other",
+      "command": [
+        "python3",
+        ".pdca/scripts/perf/t247_json_gate.py",
+        "phases",
+        "--evidence-root",
+        ".pdca/T247/rv2"
+      ],
+      "source_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "artifact_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "at": "2026-10-18T08:58:49Z"
+    },
+    {
+      "id": "d1-phases-rv2",
+      "event": "finish",
+      "state": "finished",
+      "exit_code": 0,
+      "selected_count": 2,
+      "at": "2026-10-18T08:58:53Z",
+      "log": ".pdca/T247/rv2/logs/phases.log"
+    },
+    {
+      "id": "d1-driver-tests-c99cc512",
+      "event": "start",
+      "phase": "inner",
+      "kind": "other",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".pdca/scripts/perf/tests",
+        "-p",
+        "test_t247_json_gate.py"
+      ],
+      "source_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "artifact_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "at": "2026-10-18T08:59:07Z"
+    },
+    {
+      "id": "d1-driver-tests-c99cc512",
+      "event": "finish",
+      "state": "finished",
+      "exit_code": 0,
+      "selected_count": 33,
+      "at": "2026-10-18T08:59:09Z",
+      "log": ".pdca/T247/rv2/logs/t247_driver_tests_recheck.log"
+    }
+  ],
+  "scope": {
+    "boundary": "python3 -m unittest discover -s .pdca/scripts/perf/tests -p 'test_t247_json_gate.py'",
+    "files": [
+      ".pdca/scripts/perf/t247_json_gate.py",
+      ".pdca/scripts/perf/t247_measure.py",
+      ".pdca/scripts/perf/tests/test_t247_json_gate.py",
+      "benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkJsonFixedCost.cs",
+      "benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWriteJson.cs",
+      "docs/specs/status/D247-json-streaming-2.md"
+    ],
+    "integration_boundary_runs": 1,
+    "integration_projects": [
+      "tests/nextorm.integration.tests"
+    ],
+    "projects": [
+      ".pdca/scripts/perf"
+    ],
+    "rationale": "D247-01 is a benchmark-only + driver-only unit: the perf-gate driver .pdca/scripts/perf/t247_json_gate.py, its stdlib unittest suite .pdca/scripts/perf/tests/test_t247_json_gate.py, and two benchmark-project files (compile-only spike arm + R247-02 ToList_Dto+JsonSerializer control). No production source (src/**) is touched, so the only executable inner-loop suite is the Python unittest driver test (the affected non-integration .NET suites are measured at the flow boundary, not here). scope.rebuild stays 'affected' because two .cs benchmark files change; the affected benchmark build is deferred to the measurement unit and no inner dotnet test runs in this unit.",
+    "rebuild": "affected",
+    "selectors": [
+      "test_t247_json_gate.py"
+    ]
+  },
+  "unit": "D247-01"
+}

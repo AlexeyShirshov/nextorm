@@ -1,0 +1,4 @@
++ dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkJsonStreamPhase2* *JsonStreamPhase2WriterBenchmark* --exporters json csv --artifacts .pdca/T247/rv2/phase/round-1/phase2  -> exit 0 (round round-1, 24 case(s))
++ dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkJsonFixedCost* --exporters json csv --artifacts .pdca/T247/rv2/phase/round-1/fixed-cost  -> exit 0 (round round-1, 40 case(s))
++ dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkJsonStreamPhase2* *JsonStreamPhase2WriterBenchmark* --exporters json csv --artifacts .pdca/T247/rv2/phase/round-2/phase2  -> exit 0 (round round-2, 24 case(s))
++ dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkJsonFixedCost* --exporters json csv --artifacts .pdca/T247/rv2/phase/round-2/fixed-cost  -> exit 0 (round round-2, 40 case(s))

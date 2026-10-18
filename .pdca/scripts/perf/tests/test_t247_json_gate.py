@@ -27,6 +27,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 from pathlib import Path
 
 PERF_DIR = Path(__file__).resolve().parents[1]
@@ -407,6 +408,78 @@ class CommandTests(unittest.TestCase):
         self.assertIn("database", payload)
         if code == t247.EXIT_OK:
             self.assertEqual(payload["unresolved"], [])
+
+
+class DuplicateGuardWrapperTests(unittest.TestCase):
+    """The measurement wrapper refuses a duplicate launch before it queues for the host lock.
+
+    Observed failure mode: a tool double-launch queued a second wrapper behind the host lock,
+    which would have started a second full ``phase --rounds 2`` block and overwritten the
+    evidence of the running block.  The wrapper now takes a NON-BLOCKING marker lock
+    (``/tmp/opencode/t247-measure.guard``) before the blocking host lock.
+    """
+
+    def setUp(self):
+        import t247_measure
+
+        self.measure = t247_measure
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.guard = Path(self._tmp.name) / "t247-measure.guard"
+
+    def test_second_wrapper_exits_90_before_any_driver_run(self):
+        import fcntl
+        import os
+
+        holder = os.open(str(self.guard), os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            runs = []
+            stderr = io.StringIO()
+            with mock.patch.dict(os.environ, {"T247_GUARD_LOCK": str(self.guard)}):
+                with mock.patch.object(
+                    self.measure.subprocess, "run", lambda *a, **k: runs.append(a)
+                ):
+                    with contextlib.redirect_stderr(stderr):
+                        code = self.measure.main(["phase", "--rounds", "2"])
+            self.assertEqual(code, 90)
+            self.assertEqual(code, self.measure.DUPLICATE_EXIT)
+            self.assertIn("T247-DUPLICATE-GUARD", stderr.getvalue())
+            self.assertEqual(runs, [])  # the driver is never launched
+        finally:
+            os.close(holder)
+
+    def test_marker_is_held_while_the_host_locked_driver_runs(self):
+        calls = []
+
+        def fake_run(argv, cwd=None, env=None):
+            calls.append({"argv": list(argv), "cwd": cwd, "env": dict(env or {})})
+            with self.assertRaises(self.measure.DuplicateMeasurement):
+                self.measure.acquire_guard(self.guard)
+            return types.SimpleNamespace(returncode=7)
+
+        import os
+
+        with mock.patch.dict(os.environ, {"T247_GUARD_LOCK": str(self.guard)}):
+            with mock.patch.object(self.measure.subprocess, "run", fake_run):
+                code = self.measure.main(["phase", "--rounds", "2", "--evidence-root", "x"])
+        self.assertEqual(code, 7)  # the driver's own exit code is propagated
+        self.assertEqual(len(calls), 1)
+        argv = calls[0]["argv"]
+        self.assertEqual(argv[:3], ["flock", "-x", str(self.measure.DEFAULT_HOST_LOCK)])
+        self.assertIn("t247_json_gate.py", argv[4])
+        self.assertNotIn(str(self.guard), " ".join(argv))  # marker never nested as a host lock
+        self.assertEqual(calls[0]["env"]["NEXTORM_BENCH_FULL"], "1")
+
+    def test_no_arguments_after_a_free_guard_is_usage_error(self):
+        import os
+
+        with mock.patch.dict(os.environ, {"T247_GUARD_LOCK": str(self.guard)}):
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = self.measure.main([])
+        self.assertEqual(code, 2)
+        self.assertIn("usage:", stderr.getvalue())
 
 
 if __name__ == "__main__":

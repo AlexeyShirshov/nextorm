@@ -1,0 +1,3 @@
+  INVALID round-1: source state moved during the block
+  INVALID round-2: source state moved during the block
+BASELINE_RC=4
