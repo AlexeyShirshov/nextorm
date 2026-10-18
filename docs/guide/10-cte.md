@@ -294,6 +294,12 @@ three-argument overload takes a required `int` (there is no nullable default) an
 recursion depth. Every other provider ignores the hint and uses its own default, exactly as the legacy
 string API does.
 
+When a recursive CTE is hoisted into another statement — `INSERT … SELECT`, `MERGE`, `CTAS` /
+`SELECT … INTO`, or a batch step — the explicit limit travels with it: SQL Server appends
+`option (maxrecursion n)` at the tail of the whole statement (before the `MERGE` terminator), so an
+explicitly supplied `maxRecursion` is preserved instead of falling back to the server default. Providers
+that do not support the option are unaffected and emit byte-identical SQL.
+
 ```csharp
 var numbers = dataContext.From<ISimpleEntity>()
     .Where(s => s.Id == 1)

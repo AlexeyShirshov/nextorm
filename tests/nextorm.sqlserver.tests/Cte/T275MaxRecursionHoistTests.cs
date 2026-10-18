@@ -31,11 +31,7 @@ public sealed class T275MergeTarget
 /// </summary>
 public class T275MaxRecursionHoistTests
 {
-    private const string Option = "option (maxrecursion 7)";
-
-    private static readonly Regex Tail = new(@"option \(maxrecursion 7\)\s*$", RegexOptions.IgnoreCase);
-    private static readonly Regex TerminatedTail = new(@"option \(maxrecursion 7\);\s*$", RegexOptions.IgnoreCase);
-
+    private static readonly Regex OptionCountPattern = new("option \\(maxrecursion", RegexOptions.IgnoreCase);
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
@@ -46,13 +42,14 @@ public class T275MaxRecursionHoistTests
             .AsRecursiveCte("nums", self => ctx.From(self).Where(n => n < 5).Select(n => n + 1), maxRecursion);
 
     private static int OptionCount(string sql)
-        => Regex.Matches(sql, "option \\(maxrecursion", RegexOptions.IgnoreCase).Count;
+        => OptionCountPattern.Matches(sql).Count;
 
-    private static void AssertSingleTail(string sql, bool terminated)
+    private static void AssertSingleTail(string sql, bool terminated, int limit = 7)
     {
         OptionCount(sql).Should().Be(1, "the option must be emitted exactly once per statement");
-        (terminated ? TerminatedTail : Tail).IsMatch(sql)
-            .Should().BeTrue($"'{sql}' must end with '{Option}'{(terminated ? " before the terminal ';'" : string.Empty)}");
+        var tail = new Regex($@"option \(maxrecursion {limit}\){(terminated ? ";" : string.Empty)}\s*$", RegexOptions.IgnoreCase);
+        tail.IsMatch(sql)
+            .Should().BeTrue($"'{sql}' must end with 'option (maxrecursion {limit})'{(terminated ? " before the terminal ';'" : string.Empty)}");
     }
 
     [Fact]
@@ -149,15 +146,20 @@ public class T275MaxRecursionHoistTests
     {
         using var ctx = SqlServerTestContext.Create();
 
+        // One affected step with limit 7, one unaffected step, and a second affected step with a different
+        // limit: each statement keeps exactly its own option, and the unaffected step stays byte-identical.
         var statements = ctx.CreateBatchBuilder()
-            .AddQuery(ctx.From(Recursive(ctx)).Select(n => new { Id = n }))
-            .AddQuery(ctx.From(Recursive(ctx)).Select(n => new { Id = n }))
+            .AddQuery(ctx.From(Recursive(ctx, 7)).Select(n => new { Id = n }))
+            .AddQuery(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
+            .AddQuery(ctx.From(Recursive(ctx, 3)).Select(n => new { Id = n }))
             .ToSql()
             .Split("; ");
 
-        statements.Should().HaveCount(2);
-        AssertSingleTail(statements[0], terminated: false);
-        AssertSingleTail(statements[1], terminated: false);
+        statements.Should().HaveCount(3);
+        AssertSingleTail(statements[0], terminated: false, limit: 7);
+        OptionCount(statements[1]).Should().Be(0, "the option of a neighbouring step must not leak");
+        statements[1].Should().Be("select id\n from simple_entity");
+        AssertSingleTail(statements[2], terminated: false, limit: 3);
     }
 
     [Fact]
@@ -208,6 +210,19 @@ public class T275MaxRecursionHoistTests
             .ToSql();
 
         sql.Should().Contain("update [t1] set t1.id = @p0");
+        AssertSingleTail(sql, terminated: false);
+    }
+
+    [Fact]
+    public void DeleteJoin_ExistingTailUnchanged()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = ctx.From<ISimpleEntity>()
+            .Join(ctx.From(Recursive(ctx)), (t, c) => t.Id == c)
+            .ToSql();
+
+        sql.Should().StartWith("with nums as (").And.Contain("delete [t1]");
         AssertSingleTail(sql, terminated: false);
     }
 

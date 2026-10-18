@@ -296,6 +296,12 @@ self-reference member 'Total' at position 0, but the anchor names that column 'I
 положительное значение — максимальная глубина рекурсии. Остальные провайдеры игнорируют подсказку и
 используют собственное значение по умолчанию — ровно как строковый API.
 
+Когда рекурсивный CTE поднимается (hoisting) в другой statement — `INSERT … SELECT`, `MERGE`, `CTAS` /
+`SELECT … INTO` или шаг batch, — явно заданный лимит переезжает вместе с ним: SQL Server дописывает
+`option (maxrecursion n)` в хвост всего statement (перед терминатором `MERGE`), поэтому явный
+`maxRecursion` сохраняется, а не заменяется серверным значением по умолчанию. Провайдеры, у которых
+такой опции нет, не затронуты и выдают байт-идентичный SQL.
+
 ```csharp
 var numbers = dataContext.From<ISimpleEntity>()
     .Where(s => s.Id == 1)

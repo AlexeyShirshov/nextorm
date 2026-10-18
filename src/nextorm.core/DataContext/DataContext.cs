@@ -1192,11 +1192,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (command.Source is null)
             return SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, parameterProvider: parameterProvider);
 
-        var (withSql, sourceSql, sourceParameters) = _planner.RenderSource(command.Source, parameterProvider, null, null, parameterNamePrefix);
+        var (withSql, sourceSql, sourceParameters, maxRecursionStmt) = _planner.RenderSource(command.Source, parameterProvider, null, null, parameterNamePrefix);
         var (insertSql, parameters) = SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, sourceSql, sourceParameters, parameterProvider);
 
-        // A data-modifying CTE (or a hoisted read CTE) must precede INSERT, not sit inside the SELECT.
-        return (withSql is null ? insertSql : withSql + insertSql, parameters);
+        // A data-modifying CTE (or a hoisted read CTE) must precede INSERT, not sit inside the SELECT; the
+        // recursion limit is a statement tail, so it is appended after the whole INSERT ... SELECT.
+        return (AppendMaxRecursionStmt(withSql is null ? insertSql : withSql + insertSql, maxRecursionStmt), parameters);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildUpdateSql(UpdateCommand command)
@@ -1259,9 +1260,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             if (command.Source is null)
                 return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, null, null, keyAccumulator, null, null, keyFilterSql, this);
 
-            var (withInsert, sourceInsert, sourceInsertParameters) = _planner.RenderSource(command.Source);
+            var (withInsert, sourceInsert, sourceInsertParameters, keyMaxRecursionStmt) = _planner.RenderSource(command.Source);
             var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, sourceInsert, sourceInsertParameters, keyAccumulator, null, null, keyFilterSql, this);
-            return (withInsert is null ? insertSql : withInsert + insertSql, insertParameters);
+            return (AppendMaxRecursionStmt(withInsert is null ? insertSql : withInsert + insertSql, keyMaxRecursionStmt), insertParameters);
         }
 
         // Full MERGE: render the search conditions into the same accumulator the VALUES rows use, so their
@@ -1298,11 +1299,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             return (sql, parameters);
         }
 
-        var (withSql, sourceSql, _) = _planner.RenderSource(command.Source, provider, accumulator);
+        var (withSql, sourceSql, _, maxRecursionStmt) = _planner.RenderSource(command.Source, provider, accumulator);
         // The source parameters already sit in the shared accumulator, so MakeMerge must not re-add them;
         // passing them again would duplicate every @pN.
         var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this);
-        return (withSql is null ? fullSql : withSql + fullSql, fullParameters);
+        // MERGE is terminated with ';' (SQL Server): OPTION goes before that terminator, not after it.
+        return (AppendMaxRecursionStmt(withSql is null ? fullSql : withSql + fullSql, maxRecursionStmt), fullParameters);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildTruncateSql(TruncateCommand command)
@@ -1326,12 +1328,27 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var quoteIdentifiers = command.Source.QuoteIdentifiers ?? QuoteIdentifiers;
         var keywordCase = command.Source.KeywordCase ?? KeywordCase;
         var selectInto = SqlMutationBuilder.ResolveCreateTableAsInto(Dialect, quoteIdentifiers, command, keywordCase);
-        var (withSql, sourceSql, sourceParameters) = _planner.RenderSource(command.Source, selectInto);
-        return SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, sourceParameters, command, keywordCase);
+        var (withSql, sourceSql, sourceParameters, maxRecursionStmt) = _planner.RenderSource(command.Source, selectInto);
+        var (sql, parameters) = SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, sourceParameters, command, keywordCase);
+        return (AppendMaxRecursionStmt(sql, maxRecursionStmt), parameters);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildDropTableSql(DropTableCommand command)
         => (SqlMutationBuilder.MakeDropTableIfExists(Dialect, command.QuoteIdentifiers ?? QuoteIdentifiers, command.TargetName, command.KeywordCase ?? KeywordCase), []);
+
+    // The recursion limit returned by MakeWithClause is a statement tail, not a WITH fragment: it must follow
+    // the whole statement body and precede an optional terminal ';' (T-SQL requires OPTION before the MERGE
+    // terminator). A null value leaves the statement byte-identical to the pre-#275 output.
+    private static string AppendMaxRecursionStmt(string sql, string? maxRecursionStmt)
+    {
+        if (maxRecursionStmt is null)
+            return sql;
+
+        var trimmed = sql.TrimEnd();
+        return trimmed.EndsWith(';')
+            ? trimmed[..^1] + " " + maxRecursionStmt + ";"
+            : trimmed + " " + maxRecursionStmt;
+    }
 
     // A per-statement placeholder prefix for captured members: the shared parameter provider already
     // keeps inline values unique, but a member (closure variable) is named after the member, so two
@@ -1395,8 +1412,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                         Array.Empty<Parameter>()));
 
                 var selectInto = SqlMutationBuilder.ResolveCreateTableAsInto(Dialect, quoteIdentifiers, createTableAs, keywordCase);
-                var (withSql, sourceSql, _) = _planner.RenderSource(createTableAs.Source, provider, accumulator, selectInto, BatchParameterPrefix(i));
-                (sql, _) = SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, accumulator, createTableAs, keywordCase);
+                var (withSql, sourceSql, _, maxRecursionStmt) = _planner.RenderSource(createTableAs.Source, provider, accumulator, selectInto, BatchParameterPrefix(i));
+                var (ctasSql, _) = SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, accumulator, createTableAs, keywordCase);
+                // Statement-local: the option must stay inside this step's string, before the batch joins steps.
+                sql = AppendMaxRecursionStmt(ctasSql, maxRecursionStmt);
             }
             else if (step.Mutation is { } mutation)
             {
@@ -1405,8 +1424,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             }
             else
             {
-                var (withSql, sourceSql, _) = _planner.RenderSource(step.Query!, provider, accumulator, null, BatchParameterPrefix(i));
-                sql = withSql is null ? sourceSql : withSql + sourceSql;
+                var (withSql, sourceSql, _, maxRecursionStmt) = _planner.RenderSource(step.Query!, provider, accumulator, null, BatchParameterPrefix(i));
+                sql = AppendMaxRecursionStmt(withSql is null ? sourceSql : withSql + sourceSql, maxRecursionStmt);
                 results.Add(new BatchResultSpec(step.Query!, sql));
             }
 
