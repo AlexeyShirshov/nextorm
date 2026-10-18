@@ -27,6 +27,13 @@ if (args.Length > 0 && args[0] == "--stage-a")
 if (args.Length > 0 && args[0] == "--t217-perf-probe")
     return await T217DtoPerfProbe.RunAsync(args.Length > 1 ? args[1] : ".");
 
+// T297-G8 (#297): BenchmarkDotNet launches one process per benchmark, so the class-level static
+// collector never sees more than the last probe of a BDN run. This env-gated entry point runs all
+// 32 probe bodies in a single process and writes the evidence; benchmark-project-only, and with
+// the flag absent this file behaves exactly as before.
+if (Environment.GetEnvironmentVariable("NEXTORM_G8_PROBE_ONLY") == "1")
+    return SqliteBenchmarkG8Shape.RunAllProbes();
+
 BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
 return 0;
 
