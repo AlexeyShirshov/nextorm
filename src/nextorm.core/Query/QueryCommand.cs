@@ -64,11 +64,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private List<QueryCommand>? _referencedQueries;
     private List<Expression>? _outerRefs;
     private JoinExpression[]? _joins;
-    /// <summary>The prepared projection columns after <c>PrepareCommand</c>, or <c>null</c> before preparation.</summary>
-    protected SelectExpression[]? _selectList;
     private object? _customData;
-    /// <summary>The prepared <c>FROM</c> source (physical table, subquery, CTE or set-operation operand), or <c>null</c> before preparation.</summary>
-    protected FromExpression? _from;
     /// <summary>The context that executes the command, or <c>null</c> for an unbound cached clone.</summary>
     protected IDataContext? _dataContext;
     /// <summary>The original projection lambda, or <c>null</c> for a command without an explicit projection.</summary>
@@ -83,17 +79,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     protected LambdaExpression? _preWhere;
     /// <summary>The ClickHouse <c>ARRAY JOIN</c> expressions before preparation, or <c>null</c> when the clause is absent.</summary>
     protected LambdaExpression[]? _arrayJoins;
-    internal Expression[]? _preparedArrayJoin;
     private IReadOnlyList<WindowDefinition>? _windows;
-    /// <summary>Whether the command has been prepared and its cached plan hashes are current.</summary>
-    protected bool _isPrepared;
-
-    /// <summary>
-    /// Whether this command instance has ever completed a preparation. Unlike <see cref="_isPrepared"/> it
-    /// is not cleared by <see cref="ResetPreparation"/>: it distinguishes a genuinely fresh command (which
-    /// may reuse a pre-preparation recipe) from one being re-prepared in place. Clones start <see langword="false"/>.
-    /// </summary>
-    internal bool HasEverPrepared;
     /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
     protected Type? _srcType;
     /// <summary>
@@ -107,128 +93,9 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// emits. Set before preparation so the alias is folded into the column plan hash.
     /// </summary>
     internal bool IdentitySlotAliases { get; set; }
-    private bool _dontCache;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
-    internal int ColumnsPlanHash;
-    internal int JoinPlanHash;
-    internal int SortingPlanHash;
-    internal int WherePlanHash;
-    internal int GroupingPlanHash;
-    internal int ResultPlanHash;
-    internal int FromPlanHash;
-    internal int UnionPlanHash;
-    internal int ReferencedQueriesPlanHash;
-    internal int CtesPlanHash;
-    /// <summary>
-    /// Hash of <see cref="Hints"/>. It is part of the plan key so two otherwise identical commands
-    /// with different hints do not share a cached plan (and therefore the wrong SQL).
-    /// </summary>
-    internal int HintsPlanHash;
-    /// <summary>
-    /// Hash of <see cref="Windows"/>. It is part of the plan key so two otherwise identical commands
-    /// with different named windows (or the same name with different keys) do not share a cached plan.
-    /// </summary>
-    internal int WindowsPlanHash;
-    internal Type? ResultType;
     /// <summary>The paging state (<c>LIMIT</c>/<c>OFFSET</c>) applied to the query.</summary>
     public Paging Paging;
-    /// <summary>
-    /// True when this command is used as a correlated scalar with a <c>*OrDefault</c> terminal
-    /// (<c>FirstOrDefault</c>/<c>SingleOrDefault</c>). A SQL NULL result then means "no row" and must
-    /// materialise as <c>default</c> instead of throwing.
-    /// </summary>
-    internal bool DefaultOnEmpty;
-    /// <summary>
-    /// True when this command is used as a correlated scalar with a <c>Single</c>/<c>SingleOrDefault</c>
-    /// terminal. At most one row is allowed; the renderer may reject it on dialects whose scalar
-    /// subqueries do not enforce cardinality.
-    /// </summary>
-    internal bool SingleScalar;
-    internal Expression? PreparedCondition;
-    /// <summary>
-    /// The HAVING predicate after it has been run through the correlated-query visitor. Subqueries in
-    /// HAVING register their outer references here, exactly like <see cref="PreparedCondition"/> does
-    /// for WHERE; the renderer prefers it over the raw <see cref="Having"/> lambda.
-    /// </summary>
-    internal Expression? PreparedHaving;
-    /// <summary>
-    /// Hash of the captured-collection shapes found in <see cref="PreparedCondition"/>: value-list
-    /// (<c>in</c>/<c>Contains</c>) element counts / null-presence and lookup (<c>dict[column]</c>) entry
-    /// counts. A captured collection's member access contributes nothing to the expression plan hash, so
-    /// this folds its shape into the plan key. Zero when there are no such nodes.
-    /// </summary>
-    internal int InValuesShapeHash;
-    /// <summary>
-    /// The condition plan hash before the value-list shape is folded in, so an already-prepared command
-    /// can refresh the shape (and therefore the key) when its captured collection changed.
-    /// </summary>
-    private int _whereBasePlanHash;
-    /// <summary>
-    /// Whether <see cref="PreparedCondition"/> contains a top-level captured-collection node (a value
-    /// list or a lookup) whose shape must be re-checked on every execution of an already-prepared command.
-    /// </summary>
-    internal bool HasTopLevelInValues;
-    /// <summary>
-    /// The value lists evaluated while preparing the condition, keyed by the collection expression, so
-    /// the SQL and parameter passes reuse one evaluation of a captured collection. Only populated when
-    /// the command participates in the plan cache.
-    /// </summary>
-    internal Dictionary<Expression, InValuesPartition>? InValuesPartitions;
-    /// <summary>
-    /// The captured-collection lookups (<c>dict[column]</c>) evaluated while preparing the condition,
-    /// keyed by the index expression, so the SQL and parameter passes reuse one evaluation and a cached
-    /// plan only lives while the collection shape is unchanged. Only populated when the command
-    /// participates in the plan cache.
-    /// </summary>
-    internal Dictionary<Expression, List<LookupEntry>>? LookupPartitions;
-    /// <summary>
-    /// Whether the shape of captured collections (value lists and lookups) was folded into the plan key
-    /// during preparation. When it was and a lookup is not among <see cref="LookupPartitions"/>, the
-    /// lookup sits in a clause whose shape is not part of the key and is refused instead of risking a
-    /// stale cached plan.
-    /// </summary>
-    internal bool ShapeScanned;
-    /// <summary>
-    /// Whether every value list and lookup collection matched by the shape scan is shape-stable
-    /// (an inline array of immutable values or a value-type <c>new</c> expression). A stable shape
-    /// cannot change between two executions of a cached plan, so a prepared command can skip the
-    /// per-execution refresh of <see cref="InValuesShapeHash"/> and the evaluated partitions.
-    /// </summary>
-    internal bool ShapeValuesStable;
-    /// <summary>
-    /// Whether a tuple-valued <c>IN</c>/<c>Contains</c> appears in a clause whose captured-collection
-    /// shape is <b>not</b> folded into the plan key (HAVING, a JOIN condition, a SELECT column or a
-    /// subquery nested in one of those). The rendered SQL of such a clause depends on the collection's
-    /// current shape, so reusing a cached plan built for another shape would be wrong; the planner reads
-    /// this flag and suppresses the call-local cache instead of mutating the sticky <see cref="Cache"/>
-    /// flag. A false positive only forgoes caching (harmless); a false negative would be a wrong result.
-    /// </summary>
-    internal bool HasUnkeyedTupleInValues;
-    /// <summary>
-    /// Whether a scalar-valued (non-tuple) captured-collection <c>IN</c>/<c>Contains</c> appears in a
-    /// clause whose captured-collection shape is <b>not</b> folded into the plan key, including the
-    /// WHERE/PREWHERE of a descendant command rendered through this one (for example the referenced query
-    /// swapped into the context-shared <c>Any</c>/<c>Count</c> command). The rendered SQL of such a clause
-    /// depends on the collection's current shape, so reusing a cached plan built for another shape would be
-    /// wrong; the planner reads this flag and suppresses the call-local cache instead of mutating the
-    /// sticky <see cref="Cache"/> flag. It is set during preparation, recomputed when a shared command's
-    /// referenced query is swapped (<see cref="ReplaceCommand"/>) and cleared by
-    /// <see cref="ResetPreparation"/>. A false positive only forgoes caching (harmless); a false negative
-    /// would be a wrong result.
-    /// </summary>
-    internal bool HasUnkeyedScalarInValues;
-    private QueryPlanEqualityComparer? _queryPlanComparer;
-    private ExpressionPlanEqualityComparer? _expressionPlanComparer;
-    private SelectExpressionPlanEqualityComparer? _selectExpressionPlanComparer;
-    private FromExpressionPlanEqualityComparer? _fromExpressionPlanComparer;
-    private JoinExpressionPlanEqualityComparer? _joinExpressionPlanComparer;
-    private SortingExpressionPlanEqualityComparer? _sortingExpressionPlanComparer;
-    private SelectExpression[]? _groupingList;
-    private SelectExpression[]? _limitByColumns;
-    private SelectExpression[]? _distinctOnColumns;
-    private SelectExpression[]? _extremeRowColumns;
-    private SelectExpression[]? _extremeRowGroupByColumns;
-    private SelectExpression[]? _perParentPartitionColumns;
     /// <summary>The sort columns before preparation, or <c>null</c> when the query has no <c>ORDER BY</c>.</summary>
     protected Sorting[]? _sorting;
 
@@ -591,13 +458,29 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// select list, instead of collapsing a nested construction into one opaque column. Set only on the
     /// JSON stream clone; ordinary query preparation never sets it.
     /// </summary>
-    internal bool JsonShapeMode { get; set; }
+    internal bool JsonShapeMode
+    {
+        get => _preparation?.JsonShapeMode ?? false;
+        set
+        {
+            if (value == (_preparation?.JsonShapeMode ?? false)) return;
+            Preparation.JsonShapeMode = value;
+        }
+    }
     /// <summary>
     /// The recursively captured JSON projection shape stored by the JSON-only preparer when
     /// <see cref="JsonShapeMode"/> is set; <see langword="null"/> for an ordinary (non-JSON) preparation or a
     /// shape the JSON preparer did not need to take over.
     /// </summary>
-    internal JsonShapeNode? JsonShape { get; set; }
+    internal JsonShapeNode? JsonShape
+    {
+        get => _preparation?.JsonShape;
+        set
+        {
+            if (ReferenceEquals(value, _preparation?.JsonShape)) return;
+            Preparation.JsonShape = value;
+        }
+    }
     /// <summary>
     /// When <c>true</c>, the planner compiles no row mapper: the command is read as a single scalar
     /// value. Set by the <c>ForJson</c>/<c>ForXml</c> terminals, whose whole result set collapses into
@@ -715,11 +598,6 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <see cref="ArrayJoinProjection{TEntity, TElement}.Element"/>.
     /// </summary>
     internal bool BindArrayJoinElement { get; set; }
-    /// <summary>The prepared <see cref="PreWhere"/> expression, or <c>null</c> when there is none.</summary>
-    internal Expression? PreparedPreWhere;    /// <summary>Shape hash of any captured value-list in <see cref="PreparedPreWhere"/>; zero when none.</summary>
-    internal int PreWhereShapeHash;
-    /// <summary>Whether <see cref="PreparedPreWhere"/> contains a top-level value-list whose shape is refreshed per run.</summary>
-    internal bool HasPreWhereInValues;
     internal bool IgnoreColumns { get; set; }
     /// <summary>The commands referenced by correlated subqueries in this command's expressions, in registration order; empty until preparation registers one.</summary>
     public IReadOnlyList<QueryCommand> ReferencedQueries => _referencedQueries!;
@@ -743,7 +621,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// re-rendering the anchor body: a constant or other non-column anchor projection would otherwise
     /// inline a literal and emit an unaddressable column such as <c>t1.1</c>.
     /// </summary>
-    internal CteReference? TypedRecursiveAnchor { get; set; }
+    internal CteReference? TypedRecursiveAnchor
+    {
+        get => _binding?.TypedRecursiveAnchor;
+        set
+        {
+            if (ReferenceEquals(value, _binding?.TypedRecursiveAnchor)) return;
+            Binding.TypedRecursiveAnchor = value;
+        }
+    }
 
     /// <summary>
     /// True when any common table expression carried by this command, at any declaration depth, has a
@@ -827,7 +713,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// and is cleared once the warning has been emitted, so a command warns at most once per preparation,
     /// with suppression applying to the first plan-cache population.
     /// </summary>
-    internal bool PendingJoinIntoCartesianWarning { get; set; }
+    internal bool PendingJoinIntoCartesianWarning
+    {
+        get => _preparation?.PendingJoinIntoCartesianWarning ?? false;
+        set
+        {
+            if (value == (_preparation?.PendingJoinIntoCartesianWarning ?? false)) return;
+            Preparation.PendingJoinIntoCartesianWarning = value;
+        }
+    }
 
     /// <summary>
     /// Whether this denormalized pair command (<c>JoinInto</c> or a single-query <c>LoadWith</c>) joins at
@@ -847,7 +741,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// of the plan key: it carries only diagnostic data (entity name, filter key, reason, missing column
     /// names), never SQL text, table names, parameters or captured values.
     /// </summary>
-    internal List<RawSourceFilterSkip>? PendingRawSourceFilterSkips { get; set; }
+    internal List<RawSourceFilterSkip>? PendingRawSourceFilterSkips
+    {
+        get => _preparation?.PendingRawSourceFilterSkips;
+        set
+        {
+            if (ReferenceEquals(value, _preparation?.PendingRawSourceFilterSkips)) return;
+            Preparation.PendingRawSourceFilterSkips = value;
+        }
+    }
 
     /// <summary>
     /// The bound raw/named join filters collected during the current preparation whose join has no
@@ -856,7 +758,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// fabricate an <c>ON</c> clause. Preparation-local scratch: reset at the start of every preparation
     /// and never part of the plan key.
     /// </summary>
-    internal List<PendingCrossJoinFilter>? PendingCrossJoinFilters { get; set; }
+    internal List<PendingCrossJoinFilter>? PendingCrossJoinFilters
+    {
+        get => _preparation?.PendingCrossJoinFilters;
+        set
+        {
+            if (ReferenceEquals(value, _preparation?.PendingCrossJoinFilters)) return;
+            Preparation.PendingCrossJoinFilters = value;
+        }
+    }
 
     /// <summary>
     /// One bound join filter deferred to the main-source filter pass because its CROSS/APPLY join has no
@@ -967,7 +877,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// when present, otherwise the context default. It is part of the plan key (the inherited value
     /// must not let two contexts with different defaults share a cached plan).
     /// </summary>
-    internal bool ResolvedQuoteIdentifiers;
+    internal bool ResolvedQuoteIdentifiers
+    {
+        get => _preparation?.ResolvedQuoteIdentifiers ?? false;
+        set
+        {
+            if (value == (_preparation?.ResolvedQuoteIdentifiers ?? false)) return;
+            Preparation.ResolvedQuoteIdentifiers = value;
+        }
+    }
     /// <summary>
     /// Per-command override of the naming convention applied to auto-derived table/column names:
     /// <see langword="null"/> inherits the context default
@@ -979,7 +897,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// present, otherwise the context default. It is part of the plan key (the inherited value must
     /// not let two contexts with different defaults share a cached plan).
     /// </summary>
-    internal INamingConvention? ResolvedNamingConvention;
+    internal INamingConvention? ResolvedNamingConvention
+    {
+        get => _preparation?.ResolvedNamingConvention;
+        set
+        {
+            if (ReferenceEquals(value, _preparation?.ResolvedNamingConvention)) return;
+            Preparation.ResolvedNamingConvention = value;
+        }
+    }
     /// <summary>
     /// Per-command override of the letter case in which SQL keywords are emitted: <see langword="null"/>
     /// inherits the context default (<c>DataContextBuilder.UseKeywordCase</c>). Set through
@@ -991,7 +917,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// otherwise the context default. It is part of the plan key (the inherited value must not let two
     /// contexts with different defaults share a cached plan).
     /// </summary>
-    internal KeywordCase ResolvedKeywordCase;
+    internal KeywordCase ResolvedKeywordCase
+    {
+        get => _preparation?.ResolvedKeywordCase ?? default;
+        set
+        {
+            if (value == (_preparation?.ResolvedKeywordCase ?? default)) return;
+            Preparation.ResolvedKeywordCase = value;
+        }
+    }
     /// <summary>
     /// Per-query override of the command timeout in seconds: <see langword="null"/> inherits the
     /// context default (<c>DataContextBuilder.UseCommandTimeout</c>), and a value of zero or less means
@@ -1004,7 +938,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// provider default applies. It is part of the plan key (the inherited value must not let two
     /// contexts with different defaults share a cached command).
     /// </summary>
-    internal int? ResolvedCommandTimeout;
+    internal int? ResolvedCommandTimeout
+    {
+        get => _preparation?.ResolvedCommandTimeout;
+        set
+        {
+            if (value == (_preparation?.ResolvedCommandTimeout ?? null)) return;
+            Preparation.ResolvedCommandTimeout = value;
+        }
+    }
     /// <summary>
     /// The trailing <c>FOR JSON</c> clause (SQL Server), or <c>null</c> when the result set is returned
     /// as rows. A dialect that does not implement it rejects a command that carries it.
@@ -1081,42 +1023,16 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     public virtual void ResetPreparation()
     {
-        _isPrepared = false;
-        _selectList = null;
-        _groupingList = null;
-        _limitByColumns = null;
-        _distinctOnColumns = null;
-        _extremeRowColumns = null;
-        _extremeRowGroupByColumns = null;
-        _perParentPartitionColumns = null;
-        PreparedPreWhere = null;
-        _preparedArrayJoin = null;
-        PreWhereShapeHash = 0;
-        HasPreWhereInValues = false;
-        _from = null;
-        PreparedCondition = null;
-        PreparedHaving = null;
-        InValuesShapeHash = 0;
-        InValuesPartitions = null;
-        HasTopLevelInValues = false;
-        LookupPartitions = null;
-        ShapeScanned = false;
-        ShapeValuesStable = false;
-        HasUnkeyedTupleInValues = false;
-        HasUnkeyedScalarInValues = false;
-        _whereBasePlanHash = 0;
+        // The node-owned preparation storage is reset in place; the fields it deliberately keeps
+        // (the eleven plan hashes other than ReferencedQueriesPlanHash, the node-owned shape flags and
+        // the comparers) survive exactly as they did when they were plain fields.
+        _preparation?.Reset();
         // Correlated subqueries and outer references are registered while preparing (#148-B: the
         // navigation collection terminals add one referenced command per terminal). A re-preparation
         // rebuilds them from scratch; keeping the previous lists would append duplicates on every
         // reset/prepare cycle, changing the plan key and growing the registry without bound.
         _referencedQueries = null;
         _outerRefs = null;
-        ReferencedQueriesPlanHash = 0;
-        // The JSON-only preparation state is per-preparation: a re-prepared or derived command must not
-        // retain a stale captured descriptor (or remain in JSON shape mode) from a previous JSON stream.
-        JsonShapeMode = false;
-        JsonShape = null;
-        InvalidatePlanKey();
 
         _dataContext?.ResetPreparation(this);
     }

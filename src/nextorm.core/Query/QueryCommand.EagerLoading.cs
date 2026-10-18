@@ -23,7 +23,15 @@ public partial class QueryCommand
     /// the command has no eager-load strategy. It is part of the plan key so two commands that resolve to
     /// different strategies never share a cached plan.
     /// </summary>
-    internal EagerLoadMode ResolvedEagerLoadMode;
+    internal EagerLoadMode ResolvedEagerLoadMode
+    {
+        get => _preparation?.ResolvedEagerLoadMode ?? default;
+        set
+        {
+            if (value == (_preparation?.ResolvedEagerLoadMode ?? default)) return;
+            Preparation.ResolvedEagerLoadMode = value;
+        }
+    }
 
     /// <summary>
     /// The structural identity of this command's eager-load graph (ordered load paths, member and

@@ -16,10 +16,6 @@ public partial class QueryCommand
     // while the command is prepared and its re-evaluated value-list shape is unchanged; it is dropped
     // when the command is prepared/reset. Reusing the same key instance lets the plan store match it
     // by reference (see QueryPlan.Equals), so a warm repeated execution does no structural comparison.
-    private QueryPlan? _planKey;
-    private string? _planKeySql;
-    private int _planKeyInValuesShapeHash;
-    private int _planKeyPreWhereShapeHash;
 
     /// <summary>
     /// Returns this command's plan-cache key, reusing the memoized one when the command is prepared
