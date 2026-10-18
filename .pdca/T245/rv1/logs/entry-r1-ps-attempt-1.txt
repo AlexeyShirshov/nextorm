@@ -1,0 +1,15 @@
+COMMAND         %CPU
+VBCSCompiler     123
+roslynq         23.1
+opencode        17.8
+opencode        11.9
+opencode         3.4
+MainThread       3.3
+MainThread       2.3
+opencode         2.1
+dotnet           1.6
+dotnet           1.5
+dotnet           1.5
+dotnet           1.4
+dotnet           1.4
+dotnet           1.4
