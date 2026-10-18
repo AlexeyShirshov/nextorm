@@ -14,7 +14,15 @@ public partial class QueryCommand
     /// <see cref="QuoteIdentifiers"/> and <see cref="KeywordCase"/>. A command with no eager loads leaves
     /// it <see langword="null"/> and carries no resolved strategy.
     /// </summary>
-    public EagerLoadMode? EagerLoadMode { get; internal set; }
+    public EagerLoadMode? EagerLoadMode
+    {
+        get => _description?.Options.EagerLoadMode;
+        internal set
+        {
+            if (value == _description?.Options.EagerLoadMode) return;
+            WriteOptions().EagerLoadMode = value;
+        }
+    }
 
     /// <summary>
     /// The executable strategy resolved for this command during preparation (the command override when
@@ -39,7 +47,15 @@ public partial class QueryCommand
     /// no eager loads. It is part of the plan key so an otherwise identical parent command loaded with a
     /// different eager graph cannot reuse an incompatible plan.
     /// </summary>
-    internal EagerLoadShape EagerLoadShape;
+    internal EagerLoadShape EagerLoadShape
+    {
+        get => _description?.Options.EagerLoadShape ?? default;
+        set
+        {
+            if (value.Equals(_description?.Options.EagerLoadShape ?? default)) return;
+            WriteOptions().EagerLoadShape = value;
+        }
+    }
 
     /// <summary>
     /// Whether one of this command's eager-load children requests a per-parent top-N (a child
@@ -48,7 +64,15 @@ public partial class QueryCommand
     /// or a plan is inserted — instead of running the parent statement and failing in the child loader.
     /// It is command state, not a plan-key dimension: a rejected command never reaches the cache.
     /// </summary>
-    internal bool HasPerParentEagerTopN;
+    internal bool HasPerParentEagerTopN
+    {
+        get => _description?.Options.HasPerParentEagerTopN ?? false;
+        set
+        {
+            if (value == (_description?.Options.HasPerParentEagerTopN ?? false)) return;
+            WriteOptions().HasPerParentEagerTopN = value;
+        }
+    }
 }
 
 /// <summary>

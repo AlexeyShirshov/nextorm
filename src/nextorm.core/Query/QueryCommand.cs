@@ -57,47 +57,34 @@ internal readonly struct QueryShape
 public partial class QueryCommand : IQueryRegistry, ICloneable
 {
 
-    private QueryCommand? _union;
-    private UnionType _unionType;
-    private IReadOnlyList<CteDefinition>? _ctes;
-    private IReadOnlyList<string>? _hints;
-    private List<QueryCommand>? _referencedQueries;
-    private List<Expression>? _outerRefs;
-    private JoinExpression[]? _joins;
     private object? _customData;
     /// <summary>The context that executes the command, or <c>null</c> for an unbound cached clone.</summary>
     protected IDataContext? _dataContext;
-    /// <summary>The original projection lambda, or <c>null</c> for a command without an explicit projection.</summary>
-    protected LambdaExpression? _exp;
-    /// <summary>The <c>WHERE</c> predicate lambda before preparation, or <c>null</c> when there is none.</summary>
-    protected LambdaExpression? _condition;
-    /// <summary>The <c>GROUP BY</c> key selector before preparation, or <c>null</c> when there is no grouping.</summary>
-    protected LambdaExpression? _groupExp;
-    /// <summary>The <c>HAVING</c> predicate before preparation, or <c>null</c> when there is none.</summary>
-    protected LambdaExpression? _having;
-    /// <summary>The ClickHouse <c>PREWHERE</c> predicate before preparation, or <c>null</c> when there is none.</summary>
-    protected LambdaExpression? _preWhere;
-    /// <summary>The ClickHouse <c>ARRAY JOIN</c> expressions before preparation, or <c>null</c> when the clause is absent.</summary>
-    protected LambdaExpression[]? _arrayJoins;
-    private IReadOnlyList<WindowDefinition>? _windows;
-    /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
-    protected Type? _srcType;
     /// <summary>
     /// The join-projection result type a <c>JoinInto</c> pair command materializes while its
     /// <see cref="_srcType"/> stays the parent entity type, or <c>null</c> for an ordinary command.
     /// </summary>
-    internal Type? ProjectionType { get; init; }
+    internal Type? ProjectionType
+    {
+        get => _description?.ProjectionType;
+        init
+        {
+            if (ReferenceEquals(value, _description?.ProjectionType)) return;
+            WriteDescription().ProjectionType = value;
+        }
+    }
     /// <summary>
     /// True for a prepared identity (whole-projection) CTE shape: its flattened item columns are tagged
     /// with the deterministic, collision-free per-slot aliases the mutation's <c>RETURNING</c> list
     /// emits. Set before preparation so the alias is folded into the column plan hash.
     /// </summary>
-    internal bool IdentitySlotAliases { get; set; }
-    private QueryFilterScope _filterScope = QueryFilterScope.None;
+    internal bool IdentitySlotAliases
+    {
+        get => GetFlag(QueryDescription.FlagIdentitySlotAliases);
+        set => SetFlag(QueryDescription.FlagIdentitySlotAliases, value);
+    }
     /// <summary>The paging state (<c>LIMIT</c>/<c>OFFSET</c>) applied to the query.</summary>
     public Paging Paging;
-    /// <summary>The sort columns before preparation, or <c>null</c> when the query has no <c>ORDER BY</c>.</summary>
-    protected Sorting[]? _sorting;
 
     /// <summary>
     /// Initializes a command from a query shape, copying each collaborator and leaving the command
@@ -149,7 +136,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _sorting = definition.Sorting;
         _groupExp = definition.Group;
         _having = definition.Having;
-        Logger = definition.Logger;
+        SetLogger(definition.Logger);
         IsDistinct = definition.IsDistinct;
         GroupByWithTotals = definition.GroupByWithTotals;
         LimitBy = definition.LimitBy;
@@ -186,40 +173,59 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     internal QueryCommand(IDataContext? dataProvider, QueryCommand source, bool forCache)
     {
         _dataContext = dataProvider;
-        _exp = forCache ? null : source._exp;
-        _srcType = source._srcType;
-        ProjectionType = source.ProjectionType;
-        IdentitySlotAliases = source.IdentitySlotAliases;
-        _condition = forCache ? null : source._condition;
-        _filterScope = source._filterScope;
-        // Own a private array, exactly like the definition constructor: preparation writes the prepared
-        // copy back into the array (PrepareJoin), so sharing it would let one command's preparation
-        // rewrite a source's or sibling's joins. The cache clone deep-clones instead.
-        _joins = forCache ? CloneForCache(source._joins) : CloneJoinArray(source._joins);
         Paging = source.Paging;
-        _sorting = source._sorting;
-        _groupExp = forCache ? null : source._groupExp;
-        _having = source._having;
-        Logger = source.Logger;
-        IsDistinct = source.IsDistinct;
-        GroupByWithTotals = source.GroupByWithTotals;
-        LimitBy = source.LimitBy;
-        DistinctOn = source.DistinctOn;
-        ExtremeRow = source.ExtremeRow;
-        TableSample = source.TableSample;
-        Temporal = source.Temporal;
-        RowLock = source.RowLock;
-        SourceLockClause = source.SourceLockClause;
-        Final = source.Final;
-        SampleRatio = source.SampleRatio;
-        SampleOffset = source.SampleOffset;
-        Settings = source.Settings;
-        NavigationPaths = source.NavigationPaths;
-        _preWhere = source._preWhere;
-        _arrayJoins = CloneJoinArray(source._arrayJoins);
-        _windows = source._windows;
-        ArrayJoinKind = source.ArrayJoinKind;
-        BindArrayJoinElement = source.BindArrayJoinElement;
+
+        // A live clone that does not need a private join/array-join array shares the source's immutable
+        // description: the very first raw write on either side splits it (copy-on-write). This is the
+        // CTE-construction edge the plan targets: UnionAll/Clone/Cte bodies stop re-allocating every raw
+        // field of the node.
+        if (!forCache && source._joins is null && source._arrayJoins is null)
+        {
+            var shared = source._description;
+            if (shared is null)
+            {
+                _description = new QueryDescription();
+                SetLogger(source.Logger);
+                ProjectionType = source.ProjectionType;
+                IdentitySlotAliases = source.IdentitySlotAliases;
+                return;
+            }
+
+            shared.MarkShared();
+            _description = shared;
+            return;
+        }
+
+        // The cache clone (and any live clone that must own a private join/array-join array) builds an
+        // owned description from the source's blocks.
+        var description = source._description?.CloneShellForWrite() ?? new QueryDescription();
+        if (forCache)
+        {
+            description.Exp = null;
+            description.Predicates = new QueryPredicates(description.Predicates)
+            {
+                Condition = null,
+                Group = null,
+            };
+            description.Relations = new QueryRelations(description.Relations)
+            {
+                Joins = CloneForCache(description.Relations.Joins),
+            };
+        }
+        else
+        {
+            description.Relations = new QueryRelations(description.Relations)
+            {
+                Joins = CloneJoinArray(description.Relations.Joins),
+            };
+        }
+
+        description.Clauses = new QueryClauses(description.Clauses)
+        {
+            ArrayJoins = CloneJoinArray(description.Clauses.ArrayJoins),
+        };
+        description.DefinitionCache = null;
+        _description = description;
     }
 
     /// <summary>
@@ -247,7 +253,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _sorting = shape.Sorting;
         _groupExp = shape.Group;
         _having = shape.Having;
-        Logger = shape.Logger;
+        SetLogger(shape.Logger);
         IsDistinct = shape.IsDistinct;
         Final = shape.Final;
         SampleRatio = shape.SampleRatio;
@@ -271,25 +277,21 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// the test surface. Each read materialises a fresh record and it is deliberately not used by the
     /// internal clone paths (they transfer state directly and allocate no record).
     /// </summary>
-    internal QueryDefinition Definition => BuildDefinition(_exp, _condition, _joins, _groupExp);
-    /// <summary>Materialises the shape record once, substituting the four collaborator overrides.</summary>
-    private QueryDefinition BuildDefinition(
-        LambdaExpression? exp,
-        LambdaExpression? condition,
-        JoinExpression[]? joins,
-        LambdaExpression? group) => new()
+    internal QueryDefinition Definition => Description.DefinitionCache ??= BuildDefinition();
+    /// <summary>Materialises the shape record from the current description and memoizes it there.</summary>
+    private QueryDefinition BuildDefinition() => new()
         {
-            Exp = exp,
+            Exp = _exp,
             SrcType = _srcType,
             ProjectionType = ProjectionType,
             IdentitySlotAliases = IdentitySlotAliases,
-            Condition = condition,
+            Condition = _condition,
             IgnoreFilters = !_filterScope.IsEmpty,
             FilterScope = _filterScope,
-            Joins = joins,
+            Joins = _joins,
             Paging = Paging,
             Sorting = _sorting,
-            Group = group,
+            Group = _groupExp,
             Having = _having,
             Logger = Logger,
             IsDistinct = IsDistinct,
@@ -324,7 +326,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <see cref="NavigationExpansion"/> and read by the projection-nullability check and the provider
     /// outer-join null-settings injection. Not part of the plan key.
     /// </summary>
-    internal IReadOnlyDictionary<ParameterExpression, string>? NavigationPaths { get; set; }
+    internal IReadOnlyDictionary<ParameterExpression, string>? NavigationPaths
+{
+    get => _description?.Clauses.NavigationPaths;
+    set
+    {
+        if (ReferenceEquals(value, _description?.Clauses.NavigationPaths)) return;
+        WriteClauses().NavigationPaths = value;
+    }
+}
 
     /// <summary>
     /// #148-B R2.1: the mapped-child-existence leg of a many-to-many collection correlation. Set only
@@ -333,7 +343,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <see cref="InMemoryQueryBuilder"/>). Not part of the plan key; the condition already fixes the
     /// relationship shape.
     /// </summary>
-    internal JunctionChildFilter? JunctionChildFilter { get; set; }
+    internal JunctionChildFilter? JunctionChildFilter
+{
+    get => _description?.Options.JunctionChildFilter;
+    set
+    {
+        if (ReferenceEquals(value, _description?.Options.JunctionChildFilter)) return;
+        WriteOptions().JunctionChildFilter = value;
+    }
+}
 
     /// <summary>
     /// #148-B R2.3: the in-memory descriptor of a multi-hop reference-navigation chain. When set, the
@@ -341,7 +359,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// building a nested correlated subquery (which the evaluator cannot bind). Set only for the
     /// in-memory provider and only on the correlated command the chain was lowered to.
     /// </summary>
-    internal InMemoryNavigationChain? NavigationChain { get; set; }
+    internal InMemoryNavigationChain? NavigationChain
+{
+    get => _description?.Options.NavigationChain;
+    set
+    {
+        if (ReferenceEquals(value, _description?.Options.NavigationChain)) return;
+        WriteOptions().NavigationChain = value;
+    }
+}
 
     /// <summary>
     /// #148-B r3 A3′: marks the correlated <c>count_big</c> subcommand a navigation <c>Count()</c> /
@@ -351,7 +377,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// uses it to tag the materialized Int32 column. Preparation-local; carried with clones but not
     /// part of the plan key (the command's own projection/ResultType already describes the shape).
     /// </summary>
-    internal bool IsWideNavigationCount { get; set; }
+    internal bool IsWideNavigationCount
+{
+    get => GetFlag(QueryDescription.FlagIsWideNavigationCount);
+    set => SetFlag(QueryDescription.FlagIsWideNavigationCount, value);
+}
 
     internal void ApplyNavigationExpansion(
         LambdaExpression? projection,
@@ -375,7 +405,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     }
 
     /// <summary>The logger that receives command-preparation diagnostics, or <c>null</c> when logging is disabled.</summary>
-    public ILogger? Logger { get; }
+    public ILogger? Logger { get => _description?.Options.Logger; }
     /// <summary>The prepared <c>FROM</c> source, or <c>null</c> before preparation.</summary>
     public FromExpression? From { get => _from; set => _from = value; }
     /// <summary>The prepared projection columns, or <c>null</c> before preparation.</summary>
@@ -451,7 +481,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             ResetPreparation();
     }
     internal QueryCommand? FromQuery => From?.SubQuery;
-    internal bool OneColumn { get; set; }
+    internal bool OneColumn
+{
+    get => GetFlag(QueryDescription.FlagOneColumn);
+    set => SetFlag(QueryDescription.FlagOneColumn, value);
+}
     /// <summary>
     /// When <c>true</c>, the JSON preparation path captures a recursive JSON shape description (including
     /// nested constructions and expanded entity items) and lowers its scalar descendants into the prepared
@@ -486,40 +520,80 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// value. Set by the <c>ForJson</c>/<c>ForXml</c> terminals, whose whole result set collapses into
     /// one document column.
     /// </summary>
-    internal bool DocumentMode { get; set; }
+    internal bool DocumentMode
+{
+    get => GetFlag(QueryDescription.FlagDocumentMode);
+    set => SetFlag(QueryDescription.FlagDocumentMode, value);
+}
     /// <summary>Whether the command is shaped to return at most a single row (set by the <c>First</c>/<c>Single</c> terminals).</summary>
-    public bool SingleRow { get; set; }
+    public bool SingleRow
+{
+    get => GetFlag(QueryDescription.FlagSingleRow);
+    set => SetFlag(QueryDescription.FlagSingleRow, value);
+}
     /// <summary>
     /// Whether the command was marked with <c>DISTINCT</c>. Named <c>IsDistinct</c> rather than
     /// <c>Distinct</c> so the fluent <see cref="QueryCommand{TResult}.Distinct"/> method does not hide
     /// the property on the generic command type.
     /// </summary>
-    public bool IsDistinct { get; internal set; }
+    public bool IsDistinct
+{
+    get => GetFlag(QueryDescription.FlagIsDistinct);
+    internal set => SetFlag(QueryDescription.FlagIsDistinct, value);
+}
     /// <summary>
     /// Whether the grouping carries the <c>WITH TOTALS</c> modifier (ClickHouse). Only meaningful when
     /// the command has a grouping list; a dialect that does not support it rejects the command when its
     /// SQL is built.
     /// </summary>
-    public bool GroupByWithTotals { get; internal set; }
+    public bool GroupByWithTotals
+{
+    get => GetFlag(QueryDescription.FlagGroupByWithTotals);
+    internal set => SetFlag(QueryDescription.FlagGroupByWithTotals, value);
+}
     /// <summary>
     /// The <c>LIMIT n BY expr</c> clause (ClickHouse), or <c>null</c> when the query has none. A dialect
     /// that does not support it rejects the command when its SQL is built.
     /// </summary>
-    internal LimitByClause? LimitBy { get; set; }
+    internal LimitByClause? LimitBy
+{
+    get => _description?.Clauses.LimitBy;
+    set
+    {
+        if (ReferenceEquals(value, _description?.Clauses.LimitBy)) return;
+        WriteClauses().LimitBy = value;
+    }
+}
     /// <summary>The prepared key columns of <see cref="LimitBy"/>, or <c>null</c> when there is none.</summary>
     internal SelectExpression[]? LimitByColumns => _limitByColumns;
     /// <summary>
     /// The <c>DISTINCT ON (expr, ...)</c> clause (PostgreSQL), or <c>null</c> when the query has none. A
     /// dialect that does not support it rejects the command when its SQL is built.
     /// </summary>
-    internal DistinctOnClause? DistinctOn { get; set; }
+    internal DistinctOnClause? DistinctOn
+{
+    get => _description?.Clauses.DistinctOn;
+    set
+    {
+        if (ReferenceEquals(value, _description?.Clauses.DistinctOn)) return;
+        WriteClauses().DistinctOn = value;
+    }
+}
     /// <summary>The prepared key columns of <see cref="DistinctOn"/>, or <c>null</c> when there is none.</summary>
     internal SelectExpression[]? DistinctOnColumns => _distinctOnColumns;
     /// <summary>
     /// The <c>SelectWhereMax</c>/<c>SelectWhereMin</c> row-selection clause, or <c>null</c> when the query
     /// has none. A dialect that does not support it rejects the command when its SQL is built.
     /// </summary>
-    internal ExtremeRowClause? ExtremeRow { get; set; }
+    internal ExtremeRowClause? ExtremeRow
+{
+    get => _description?.Clauses.ExtremeRow;
+    set
+    {
+        if (ReferenceEquals(value, _description?.Clauses.ExtremeRow)) return;
+        WriteClauses().ExtremeRow = value;
+    }
+}
     /// <summary>The prepared value-selector columns of <see cref="ExtremeRow"/>, or <c>null</c> when there is none.</summary>
     internal SelectExpression[]? ExtremeRowColumns => _extremeRowColumns;
     /// <summary>The prepared group-by columns of <see cref="ExtremeRow"/>, or <c>null</c> when the clause has no group.</summary>
@@ -531,13 +605,29 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// bounds to each partition, so the paging is per parent instead of global. It is an internal
     /// execution detail of the eager loader; a command with no eager load never sets it.
     /// </summary>
-    internal bool PerParentPaging { get; set; }
+    internal bool PerParentPaging
+{
+    get => _description?.Options.PerParentPaging ?? false;
+    set
+    {
+        if (value == (_description?.Options.PerParentPaging ?? false)) return;
+        WriteOptions().PerParentPaging = value;
+    }
+}
     /// <summary>
     /// The child-side partition selector used by <see cref="PerParentPaging"/> (the load's child key
     /// selector, whose parameter is the child entity type). Prepared into
     /// <see cref="PerParentPartitionColumns"/> during preparation.
     /// </summary>
-    internal LambdaExpression? PerParentPartition { get; set; }
+    internal LambdaExpression? PerParentPartition
+{
+    get => _description?.Options.PerParentPartition;
+    set
+    {
+        if (ReferenceEquals(value, _description?.Options.PerParentPartition)) return;
+        WriteOptions().PerParentPartition = value;
+    }
+}
     /// <summary>The prepared partition columns of <see cref="PerParentPaging"/>, or <c>null</c> when absent.</summary>
     internal SelectExpression[]? PerParentPartitionColumns => _perParentPartitionColumns;
     /// <summary>
@@ -547,36 +637,104 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// join and is rejected by SQL Server - while the split statement keeps it so the loaded children
     /// preserve the child query's order. Set before preparation; a rendering detail, not query state.
     /// </summary>
-    internal bool PerParentPagingEmbedded { get; set; }
+    internal bool PerParentPagingEmbedded
+{
+    get => _description?.Options.PerParentPagingEmbedded ?? false;
+    set
+    {
+        if (value == (_description?.Options.PerParentPagingEmbedded ?? false)) return;
+        WriteOptions().PerParentPagingEmbedded = value;
+    }
+}
     /// <summary>
     /// The <c>TABLESAMPLE</c> table modifier, or <c>null</c> when the query has none. A dialect that does
     /// not support it rejects the command when its SQL is built.
     /// </summary>
-    internal TableSampleClause? TableSample { get; set; }
+    internal TableSampleClause? TableSample
+{
+    get => _description?.Clauses.TableSample;
+    set
+    {
+        if (ReferenceEquals(value, _description?.Clauses.TableSample)) return;
+        WriteClauses().TableSample = value;
+    }
+}
     /// <summary>
     /// The <c>FOR SYSTEM_TIME</c> temporal-table clause, or <c>null</c> when the query has none. A
     /// dialect that does not support it rejects the command when its SQL is built.
     /// </summary>
-    internal TemporalClause? Temporal { get; set; }
+    internal TemporalClause? Temporal
+{
+    get => _description?.Clauses.Temporal;
+    set
+    {
+        if (ReferenceEquals(value, _description?.Clauses.Temporal)) return;
+        WriteClauses().Temporal = value;
+    }
+}
     /// <summary>
     /// The trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> row-locking clause, or <c>null</c> when the query
     /// has none. A dialect that does not support it rejects the command when its SQL is built.
     /// </summary>
-    internal LockClause? RowLock { get; set; }
+    internal LockClause? RowLock
+{
+    get => _description?.Clauses.RowLock;
+    set
+    {
+        if (ReferenceEquals(value, _description?.Clauses.RowLock)) return;
+        WriteClauses().RowLock = value;
+    }
+}
     /// <summary>
     /// The source-level row lock requested for the primary physical source, or <c>null</c> when none was
     /// requested. During preparation it is transferred to the resolved <c>FromExpression.SourceLock</c>
     /// (and validated); a whole-query <see cref="RowLock"/> cannot be combined with it.
     /// </summary>
-    internal LockClause? SourceLockClause { get; set; }
+    internal LockClause? SourceLockClause
+{
+    get => _description?.Clauses.SourceLockClause;
+    set
+    {
+        if (ReferenceEquals(value, _description?.Clauses.SourceLockClause)) return;
+        WriteClauses().SourceLockClause = value;
+    }
+}
     /// <summary>Whether the query carries the ClickHouse <c>FINAL</c> modifier.</summary>
-    public bool Final { get; internal set; }
+    public bool Final
+{
+    get => GetFlag(QueryDescription.FlagFinal);
+    internal set => SetFlag(QueryDescription.FlagFinal, value);
+}
     /// <summary>The ClickHouse <c>SAMPLE</c> ratio (a value in <c>[0, 1]</c>), or <c>null</c> when absent.</summary>
-    public double? SampleRatio { get; internal set; }
+    public double? SampleRatio
+{
+    get => _description?.Clauses.SampleRatio;
+    internal set
+    {
+        if (value == _description?.Clauses.SampleRatio) return;
+        WriteClauses().SampleRatio = value;
+    }
+}
     /// <summary>The ClickHouse <c>SAMPLE ... OFFSET</c> value; zero when absent.</summary>
-    public double SampleOffset { get; internal set; }
+    public double SampleOffset
+{
+    get => _description?.Clauses.SampleOffset ?? 0d;
+    internal set
+    {
+        if (value == (_description?.Clauses.SampleOffset ?? 0d)) return;
+        WriteClauses().SampleOffset = value;
+    }
+}
     /// <summary>The trailing ClickHouse <c>SETTINGS</c> entries, or <c>null</c> when there are none.</summary>
-    public IReadOnlyList<KeyValuePair<string, string>>? Settings { get; internal set; }
+    public IReadOnlyList<KeyValuePair<string, string>>? Settings
+{
+    get => _description?.Clauses.Settings;
+    internal set
+    {
+        if (ReferenceEquals(value, _description?.Clauses.Settings)) return;
+        WriteClauses().Settings = value;
+    }
+}
     /// <summary>The ClickHouse <c>PREWHERE</c> predicate, or <c>null</c> when there is none.</summary>
     public LambdaExpression? PreWhere => _preWhere;
     /// <summary>
@@ -592,13 +750,33 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     internal IReadOnlyList<Expression>? ArrayJoinExpressions => _preparedArrayJoin;
     /// <summary>The <c>ARRAY JOIN</c> kind (plain or <c>LEFT</c>) shared by <see cref="ArrayJoinExpressions"/>.</summary>
-    public ArrayJoinKind ArrayJoinKind { get; internal set; }
+    public ArrayJoinKind ArrayJoinKind
+{
+    get => _description?.Clauses.ArrayJoinKind ?? default;
+    internal set
+    {
+        if (value == (_description?.Clauses.ArrayJoinKind ?? default)) return;
+        WriteClauses().ArrayJoinKind = value;
+    }
+}
     /// <summary>
     /// Whether the last <c>ARRAY JOIN</c> expression is aliased as the element referenced by
     /// <see cref="ArrayJoinProjection{TEntity, TElement}.Element"/>.
     /// </summary>
-    internal bool BindArrayJoinElement { get; set; }
-    internal bool IgnoreColumns { get; set; }
+    internal bool BindArrayJoinElement
+{
+    get => GetFlag(QueryDescription.FlagBindArrayJoinElement);
+    set => SetFlag(QueryDescription.FlagBindArrayJoinElement, value);
+}
+    internal bool IgnoreColumns
+{
+    get => _description?.Options.IgnoreColumns ?? false;
+    set
+    {
+        if (value == (_description?.Options.IgnoreColumns ?? false)) return;
+        WriteOptions().IgnoreColumns = value;
+    }
+}
     /// <summary>The commands referenced by correlated subqueries in this command's expressions, in registration order; empty until preparation registers one.</summary>
     public IReadOnlyList<QueryCommand> ReferencedQueries => _referencedQueries!;
     /// <summary>The sort columns declared for the query, or <c>null</c> when the query has no <c>ORDER BY</c>.</summary>
@@ -732,7 +910,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <c>NavigationExpansion.ApplyProviderOuterJoinNullSettings</c>, which also honors it for a command
     /// whose joins come from a navigation expansion.
     /// </summary>
-    internal bool NeedsOuterJoinNullSettings { get; set; }
+    internal bool NeedsOuterJoinNullSettings
+{
+    get => GetFlag(QueryDescription.FlagNeedsOuterJoinNullSettings);
+    set => SetFlag(QueryDescription.FlagNeedsOuterJoinNullSettings, value);
+}
 
     /// <summary>
     /// The raw-source global-filter skips collected during the current preparation, or <see langword="null"/>
@@ -841,22 +1023,54 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// key is unchanged. The tag is part of the plan key, so two commands that differ only in their
     /// tag never share a cached plan.
     /// </summary>
-    public string? Tag { get; internal set; }
+    public string? Tag
+{
+    get => _description?.Options.Tag;
+    internal set
+    {
+        if (ReferenceEquals(value, _description?.Options.Tag)) return;
+        WriteOptions().Tag = value;
+    }
+}
     /// <summary>
     /// Table-level hints attached to the command's physical <c>FROM</c> table (for example SQL Server
     /// <c>nolock</c>), or <c>null</c> when there are none. How they are rendered is provider specific;
     /// a dialect that does not implement table hints rejects a command that carries them.
     /// </summary>
-    public IReadOnlyList<string>? TableHints { get; internal set; }
+    public IReadOnlyList<string>? TableHints
+{
+    get => _description?.Options.TableHints;
+    internal set
+    {
+        if (ReferenceEquals(value, _description?.Options.TableHints)) return;
+        WriteOptions().TableHints = value;
+    }
+}
     /// <summary>
     /// Index hints attached to the command's physical <c>FROM</c> table (MySQL/MariaDB
     /// <c>USE|FORCE|IGNORE INDEX</c>, SQLite <c>INDEXED BY</c>/<c>NOT INDEXED</c>, SQL Server
     /// <c>WITH (INDEX(...))</c>), or <c>null</c> when there are none. A dialect without a native form
     /// (see <see cref="ISqlDialect.IndexHints"/>) rejects a command that carries them.
     /// </summary>
-    public IReadOnlyList<string>? IndexHints { get; internal set; }
+    public IReadOnlyList<string>? IndexHints
+{
+    get => _description?.Options.IndexHints;
+    internal set
+    {
+        if (ReferenceEquals(value, _description?.Options.IndexHints)) return;
+        WriteOptions().IndexHints = value;
+    }
+}
     /// <summary>The intent of <see cref="IndexHints"/> (<c>USE</c>, <c>FORCE</c> or <c>IGNORE</c>).</summary>
-    public IndexHintKind IndexHintKind { get; internal set; }
+    public IndexHintKind IndexHintKind
+{
+    get => _description?.Options.IndexHintKind ?? default;
+    internal set
+    {
+        if (value == (_description?.Options.IndexHintKind ?? default)) return;
+        WriteOptions().IndexHintKind = value;
+    }
+}
     /// <summary>
     /// Hints applied to every physical table in this command's scope (for example SQL Server
     /// <c>WITH (...)</c> on the primary and joined tables, or a <c>pg_hint_plan</c>/MySQL optimizer
@@ -864,14 +1078,30 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// fluent <c>WithTablesInScopeHint</c> modifier. A dialect that supports neither form rejects the
     /// command when its SQL is built.
     /// </summary>
-    public IReadOnlyList<string>? TablesInScopeHints { get; internal set; }
+    public IReadOnlyList<string>? TablesInScopeHints
+{
+    get => _description?.Options.TablesInScopeHints;
+    internal set
+    {
+        if (ReferenceEquals(value, _description?.Options.TablesInScopeHints)) return;
+        WriteOptions().TablesInScopeHints = value;
+    }
+}
     /// <summary>
     /// Per-command override of identifier quoting: <c>true</c> quotes physical table/column names with
     /// the provider's delimiter, <c>false</c> emits them verbatim, and <c>null</c> inherits the
     /// context default (<c>DataContextBuilder.UseQuotedIdentifiers</c>). Set through
     /// <c>WithQuotedIdentifiers</c>.
     /// </summary>
-    public bool? QuoteIdentifiers { get; internal set; }
+    public bool? QuoteIdentifiers
+{
+    get => _description?.Options.QuoteIdentifiers;
+    internal set
+    {
+        if (value == _description?.Options.QuoteIdentifiers) return;
+        WriteOptions().QuoteIdentifiers = value;
+    }
+}
     /// <summary>
     /// The identifier-quoting flag resolved for this command during preparation: the command override
     /// when present, otherwise the context default. It is part of the plan key (the inherited value
@@ -891,7 +1121,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <see langword="null"/> inherits the context default
     /// (<c>DataContextBuilder.UseNamingConvention</c>). Set through <c>WithNamingConvention</c>.
     /// </summary>
-    public INamingConvention? NamingConvention { get; internal set; }
+    public INamingConvention? NamingConvention
+{
+    get => _description?.Options.NamingConvention;
+    internal set
+    {
+        if (ReferenceEquals(value, _description?.Options.NamingConvention)) return;
+        WriteOptions().NamingConvention = value;
+    }
+}
     /// <summary>
     /// The naming convention resolved for this command during preparation: the command override when
     /// present, otherwise the context default. It is part of the plan key (the inherited value must
@@ -911,7 +1149,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// inherits the context default (<c>DataContextBuilder.UseKeywordCase</c>). Set through
     /// <c>WithKeywordCase</c>.
     /// </summary>
-    public KeywordCase? KeywordCase { get; internal set; }
+    public KeywordCase? KeywordCase
+{
+    get => _description?.Options.KeywordCase;
+    internal set
+    {
+        if (value == _description?.Options.KeywordCase) return;
+        WriteOptions().KeywordCase = value;
+    }
+}
     /// <summary>
     /// The keyword case resolved for this command during preparation: the command override when present,
     /// otherwise the context default. It is part of the plan key (the inherited value must not let two
@@ -931,7 +1177,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// context default (<c>DataContextBuilder.UseCommandTimeout</c>), and a value of zero or less means
     /// the provider default. Set through <c>WithCommandTimeout</c>.
     /// </summary>
-    public int? CommandTimeout { get; internal set; }
+    public int? CommandTimeout
+{
+    get => _description?.Options.CommandTimeout;
+    internal set
+    {
+        if (value == _description?.Options.CommandTimeout) return;
+        WriteOptions().CommandTimeout = value;
+    }
+}
     /// <summary>
     /// The command timeout resolved for this command during preparation: the command override when
     /// present, otherwise the context default; <see langword="null"/> when neither is set and the
@@ -951,12 +1205,28 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// The trailing <c>FOR JSON</c> clause (SQL Server), or <c>null</c> when the result set is returned
     /// as rows. A dialect that does not implement it rejects a command that carries it.
     /// </summary>
-    public ForJsonClause? ForJsonClause { get; internal set; }
+    public ForJsonClause? ForJsonClause
+{
+    get => _description?.Clauses.ForJsonClause;
+    internal set
+    {
+        if (value == _description?.Clauses.ForJsonClause) return;
+        WriteClauses().ForJsonClause = value;
+    }
+}
     /// <summary>
     /// The trailing <c>FOR XML</c> clause (SQL Server), or <c>null</c> when the result set is returned
     /// as rows. Mutually exclusive with <see cref="ForJsonClause"/>.
     /// </summary>
-    public ForXmlClause? ForXmlClause { get; internal set; }
+    public ForXmlClause? ForXmlClause
+{
+    get => _description?.Clauses.ForXmlClause;
+    internal set
+    {
+        if (value == _description?.Clauses.ForXmlClause) return;
+        WriteClauses().ForXmlClause = value;
+    }
+}
     /// <summary>The <c>GROUP BY</c> key selector, or <c>null</c> when the query has no grouping.</summary>
     public LambdaExpression? GroupBy { get => _groupExp; }
     /// <summary>
@@ -964,13 +1234,29 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <see cref="GroupingType.None"/> for a plain <c>GROUP BY</c>. Only meaningful when a grouping
     /// list is present.
     /// </summary>
-    public GroupingType GroupingType { get; internal set; }
+    public GroupingType GroupingType
+{
+    get => _description?.Clauses.GroupingType ?? default;
+    internal set
+    {
+        if (value == (_description?.Clauses.GroupingType ?? default)) return;
+        WriteClauses().GroupingType = value;
+    }
+}
     /// <summary>
     /// The explicit grouping sets (0-based indices into the grouping list) used when
     /// <see cref="GroupingType"/> is <see cref="NextORM.Core.GroupingType.GroupingSets"/>, or
     /// <c>null</c> otherwise. An empty set yields the grand total.
     /// </summary>
-    public IReadOnlyList<int[]>? GroupingSets { get; internal set; }
+    public IReadOnlyList<int[]>? GroupingSets
+{
+    get => _description?.Clauses.GroupingSets;
+    internal set
+    {
+        if (ReferenceEquals(value, _description?.Clauses.GroupingSets)) return;
+        WriteClauses().GroupingSets = value;
+    }
+}
     /// <summary>The <c>HAVING</c> predicate lambda, or <c>null</c> when there is none.</summary>
     public LambdaExpression? Having { get => _having; }
     /// <summary>The second operand of the command's set operation, or <c>null</c> when the command carries none.</summary>
@@ -986,7 +1272,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// commands share the root command's registry, so the renderer - which always resolves references
     /// against the root - can resolve markers registered one or more correlation levels up.
     /// </summary>
-    internal IQueryRegistry? OuterRegistry { get; set; }
+    internal IQueryRegistry? OuterRegistry
+{
+    get => _description?.Relations.OuterRegistry;
+    set
+    {
+        if (ReferenceEquals(value, _description?.Relations.OuterRegistry)) return;
+        WriteRelations().OuterRegistry = value;
+    }
+}
 
     /// <summary>
     /// True for the projection types a scalar <c>Single</c>/<c>SingleOrDefault</c> subquery can guard
@@ -1044,9 +1338,14 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             throw new InvalidOperationException("Different data context");
 #endif
 
-        if (_referencedQueries is null) throw new InvalidOperationException("Referenced queries must be initialized");
+        var referenced = _referencedQueries ?? throw new InvalidOperationException("Referenced queries must be initialized");
+        if (_description!.Relations.Shared)
+        {
+            referenced = [.. referenced];
+            WriteRelations().ReferencedQueries = referenced;
+        }
 
-        _referencedQueries[idx] = cmd;
+        referenced[idx] = cmd;
         // The scalar unkeyed flag was computed against the previous referenced graph. A swapped-in
         // referenced query can add or remove a scalar captured Contains in its WHERE/PREWHERE, which is
         // not re-keyed by the swap, so recompute the flag now to keep the planner's call-local suppression
@@ -1068,9 +1367,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         if (!cmd.IsPrepared) throw new InvalidOperationException("QueryCommand must be prepared");
 #endif
 
-        _referencedQueries ??= [];
-        var idx = _referencedQueries.Count;
-        _referencedQueries.Add(cmd);
+        var referenced = _referencedQueries;
+        if (referenced is null || _description!.Relations.Shared)
+        {
+            referenced = referenced is null ? [] : [.. referenced];
+            WriteRelations().ReferencedQueries = referenced;
+        }
+
+        var idx = referenced.Count;
+        referenced.Add(cmd);
         return idx;
     }
 
@@ -1113,7 +1418,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         // registered while preparing a nested command is resolvable when the root is rendered.
         if (OuterRegistry is { } owner) return owner.AddOuterReference(node);
 
-        var outerRefs = _outerRefs ??= [];
+        var outerRefs = _outerRefs;
+        if (outerRefs is null || _description!.Relations.Shared)
+        {
+            outerRefs = outerRefs is null ? [] : [.. outerRefs];
+            WriteRelations().OuterRefs = outerRefs;
+        }
 
         var idx = outerRefs.Count;
 
