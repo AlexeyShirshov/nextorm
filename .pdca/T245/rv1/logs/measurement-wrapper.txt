@@ -1,0 +1,24 @@
+T245 canonical benchmark-host wrapper (leak-free) — adopted 2026-10-18 (r=2, D245-P1)
+=====================================================================================
+Environment for every build/measurement command:
+  export MSBUILDDISABLENODEREUSE=1 DOTNET_CLI_USE_MSBUILD_SERVER=0
+
+Lock:
+  /tmp/opencode/nextorm-bdn-host.lock (inode 187859, dev 2096)
+  Always acquire with `flock -x --close` (never --no-fork):
+    -o/--close closes the lock fd before the command executes, so MSBuild node
+    servers / BDN generated projects / any descendant cannot inherit the open
+    file description; the flock parent keeps holding the lock until the command
+    exits. Plain `flock -x` leaked an orphaned FLOCK via nodeReuse:true servers
+    (owner pid 0) and blocked T297/T245 for >20 min on 2026-10-18.
+
+1) Release build of the benchmark project — once, while owning the host and
+   outside any measurement interval:
+  flock -x --close /tmp/opencode/nextorm-bdn-host.lock bash -lc 'MSBUILDDISABLENODEREUSE=1 DOTNET_CLI_USE_MSBUILD_SERVER=0 dotnet build benchmarks/nextorm.benchmark -c Release --disable-build-servers -nodeReuse:false'
+
+2) Every measurement (all filters/configuration unchanged):
+  flock -x --close /tmp/opencode/nextorm-bdn-host.lock bash -lc 'MSBUILDDISABLENODEREUSE=1 DOTNET_CLI_USE_MSBUILD_SERVER=0 dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --filter "*SqliteBenchmarkFeaturesFairCached.B_*" --exporters json --artifacts <artifacts-dir>'
+
+3) Post-run leak check (must be clean):
+  ps -eo pid,args | grep 'nodemode' | grep -v grep        # no new node servers
+  flock -n /tmp/opencode/nextorm-bdn-host.lock true       # rc=0 => lock free

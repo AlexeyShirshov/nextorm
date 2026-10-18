@@ -10,7 +10,7 @@ group: unallocated_by_collection_ALL_barrier
 selected_variant: pdca-dotnet
 cycle: 1
 attempt: 1
-plan_revision: 1
+plan_revision: 2
 evidence_contract_rv: 1
 plan_state: in_progress
 status: do_started
@@ -642,3 +642,57 @@ CHECK independently requires each case's same-round allocation ratio ≤1.00 in 
 - Benchmark-host lock contention requires waiting and recorded ownership, never a parallel or unlocked measurement.
 - Factor-10 confusion can falsely admit/reject results; distinguish raw FairCached B/op, per-query bytes and native normalization.
 - `.pdca/` is gitignored; explicitly preserve required status/tooling files without accidentally staging the whole evidence tree.
+
+## PLAN REVISION r=2 (2026-10-18)
+
+**Trigger.** Two host-level facts invalidated the DO start, not the plan's content:
+
+1. **Orphaned benchmark-host lock.** `entry-r2` aborted before measurement because an exclusive
+   `FLOCK ADVISORY WRITE` on `/tmp/opencode/nextorm-bdn-host.lock` was stranded with **owner pid 0**
+   inside two idle `MSBuild.dll /nodemode:1 /nodeReuse:true` build servers (pids 2002215, 2002312).
+   The descriptor was inherited from the `entry-r1` `flock -x` wrapper, so the lock outlived the
+   measurement and no lane could acquire the host (`flock -n` BUSY, `/proc/locks` empty, no build in
+   flight). The previous wrapper was therefore not leak-free.
+2. **entry-r1 provenance.** The round itself finished rc=0 over 416 s, but it was flagged
+   `HEAD_CHANGED_DURING_INTERVAL` (a foreign docs/status-only commit `08004366`) and
+   `FOREIGN_LOCK_WAITER_PROCESS` (pid 2001250 polling `flock -n`). Its numbers were recorded but the
+   round was marked inadmissible on those flags rather than reconciled against the commit's content.
+
+### New prerequisite — D245-P1 — restore leak-free benchmark-host execution and reconcile entry-r1 provenance
+
+- **Scope:** host hygiene and evidence provenance only. **No production change**, no benchmark arm
+  change, no test change, no contract change, no measurement re-run required by this unit.
+- **Work:**
+  1. record the safety preconditions before any signal (process identity/state, `fdinfo/3` orphaned
+     `lock:` line with owner pid 0, no children/clients/active build, `/proc/locks` empty for the inode,
+     `flock -n` BUSY, foreign waiter identified but **not** signalled);
+  2. clear the orphaned lock with a targeted `kill -TERM` of exactly those two node servers — never
+     SIGKILL, never unlink the lock inode, never a broad `pkill`, never touching a foreign lane;
+  3. adopt and record a leak-free wrapper: `flock -x --close` plus
+     `MSBUILDDISABLENODEREUSE=1 DOTNET_CLI_USE_MSBUILD_SERVER=0` and
+     `--disable-build-servers -nodeReuse:false`; `--no-fork` is forbidden;
+  4. Release-build the benchmark project once under the recovered lock (expected 0 warnings / 0 errors)
+     and verify that no build server survives holding the lock;
+  5. assemble `.pdca/T245/rv1/bdn/entry-r1/admission.json` **from files**: interval/argv/BDN version/job,
+     rc and wall time, `head_before`/`head_after` with the full `git diff --name-only` list,
+     `measured_paths_changed: []` for `src/ tests/ benchmarks/ Directory.Build.props
+     Directory.Packages.props global.json`, identical working-tree fingerprints, benchmark-assembly
+     provenance, quiet-window samples with median 4.37 / p95 6.68, lock-waiter process records, and the
+     four-arm inventory per category.
+- **Completion:** the lock is free and reacquirable, the hardened wrapper is recorded and exercised,
+  the Release build is 0/0, and the entry-r1 admission bundle exists with
+  `admission: "admitted"` and `basis: "docs/status-only commit + lock waiter, zero measured-path diff,
+  no concurrent execution"`.
+
+### Invariants of this revision
+
+- **No decision, criterion, threshold, denominator, E245/R245 id or `evidence_contract_rv` changes.**
+  `evidence_contract_rv` stays **1**; contract `base_ref: 01815f3a` and `entry_head: 8c94207f` stand.
+- The EXCEPT ≤5.05 KB/query and INTERSECT ≤5.01 KB/query caps and both ≤1.00× same-round linq2db ratios
+  are untouched; no acceptance value is re-derived from the admission.
+- **D245-1 remains active** and stays blocked on D245-P1 until it closes; it then continues from the
+  admitted entry evidence. D245-2, D245-3, D245-4 and the deferred unit are unchanged.
+- Counters: **N=1**, plan revision **r=2**, attempt **n=1/3** (a genuine replan resets `n` to 1 and
+  increments `r`; the rejected/invalid candidate does not itself create a revision).
+- A round is admitted on **provenance**, never on its numbers: an admitted entry round changes no
+  measured value, ratio or checkpoint and does not by itself satisfy any R245 row.

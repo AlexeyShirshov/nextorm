@@ -1,0 +1,348 @@
+{
+  "task": "T245",
+  "cycle": 1,
+  "plan_revision": 2,
+  "unit": "D245-P1",
+  "block": "entry-r1",
+  "artifact_root": ".pdca/T245/rv1/bdn/entry-r1",
+  "kind": "entry-r1 provenance admission bundle",
+  "generated_utc": "2026-10-18T16:51:58Z",
+  "interval": {
+    "start_utc": "2026-10-18T16:18:52Z",
+    "end_utc": "2026-10-18T16:25:48Z",
+    "wall_seconds": 416,
+    "bdn_reported_runtime_seconds": 420.5,
+    "note": "quiet-window probe ran 16:16:27Z..16:18:52Z immediately before the measured interval and is part of the same locked block"
+  },
+  "argv": "env -u NEXTORM_BENCH_FULL NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkFeaturesFairCached.B_* --exporters json --artifacts .pdca/T245/rv1/bdn/entry-r1",
+  "lock": {
+    "path": "/tmp/opencode/nextorm-bdn-host.lock",
+    "inode": 187859,
+    "device": "2096 (08:30 in fdinfo)",
+    "note": "plain 'flock -x' at entry-r1; the lock fd was inherited by nodeReuse:true MSBuild servers, which produced the orphaned FLOCK (owner pid 0) recovered in D245-P1",
+    "recorded_by_runner_r1": "flock -x /tmp/opencode/nextorm-bdn-host.lock bash /tmp/opencode/t245-entry-r1.sh (single lock held for the whole block, no nesting, no inherited fd)",
+    "runner_claim_status": "partly disproved: the lock fd WAS inherited by nodeReuse:true MSBuild node servers (orphaned FLOCK, owner pid 0, 2026-10-18), which is exactly what D245-P1 fixes"
+  },
+  "bdn_version": "0.15.8",
+  "job": {
+    "name": "ShortRun",
+    "toolchain": "InProcessEmitToolchain",
+    "default_job_present": false,
+    "default_job_note": "NEXTORM_BENCH_FULL was unset, so NextormConfig registers only Job.ShortRun.WithToolchain(InProcessEmitToolchain); no Default job exists in this block.",
+    "launch_count": 1,
+    "warmup_count": 3,
+    "iteration_count": 3,
+    "executed_benchmarks": 55,
+    "csv_source": ".pdca/T245/rv1/bdn/entry-r1/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report.csv"
+  },
+  "exit": {
+    "rc": 0,
+    "wall_seconds": 416,
+    "runner_log": ".pdca/T245/rv1/logs/entry-r1-runner.log",
+    "bdn_log": ".pdca/T245/rv1/bdn/entry-r1/NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-20261018-211901.log"
+  },
+  "provenance": {
+    "head_before": "e7813beb048c2918946c31260c6a27fe30d55ecb",
+    "head_after": "080043669ee19ba9eff8f19602fe0af51dc7698f",
+    "head_changed_during_interval": true,
+    "intervening_commits": [
+      "08004366 #297 plan: T297-cow rv2 contract, owner unfreeze override, COW acceptance"
+    ],
+    "git_diff_name_only": [
+      ".pdca/status/T297-cow-1.md",
+      "docs/specs/status/D297-structural-cte-graph-1.md"
+    ],
+    "measured_paths_changed": [],
+    "measured_paths_scope": [
+      "src/",
+      "tests/",
+      "benchmarks/",
+      "Directory.Build.props",
+      "Directory.Packages.props",
+      "global.json"
+    ],
+    "measured_paths_changed_verdict": "empty - zero changed paths",
+    "working_tree_fingerprints": {
+      "entry-r1-status-before": {
+        "path": ".pdca/T245/rv1/logs/entry-r1-status-before.txt",
+        "sha256": "f4e972af7a21656f66470372d28fe8bb54e9596209caf97f2d91beeb3370b999",
+        "bytes": 2396
+      },
+      "entry-r1-status-after": {
+        "path": ".pdca/T245/rv1/logs/entry-r1-status-after.txt",
+        "sha256": "f4e972af7a21656f66470372d28fe8bb54e9596209caf97f2d91beeb3370b999",
+        "bytes": 2396
+      },
+      "entry-r1-status-scoped-before": {
+        "path": ".pdca/T245/rv1/logs/entry-r1-status-scoped-before.txt",
+        "sha256": "8f3b4337989e4736ccc59cdd0dc1aab4d4df00d5b56f583c06ae9c4248b8004e",
+        "bytes": 2057
+      },
+      "entry-r1-status-scoped-after": {
+        "path": ".pdca/T245/rv1/logs/entry-r1-status-scoped-after.txt",
+        "sha256": "8f3b4337989e4736ccc59cdd0dc1aab4d4df00d5b56f583c06ae9c4248b8004e",
+        "bytes": 2057
+      }
+    },
+    "working_tree_fingerprints_identical": true,
+    "working_tree_note": "full and scoped 'git status --porcelain' snapshots taken immediately before and after the interval are byte-identical (sha256 above); the same 36-entry pre-existing dirty tree is present in both",
+    "benchmark_assembly": {
+      "path": "benchmarks/nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark.dll",
+      "sha256": "5d499f38ef5bfe2c1f3a13d697435afbc5346a9bc5bc0d729b506d716f3f4379",
+      "bytes": 792576,
+      "mtime_utc": "2026-10-18T16:49:41Z",
+      "provenance": "deterministic Release build of benchmarks/nextorm.benchmark",
+      "round_time_bytes_retained": false,
+      "why_not": "the Release assembly was rebuilt after the interval by the foreign T297 lane (`dotnet run ... -c Release` without --no-build, 2026-10-18T16:49:41Z) - the exact entry-r1 bytes no longer exist on disk; provenance is carried instead by the empty measured-path diff, identical working-tree fingerprints and unchanged build inputs"
+    },
+    "runtime": {
+      "dotnet_sdk": "10.0.401",
+      "dotnet_runtime": "10.0.12",
+      "tfm": "net10.0",
+      "os": "Linux alex-asus 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
+      "cpu": {
+        "model_name": "AMD Ryzen 7 5800HS with Radeon Graphics",
+        "logical_cpus": 8
+      },
+      "jit": "RyuJit",
+      "platform": "X64",
+      "gc_concurrent": true,
+      "gc_server": false
+    },
+    "db_pin": {
+      "sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+      "match": "2/2"
+    },
+    "git_diff_name_only_raw": ".pdca/T245/rv1/logs/entry-r1-diff-name-only.txt",
+    "measured_paths_changed_raw": ".pdca/T245/rv1/logs/entry-r1-diff-measured-paths.txt"
+  },
+  "quiet_window": {
+    "thresholds": {
+      "median_max_pct": 8.4,
+      "p95_max_pct": 11.4
+    },
+    "method": "30 samples x 1 s aggregate CPU utilisation from /proc/stat under the host lock",
+    "attempts_used": 2,
+    "attempts_budget": 4,
+    "attempt_1": {
+      "started_utc": "2026-10-18T16:16:27Z",
+      "finished_utc": "2026-10-18T16:16:56Z",
+      "count": 30,
+      "median": 19.95,
+      "p95": 28.29,
+      "min": 4.03,
+      "max": 30.7,
+      "admitted": false
+    },
+    "attempt_1_samples": [
+      22.14,
+      20.32,
+      18.78,
+      14.22,
+      5.03,
+      7.6,
+      7.05,
+      18.08,
+      22.96,
+      22.47,
+      24.3,
+      21.22,
+      25.56,
+      25.49,
+      24.01,
+      29.9,
+      17.43,
+      19.58,
+      26.32,
+      21.13,
+      24.15,
+      30.7,
+      21.93,
+      10.14,
+      5.62,
+      8.08,
+      4.03,
+      9.65,
+      11.45,
+      8.58
+    ],
+    "attempt_2": {
+      "started_utc": "2026-10-18T16:18:23Z",
+      "finished_utc": "2026-10-18T16:18:52Z",
+      "count": 30,
+      "median": 4.37,
+      "p95": 6.68,
+      "min": 2.12,
+      "max": 9.7,
+      "admitted": true
+    },
+    "attempt_2_samples": [
+      4.59,
+      3.88,
+      2.12,
+      3.39,
+      4.38,
+      2.75,
+      5.47,
+      2.99,
+      2.38,
+      5.11,
+      3.47,
+      4.36,
+      4.86,
+      5.0,
+      5.17,
+      2.99,
+      4.11,
+      3.5,
+      4.11,
+      6.45,
+      3.38,
+      3.38,
+      6.87,
+      3.12,
+      5.97,
+      5.0,
+      4.73,
+      6.31,
+      5.62,
+      9.7
+    ],
+    "median": 4.37,
+    "p95": 6.68,
+    "admission": "admitted on attempt 2 (median 4.37 <= 8.4, p95 6.68 <= 11.4)",
+    "raw": [
+      ".pdca/T245/rv1/logs/entry-r1-quiet-window.txt",
+      ".pdca/T245/rv1/logs/entry-r1-quiet-attempt-1.json",
+      ".pdca/T245/rv1/logs/entry-r1-quiet-attempt-2.json"
+    ]
+  },
+  "foreign_processes": {
+    "verdict": "no foreign benchmark/build/testhost/coverage execution; the only foreign process was a lock waiter",
+    "lock_waiter_pid_2001250": {
+      "pid": 2001250,
+      "ppid": 1948512,
+      "observed_utc": [
+        "2026-10-18T16:25:35Z",
+        "2026-10-18T16:25:40Z",
+        "2026-10-18T16:25:45Z",
+        "2026-10-18T16:25:50Z"
+      ],
+      "cmdline": "bash -c '... while [ time < deadline ]; do if flock -n /tmp/opencode/nextorm-bdn-host.lock -c \"exit 0\"; then if ! ps -eo args | grep -E \"nextorm\\.benchmark|BenchmarkDotNet\" ...; then echo FREE; exit 0; fi; fi; sleep 15; done'",
+      "evidence": [
+        ".pdca/T245/rv1/logs/entry-r1-foreign-monitor.txt",
+        ".pdca/T245/rv1/logs/entry-r1-ps-attempt-1.txt",
+        ".pdca/T245/rv1/logs/entry-r1-ps-attempt-2.txt"
+      ],
+      "waiter_proof": [
+        "4 consecutive 5 s monitor samples of the same pid while the T245 runner held the lock; it never printed FREE, i.e. every flock -n probe returned EWOULDBLOCK",
+        "the loop body runs `flock -n <lock> -c 'exit 0'`, a non-blocking probe whose descriptor is closed on exit of each short-lived flock process - it never retained an open file description on the lock",
+        "its fdinfo cannot be captured post-mortem (pid gone, ESRCH); the live equivalent record is pid 2006493 (same driver, next attempt) captured at 2026-10-18T16:49:17Z: fd 3 -> ino 187859, flags 02102002 and NO `lock:` line (see logs/lock-recovery-proof.txt), identical to the 16:29Z record in logs/entry-r2-lock-wait.txt"
+      ]
+    },
+    "no_foreign_execution_proof": [
+      "monitor captured 4 foreign lines total, all the same waiter pid",
+      "`ps -eo pid,args | grep -E 'dotnet (build|test|run)|testhost|BenchmarkDotNet|dotnet-coverage'` during preflight/step-A returned none",
+      "the T245 block ran under a single exclusive host lock for the whole interval"
+    ]
+  },
+  "arm_inventory": {
+    "per_category_four_arms": {
+      "Except": [
+        {
+          "method": "B_Nextorm_Cached_Except",
+          "category": "B_Except",
+          "alloc_bytes_per_op_raw": 65281,
+          "in_cfair_comparator_pair": true,
+          "present_in_report": true
+        },
+        {
+          "method": "B_Linq2Db_Except",
+          "category": "B_Except",
+          "alloc_bytes_per_op_raw": 51762,
+          "in_cfair_comparator_pair": true,
+          "present_in_report": true
+        },
+        {
+          "method": "B_EFCore_Except",
+          "category": "B_Except",
+          "alloc_bytes_per_op_raw": 156725,
+          "in_cfair_comparator_pair": false,
+          "present_in_report": true
+        },
+        {
+          "method": "B_Dapper_Except",
+          "category": "B_Except",
+          "alloc_bytes_per_op_raw": 14721,
+          "in_cfair_comparator_pair": false,
+          "present_in_report": true
+        }
+      ],
+      "Intersect": [
+        {
+          "method": "B_Nextorm_Cached_Intersect",
+          "category": "B_Intersect",
+          "alloc_bytes_per_op_raw": 65121,
+          "in_cfair_comparator_pair": true,
+          "present_in_report": true
+        },
+        {
+          "method": "B_Linq2Db_Intersect",
+          "category": "B_Intersect",
+          "alloc_bytes_per_op_raw": 51285,
+          "in_cfair_comparator_pair": true,
+          "present_in_report": true
+        },
+        {
+          "method": "B_EFCore_Intersect",
+          "category": "B_Intersect",
+          "alloc_bytes_per_op_raw": 147205,
+          "in_cfair_comparator_pair": false,
+          "present_in_report": true
+        },
+        {
+          "method": "B_Dapper_Intersect",
+          "category": "B_Intersect",
+          "alloc_bytes_per_op_raw": 13201,
+          "in_cfair_comparator_pair": false,
+          "present_in_report": true
+        }
+      ]
+    },
+    "verdict": "four-arm inventory present for both categories (Nextorm_Cached, Linq2Db, EFCore, Dapper)",
+    "cfair_comparator_pair": {
+      "fair_cached_iterations_per_invocation": 10,
+      "per_operation": {
+        "EXCEPT": {
+          "job": "ShortRun",
+          "bytes_per_query_nextorm": 6528.1,
+          "bytes_per_query_linq2db": 5176.2,
+          "ratio_nextorm_over_linq2db": 1.2612
+        },
+        "INTERSECT": {
+          "job": "ShortRun",
+          "bytes_per_query_nextorm": 6512.1,
+          "bytes_per_query_linq2db": 5128.5,
+          "ratio_nextorm_over_linq2db": 1.2698
+        }
+      }
+    },
+    "source": [
+      ".pdca/T245/rv1/logs/entry-r1.log",
+      ".pdca/T245/rv1/bdn/entry-r1/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report.csv"
+    ],
+    "raw_source": ".pdca/T245/rv1/bdn/entry-r1/results/NextORM.Benchmark.SqliteBenchmarkFeaturesFairCached-report-full-compressed.json (Memory.BytesAllocatedPerOperation)"
+  },
+  "invalidity_reasons_from_r1": [
+    "HEAD_CHANGED_DURING_INTERVAL: e7813beb048c2918946c31260c6a27fe30d55ecb -> 080043669ee19ba9eff8f19602fe0af51dc7698f at 2026-10-18T16:23:32Z (inside the 16:18:52Z..16:25:48Z interval); foreign commit \"#297 plan: T297-cow rv2 contract, owner unfreeze override, COW acceptance\" touched only .pdca/status/T297-cow-1.md and docs/specs/status/D297-structural-cte-graph-1.md (0 files under src/ tests/ benchmarks/)",
+    "FOREIGN_LOCK_WAITER: pid 2001250 (ppid 1948512) polled flock -n every 15 s during the interval; not a build/test/coverage/BDN process (loop of \"ps|grep\" probes), observed 16:25:35..16:25:50Z",
+    "BDN_EMITTED_NO_VALIDATION_WARNINGS: no \"Warning\"/\"invalid measurement\"/outlier-disqualification block in the BDN log"
+  ],
+  "reconciliation": {
+    "head_change": "only .pdca/status/T297-cow-1.md and docs/specs/status/D297-structural-cte-graph-1.md; 0 files under src/ tests/ benchmarks/ or at the pinned build-config paths",
+    "foreign_lock_waiter": "polling-only waiter, never a holder and never an executing build/test/BDN process",
+    "bdn_validation_warnings": "BDN emitted no validation warnings, no invalid-measurement block and no outlier disqualification in the entry-r1 log"
+  },
+  "admission": "admitted",
+  "basis": "docs/status-only commit + lock waiter, zero measured-path diff, no concurrent execution"
+}
