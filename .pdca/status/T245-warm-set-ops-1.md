@@ -11,8 +11,10 @@ attempt: 1/3
 max_attempts: 3
 mode: autonomous
 plan_file: docs/specs/status/D245-warm-set-ops-1.md
-phase: DO
-status: do_started
+phase: ACT
+status: incomplete
+terminal_decision: insufficient
+terminal_record: 2026-10-19
 branch: 1.0.9-rc3
 entry_head: 8c94207f
 evidence_dir: .pdca/T245/rv1/
@@ -27,10 +29,10 @@ created: 2026-10-18
 | Unit | State | Notes |
 |---|---|---|
 | D245-P1 | done | Prerequisite (r=2): leak-free benchmark-host execution + entry-r1 provenance — orphaned lock cleared, canonical wrapper recorded and exercised, Release build 0 Warning(s)/0 Error(s), `bdn/entry-r1/admission.json` admitted |
-| D245-1 | active | Was blocked on D245-P1; unblocked when D245-P1 closed — entry evidence + attribution decision |
-| D245-2 | pending | Narrow evidence admission and native-gate coverage |
-| D245-3 | blocked on D245-1 lever decision | Measured narrow optimization and semantic guards |
-| D245-4 | pending | Final measurement, documentation and evidence freeze |
+| D245-1 | done | Attribution complete (`.pdca/T245/rv1/attribution.json`); lever criterion **not met** — decision `insufficient` recorded in `lever-decision.md`; no production change |
+| D245-2 | not started | Narrow evidence admission and native-gate coverage |
+| D245-3 | blocked (never authorized — insufficient lever) | Measured narrow optimization and semantic guards; no permitted narrow lever demonstrated, so the unit was never started |
+| D245-4 | not started | Final measurement, documentation and evidence freeze |
 | Deferred | deferred in 1.0.9-rc3 | Broad metadata/CTE redesign; requires a revised PLAN |
 
 ## Measurements
@@ -70,47 +72,53 @@ Raw per-arm B/op (100 iterations): Construct 363216, Prepare_NoHash 537624, Prep
 
 
 
-| Row | State |
-|---|---|
-| R245-01 | open |
-| R245-02 | open |
-| R245-03 | open |
-| R245-04 | open |
-| R245-05 | open |
-| R245-06 | open |
-| R245-07 | open |
-| R245-08 | open |
-| R245-09 | open |
-| R245-10 | open |
-| R245-11 | open |
-| R245-12 | open |
-| R245-13 | open |
-| R245-14 | open |
-| R245-15 | open |
-| R245-16 | open |
+| Row | State | Reason / evidence |
+|---|---|---|
+| R245-01 | open | no acceptance claim — measurement stopped before final rounds by decision (EXCEPT cap 5,171.2 B/query and ≤1.00× not claimed) |
+| R245-02 | open | no acceptance claim — measurement stopped before final rounds by decision (INTERSECT cap 5,130.24 B/query and ≤1.00× not claimed) |
+| R245-03 | open | no acceptance claim — final-r1/final-r2 per-case timing not measured |
+| R245-04 | met (evidence: `.pdca/T245/rv1/tests/sql-{sqlite,postgres,sqlserver,mariadb}.log`, `tests/core.log`; production untouched so before/after snapshots are identical by construction) | — |
+| R245-05 | open | no C-INT run and no final result comparison; measurement stopped before the final boundary |
+| R245-06 | open | duplicate/ALL multiplicities and provider cases were not re-run at a final boundary |
+| R245-07 | met (evidence: `git status --porcelain src` empty at every step; `.pdca/T245/rv1/api/entry.json`) | no public API change |
+| R245-08 | met (evidence: `.pdca/T245/rv1/tests/core-attribution2.log` — 11/11 passed, `NestedSetOperations_KeepOperandsUnchanged` 1/1) | clone/operand guard intact |
+| R245-09 | open | controls-final was not measured; only controls-entry (760.0 / 744.0 B/query) exists |
+| R245-10 | met (evidence: `.pdca/T245/rv1/bdn/decompose-entry/summary.json` — all `Warm_Reused` rows exactly 0 B; `src` untouched) | existing zero rows intact |
+| R245-11 | open | D245-2 not started; no 100-operation native rows or strict budgets |
+| R245-12 | open | entry attribution is complete, but final BDN allocation/time per case was not measured |
+| R245-13 | met (evidence: `git status --porcelain src` empty; no recipe/cache-key/equality edit) | frozen semantics untouched |
+| R245-14 | open | no final boundary sweep was run; production was never modified, so the sweep is unclaimed rather than passed |
+| R245-15 | open | EN/RU docs intentionally not updated — no publishable claim |
+| R245-16 | open | manifest/frozen-tree/CHECK inputs not produced |
 
 ## Evidence contract rv=1
 
 Contract: `.pdca/T245/rv1/contract.json` (`contract_rv: 1`, `base_ref: 01815f3a`, `entry_head: 8c94207f`, `evidence_root: .pdca/T245/rv1`).
 
-| Row | State |
-|---|---|
-| E245-01 | open |
-| E245-02 | open |
-| E245-03 | open |
-| E245-04 | open |
-| E245-05 | open |
-| E245-06 | open |
-| E245-07 | open |
-| E245-08 | open |
-| E245-09 | open |
-| E245-10 | open |
-| E245-11 | open |
-| E245-12 | open |
-| E245-13 | open |
-| E245-14 | open |
-| E245-15 | open |
-| E245-16 | open |
+| Row | State | Reason / evidence |
+|---|---|---|
+| E245-01 | open | no acceptance claim — measurement stopped before final rounds by decision (no final EXCEPT pair/ratio) |
+| E245-02 | open | no acceptance claim — measurement stopped before final rounds by decision (no final INTERSECT pair/ratio) |
+| E245-03 | open | no acceptance claim — measurement stopped before final rounds by decision (no final timing/isolation rounds) |
+| E245-04 | met (evidence: `.pdca/T245/rv1/tests/sql-{sqlite,postgres,sqlserver,mariadb}.log`, `tests/core.log`, `semantics/sql-entry.json`; entry-only, production untouched) | SQL snapshots unchanged |
+| E245-05 | open | no C-INT run; SQL multisets/result comparison not exercised at a final boundary |
+| E245-06 | open | no explicit multiplicity/provider final run |
+| E245-07 | met (evidence: `.pdca/T245/rv1/api/entry.json`; `git status --porcelain src` empty so no final surface can differ) | public surface unchanged |
+| E245-08 | met (evidence: `.pdca/T245/rv1/tests/core-attribution2.log` — `NestedSetOperations_KeepOperandsUnchanged` passed) | operand-reuse regression intact |
+| E245-09 | open | controls-final/C-CONTROL-CHECK not run |
+| E245-10 | open | native-final not run (entry `Warm_Reused` evidence is recorded under R245-10) |
+| E245-11 | open | D245-2 not started; no native gate rows |
+| E245-12 | met (evidence: `.pdca/T245/rv1/attribution.json` + `.pdca/T245/rv1/lever-decision.md`; attribution complete; sufficient-savings criterion recorded as **not met**) | — |
+| E245-13 | met (evidence: `git status --porcelain src` empty; no frozen-file diff) | frozen recipe untouched |
+| E245-14 | open | no boundary sweep; production never modified, R245-14 unclaimed |
+| E245-15 | open | EN/RU docs intentionally not updated |
+| E245-16 | open | no manifest/lint/frozen-tree admission |
+
+## Terminal record (2026-10-19)
+
+**Verdict: terminal `incomplete` — measured GAP.** D245-1 attribution is complete (`.pdca/T245/rv1/attribution.json`) and closes to 0.00 B/query at probe level: entry EXCEPT 6,528.1 B/query (1.2612×, required −1,356.9) and INTERSECT 6,512.1 B/query (1.2699×, required −1,383.9). No permitted narrow lever was demonstrated. Every candidate is blocked by R245-07 (public `QueryDefinition`/public parameter positions), R245-13 (frozen preparation/recipe/cache-key/equality) or the mandatory G4 clone; the ≤1.00× ratio arm additionally requires shifting the preparation block itself. Decision `insufficient` (`lever-decision.md`); D245-3 was never authorized and remains unimplemented. **No final rounds were spent:** final-r1, final-r2, controls-final, decompose-final and native-final were not run. No threshold, denominator, guard or acceptance criterion was relaxed, and no final acceptance claim exists.
+
+Production was never modified (`git status --porcelain src` empty at every step); therefore no final boundary sweep was warranted and **R245-14 remains open/unclaimed** — no sweep is claimed. Docs EN/RU were intentionally not updated because there is no claim to publish, so **R245-15 remains open**. Issue #245 is left open.
 
 ## Progress log
 
@@ -172,3 +180,8 @@ Contract: `.pdca/T245/rv1/contract.json` (`contract_rv: 1`, `base_ref: 01815f3a`
 - 2026-10-18T19:33:12Z | DO | revision r=2 | iteration 1/3 | G4 (facts, no change): without the `Clone()` at QueryCommand.TResult.cs:1076 (Intersect) / :1108 (Except), `SetOperation` would write `_union`/`_unionType` onto the reused left operand (QueryCommand.cs:1164-1182) and `ResetPreparation` (:1082) would clear `_isPrepared`/`_selectList`/`_from`/`PreparedCondition`/hashes/plan key, with only `_from` restored (:1080-1082 / :1112-1114); `NestedSetOperations_KeepOperandsUnchanged` (T240CommandConstructionTests.cs:196) renders a before/after, so it would fail (a then renders as `a UNION b`). Clone is semantically mandatory for the reused-operand contract; it is not avoidable for a "provably fresh" command because no flag proves non-reuse — `HasEverPrepared` (QueryCommand.cs:93-98) is false for both an internal temporary and a caller-held never-prepared command, and `_union` is the only state checked | .pdca/T245/rv1/tests/core-attribution2.log
 - 2026-10-18T19:33:12Z | DO | revision r=2 | iteration 1/3 | C-CORE: `dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~T240CommandConstructionTests` total 11 / succeeded 11 / failed 0 / skipped 0 rc=0; operand-reuse test by name `FullyQualifiedName~NestedSetOperations_KeepOperandsUnchanged` total 1 / succeeded 1 / failed 0 / skipped 0 rc=0 | .pdca/T245/rv1/tests/core-attribution2.log
 - 2026-10-18T19:33:12Z | DO | revision r=2 | iteration 1/3 | `git status --porcelain src` empty (production untouched); probe run rc=0, DB pin 32bf10a0…72295, 52 variant rows (26 per operation) | .pdca/T245/rv1/logs/t245-attribution-probe2.log
+- 2026-10-18T19:45:00Z | ACT | revision r=2 | iteration 1/3 | terminal decision recorded: insufficient — no permitted narrow lever; D245-3 blocked/unimplemented, #245 left open | .pdca/T245/rv1/lever-decision.md
+- 2026-10-18T19:45:00Z | ACT | revision r=2 | iteration 1/3 | attribution.json assembled mechanically from entry-r1/r2, controls-entry, decompose-entry and probe-variants{,2}; JSON parse rc=0; per-case closure residual 0.00 | .pdca/T245/rv1/attribution.json
+- 2026-10-18T19:45:00Z | ACT | revision r=2 | iteration 1/3 | production never modified (`git status --porcelain src` empty at every step); no final boundary sweep warranted, R245-14 open/unclaimed; no final rounds spent | .pdca/status/T245-warm-set-ops-1.md
+- 2026-10-18T19:45:00Z | ACT | revision r=2 | iteration 1/3 | docs EN/RU intentionally not updated (no publishable claim), R245-15 open | .pdca/status/T245-warm-set-ops-1.md
+- 2026-10-18T19:45:00Z | ACT | revision r=2 | iteration 1/3 | terminal status written: phase ACT, status incomplete; E245/R245 tables updated — met rows only from entry evidence/guards, all cap/ratio/final rows open | .pdca/status/T245-warm-set-ops-1.md

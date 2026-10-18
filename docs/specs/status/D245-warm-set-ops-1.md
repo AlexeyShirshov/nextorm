@@ -12,8 +12,10 @@ cycle: 1
 attempt: 1
 plan_revision: 2
 evidence_contract_rv: 1
-plan_state: in_progress
-status: do_started
+plan_state: incomplete
+status: terminal_incomplete
+terminal_decision: insufficient
+terminal_record: 2026-10-19
 blocked_reason: none
 baseline_ref: 957fcfe7
 base_ref: 01815f3a
@@ -696,3 +698,13 @@ CHECK independently requires each case's same-round allocation ratio ≤1.00 in 
   increments `r`; the rejected/invalid candidate does not itself create a revision).
 - A round is admitted on **provenance**, never on its numbers: an admitted entry round changes no
   measured value, ratio or checkpoint and does not by itself satisfy any R245 row.
+
+## Terminal disposition (2026-10-19)
+
+**Verdict: terminal `incomplete` — measured GAP.** D245-1 attribution is complete (`.pdca/T245/rv1/attribution.json`) and closes to 0.00 B/query at probe level: entry EXCEPT 6,528.1 B/query (1.2612× linq2db, required −1,356.9 B/query) and INTERSECT 6,512.1 B/query (1.2699×, required −1,383.9 B/query). No permitted narrow lever was demonstrated: the candidate pool is blocked by R245-07 (public `QueryDefinition` and public parameter positions), R245-13 (frozen preparation/recipe/cache-key/equality) or the mandatory G4 clone, and the ≤1.00× ratio arm additionally requires shifting the preparation block itself. The lever decision is `insufficient` (`.pdca/T245/rv1/lever-decision.md`); D245-3 was never authorized and remains unimplemented. **No final rounds were spent** — final-r1, final-r2, controls-final, decompose-final and native-final were not run. No threshold, denominator, guard or acceptance criterion was relaxed, and **no final acceptance claim exists**.
+
+Counters: **N=1, r=2, rv=1, n=1/3** (unchanged by this terminal record; the terminal decision is not a replan).
+
+Production was never modified (`git status --porcelain src` empty at every step), so no final boundary sweep was warranted: R245-14 remains `open`/unclaimed and no sweep is claimed. Docs EN/RU were intentionally not updated because there is no claim to publish: R245-15 remains `open`. Rows met by entry evidence/guards only: R245-04, R245-07, R245-08, R245-10, R245-13 and E245-04, E245-07, E245-08, E245-12, E245-13; every cap, ratio, timing and final-round row remains `open`.
+
+Next revision requirements: close the remaining −1,357 B/query (EXCEPT) and −1,384 B/query (INTERSECT) and the 1.26–1.27× ratios; add a shared/stateless comparer-ownership design that does not capture the owning `QueryCommand`; obtain explicit owner authorization for the D240-protected files and the public `QueryDefinition` shape; keep the accepted T244 CTE residual separate. D245-3 stays blocked until a revised PLAN demonstrates a permitted lever. The deferred unit and milestone `1.0.9-rc3` are retained. Issue #245 is left open.
