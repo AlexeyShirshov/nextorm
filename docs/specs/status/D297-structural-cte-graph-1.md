@@ -403,3 +403,77 @@ ALLOWED новый `benchmarks/nextorm.benchmark/Program.cs`, разрешённ
 
 **(f) Протокол измерения (pointer).** Canonical host lock `/tmp/opencode/nextorm-bdn-host.lock` берётся снаружи и ровно один раз; БД pinned sha256 `32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295`; требуются **два валидных same-round раунда** baseline и два candidate (не более трёх пар, невалидные раунды сохраняются и исключаются, а не вычеркиваются); измеряется **весь** family `SqliteBenchmarkFeaturesFairCached` (все 15 non-CTE arm'ов + Cte/RecursiveCte), а не только две CTE-строки; тот же wrapper/protocol, что T244/T247; FairCached bytes делятся на 10, WarmDecompose — на 100. Детали — `.pdca/T297/rv2/README.md`.
 
+
+## rv2 — implementation result (2026-10-19)
+
+Цикл `T297-cow` (issue #297, milestone `1.0.9-rc3`, branch `1.0.9-rc3`) реализовал D297-02/03 по
+owner-override §13: compact shared description + copy-on-write на structural CTE construction path.
+Этот раздел — append-only результат реализации; rv1 evidence и его вердикты не переписываются.
+
+### Что изменено
+
+- `QueryCommand` разделён на **immutable description** (`QueryDescription` + блоки
+  predicates/relations/ordering/clauses/options) и **node-owned** `QueryPreparation`/`QueryBinding`;
+  мутация любого raw-поля идёт через copy-on-write (`WriteDescription`/`WritePredicates`/…), а
+  `Definition` публикуется как единый immutable memo (`DefinitionMemo`, включая paging).
+- Подготовка и binding-состояние (`TypedRecursiveAnchor`, cache-policy, `_dontCache`) ленивы и
+  никогда не разделяются между командами; `Clone` сохраняет глубокий declaration clone, а
+  CTE-construction edge разделяет immutable description между узлами CTE-графа.
+- `EntityBuilder.SelectCore` строит stack-only `QueryShape` (без аллокации `QueryDefinition`),
+  `Cte.BuildDefinitions` возвращает single-element array для обычного typed descriptor.
+- **Публичный контракт (public members) не изменён**, cache policy не тронута (нет `Cache=false`,
+  нет sticky `_dontCache`). Зафиксированное исключение: 11 `protected` raw-полей (`_exp`,
+  `_srcType`, `_condition`, `_groupExp`, `_having`, `_preWhere`, `_arrayJoins`, `_sorting`,
+  `_selectList`, `_from`, `_isPrepared`) стали `protected`-свойствами с теми же именами и типами —
+  source-compatible, binary-breaking для уже скомпилированного внешнего наследника; в репозитории
+  наследников нет. Это записано как protected-surface изменение, а не как «API не менялся».
+
+### Коммиты
+
+`a272ebed` (preparation storage) → `5536c084` (binding isolation) → `061ee27f` (copy-on-write
+description) → `f0d64307` (CTE-graph sharing) → `526af310` (behavioural proof) → `ccee1930`
+(D-COW-1 definition-snapshot independence) → P6 (этот раздел, evidence/status handoff; sha — это
+коммит, в котором лежит раздел).
+
+### Измерения (same-round, `SqliteBenchmarkFeaturesFairCached`, bytes/query)
+
+Pairing: candidate round-01 ↔ baseline round-04; candidate round-02 ↔ baseline round-05.
+FairCached bytes делятся на 10; `Warm_Reused = 0 B/query`.
+
+| arm | job | b4 B/q | c1 B/q | Δ c1−b4 | ratio | b5 B/q | c2 B/q | Δ c2−b5 | ratio |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `B_Nextorm_Cached_Cte` | `ShortRun/Default` | 11 152.9 | 10 744.9 | −408.0 | 0.963 | 11 264.9 | 10 664.9 | −600.0 | 0.947 |
+| `B_Nextorm_Cached_Cte` | `ShortRun/InProcessEmitToolchain` | 11 232.7 | 10 744.7 | −488.0 | 0.957 | 11 272.7 | 10 664.7 | −608.0 | 0.946 |
+| `B_Nextorm_Cached_RecursiveCte` | `ShortRun/Default` | 13 632.3 | 12 328.3 | −1 304.0 | 0.904 | 13 632.3 | 12 328.3 | −1 304.0 | 0.904 |
+| `B_Nextorm_Cached_RecursiveCte` | `ShortRun/InProcessEmitToolchain` | 13 632.2 | 12 472.2 | −1 160.0 | 0.915 | 13 632.2 | 12 328.2 | −1 304.0 | 0.904 |
+
+nextorm/linq2db: Cte baseline 1.202 / 1.210 и 1.176 / 1.215 → candidate **1.130 / 1.148** и
+**1.139 / 1.149**; RecursiveCte baseline 1.587 / 1.586 и 1.566 / 1.586 → candidate **1.435 / 1.451**
+и **1.435 / 1.367**. Время (candidate / job-matched baseline): Cte **1.039–1.143×**, RecursiveCte
+**1.081–1.130×** — в допуске `WARM_TIME_TOLERANCE = 1.20`. Остальные 15 cached arm'ов:
+Δ = **−48.0 … −1 192.1 B/query** (никто не вырос); prepared `A_*` max candidate/baseline ratio
+**1.000 ≤ 1.03**. Diagnostic `SqliteBenchmarkConstructAllocation` (не acceptance): Cte
+**8 976 → 7 584 B/op** (Default), 8 960 → 7 424 (InProcess); RecursiveCte **11 568 → 9 080 B/op**
+(Default), 11 520 → 9 000 (InProcess).
+
+### Шесть критериев приёмки — вердикты
+
+| # | Критерий | Вердикт | Основание |
+|---|---|---|---|
+| 1 | Measured allocation reduction, two valid same-round rounds | **met** | 2 valid baseline + 2 valid candidate раунда (2251/2152/2143/2129 s), оба job'а, стабильные assembly `3b36c850` → `c55b72a9` |
+| 2 | Cte ≤1.20× | **met** | 1.130 / 1.148 / 1.139 / 1.149 |
+| 3 | RecursiveCte improves vs own baseline | **met** | 1.566–1.587 → 1.367–1.451 |
+| 4 | No time regression (> +20 %) | **met** | 1.039–1.143 Cte, 1.081–1.130 RecursiveCte |
+| 5 | No allocation regression elsewhere; prepared ≤1.03× | **met** | 15/15 arm'ов ≤ baseline; `A_*` max 1.000 |
+| 6 | Public API unchanged; cache policy untouched; full suites green; build 0W/0E | **not met** | build 0W/0E, core 2655/2655, cache policy untouched, public members unchanged — но integration exit 1 (5083/4887/1 foreign failed/195 skipped, `INT-ORDER-1`), dialect suites сняты на 526af310 до D-COW-1 fix, и 11 protected-полей стали protected-свойствами |
+
+**Честная оценка абсолютных чисел.** Модель §rv2(d) предсказывала ≈**840 B/query** для Cte и
+≈**2 456 B/query** для RecursiveCte. Измерено **−408…−608 B/query** (Cte) и **−1 160…−1 304
+B/query** (RecursiveCte): модель **underdelivered** в абсолютных величинах (недобор 232–432 B и
+1 152–1 296 B соответственно). Отношенческие критерии цикла (Cte ≤1.20×, RecursiveCte строго
+лучше своего baseline, время ≤1.20×, отсутствие регрессий) при этом выполнены.
+
+**Исходные пороги 2 640 / 3 482 / 5 199 B остаются UNMET.** Измеренный RecursiveCte delta
+(−1 160…−1 304 B) не достигает даже входного порога 2 640 B (недобор 1 336–1 480 B); checkpoint
+3 482 и final parity 5 199 — тем более. Cte checkpoint 216 B измерением покрыт (−408…−608), Cte
+parity 2 073 B — нет. Эти пороги не понижались, не пересчитывались и не объявляются достигнутыми.
