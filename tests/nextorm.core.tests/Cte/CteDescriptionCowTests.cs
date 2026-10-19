@@ -2,6 +2,7 @@ using FluentAssertions;
 using NextORM.Core;
 using NextORM.SqlServer;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace NextORM.Core.Tests;
 
@@ -285,6 +286,47 @@ public class CteDescriptionCowTests
         left.NavigationPaths = navigationPaths;
         left.Definition.NavigationPaths.Should().BeSameAs(navigationPaths);
         right.Definition.NavigationPaths.Should().BeNull("the memo key covers node-owned navigation paths");
+    }
+
+    /// <summary>
+    /// Pins the AC5 allocation fix: the node-owned <see cref="DefinitionMemo"/> is a value type stored in
+    /// a nullable field, so the first definition read of a fresh Join4-shaped chain publishes the memo
+    /// without a heap allocation, and a warm read keeps returning the same node-owned snapshot for zero
+    /// bytes.
+    /// </summary>
+    [Fact]
+    public void Descriptions_Join4DefinitionRead_MemoIsValueTypeAndWarmReadsAllocateNothing()
+    {
+        using var ctx = CreateSqlServerContext();
+
+        var query = ctx.From<SimpleEntity>()
+            .Join(ctx.From<SimpleEntity>(), (t1, t2) => t1.Id == t2.Id + 1)
+            .Join(ctx.From<SimpleEntity>(), (p, t3) => p.Item2.Id == t3.Id - 1)
+            .Join(ctx.From<SimpleEntity>(), (p, t4) => p.Item3.Id == t4.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id });
+
+        typeof(DefinitionMemo).IsValueType.Should().BeTrue(
+            "the node-owned memo must be a value type so a definition read allocates no memo object");
+
+        var memoField = typeof(QueryCommand).GetField("_definitionMemo", BindingFlags.Instance | BindingFlags.NonPublic);
+        memoField.Should().NotBeNull("the command owns the memo in a private field");
+        memoField!.FieldType.Should().Be(typeof(DefinitionMemo?),
+            "the memo is published through one nullable value-type field");
+
+        var first = query.Definition;
+        var second = query.Definition;
+        second.Should().BeSameAs(first, "the warm memo serves the node-owned snapshot without rebuilding it");
+        first.Joins.Should().HaveCount(3, "the Join4 shape carries three joins");
+
+        for (var i = 0; i < 100; i++)
+            _ = query.Definition;
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 10_000; i++)
+            _ = query.Definition;
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        allocated.Should().Be(0, "a warm definition read on a Join4-shaped chain must not allocate");
     }
 
     /// <summary>Pins that a CTE graph publishes one raw-shape recipe, a second fresh command hits it exactly once, and the apply is differential-equal to ordinary preparation.</summary>

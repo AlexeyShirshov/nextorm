@@ -176,9 +176,10 @@ internal sealed class QueryOptions
 /// Immutable memo of a <see cref="QueryDefinition"/> snapshot together with the node-owned inputs it was
 /// built from. The memo belongs to one <see cref="QueryCommand"/> node, never to a shared description:
 /// two commands that share a description each keep their own memo, so a reader can never observe a
-/// definition published by a sibling.
+/// definition published by a sibling. Value type by design: a definition read publishes the memo with a
+/// single value write and allocates nothing on the heap.
 /// </summary>
-internal sealed class DefinitionMemo
+internal readonly struct DefinitionMemo
 {
     internal DefinitionMemo(
         QueryDefinition definition,
@@ -282,8 +283,9 @@ public partial class QueryCommand
 {
     private QueryDescription? _description;
     /// <summary>
-    /// Node-owned memo of the last <see cref="Definition"/> snapshot. It is deliberately not stored on
-    /// the description: two commands that share a description must not observe each other's memo.
+    /// Node-owned memo of the last <see cref="Definition"/> snapshot, stored as a value-type field so
+    /// publishing it is one value write with no heap allocation. It is deliberately not stored on the
+    /// description: two commands that share a description must not observe each other's memo.
     /// </summary>
     private DefinitionMemo? _definitionMemo;
 

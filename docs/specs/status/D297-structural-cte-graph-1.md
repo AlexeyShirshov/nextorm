@@ -537,3 +537,115 @@ Diagnostic `SqliteBenchmarkConstructAllocation` (не acceptance): Cte **8 976 �
 (−1 192…−1 336 B) не достигает даже входного порога 2 640 B (недобор 1 304–1 448 B); checkpoint
 3 482 и final parity 5 199 — тем более. Cte checkpoint 216 B покрыт (−472…−672), Cte parity
 2 073 B — нет. Пороги не понижались, не пересчитывались и не объявляются достигнутыми.
+
+### rv3 — n=2 result (2026-10-19)
+
+После r=2 CHECK цикл вернулся в DO (n=2, без смены плана/r). Коммиты n=2:
+`c47d2f55` (node-owned definition memo; projection/logger preservation; правка
+`QueryCommand.QueryPreparer.cs` добавлена в авторизованный набор — теперь 9 src-файлов) и
+`7419737d` (усиленные COW-тесты: projection, memo, join arrays, logger). Публичный API не
+менялся; E19 на итоговом дереве снова зелёный.
+
+**Три раунда rv3** (`SqliteBenchmarkFeaturesFairCached`, `dotnet run --no-build` под
+каноническим lock, DB pin `32bf10a0…72295`):
+
+| round | wall | HEAD | assembly | valid (runner) | почему |
+|---|---:|---|---|---|---|
+| 01 | 2213 s | `7419737d` | `f5e7a432` | **valid** | HEAD/`src/**` неизменны, оба job'а, без overlap |
+| 02 | 2363 s | `631101dc` | `a2f41ad4` | invalid | docs-only коммит `8ccb6873` во время invocation 1; `src/**` sha пуст, assembly/DB постоянны |
+| 03 (reserve) | 2256 s | `8ccb6873` | `02d9e6cd` | invalid | docs-only коммиты `53782684`, `3daf3765` во время invocation 1; `src/**` sha пуст, assembly/DB постоянны; хост под чужой нагрузкой |
+
+Бюджет трёх раундов исчерпан, поэтому **tool-valid только round-01**. Assembly-хеши
+различаются между раундами при идентичном `src/**` (`f5e7a432` / `a2f41ad4` / `02d9e6cd`) —
+критерий «single assembly hash» выполняется только внутри раунда; это зафиксировано как
+D-RV3-1.
+
+#### Измерения n=2 (bytes/query; round-01 ↔ baseline-04, round-03 ↔ baseline-05)
+
+| arm | job | b4 B/q | c1 B/q | Δ c1−b4 | ratio | b5 B/q | c3 B/q | Δ c3−b5 | ratio |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `B_Nextorm_Cached_Cte` | `ShortRun/Default` | 11 152.9 | 10 608.9 | −544.0 | 0.951 | 11 264.9 | 10 689.0 | −575.9 | 0.949 |
+| `B_Nextorm_Cached_Cte` | `ShortRun/InProcessEmitToolchain` | 11 232.7 | 10 608.7 | −624.0 | 0.944 | 11 272.7 | 10 752.9 | −519.8 | 0.954 |
+| `B_Nextorm_Cached_RecursiveCte` | `ShortRun/Default` | 13 632.3 | 12 304.3 | −1 328.0 | 0.903 | 13 632.3 | 12 304.3 | −1 328.0 | 0.903 |
+| `B_Nextorm_Cached_RecursiveCte` | `ShortRun/InProcessEmitToolchain` | 13 632.2 | 12 544.2 | −1 088.0 | 0.920 | 13 632.2 | 12 304.5 | −1 327.7 | 0.903 |
+
+nextorm/linq2db: Cte **1.099–1.159**, RecursiveCte **1.412–1.460** (baseline 1.176–1.215 и
+1.566–1.587). Время candidate / job-matched baseline: round-01 Cte **1.035–1.094×**,
+RecursiveCte **1.067–1.130×**; round-03 (invalid, contended) **1.662–2.012×**. Остальные 15
+cached arm'ов: максимум **+80.0 B/query** (`B_Nextorm_Cached_Join4`/InProcess, round-01;
+round-03 −200.0), prepared `A_*` max ratio **1.0001**.
+
+#### Шесть критериев приёмки — вердикты n=2
+
+| # | Критерий | Вердикт | Основание |
+|---|---|---|---|
+| 1 | Two valid same-round rounds | **open** | tool-valid только round-01; rounds 02/03 invalid (docs-only HEAD moves), бюджет 3 раундов исчерпан |
+| 2 | Cte ≤1.20× | **met** | nextorm/linq2db 1.099–1.159 во всех измеренных раундах |
+| 3 | RecursiveCte improves vs own baseline | **met** | 1.566–1.587 → 1.412–1.460; allocation 0.903–0.920 |
+| 4 | No time regression | **open** | owner correction `3daf3765`: время должно быть ≤1.00×; round-01 Cte 1.035–1.094×, RecursiveCte 1.067–1.130× — реальная регрессия |
+| 5 | No allocation regression elsewhere; prepared ≤1.03× | **open** | `Join4`/InProcess +80.0 B/query в round-01; A_* max 1.0001 проходит |
+| 6 | Public API unchanged; cache policy untouched; suites green; build 0W/0E | **met** | E19 exit 0 (7/7 + 7/7, 11 полей); build 0W/0E; core 2657, COW 9/9, integration 5083/4888/0 failed/195 skips, skip-budget exit 0 |
+
+**Итог n=2: #297 остаётся OPEN.** Аллокационная цель по отношениям достигнута (AC2/AC3), но
+AC4 (владелец ужесточил критерий времени до ≤1.00×, запись `3daf3765`), AC5 (+80 B/query на
+одном non-CTE arm) и AC1 (нет двух valid раундов) не выполнены. Следующий шаг — DO r=3:
+убрать временной overhead, устранить +80 B/query регрессию и перемерить два valid раунда в
+тихом окне. Пороги 2 640 / 3 482 / 5 199 B не понижались; E05 переведён в `na` по owner
+override, измеренные значения сохранены.
+
+### rv3 — final acceptance rounds r=3 (2026-10-19)
+
+DO r=3: AC5-фикс (node-owned `DefinitionMemo` переведён из `sealed class` в `readonly struct`,
+хранится в `Nullable<DefinitionMemo>` — публикация одним value-write, без heap-аллокации;
+логика совпадения paging + `_joins`/`_ctes`/`_filterScope`/`NavigationPaths` не менялась) и
+финальная перемерка двумя valid раундами. `dotnet build nextorm.slnx -c Debug` exit 0,
+**0W/0E**; COW+T240 34/34; full core **2658/2658**, 0 failed, 0 skipped.
+
+| round | wall | HEAD start→end | assembly | valid | проверки |
+|---|---:|---|---|---|---|
+| 04 | 2278 s | `3daf3765`→`3daf3765` | `8fee8c3ca2cb` | **valid** | `src/**` sha `54c9dd96…` постоянен, DB pin `32bf10a0…72295` до/после каждой invocation, один assembly на все 6 invocation, overlaps 0, оба job'а, artifacts restored (382 файла) |
+| 05 | 2223 s | `3daf3765`→`3daf3765` | `8fee8c3ca2cb` | **valid** | те же проверки; HEAD не двигался, `head_drift` нет |
+
+Один `dotnet build benchmarks/nextorm.benchmark -c Release` (exit 0) на оба раунда; три
+`dotnet run --no-build` invocation на раунд, `env -u NEXTORM_BENCH_FULL`; canonical lock
+`/tmp/opencode/nextorm-bdn-host.lock` удерживался непрерывно на оба раунда.
+
+#### Измерения (bytes/query; round-04 ↔ baseline-04, round-05 ↔ baseline-05)
+
+| arm | job | b4 B/q | c4 B/q | Δ c4−b4 | ratio | b5 B/q | c5 B/q | Δ c5−b5 | ratio |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `B_Nextorm_Cached_Cte` | `ShortRun/Default` | 11 152.9 | 10 848.9 | −304.0 | 0.973 | 11 264.9 | 10 968.9 | −296.0 | 0.974 |
+| `B_Nextorm_Cached_Cte` | `ShortRun/InProcessEmitToolchain` | 11 232.7 | 10 848.7 | −384.0 | 0.966 | 11 272.7 | 11 080.7 | −192.0 | 0.983 |
+| `B_Nextorm_Cached_RecursiveCte` | `ShortRun/Default` | 13 632.3 | 12 784.3 | −848.0 | 0.938 | 13 632.3 | 12 784.3 | −848.0 | 0.938 |
+| `B_Nextorm_Cached_RecursiveCte` | `ShortRun/InProcessEmitToolchain` | 13 632.2 | 12 784.2 | −848.0 | 0.938 | 13 632.2 | 12 864.5 | −767.7 | 0.944 |
+
+nextorm/linq2db: Cte **1.128–1.169** (c4) и **1.143–1.159** (c5); RecursiveCte **1.469–1.488**
+(c4) и **1.444–1.463** (c5). Остальные 15 cached arm'ов: Join4 теперь **−80.2/−80.0** B/query
+(c4) и **−160.0/−40.0** (c5), +80-регрессия устранена; единственный положительный delta —
+**+32.0 B/query** (`B_Nextorm_Cached_In_ListContains_Captured`, `ShortRun/Default`, c5,
+9 432.0→9 464.0, ratio 1.003), в c4 и в InProcess того же раунда −120.0. Prepared `A_*` max
+ratio **1.0001**.
+
+Время candidate / job-matched baseline: Cte **1.119–1.288×** (c4), **1.134–1.156×** (c5);
+RecursiveCte **1.118–1.177×** (c4), **1.139–1.177×** (c5). Правило: owner correction в
+`3daf3765` (docs/specs/status/collection-1.0.9-rc3-open-3.md, запись 2026-10-19 correction)
+аннулирует `WARM_TIME_TOLERANCE = 1.20` для времени и требует **≤1.00×**; 1.20 остаётся только
+allocation checkpoint. По этому правилу AC4 не выполнен; по отменённому 1.20 единственная
+ячейка выше порога — c4 Cte Default 1.288×.
+
+#### Шесть критериев приёмки — вердикты r=3
+
+| # | Критерий | Вердикт | Основание |
+|---|---|---|---|
+| 1 | Two valid same-round rounds | **met** | round-04 и round-05 valid; matched reductions Cte −192…−384, RecursiveCte −768…−848 B/query |
+| 2 | Cte ≤1.20× | **met** | nextorm/linq2db 1.128–1.169 (c4), 1.143–1.159 (c5) |
+| 3 | RecursiveCte improves vs own baseline | **met** | ratio 0.938–0.944; −848.0/−848.0 и −848.0/−767.7 B/query |
+| 4 | No time regression | **open** | owner rule ≤1.00×: 1.118–1.288× — реальная регрессия; по 1.20 также 1.288 > 1.20 |
+| 5 | No allocation regression elsewhere; prepared ≤1.03× | **open (caveat)** | Join4 +80 устранён (теперь отрицательный), 14/15 arm'ов не регрессируют; один +32.0 B/query (0.3%, c5 Default, не воспроизведён в c4/InProcess) строго нарушает «nonregressing»; A_* max 1.0001 ≤1.03 |
+| 6 | Public API unchanged; cache policy untouched; suites green; build 0W/0E | **met** | build 0W/0E; core 2658/2658; COW+T240 34/34; integration 5083 total / 4888 passed / 0 failed / 195 pinned skips / 0 not run; skip-budget exit 0; E19 exit 0 |
+
+**Итог r=3: #297 остаётся OPEN по AC4** (время выше owner-порога ≤1.00×) и, строго, по AC5
+(единственная +32.0 B/query ячейка). AC1/AC2/AC3/AC6 выполнены; аллокационная регрессия
+Join4 устранена, две valid раунда получены. Пороги 2 640 / 3 482 / 5 199 B не понижались;
+E05 остаётся `na` по owner override.
+

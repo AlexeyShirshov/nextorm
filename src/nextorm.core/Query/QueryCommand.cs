@@ -280,7 +280,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         {
             var paging = Paging;
             if (_definitionMemo is { } memo
-                && MemoMatches(memo, paging))
+                && MemoMatches(in memo, paging))
             {
                 return memo.Definition;
             }
@@ -310,7 +310,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// Reference equality is exact here: the fields are replaced, never mutated, so a node that writes
     /// one of them (a fluent step, navigation expansion or preparation) no longer matches its memo.
     /// </summary>
-    private bool MemoMatches(DefinitionMemo memo, in Paging paging)
+    private bool MemoMatches(in DefinitionMemo memo, in Paging paging)
         => PagingEquals(memo.Paging, paging)
             && ReferenceEquals(memo.Exp, _exp)
             && ReferenceEquals(memo.SrcType, _srcType)
