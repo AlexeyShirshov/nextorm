@@ -176,6 +176,8 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         Paging = source.Paging;
         _exp = forCache ? null : source._exp;
         _srcType = source._srcType;
+        ProjectionType = source.ProjectionType;
+        IdentitySlotAliases = source.IdentitySlotAliases;
         _condition = forCache ? null : source._condition;
         _groupExp = forCache ? null : source._groupExp;
         _having = source._having;
@@ -216,7 +218,6 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             };
         }
 
-        description.DefinitionCache = null;
         _description = description;
     }
 
@@ -266,28 +267,26 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
 
     /// <summary>
     /// Snapshot of this command's shape as a <see cref="QueryDefinition"/>, used by external readers and
-    /// the test surface. The record is materialised once per (description, node-owned raw inputs) tuple
-    /// and memoised on the description; any raw write installs a fresh description (copy-on-write) and
-    /// clears the memo. Paging, the projection/predicate lambdas, the source type and the array joins are
-    /// node-owned rather than description state, so the memo records the values it was built from: a
-    /// sibling that shares the description with a different limit/offset or a different raw field never
-    /// receives this node's snapshot. The internal clone paths do not read it — they transfer state
-    /// directly and allocate no record.
+    /// the test surface. The record is materialised once per node-owned raw state and memoised on the
+    /// node (never on the description, which may be shared): any raw write of this command invalidates
+    /// the memo, and the memo additionally records the node-owned inputs it was built from (paging,
+    /// the projection/predicate lambdas, joins, CTEs, the filter scope and the navigation paths) so a
+    /// value that changes without a write through this command is still detected. The internal clone
+    /// paths do not read it — they transfer state directly and allocate no record.
     /// </summary>
     internal QueryDefinition Definition
     {
         get
         {
-            var description = Description;
             var paging = Paging;
-            if (description.DefinitionCache is { } memo
+            if (_definitionMemo is { } memo
                 && MemoMatches(memo, paging))
             {
                 return memo.Definition;
             }
 
             var definition = BuildDefinition();
-            description.DefinitionCache = new DefinitionMemo(
+            _definitionMemo = new DefinitionMemo(
                 definition,
                 paging,
                 _exp,
@@ -297,16 +296,19 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
                 _having,
                 _preWhere,
                 _arrayJoins,
-                _sorting);
+                _sorting,
+                _joins,
+                _ctes,
+                _filterScope,
+                NavigationPaths);
             return definition;
         }
     }
 
     /// <summary>
-    /// Whether the memoised definition was built from this node's current paging and raw fields.
-    /// Reference equality is exact here: the node fields are replaced, never mutated, so a node that
-    /// writes one of them (a fluent step, navigation expansion or preparation) no longer matches the
-    /// memo a sibling published on the shared description.
+    /// Whether the memoised definition was built from this node's current paging and raw state.
+    /// Reference equality is exact here: the fields are replaced, never mutated, so a node that writes
+    /// one of them (a fluent step, navigation expansion or preparation) no longer matches its memo.
     /// </summary>
     private bool MemoMatches(DefinitionMemo memo, in Paging paging)
         => PagingEquals(memo.Paging, paging)
@@ -317,7 +319,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             && ReferenceEquals(memo.Having, _having)
             && ReferenceEquals(memo.PreWhere, _preWhere)
             && ReferenceEquals(memo.ArrayJoins, _arrayJoins)
-            && ReferenceEquals(memo.Sorting, _sorting);
+            && ReferenceEquals(memo.Sorting, _sorting)
+            && ReferenceEquals(memo.Joins, _joins)
+            && ReferenceEquals(memo.Ctes, _ctes)
+            && ReferenceEquals(memo.FilterScope, _filterScope)
+            && ReferenceEquals(memo.NavigationPaths, NavigationPaths);
 
     /// <summary>
     /// Compares the paging snapshot a memoised definition was built from with the command's current

@@ -174,8 +174,9 @@ internal sealed class QueryOptions
 
 /// <summary>
 /// Immutable memo of a <see cref="QueryDefinition"/> snapshot together with the node-owned inputs it was
-/// built from. The description holds one reference to the memo, so a reader of a shared description can
-/// never observe a definition and a snapshot from two different writes.
+/// built from. The memo belongs to one <see cref="QueryCommand"/> node, never to a shared description:
+/// two commands that share a description each keep their own memo, so a reader can never observe a
+/// definition published by a sibling.
 /// </summary>
 internal sealed class DefinitionMemo
 {
@@ -189,7 +190,11 @@ internal sealed class DefinitionMemo
         LambdaExpression? having,
         LambdaExpression? preWhere,
         LambdaExpression[]? arrayJoins,
-        Sorting[]? sorting)
+        Sorting[]? sorting,
+        JoinExpression[]? joins,
+        IReadOnlyList<CteDefinition>? ctes,
+        QueryFilterScope filterScope,
+        IReadOnlyDictionary<ParameterExpression, string>? navigationPaths)
     {
         Definition = definition;
         Paging = paging;
@@ -201,6 +206,10 @@ internal sealed class DefinitionMemo
         PreWhere = preWhere;
         ArrayJoins = arrayJoins;
         Sorting = sorting;
+        Joins = joins;
+        Ctes = ctes;
+        FilterScope = filterScope;
+        NavigationPaths = navigationPaths;
     }
 
     internal QueryDefinition Definition { get; }
@@ -213,6 +222,10 @@ internal sealed class DefinitionMemo
     internal LambdaExpression? PreWhere { get; }
     internal LambdaExpression[]? ArrayJoins { get; }
     internal Sorting[]? Sorting { get; }
+    internal JoinExpression[]? Joins { get; }
+    internal IReadOnlyList<CteDefinition>? Ctes { get; }
+    internal QueryFilterScope FilterScope { get; }
+    internal IReadOnlyDictionary<ParameterExpression, string>? NavigationPaths { get; }
 }
 
 /// <summary>
@@ -241,12 +254,6 @@ internal sealed class QueryDescription
     internal QueryRelations Relations = QueryRelations.Empty;
     internal QueryClauses Clauses = QueryClauses.Empty;
     internal QueryOptions Options = QueryOptions.Empty;
-    /// <summary>
-    /// The memoised <see cref="QueryDefinition"/> snapshot together with the paging it was built from.
-    /// One immutable object per memo keeps the pair consistent under concurrent reads of a shared
-    /// description: a single reference write publishes both values, never a torn <see cref="Paging"/>.
-    /// </summary>
-    internal DefinitionMemo? DefinitionCache;
 
     /// <summary>Marks this description and every block it references as shared by more than one node.</summary>
     internal void MarkShared()
@@ -267,7 +274,6 @@ internal sealed class QueryDescription
         MarkShared();
         var clone = (QueryDescription)MemberwiseClone();
         clone.Shared = false;
-        clone.DefinitionCache = null;
         return clone;
     }
 }
@@ -275,14 +281,19 @@ internal sealed class QueryDescription
 public partial class QueryCommand
 {
     private QueryDescription? _description;
-
-    private QueryDescription Description => _description ??= new QueryDescription();
+    /// <summary>
+    /// Node-owned memo of the last <see cref="Definition"/> snapshot. It is deliberately not stored on
+    /// the description: two commands that share a description must not observe each other's memo.
+    /// </summary>
+    private DefinitionMemo? _definitionMemo;
 
     /// <summary>Returns the command's mutable description, splitting it from any node that shares it.</summary>
     private QueryDescription WriteDescription()
     {
+        // The definition memo is node-owned and depends on every raw write of this node: a writer that
+        // arrives here (before installing the new value or the split description) invalidates it.
+        _definitionMemo = null;
         var description = _description ??= new QueryDescription();
-        description.DefinitionCache = null;
         if (description.Shared)
         {
             description = description.CloneShellForWrite();
@@ -471,7 +482,9 @@ public partial class QueryCommand
 
     private void SetLogger(ILogger? value)
     {
-        if (value is null) return;
+        // A null logger must overwrite an inherited one: baseline assigned the definition's logger
+        // unconditionally, so a derivation created without logging cannot keep the source's logger.
+        if (ReferenceEquals(value, _description?.Options.Logger)) return;
         WriteOptions().Logger = value;
     }
 }

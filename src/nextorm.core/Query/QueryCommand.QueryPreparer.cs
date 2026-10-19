@@ -2059,6 +2059,10 @@ public partial class QueryCommand
             int joinPlanHash = 7;
             if (cmd._joins is not null)
             {
+                // Preparation replaces the join elements in place below, so the array reference and the
+                // description stay the same while the materialized definition changes: drop the node's
+                // definition memo explicitly (the setter/property invalidation cannot see this).
+                cmd._definitionMemo = null;
 
                 for (var (idx, cnt) = (0, cmd._joins.Length); idx < cnt; idx++)
                 {
@@ -4376,6 +4380,10 @@ public partial class QueryCommand
 
         // Members CopyTo never carries: the clone's joins come from its Definition, so they must be
         // adopted explicitly, together with the value-list base hash and the prepared ARRAY JOIN list.
+        // The array reference is adopted as-is, matching baseline 08004366 (`_joins = clone._joins`):
+        // the clone is the stored recipe/prepared command whose joins are already prepared, and the
+        // adopting command is marked prepared by the same path, so it never re-enters PrepareJoin and
+        // never writes an element of the adopted array.
         _joins = clone._joins;
         _whereBasePlanHash = clone._whereBasePlanHash;
         _preparedArrayJoin = clone._preparedArrayJoin;
