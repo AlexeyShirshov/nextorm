@@ -1,0 +1,19 @@
+2026-10-19T11:21:49Z | host lock acquired: /tmp/opencode/nextorm-bdn-host.lock
+2026-10-19T11:21:49Z | duplicate guard present: True (not nested)
+2026-10-19T11:21:49Z | no competing benchmark/probe process
+2026-10-19T11:21:49Z | quiet window start (60s): loadavg 1.26 2.46 1.92 2/1016 3108944
+2026-10-19T11:22:49Z | quiet window end: loadavg 0.67 2.07 1.82 1/1008 3109567
+2026-10-19T11:22:50Z | block 01 A exit=0 wall=0.7s records=5 load 0.67
+2026-10-19T11:22:51Z | block 02 B exit=0 wall=0.7s records=5 load 0.70
+2026-10-19T11:22:52Z | block 03 B exit=0 wall=0.8s records=5 load 0.70
+2026-10-19T11:22:52Z | block 04 A exit=0 wall=0.7s records=5 load 0.70
+2026-10-19T11:22:53Z | block 05 A exit=0 wall=0.7s records=5 load 0.70
+2026-10-19T11:22:54Z | block 06 B exit=0 wall=0.8s records=5 load 0.70
+2026-10-19T11:22:55Z | block 07 B exit=0 wall=0.8s records=5 load 0.70
+2026-10-19T11:22:55Z | block 08 A exit=0 wall=0.7s records=5 load 0.70
+2026-10-19T11:22:56Z | block 09 A exit=0 wall=0.7s records=5 load 0.80
+2026-10-19T11:22:57Z | block 10 B exit=0 wall=0.8s records=5 load 0.80
+2026-10-19T11:22:58Z | block 11 B exit=0 wall=0.8s records=5 load 0.80
+2026-10-19T11:22:58Z | block 12 A exit=0 wall=0.7s records=5 load 0.80
+2026-10-19T11:23:01Z | attribution complete: named=planner_preamble, planner_recipe, plan, planner_gate
+2026-10-19T11:23:01Z | host lock released

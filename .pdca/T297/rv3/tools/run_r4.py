@@ -53,15 +53,37 @@ ARMS = ["cte", "recursive", "inlist", "leftjoin"]
 PHASES = [
     "construct", "prepare", "plan", "bind", "enum_create", "cow_shape",
     "get_db_command", "execute", "read_rows", "map_rows", "cow_description", "cow_clone",
+    # P02b second-level decomposition of the prepare span: planner preamble + Prepare pipeline.
+    "prepare_call", "planner_gate", "planner_recipe", "prepare_pipeline",
+    # Leaf, mutually exclusive sub-steps of QueryPreparer.Prepare, in execution order.
+    "prep_preamble", "nav_expand", "get_from", "prepare_from", "prepare_join",
+    "prepare_columns", "prepare_where", "prepare_prewhere", "prepare_arrayjoin",
+    "prepare_grouping", "prepare_sorting", "prepare_union", "prepare_ctes",
+    "prepare_hints", "unkeyed_scans", "from_hash",
 ]
+PREPARE_SUBSTEPS = [
+    "prep_preamble", "nav_expand", "get_from", "prepare_from", "prepare_join",
+    "prepare_columns", "prepare_where", "prepare_prewhere", "prepare_arrayjoin",
+    "prepare_grouping", "prepare_sorting", "prepare_union", "prepare_ctes",
+    "prepare_hints", "unkeyed_scans", "from_hash",
+]
+PLANNER_PREAMBLE_PARTS = ["planner_gate", "planner_recipe"]
 # prepare is a span over these nested phases: exclusive prepare = prepare - nested sum.
-NESTED_IN_PREPARE = ["plan", "bind", "enum_create", "cow_shape"]
+# P02b: the prepare pipeline and the planner preamble are now measured separately and subtracted;
+# the Prepare sub-steps are nested inside prepare_pipeline and are never added back (no double count).
+NESTED_IN_PREPARE = ["plan", "bind", "enum_create", "cow_shape", "prepare_pipeline", "planner_gate", "planner_recipe"]
+LEGACY_NESTED_IN_PREPARE = ["plan", "bind", "enum_create", "cow_shape"]
 E2E_PHASES = ["construct", "prepare_exclusive", "get_db_command", "execute", "read_rows", "map_rows"]
+DERIVED_PHASES = ["prepare_exclusive", "legacy_prepare_exclusive", "planner_preamble", "pipeline_remainder"]
 CAUSE_CANDIDATES = [
     "construct", "prepare_exclusive", "plan", "bind", "enum_create", "cow_shape",
     "get_db_command", "execute", "read_rows", "map_rows",
-]
-COUNTER_PHASES = ["construct", "prepare", "plan", "get_db_command", "execute"]
+    # P02b sub-step candidates (the refinement this run is for).
+    "planner_preamble", "planner_gate", "planner_recipe", "prepare_pipeline",
+] + PREPARE_SUBSTEPS
+COUNTER_PHASES = ["construct", "prepare", "plan", "get_db_command", "execute",
+                  "planner_gate", "planner_recipe"]
+TIME_PHASES = [phase for phase in PHASES if phase != "prepare_call"]
 STUBS = [
     "seal", "fix-audit", "allocation-audit", "acceptance",
     "boundary", "coverage", "hygiene", "handoff",
@@ -82,16 +104,37 @@ ANCHOR = {
 BOUNDARY = {
     "construct": "QueryCommand.TResult.cs:303-313 ToList + :332-342 ToListAsyncCore (T297PhaseProbe.OnEntry/OnEnd gap)",
     "prepare": "QueryCommand.TResult.cs:303-313 ToList + :332-342 ToListAsyncCore (OnEntry -> OnPrepare around GetPreparedQueryCommand)",
-    "plan": "DataContext/QueryPlanner.cs:698-711 MakeSelect (plan-key + QueryPlanStore.TryGet)",
-    "bind": "DataContext/QueryPlanner.cs:874-881 MakeSelect -> RefreshParameters<TResult>",
-    "enum_create": "DataContext/QueryPlanner.cs:891-898 MakeSelect -> CreateResultSetEnumerator<TResult>",
-    "cow_shape": "Query/QueryCommand.QueryPreparer.cs:198-288 RefreshInValuesShape",
+    "plan": "DataContext/QueryPlanner.cs:707-720 MakeSelect (plan-key + QueryPlanStore.TryGet)",
+    "bind": "DataContext/QueryPlanner.cs:883-890 MakeSelect -> RefreshParameters<TResult>",
+    "enum_create": "DataContext/QueryPlanner.cs:900-907 MakeSelect -> CreateResultSetEnumerator<TResult>",
+    "cow_shape": "Query/QueryCommand.QueryPreparer.cs:231-321 RefreshInValuesShape",
     "get_db_command": "DataContext/Cache/DbPreparedQueryCommand.cs:199-294 GetDbCommandCore",
     "execute": "DataContext/QueryExecutor.cs:181-189 RunReader + :211-221 RunReaderAsync",
     "read_rows": "DataContext/QueryExecutor.cs:757-765 ToListAsync + :809-817 ToList",
     "map_rows": "DataContext/QueryExecutor.cs:771-779 ToListAsync + :823-831 ToList",
     "cow_description": "Query/QueryCommand.Description.cs:263-274 + :287-296 QueryDescription.MarkShared / CloneShellForWrite, :316-321 QueryCommand.WriteDescription (B only)",
     "cow_clone": "Query/QueryCommand.cs:195-208 QueryCommand clone constructor (B only)",
+    # P02b boundaries (added by this refinement; identical in A and B).
+    "prepare_call": "Query/QueryCommand.QueryPreparer.cs:32 QueryPreparer.Prepare entry counter (no time charged)",
+    "planner_gate": "DataContext/QueryPlanner.cs:594-602 GetPreparedQueryCommand: HasDataModifyingCte gate (:600-601 inside the span)",
+    "planner_recipe": "DataContext/QueryPlanner.cs:614-662 GetPreparedQueryCommand: D201-3 raw-recipe probe (CaptureRawShape/HasApplicableFiltersInRawGraph/TryGetRaw/ApplyPreparationFrom/staged plan key)",
+    "prepare_pipeline": "DataContext/QueryPlanner.cs:666-668 GetPreparedQueryCommand: the PrepareCommand call",
+    "prep_preamble": "Query/QueryCommand.QueryPreparer.cs:33-88 Prepare: InvalidatePlanKey + resolved state + srcType",
+    "nav_expand": "Query/QueryCommand.QueryPreparer.cs:93-99 Prepare: NavigationExpansion.Expand + ApplyProviderOuterJoinNullSettings",
+    "get_from": "Query/QueryCommand.QueryPreparer.cs:101-103 Prepare: cmd._from ?? GetFrom(srcType, cmd)",
+    "prepare_from": "Query/QueryCommand.QueryPreparer.cs:104-107 Prepare: PrepareFrom + AttachPrimarySourceLock",
+    "prepare_join": "Query/QueryCommand.QueryPreparer.cs:108-110 Prepare: PrepareJoin",
+    "prepare_columns": "Query/QueryCommand.QueryPreparer.cs:111-116 Prepare: PrepareColumns + ValidateProjectionNullability",
+    "prepare_where": "Query/QueryCommand.QueryPreparer.cs:117-119 Prepare: PrepareWhere + InjectMainSourceFilters",
+    "prepare_prewhere": "Query/QueryCommand.QueryPreparer.cs:120-122 Prepare: PreparePreWhere",
+    "prepare_arrayjoin": "Query/QueryCommand.QueryPreparer.cs:123-125 Prepare: PrepareArrayJoin",
+    "prepare_grouping": "Query/QueryCommand.QueryPreparer.cs:127-134 Prepare: PrepareGrouping + LimitBy + DistinctOn + ExtremeRow + PerParentPartition + Windows",
+    "prepare_sorting": "Query/QueryCommand.QueryPreparer.cs:135-137 Prepare: PrepareSorting",
+    "prepare_union": "Query/QueryCommand.QueryPreparer.cs:139-143 Prepare: union PrepareCommand + TransferNestedFilterSkips",
+    "prepare_ctes": "Query/QueryCommand.QueryPreparer.cs:144-146 Prepare: PrepareCtes",
+    "prepare_hints": "Query/QueryCommand.QueryPreparer.cs:147-149 Prepare: PrepareHints",
+    "unkeyed_scans": "Query/QueryCommand.QueryPreparer.cs:155-163 Prepare: ScanUnkeyedTupleInValues + ScanUnkeyedScalarInValues",
+    "from_hash": "Query/QueryCommand.QueryPreparer.cs:182-184 Prepare: FromPlanHash = GetFromExpressionPlanEqualityComparer().GetHashCode(from)",
 }
 ROSLYN = {
     "construct": "NextORM.Core.QueryCommand<TResult>.ToList / ToListAsyncCore (src/nextorm.core/Query/QueryCommand.TResult.cs:14)",
@@ -106,6 +149,26 @@ ROSLYN = {
     "map_rows": "NextORM.Core.QueryExecutor.ToListAsync<TResult> (:738) / ToList<TResult> (:790)",
     "cow_description": "NextORM.Core.QueryDescription.MarkShared (:261) / CloneShellForWrite (:282) and NextORM.Core.QueryCommand.WriteDescription (:312) [B]",
     "cow_clone": "NextORM.Core.QueryCommand.QueryCommand(IDataContext?, QueryCommand, bool) (src/nextorm.core/Query/QueryCommand.cs:174) [B]",
+    "prepare_call": "NextORM.Core.QueryCommand.QueryPreparer.Prepare (QueryCommand.QueryPreparer.cs:30)",
+    "planner_gate": "NextORM.Core.QueryCommand.HasDataModifyingCte (QueryCommand.cs:770)",
+    "planner_recipe": "NextORM.Core.QueryCommand.CaptureRawShape (:3938) / QueryPlanStore.TryGetRaw / NextORM.Core.QueryCommand.ApplyPreparationFrom (:4412)",
+    "prepare_pipeline": "NextORM.Core.QueryCommand.PrepareCommand (QueryCommand.Prepare.cs:17) -> QueryPreparer.Prepare (:30)",
+    "prep_preamble": "NextORM.Core.QueryCommand.InvalidatePlanKey + QueryPreparer.Prepare preamble (:33-88)",
+    "nav_expand": "NextORM.Core.NavigationExpansion.Expand / ApplyProviderOuterJoinNullSettings",
+    "get_from": "NextORM.Core.IDataContext.GetFrom / QueryCommand._from",
+    "prepare_from": "NextORM.Core.QueryCommand.QueryPreparer.PrepareFrom (:325) + AttachPrimarySourceLock (:358)",
+    "prepare_join": "NextORM.Core.QueryCommand.QueryPreparer.PrepareJoin (:2099)",
+    "prepare_columns": "NextORM.Core.QueryCommand.QueryPreparer.PrepareColumns (:555) + NavigationExpansion.ValidateProjectionNullability",
+    "prepare_where": "NextORM.Core.QueryCommand.QueryPreparer.PrepareWhere (:3367) + InjectMainSourceFilters (:2159)",
+    "prepare_prewhere": "NextORM.Core.QueryCommand.QueryPreparer.PreparePreWhere (:3402)",
+    "prepare_arrayjoin": "NextORM.Core.QueryCommand.QueryPreparer.PrepareArrayJoin (:3430)",
+    "prepare_grouping": "NextORM.Core.QueryCommand.QueryPreparer.PrepareGrouping (:3601) / PrepareLimitBy (:3444) / PrepareDistinctOn (:3462) / PrepareExtremeRow (:3477) / PreparePerParentPartition (:3499) / PrepareWindows (:3514)",
+    "prepare_sorting": "NextORM.Core.QueryCommand.QueryPreparer.PrepareSorting (:2772)",
+    "prepare_union": "NextORM.Core.QueryCommand._union.PrepareCommand + QueryPreparer.TransferNestedFilterSkips (:414)",
+    "prepare_ctes": "NextORM.Core.QueryCommand.QueryPreparer.PrepareCtes (:423)",
+    "prepare_hints": "NextORM.Core.QueryCommand.QueryPreparer.PrepareHints (:518)",
+    "unkeyed_scans": "NextORM.Core.QueryCommand.QueryPreparer.ScanUnkeyedTupleInValues (:2887) / ScanUnkeyedScalarInValues (:3132)",
+    "from_hash": "NextORM.Core.QueryCommand.GetFromExpressionPlanEqualityComparer (QueryCommand.Plan.cs:81).GetHashCode(from)",
 }
 
 INSTRUMENTED = {
@@ -358,6 +421,43 @@ def derive_prepare_exclusive(metric):
     return metric["ns"]["prepare"] - nested
 
 
+def derive_legacy_prepare_exclusive(metric):
+    """P02 derivation kept for continuity: prepare minus plan/bind/enum_create/cow_shape only."""
+    nested = sum(metric["ns"][phase] for phase in LEGACY_NESTED_IN_PREPARE)
+    return metric["ns"]["prepare"] - nested
+
+
+def derive_planner_preamble(metric):
+    """Aggregate of the two prescribed preamble timers (gate + raw-recipe probe)."""
+    return sum(metric["ns"][phase] for phase in PLANNER_PREAMBLE_PARTS)
+
+
+def derive_pipeline_remainder(metric):
+    """Prepare work outside the instrumented sub-steps (unlisted steps + tail hashes)."""
+    return metric["ns"]["prepare_pipeline"] - sum(metric["ns"][phase] for phase in PREPARE_SUBSTEPS)
+
+
+DERIVED_ROWS = {
+    "prepare_exclusive": (
+        derive_prepare_exclusive,
+        "prepare span (QueryCommand.TResult.cs:303-342) minus plan/bind/enum_create/cow_shape/"
+        "prepare_pipeline/planner_preamble (planner_gate+planner_recipe)",
+        "prepare"),
+    "legacy_prepare_exclusive": (
+        derive_legacy_prepare_exclusive,
+        "legacy P02 derivation: prepare span minus plan/bind/enum_create/cow_shape only",
+        "prepare"),
+    "planner_preamble": (
+        derive_planner_preamble,
+        "DataContext/QueryPlanner.cs:594-662 GetPreparedQueryCommand preamble = planner_gate + planner_recipe",
+        "planner_recipe"),
+    "pipeline_remainder": (
+        derive_pipeline_remainder,
+        "prepare_pipeline minus the instrumented Prepare sub-step sum (unlisted steps and tail hashes)",
+        "prepare_pipeline"),
+}
+
+
 def bootstrap_ci(values, seed, resamples):
     """Percentile bootstrap of the median; fixed seed, deterministic."""
     values = [v for v in values if v is not None]
@@ -478,8 +578,8 @@ def analyze(runs, args):
         pairs = pairs_for(lambda m: m[arm]["end_to_end"])
         rows["end_to_end"] = summarize_pairs(pairs, args.seed)
 
-        pairs = pairs_for(lambda m: derive_prepare_exclusive(m[arm]))
-        rows["prepare_exclusive"] = summarize_pairs(pairs, args.seed)
+        for name, (getter, _resolved, _calls_src) in DERIVED_ROWS.items():
+            rows[name] = summarize_pairs(pairs_for(lambda m, g=getter: g(m[arm])), args.seed)
 
         # Dispatch formula residual: prepare_exclusive + the other exclusive leaves, WITHOUT
         # adding back the nested phases that were subtracted from prepare. By construction it
@@ -498,16 +598,19 @@ def analyze(runs, args):
         for key, row in rows.items():
             if key in ("end_to_end", "phase_residual", "residual_unattributed"):
                 continue
-            if key == "prepare_exclusive":
-                a_vals = [derive_prepare_exclusive(b["metrics"][arm]) for b in a_blocks]
-                b_vals = [derive_prepare_exclusive(b["metrics"][arm]) for b in b_blocks]
-                row["resolved"] = "prepare span (QueryCommand.TResult.cs:303-342) minus plan/bind/enum_create/cow_shape"
-                row["roslyn"] = ROSLYN["prepare"]
+            if key in DERIVED_ROWS:
+                getter, resolved, calls_src = DERIVED_ROWS[key]
+                a_vals = [getter(b["metrics"][arm]) for b in a_blocks]
+                b_vals = [getter(b["metrics"][arm]) for b in b_blocks]
+                row["resolved"] = resolved
+                row["roslyn"] = ROSLYN.get(calls_src, "—")
+                row["calls_src"] = calls_src
             else:
                 a_vals = [b["metrics"][arm]["ns"][key] for b in a_blocks]
                 b_vals = [b["metrics"][arm]["ns"][key] for b in b_blocks]
                 row["resolved"] = BOUNDARY.get(key, "—")
                 row["roslyn"] = ROSLYN.get(key, "—")
+                row["calls_src"] = key
             row["a_ns"] = median(a_vals)
             row["b_ns"] = median(b_vals)
             row["delta_ns"] = row["delta"] if row.get("delta") is not None else (
@@ -548,8 +651,9 @@ def analyze(runs, args):
         for phase in PHASES:
             rows[phase]["calls_a"] = median([b["metrics"][arm]["calls"][phase] for b in a_blocks])
             rows[phase]["calls_b"] = median([b["metrics"][arm]["calls"][phase] for b in b_blocks])
-        rows["prepare_exclusive"]["calls_a"] = rows["prepare"]["calls_a"]
-        rows["prepare_exclusive"]["calls_b"] = rows["prepare"]["calls_b"]
+        for name, (_getter, _resolved, calls_src) in DERIVED_ROWS.items():
+            rows[name]["calls_a"] = rows[calls_src]["calls_a"]
+            rows[name]["calls_b"] = rows[calls_src]["calls_b"]
         e2e["calls_a"] = 1.0
         e2e["calls_b"] = 1.0
         residual["calls_a"] = None
@@ -561,8 +665,8 @@ def analyze(runs, args):
 
         pair_ns_a = median([b["metrics"][arm]["pair_ns"] for b in a_blocks])
         pair_ns_b = median([b["metrics"][arm]["pair_ns"] for b in b_blocks])
-        pairs_per_op_a = sum(rows[p]["calls_a"] or 0 for p in PHASES)
-        pairs_per_op_b = sum(rows[p]["calls_b"] or 0 for p in PHASES)
+        pairs_per_op_a = sum(rows[p]["calls_a"] or 0 for p in TIME_PHASES)
+        pairs_per_op_b = sum(rows[p]["calls_b"] or 0 for p in TIME_PHASES)
         rows["overhead"] = {
             "pair_ns_a": pair_ns_a,
             "pair_ns_b": pair_ns_b,
@@ -673,7 +777,7 @@ def write_artifacts(evid, meta, runs, analysis, args):
     for arm in ARMS:
         rows = tables[arm]
         export[arm] = {
-            "phases": {phase: dict(rows[phase]) for phase in PHASES + ["prepare_exclusive"]},
+            "phases": {phase: dict(rows[phase]) for phase in PHASES + DERIVED_PHASES},
             "end_to_end": {k: v for k, v in rows["end_to_end"].items() if k != "pairs"},
             "phase_residual": {k: v for k, v in rows["phase_residual"].items() if k != "pairs"},
             "residual_unattributed": {k: v for k, v in rows["residual_unattributed"].items() if k != "pairs"},
@@ -684,10 +788,17 @@ def write_artifacts(evid, meta, runs, analysis, args):
     with open(evid / "phase-table.json", "w", encoding="utf-8") as f:
         json.dump(export, f, indent=1)
 
-    lines = ["# E22 phase table — T297 r=4", "",
+    lines = ["# E22 phase table — T297 r=4 — P02b prepare-pipeline decomposition", "",
              "Paired B/A per round (6 paired rounds per arm = three ABBA groups). CI = bootstrap 95 % CI",
              "(10 000 resamples, seed %d). Hw = relative CI half-width. Share = phase delta / e2e delta." % args.seed,
              "Alloc delta is arm-level (bytes/op) and is shown on the end-to-end row only.", "",
+             "Decomposition (P02b): `prepare` is a span over `plan`, `bind`, `enum_create`, `cow_shape`,",
+             "`prepare_pipeline` (the `PrepareCommand` call) and `planner_preamble` (`planner_gate` + `planner_recipe`).",
+             "`prepare_exclusive = prepare −` that nested list; `legacy_prepare_exclusive` is the P02 derivation",
+             "(`prepare − plan − bind − enum_create − cow_shape`). `pipeline_remainder = prepare_pipeline −` the",
+             "instrumented `Prepare` sub-step sum (unlisted Prepare steps and the tail union/referenced hashes).",
+             "`prepare_call` is the entry counter for `QueryPreparer.Prepare` (no time charged; with the raw-recipe",
+             "path it is 0 because `ApplyPreparationFrom` marks the command prepared before `PrepareCommand`).", "",
              "Uninstrumented ABBA causal anchor (E21, B/A): " +
              "; ".join("%s %.3f/%.3f (default/inprocess)" % (arm, ANCHOR[arm]["default"], ANCHOR[arm]["inprocess"])
                        for arm in ARMS), ""]
@@ -705,7 +816,7 @@ def write_artifacts(evid, meta, runs, analysis, args):
         lines.append("")
         lines.append("| phase | A ns/op | B ns/op | paired ratio | 95% CI | rel CI half-width | calls/op A/B | alloc delta B/op | resolved file:line | share of e2e delta |")
         lines.append("|---|---|---|---|---|---|---|---|---|---|")
-        for phase in PHASES + ["prepare_exclusive", "end_to_end", "phase_residual", "residual_unattributed"]:
+        for phase in PHASES + DERIVED_PHASES + ["end_to_end", "phase_residual", "residual_unattributed"]:
             row = rows[phase]
             if phase == "end_to_end":
                 calls = "1/1"
@@ -736,12 +847,17 @@ def write_artifacts(evid, meta, runs, analysis, args):
         f.write("\n".join(lines) + "\n")
 
     # reconciliation.md
-    rec = ["# E22 reconciliation — T297 r=4", "",
-           "`prepare_exclusive = prepare − (plan + bind + enum_create + cow_shape)` (nested spans).",
+    rec = ["# E22 reconciliation — T297 r=4 — P02b prepare-pipeline decomposition", "",
+           "`prepare_exclusive = prepare − (plan + bind + enum_create + cow_shape + prepare_pipeline + planner_gate + planner_recipe)`.",
+           "`planner_preamble = planner_gate + planner_recipe`; `legacy_prepare_exclusive = prepare − (plan + bind + enum_create + cow_shape)`",
+           "(the P02 derivation, kept for continuity).",
            "Dispatch six-term sum: `e2e_phases = construct + prepare_exclusive + get_db_command + execute + read_rows + map_rows`;",
            "its residual (`phase_residual`) **by construction contains** the nested phases that were subtracted from",
            "`prepare`, so it is reported but is not the unexplained part.",
-           "Full phase sum adds the nested phases back: `e2e_phases + plan + bind + enum_create + cow_shape`.",
+           "Full phase sum adds the nested phases back: `e2e_phases + plan + bind + enum_create + cow_shape + prepare_pipeline + planner_gate + planner_recipe`.",
+           "The instrumented `Prepare` sub-steps are nested inside `prepare_pipeline` and are **not** added to the full",
+           "sum (no double count); they are reconciled against `prepare_pipeline` separately, and any gap is",
+           "`pipeline_remainder` (unlisted `Prepare` steps plus the union/referenced tail hashes).",
            "`residual_unattributed = end_to_end − full phase sum` is the genuine unexplained remainder.",
            "Instrumentation overhead is reported separately below (pair cost × instrumented boundary calls per",
            "query), not inside the phase table.", ""]
@@ -752,10 +868,22 @@ def write_artifacts(evid, meta, runs, analysis, args):
         rec.append("")
         rec.append("| component | A ns/op | B ns/op | delta ns/op |")
         rec.append("|---|---|---|---|")
-        for phase in E2E_PHASES + NESTED_IN_PREPARE + ["end_to_end", "phase_residual", "residual_unattributed"]:
+        for phase in E2E_PHASES + NESTED_IN_PREPARE + ["planner_preamble", "legacy_prepare_exclusive",
+                                                       "pipeline_remainder", "end_to_end",
+                                                       "phase_residual", "residual_unattributed"]:
             row = rows[phase]
             rec.append("| %s | %s | %s | %+.1f |" % (
                 phase, fmt(row.get("a_ns")), fmt(row.get("b_ns")), row.get("delta_ns") or 0))
+        rec.append("")
+        substep_sum_a = sum(rows[p]["a_ns"] or 0 for p in PREPARE_SUBSTEPS)
+        substep_sum_b = sum(rows[p]["b_ns"] or 0 for p in PREPARE_SUBSTEPS)
+        rec.append("Prepare pipeline decomposition: `prepare_pipeline` A %s / B %s ns/op; sum of sub-step medians A %s / B %s; "
+                   "`pipeline_remainder` A %s / B %s ns/op. `prepare_call` calls/op A %s / B %s "
+                   "(0 means the D201-3 raw-recipe path applied the prepared state before `PrepareCommand`)."
+                   % (fmt(rows["prepare_pipeline"]["a_ns"]), fmt(rows["prepare_pipeline"]["b_ns"]),
+                      fmt(substep_sum_a), fmt(substep_sum_b),
+                      fmt(rows["pipeline_remainder"]["a_ns"]), fmt(rows["pipeline_remainder"]["b_ns"]),
+                      fmt(rows["prepare_call"]["calls_a"], 2), fmt(rows["prepare_call"]["calls_b"], 2)))
         rec.append("")
         rec.append("Full phase sum delta %+.1f ns/op vs e2e delta %+.1f ns/op -> unattributed residual %+.1f ns/op (%s), "
                    "combined 95 %% CI half-width %.1f ns, reconciles=%s, residual insignificant=%s."
@@ -783,22 +911,31 @@ def write_artifacts(evid, meta, runs, analysis, args):
 
     # verdict.md
     named = analysis["named"]
-    lines = ["# E22 attribution verdict — T297 r=4", "",
+    lines = ["# E22 attribution verdict — T297 r=4 — P02b prepare-pipeline decomposition", "",
              "Pre-registered rule (written in the runner before execution):", "",
              "A phase is named as the cause only if **all** hold, in **every** arm:", "",
              "1. (a) its paired B/A ratio median > 1 with bootstrap 95 % CI lower bound > 1;",
              "2. (b) it reproduces in both ABBA pair directions — at least 2 of 3 A→B pairs > 1 and at least 2 of 3 B→A pairs > 1, and at least 5 of 6 pairs > 1 (per-round signs are in phase-table.md);",
              "3. (c) its recorded boundary `file:line` resolves (Roslyn table) and its call count is non-zero in both trees;",
-             "4. (d) every measured exclusive phase reconciles with the e2e delta: the full phase sum (six exclusive phases plus the nested plan/bind/enum_create/cow_shape added back) differs from the e2e delta by no more than the combined 95 % CI half-width (quadrature);",
+             "4. (d) every measured exclusive phase reconciles with the e2e delta: the full phase sum (six exclusive phases plus the nested plan/bind/enum_create/cow_shape/prepare_pipeline/planner_gate/planner_recipe added back) differs from the e2e delta by no more than the combined 95 % CI half-width (quadrature);",
              "5. (e) the unexplained positive residual is insignificant: `residual_unattributed` ≤ 0 or ≤ 5 % of the positive e2e delta.",
              "",
-             "Amendment recorded before the verdict was issued: the dispatch's six-term `e2e_phases` omits exactly the",
-             "nested phases that its own `prepare_exclusive` definition subtracted, so the six-term residual contains",
+             "Amendment recorded before the verdict was issued (P02): the dispatch's six-term `e2e_phases` omits exactly",
+             "the nested phases that its own `prepare_exclusive` definition subtracted, so the six-term residual contains",
              "measured work by construction. The full phase sum adds them back; the six-term residual is still reported",
              "as `phase_residual`. No threshold in (a), (b), (c) or (e) changed after the run.",
              "",
+             "Amendment 2 recorded before the P02b run (refined attribution): `prepare_exclusive` is re-derived as",
+             "`prepare − (plan + bind + enum_create + cow_shape + prepare_pipeline + planner_preamble)`, i.e. the whole",
+             "`PrepareCommand` pipeline and the planner preamble are measured separately instead of sitting inside the",
+             "exclusive remainder; `planner_preamble` is the sum of its two prescribed timers (`planner_gate`, `planner_recipe`).",
+             "The `Prepare` sub-steps are nested inside `prepare_pipeline`, so they are candidates for (a)-(c)/(e) but are",
+             "never added back to the full phase sum (that would double-count). The P02 derivation stays available as",
+             "`legacy_prepare_exclusive`. Protocols, thresholds and the verdict rule itself are unchanged.",
+             "",
              "Otherwise the verdict is `attribution: incomplete` with the numbers, and no cause is named.", ""]
     for arm in ARMS:
+        rows = tables[arm]
         v = verdicts[arm]
         lines.append("## %s" % arm)
         lines.append("")
@@ -817,6 +954,54 @@ def write_artifacts(evid, meta, runs, analysis, args):
             lines.append("| %s | %s | %s | %s | %s | %s | %s |" % (
                 phase, c["a_positive_ci"], c["b_both_directions"], c["c_boundary_and_calls"],
                 c["d_reconciles"], c["e_residual_insignificant"], c["pass"]))
+        lines.append("")
+
+        # Per-round signs and shares for every candidate with a positive delta and a CI excluding 0.
+        positive = [(phase, rows[phase]) for phase in CAUSE_CANDIDATES
+                    if rows[phase]["ratio"] is not None and rows[phase]["ci_low"] is not None
+                    and rows[phase]["ratio"] > 1 and rows[phase]["ci_low"] > 1]
+        positive.sort(key=lambda item: item[1].get("delta_ns") or 0, reverse=True)
+        lines.append("Top contributors with a positive delta and a 95 % CI excluding 0 "
+                     "(per-round sign string: round 1..6, `+` = ratio > 1):")
+        lines.append("")
+        lines.append("| component | B/A ratio | 95 % CI | signs | A→B >1 | B→A >1 | delta ns/op | share of e2e delta |")
+        lines.append("|---|---|---|---|---|---|---|---|")
+        for phase, row in positive[:8]:
+            lines.append("| %s | %.4f | [%.4f, %.4f] | `%s` | %d/%d | %d/%d | %+.1f | %s |" % (
+                phase, row["ratio"], row["ci_low"], row["ci_high"], row["signs"],
+                row["positive_ab"], row["n_ab"], row["positive_ba"], row["n_ba"],
+                row["delta_ns"] or 0, fmt_pct((row.get("share") or 0) * 100)))
+        lines.append("")
+        overhead = rows["overhead"]
+        lines.append("Overhead: pair cost A %.2f / B %.2f ns; boundary calls/op A %.2f / B %.2f; "
+                     "estimated overhead A %.0f / B %.0f ns/op (delta %+.0f ns/op)."
+                     % (overhead["pair_ns_a"] or 0, overhead["pair_ns_b"] or 0,
+                        overhead["pairs_per_op_a"], overhead["pairs_per_op_b"],
+                        overhead["ns_per_op_a"], overhead["ns_per_op_b"], overhead["ns_per_op_delta"]))
+        lines.append("")
+
+        # Dominance: the largest prepare-level contributor (pipeline, its sub-steps, or the preamble)
+        # against the positive e2e delta. Reported, not a new acceptance threshold.
+        prepare_level = PREPARE_SUBSTEPS + ["planner_preamble", "planner_gate", "planner_recipe", "prepare_pipeline"]
+        ranked = sorted(((p, rows[p]) for p in prepare_level if (rows[p].get("delta_ns") or 0) > 0),
+                        key=lambda item: item[1]["delta_ns"], reverse=True)
+        if ranked:
+            top_phase, top_row = ranked[0]
+            top_share = (top_row["delta_ns"] / v["e2e_delta_ns"]) if v["e2e_delta_ns"] else None
+            if top_share is not None and top_share >= 0.5:
+                lines.append("Dominant prepare sub-step: **%s** (+%.1f ns/op, %s of the e2e delta)."
+                             % (top_phase, top_row["delta_ns"], fmt_pct(top_share * 100)))
+            else:
+                lines.append("No single prepare sub-step dominates (largest **%s**, +%.1f ns/op, %s of the e2e delta)."
+                             % (top_phase, top_row["delta_ns"],
+                                fmt_pct(top_share * 100) if top_share is not None else "—"))
+            lines.append("")
+            lines.append("Top prepare-level contributors: " + "; ".join(
+                "%s +%.1f ns (%s)" % (phase, row["delta_ns"],
+                                      fmt_pct((row["delta_ns"] / v["e2e_delta_ns"]) * 100) if v["e2e_delta_ns"] else "—")
+                for phase, row in ranked[:4]) + ".")
+        else:
+            lines.append("No prepare-level sub-step has a positive median delta in this arm.")
         lines.append("")
     if named:
         lines.append("**attribution: %s** — satisfies (a)-(e) in all four arms." % ", ".join(named))
@@ -872,6 +1057,15 @@ def write_protocol(evid, meta, runs, analysis, args):
             run["block"], run["side"], run["started"], run["wall_s"], run["exit"],
             (run["loadavg_before"] or "?").split()[0], (run["loadavg_after"] or "?").split()[0],
             run["db_sha_before"][:12], run["db_sha_after"][:12], run["record_count"]))
+    lines += ["", "## Decomposition (P02b refinement)", "",
+              "- Same protocol as the P02 run: order, rounds, warmup, iterations, quiet window, lock, db, probes.",
+              "- Only the instrumentation and the derivation changed; the P02 evidence dir is untouched.",
+              "- New phases inside the `prepare` span: `planner_gate`, `planner_recipe`, `prepare_pipeline`; inside",
+              "  `prepare_pipeline`: `prep_preamble`, `nav_expand`, `get_from`, `prepare_from`, `prepare_join`,",
+              "  `prepare_columns`, `prepare_where`, `prepare_prewhere`, `prepare_arrayjoin`, `prepare_grouping`,",
+              "  `prepare_sorting`, `prepare_union`, `prepare_ctes`, `prepare_hints`, `unkeyed_scans`, `from_hash`.",
+              "- `prepare_exclusive` is re-derived by subtracting the whole pipeline and the planner preamble; the P02",
+              "  derivation is reported as `legacy_prepare_exclusive`.", ""]
     lines += ["", "Analysis: paired B/A ratio per round; median of per-round ratios; percentile bootstrap 95 % CI",
               "(%d resamples, fixed seed %d); calls/op and allocation delta are side totals; the overhead estimate" % (args.resamples, args.seed),
               "is `pair cost × instrumented boundary calls per query`, reported separately from the phase table.", ""]
@@ -880,14 +1074,18 @@ def write_protocol(evid, meta, runs, analysis, args):
 
 
 def write_instrumentation(evid):
-    lines = ["# E22 instrumentation — T297 r=4 (P02)", "",
+    base_phases = ["construct", "prepare", "plan", "bind", "enum_create", "cow_shape",
+                   "get_db_command", "execute", "read_rows", "map_rows",
+                   "cow_description", "cow_clone"]
+    refined_phases = ["prepare_call", "planner_gate", "planner_recipe", "prepare_pipeline"] + PREPARE_SUBSTEPS
+    lines = ["# E22 instrumentation — T297 r=4 (P02 + P02b prepare decomposition)", "",
              "Identical instrumentation in both throwaway trees: `src/nextorm.core/Probe/T297PhaseProbe.cs`",
              "plus boundary calls. Trees: A = `0d4d5df2` (baseline), B = `9d633521` (candidate).",
              "Nothing here is shipped; the product tree is untouched.", "",
-             "## Phase boundary table", "",
+             "## Phase boundary table (P02 phases)", "",
              "| phase | A path:line + enclosing method | B path:line + enclosing method |",
              "|---|---|---|"]
-    for phase in PHASES:
+    for phase in base_phases:
         if phase in ("cow_description", "cow_clone"):
             a_cell = "— (path absent in A)"
             b_cell = "`%s`" % BOUNDARY[phase]
@@ -898,6 +1096,29 @@ def write_instrumentation(evid):
     lines += ["",
               "All paths are relative to `src/nextorm.core/` in the probe copies. Shared boundaries have identical",
               "line numbers in both copies; B additionally carries the COW description/clone counters.", "",
+              "## P02b second-level decomposition (new boundaries)", "",
+              "Two timers in the `GetPreparedQueryCommand` preamble and one around the `PrepareCommand` call;",
+              "16 leaf, mutually exclusive timers around the top-level steps of `QueryPreparer.Prepare`, in execution",
+              "order. `planner_preamble` in the tables is the derived sum `planner_gate + planner_recipe`; the",
+              "`Prepare` sub-steps are nested inside `prepare_pipeline`.", "",
+              "| phase | A path:line + enclosing method | B path:line + enclosing method |",
+              "|---|---|---|"]
+    for phase in refined_phases:
+        a_cell = "`%s`" % BOUNDARY[phase]
+        b_cell = "`%s`" % BOUNDARY[phase]
+        lines.append("| %s | %s | %s |" % (phase, a_cell, b_cell))
+    lines += ["",
+              "A and B share every P02b boundary line: `DataContext/QueryPlanner.cs:594-668` is byte-identical",
+              "in both copies, and `QueryCommand.QueryPreparer.cs:30-184` is identical; B's only `PrepareJoin`",
+              "difference is inside the called method at `:2101+` (`_definitionMemo = null`), after the boundary.",
+              "`prepare_call` records the `QueryPreparer.Prepare` entry counter only (no time charged).", "",
+              "## Derivation formulas", "",
+              "- `legacy_prepare_exclusive = prepare − (plan + bind + enum_create + cow_shape)` (P02, kept).",
+              "- `prepare_exclusive = prepare − (plan + bind + enum_create + cow_shape + prepare_pipeline + planner_gate + planner_recipe)`.",
+              "- `planner_preamble = planner_gate + planner_recipe`.",
+              "- `pipeline_remainder = prepare_pipeline − Σ(prep_preamble … from_hash)`.",
+              "- The full reconciliation sum adds back `plan/bind/enum_create/cow_shape/prepare_pipeline/planner_gate/planner_recipe`;",
+              "  the `Prepare` sub-steps are never added back (nested in `prepare_pipeline`).", "",
               "## Roslyn resolutions", "",
               "| phase | resolved symbol |", "|---|---|"]
     for phase in PHASES:
@@ -905,7 +1126,7 @@ def write_instrumentation(evid):
     lines += ["",
               "Resolution performed with the `roslyn` tool against `/tmp/opencode/t297-p02/A/nextorm.slnx`",
               "and `/tmp/opencode/t297-p02/B/nextorm.slnx` (`members`: QueryPlanner, QueryExecutor,",
-              "DbPreparedQueryCommand<TResult>, QueryCommand, QueryDescription). Full bodies are in",
+              "DbPreparedQueryCommand<TResult>, QueryCommand, QueryDescription, QueryPreparer). Full bodies are in",
               "`probe-src/` and `probe-src/instrumentation-{A,B}.diff`.", "",
               "## COW counters (B only) and why", "",
               "B replaces the shared mutable command state with a copy-on-write `QueryDescription`. A has no such",
@@ -1043,9 +1264,13 @@ def check_evidence(evid):
                 if calls.get(phase) != queries:
                     problems.append("%s/%s: calls.%s=%s expected %s" % (
                         tag, arm, phase, calls.get(phase), queries))
-            for phase in ("prepare", "plan", "execute"):
+            for phase in ("prepare", "plan", "execute", "planner_recipe"):
                 if not ticks.get(phase):
                     problems.append("%s/%s: ticks.%s is zero" % (tag, arm, phase))
+            # P02b: one Prepare entry per PrepareCommand call; the raw-recipe path calls neither.
+            if calls.get("prepare_call") != calls.get("prepare_pipeline"):
+                problems.append("%s/%s: calls.prepare_call=%s != calls.prepare_pipeline=%s" % (
+                    tag, arm, calls.get("prepare_call"), calls.get("prepare_pipeline")))
             if not entry.get("end_to_end_ticks"):
                 problems.append("%s/%s: end_to_end_ticks is zero" % (tag, arm))
             if (entry.get("alloc") or {}).get("total_per_arm", 0) <= 0:
