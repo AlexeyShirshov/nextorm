@@ -49,6 +49,51 @@ CORE_DLL = {
 }
 SIDE_TREE = {"A": PROBE_ROOT / "A", "B": PROBE_ROOT / "B"}
 SIDE_COMMIT = {"A": "0d4d5df2", "B": "9d633521"}
+
+
+def resolve_probe_dll(value):
+    """Accepts a probe directory or a dll path; a directory resolves its Release net10.0 dll."""
+    path = Path(value)
+    if path.is_dir():
+        found = sorted((path / "bin" / "Release" / "net10.0").glob("t297-probe-*.dll"))
+        if not found:
+            raise RuntimeError("no t297-probe-*.dll under %s" % (path / "bin" / "Release" / "net10.0"))
+        return found[0]
+    return path
+
+
+def tree_commit(tree, fallback):
+    tree = Path(tree)
+    if (tree / ".git").exists():
+        result = subprocess.run(["git", "-C", str(tree), "rev-parse", "--short=8", "HEAD"],
+                                capture_output=True, text=True)
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    return fallback
+
+
+def configure_sides(args):
+    """Resolves the four path overrides without touching the wire protocol or the analysis."""
+    args.side_tree = {"A": Path(args.baseline_tree), "B": Path(args.candidate_tree)}
+    args.side_probe = {
+        "A": resolve_probe_dll(args.baseline_probe or args.bin_a),
+        "B": resolve_probe_dll(args.candidate_probe or args.bin_b),
+    }
+    args.side_core = {
+        side: tree / "src" / "nextorm.core" / "bin" / "linux" / "Release" / "net10.0" / "nextorm.core.dll"
+        for side, tree in args.side_tree.items()
+    }
+    args.side_commit = {
+        "A": tree_commit(args.side_tree["A"], SIDE_COMMIT["A"]),
+        "B": tree_commit(args.side_tree["B"], SIDE_COMMIT["B"] if args.side_tree["B"] == SIDE_TREE["B"]
+                         else repo_head()),
+    }
+
+
+def repo_head():
+    result = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short=8", "HEAD"],
+                            capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else "unknown"
 ARMS = ["cte", "recursive", "inlist", "leftjoin"]
 PHASES = [
     "construct", "prepare", "plan", "bind", "enum_create", "cow_shape",
@@ -321,7 +366,7 @@ def env_snapshot():
 
 
 def run_block(side, block, args, evid):
-    binary = Path(args.bin_a if side == "A" else args.bin_b)
+    binary = Path(args.side_probe[side])
     if not binary.exists():
         raise RuntimeError("probe binary missing for side %s: %s" % (side, binary))
 
@@ -1043,7 +1088,8 @@ def write_protocol(evid, meta, runs, analysis, args):
              "|---|---|---|---|---|"]
     for side in ("A", "B"):
         lines.append("| %s | `%s` | `%s` | `%s` | `%s` |" % (
-            side, SIDE_COMMIT[side], PROBE[side], meta["probe_sha"][side], meta["core_sha"][side]))
+            side, meta.get("side_commit", SIDE_COMMIT)[side], meta.get("probe", {k: str(v) for k, v in PROBE.items()})[side],
+            meta["probe_sha"][side], meta["core_sha"][side]))
     lines += ["",
               "- `dotnet --version`: `%s`; repo HEAD: `%s`." % (meta["dotnet"], meta["repo_head"]),
               "- Benchmark DB: `%s`, sha256 `%s` (checked before and after every block; expected)." % (meta["db"], meta["db_sha"]),
@@ -1073,14 +1119,16 @@ def write_protocol(evid, meta, runs, analysis, args):
         f.write("\n".join(lines) + "\n")
 
 
-def write_instrumentation(evid):
+def write_instrumentation(evid, meta=None):
     base_phases = ["construct", "prepare", "plan", "bind", "enum_create", "cow_shape",
                    "get_db_command", "execute", "read_rows", "map_rows",
                    "cow_description", "cow_clone"]
     refined_phases = ["prepare_call", "planner_gate", "planner_recipe", "prepare_pipeline"] + PREPARE_SUBSTEPS
+    commit_a = meta.get("side_commit", SIDE_COMMIT)["A"] if meta else SIDE_COMMIT["A"]
+    commit_b = meta.get("side_commit", SIDE_COMMIT)["B"] if meta else SIDE_COMMIT["B"]
     lines = ["# E22 instrumentation — T297 r=4 (P02 + P02b prepare decomposition)", "",
              "Identical instrumentation in both throwaway trees: `src/nextorm.core/Probe/T297PhaseProbe.cs`",
-             "plus boundary calls. Trees: A = `0d4d5df2` (baseline), B = `9d633521` (candidate).",
+             "plus boundary calls. Trees: A = `%s` (baseline), B = `%s` (candidate)." % (commit_a, commit_b),
              "Nothing here is shipped; the product tree is untouched.", "",
              "## Phase boundary table (P02 phases)", "",
              "| phase | A path:line + enclosing method | B path:line + enclosing method |",
@@ -1139,19 +1187,22 @@ def write_instrumentation(evid):
         f.write("\n".join(lines) + "\n")
 
 
-def copy_probe_sources(evid):
+def copy_probe_sources(evid, args, meta):
     out = evid / "probe-src"
     out.mkdir(exist_ok=True)
-    shutil.copyfile(PROBE_ROOT / "A" / "src" / "nextorm.core" / "Probe" / "T297PhaseProbe.cs", out / "T297PhaseProbe.A.cs")
-    shutil.copyfile(PROBE_ROOT / "B" / "src" / "nextorm.core" / "Probe" / "T297PhaseProbe.cs", out / "T297PhaseProbe.B.cs")
+    shutil.copyfile(args.side_tree["A"] / "src" / "nextorm.core" / "Probe" / "T297PhaseProbe.cs", out / "T297PhaseProbe.A.cs")
+    shutil.copyfile(args.side_tree["B"] / "src" / "nextorm.core" / "Probe" / "T297PhaseProbe.cs", out / "T297PhaseProbe.B.cs")
     shutil.copyfile(PROBE_ROOT / "Common" / "ProbeProgram.cs", out / "ProbeProgram.cs")
-    shutil.copyfile(PROBE_ROOT / "probe-a" / "probe-a.csproj", out / "probe-a.csproj")
-    shutil.copyfile(PROBE_ROOT / "probe-b" / "probe-b.csproj", out / "probe-b.csproj")
+    for side, value in (("A", args.baseline_probe or args.bin_a), ("B", args.candidate_probe or args.bin_b)):
+        probe_dir = Path(value) if Path(value).is_dir() else Path(value).parent
+        csproj = sorted(probe_dir.glob("*.csproj"))
+        if csproj:
+            shutil.copyfile(csproj[0], out / ("probe-%s.csproj" % side))
     for side in ("A", "B"):
         chunks = []
         for rel in INSTRUMENTED[side]:
-            target = SIDE_TREE[side] / rel
-            original = subprocess.run(["git", "-C", str(REPO), "show", "%s:%s" % (SIDE_COMMIT[side], rel)],
+            target = args.side_tree[side] / rel
+            original = subprocess.run(["git", "-C", str(REPO), "show", "%s:%s" % (meta.get("side_commit", SIDE_COMMIT)[side], rel)],
                                       capture_output=True, text=True)
             before = original.stdout.splitlines(keepends=True) if original.returncode == 0 else []
             after = target.read_text(encoding="utf-8").splitlines(keepends=True)
@@ -1169,8 +1220,8 @@ def write_hashes(evid, meta):
              "repo HEAD      %s" % meta["repo_head"],
              "DB sha256      %s  %s" % (meta["db_sha"], meta["db"])]
     for side in ("A", "B"):
-        lines.append("probe %s dll  %s  %s" % (side, meta["probe_sha"][side], PROBE[side]))
-        lines.append("core  %s dll  %s  %s" % (side, meta["core_sha"][side], CORE_DLL[side]))
+        lines.append("probe %s dll  %s  %s" % (side, meta["probe_sha"][side], meta.get("probe", {k: str(v) for k, v in PROBE.items()})[side]))
+        lines.append("core  %s dll  %s  %s" % (side, meta["core_sha"][side], meta.get("core_dll", {k: str(v) for k, v in CORE_DLL.items()})[side]))
     for name in ("T297PhaseProbe.A.cs", "T297PhaseProbe.B.cs", "ProbeProgram.cs",
                  "probe-a.csproj", "probe-b.csproj", "instrumentation-A.diff", "instrumentation-B.diff"):
         path = evid / "probe-src" / name
@@ -1298,6 +1349,11 @@ def cmd_attribute(args):
         print("attribute evidence OK: %s" % evid)
         return 0
 
+    try:
+        configure_sides(args)
+    except RuntimeError as exc:
+        return fail(str(exc))
+
     if args.render_only:
         runs_path, meta_path = evid / "runs.json", evid / "meta.json"
         if not runs_path.exists() or not meta_path.exists():
@@ -1311,8 +1367,8 @@ def cmd_attribute(args):
         (evid / "summary.json").write_text(json.dumps(aggregate(runs), indent=1), encoding="utf-8")
         named = write_artifacts(evid, meta, runs, analysis, args)
         write_protocol(evid, meta, runs, analysis, args)
-        write_instrumentation(evid)
-        copy_probe_sources(evid)
+        write_instrumentation(evid, meta)
+        copy_probe_sources(evid, args, meta)
         write_hashes(evid, meta)
         scope = PROBE_ROOT / "scope-brief.json"
         if scope.exists():
@@ -1328,7 +1384,7 @@ def cmd_attribute(args):
     if db_sha != EXPECTED_DB_SHA:
         return fail("benchmark db sha mismatch: %s" % db_sha)
     for side in ("A", "B"):
-        binary = Path(args.bin_a if side == "A" else args.bin_b)
+        binary = Path(args.side_probe[side])
         if not binary.exists():
             return fail("probe binary missing for %s: %s" % (side, binary))
 
@@ -1387,6 +1443,10 @@ def cmd_attribute(args):
                 "quiet_window_s": args.quiet,
                 "bootstrap_resamples": args.resamples,
                 "bootstrap_seed": args.seed,
+                "baseline_tree": str(args.side_tree["A"]),
+                "candidate_tree": str(args.side_tree["B"]),
+                "baseline_probe": str(args.side_probe["A"]),
+                "candidate_probe": str(args.side_probe["B"]),
             },
             "started": utc(),
             "quiet_start": quiet_start,
@@ -1397,10 +1457,12 @@ def cmd_attribute(args):
             "guard_present": GUARD.exists(),
             "db": str(db),
             "db_sha": db_sha,
-            "probe": {k: str(v) for k, v in PROBE.items()},
-            "probe_sha": {side: sha256(Path(args.bin_a if side == "A" else args.bin_b)) for side in ("A", "B")},
-            "core_dll": {k: str(v) for k, v in CORE_DLL.items()},
-            "core_sha": {side: sha256(CORE_DLL[side]) if CORE_DLL[side].exists() else None for side in ("A", "B")},
+            "probe": {k: str(v) for k, v in args.side_probe.items()},
+            "probe_sha": {side: sha256(args.side_probe[side]) for side in ("A", "B")},
+            "core_dll": {k: str(v) for k, v in args.side_core.items()},
+            "core_sha": {side: sha256(args.side_core[side]) if args.side_core[side].exists() else None
+                         for side in ("A", "B")},
+            "side_commit": args.side_commit,
             "dotnet": subprocess.run(["dotnet", "--version"], capture_output=True,
                                      text=True).stdout.strip(),
             "repo_head": subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"],
@@ -1437,8 +1499,8 @@ def cmd_attribute(args):
 
         named = write_artifacts(evid, meta, runs, analysis, args)
         write_protocol(evid, meta, runs, analysis, args)
-        write_instrumentation(evid)
-        copy_probe_sources(evid)
+        write_instrumentation(evid, meta)
+        copy_probe_sources(evid, args, meta)
         write_hashes(evid, meta)
         scope = PROBE_ROOT / "scope-brief.json"
         if scope.exists():
@@ -1487,6 +1549,14 @@ def build_parser():
     att.add_argument("--db", default=str(DB), help="benchmark DB (default: %(default)s)")
     att.add_argument("--bin-a", default=str(PROBE["A"]), help="probe A dll")
     att.add_argument("--bin-b", default=str(PROBE["B"]), help="probe B dll")
+    att.add_argument("--baseline-tree", default=str(PROBE_ROOT / "A"),
+                     help="baseline source tree (default: %(default)s)")
+    att.add_argument("--candidate-tree", default=str(PROBE_ROOT / "B"),
+                     help="candidate source tree (default: %(default)s)")
+    att.add_argument("--baseline-probe", default=None,
+                     help="baseline probe directory or dll (default: --bin-a)")
+    att.add_argument("--candidate-probe", default=None,
+                     help="candidate probe directory or dll (default: --bin-b)")
 
     for name in STUBS:
         sub.add_parser(name, help="declared in rv=4, not implemented in this phase")
