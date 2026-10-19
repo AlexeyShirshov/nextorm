@@ -1,0 +1,1069 @@
+{
+ "task": "T297-cow",
+ "issue": 297,
+ "status_file": ".pdca/status/T297-cow-1.md",
+ "path": ".pdca/T297/rv5",
+ "base_ref": "1f15c5d0",
+ "collection_baseline_ref": "0d4d5df2",
+ "footprint": [
+  "src/nextorm.core/Builders/EntityBuilder.cs",
+  "src/nextorm.core/Cte.cs",
+  "src/nextorm.core/Query/QueryCommand.Binding.cs",
+  "src/nextorm.core/Query/QueryCommand.Description.cs",
+  "src/nextorm.core/Query/QueryCommand.EagerLoading.cs",
+  "src/nextorm.core/Query/QueryCommand.Plan.cs",
+  "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+  "src/nextorm.core/Query/QueryCommand.Storage.cs",
+  "src/nextorm.core/Query/QueryCommand.cs",
+  "tests/nextorm.core.tests/Cte/CteDescriptionCowTests.cs",
+  "docs/specs/status/D297-structural-cte-graph-1.md",
+  "tests/nextorm.publicextensibility.tests/T297ProtectedFieldCompatibilityTests.cs",
+  "tests/nextorm.core.tests/Caching/CachedPreparationRecipeTests.cs"
+ ],
+ "exclusions": [
+  ".pdca/**"
+ ],
+ "contract_rv": 5,
+ "supersedes": 4,
+ "required_rows": [
+  "E01",
+  "E02",
+  "E03",
+  "E04",
+  "E05",
+  "E06",
+  "E07",
+  "E08",
+  "E09",
+  "E10",
+  "E11",
+  "E12",
+  "E13",
+  "E14",
+  "E15",
+  "E16",
+  "E17",
+  "E18",
+  "E19",
+  "E20",
+  "E21",
+  "E22",
+  "E23",
+  "E24",
+  "E25",
+  "E26",
+  "E27",
+  "E28",
+  "E29",
+  "E30",
+  "E31",
+  "E32",
+  "E33",
+  "E34",
+  "E35",
+  "E36",
+  "E37"
+ ],
+ "rows": [
+  {
+   "id": "E01",
+   "status": "met",
+   "requirements": [
+    "R01"
+   ],
+   "predicate": "no src/** diff beyond the authorised P2/P3 edit set, checked before/after each run",
+   "inherited_from": "rv1:E01",
+   "evidence": [
+    {
+     "kind": "scope",
+     "path": ".pdca/T297/rv2/scope/authorized-src-diff-rv3.txt",
+     "value": "git diff --name-status 1f15c5d0..HEAD -- src: exactly the 9 authorised src files; the final commit 5054d9a2 changes only QueryCommand.cs and QueryCommand.Description.cs vs 3daf3765"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/baseline/round-04/summary.json",
+     "value": "baseline source_state_start/end HEAD 0d4d5df2, dirty_paths=0"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/rv3/candidate/round-04/summary.json",
+     "value": "candidate measured tree HEAD 3daf3765 + 2 AC5 src files, dirty_paths=2, head unchanged start/end"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/rv3/candidate/round-05/summary.json",
+     "value": "same source fingerprint 54c9dd96..., head unchanged start/end"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E02",
+   "status": "met",
+   "requirements": [
+    "R02"
+   ],
+   "predicate": "per-node bytes measured on the real types with controls, closure reconciled",
+   "inherited_from": "rv1:E02",
+   "evidence": [
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/inherited/rv1-obligations.md",
+     "value": "rv1 R02 met: nodes.json sha256 f6ac7502..., controls.json sha256 8d74ddc2..."
+    },
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/field-registry.md",
+     "value": "every QueryCommand instance field mapped to description/preparation/binding ownership; r2 restored 11 protected fields"
+    },
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/candidate-r2/construct-allocation/summary.txt",
+     "value": "r2 tree: Cte 7,136 B/op Default / 6,976 InProcess; RecursiveCte 8,520 / 8,440"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E03",
+   "status": "met",
+   "requirements": [
+    "R02"
+   ],
+   "predicate": "per-query composition on real Cte/RecursiveCte with closure",
+   "inherited_from": "rv1:E03",
+   "evidence": [
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/inherited/rv1-obligations.md",
+     "value": "rv1 R02 closure reconciled"
+    },
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/candidate-r2/comparison.md",
+     "value": "r2 per-query composition on real Cte/RecursiveCte for both rounds/jobs"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E04",
+   "status": "met",
+   "requirements": [
+    "R03"
+   ],
+   "predicate": "COW prototype operations (shared core, overlay-on-write, union clone, materialisation) observably equivalent",
+   "inherited_from": "rv1:E04",
+   "evidence": [
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/inherited/rv1-obligations.md",
+     "value": "rv1 R03 prototype operations met"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/inner-loop.json",
+     "value": "COW prototype operations and inner-loop evidence"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E05",
+   "status": "na",
+   "requirements": [
+    "R04"
+   ],
+   "predicate": "owner override 2026-10-18 (issue #297 comment 3): the six acceptance criteria replace the 2,640/3,482/5,199 B entry gates for this cycle; the measured values stay recorded and the thresholds are not lowered",
+   "inherited_from": "rv1:E05",
+   "evidence": [
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/inherited/rv1-obligations.md",
+     "value": "rv1 R04 delta.json / decision.md verdict"
+    },
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/candidate-r2/comparison.md",
+     "value": "r2 measured deltas: Cte -472..-672 B, RecursiveCte -1,192..-1,336 B"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/candidate-r2/round-02/summary.json",
+     "value": "candidate-r2 Cte 10,712.9/10,600.7, RecursiveCte 12,440.3/12,296.2 B/query"
+    },
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/rv3/candidate/comparison.md",
+     "value": "measured B/query: Cte 10,608.9-10,752.9, RecursiveCte 12,304.3-12,544.2; deltas vs baseline -519.8..-1,328.0 B/query"
+    }
+   ],
+   "reason": "Original byte gates remain recorded as UNMET in the evidence above; they are replaced for this cycle by the six acceptance criteria and are not lowered or re-labelled.",
+   "rv": 5
+  },
+  {
+   "id": "E06",
+   "status": "met",
+   "requirements": [
+    "R05"
+   ],
+   "predicate": "conditional real-warm arm executed under the canonical host lock when R04 is plausible",
+   "supersedes": "rv1:E06 (R05 open: warm arm not executed)",
+   "evidence": [
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/baseline/round-04/summary.json"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/baseline/round-05/summary.json"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/candidate-r2/round-01/summary.json"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/candidate-r2/round-02/summary.json"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E07",
+   "status": "met",
+   "requirements": [
+    "R01",
+    "R02",
+    "R03",
+    "R04"
+   ],
+   "predicate": "harness controls and self-checks pass; Release build 0 warnings",
+   "inherited_from": "rv1:E07",
+   "evidence": [
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/inherited/rv1-obligations.md",
+     "value": "rv1 harness controls/self-checks"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/boundary/r3/build.log",
+     "exit": 0,
+     "value": "dotnet build nextorm.slnx -c Debug: 0 Warning(s), 0 Error(s), 60.55 s"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/boundary/r3/exits.txt",
+     "value": "all r3 block exit codes"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E08",
+   "status": "met",
+   "requirements": [
+    "R01",
+    "R02",
+    "R03",
+    "R04",
+    "R05"
+   ],
+   "predicate": "DB sha256 pinned, quiet window/lock ownership recorded, source state and assembly hashes recorded",
+   "inherited_from": "rv1:E08",
+   "evidence": [
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/baseline/round-04/provenance.json"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/baseline/round-05/provenance.json"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/candidate-r2/round-01/provenance.json"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/candidate-r2/round-02/provenance.json"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E09",
+   "status": "met",
+   "requirements": [
+    "CHECK"
+   ],
+   "predicate": "manifest covers E01-E18, every required slot populated, applicability confirmed",
+   "evidence": [
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/manifest-rv3.json",
+     "value": "contract rv=3 covers E01-E19"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/validate-inner-loop-rv3.log",
+     "exit": 0,
+     "value": "validate_inner_loop.py manifest exit 0"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/pdca-evidence-lint-rv3.log",
+     "exit": 0,
+     "value": "pdca_evidence.py lint exit 0"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E10",
+   "status": "met",
+   "requirements": [
+    "R06",
+    "Acceptance 1"
+   ],
+   "predicate": "two valid baseline and two valid candidate same-round rounds with matched reductions",
+   "evidence": [
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/baseline/round-04/round-validity.json",
+     "value": "baseline round 1 valid"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/baseline/round-05/round-validity.json",
+     "value": "baseline round 2 valid"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/rv3/candidate/round-04/round-validity.json",
+     "value": "candidate round-04 valid: HEAD 3daf3765 unchanged, src sha constant, assembly 8fee8c3c in all three invocations, DB pin, no overlap, artifacts restored (2278 s)"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/rv3/candidate/round-05/round-validity.json",
+     "value": "candidate round-05 valid: identical checks, same assembly 8fee8c3c (2223 s)"
+    },
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/rv3/candidate/comparison.md",
+     "value": "matched reductions: Cte -192.0..-384.0 B/query, RecursiveCte -767.7..-848.0 B/query vs the job-matched baselines"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E11",
+   "status": "met",
+   "requirements": [
+    "R07",
+    "Acceptance 2"
+   ],
+   "predicate": "every required Cte nextorm/linq2db ratio <= 1.20",
+   "evidence": [
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/rv3/candidate/comparison.md",
+     "value": "Cte nextorm/linq2db 1.128/1.169 (round-04) and 1.143/1.159 (round-05) <= 1.20"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/rv3/candidate/round-04/summary.json",
+     "value": "Cte 10,848.9/10,848.7 B/query"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/rv3/candidate/round-05/summary.json",
+     "value": "Cte 10,968.9/11,080.7 B/query"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E12",
+   "status": "met",
+   "requirements": [
+    "R08",
+    "Acceptance 3"
+   ],
+   "predicate": "RecursiveCte improves strictly vs its own baseline in both rounds and jobs",
+   "evidence": [
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/rv3/candidate/comparison.md",
+     "value": "RecursiveCte allocation ratios 0.938-0.944 vs own baseline; -767.7..-848.0 B/query both rounds and jobs"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/rv3/candidate/round-04/summary.json",
+     "value": "RecursiveCte 12,784.3/12,784.2 B/query vs baseline 13,632.3/13,632.2"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/rv3/candidate/round-05/summary.json",
+     "value": "RecursiveCte 12,784.3/12,864.5 B/query vs baseline 13,632.3/13,632.2"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E13",
+   "status": "open",
+   "requirements": [
+    "R09",
+    "Acceptance 4"
+   ],
+   "predicate": "every CTE candidate time <= 1.00x its job-matched baseline (owner correction 2026-10-19 in 3daf3765: the sealed 1.20 time tolerance is void; 1.20 remains the allocation checkpoint)",
+   "evidence": [
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/rv3/candidate/comparison.md",
+     "value": "time ratios: round-04 Cte 1.119/1.288, RCte 1.118/1.177; round-05 Cte 1.134/1.156, RCte 1.139/1.177"
+    },
+    {
+     "kind": "doc",
+     "path": "docs/specs/status/collection-1.0.9-rc3-open-3.md",
+     "value": "2026-10-19 correction in commit 3daf3765: time must be <=1.00x; 1.20 was an error"
+    },
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/rv3/do/phase-a/report.md",
+     "value": "r=3 prepare-path diagnostic: whole prepare delta 5.7 us of the 42-91 us op-level AC4 gap; hash getters 0, lazy null-check <=0.6 us warm, _from/_selectList 0, _ctes/description <1 ns; remaining gap is post-prepare and unattributed; Phase B not executed"
+    }
+   ],
+   "reason": "both valid rounds exceed the owner <=1.00x time rule: Cte 1.119-1.288x, RecursiveCte 1.118-1.177x. Even the void 1.20 allocation checkpoint is exceeded by round-04 Cte/Default 1.288x. The r=3 prepare-path diagnostic (phase-a/report.md) rules out the prepare path as the lever; #297 stays open.",
+   "rv": 5
+  },
+  {
+   "id": "E14",
+   "status": "open",
+   "requirements": [
+    "R10",
+    "Acceptance 5"
+   ],
+   "predicate": "all 15 other cached arms nonregressing and prepared A_* <= 1.03x",
+   "evidence": [
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/rv3/candidate/comparison.md",
+     "value": "Join4 +80 regression removed: -80.2/-80.0 (round-04) and -160.0/-40.0 (round-05) B/query; one positive cell +32.0 B/query (In_ListContains_Captured/Default, round-05, 9,432.0->9,464.0, ratio 1.003); A_* max 1.0001"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/rv3/candidate/round-05/summary.json",
+     "value": "In_ListContains_Captured/Default 9,464.0 vs baseline 9,432.0 B/query; same arm -120.0 in round-04 and in InProcess round-05"
+    },
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/rv3/do/phase-a/report.md",
+     "value": "r=3 Phase A: the +32 B/query In_ListContains_Captured cell is not in the prepare path; no cheap sharing-preserving fix is supported, residual documented and not fixed"
+    }
+   ],
+   "reason": "the +80.0 B/query Join4 regression is gone, 14/15 arms are nonregressing and A_* max is 1.0001 <= 1.03, but one cell is strictly positive: +32.0 B/query (0.3%) on In_ListContains_Captured/Default in round-05, not reproduced in round-04 or in the other job. Strict 'all 15 nonregressing' is therefore not met; the residual is confirmed outside the prepare path by phase-a/report.md.",
+   "rv": 5
+  },
+  {
+   "id": "E15",
+   "status": "met",
+   "requirements": [
+    "R11",
+    "Acceptance 6"
+   ],
+   "predicate": "dotnet build 0W/0E and full suites green with required providers executed; both exits 0",
+   "evidence": [
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/boundary/r5/build.log",
+     "exit": 0,
+     "value": "dotnet build nextorm.slnx -c Debug: 0 Warning(s), 0 Error(s), 5.62 s"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/boundary/r5/exits.txt",
+     "exit": 0,
+     "value": "build/core/cow/integration/skip-budget/e19 all exit 0 at the measured tree (byte-identical to commit 5054d9a2)"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/boundary/r5/core-tests.log",
+     "exit": 0,
+     "value": "core 2658 total / 0 failed / 0 skipped"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/boundary/r5/cow-tests.log",
+     "exit": 0,
+     "value": "CteDescriptionCowTests + T240 34 total / 0 failed / 0 skipped"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/boundary/r5/integration.log",
+     "exit": 0,
+     "value": "5083 total / 4888 passed / 0 failed / 195 skipped / 0 not run; PostgreSQL+SQL Server+MySQL+MariaDB+ClickHouse (+ in-process SQLite), none skipped"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/boundary/r5/skip-budget.log",
+     "exit": 0,
+     "value": "OK: 195 skips match the pinned budget"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E16",
+   "status": "met",
+   "requirements": [
+    "R11",
+    "layout hypothesis"
+   ],
+   "predicate": "locked construct-allocation diagnostic shows the layout reduction; diagnostic only",
+   "evidence": [
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/baseline/construct-allocation/summary.txt",
+     "value": "pre-change Cte 8,976/8,960; RecursiveCte 11,568/11,520 B/op"
+    },
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/candidate-r2/construct-allocation/summary.txt",
+     "value": "r2 Cte 7,136/6,976; RecursiveCte 8,520/8,440 B/op; diagnostic only"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E17",
+   "status": "met",
+   "requirements": [
+    "R11",
+    "compatibility"
+   ],
+   "predicate": "public API unchanged; cache policy untouched; field registry reviewed; targeted tests pass",
+   "evidence": [
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/compat/api-comparison.log",
+     "exit": 0,
+     "value": "public members 0 added / 0 removed; cache policy untouched"
+    },
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/field-registry.md",
+     "value": "field-by-field ownership registry; 11 protected fields present as fields"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/boundary/r5/e19.log",
+     "exit": 0,
+     "value": "fresh at the measured tree: metadata 11/11 protected fields, Paging field, EagerLoadMode property, property substitute rejected"
+    },
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/compat/e19/metadata-diff.txt",
+     "value": "fresh r5 run: 11/11 protected fields PASS"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E18",
+   "status": "met",
+   "requirements": [
+    "R06",
+    "R07",
+    "R08",
+    "R09",
+    "R10",
+    "R11"
+   ],
+   "predicate": "both required validators exit 0 on the frozen manifest",
+   "evidence": [
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/manifest-rv3.json",
+     "value": "contract rv=3, tree-bound, covers E01-E19"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/validate-inner-loop-rv3.log",
+     "exit": 0,
+     "value": "validate_inner_loop.py manifest exit 0"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/pdca-evidence-lint-rv3.log",
+     "exit": 0,
+     "value": "pdca_evidence.py lint exit 0"
+    }
+   ],
+   "rv": 5
+  },
+  {
+   "id": "E19",
+   "requirements": [
+    "R11",
+    "Acceptance 6"
+   ],
+   "predicate": "AC6: protected surface metadata matches baseline and an externally compiled subclass fixture runs unchanged against both cores",
+   "evidence": [
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/compat/e19/summary.json",
+     "exit": 0,
+     "value": "fresh r5 run: fixture executed unchanged against baseline and candidate cores, 7/7 scenarios each, 11 field exercises, exit 0"
+    },
+    {
+     "kind": "json",
+     "path": ".pdca/T297/rv2/compat/e19/hashes.json",
+     "value": "baseline core 5b6826b4..., candidate core from the measured tree, identical staged fixture hash"
+    },
+    {
+     "kind": "doc",
+     "path": ".pdca/T297/rv2/compat/e19/metadata-diff.txt",
+     "value": "11 protected fields PASS; Paging field; EagerLoadMode property; property substitute rejected"
+    },
+    {
+     "kind": "log",
+     "path": ".pdca/T297/rv2/boundary/r5/e19.log",
+     "exit": 0,
+     "value": "check-e19.py exit 0 at the measured tree"
+    },
+    {
+     "kind": "source",
+     "path": "tests/nextorm.publicextensibility.tests/T297ProtectedFieldCompatibilityTests.cs",
+     "value": "external fixture in a project without IVT"
+    }
+   ],
+   "status": "met",
+   "rv": 5
+  },
+  {
+   "id": "E20",
+   "status": "open",
+   "requirements": [
+    "R08"
+   ],
+   "rv": 5,
+   "scenario": "run_r4.py seal — inherited/new row audit, manifest, foreign hashes, tool CLI capture",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv3/seal/",
+     "value": "seal.json + file/row audit"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv3/seal/",
+    ".pdca/T297/rv3/manifest-rv4.json"
+   ],
+   "owner": "coder",
+   "predicate": "all inherited/new slots filled, 0 lost obligations, tool CLI captured",
+   "reason": "planned DO P00 row; execution not completed at sealing time"
+  },
+  {
+   "id": "E21",
+   "status": "open",
+   "requirements": [
+    "R01"
+   ],
+   "rv": 5,
+   "scenario": "run_r4.py diagnostic --blocks 8 --order ABBA",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv3/diagnostic/",
+     "value": "raw BDN, binaries, host/DB/env logs, paired table"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv3/diagnostic/"
+   ],
+   "owner": "perf",
+   "predicate": "directional causal reproduction: 8/8 CIs wholly >1.00, 32/32 valid blocks; <=1% precision half-width recorded UNMET as a retained non-blocking audit obligation; closure delegated to the unchanged two-round ABBA",
+   "reason": "planned DO P01 row; no diagnostic run yet"
+  },
+  {
+   "id": "E22",
+   "status": "open",
+   "requirements": [
+    "R02"
+   ],
+   "rv": 5,
+   "scenario": "run_r4.py attribute",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/attribution/",
+     "value": "profiles, timer definitions, phase table, overhead/reconciliation"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/attribution/"
+   ],
+   "owner": "perf",
+   "predicate": "quantified full-path hot path reconciling with end-to-end delta; applicable only when E21 reproduces",
+   "reason": "planned DO P02 row; conditional on E21 reproduction"
+  },
+  {
+   "id": "E23",
+   "status": "open",
+   "requirements": [
+    "R02",
+    "R06"
+   ],
+   "rv": 5,
+   "scenario": "run_r4.py fix-audit",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/fix/",
+     "value": "diff, Roslyn locations, attribution->change, focused tests"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/fix/"
+   ],
+   "owner": "coder",
+   "predicate": "no shipped probes/cache/API violation; applicable only when a production change exists",
+   "reason": "planned DO P03 row; conditional on a proven cause"
+  },
+  {
+   "id": "E24",
+   "status": "open",
+   "requirements": [
+    "R04"
+   ],
+   "rv": 5,
+   "scenario": "run_r4.py allocation-audit",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/allocation/",
+     "value": "both-job Captured/Join4/all-arm allocation tables"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/allocation/"
+   ],
+   "owner": "perf",
+   "predicate": "zero residual growth, strict CTE gains across all arms/jobs",
+   "reason": "planned DO P04 row; no allocation audit yet"
+  },
+  {
+   "id": "E25",
+   "status": "open",
+   "requirements": [
+    "R03",
+    "R04",
+    "R05"
+   ],
+   "rv": 5,
+   "scenario": "run_r4.py acceptance --rounds 1,2 --order ABBA --baseline 0d4d5df2 --candidate HEAD",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/acceptance/",
+     "value": "round-1/2 slot raw reports, uncertainty and allocation tables, complete matrix"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/acceptance/"
+   ],
+   "owner": "perf",
+   "predicate": "all active gates pass in two valid full same-round comparisons",
+   "reason": "planned DO P06 row; no acceptance run yet"
+  },
+  {
+   "id": "E26",
+   "status": "open",
+   "requirements": [
+    "R06",
+    "R07"
+   ],
+   "rv": 5,
+   "scenario": "run_r4.py boundary",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/boundary/",
+     "value": "exact build/tests/API commands, exit logs, test results, E19 baseline-consumer evidence"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/boundary/"
+   ],
+   "owner": "tests",
+   "predicate": "0W/0E, all suites green, E19 green, no provider skips",
+   "reason": "planned DO P05 row; boundary not run yet"
+  },
+  {
+   "id": "E27",
+   "status": "open",
+   "requirements": [
+    "R07"
+   ],
+   "rv": 5,
+   "scenario": "run_r4.py coverage",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/coverage/",
+     "value": "inherited exact collect/report invocations, XML/Summary, thresholds/denominators"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/coverage/"
+   ],
+   "owner": "tests",
+   "predicate": "unchanged 85/75 whole-solution and 65/75 integration gates met with published numerators/denominators",
+   "reason": "planned DO P05 row; no coverage run yet"
+  },
+  {
+   "id": "E28",
+   "status": "open",
+   "requirements": [
+    "R08"
+   ],
+   "rv": 5,
+   "scenario": "run_r4.py hygiene",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/seal/foreign-dirt.txt",
+     "value": "before/after hashes/status, explicit-path commit list, instrumentation audit"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/hygiene/"
+   ],
+   "owner": "coder",
+   "predicate": "foreign unchanged/unstaged; instrumentation absent from shipped diff",
+   "reason": "planned DO P07 row; final hygiene audit pending"
+  },
+  {
+   "id": "E29",
+   "status": "open",
+   "requirements": [
+    "R01",
+    "R02",
+    "R03",
+    "R04",
+    "R05",
+    "R06",
+    "R07",
+    "R08"
+   ],
+   "rv": 5,
+   "scenario": "run_r4.py handoff",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/handoff/",
+     "value": "requirement->row->artifact/hash index, final tables, residuals and ACT proposal"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/handoff/"
+   ],
+   "owner": "CHECK",
+   "predicate": "no unsupported pass; every requirement mapped to real evidence",
+   "reason": "planned CHECK handoff row; not produced yet"
+  },
+  {
+   "id": "E30",
+   "status": "open",
+   "requirements": [
+    "B",
+    "F",
+    "S(representation)"
+   ],
+   "rv": 5,
+   "scenario": "T297-R5-REP flat representation/ownership review + representation screening",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/reviews/representation.md",
+     "value": "flat-root ownership review and representation screening artifacts"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/reviews/representation.md",
+    ".pdca/T297/rv5/screening/representation/"
+   ],
+   "owner": "coder",
+   "predicate": "flat COW root removes every block-backed slot and the block classes/Empty objects/block Shared flags, keeping root-only Shared; ownership review and representation screening published; CHECK validates",
+   "reason": "planned r=5 DO P03a row; not executed at contract sealing"
+  },
+  {
+   "id": "E31",
+   "status": "open",
+   "requirements": [
+    "B",
+    "F",
+    "S(accessors)"
+   ],
+   "rv": 5,
+   "scenario": "T297-R5-ACCESS simplified accessor semantic equivalence + screening",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/reviews/accessors.md",
+     "value": "accessor equivalence analysis and accessor screening artifacts"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/reviews/accessors.md",
+    ".pdca/T297/rv5/screening/accessors/"
+   ],
+   "owner": "coder",
+   "predicate": "leaf accessors read flat root slots with unchanged defaults, nullable distinctions and reset semantics; accessor screening published; CHECK validates",
+   "reason": "planned r=5 DO P03b row; not executed at contract sealing"
+  },
+  {
+   "id": "E32",
+   "status": "open",
+   "requirements": [
+    "B",
+    "F",
+    "U",
+    "X",
+    "I",
+    "K"
+   ],
+   "rv": 5,
+   "scenario": "T297-R5-TEST matrix V01-V09 + ABI/provider regression",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/logs/focused-tests.log",
+     "value": "matrix V01-V09 results, ABI compatibility, provider regression logs"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/logs/",
+    ".pdca/T297/rv5/e19/"
+   ],
+   "owner": "coder",
+   "predicate": "V01-V09 closed by focused + full unit/dialect suites and live integration; 11 protected fields and provider regressions green",
+   "reason": "planned r=5 DO P03d row; not executed at contract sealing"
+  },
+  {
+   "id": "E33",
+   "status": "open",
+   "requirements": [
+    "R"
+   ],
+   "rv": 5,
+   "scenario": "T297-R5-RUNNER acceptance runner replaces exit-3 stub",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/runner/runner-test.log",
+     "value": "runner implementation, exercised invocation and exit codes"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/runner/"
+   ],
+   "owner": "coder",
+   "predicate": "acceptance mode is implemented (no exit-3 stub) and exercised before the two-round protocol",
+   "reason": "planned r=5 DO P06 row; not executed at contract sealing"
+  },
+  {
+   "id": "E34",
+   "status": "open",
+   "requirements": [
+    "A"
+   ],
+   "rv": 5,
+   "scenario": "T297-R5-CLOSURE unchanged performance/allocation closure, two valid rounds",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/acceptance-index/report.md",
+     "value": "two valid same-round ABBA closure rounds, time/allocation tables and uncertainty"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/acceptance-index/"
+   ],
+   "owner": "perf",
+   "predicate": "every cached arm <=1.00x job-matched baseline, Cte/RecursiveCte allocations strictly better, zero allocation regression on any arm, two valid same-round ABBA rounds",
+   "reason": "planned r=5 DO P06 closure row; not executed at contract sealing"
+  },
+  {
+   "id": "E35",
+   "status": "open",
+   "requirements": [
+    "C"
+   ],
+   "rv": 5,
+   "scenario": "T297-R5-COVERAGE unchanged 85/75 whole-solution and 65/75 integration",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/coverage/Summary.txt",
+     "value": "coverage XML/Summary, numerators, denominators and thresholds"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/coverage/"
+   ],
+   "owner": "test stream",
+   "predicate": "unchanged 85/75 whole-solution and 65/75 integration gates met with published numerators/denominators",
+   "reason": "planned r=5 DO P03d/P07 row; not executed at contract sealing"
+  },
+  {
+   "id": "E36",
+   "status": "open",
+   "requirements": [
+    "T"
+   ],
+   "rv": 5,
+   "scenario": "T297-R5-SCOPE dispatch boundary validation",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/logs/test-scope.log",
+     "value": "validate_inner_loop.py brief rc and scope validation output"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/test-scope.json",
+    ".pdca/T297/rv5/logs/test-scope.log"
+   ],
+   "owner": "coder",
+   "predicate": "unconditional: the rv5 inner-loop scope is validated (rc=0) before any edit and no scope is weakened",
+   "reason": "planned dispatch boundary row; unconditional by construction"
+  },
+  {
+   "id": "E37",
+   "status": "open",
+   "requirements": [
+    "M"
+   ],
+   "rv": 5,
+   "scenario": "T297-R5-SEAL rv4 import, rv5 manifest, honest ACT classification (E21 precision visibly unmet)",
+   "evidence": [
+    {
+     "kind": "planned",
+     "path": ".pdca/T297/rv5/evidence-manifest.json",
+     "value": "rv5 manifest generated at the DO->CHECK boundary; E21 precision recorded UNMET"
+    }
+   ],
+   "artifacts": [
+    ".pdca/T297/rv5/evidence-manifest.json",
+    ".pdca/T297/rv5/rv4-contract.snapshot.json"
+   ],
+   "owner": "coder",
+   "predicate": "rv4 rows imported with 0 lost obligations, rv5 manifest valid, ACT classification honestly states the E21 precision half-width is UNMET",
+   "reason": "planned r=5 P07 row; not executed at contract sealing"
+  }
+ ]
+}
