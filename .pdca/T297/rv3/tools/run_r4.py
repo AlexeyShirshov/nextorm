@@ -49,6 +49,13 @@ CORE_DLL = {
 }
 SIDE_TREE = {"A": PROBE_ROOT / "A", "B": PROBE_ROOT / "B"}
 SIDE_COMMIT = {"A": "0d4d5df2", "B": "9d633521"}
+# The probe copies carry no `.git`, so provenance for a non-default tree cannot be read with
+# `git rev-parse`; these are the pristine commits the copies were made from.
+KNOWN_TREE_COMMITS = {
+    str(PROBE_ROOT / "A"): "0d4d5df2",
+    str(PROBE_ROOT / "B"): "9d633521",
+    str(PROBE_ROOT / "C"): "777e9233",
+}
 
 
 def resolve_probe_dll(value):
@@ -84,9 +91,10 @@ def configure_sides(args):
         for side, tree in args.side_tree.items()
     }
     args.side_commit = {
-        "A": tree_commit(args.side_tree["A"], SIDE_COMMIT["A"]),
-        "B": tree_commit(args.side_tree["B"], SIDE_COMMIT["B"] if args.side_tree["B"] == SIDE_TREE["B"]
-                         else repo_head()),
+        "A": tree_commit(args.side_tree["A"], KNOWN_TREE_COMMITS.get(str(args.side_tree["A"]), SIDE_COMMIT["A"])),
+        "B": tree_commit(args.side_tree["B"], KNOWN_TREE_COMMITS.get(
+            str(args.side_tree["B"]),
+            SIDE_COMMIT["B"] if args.side_tree["B"] == SIDE_TREE["B"] else repo_head())),
     }
 
 
@@ -105,7 +113,33 @@ PHASES = [
     "prepare_columns", "prepare_where", "prepare_prewhere", "prepare_arrayjoin",
     "prepare_grouping", "prepare_sorting", "prepare_union", "prepare_ctes",
     "prepare_hints", "unkeyed_scans", "from_hash",
+    # P04 (E38) bounded recipe decomposition: the D201-3 raw-recipe span inside
+    # `GetPreparedQueryCommand` (QueryPlanner.cs:614-662). Inclusive spans first, then their
+    # nested leaves; the exclusive terms are derived below.
+    "rcp_capture", "rcp_fingerprint", "rcp_filter_scan", "rcp_lookup", "rcp_matches",
+    "rcp_transfer", "rcp_copyto", "rcp_copyto_members", "rcp_transfer_edges", "rcp_staged",
+    "rcp_qplan_ctor", "rcp_qplan_hash", "rcp_equals1", "rcp_equals2", "rcp_discard",
 ]
+# P04 recipe phases (inclusive as measured): the five top-level spans of the recipe probe plus
+# their nested leaves. Nested terms are subtracted at analysis time, never double-counted.
+RECIPE_PHASES = [
+    "rcp_capture", "rcp_fingerprint", "rcp_filter_scan", "rcp_lookup", "rcp_matches",
+    "rcp_transfer", "rcp_copyto", "rcp_copyto_members", "rcp_transfer_edges", "rcp_staged",
+    "rcp_qplan_ctor", "rcp_qplan_hash", "rcp_equals1", "rcp_equals2", "rcp_discard",
+]
+# The mutually exclusive top-level spans of `planner_recipe` (see instrumentation.md):
+# capture + filter_scan + lookup + transfer + staged = planner_recipe minus the un-timed
+# eligibility gate and CaptureRawGraph of the graph root.
+RECIPE_TOP = ["rcp_capture", "rcp_filter_scan", "rcp_lookup", "rcp_transfer", "rcp_staged"]
+# Non-overlapping partition of `planner_recipe`: each nested leaf folded into its exclusive
+# parent, so these terms sum to `planner_recipe` by construction and shares are additive.
+RECIPE_PARTITION = [
+    "capture_exclusive", "rcp_fingerprint", "rcp_filter_scan", "lookup_exclusive", "rcp_matches",
+    "transfer_exclusive", "copyto_exclusive", "rcp_copyto_members",
+    "staged_exclusive", "qplan_ctor_exclusive", "rcp_qplan_hash", "rcp_equals1", "rcp_equals2",
+    "rcp_discard",
+]
+RECIPE_DOMINANCE_THRESHOLD = 0.8
 PREPARE_SUBSTEPS = [
     "prep_preamble", "nav_expand", "get_from", "prepare_from", "prepare_join",
     "prepare_columns", "prepare_where", "prepare_prewhere", "prepare_arrayjoin",
@@ -119,7 +153,10 @@ PLANNER_PREAMBLE_PARTS = ["planner_gate", "planner_recipe"]
 NESTED_IN_PREPARE = ["plan", "bind", "enum_create", "cow_shape", "prepare_pipeline", "planner_gate", "planner_recipe"]
 LEGACY_NESTED_IN_PREPARE = ["plan", "bind", "enum_create", "cow_shape"]
 E2E_PHASES = ["construct", "prepare_exclusive", "get_db_command", "execute", "read_rows", "map_rows"]
-DERIVED_PHASES = ["prepare_exclusive", "legacy_prepare_exclusive", "planner_preamble", "pipeline_remainder"]
+DERIVED_PHASES = ["prepare_exclusive", "legacy_prepare_exclusive", "planner_preamble", "pipeline_remainder",
+                  # P04 (E38) recipe-exclusive terms: a nested leaf folded into its parent span.
+                  "capture_exclusive", "lookup_exclusive", "copyto_exclusive", "qplan_ctor_exclusive",
+                  "transfer_exclusive", "staged_exclusive", "planner_recipe_exclusive", "recipe_residual"]
 CAUSE_CANDIDATES = [
     "construct", "prepare_exclusive", "plan", "bind", "enum_create", "cow_shape",
     "get_db_command", "execute", "read_rows", "map_rows",
@@ -180,6 +217,22 @@ BOUNDARY = {
     "prepare_hints": "Query/QueryCommand.QueryPreparer.cs:147-149 Prepare: PrepareHints",
     "unkeyed_scans": "Query/QueryCommand.QueryPreparer.cs:155-163 Prepare: ScanUnkeyedTupleInValues + ScanUnkeyedScalarInValues",
     "from_hash": "Query/QueryCommand.QueryPreparer.cs:182-184 Prepare: FromPlanHash = GetFromExpressionPlanEqualityComparer().GetHashCode(from)",
+    # P04 (E38) recipe boundaries (identical in A and C; C is +4 lines in QueryPreparer.cs).
+    "rcp_capture": "Query/QueryCommand.QueryPreparer.cs:3948 CaptureRawShape(QueryCommand, int depth) inclusive (every recursion level; contains rcp_fingerprint)",
+    "rcp_fingerprint": "Query/QueryCommand.QueryPreparer.cs:4088 inside CaptureRawShape: the Fingerprint(shape, cmd) call (nested in rcp_capture)",
+    "rcp_filter_scan": "DataContext/QueryPlanner.cs:637 GetPreparedQueryCommand: HasApplicableFiltersInRawGraph call site",
+    "rcp_lookup": "DataContext/Cache/QueryPlanStore.cs:120 TryGetRaw inclusive (contains rcp_matches)",
+    "rcp_matches": "Query/QueryCommand.QueryPreparer.cs:3751 RawShape.Matches inclusive (every recursion level; nested in rcp_lookup)",
+    "rcp_transfer": "Query/QueryCommand.QueryPreparer.cs:4430 ApplyPreparationFrom inclusive (contains rcp_copyto and rcp_transfer_edges)",
+    "rcp_copyto": "Query/QueryCommand.QueryPreparer.cs:4438 ApplyPreparationFrom: the clone.CopyTo(this, copyAll: true) call (nested in rcp_transfer)",
+    "rcp_copyto_members": "Query/QueryCommand.Clone.cs:136 QueryCommand.CopyTo: the if (copyAll) member block (nested in rcp_copyto)",
+    "rcp_transfer_edges": "Query/QueryCommand.QueryPreparer.cs:4444 ApplyPreparationFrom: the four writes after CopyTo (nested in rcp_transfer)",
+    "rcp_staged": "DataContext/QueryPlanner.cs:655 recipe probe: staged plan-key block GetOrCreatePlanKey -> outcome (contains the qplan/equals/discard leaves)",
+    "rcp_qplan_ctor": "DataContext/Cache/QueryPlan.cs:43 QueryPlan(QueryCommand, string?) assignments before ComputeHash (nested in rcp_staged)",
+    "rcp_qplan_hash": "DataContext/Cache/QueryPlan.cs:50 QueryPlan ctor: the ComputeHash call (nested in rcp_staged)",
+    "rcp_equals1": "DataContext/QueryPlanner.cs:657 staged block: recipePlan.Equals(stagedKey) (nested in rcp_staged)",
+    "rcp_equals2": "DataContext/QueryPlanner.cs:663 staged block: stagedKey.Equals(recipePlan), only when the first is false (nested in rcp_staged)",
+    "rcp_discard": "Query/QueryCommand.QueryPreparer.cs:4467 DiscardStagedPreparation (nested in rcp_staged)",
 }
 ROSLYN = {
     "construct": "NextORM.Core.QueryCommand<TResult>.ToList / ToListAsyncCore (src/nextorm.core/Query/QueryCommand.TResult.cs:14)",
@@ -214,6 +267,21 @@ ROSLYN = {
     "prepare_hints": "NextORM.Core.QueryCommand.QueryPreparer.PrepareHints (:518)",
     "unkeyed_scans": "NextORM.Core.QueryCommand.QueryPreparer.ScanUnkeyedTupleInValues (:2887) / ScanUnkeyedScalarInValues (:3132)",
     "from_hash": "NextORM.Core.QueryCommand.GetFromExpressionPlanEqualityComparer (QueryCommand.Plan.cs:81).GetHashCode(from)",
+    "rcp_capture": "NextORM.Core.QueryCommand.CaptureRawShape(QueryCommand, int) (QueryCommand.QueryPreparer.cs:3938)",
+    "rcp_fingerprint": "NextORM.Core.QueryCommand.Fingerprint (inside CaptureRawShape)",
+    "rcp_filter_scan": "NextORM.Core.QueryCommand.HasApplicableFiltersInRawGraph",
+    "rcp_lookup": "NextORM.Core.QueryPlanStore.TryGetRaw (DataContext/Cache/QueryPlanStore.cs:112)",
+    "rcp_matches": "NextORM.Core.QueryCommand.RawShape.Matches",
+    "rcp_transfer": "NextORM.Core.QueryCommand.ApplyPreparationFrom (:4412)",
+    "rcp_copyto": "NextORM.Core.QueryCommand.CopyTo (QueryCommand.Clone.cs:110)",
+    "rcp_copyto_members": "NextORM.Core.QueryCommand.CopyTo, if (copyAll) member block (QueryCommand.Clone.cs:136)",
+    "rcp_transfer_edges": "NextORM.Core.QueryCommand.ApplyPreparationFrom, writes after CopyTo",
+    "rcp_staged": "NextORM.Core.QueryPlanner.GetPreparedQueryCommand staged plan-key block (DataContext/QueryPlanner.cs:655-665)",
+    "rcp_qplan_ctor": "NextORM.Core.QueryPlan.QueryPlan(QueryCommand, string?) (DataContext/Cache/QueryPlan.cs:43)",
+    "rcp_qplan_hash": "NextORM.Core.QueryPlan.ComputeHash (DataContext/Cache/QueryPlan.cs:50)",
+    "rcp_equals1": "NextORM.Core.QueryPlan.Equals (DataContext/QueryPlanner.cs:657)",
+    "rcp_equals2": "NextORM.Core.QueryPlan.Equals (DataContext/QueryPlanner.cs:663)",
+    "rcp_discard": "NextORM.Core.QueryCommand.DiscardStagedPreparation (QueryCommand.QueryPreparer.cs:4467)",
 }
 
 INSTRUMENTED = {
@@ -223,6 +291,9 @@ INSTRUMENTED = {
         "src/nextorm.core/DataContext/QueryExecutor.cs",
         "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
         "src/nextorm.core/Query/QueryCommand.TResult.cs",
+        "src/nextorm.core/Query/QueryCommand.Clone.cs",
+        "src/nextorm.core/DataContext/Cache/QueryPlan.cs",
+        "src/nextorm.core/DataContext/Cache/QueryPlanStore.cs",
         "src/nextorm.core/Probe/T297PhaseProbe.cs",
     ],
     "B": [
@@ -233,6 +304,9 @@ INSTRUMENTED = {
         "src/nextorm.core/Query/QueryCommand.TResult.cs",
         "src/nextorm.core/Query/QueryCommand.Description.cs",
         "src/nextorm.core/Query/QueryCommand.cs",
+        "src/nextorm.core/Query/QueryCommand.Clone.cs",
+        "src/nextorm.core/DataContext/Cache/QueryPlan.cs",
+        "src/nextorm.core/DataContext/Cache/QueryPlanStore.cs",
         "src/nextorm.core/Probe/T297PhaseProbe.cs",
     ],
 }
@@ -482,6 +556,51 @@ def derive_pipeline_remainder(metric):
     return metric["ns"]["prepare_pipeline"] - sum(metric["ns"][phase] for phase in PREPARE_SUBSTEPS)
 
 
+# --- P04 (E38) recipe derivations -------------------------------------------------------------
+# Every nested leaf is subtracted from its inclusive parent exactly once, so the exclusive terms
+# and the folds are a partition of `planner_recipe` (no term is counted twice).
+
+def derive_capture_exclusive(metric):
+    return metric["ns"]["rcp_capture"] - metric["ns"]["rcp_fingerprint"]
+
+
+def derive_lookup_exclusive(metric):
+    return metric["ns"]["rcp_lookup"] - metric["ns"]["rcp_matches"]
+
+
+def derive_copyto_exclusive(metric):
+    return metric["ns"]["rcp_copyto"] - metric["ns"]["rcp_copyto_members"]
+
+
+def derive_qplan_ctor_exclusive(metric):
+    return metric["ns"]["rcp_qplan_ctor"] - metric["ns"]["rcp_qplan_hash"]
+
+
+def derive_transfer_exclusive(metric):
+    return metric["ns"]["rcp_transfer"] - metric["ns"]["rcp_copyto"]
+
+
+def derive_staged_exclusive(metric):
+    nested = ("rcp_qplan_ctor", "rcp_equals1", "rcp_equals2", "rcp_discard")
+    return metric["ns"]["rcp_staged"] - sum(metric["ns"][phase] for phase in nested)
+
+
+def derive_planner_recipe_exclusive(metric):
+    """Recipe span minus the five measured top-level spans (gate/CaptureRawGraph remainder)."""
+    return metric["ns"]["planner_recipe"] - sum(metric["ns"][phase] for phase in RECIPE_TOP)
+
+
+def derive_recipe_residual(metric):
+    """`planner_recipe − (planner_recipe_exclusive + all nested terms added back)`.
+
+    By construction this is 0: the exclusive term is defined by subtracting exactly the same
+    top-level spans that are added back here. Reported separately as an algebraic check, never
+    used to widen the attribution.
+    """
+    return metric["ns"]["planner_recipe"] - (derive_planner_recipe_exclusive(metric)
+                                             + sum(metric["ns"][phase] for phase in RECIPE_TOP))
+
+
 DERIVED_ROWS = {
     "prepare_exclusive": (
         derive_prepare_exclusive,
@@ -500,6 +619,40 @@ DERIVED_ROWS = {
         derive_pipeline_remainder,
         "prepare_pipeline minus the instrumented Prepare sub-step sum (unlisted steps and tail hashes)",
         "prepare_pipeline"),
+    # P04 (E38) recipe-exclusive terms and the algebraic residual.
+    "capture_exclusive": (
+        derive_capture_exclusive,
+        "rcp_capture − rcp_fingerprint (nested Fingerprint call inside CaptureRawShape)",
+        "rcp_capture"),
+    "lookup_exclusive": (
+        derive_lookup_exclusive,
+        "rcp_lookup − rcp_matches (nested RawShape.Matches inside QueryPlanStore.TryGetRaw)",
+        "rcp_lookup"),
+    "copyto_exclusive": (
+        derive_copyto_exclusive,
+        "rcp_copyto − rcp_copyto_members (nested copyAll member block inside CopyTo)",
+        "rcp_copyto"),
+    "qplan_ctor_exclusive": (
+        derive_qplan_ctor_exclusive,
+        "rcp_qplan_ctor − rcp_qplan_hash (nested ComputeHash inside the QueryPlan ctor)",
+        "rcp_qplan_ctor"),
+    "transfer_exclusive": (
+        derive_transfer_exclusive,
+        "rcp_transfer − rcp_copyto (ApplyPreparationFrom without the CopyTo call; includes the edges)",
+        "rcp_transfer"),
+    "staged_exclusive": (
+        derive_staged_exclusive,
+        "rcp_staged − (rcp_qplan_ctor + rcp_equals1 + rcp_equals2 + rcp_discard)",
+        "rcp_staged"),
+    "planner_recipe_exclusive": (
+        derive_planner_recipe_exclusive,
+        "planner_recipe − (rcp_capture + rcp_filter_scan + rcp_lookup + rcp_transfer + rcp_staged); "
+        "the un-timed eligibility gate plus CaptureRawGraph of the root",
+        "planner_recipe"),
+    "recipe_residual": (
+        derive_recipe_residual,
+        "planner_recipe − (planner_recipe_exclusive + all nested top-level terms added back); 0 by construction, reported separately",
+        "planner_recipe"),
 }
 
 
@@ -641,7 +794,7 @@ def analyze(runs, args):
         a_blocks = [g[0] for g in groups] + [g[3] for g in groups]
         b_blocks = [g[1] for g in groups] + [g[2] for g in groups]
         for key, row in rows.items():
-            if key in ("end_to_end", "phase_residual", "residual_unattributed"):
+            if key in ("end_to_end", "phase_residual", "residual_unattributed", "recipe_decomposition"):
                 continue
             if key in DERIVED_ROWS:
                 getter, resolved, calls_src = DERIVED_ROWS[key]
@@ -723,9 +876,107 @@ def analyze(runs, args):
         rows["overhead"]["ns_per_op_delta"] = rows["overhead"]["ns_per_op_b"] - rows["overhead"]["ns_per_op_a"]
 
         for key, row in rows.items():
-            if key in ("alloc", "overhead"):
+            if key in ("alloc", "overhead", "recipe_decomposition"):
                 continue
             row["share"] = (row.get("delta_ns") / e2e["delta_ns"]) if row.get("delta_ns") is not None and e2e["delta_ns"] else None
+
+        # P04 (E38): bounded decomposition of the `planner_recipe` span. `RECIPE_PARTITION` is a
+        # mutually exclusive partition: the terms sum to `planner_recipe` by construction, so their
+        # shares of the recipe delta are additive. `recipe_residual` is an algebraic check only.
+        recipe = rows["planner_recipe"]
+        recipe_delta = recipe.get("delta_ns")
+        partition = []
+        for name in RECIPE_PARTITION:
+            row = rows[name]
+            partition.append({
+                "name": name,
+                "a_ns": row.get("a_ns"),
+                "b_ns": row.get("b_ns"),
+                "delta_ns": row.get("delta_ns"),
+                "ratio": row.get("ratio"),
+                "ci_low": row.get("ci_low"),
+                "ci_high": row.get("ci_high"),
+                "calls_a": row.get("calls_a"),
+                "calls_b": row.get("calls_b"),
+                "resolved": row.get("resolved"),
+                "share_of_recipe_delta": (row["delta_ns"] / recipe_delta)
+                if row.get("delta_ns") is not None and recipe_delta else None,
+            })
+        ranking = sorted(partition, key=lambda item: item["delta_ns"] if item["delta_ns"] is not None else float("-inf"),
+                         reverse=True)
+        positive_ranking = [item for item in ranking if (item["delta_ns"] or 0) > 0]
+        top = positive_ranking[0] if positive_ranking else None
+        dominance = {
+            "threshold": RECIPE_DOMINANCE_THRESHOLD,
+            "planner_recipe_delta_ns": recipe_delta,
+            "positive_recipe_delta": recipe_delta is not None and recipe_delta > 0,
+            "top": top["name"] if top else None,
+            "top_delta_ns": top["delta_ns"] if top else None,
+            "top_share": top["share_of_recipe_delta"] if top else None,
+            "share_ge_threshold": bool(top is not None and top["share_of_recipe_delta"] is not None
+                                       and top["share_of_recipe_delta"] >= RECIPE_DOMINANCE_THRESHOLD),
+            "top_ci_excludes_zero": bool(top is not None and top["ci_low"] is not None and top["ci_low"] > 1),
+        }
+        dominance["pass"] = dominance["share_ge_threshold"] and dominance["top_ci_excludes_zero"]
+        partition_sum = sum(item["delta_ns"] or 0 for item in partition)
+        remainder_row = rows["planner_recipe_exclusive"]
+        remainder = {
+            "name": "planner_recipe_exclusive",
+            "a_ns": remainder_row.get("a_ns"), "b_ns": remainder_row.get("b_ns"),
+            "delta_ns": remainder_row.get("delta_ns"), "ratio": remainder_row.get("ratio"),
+            "ci_low": remainder_row.get("ci_low"), "ci_high": remainder_row.get("ci_high"),
+            "share_of_recipe_delta": (remainder_row["delta_ns"] / recipe_delta)
+            if remainder_row.get("delta_ns") is not None and recipe_delta else None,
+            "note": "un-timed remainder: eligibility gate + CaptureRawGraph of the graph root",
+        }
+        residual_row = rows["recipe_residual"]
+        rows["recipe_decomposition"] = {
+            "planner_recipe": {
+                "a_ns": recipe.get("a_ns"), "b_ns": recipe.get("b_ns"), "delta_ns": recipe_delta,
+                "ratio": recipe.get("ratio"), "ci_low": recipe.get("ci_low"),
+                "ci_high": recipe.get("ci_high"),
+                "calls_a": recipe.get("calls_a"), "calls_b": recipe.get("calls_b"),
+            },
+            "definitions": {
+                "capture_exclusive": "rcp_capture − rcp_fingerprint",
+                "lookup_exclusive": "rcp_lookup − rcp_matches",
+                "copyto_exclusive": "rcp_copyto − rcp_copyto_members",
+                "qplan_ctor_exclusive": "rcp_qplan_ctor − rcp_qplan_hash",
+                "transfer_exclusive": "rcp_transfer − rcp_copyto",
+                "staged_exclusive": "rcp_staged − (rcp_qplan_ctor + rcp_equals1 + rcp_equals2 + rcp_discard)",
+                "planner_recipe_exclusive": "planner_recipe − (rcp_capture + rcp_filter_scan + rcp_lookup + rcp_transfer + rcp_staged)",
+                "recipe_residual": "planner_recipe − (planner_recipe_exclusive + all nested terms added back)",
+            },
+            "inclusive": {name: {
+                "a_ns": rows[name].get("a_ns"), "b_ns": rows[name].get("b_ns"),
+                "delta_ns": rows[name].get("delta_ns"), "ratio": rows[name].get("ratio"),
+                "ci_low": rows[name].get("ci_low"), "ci_high": rows[name].get("ci_high"),
+                "calls_a": rows[name].get("calls_a"), "calls_b": rows[name].get("calls_b"),
+                "nested_in": BOUNDARY.get(name, "—"),
+            } for name in RECIPE_PHASES},
+            "exclusive": {name: {
+                "a_ns": rows[name].get("a_ns"), "b_ns": rows[name].get("b_ns"),
+                "delta_ns": rows[name].get("delta_ns"), "ratio": rows[name].get("ratio"),
+                "ci_low": rows[name].get("ci_low"), "ci_high": rows[name].get("ci_high"),
+                "calls_a": rows[name].get("calls_a"), "calls_b": rows[name].get("calls_b"),
+                "definition": DERIVED_ROWS[name][1],
+            } for name in ("capture_exclusive", "lookup_exclusive", "copyto_exclusive",
+                           "qplan_ctor_exclusive", "transfer_exclusive", "staged_exclusive",
+                           "planner_recipe_exclusive")},
+            "partition": partition,
+            "ranking": ranking,
+            "top_contributors": positive_ranking[:3],
+            "remainder": remainder,
+            "partition_sum_delta_ns": partition_sum,
+            "partition_minus_recipe_ns": (partition_sum - recipe_delta) if recipe_delta is not None else None,
+            "recipe_residual": {
+                "a_ns": residual_row.get("a_ns"), "b_ns": residual_row.get("b_ns"),
+                "delta_ns": residual_row.get("delta_ns"),
+                "ratio": residual_row.get("ratio"),
+                "ci_low": residual_row.get("ci_low"), "ci_high": residual_row.get("ci_high"),
+            },
+            "dominance": dominance,
+        }
 
         # Reconciliation: every measured exclusive phase (the six-term dispatch sum plus the
         # nested plan/bind/enum_create/cow_shape added back) vs the end-to-end delta.
@@ -828,6 +1079,7 @@ def write_artifacts(evid, meta, runs, analysis, args):
             "residual_unattributed": {k: v for k, v in rows["residual_unattributed"].items() if k != "pairs"},
             "alloc": rows["alloc"],
             "overhead": rows["overhead"],
+            "recipe_decomposition": rows["recipe_decomposition"],
             "verdict": verdicts[arm],
         }
     with open(evid / "phase-table.json", "w", encoding="utf-8") as f:
@@ -1055,6 +1307,85 @@ def write_artifacts(evid, meta, runs, analysis, args):
                      "the numbers above are the measured state and no cause is named.")
     with open(evid / "verdict.md", "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
+
+    # recipe-decomposition.md — P04 (E38) bounded decomposition of the planner_recipe span.
+    lines = ["# E38 recipe decomposition — T297 r=6 — P04 bounded sub-phase pass", "",
+             "Generated %s by `.pdca/T297/rv3/tools/run_r4.py attribute`." % utc(), "",
+             "`planner_recipe` is the parent span; the partition terms are mutually exclusive and",
+             "cover it except for the un-timed remainder (`planner_recipe_exclusive`: eligibility gate plus",
+             "`CaptureRawGraph` of the graph root). Shares are of the paired `planner_recipe` delta, so they",
+             "are additive up to that remainder and the per-term median arithmetic shown as",
+             "`partition_minus_recipe_ns`.", "",
+             "Definitions:", "",
+             "- `capture_exclusive = rcp_capture − rcp_fingerprint`; `lookup_exclusive = rcp_lookup − rcp_matches`;",
+             "- `copyto_exclusive = rcp_copyto − rcp_copyto_members`; `qplan_ctor_exclusive = rcp_qplan_ctor − rcp_qplan_hash`;",
+             "- `transfer_exclusive = rcp_transfer − rcp_copyto`;",
+             "- `staged_exclusive = rcp_staged − (rcp_qplan_ctor + rcp_equals1 + rcp_equals2 + rcp_discard)`;",
+             "- `planner_recipe_exclusive = planner_recipe − (rcp_capture + rcp_filter_scan + rcp_lookup + rcp_transfer + rcp_staged)`;",
+             "- `recipe_residual = planner_recipe − (planner_recipe_exclusive + all nested terms added back)` — 0 by construction, reported separately.", ""]
+    for arm in ARMS:
+        rows = tables[arm]
+        recipe = rows["recipe_decomposition"]
+        parent = recipe["planner_recipe"]
+        dom = recipe["dominance"]
+        lines.append("## %s" % arm)
+        lines.append("")
+        lines.append("`planner_recipe` A %s / B %s ns/op, paired ratio %.4f [%s, %s], delta %+.1f ns/op, calls/op %s/%s."
+                     % (fmt(parent["a_ns"]), fmt(parent["b_ns"]), parent["ratio"] or 0,
+                        fmt(parent["ci_low"], 4), fmt(parent["ci_high"], 4), parent["delta_ns"] or 0,
+                        fmt(parent["calls_a"], 2), fmt(parent["calls_b"], 2)))
+        lines.append("")
+        lines.append("| term | A ns/op | B ns/op | delta ns/op | ratio | 95% CI | calls/op A/B | share of recipe delta |")
+        lines.append("|---|---|---|---|---|---|---|---|")
+        for item in recipe["ranking"]:
+            lines.append("| %s | %s | %s | %+.1f | %s | [%s, %s] | %s/%s | %s |" % (
+                item["name"], fmt(item["a_ns"]), fmt(item["b_ns"]), item["delta_ns"] or 0,
+                fmt(item["ratio"], 4), fmt(item["ci_low"], 4), fmt(item["ci_high"], 4),
+                fmt(item["calls_a"], 2), fmt(item["calls_b"], 2),
+                fmt_pct(item["share_of_recipe_delta"] * 100) if item["share_of_recipe_delta"] is not None else "—"))
+        lines.append("")
+        lines.append("Inclusive spans as measured (nested leaves are inside their parent):")
+        lines.append("")
+        lines.append("| inclusive span | A ns/op | B ns/op | delta ns/op | ratio | 95% CI | calls/op A/B |")
+        lines.append("|---|---|---|---|---|---|---|")
+        for name in RECIPE_PHASES:
+            item = recipe["inclusive"][name]
+            lines.append("| %s | %s | %s | %+.1f | %s | [%s, %s] | %s/%s |" % (
+                name, fmt(item["a_ns"]), fmt(item["b_ns"]), item["delta_ns"] or 0,
+                fmt(item["ratio"], 4), fmt(item["ci_low"], 4), fmt(item["ci_high"], 4),
+                fmt(item["calls_a"], 2), fmt(item["calls_b"], 2)))
+        lines.append("")
+        lines.append("Partition sum delta %+.1f ns/op vs parent delta %+.1f ns/op -> gap %+.1f ns/op "
+                     "(un-timed remainder `planner_recipe_exclusive` %+.1f ns/op, %s; the gap is that remainder "
+                     "up to per-round median arithmetic). `recipe_residual` delta %+.1f ns/op "
+                     "(algebraic check, 0 by construction)."
+                     % (recipe["partition_sum_delta_ns"], parent["delta_ns"] or 0,
+                        recipe["partition_minus_recipe_ns"] or 0,
+                        recipe["remainder"]["delta_ns"] or 0,
+                        fmt_pct(recipe["remainder"]["share_of_recipe_delta"] * 100)
+                        if recipe["remainder"]["share_of_recipe_delta"] is not None else "—",
+                        recipe["recipe_residual"]["delta_ns"] or 0))
+        lines.append("")
+        if dom["positive_recipe_delta"]:
+            lines.append("Dominance (80 %% test): top positive contributor **%s** %+.1f ns/op = %.1f %% of the "
+                         "+%.1f ns/op `planner_recipe` delta; share>=80 %%: %s; paired 95 %% CI excludes zero "
+                         "(ci_low %.4f > 1): %s; dominance=%s."
+                         % (dom["top"], dom["top_delta_ns"] or 0, (dom["top_share"] or 0) * 100,
+                            dom["planner_recipe_delta_ns"] or 0, dom["share_ge_threshold"],
+                            (rows[dom["top"]]["ci_low"] if dom["top"] else 0) or 0,
+                            dom["top_ci_excludes_zero"], "PASS" if dom["pass"] else "FAIL"))
+            lines.append("")
+            lines.append("Top 3 positive contributors: " + "; ".join(
+                "%s %+.1f ns (%s)" % (item["name"], item["delta_ns"] or 0,
+                                      fmt_pct(item["share_of_recipe_delta"] * 100)
+                                      if item["share_of_recipe_delta"] is not None else "—")
+                for item in recipe["top_contributors"]) + ".")
+        else:
+            lines.append("Dominance (80 %% test): `planner_recipe` delta is not positive (%+.1f ns/op), so no "
+                         "candidate can explain a positive recipe overhead; dominance=FAIL." % (parent["delta_ns"] or 0))
+        lines.append("")
+    with open(evid / "recipe-decomposition.md", "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
     return named
 
 
@@ -1111,7 +1442,10 @@ def write_protocol(evid, meta, runs, analysis, args):
               "  `prepare_columns`, `prepare_where`, `prepare_prewhere`, `prepare_arrayjoin`, `prepare_grouping`,",
               "  `prepare_sorting`, `prepare_union`, `prepare_ctes`, `prepare_hints`, `unkeyed_scans`, `from_hash`.",
               "- `prepare_exclusive` is re-derived by subtracting the whole pipeline and the planner preamble; the P02",
-              "  derivation is reported as `legacy_prepare_exclusive`.", ""]
+              "  derivation is reported as `legacy_prepare_exclusive`.", "",
+              "- P04 (E38): 15 new `rcp_*` phases decompose the `planner_recipe` span; exclusive terms are derived by",
+              "  subtraction exactly once (definitions in `recipe-decomposition.md`). The new phases are reported",
+              "  beside the E22 reconciliation; no protocol, threshold or verdict-rule change.", ""]
     lines += ["", "Analysis: paired B/A ratio per round; median of per-round ratios; percentile bootstrap 95 % CI",
               "(%d resamples, fixed seed %d); calls/op and allocation delta are side totals; the overhead estimate" % (args.resamples, args.seed),
               "is `pair cost × instrumented boundary calls per query`, reported separately from the phase table.", ""]
@@ -1331,6 +1665,11 @@ def check_evidence(evid):
             if read_calls != map_calls + queries:
                 problems.append("%s/%s: read_rows=%s expected map_rows+queries=%s" % (
                     tag, arm, read_calls, map_calls + queries))
+            # P04 (E38): every recipe phase must be present in the probe snapshot (presence only;
+            # call counts legitimately differ per arm, e.g. rcp_matches=0 on a plain recipe miss).
+            for phase in RECIPE_PHASES:
+                if phase not in calls or phase not in ticks:
+                    problems.append("%s/%s: recipe phase %s missing from probe output" % (tag, arm, phase))
 
     for side in ("A", "B"):
         if side not in json.loads(summary_path.read_text(encoding="utf-8")):
