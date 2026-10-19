@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NextORM.Core;
 using NextORM.SqlServer;
+using System.Linq.Expressions;
 
 namespace NextORM.Core.Tests;
 
@@ -46,7 +47,9 @@ public class CteDescriptionCowTests
         var originalSql = PrepareSql(ctx, original, storeInCache: false);
 
         var clone = (QueryCommand<int>)original.Clone();
-        ReferenceEquals(original.Definition, clone.Definition).Should().BeTrue(
+        clone.Definition.Should().NotBeSameAs(original.Definition,
+            "the definition memo is node-owned even while the raw description is shared");
+        clone.Definition.Condition.Should().BeSameAs(original.Definition.Condition,
             "a clone shares the raw description until it writes to it");
         clone.IsDistinct = true;
         clone.ResetPreparation();
@@ -121,8 +124,10 @@ public class CteDescriptionCowTests
         var resultHash = original.ResultPlanHash;
 
         var clone = (QueryCommand<int>)original.Clone();
-        ReferenceEquals(original.Definition, clone.Definition).Should().BeTrue(
-            "the clone must share the original's description until it writes to it");
+        clone.Definition.Should().NotBeSameAs(original.Definition,
+            "the definition memo is node-owned even while the raw description is shared");
+        clone.Definition.Exp.Should().BeSameAs(original.Definition.Exp,
+            "the clone must share the original's raw description until it writes to it");
 
         clone.IsDistinct = true;
         clone.ResetPreparation();
@@ -187,7 +192,8 @@ public class CteDescriptionCowTests
         // clone, so its description is shared with the raw command whose bind state must stay untouched.
         var rawForeignAnchor = ctx.From<CowTypedCteRow>().Where(x => x.Id == 1).Select(x => x.Id);
         var foreignAnchor = (QueryCommand<int>)rawForeignAnchor.Clone();
-        ReferenceEquals(rawForeignAnchor.Definition, foreignAnchor.Definition).Should().BeTrue();
+        foreignAnchor.Definition.Condition.Should().BeSameAs(rawForeignAnchor.Definition.Condition,
+            "the anchor clone shares the raw description of the command it was cloned from");
 
         var foreignAct = () => foreignAnchor.AsRecursiveCte("cow_nums", outer =>
         {
@@ -220,6 +226,67 @@ public class CteDescriptionCowTests
             .WithMessage("*in its anchor*different recursive definition*");
     }
 
+    /// <summary>
+    /// Pins that the live copy constructor and the plan-cache clone preserve the <c>JoinInto</c> pair
+    /// projection type: the copy must keep the result type the parent command materialises.
+    /// </summary>
+    [Fact]
+    public void Descriptions_JoinIntoPairClone_PreservesProjectionType()
+    {
+        var pair = CreateJoinIntoPairCommand();
+        var projectionType = pair.ProjectionType;
+        projectionType.Should().NotBeNull("a JoinInto pair command materialises a stitched projection");
+
+        var clone = pair.Clone();
+        clone.ProjectionType.Should().BeSameAs(projectionType,
+            "the live copy constructor must preserve the pair projection type");
+        clone.Definition.ProjectionType.Should().BeSameAs(projectionType);
+        clone.GetType().Should().Be(pair.GetType(), "the clone keeps the pair command's result type");
+
+        var cacheClone = pair.CloneForCache();
+        cacheClone.ProjectionType.Should().BeSameAs(projectionType,
+            "the plan-cache clone must preserve the pair projection type");
+        cacheClone.Definition.ProjectionType.Should().BeSameAs(projectionType);
+    }
+
+    /// <summary>
+    /// Pins that two commands sharing one raw description own independent definition memos: paging and
+    /// node-owned raw state (navigation paths) never leak a sibling's snapshot, including under
+    /// concurrent reads.
+    /// </summary>
+    [Fact]
+    public async Task Descriptions_ConcurrentSiblings_KeepIndependentDefinitionMemos()
+    {
+        using var ctx = CreateSqlServerContext();
+
+        var root = ctx.From<SimpleEntity>().Where(x => x.Id > 0).Select(x => x.Id);
+        var left = (QueryCommand<int>)root.Clone();
+        var right = (QueryCommand<int>)root.Clone();
+        left.Definition.Condition.Should().BeSameAs(right.Definition.Condition,
+            "the siblings share one raw description");
+        left.Paging.Limit = 4;
+        right.Paging.Limit = 7;
+        right.Paging.Offset = 2;
+
+        await Task.WhenAll(Enumerable.Range(0, 200).Select(_ => Task.Run(() =>
+        {
+            left.Definition.Paging.Should().Match<Paging>(p => p.Limit == 4 && p.Offset == 0);
+            right.Definition.Paging.Should().Match<Paging>(p => p.Limit == 7 && p.Offset == 2);
+            left.Definition.Should().NotBeSameAs(right.Definition,
+                "each node owns its definition memo");
+        })));
+
+        root.Definition.Paging.Limit.Should().Be(0, "a sibling's memo must not move the root's snapshot");
+        root.Definition.Paging.Offset.Should().Be(0);
+
+        // A node-owned raw write invalidates only its own memo.
+        var navigationParameter = Expression.Parameter(typeof(SimpleEntity), "root");
+        var navigationPaths = new Dictionary<ParameterExpression, string> { [navigationParameter] = "Children" };
+        left.NavigationPaths = navigationPaths;
+        left.Definition.NavigationPaths.Should().BeSameAs(navigationPaths);
+        right.Definition.NavigationPaths.Should().BeNull("the memo key covers node-owned navigation paths");
+    }
+
     /// <summary>Pins that a CTE graph publishes one raw-shape recipe, a second fresh command hits it exactly once, and the apply is differential-equal to ordinary preparation.</summary>
     [Fact]
     public void Descriptions_RawShapeRecipe_MissThenSingleHitApply()
@@ -244,6 +311,19 @@ public class CteDescriptionCowTests
         QueryPlanner.RecipeReuses.Should().Be(1,
             "a recipe is applied once per fresh command; the next call is the prepared-command path");
 
+        // The applied command owns a mutable join array (preparation replaces the elements in place), so
+        // its plan-cache clone must own a deep copy: a later cache comparison must never observe that
+        // array, and mutating the clone's array must not reach the applied command.
+        var appliedJoins = secondCommand.Joins;
+        appliedJoins.Should().NotBeNull("the recipe shape joins the CTE source");
+        var appliedJoin = appliedJoins![0];
+        var cacheClone = secondCommand.CloneForCache();
+        cacheClone.Joins.Should().NotBeSameAs(appliedJoins,
+            "the cache clone must not share the applied command's mutable join array");
+        cacheClone.Joins![0] = null!;
+        ReferenceEquals(secondCommand.Joins![0], appliedJoin).Should().BeTrue(
+            "mutating the cache clone's join array must not reach the applied command");
+
         // Differential against ordinary preparation of the same graph (no recipe, no store).
         using var fresh = CreateSqlServerContext();
         var ordinary = PrepareSql(fresh, CteShape(fresh), storeInCache: false);
@@ -261,8 +341,10 @@ public class CteDescriptionCowTests
             var body = ctx.From<SimpleEntity>().Where(x => x.Id > 1).Select(x => new { x.Id });
             var bodyA = body.Clone();
             var bodyB = body.Clone();
-            ReferenceEquals(bodyA.Definition, bodyB.Definition).Should().BeTrue(
-                $"iteration {iteration}: both bodies must share one description");
+            bodyA.Definition.Should().NotBeSameAs(bodyB.Definition,
+                $"iteration {iteration}: the definition memo is node-owned, not published on the shared description");
+            bodyA.Definition.Condition.Should().BeSameAs(bodyB.Definition.Condition,
+                $"iteration {iteration}: both bodies still share the raw description");
 
             var rootA = ctx.With("cow_concurrent", bodyA).From("cow_concurrent").Select(t => t["id"].AsInt);
             var rootB = ctx.With("cow_concurrent", bodyB).From("cow_concurrent").Select(t => t["id"].AsInt);
@@ -283,6 +365,43 @@ public class CteDescriptionCowTests
             ReferenceEquals(bodyA.SelectList, bodyB.SelectList).Should().BeFalse(
                 $"iteration {iteration}: neither body observes the other's prepared select list");
         }
+
+        // Per-node mutable arrays where the baseline requires them: a live clone owns a private join
+        // array (preparation writes prepared copies into it), while the elements stay shared until then;
+        // the plan-cache key deep-clones both the array and its elements.
+        var withJoin = ctx.From<SimpleEntity>()
+            .Join(ctx.From<SimpleEntity>(), (p, c) => p.Id == c.Id)
+            .Select(x => x.Item1.Id);
+        var liveClone = (QueryCommand<int>)withJoin.Clone();
+        liveClone.Joins.Should().NotBeSameAs(withJoin.Joins,
+            "a live clone owns a private join array");
+        liveClone.Joins![0].Should().BeSameAs(withJoin.Joins![0],
+            "join elements stay shared until preparation replaces them");
+        var cacheClone = withJoin.CloneForCache();
+        cacheClone.Joins.Should().NotBeSameAs(withJoin.Joins,
+            "the plan-cache key owns a private join array");
+        cacheClone.Joins![0].Should().NotBeSameAs(withJoin.Joins![0],
+            "the plan-cache key deep-clones the join elements");
+
+        // The CTE declaration list is immutable raw state; the cache clone owns a deep copy of it.
+        var cteCommand = ctx.With("cow_arrays", ctx.From<SimpleEntity>().Select(x => new { x.Id }))
+            .From("cow_arrays")
+            .Select(t => t["id"].AsInt);
+        var cteCacheClone = cteCommand.CloneForCache();
+        cteCacheClone.Ctes.Should().NotBeSameAs(cteCommand.Ctes,
+            "the cache clone rebuilds the declaration list");
+        cteCacheClone.Ctes![0].Should().NotBeSameAs(cteCommand.Ctes![0]);
+        cteCacheClone.Ctes[0].Query.Should().NotBeSameAs(cteCommand.Ctes[0].Query,
+            "the cache clone owns cloned CTE body commands");
+
+        // The JoinInto pair projection type is raw state and must survive both clone kinds.
+        var pair = CreateJoinIntoPairCommand();
+        var projectionType = pair.ProjectionType;
+        projectionType.Should().NotBeNull("a JoinInto pair command materialises a stitched projection");
+        ((QueryCommand)pair.Clone()).ProjectionType.Should().BeSameAs(projectionType,
+            "a live clone preserves the pair projection type");
+        pair.CloneForCache().ProjectionType.Should().BeSameAs(projectionType,
+            "the cache clone preserves the pair projection type");
     }
 
     private static QueryCommand<int> CteShape(IDataContext ctx)
@@ -292,5 +411,15 @@ public class CteDescriptionCowTests
             .From("cow_recipe")
             .Join(ctx.From<SimpleEntity>(), (r, s) => r["id"].AsInt == s.Id)
             .Select(p => p.Item1["id"].AsInt);
+    }
+
+    private static QueryCommand CreateJoinIntoPairCommand()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.From<MemoryJoinParent>(b => b.HasMany(p => p.Children, c => c.ParentId))
+            .WithData([new MemoryJoinParent { Id = 1 }]);
+        return ctx.From<MemoryJoinParent>()
+            .JoinInto(ctx.From<MemoryJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+            .CreateJoinIntoPairCommand();
     }
 }
