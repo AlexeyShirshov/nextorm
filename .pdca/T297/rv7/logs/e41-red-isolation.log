@@ -1,0 +1,46 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+failed NextORM.Core.Tests.CachedPreparationRecipeTests.ApplyPreparationFrom_AdoptedDescription_IsolatesRecipeFromPostAdoptWrites (234ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected SnapshotRecipeState(recipe) to be the same string because post-adopt writes on the adopting command must never reach the stored recipe, but they differ on line 8 and column 30 (index 301):
+                ↓ (actual)
+    "…s.LimitBy=ref#482046…"
+    "…s.LimitBy=null\n_desc…"
+                ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.CachedPreparationRecipeTests.ApplyPreparationFrom_AdoptedDescription_IsolatesRecipeFromPostAdoptWrites() in /home/alex/sources/nextorm/tests/nextorm.core.tests/Caching/CachedPreparationRecipeTests.cs:1175
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) failed with 1 error(s) (1s 187ms)
+Exit code: 2
+  Standard output: dbug: Microsoft.Extensions.Hosting.Internal.Host[1]
+        Hosting starting
+  info: Microsoft.Hosting.Lifetime[0]
+        Application started. Press Ctrl+C to shut down.
+  info: Microsoft.Hosting.Lifetime[0]
+        Hosting environment: Production
+  info: Microsoft.Hosting.Lifetime[0]
+        Content root path: /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[2]
+        Hosting started
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[3]
+        Hosting stopping
+  info: Microsoft.Hosting.Lifetime[0]
+        Application is shutting down...
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[4]
+        Hosting stopped
+
+Test run summary: Failed!
+  total: 2
+  failed: 1
+  succeeded: 1
+  skipped: 0
+  duration: 1s 420ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)
