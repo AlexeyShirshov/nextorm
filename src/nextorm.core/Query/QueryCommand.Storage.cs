@@ -10,9 +10,6 @@ namespace NextORM.Core;
 /// </summary>
 internal sealed class QueryCommandPreparation
 {
-    internal SelectExpression[]? SelectList;
-    internal FromExpression? From;
-    internal bool IsPrepared;
     internal Expression[]? PreparedArrayJoin;
     internal SelectExpression[]? GroupingList;
     internal SelectExpression[]? LimitByColumns;
@@ -77,8 +74,6 @@ internal sealed class QueryCommandPreparation
     /// </summary>
     internal void Reset()
     {
-        IsPrepared = false;
-        SelectList = null;
         GroupingList = null;
         LimitByColumns = null;
         DistinctOnColumns = null;
@@ -89,7 +84,6 @@ internal sealed class QueryCommandPreparation
         PreparedArrayJoin = null;
         PreWhereShapeHash = 0;
         HasPreWhereInValues = false;
-        From = null;
         PreparedCondition = null;
         PreparedHaving = null;
         InValuesShapeHash = 0;
@@ -116,26 +110,10 @@ public partial class QueryCommand
     private QueryCommandPreparation Preparation => _preparation ??= new QueryCommandPreparation();
 
     /// <summary>The prepared projection columns after <c>PrepareCommand</c>, or <c>null</c> before preparation.</summary>
-    protected SelectExpression[]? _selectList
-    {
-        get => _preparation?.SelectList;
-        set
-        {
-            if (ReferenceEquals(value, _preparation?.SelectList)) return;
-            Preparation.SelectList = value;
-        }
-    }
+    protected SelectExpression[]? _selectList;
 
     /// <summary>The prepared <c>FROM</c> source, or <c>null</c> before preparation.</summary>
-    protected FromExpression? _from
-    {
-        get => _preparation?.From;
-        set
-        {
-            if (ReferenceEquals(value, _preparation?.From)) return;
-            Preparation.From = value;
-        }
-    }
+    protected FromExpression? _from;
 
     /// <summary>The prepared <c>GROUP BY</c> columns, or <c>null</c> when the query has no grouping.</summary>
     private SelectExpression[]? _groupingList
@@ -209,15 +187,7 @@ public partial class QueryCommand
     }
 
     /// <summary>Whether the command has been prepared and its cached plan hashes are current.</summary>
-    protected bool _isPrepared
-    {
-        get => _preparation?.IsPrepared ?? false;
-        set
-        {
-            if (value == (_preparation?.IsPrepared ?? false)) return;
-            Preparation.IsPrepared = value;
-        }
-    }
+    protected bool _isPrepared;
 
     internal Expression? PreparedCondition
     {
