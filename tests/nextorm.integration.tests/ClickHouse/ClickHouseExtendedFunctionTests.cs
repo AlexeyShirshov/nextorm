@@ -320,4 +320,129 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
         lag[2].Lag.Should().Be(2);
         lag[0].Lead.Should().Be(2);
     }
+
+    [Fact]
+    public void ArrayAndRankingAggregates_ShouldExecute()
+    {
+        var r = _sut.ComplexEntity
+            .Where(x => x.Int != null)
+            .Select(x => new
+            {
+                Grouped = SqlFunctions.ClickHouse.group_array((int)x.Int!),
+                GroupedUniq = SqlFunctions.ClickHouse.group_uniq_array((int)x.Int!),
+                TopK = SqlFunctions.ClickHouse.top_k(2, (int)x.Int!),
+                TopKWeighted = SqlFunctions.ClickHouse.top_k_weighted(2, (int)x.Int!, x.Id)
+            })
+            .First();
+
+        // Both non-null rows carry Int == 1, so the unordered groupArray result is [1, 1].
+        r.Grouped.Should().Equal(1, 1);
+        r.GroupedUniq.Should().Equal(1);
+        r.TopK.Should().Equal(1);
+        r.TopKWeighted.Should().Equal(1);
+    }
+
+    [Fact]
+    public void StatisticalAndBitAggregates_ShouldExecute()
+    {
+        var r = _sut.ComplexEntity
+            .Select(x => new
+            {
+                Corr = SqlFunctions.Sql.corr((double)x.Id, (double)x.Id),
+                CovarPop = SqlFunctions.Sql.covar_pop((double)x.Id, (double)x.Id),
+                CovarSamp = SqlFunctions.Sql.covar_samp((double)x.Id, (double)x.Id),
+                BitAnd = SqlFunctions.Postgres.bit_and((int)x.Id),
+                BitOr = SqlFunctions.Postgres.bit_or((int)x.Id),
+                BitXor = SqlFunctions.Postgres.bit_xor((int)x.Id)
+            })
+            .First();
+
+        r.Corr.Should().BeApproximately(1.0, 1e-12);
+        r.CovarPop.Should().BeApproximately(2.0 / 3.0, 1e-12);
+        r.CovarSamp.Should().BeApproximately(1.0, 1e-12);
+        r.BitAnd.Should().Be(0);
+        r.BitOr.Should().Be(3);
+        r.BitXor.Should().Be(0);
+    }
+
+    [Fact]
+    public void RetentionAggregate_ShouldExecute()
+    {
+        // ClickHouse returns retention(...) as Array(UInt8), while the public signature declares int[]:
+        // projecting the mask itself throws InvalidCastException (Byte[] -> Int32[]) during
+        // materialization. The aggregate is executed through length() so the renderer and the server
+        // path stay covered; the declared-array materialization mismatch is recorded as a product defect.
+        var r = _sut.ComplexEntity
+            .Select(x => new
+            {
+                MaskLength = SqlFunctions.ClickHouse.length(
+                    SqlFunctions.ClickHouse.retention(x.Id > 0, x.Id > 1, x.Id > 2))
+            })
+            .First();
+
+        r.MaskLength.Should().Be(3);
+    }
+
+    [Fact]
+    public void MultiIfGuards_ShouldBeRejected()
+    {
+        FluentActions.Invoking(() => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.ClickHouse.multi_if(
+                    SqlFunctions.ClickHouse.when(x.Id == 1, "one"),
+                    SqlFunctions.ClickHouse.otherwise("other"),
+                    SqlFunctions.ClickHouse.when(x.Id == 2, "two")))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The multiIf otherwise(...) branch must be the last one.");
+
+        FluentActions.Invoking(() => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.ClickHouse.multi_if(
+                    SqlFunctions.ClickHouse.when(x.Id == 1, "one")))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("multiIf requires a final otherwise(...) branch.");
+
+        // The branch accessors are query-expression-only markers (they return null at runtime), so the
+        // captured-array arm is reached with an already-captured empty array expression instead.
+        FluentActions.Invoking(() => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.ClickHouse.multi_if(Array.Empty<ClickHouseFunctions.MultiIfBranch<string>>()))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The multiIf branches must be inline when(...)/otherwise(...) calls.");
+
+        FluentActions.Invoking(() => _sut.SimpleEntity
+                .Where(x => SqlFunctions.ClickHouse.otherwise("other") != null)
+                .Select(x => x.Id)
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The when/otherwise branches can only be used inside multi_if.");
+    }
+
+    [Fact]
+    public void AggregateParameterGuards_ShouldBeRejected()
+    {
+        var levels = new[] { 0.25, 0.75 };
+        FluentActions.Invoking(() => _sut.ComplexEntity.Where(x => x.Int != null)
+                .Select(x => SqlFunctions.ClickHouse.quantiles(levels, x.Int))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The quantiles levels must be inline expressions, not a captured array.");
+
+        var conditions = new[] { true, true };
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.ClickHouse.window_funnel(3600, x.Datetime, conditions))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The windowFunnel/retention/sequenceMatch conditions must be inline expressions, not a captured array.");
+    }
+
+    [Fact]
+    public void FullTextPredicates_ShouldBeRejected()
+    {
+        FluentActions.Invoking(() => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Sql.contains("abc", "a"))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The full-text predicates (contains/freetext) are not supported by this provider.");
+    }
 }

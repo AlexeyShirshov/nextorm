@@ -360,4 +360,137 @@ public sealed class SqlServerFunctionExecutionTests : ProviderTestSuite
 
         shifted.Should().Equal(all.Skip(1));
     }
+
+    [Fact]
+    public void ConditionalFunctions_ShouldExecute()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Chosen = SqlFunctions.SqlServer.choose(2, "a", "b", "c"),
+                OutOfRange = SqlFunctions.SqlServer.choose(9, "a", "b"),
+                Iif = SqlFunctions.Sql.iif(x.Id > 1, "big", "small"),
+                Greatest = SqlFunctions.Sql.greatest(1L, 5L, 3L),
+                Least = SqlFunctions.Sql.least(1L, 5L, 3L)
+            })
+            .First();
+
+        r.Chosen.Should().Be("b");
+        r.OutOfRange.Should().BeNull();
+        r.Iif.Should().Be("small");
+        r.Greatest.Should().Be(5L);
+        r.Least.Should().Be(1L);
+    }
+
+    [Fact]
+    public void AggregateFamilies_ShouldCompute()
+    {
+        var r = _sut.SimpleEntity
+            .Select(x => new
+            {
+                Count = SqlFunctions.Sql.count(),
+                CountArgument = SqlFunctions.Sql.count(x.Id),
+                CountDistinct = SqlFunctions.Sql.count_distinct(x.Id),
+                CountBig = SqlFunctions.Sql.count_big(),
+                CountBigDistinct = SqlFunctions.Sql.count_big_distinct(x.Id),
+                Min = SqlFunctions.Sql.min(x.Id),
+                Max = SqlFunctions.Sql.max(x.Id),
+                Avg = SqlFunctions.Sql.avg((double)x.Id),
+                Sum = SqlFunctions.Sql.sum((long)x.Id),
+                Stdev = SqlFunctions.Sql.stdev((double)x.Id),
+                Stdevp = SqlFunctions.Sql.stdevp((double)x.Id),
+                Var = SqlFunctions.Sql.var((double)x.Id),
+                Varp = SqlFunctions.Sql.varp((double)x.Id),
+                AvgDistinct = SqlFunctions.Sql.avg_distinct((double)x.Id),
+                SumDistinct = SqlFunctions.Sql.sum_distinct((long)x.Id),
+                StdevDistinct = SqlFunctions.Sql.stdev_distinct((double)x.Id),
+                StdevpDistinct = SqlFunctions.Sql.stdevp_distinct((double)x.Id),
+                VarDistinct = SqlFunctions.Sql.var_distinct((double)x.Id),
+                VarpDistinct = SqlFunctions.Sql.varp_distinct((double)x.Id)
+            })
+            .First();
+
+        r.Count.Should().Be(10);
+        r.CountArgument.Should().Be(10);
+        r.CountDistinct.Should().Be(10);
+        r.CountBig.Should().Be(10L);
+        r.CountBigDistinct.Should().Be(10L);
+        r.Min.Should().Be(1);
+        r.Max.Should().Be(10);
+        r.Avg.Should().BeApproximately(5.5, 1e-12);
+        r.Sum.Should().Be(55L);
+        r.Stdev.Should().BeApproximately(3.0276503540974917, 1e-12);
+        r.Stdevp.Should().BeApproximately(2.8722813232690143, 1e-12);
+        r.Var.Should().BeApproximately(9.166666666666666, 1e-12);
+        r.Varp.Should().BeApproximately(8.25, 1e-12);
+        r.AvgDistinct.Should().BeApproximately(5.5, 1e-12);
+        r.SumDistinct.Should().Be(55L);
+        r.StdevDistinct.Should().BeApproximately(3.0276503540974917, 1e-12);
+        r.StdevpDistinct.Should().BeApproximately(2.8722813232690143, 1e-12);
+        r.VarDistinct.Should().BeApproximately(9.166666666666666, 1e-12);
+        r.VarpDistinct.Should().BeApproximately(8.25, 1e-12);
+    }
+
+    [Fact]
+    public void FilteredAggregates_ShouldBeRejected()
+    {
+        FluentActions.Invoking(() => _sut.SimpleEntity
+                .Select(x => SqlFunctions.Sql.count(() => x.Id <= 2))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The FILTER clause is not supported by this provider.");
+
+        FluentActions.Invoking(() => _sut.SimpleEntity
+                .Select(x => SqlFunctions.Sql.min(x.Id, () => x.Id <= 2))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The FILTER clause is not supported by this provider.");
+
+        FluentActions.Invoking(() => _sut.SimpleEntity
+                .Select(x => SqlFunctions.Sql.avg((double)x.Id, () => x.Id <= 2))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The FILTER clause is not supported by this provider.");
+
+        FluentActions.Invoking(() => _sut.SimpleEntity
+                .Select(x => SqlFunctions.Sql.string_agg(x.Id.ToString(), ",", () => x.Id <= 2))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The FILTER clause is not supported by this provider.");
+    }
+
+    [Fact]
+    public void AdvancedAggregateCapabilityGuards_ShouldBeRejected()
+    {
+        void Reject(Action act, string message)
+            => FluentActions.Invoking(act).Should().Throw<NotSupportedException>().WithMessage(message);
+
+        Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.Postgres.bool_and(x.Id > 0)).First(),
+            "The bool_and/bool_or/every aggregates are not supported by this provider.");
+        Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.Postgres.bit_and((int)x.Id)).First(),
+            "The bit_and/bit_or/bit_xor aggregates are not supported by this provider.");
+        Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.Sql.corr((double)x.Id, (double)x.Id)).First(),
+            "The statistical (corr/covar) aggregates are not supported by this provider.");
+        Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.Postgres.regr_slope((double)x.Id, (double)x.Id)).First(),
+            "The regr_* aggregates are not supported by this provider.");
+        Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.ClickHouse.arg_min(x.Id, x.Id)).First(),
+            "The argMin/argMax aggregates are not supported by this provider.");
+        Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.ClickHouse.uniq(x.Id)).First(),
+            "The uniq/uniqExact/uniqCombined/uniqHLL12 aggregates are not supported by this provider.");
+        Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.ClickHouse.quantile(0.5, x.Id)).First(),
+            "The quantile/median aggregates are not supported by this provider.");
+        Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.ClickHouse.median(x.Id)).First(),
+            "The quantile/median aggregates are not supported by this provider.");
+        Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.ClickHouse.top_k(2, x.Id)).First(),
+            "The topK/topKWeighted aggregates are not supported by this provider.");
+        Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.ClickHouse.group_array(x.Id)).First(),
+            "The groupArray/groupUniqArray aggregates are not supported by this provider.");
+        Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.ClickHouse.any_last(x.Id)).First(),
+            "The anyLast aggregates are not supported by this provider.");
+        Reject(() => _sut.ComplexEntity.Select(x => SqlFunctions.ClickHouse.window_funnel(3600, x.Id, x.Id > 0)).First(),
+            "The windowFunnel/retention/sequenceMatch aggregates are not supported by this provider.");
+        Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.Postgres.percentile_cont(0.5, () => (double)x.Id)).First(),
+            "The ordered-set aggregates (percentile_cont/percentile_disc/mode) are not supported by this provider.");
+    }
 }

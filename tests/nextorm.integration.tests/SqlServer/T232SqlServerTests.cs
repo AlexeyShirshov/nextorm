@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
@@ -429,6 +430,384 @@ public sealed class T232SqlServerTests : ProviderTestSuite
 
         untyped.Select(r => ((string?)r.Category, r.Name, r.Value))
             .Should().BeEquivalentTo(typed.Select(r => ((string?)r.Category, r.Name, r.Value)));
+    }
+
+    // ------------------------------------------------------------------ #232 marker guards
+
+    [Fact]
+    public void TypedPivot_MarkerWithoutAPivotSource_IsRejected()
+    {
+        var ctx = Ctx;
+        var marker = new PivotValues();
+
+        FluentActions.Invoking(() => ctx.From<IT232Sales>()
+                .Select(s => new { V = marker.Value<decimal?>("1") })
+                .ToList())
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*requires a bound PIVOT/UNPIVOT result source*");
+    }
+
+    [Fact]
+    public void TypedPivot_MarkerWithARuntimeColumnName_IsRejected()
+    {
+        var ctx = Ctx;
+        var marker = new PivotValues();
+        var column = "1";
+
+        FluentActions.Invoking(() => ctx.From<IT232Sales>()
+                .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"))
+                .Select(t => new { V = marker.Value<decimal?>(column) })
+                .ToList())
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*compile-time constant column name*");
+    }
+
+    [Fact]
+    public void TypedPivot_MarkerWithAnEmptyColumnName_IsRejected()
+    {
+        var ctx = Ctx;
+        var marker = new PivotValues();
+
+        FluentActions.Invoking(() => ctx.From<IT232Sales>()
+                .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"))
+                .Select(t => new { V = marker.Value<decimal?>("") })
+                .ToList())
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*compile-time constant column name*");
+    }
+
+    [Fact]
+    public void TypedPivot_MarkerWithTwoTableAliasSources_IsRejected()
+    {
+        var ctx = Ctx;
+        var marker = new PivotValues();
+
+        var pivot = ctx.From<IT232Sales>()
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
+        var raw = ctx.From(T232SqlServerFixture.SalesTable);
+
+        FluentActions.Invoking(() => pivot
+                .Join(raw, (p, r) => p.GetString("category") == r.GetString("category"))
+                .Select(p => new { V = marker.Value<decimal?>("1") })
+                .ToList())
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*matches more than one TableAlias source in scope*");
+    }
+
+    [Fact]
+    public void TypedPivot_MarkerInAFilter_QualifiesThePivotAlias()
+    {
+        var ctx = Ctx;
+        var marker = new PivotValues();
+
+        // The marker binds through the pivot alias in a predicate (the alias-qualified identifier
+        // route) and the executed rows prove it reads the pivoted cell, not the source column.
+        var rows = ctx.From<IT232Sales>()
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"), PivotValue.Create("2"))
+            .Where(t => marker.Value<decimal?>("1") > 5m)
+            .Select(t => new { Category = t.GetString("category"), Q1 = marker.Value<decimal?>("1") })
+            .ToList();
+
+        rows.Should().ContainSingle();
+        rows[0].Category.Should().Be("North");
+        rows[0].Q1.Should().Be(10m);
+    }
+
+    [Fact]
+    public void ColumnAndParameterAccessors_WithRuntimeValues_AreRejected()
+    {
+        var ctx = Ctx;
+        var columnName = "category";
+        var parameterIndex = 0;
+
+        FluentActions.Invoking(() => ctx.From<IT232Sales>()
+                .Select(s => new { C = SqlFunctions.Column<string>(s, columnName) })
+                .ToList())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("Column");
+
+        FluentActions.Invoking(() => ctx.From<IT232Sales>()
+                .Where(s => s.Quarter > SqlFunctions.Parameter<int>(parameterIndex))
+                .Select(s => s.Category)
+                .ToList())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("Parameter");
+    }
+
+    // ------------------------------------------------------------------ mutation renderer coverage
+
+    private void Execute(string sql)
+    {
+        var context = (DataContext)_sut.DataProvider;
+        context.EnsureConnectionOpen();
+        using var command = context.CreateCommand(sql);
+        command.ExecuteNonQuery();
+    }
+
+    private void CreateMutationTables()
+    {
+        Execute("drop table if exists t232_audit");
+        Execute("drop table if exists t232_defaults");
+        Execute("drop table if exists t232_identity");
+        Execute("drop table if exists t232_mut");
+        Execute("create table t232_mut (id int not null primary key, name nvarchar(50) not null, age int null)");
+        Execute("create table t232_defaults (id int identity(1,1) primary key, note nvarchar(20) not null default 'd')");
+        Execute("create table t232_identity (id int identity(1,1) primary key, name nvarchar(50) not null)");
+        Execute("create table t232_audit (id int not null, name nvarchar(50) not null)");
+        Execute("insert into t232_mut (id, name, age) values (1, N'a', 10), (2, N'b', 20)");
+    }
+
+    private void DropMutationTables()
+    {
+        Execute("drop table if exists t232_ctas");
+        Execute("drop table if exists t232_audit");
+        Execute("drop table if exists t232_defaults");
+        Execute("drop table if exists t232_identity");
+        Execute("drop table if exists t232_mut");
+    }
+
+    /// <summary>
+    /// Executes the insert (VALUES with an explicit DEFAULT marker and OUTPUT returning), the update
+    /// (predicate form) and the delete (predicate form with a returning projection) and asserts the
+    /// returned values and the surviving rows.
+    /// </summary>
+    [Fact]
+    public void Dml_InsertDefaultMarkerUpdateAndDelete_ShouldExecute()
+    {
+        CreateMutationTables();
+        var ctx = _sut.DataProvider;
+        try
+        {
+            var inserted = ctx.CreateInsertBuilder<T232Mut>()
+                .Value(x => x.Id, 3)
+                .Value(x => x.Name, "c")
+                .Value(x => x.Age, SqlDefault.Value)
+                .Returning(x => new { x.Id, x.Age })
+                .ToList();
+
+            inserted.Should().ContainSingle();
+            inserted[0].Id.Should().Be(3);
+            inserted[0].Age.Should().BeNull("DEFAULT on a nullable column with no default writes NULL");
+
+            var updated = ctx.CreateUpdateBuilder<T232Mut>()
+                .Set(x => x.Age, 30)
+                .Where(x => x.Id == 3)
+                .Returning()
+                .ToList();
+            updated.Should().ContainSingle();
+            updated[0].Age.Should().Be(30);
+
+            var deleted = ctx.CreateDeleteBuilder<T232Mut>()
+                .Where(x => x.Id == 3)
+                .Returning(x => x.Id)
+                .ToList();
+            deleted.Should().Equal(new[] { 3 });
+            ctx.From<T232Mut>().OrderBy(x => x.Id).Select(x => x.Id).ToList().Should().Equal(new[] { 1, 2 });
+        }
+        finally
+        {
+            DropMutationTables();
+        }
+    }
+
+    /// <summary>
+    /// INSERT ... SELECT, the all-defaults insert path, the SQL Server SELECT INTO materialisation and
+    /// the CTAS option guards that SQL Server cannot express.
+    /// </summary>
+    [Fact]
+    public void Dml_InsertSelectDefaultValuesAndCreateTableAs_ShouldExecuteOrGuard()
+    {
+        CreateMutationTables();
+        var ctx = _sut.DataProvider;
+        try
+        {
+            var source = ctx.From<T232Mut>().Where(x => x.Id == 1);
+            var copied = ctx.CreateInsertBuilder<T232Mut>()
+                .Values(source, x => new T232Mut { Id = 100, Name = x.Name, Age = x.Age })
+                .Insert();
+            copied.Should().Be(1);
+            ctx.From<T232Mut>().Where(x => x.Id == 100).Select(x => x.Name).Single().Should().Be("a");
+
+            var defaults = ctx.CreateInsertBuilder<T232OnlyIdentity>()
+                .Insert();
+            defaults.Should().Be(1);
+            ctx.From<T232OnlyIdentity>().Select(x => x.Id).ToList().Should().ContainSingle();
+
+            ctx.From<T232Mut>()
+                .Where(x => x.Id <= 2)
+                .Select(x => new { x.Id, x.Name })
+                .ToTable("t232_ctas");
+            ctx.From<T232Ctas>().OrderBy(x => x.Id).Select(x => x.Id).ToList().Should().Equal(new[] { 1, 2 });
+
+            var noData = () => ctx.From<T232Mut>()
+                .Select(x => new { x.Id })
+                .ToTable("t232_ctas_nodata", o => o.WithData(false));
+            noData.Should().Throw<NotSupportedException>().WithMessage("*WITH NO DATA*");
+
+            var columns = () => ctx.From<T232Mut>()
+                .Select(x => new { x.Id })
+                .ToTable("t232_ctas_columns", o => o.Columns("id"));
+            columns.Should().Throw<NotSupportedException>().WithMessage("*column list on a materialised table*");
+        }
+        finally
+        {
+            DropMutationTables();
+        }
+    }
+
+    /// <summary>
+    /// The key-upsert <c>MERGE</c> (update and insert paths, with OUTPUT returning) and the general
+    /// <c>MERGE</c> statement with a <c>WHEN NOT MATCHED BY SOURCE</c> delete branch.
+    /// </summary>
+    [Fact]
+    public void Dml_MergeKeyUpsertAndFullBranches_ShouldExecute()
+    {
+        CreateMutationTables();
+        var ctx = _sut.DataProvider;
+        try
+        {
+            var returned = ctx.CreateMergeBuilder<T232Mut>()
+                .Using(new T232Mut { Id = 1, Name = "a2", Age = 11 })
+                .OnKeys()
+                .WhenMatchedUpdate()
+                .WhenNotMatchedInsert()
+                .Returning(x => x.Id)
+                .ToList();
+            returned.Should().Equal(new[] { 1 }, "the key-upsert returns the matched row through OUTPUT");
+
+            ctx.CreateMergeBuilder<T232Mut>()
+                .Using([
+                    new T232Mut { Id = 1, Name = "a3", Age = 12 },
+                    new T232Mut { Id = 9, Name = "n", Age = 90 }
+                ])
+                .OnKeys()
+                .WhenMatchedUpdate()
+                .WhenNotMatchedInsert()
+                .Merge();
+
+            ctx.From<T232Mut>().OrderBy(x => x.Id).Select(x => x.Id).ToList().Should().Equal(new[] { 1, 2, 9 });
+
+            ctx.CreateMergeBuilder<T232Mut>()
+                .Using(new T232Mut { Id = 1, Name = "a4", Age = 13 })
+                .OnKeys()
+                .WhenMatchedUpdate()
+                .WhenNotMatchedInsert()
+                .WhenNotMatchedBySource((t, s) => t.Id == 2)
+                .ThenDelete()
+                .Merge();
+
+            ctx.From<T232Mut>().OrderBy(x => x.Id).Select(x => x.Id).ToList().Should().Equal(new[] { 1, 9 },
+                "the by-source branch removes only the filtered target row");
+        }
+        finally
+        {
+            DropMutationTables();
+        }
+    }
+
+    /// <summary>
+    /// <c>OUTPUT ... INTO</c> writes the inserted rows into an existing audit table, and a bulk insert
+    /// with explicit identity values renders the <c>SET IDENTITY_INSERT</c> toggle around the write.
+    /// </summary>
+    [Fact]
+    public void Dml_OutputIntoAndKeepIdentityBulkInsert_ShouldExecute()
+    {
+        CreateMutationTables();
+        var ctx = _sut.DataProvider;
+        try
+        {
+            var written = ctx.CreateInsertBuilder<T232Mut>()
+                .Values(new T232Mut { Id = 4, Name = "d", Age = 40 })
+                .Returning(x => new { x.Id, x.Name })
+                .OutputInto("t232_audit")
+                .Execute();
+            written.Should().Be(1);
+            ctx.From<T232Audit>().Select(x => new { x.Id, x.Name }).Single()
+                .Should().BeEquivalentTo(new { Id = 4, Name = "d" });
+
+            var bulk = ctx.CreateBulkInsertBuilder<T232Identity>(o => o.KeepIdentity())
+                .Values([
+                    new T232Identity { Id = 7, Name = "x" },
+                    new T232Identity { Id = 9, Name = "y" }
+                ])
+                .BulkInsert();
+            bulk.Should().Be(2);
+            ctx.From<T232Identity>().OrderBy(x => x.Id).Select(x => x.Id).ToList().Should().Equal(new[] { 7, 9 },
+                "the explicit identity values survive the IDENTITY_INSERT window");
+        }
+        finally
+        {
+            DropMutationTables();
+        }
+    }
+
+    /// <summary>
+    /// A SQLite-only FTS5 maintenance command is rejected by the SQL Server dialect before any SQL is
+    /// produced.
+    /// </summary>
+    [Fact]
+    public void Dml_SqliteFts5Command_ShouldBeRejectedBySqlServer()
+    {
+        var act = () => _sut.DataProvider.CreateSqliteFts5CommandBuilder("t232_mut").Optimize().Execute();
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*SqlServerDialect does not support SQLite FTS5 maintenance commands*");
+    }
+
+    [SqlTable("t232_mut")]
+    public sealed class T232Mut
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [Column("age")]
+        public int? Age { get; set; }
+    }
+
+    [SqlTable("t232_defaults")]
+    public sealed class T232OnlyIdentity
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        [Column("id")]
+        public int Id { get; set; }
+    }
+
+    [SqlTable("t232_identity")]
+    public sealed class T232Identity
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+    }
+
+    [SqlTable("t232_ctas")]
+    public sealed class T232Ctas
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+    }
+
+    [SqlTable("t232_audit")]
+    public sealed class T232Audit
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
     }
 }
 

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
+using FluentAssertions.Execution;
 using NextORM.Core;
 
 namespace NextORM.Integration.Tests;
@@ -38,6 +39,132 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
         + "(2, '2023-01-02T00:00:00', 20, 'two', 1), "
         + "(3, '2024-03-04T05:06:07', 30, 'three', 2), "
         + "(4, null, null, 'four', 2)";
+
+    /// <summary>
+    /// The complete SQL Server-only function inventory of <c>SqlServerSpecificFunctions.Supports</c>
+    /// (<c>src/nextorm.sqlserver/SqlServerDialect.cs:1046-1067</c>), read through the live context's
+    /// public <see cref="ISqlServerFunctions"/> surface: 72 T-SQL function names.
+    /// </summary>
+    private static readonly string[] SqlServerFunctionNames =
+    [
+        "patindex", "quotename", "soundex", "difference", "string_escape", "unicode", "nchar", "format",
+        "acos", "asin", "atan", "atn2", "square", "datename", "date_bucket", "hashbytes",
+        "newsequentialid", "json_array", "json_object", "json_arrayagg", "json_objectagg",
+        "json_contains", "json_path_exists", "sysdatetime", "sysdatetimeoffset", "sysutcdatetime",
+        "switchoffset", "todatetimeoffset", "timefromparts", "smalldatetimefromparts",
+        "datetimefromparts", "datetime2fromparts", "datetimeoffsetfromparts", "checksum",
+        "binary_checksum", "compress", "decompress", "rand", "stuff", "col_length", "col_name",
+        "ident_incr", "ident_seed", "index_col", "object_definition", "object_id", "object_name",
+        "object_schema_name", "stats_date", "db_id", "db_name", "original_db_name", "schema_id",
+        "schema_name", "type_id", "type_name", "filegroup_id", "filegroup_name", "file_id", "file_idex",
+        "file_name", "current_timezone", "current_timezone_id", "formatmessage", "getansinull",
+        "isdate", "isnumeric", "parsename", "publishingservername", "str", "next_value_for", "nextval"
+    ];
+
+    /// <summary>
+    /// Every <c>SqlServerSpecificFunctions.Render</c> arm, written out literally and independently of
+    /// the renderer: the 68 switch arms, the 12 arms that also carry an optional-arity form
+    /// (<c>quotename</c>, <c>format</c>, <c>date_bucket</c>, <c>rand</c>, <c>object_id</c>,
+    /// <c>object_name</c>, <c>object_schema_name</c>, <c>db_id</c>, <c>db_name</c>, <c>schema_id</c>,
+    /// <c>schema_name</c>, <c>getansinull</c>) and a second <c>datename</c> argument variant for the
+    /// quote-stripping helper. 85 assertion rows over 72 names / 68 source switch arms.
+    /// </summary>
+    private static readonly (string Name, string[] Args, string Expected)[] RenderArms =
+    [
+        ("patindex", ["'%b%'", "'abc'"], "patindex('%b%', 'abc')"),
+        ("quotename", ["'a'"], "quotename('a')"),
+        ("quotename", ["'a'", "'<'"], "quotename('a', '<')"),
+        ("soundex", ["'Robert'"], "soundex('Robert')"),
+        ("difference", ["'green'", "'greene'"], "difference('green', 'greene')"),
+        ("string_escape", ["'a'", "'json'"], "string_escape('a', 'json')"),
+        ("unicode", ["'A'"], "unicode('A')"),
+        ("nchar", ["65"], "nchar(65)"),
+        ("format", ["1234.5", "'N2'"], "format(1234.5, 'N2')"),
+        ("format", ["1234.5", "'N2'", "'en-US'"], "format(1234.5, 'N2', 'en-US')"),
+        ("acos", ["0.5"], "acos(0.5)"),
+        ("asin", ["0.5"], "asin(0.5)"),
+        ("atan", ["1"], "atan(1)"),
+        ("atn2", ["1", "1"], "atn2(1, 1)"),
+        ("square", ["3"], "square(3)"),
+        ("datename", ["'year'", "dt"], "datename(year, dt)"),
+        ("datename", ["quarter", "dt"], "datename(quarter, dt)"),
+        ("date_bucket", ["'day'", "1", "dt"], "date_bucket(day, 1, dt)"),
+        ("date_bucket", ["'day'", "1", "dt", "origin"], "date_bucket(day, 1, dt, origin)"),
+        ("hashbytes", ["'SHA2_256'", "'abc'"], "hashbytes('SHA2_256', 'abc')"),
+        ("newsequentialid", [], "newsequentialid()"),
+        ("json_array", ["1", "'a'"], "json_array(1, 'a')"),
+        ("json_object", ["'k'", "'v'", "'k2'", "'v2'"], "json_object('k' : 'v', 'k2' : 'v2')"),
+        ("json_arrayagg", ["x"], "json_arrayagg(x)"),
+        ("json_objectagg", ["'k'", "x"], "json_objectagg('k' : x)"),
+        ("json_contains", ["'doc'", "'$.a'", "1"], "json_contains('doc', '$.a', 1)"),
+        ("json_path_exists", ["'doc'", "'$.a'"], "json_path_exists('doc', '$.a')"),
+        ("sysdatetime", [], "sysdatetime()"),
+        ("sysdatetimeoffset", [], "sysdatetimeoffset()"),
+        ("sysutcdatetime", [], "sysutcdatetime()"),
+        ("switchoffset", ["ts", "120"], "switchoffset(ts, 120)"),
+        ("todatetimeoffset", ["ts", "120"], "todatetimeoffset(ts, 120)"),
+        ("timefromparts", ["12", "30", "0", "0", "0"], "timefromparts(12, 30, 0, 0, 0)"),
+        ("smalldatetimefromparts", ["2023", "5", "17", "12", "30"],
+            "smalldatetimefromparts(2023, 5, 17, 12, 30)"),
+        ("datetimefromparts", ["2023", "5", "17", "12", "30", "0", "0"],
+            "datetimefromparts(2023, 5, 17, 12, 30, 0, 0)"),
+        ("datetime2fromparts", ["2023", "5", "17", "12", "30", "0", "0", "3"],
+            "datetime2fromparts(2023, 5, 17, 12, 30, 0, 0, 3)"),
+        ("datetimeoffsetfromparts", ["2023", "5", "17", "12", "30", "0", "0", "1", "0", "0"],
+            "datetimeoffsetfromparts(2023, 5, 17, 12, 30, 0, 0, 1, 0, 0)"),
+        ("checksum", ["a", "b"], "checksum(a, b)"),
+        ("binary_checksum", ["a", "b"], "binary_checksum(a, b)"),
+        ("compress", ["'abc'"], "compress('abc')"),
+        ("decompress", ["x"], "decompress(x)"),
+        ("rand", [], "rand()"),
+        ("rand", ["1"], "rand(1)"),
+        ("stuff", ["s", "1", "2", "'x'"], "stuff(s, 1, 2, 'x')"),
+        ("col_length", ["'t'", "'c'"], "col_length('t', 'c')"),
+        ("col_name", ["1", "2"], "col_name(1, 2)"),
+        ("ident_incr", ["'t'"], "ident_incr('t')"),
+        ("ident_seed", ["'t'"], "ident_seed('t')"),
+        ("index_col", ["'t'", "1", "1"], "index_col('t', 1, 1)"),
+        ("object_definition", ["id"], "object_definition(id)"),
+        ("object_id", ["'t'"], "object_id('t')"),
+        ("object_id", ["'t'", "'u'"], "object_id('t', 'u')"),
+        ("object_name", ["id"], "object_name(id)"),
+        ("object_name", ["id", "1"], "object_name(id, 1)"),
+        ("object_schema_name", ["id"], "object_schema_name(id)"),
+        ("object_schema_name", ["id", "1"], "object_schema_name(id, 1)"),
+        ("stats_date", ["'t'", "1"], "stats_date('t', 1)"),
+        ("db_id", [], "db_id()"),
+        ("db_id", ["'x'"], "db_id('x')"),
+        ("db_name", [], "db_name()"),
+        ("db_name", ["1"], "db_name(1)"),
+        ("original_db_name", [], "original_db_name()"),
+        ("schema_id", [], "schema_id()"),
+        ("schema_id", ["'x'"], "schema_id('x')"),
+        ("schema_name", [], "schema_name()"),
+        ("schema_name", ["1"], "schema_name(1)"),
+        ("type_id", ["'nvarchar'"], "type_id('nvarchar')"),
+        ("type_name", ["231"], "type_name(231)"),
+        ("filegroup_id", ["'PRIMARY'"], "filegroup_id('PRIMARY')"),
+        ("filegroup_name", ["1"], "filegroup_name(1)"),
+        ("file_id", ["'db'"], "file_id('db')"),
+        ("file_idex", ["'db'"], "file_idex('db')"),
+        ("file_name", ["1"], "file_name(1)"),
+        ("current_timezone", [], "current_timezone()"),
+        ("current_timezone_id", [], "current_timezone_id()"),
+        ("formatmessage", ["'x'", "1"], "formatmessage('x', 1)"),
+        ("getansinull", [], "getansinull()"),
+        ("getansinull", ["'db'"], "getansinull('db')"),
+        ("isdate", ["x"], "isdate(x)"),
+        ("isnumeric", ["x"], "isnumeric(x)"),
+        ("parsename", ["'a.b'", "1"], "parsename('a.b', 1)"),
+        ("publishingservername", [], "publishingservername()"),
+        ("str", ["123.456"], "str(123.456)"),
+        ("next_value_for", ["[seq]"], "next value for [seq]"),
+        ("nextval", ["[seq]"], "next value for [seq]")
+    ];
+
+    /// <summary>The function table wired into the live SQL Server context, reached through the public dialect surface.</summary>
+    private ISqlServerFunctions Functions =>
+        ((DataContext)_sut.DataProvider).Dialect.SqlServerFunctions!;
 
     /// <summary>
     /// One case per SQL Server date/dialect branch: <c>datename</c> (quoted date part), <c>datepart</c>
@@ -322,6 +449,178 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
         {
             DropMarker();
         }
+    }
+
+    /// <summary>
+    /// The dialect's public function table accepts exactly the 72 T-SQL names of the inventory and
+    /// nothing else; every accepted name has a renderer arm, and the session-identity surface is on.
+    /// </summary>
+    [Fact]
+    public void SqlServerFunctions_ShouldAcceptTheCompleteInventoryAndNothingElse()
+    {
+        SqlServerFunctionNames.Should().HaveCount(72, "the SQL Server table accepts 72 T-SQL function names");
+        SqlServerFunctionNames.Should().OnlyHaveUniqueItems();
+
+        using (new AssertionScope())
+        {
+            foreach (var name in SqlServerFunctionNames)
+                Functions.Supports(name).Should().BeTrue("'{0}' is part of the SQL Server inventory", name);
+        }
+
+        // The render table and the predicate agree name-for-name: no accepted name without an arm and
+        // no arm for a name the dialect does not accept.
+        RenderArms.Select(arm => arm.Name).Distinct().Should().BeEquivalentTo(SqlServerFunctionNames);
+
+        Functions.SupportsSessionIdentity.Should().BeTrue(
+            "SQL Server exposes the session/server identity functions next to the T-SQL scalar library");
+    }
+
+    /// <summary>Every renderer arm emits the literal T-SQL contract for that name and arity.</summary>
+    [Fact]
+    public void SqlServerFunctions_ShouldEmitTheContractSqlForEveryArm()
+    {
+        using (new AssertionScope())
+        {
+            foreach (var (name, args, expected) in RenderArms)
+                Functions.Render(name, args).Should().Be(
+                    expected, "'{0}({1})' is the contract arm of that name", name, string.Join(", ", args));
+        }
+    }
+
+    /// <summary>
+    /// The predicate is a case-sensitive <c>name is</c> pattern: an unknown name, the empty string, a
+    /// null name and an upper-case variant are all rejected.
+    /// </summary>
+    [Fact]
+    public void SqlServerFunctions_ShouldRejectUnknownEmptyNullAndCaseVariants()
+    {
+        Functions.Supports("bogus").Should().BeFalse("the name is not in the table");
+        Functions.Supports("").Should().BeFalse("the empty name is not in the table");
+        Functions.Supports(null!).Should().BeFalse("the name pattern never matches a null name");
+        Functions.Supports("PATINDEX").Should().BeFalse("names are matched case-sensitively against the CLR names");
+    }
+
+    /// <summary>The renderer rejects every name the predicate rejects, with the documented message.</summary>
+    [Fact]
+    public void SqlServerFunctions_Render_ShouldThrowForTheNamesItDoesNotAccept()
+    {
+        FluentActions.Invoking(() => Functions.Render("bogus", ["x"]))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The bogus function is not supported by SQL Server.");
+
+        FluentActions.Invoking(() => Functions.Render("", []))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The  function is not supported by SQL Server.");
+
+        FluentActions.Invoking(() => Functions.Render("PATINDEX", ["x"]))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The PATINDEX function is not supported by SQL Server.");
+    }
+
+    /// <summary>
+    /// The argument contracts the table actually declares: a missing argument fails on the list
+    /// indexer (there is no arity validation), <c>json_object</c> guards an odd key/value count, a
+    /// fixed-arity arm ignores surplus arguments and a null element renders as an empty position.
+    /// </summary>
+    [Fact]
+    public void SqlServerFunctions_Render_ShouldEnforceTheArgumentContractsItDeclares()
+    {
+        FluentActions.Invoking(() => Functions.Render("datename", new[] { "'year'" }))
+            .Should().Throw<ArgumentOutOfRangeException>("datename reads args[1] and only one argument was supplied");
+
+        FluentActions.Invoking(() => Functions.Render("json_object", ["'k'", "'v'", "'k2'"]))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("json_object requires an even number of key/value arguments.");
+
+        Functions.Render("soundex", ["'Robert'", "'extra'"]).Should().Be(
+            "soundex('Robert')", "a fixed-arity arm reads only the positions it declares");
+
+        Functions.Render("soundex", [(string)null!]).Should().Be(
+            "soundex()", "a null element is interpolated as an empty position, not rejected");
+    }
+
+    /// <summary>
+    /// Live proof against the SQL Server container: rendered functions of ten families execute and
+    /// return real values — numeric, string, date/time, JSON, identity/session, conversion, metadata,
+    /// hash, binary/compression and clock. <c>newsequentialid()</c> renders but cannot be evaluated
+    /// outside a <c>DEFAULT</c> expression, so it is covered by its renderer arm only.
+    /// </summary>
+    [Fact]
+    public void SqlServerFunctions_ShouldExecuteAgainstTheLiveServer()
+    {
+        var context = (DataContext)_sut.DataProvider;
+
+        T Scalar<T>(string expression)
+        {
+            using var result = context.ExecuteRaw($"select {expression} as v");
+            return result.Read<T>().Single();
+        }
+
+        string Sql(string name, params string[] args) => Functions.Render(name, args);
+
+        // Numeric family.
+        Scalar<double>(Sql("square", "3")).Should().Be(9d, "square(3) is 9");
+        Scalar<double>(Sql("acos", "0")).Should().BeApproximately(
+            Math.PI / 2, 1e-9, "acos(0) is pi/2");
+        Scalar<double>(Sql("atn2", "1", "1")).Should().BeApproximately(
+            Math.PI / 4, 1e-9, "atn2(1, 1) is pi/4");
+
+        // String family.
+        Scalar<string>(Sql("quotename", "'a'")).Should().Be("[a]", "the one-argument quotename arm");
+        Scalar<string>(Sql("soundex", "'Robert'")).Should().Be("R163", "soundex('Robert')");
+        Scalar<int>(Sql("difference", "'green'", "'greene'")).Should().Be(4, "difference of the soundex codes");
+        Scalar<int>(Sql("unicode", "'A'")).Should().Be(65, "unicode('A') is 65");
+        Scalar<string>(Sql("nchar", "65")).Should().Be("A", "nchar(65) is 'A'");
+        Scalar<string>(Sql("format", "1234.5", "'N2'")).Should().Be(
+            "1,234.50", "the two-argument format arm uses the session culture");
+
+        // Date/time family.
+        Scalar<string>(Sql("datename", "'year'", "cast('2023-05-17T13:45:30' as datetime2)")).Should().Be(
+            "2023", "datename strips the quotes around the date part");
+        Scalar<DateTime>(Sql("date_bucket", "'day'", "1", "cast('2023-05-17T13:45:30' as datetime2)")).Should().Be(
+            new DateTime(2023, 5, 17), "date_bucket truncates to the start of the day");
+        Scalar<DateTime>(Sql(
+                "datetime2fromparts", "2023", "5", "17", "13", "45", "30", "0", "3")).Should().Be(
+            new DateTime(2023, 5, 17, 13, 45, 30), "datetime2fromparts joins all eight parts");
+
+        // JSON family.
+        Scalar<string>(Sql("json_object", "'k'", "'v'")).Should().Be(
+            "{\"k\":\"v\"}", "json_object joins the key/value pairs");
+        Scalar<string>(Sql("json_array", "1", "'a'")).Should().Be("[1,\"a\"]", "json_array keeps the argument types");
+        Scalar<int>($"cast({Sql("json_path_exists", "'{\"a\":1}'", "'$.a'")} as int)").Should().Be(
+            1, "json_path_exists is a predicate over the document");
+
+        // Identity/session and metadata families.
+        Scalar<string>(Sql("schema_name")).Should().Be("dbo", "the default schema of the seeded tables");
+        Scalar<string>(Sql("db_name")).Should().NotBeNullOrEmpty("the current database has a name");
+        Scalar<int>(Sql("db_id")).Should().BePositive("the current database has an id");
+
+        // Conversion family.
+        Scalar<string>($"ltrim({Sql("str", "123.456", "10", "2")})").Should().Be(
+            "123.46", "str rounds to two decimals and pads to ten characters");
+        Scalar<string>(Sql("parsename", "'a.b.c'", "2")).Should().Be("b", "parsename reads the second part");
+        Scalar<int>($"cast({Sql("isnumeric", "'123'")} as int)").Should().Be(1, "isnumeric recognises the digits");
+
+        // Hash family.
+        Scalar<string>($"convert(varchar(32), {Sql("hashbytes", "'MD5'", "'abc'")}, 2)").Should().Be(
+            "900150983CD24FB0D6963F7D28E17F72", "HASHBYTES('MD5', 'abc') is the documented digest");
+
+        // Binary/compression family.
+        Scalar<string>($"cast({Sql("decompress", Sql("compress", "'abc'"))} as varchar(10))").Should().Be(
+            "abc", "decompress(compress('abc')) round-trips");
+        Scalar<int>(Sql("checksum", "'abc'")).Should().NotBe(0, "checksum returns a hash of the value");
+
+        // Metadata family: the seeded table and the int type id.
+        Scalar<int>($"cast({Sql("col_length", "'simple_entity'", "'id'")} as int)").Should().Be(
+            4, "the int primary key of the seeded table is four bytes");
+        Scalar<int>($"cast({Sql("object_id", "'simple_entity'")} as int)").Should().BePositive(
+            "the seeded table resolves to an object id");
+        Scalar<string>(Sql("type_name", "56")).Should().Be("int", "type id 56 is int");
+
+        // Clock family. newsequentialid() renders (its arm is asserted above) but T-SQL only allows it
+        // in a DEFAULT expression, so the executable clock probe is sysdatetime().
+        Scalar<DateTime>(Sql("sysdatetime")).Should().BeAfter(
+            new DateTime(2020, 1, 1), "sysdatetime() returns the server clock");
     }
 
     private void Execute(string sql)

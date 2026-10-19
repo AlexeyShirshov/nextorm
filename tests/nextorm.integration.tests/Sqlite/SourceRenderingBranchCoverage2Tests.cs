@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -382,5 +383,102 @@ public sealed class SourceRenderingBranchCoverage2Tests : ProviderTestSuite
         rows.Select(r => r.Key).Should().Equal(1, 2, 3);
         rows.Select(r => r.Renamed).Should().Equal("sdf", "asdfgoi", "34mfs");
         rows.Select(r => r.Int).Should().Equal(null, 1, 1);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // 15-17. The CTE parameter pass, the join-hint dialect gate and the table-function schema gate
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A CTE body that captures a value takes the parameter pass of <c>MakeWithClause</c> (46-63): the
+    /// declaration list is walked in parameter mode (no text emitted, <c>SuppressCtes</c>) while the SQL
+    /// pass still renders the single declaration. The same command shape runs twice on one context, so
+    /// the cached plan re-walks the body in parameter mode.
+    /// </summary>
+    [Fact]
+    public void WithClause_ParameterisedCteBody_ShouldWalkTheParameterPassAndFilterRows()
+    {
+        var ctx = Context;
+        var max = 4;
+        var min = 2;
+
+        var cte = _sut.SimpleEntity
+            .Where(x => x.Id <= max)
+            .Select(x => new { x.Id })
+            .AsCte("d5_param_cte");
+
+        List<int> Read() => ctx.From(cte)
+            .Where(x => x.Id >= min)
+            .OrderBy(x => x.Id)
+            .Select(x => x.Id)
+            .ToList();
+
+        Read().Should().Equal(2, 3, 4);
+        Read().Should().Equal(new[] { 2, 3, 4 }, "the cached plan re-walks the CTE body in parameter mode");
+    }
+
+    /// <summary>
+    /// A join hint is rejected by SQLite (<c>SupportsJoinHints</c> is <c>false</c>,
+    /// <c>MakeJoin</c> 195-198) while the identical join without the hint runs.
+    /// </summary>
+    [Fact]
+    public void Join_JoinHintOnSqlite_ShouldBeRejectedWhilePlainInnerJoinRuns()
+    {
+        var live = _sut.SimpleEntity
+            .Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .OrderBy(p => p.Item1.Id)
+            .Select(p => p.Item1.Id)
+            .ToList();
+
+        live.Should().Equal(1, 2, 3);
+
+        var hinted = () => _sut.SimpleEntity
+            .Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id, j => j.WithJoinHint("loop"))
+            .Select(p => p.Item1.Id)
+            .ToList();
+
+        hinted.Should().Throw<NotSupportedException>().WithMessage("*Join hints are not supported*");
+    }
+
+    /// <summary>
+    /// A table function that declares its result schema is rejected by SQLite
+    /// (<c>SupportsResultSchema</c> is the <c>false</c> base default, <c>RenderResultSchema</c> 874-876)
+    /// while the same function without the declared schema executes <c>json_each</c> live.
+    /// </summary>
+    [Fact]
+    public void FromTableFunction_DeclaredResultSchemaOnSqlite_ShouldBeRejectedWhileThePlainFunctionRuns()
+    {
+        var live = Context.FromTableFunction(() => Sr2Tvf.JsonEach("[1,2,3]"))
+            .OrderBy(r => r.Value)
+            .Select(r => r.Value)
+            .ToList();
+
+        live.Should().Equal(1L, 2L, 3L);
+
+        var declared = () => Context.FromTableFunction(() => Sr2Tvf.JsonEachWithSchema("[1,2,3]"))
+            .Select(r => r.Value)
+            .ToList();
+
+        declared.Should().Throw<NotSupportedException>()
+            .WithMessage("*declares a result schema in the 'AliasColumnList' form*");
+    }
+
+    /// <summary>Row shape of SQLite's <c>json_each</c> used by the table-function schema guard.</summary>
+    public interface ISr2JsonEachRow
+    {
+        [Column("key")]
+        long Key { get; set; }
+
+        [Column("value")]
+        long Value { get; set; }
+    }
+
+    private static class Sr2Tvf
+    {
+        [SqlTableFunction("json_each")]
+        public static IQueryable<ISr2JsonEachRow> JsonEach(string json) => throw new NotSupportedException();
+
+        [SqlTableFunction("json_each", ResultSchema = TableFunctionSchema.AliasColumnList)]
+        public static IQueryable<ISr2JsonEachRow> JsonEachWithSchema(string json) => throw new NotSupportedException();
     }
 }

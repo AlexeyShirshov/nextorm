@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Globalization;
+using System.Linq.Expressions;
 using System.Reflection;
 using FluentAssertions;
 using NextORM.Core;
@@ -74,6 +76,63 @@ public sealed class BuilderGuardBranchCoverage3Tests : ProviderTestSuite
         insert into bg3_parent (id, name) values (1, 'one'), (2, 'two'), (3, 'three');
         insert into bg3_child (id, parent_id, name) values (11, 1, 'c11'), (12, 1, 'c12'), (13, 2, 'c13');
         insert into bg3_single (id, parent_id, name) values (21, 1, 's21'), (22, 2, 's22');
+        drop table if exists bg10_merge;
+        drop table if exists bg10_key;
+        drop table if exists bg10_composite;
+        drop table if exists bg10_only_identity;
+        drop table if exists bg10_insert;
+        drop table if exists bg10_dynamic;
+        drop table if exists bg10_range;
+        drop table if exists bg10_filtered;
+        create table bg10_merge
+        (
+            id integer primary key,
+            name text not null,
+            qty int not null,
+            doubled int not null default 0
+        );
+        insert into bg10_merge (id, name, qty, doubled) values (1, 'one', 10, 20), (2, 'two', 20, 40);
+        create table bg10_key
+        (
+            code text primary key,
+            name text not null
+        );
+        create table bg10_composite
+        (
+            a text not null,
+            b text not null,
+            primary key (a, b)
+        );
+        create table bg10_only_identity
+        (
+            id integer primary key autoincrement
+        );
+        create table bg10_insert
+        (
+            id integer primary key autoincrement,
+            name text not null,
+            doubled int not null default 0
+        );
+        create table bg10_dynamic
+        (
+            id integer primary key,
+            name text not null,
+            extra text
+        );
+        insert into bg10_dynamic (id, name, extra) values (1, 'dyn', 'captured');
+        create table bg10_range
+        (
+            id integer primary key,
+            during_lower int,
+            during_upper int
+        );
+        insert into bg10_range (id, during_lower, during_upper) values (1, 1, 5);
+        create table bg10_filtered
+        (
+            id integer primary key,
+            name text not null
+        );
+        insert into bg10_filtered (id, name) values (1, 'f1'), (2, 'f2');
         """;
 
     public BuilderGuardBranchCoverage3Tests()
@@ -410,6 +469,512 @@ public sealed class BuilderGuardBranchCoverage3Tests : ProviderTestSuite
     }
 
     // ---------------------------------------------------------------------------------------------
+    // D10-02: merge / insert / metadata guard arms. Every fact drives a public entry point against
+    // the class-owned bg10_* tables, asserts the exact exception type and message fragment, and is
+    // paired with a live counterpart of the same builder shape that executes SQL.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>The live key-upsert counterpart: one row is upserted and its value is read back.</summary>
+    private void MergeUpsertIsLive()
+    {
+        Context.CreateMergeBuilder<Bg10MergeRow>()
+            .Using(new Bg10MergeRow { Id = 1, Name = "one-upserted", Qty = 11 })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .Merge()
+            .Should().BeGreaterThan(0);
+
+        Context.From<Bg10MergeRow>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Name)
+            .Single()
+            .Should().Be("one-upserted");
+    }
+
+    [Fact]
+    public void Merge_ActiveTargetFilterWithoutMergeStatement_ShouldBeRejected()
+    {
+        Context.CreateMergeBuilder<Bg10FilteredRow>()
+            .IgnoreFilters()
+            .Using(new Bg10FilteredRow { Id = 1, Name = "filtered-updated" })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .Merge()
+            .Should().BeGreaterThan(0);
+
+        Context.From<Bg10FilteredRow>()
+            .IgnoreFilters()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Name)
+            .Single()
+            .Should().Be("filtered-updated");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10FilteredRow>()
+                .Using(new Bg10FilteredRow { Id = 2, Name = "two" })
+                .OnKeys()
+                .WhenMatchedUpdate()
+                .WhenNotMatchedInsert()
+                .Merge())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*active global query filter cannot isolate the write target*");
+    }
+
+    [Fact]
+    public void Merge_SourceShape_ShouldBeRejected()
+    {
+        MergeUpsertIsLive();
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
+                .Using(new Bg10MergeRow { Id = 1, Name = "a", Qty = 1 })
+                .Using(new Bg10MergeRow { Id = 2, Name = "b", Qty = 2 }))
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*Using can only be specified once per merge*");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>().OnKeys().Merge())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*No source rows were specified*");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
+                .Using(Context.From<Bg10MergeRow>())
+                .OnKeys()
+                .WhenMatchedUpdate()
+                .WhenNotMatchedInsert()
+                .Merge())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*query source requires the full-MERGE branch form*");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
+                .Using(new Bg10MergeRow { Id = 1, Name = "a", Qty = 1 })
+                .OnKeys()
+                .Merge())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*key upsert requires both*");
+    }
+
+    [Fact]
+    public void Merge_MatchConditionExclusivity_ShouldBeRejected()
+    {
+        MergeUpsertIsLive();
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
+                .On((t, s) => t.Id == s.Id)
+                .OnKeys())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*OnKeys can only be specified once*");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10NoKeyRow>().OnKeys())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*has no key property*");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
+                .OnKeys()
+                .On((t, s) => t.Id == s.Id))
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*On can only be specified once; OnKeys was already called*");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
+                .On((t, s) => t.Id == s.Id)
+                .On((t, s) => t.Id == s.Id))
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*On can only be specified once*");
+    }
+
+    [Fact]
+    public void Merge_KeyUpsertWithoutNonKeyColumn_ShouldBeRejected()
+    {
+        MergeUpsertIsLive();
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10CompositeKeyRow>()
+                .Using(new Bg10CompositeKeyRow { A = "a", B = "b" })
+                .OnKeys()
+                .WhenMatchedUpdate()
+                .WhenNotMatchedInsert()
+                .Merge())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*has only key columns*");
+    }
+
+    [Fact]
+    public void Merge_ExplicitBranchColumns_ShouldBeRejected()
+    {
+        MergeUpsertIsLive();
+
+        // The conditional branch entry points (:465, :484) are pure factory calls; they are driven on a
+        // discarded builder because SQLite renders the key-upsert form only.
+        _ = Context.CreateMergeBuilder<Bg10MergeRow>()
+            .Using(new Bg10MergeRow { Id = 1, Name = "a", Qty = 1 })
+            .OnKeys()
+            .WhenMatched((t, s) => t.Qty < s.Qty).ThenDoNothing()
+            .WhenNotMatched((t, s) => s.Qty > 0).ThenDoNothing();
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
+                .Using(new Bg10MergeRow { Id = 1, Name = "a", Qty = 1 })
+                .WhenMatched().ThenUpdate(x => new object()))
+            .Should().Throw<ArgumentException>()
+            .WithMessage("*does not name any mapped column*");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
+                .Using(new Bg10MergeRow { Id = 1, Name = "a", Qty = 1 })
+                .WhenMatched().ThenUpdate(x => new { Extra = x.Extra }))
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*is not a mapped, writable column*");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
+                .Using(new Bg10MergeRow { Id = 1, Name = "a", Qty = 1 })
+                .WhenMatched().ThenUpdate(x => new { Value = x.Id + 1 }))
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*may only name mapped columns*");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10MergeRow>()
+                .Using(new Bg10MergeRow { Id = 1, Name = "a", Qty = 1 })
+                .WhenMatched().ThenUpdate(x => new { x.Doubled }))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*is computed and cannot be written*");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10InsertTarget>()
+                .Using(new Bg10InsertTarget { Name = "a" })
+                .WhenMatched().ThenUpdate(x => new { x.Id }))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*is database-generated and cannot be written by a merge branch*");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10KeyRow>()
+                .Using(new Bg10KeyRow { Code = "c", Name = "a" })
+                .WhenMatched().ThenUpdate(x => new { x.Code }))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*is the merge match key*");
+    }
+
+    [Fact]
+    public void Merge_BranchWithoutSelectableColumn_ShouldBeRejected()
+    {
+        MergeUpsertIsLive();
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10OnlyIdentity>()
+                .Using(Context.From<Bg10OnlyIdentity>())
+                .WhenMatched().ThenUpdate())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*has no column to update*");
+
+        FluentActions
+            .Invoking(() => Context.CreateMergeBuilder<Bg10OnlyIdentity>()
+                .Using(Context.From<Bg10OnlyIdentity>())
+                .WhenNotMatched().ThenInsert())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*has no column to insert*");
+    }
+
+    [Fact]
+    public void InsertSelect_InvalidMapping_ShouldBeRejected()
+    {
+        var source = Context.From<Bg10MergeRow>();
+
+        Context.CreateInsertBuilder<Bg10InsertTarget>()
+            .Values(source, s => new { Name = s.Name })
+            .Insert()
+            .Should().Be(2);
+
+        FluentActions
+            .Invoking(() => Context.CreateInsertBuilder<Bg10InsertTarget>()
+                .Values(source, s => new { Name = SqlDefault.Value }))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*DEFAULT is not valid in an INSERT ... SELECT source*");
+
+        FluentActions
+            .Invoking(() => Context.CreateInsertBuilder<Bg10InsertTarget>()
+                .Values(source, s => new { Unknown = s.Name }))
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*Property Unknown*is not mapped*");
+
+        FluentActions
+            .Invoking(() => Context.CreateInsertBuilder<Bg10InsertTarget>()
+                .Values(source, s => new { Doubled = s.Qty }))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*Property Doubled*is computed and cannot be written*");
+    }
+
+    [Fact]
+    public void InsertValues_MappingAndSelectorShape_ShouldBeRejected()
+    {
+        Context.CreateInsertBuilder<Bg10InsertTarget>()
+            .Values(x => x.Name, new[] { "n1", "n2" })
+            .Insert()
+            .Should().Be(2);
+
+        var source = new[] { new Bg10MergeRow { Id = 1, Name = "s", Qty = 1 } };
+
+        FluentActions
+            .Invoking(() => Context.CreateInsertBuilder<Bg10BindingRow>()
+                .Values(source, s => new Bg10BindingRow { Meta = { Tag = s.Name } }))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*may only assign mapped properties*");
+
+        FluentActions
+            .Invoking(() => Context.CreateInsertBuilder<Bg10InsertTarget>()
+                .Values(source, s => s.Name))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*must be an object initializer*");
+
+        FluentActions
+            .Invoking(() => Context.CreateInsertBuilder<Bg10InsertTarget>()
+                .Values(x => x.Name.ToUpper(), new[] { "a" }))
+            .Should().Throw<ArgumentException>()
+            .WithMessage("*column selector must select a mapped property*");
+
+        FluentActions
+            .Invoking(() => Context.CreateInsertBuilder<Bg10InsertTarget>()
+                .Values(x => x.Extra, new[] { "a" }))
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*Property Extra*is not mapped*");
+
+        FluentActions
+            .Invoking(() => Context.CreateInsertBuilder<Bg10InsertTarget>()
+                .Values(x => x.Doubled, new[] { 1 }))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*is computed and cannot be written*");
+    }
+
+    [Fact]
+    public void QueryFilterAttribute_FormGuards_ShouldBeRejected()
+    {
+        Context.From<Bg10FilterValid>().Select(x => x.Id).ToList().Should().Equal(2);
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterBoth>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must set either*not both*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterNeither>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must name a static member*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterDuplicateKey>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*declares more than one*");
+    }
+
+    [Fact]
+    public void QueryFilterAttribute_LambdaMemberGuards_ShouldBeRejected()
+    {
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterLambdaMissing>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*was not found*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterLambdaBadKind>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must be a static field, a static property or a parameterless static method*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterLambdaBadReturn>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must return a LambdaExpression*");
+    }
+
+    [Fact]
+    public void QueryFilterAttribute_FuncMemberGuards_ShouldBeRejected()
+    {
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterFuncMissing>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*was not found*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterFuncBadKind>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must be a static field, a static property or a parameterless static method*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterFuncBadReturn>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must return a Delegate*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterShapeNonGeneric>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must return a Func<EntityBuilder<TEntity>, IDataContext, EntityBuilder<TEntity>>*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterShapeFirstNotGeneric>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must return a Func<EntityBuilder<TEntity>, IDataContext, EntityBuilder<TEntity>>*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterShapeFirstValue>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must return a Func<EntityBuilder<TEntity>, IDataContext, EntityBuilder<TEntity>>*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterShapeSecondArg>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must return a Func<EntityBuilder<TEntity>, IDataContext, EntityBuilder<TEntity>>*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterShapeResult>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must return a Func<EntityBuilder<TEntity>, IDataContext, EntityBuilder<TEntity>>*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10FilterShapeGenericDefinition>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must return a Func<EntityBuilder<TEntity>, IDataContext, EntityBuilder<TEntity>>*");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_ShapeGuards_ShouldBeRejected()
+    {
+        var row = Context.From<Bg10ValidStore>().ToList().Single();
+        row.Extras.Should().ContainKey("extra").WhoseValue.Should().Be("captured");
+
+        FluentActions
+            .Invoking(() => new EntityMetadataBuilder<Bg10TwoStores>().Build())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*more than one dynamic-columns store*");
+
+        FluentActions
+            .Invoking(() => FluentNameBuilder().Build())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*more than one dynamic-columns store*");
+
+        FluentActions
+            .Invoking(() => TwoFluentStores().Build())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*more than one dynamic-columns store*");
+
+        FluentActions
+            .Invoking(() => FluentStoreBuilder().Build())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*cannot also have a fluent column mapping*");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_ValidationGuards_ShouldBeRejected()
+    {
+        Context.From<Bg10ValidStore>().Select(x => x.Id).ToList().Should().Equal(1);
+
+        FluentActions
+            .Invoking(() => new EntityMetadataBuilder<Bg10StructStore>().Build())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*not supported on the value-type entity*");
+
+        FluentActions
+            .Invoking(() => new EntityMetadataBuilder<Bg10NoSetterStore>().Build())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must have a public setter*");
+
+        FluentActions
+            .Invoking(() => new EntityMetadataBuilder<Bg10WrongStoreType>().Build())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*must be a string-keyed dictionary*");
+    }
+
+    [Fact]
+    public void Metadata_ConverterAndRangeConflicts_ShouldBeRejected()
+    {
+        Context.From<Bg10ValidRange>().Select(x => x.Id).ToList().Should().Equal(1);
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10ConverterConflict>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*cannot be mapped with both*ValueConverterAttribute*JsonColumnAttribute*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10RangeWithConverter>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*cannot be mapped with both*RangeColumnsAttribute*converter*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10RangeOnInt>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*is not Range<T>*");
+
+        FluentActions
+            .Invoking(() => Context.From<Bg10RangeWithColumn>())
+            .Should().Throw<InvalidOperationException>()
+            .WithMessage("*cannot be mapped with both*ColumnAttribute*RangeColumnsAttribute*");
+    }
+
+    [Fact]
+    public void Relationship_NavigationShapeGuards_ShouldBeRejected()
+    {
+        new EntityMetadataBuilder<Bg10NavParent>()
+            .HasMany<Bg3Child, int>(p => p.Children, c => c.ParentId)
+            .Build()
+            .Relationships
+            .Should().ContainSingle();
+
+        Context.From<Bg10NavParent>().Select(x => x.Id).ToList().Should().HaveCount(3);
+
+        FluentActions
+            .Invoking(() => new EntityMetadataBuilder<Bg10NavParent>()
+                .HasMany<Bg3Child, int>(p => (ICollection<Bg3Child>)p.Any, c => c.ParentId))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*must be a collection of*");
+
+        FluentActions
+            .Invoking(() => new EntityMetadataBuilder<Bg10NavParent>()
+                .HasOne<string, int>(p => p.Name, p => p.Id))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*must be a reference-typed property*");
+
+        FluentActions
+            .Invoking(() => new EntityMetadataBuilder<Bg10NavParent>()
+                .HasOneToOne<string, int>(p => p.Name, p => p.Id, c => c.Length))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*must be a reference-typed property*");
+
+        FluentActions
+            .Invoking(() => new EntityMetadataBuilder<Bg10NavParent>()
+                .HasManyThrough<Bg3Child, Bg3Single, int, int>(
+                    p => (IEnumerable<Bg3Child>)p.Any, p => p.Id, j => j.Id, c => c.Id, j => j.Id))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*must be a collection of*");
+    }
+
+    private static EntityMetadataBuilder<Bg10TwoStores> TwoFluentStores()
+    {
+        var builder = new EntityMetadataBuilder<Bg10TwoStores>();
+        builder.Property(x => x.First).DynamicColumnsStore();
+        builder.Property(x => x.Second).DynamicColumnsStore();
+        return builder;
+    }
+
+    private static EntityMetadataBuilder<Bg10TwoStores> FluentNameBuilder()
+    {
+        var builder = new EntityMetadataBuilder<Bg10TwoStores>();
+        builder.Property(x => x.Name);
+        return builder;
+    }
+
+    private static EntityMetadataBuilder<Bg10StoreWithFluent> FluentStoreBuilder()
+    {
+        var builder = new EntityMetadataBuilder<Bg10StoreWithFluent>();
+        builder.Property(x => x.Store);
+        return builder;
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Marker table / metadata plumbing
     // ---------------------------------------------------------------------------------------------
 
@@ -640,5 +1205,395 @@ public sealed class BuilderGuardBranchCoverage3Tests : ProviderTestSuite
         public string Name { get; set; } = string.Empty;
 
         public Bg3Single? Single { get; }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // D10-02 marker entities
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>Key-upsert marker: key, two writable columns and a database-generated (computed) column.</summary>
+    [SqlTable("bg10_merge")]
+    public sealed class Bg10MergeRow
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [Column("qty")]
+        public int Qty { get; set; }
+
+        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+        [Column("doubled")]
+        public int Doubled { get; set; }
+
+        /// <summary>Not a mapped column: read-only, so the automatic builder skips it.</summary>
+        public string Extra => "extra";
+    }
+
+    /// <summary>Marker whose key is a non-generated string column.</summary>
+    [SqlTable("bg10_key")]
+    public sealed class Bg10KeyRow
+    {
+        [Key]
+        [Column("code")]
+        public string Code { get; set; } = string.Empty;
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+    }
+
+    /// <summary>Marker whose every mapped column is part of the composite key.</summary>
+    [SqlTable("bg10_composite")]
+    public sealed class Bg10CompositeKeyRow
+    {
+        [Key]
+        [Column("a")]
+        public string A { get; set; } = string.Empty;
+
+        [Key]
+        [Column("b")]
+        public string B { get; set; } = string.Empty;
+    }
+
+    /// <summary>Marker whose only mapped column is the database-generated identity.</summary>
+    [SqlTable("bg10_only_identity")]
+    public sealed class Bg10OnlyIdentity
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        [Column("id")]
+        public int Id { get; set; }
+    }
+
+    /// <summary>INSERT..SELECT target: identity key, one writable column, a computed column, an unmapped one.</summary>
+    [SqlTable("bg10_insert")]
+    public sealed class Bg10InsertTarget
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+        [Column("doubled")]
+        public int Doubled { get; set; }
+
+        /// <summary>Not a mapped column.</summary>
+        public string Extra => "extra";
+    }
+
+    /// <summary>Marker without any key property.</summary>
+    [SqlTable("bg10_nokey")]
+    public sealed class Bg10NoKeyRow
+    {
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+    }
+
+    /// <summary>Values-mapping target with a getter-only nested value (drives a member-list binding).</summary>
+    [SqlTable("bg10_binding")]
+    public sealed class Bg10BindingRow
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        public Bg10Meta Meta { get; } = new();
+    }
+
+    /// <summary>Nested value behind the member-list binding.</summary>
+    public sealed class Bg10Meta
+    {
+        public string Tag { get; set; } = string.Empty;
+    }
+
+    /// <summary>Dynamic-columns probe with two attribute-declared stores.</summary>
+    public sealed class Bg10TwoStores
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        [DynamicColumns]
+        public Dictionary<string, object?> First { get; set; } = new();
+
+        [DynamicColumns]
+        public Dictionary<string, object?> Second { get; set; } = new();
+    }
+
+    /// <summary>Dynamic-columns probe with one attribute store the fluent builder also maps as a column.</summary>
+    public sealed class Bg10StoreWithFluent
+    {
+        [DynamicColumns]
+        public Dictionary<string, object?> Store { get; set; } = new();
+
+        public string Name { get; set; } = string.Empty;
+    }
+
+    /// <summary>Value-type entity declaring a dynamic-columns store.</summary>
+    public struct Bg10StructStore
+    {
+        [DynamicColumns]
+        public Dictionary<string, object?> Store { get; set; }
+    }
+
+    /// <summary>Dynamic-columns store without a public setter.</summary>
+    public sealed class Bg10NoSetterStore
+    {
+        [DynamicColumns]
+        public Dictionary<string, object?> Store { get; } = new();
+    }
+
+    /// <summary>Dynamic-columns store of a type the store rules reject.</summary>
+    public sealed class Bg10WrongStoreType
+    {
+        [DynamicColumns]
+        public string Store { get; set; } = string.Empty;
+    }
+
+    /// <summary>The live dynamic-columns counterpart: a valid store that collects unmapped columns.</summary>
+    [SqlTable("bg10_dynamic")]
+    public sealed class Bg10ValidStore
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [DynamicColumns]
+        public Dictionary<string, object?> Extras { get; set; } = new();
+    }
+
+    /// <summary>A valid int-to-text converter used only by the conflict probes.</summary>
+    public sealed class Bg10IntToTextConverter : ValueConverter<int, string>
+    {
+        public override string? ConvertToProvider(int model)
+            => model.ToString(CultureInfo.InvariantCulture);
+
+        public override int ConvertFromProvider(string? provider)
+            => provider is null ? 0 : int.Parse(provider, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>A converter and a JSON column on the same property.</summary>
+    [SqlTable("bg10_converter")]
+    public sealed class Bg10ConverterConflict
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [ValueConverter(typeof(Bg10IntToTextConverter))]
+        [JsonColumn]
+        [Column("v")]
+        public int Value { get; set; }
+    }
+
+    /// <summary>A range-column pair combined with a value converter.</summary>
+    public sealed class Bg10RangeWithConverter
+    {
+        [RangeColumns("during_lower", "during_upper")]
+        [ValueConverter(typeof(Bg10IntToTextConverter))]
+        public Range<int> During { get; set; }
+    }
+
+    /// <summary>A range-column pair on a property that is not <c>Range&lt;T&gt;</c>.</summary>
+    public sealed class Bg10RangeOnInt
+    {
+        [RangeColumns("during_lower", "during_upper")]
+        public int During { get; set; }
+    }
+
+    /// <summary>A range-column pair combined with an explicit column name.</summary>
+    public sealed class Bg10RangeWithColumn
+    {
+        [RangeColumns("during_lower", "during_upper")]
+        [Column("during")]
+        public Range<int> During { get; set; }
+    }
+
+    /// <summary>The live range-column counterpart.</summary>
+    [SqlTable("bg10_range")]
+    public sealed class Bg10ValidRange
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [RangeColumns("during_lower", "during_upper")]
+        public Range<int> During { get; set; }
+    }
+
+    /// <summary>Navigation-shape probe: a real collection, a string and an object-typed accessor.</summary>
+    [SqlTable("bg3_parent")]
+    public sealed class Bg10NavParent
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+
+        public ICollection<Bg3Child> Children { get; } = new List<Bg3Child>();
+
+        public object Any { get; } = new object();
+    }
+
+    /// <summary>The live attribute-filter counterpart: two named filters, both <c>id &gt; 1</c>.</summary>
+    [SqlTable("bg10_filtered")]
+    [QueryFilter(FilterKey = "lambda", FilterLambda = nameof(AboveOne))]
+    [QueryFilter(FilterKey = "func", FilterFunc = nameof(AboveOneFunc))]
+    public sealed class Bg10FilterValid
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+
+        public static Expression<Func<Bg10FilterValid, bool>> AboveOne => x => x.Id > 1;
+
+        public static Func<EntityBuilder<Bg10FilterValid>, IDataContext, EntityBuilder<Bg10FilterValid>> AboveOneFunc
+            => (builder, _) => builder.Where(x => x.Id > 1);
+    }
+
+    /// <summary>A filter attribute that sets both declaration forms.</summary>
+    [QueryFilter(FilterLambda = "Any", FilterFunc = "Any")]
+    public sealed class Bg10FilterBoth
+    {
+    }
+
+    /// <summary>A filter attribute that sets neither form and names no key.</summary>
+    [QueryFilter]
+    public sealed class Bg10FilterNeither
+    {
+    }
+
+    /// <summary>Two filter attributes sharing a named key on the same type.</summary>
+    [QueryFilter(FilterKey = "dup", FilterLambda = nameof(Above))]
+    [QueryFilter(FilterKey = "dup", FilterLambda = nameof(Above))]
+    public sealed class Bg10FilterDuplicateKey
+    {
+        public static Expression<Func<Bg10FilterDuplicateKey, bool>> Above => x => true;
+    }
+
+    /// <summary>A lambda declaration naming a member that does not exist.</summary>
+    [QueryFilter(FilterLambda = "NoSuchMember")]
+    public sealed class Bg10FilterLambdaMissing
+    {
+    }
+
+    /// <summary>A lambda declaration naming a static method with a parameter.</summary>
+    [QueryFilter(FilterLambda = nameof(WithParameter))]
+    public sealed class Bg10FilterLambdaBadKind
+    {
+        public static Expression<Func<Bg10FilterLambdaBadKind, bool>> WithParameter(int value) => _ => value > 0;
+    }
+
+    /// <summary>A lambda declaration whose member does not return a lambda expression.</summary>
+    [QueryFilter(FilterLambda = nameof(NotALambda))]
+    public sealed class Bg10FilterLambdaBadReturn
+    {
+        public static int NotALambda => 1;
+    }
+
+    /// <summary>A function declaration naming a member that does not exist.</summary>
+    [QueryFilter(FilterFunc = "NoSuchMember")]
+    public sealed class Bg10FilterFuncMissing
+    {
+    }
+
+    /// <summary>A function declaration naming a static method with a parameter.</summary>
+    [QueryFilter(FilterFunc = nameof(WithParameter))]
+    public sealed class Bg10FilterFuncBadKind
+    {
+        public static object WithParameter(int value) => value;
+    }
+
+    /// <summary>A function declaration whose member does not return a delegate.</summary>
+    [QueryFilter(FilterFunc = nameof(NotADelegate))]
+    public sealed class Bg10FilterFuncBadReturn
+    {
+        public static int NotADelegate => 1;
+    }
+
+    /// <summary>A non-generic delegate shape.</summary>
+    public delegate EntityBuilder<Bg10FilterShapeNonGeneric> Bg10ShapeDelegate(
+        EntityBuilder<Bg10FilterShapeNonGeneric> builder, IDataContext context);
+
+    /// <summary>A function declaration returning a non-generic delegate.</summary>
+    [QueryFilter(FilterFunc = nameof(Shape))]
+    public sealed class Bg10FilterShapeNonGeneric
+    {
+        public static Bg10ShapeDelegate Shape => (builder, _) => builder;
+    }
+
+    /// <summary>A function declaration whose first argument is a generic type other than the builder.</summary>
+    [QueryFilter(FilterFunc = nameof(Shape))]
+    public sealed class Bg10FilterShapeFirstNotGeneric
+    {
+        public static Func<List<int>, IDataContext, List<int>> Shape => (values, _) => values;
+    }
+
+    /// <summary>A function declaration whose first argument is a value type.</summary>
+    [QueryFilter(FilterFunc = nameof(Shape))]
+    public sealed class Bg10FilterShapeFirstValue
+    {
+        public static Func<int, IDataContext, int> Shape => (value, _) => value;
+    }
+
+    /// <summary>A function declaration whose second argument is not the data context.</summary>
+    [QueryFilter(FilterFunc = nameof(Shape))]
+    public sealed class Bg10FilterShapeSecondArg
+    {
+        public static Func<EntityBuilder<Bg10FilterShapeSecondArg>, string, EntityBuilder<Bg10FilterShapeSecondArg>> Shape
+            => (builder, _) => builder;
+    }
+
+    /// <summary>A function declaration whose result is a builder over another entity.</summary>
+    [QueryFilter(FilterFunc = nameof(Shape))]
+    public sealed class Bg10FilterShapeResult
+    {
+        public static Func<EntityBuilder<Bg10FilterShapeResult>, IDataContext, EntityBuilder<Bg10FilterShapeNonGeneric>> Shape
+            => (_, _) => null!;
+    }
+
+    /// <summary>A three-parameter generic delegate that is not <c>Func&lt;,,&gt;</c>.</summary>
+    public delegate EntityBuilder<Bg10FilterShapeGenericDefinition> Bg10GenericDelegate<T1, T2, T3>(T1 first, T2 second, T3 third);
+
+    /// <summary>A function declaration returning a generic delegate whose definition is not <c>Func&lt;,,&gt;</c>.</summary>
+    [QueryFilter(FilterFunc = nameof(Shape))]
+    public sealed class Bg10FilterShapeGenericDefinition
+    {
+        public static Bg10GenericDelegate<
+            EntityBuilder<Bg10FilterShapeGenericDefinition>,
+            IDataContext,
+            EntityBuilder<Bg10FilterShapeGenericDefinition>> Shape
+            => (builder, _, _) => builder;
+    }
+
+    /// <summary>The live merge counterpart of the active-filter guard: a type with an always-true filter.</summary>
+    [SqlTable("bg10_filtered")]
+    [QueryFilter(FilterLambda = nameof(Visible))]
+    public sealed class Bg10FilteredRow
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+
+        public static Expression<Func<Bg10FilteredRow, bool>> Visible => x => x.Id > 0;
     }
 }

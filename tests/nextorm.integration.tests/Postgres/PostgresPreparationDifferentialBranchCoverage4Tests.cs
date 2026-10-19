@@ -62,6 +62,17 @@ public sealed class PostgresPreparationDifferentialBranchCoverage4Tests : Provid
 
     private void DropMarker() => Execute("drop table if exists pg4_marker");
 
+    /// <summary>Prepares through the requested cache mode, returning the plan holder.</summary>
+    private IPreparedQueryCommand<TResult> Prepare<TResult>(QueryCommand<TResult> command, bool storeInCache)
+        => ((DataContext)Context).GetPreparedQueryCommand(
+            command,
+            createEnumerator: false,
+            storeInCache: storeInCache,
+            CancellationToken.None);
+
+    /// <summary>Executes an already prepared command against the live database.</summary>
+    private List<TResult> Rows<TResult>(IPreparedQueryCommand<TResult> prepared) => Context.ToList(prepared);
+
     private static QueryCommand.RawShape? Shape<TResult>(QueryCommand<TResult> command)
         => QueryCommand.CaptureRawShape(command);
 
@@ -131,6 +142,126 @@ public sealed class PostgresPreparationDifferentialBranchCoverage4Tests : Provid
 
             Context.From<Pg4Marker>().Where(x => x.Id == 1).ForShare(LockWaitMode.SkipLocked).Select(x => x.Id)
                 .ToList().Should().Equal(new[] { 1 }, "the first lock shape reads its own row again");
+        }
+        finally
+        {
+            DropMarker();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // 3. Data-modifying CTE: the PostgreSQL-only side-effecting preparation route
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// PostgreSQL-only fact: a data-modifying CTE is a side-effecting statement. <c>HasDataModifyingCte</c>
+    /// is true both for a flat declaration and for a mutation declared on a nested CTE body (the
+    /// recursive probe, <c>QueryCommand.cs</c> :814-899), the raw descriptor is ineligible
+    /// (<c>QueryPreparer.cs</c> :3912), the call-local cache is bypassed while the sticky
+    /// <c>QueryCommand.Cache</c> flag stays untouched, and every run persists its own row.
+    /// </summary>
+    [Fact]
+    public void DataModifyingCteDifferential_ShouldBypassThePlanCacheAndPersistEachRun()
+    {
+        CreateMarker();
+        try
+        {
+            var insert = Context.With("pg4_ins", Context.CreateInsertBuilder<Pg4Marker>()
+                .Value(x => x.Id, 5)
+                .Value(x => x.Label, "five")
+                .Value(x => x.Grp, 2)
+                .Returning(x => new { x.Id }));
+            var command = insert.From("pg4_ins").Select(r => r.Id);
+
+            command.HasDataModifyingCte.Should().BeTrue("the scope declares an INSERT ... RETURNING body");
+            Shape(command).Should().BeNull("a side-effecting data-modifying CTE is never a capturable raw shape");
+
+            var first = Prepare(command, storeInCache: true);
+            command.Cache.Should().BeTrue("the bypass is call-local; the sticky Cache flag is never mutated");
+            Rows(first).Should().Equal(new[] { 5 });
+            Prepare(command, storeInCache: true).Should()
+                .NotBeSameAs(first, "a data-modifying statement never shares its plan");
+
+            var second = Context.With("pg4_ins_second", Context.CreateInsertBuilder<Pg4Marker>()
+                    .Value(x => x.Id, 6)
+                    .Value(x => x.Label, "six")
+                    .Value(x => x.Grp, 1)
+                    .Returning(x => new { x.Id }))
+                .From("pg4_ins_second")
+                .Select(r => r.Id);
+            Rows(Prepare(second, storeInCache: true)).Should().Equal(new[] { 6 });
+
+            Context.From<Pg4Marker>()
+                .Where(x => x.Id >= 5)
+                .OrderBy(x => x.Id)
+                .Select(x => x.Id)
+                .ToList()
+                .Should().Equal(new[] { 5, 6 }, "both side-effecting runs persist their own row");
+
+            var inner = Context.With("pg4_ins_inner", Context.CreateInsertBuilder<Pg4Marker>()
+                .Value(x => x.Id, 7)
+                .Value(x => x.Label, "seven")
+                .Value(x => x.Grp, 1)
+                .Returning(x => new { x.Id }));
+            var body = inner.From("pg4_ins_inner").Select(r => r.Id);
+            var nested = Context.With("pg4_ins_outer", body)
+                .From("pg4_ins_outer")
+                .Select(t => t.GetInt32("id"));
+
+            nested.HasDataModifyingCte.Should()
+                .BeTrue("a mutation declared on a nested CTE body is found by the recursive probe");
+            Shape(nested).Should().BeNull("a nested side-effecting declaration is not capturable");
+        }
+        finally
+        {
+            DropMarker();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // 4. Same context, cached -> uncached -> cached, with a captured-list refresh
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// One context and one captured list: a cached preparation, an uncached one
+    /// (<c>storeInCache: false</c> — the local no-hash route) and a cached one again. The cached runs
+    /// share one holder, the uncached run owns a call-local plan, every run agrees on the rows, and a
+    /// grown list refreshes the parameters of the next cached run.
+    /// </summary>
+    [Fact]
+    public void CachedUncachedCachedDifferential_ShouldAgreeAndRefreshCapturedParameters()
+    {
+        CreateMarker();
+        try
+        {
+            var ids = new List<int> { 1, 2 };
+
+            QueryCommand<int> Filtered() => Context.From<Pg4Marker>()
+                .Where(x => ids.Contains(x.Id))
+                .OrderBy(x => x.Id)
+                .Select(x => x.Id);
+            QueryCommand<int> Grouped() => Context.From<Pg4Marker>()
+                .Where(x => x.Grp == 2)
+                .OrderBy(x => x.Num)
+                .OrderBy(x => x.Id)
+                .Select(x => x.Id);
+
+            var cached = Prepare(Filtered(), storeInCache: true);
+            Rows(cached).Should().Equal(new[] { 1, 2 });
+
+            var uncached = Prepare(Filtered(), storeInCache: false);
+            uncached.Should().NotBeSameAs(cached, "the uncached route builds a call-local plan");
+            Rows(uncached).Should().Equal(new[] { 1, 2 }, "the uncached preparation reads the same rows");
+
+            Prepare(Filtered(), storeInCache: true).Should()
+                .BeSameAs(cached, "the third, cached preparation reuses the first holder");
+
+            ids.Add(3);
+            Rows(Prepare(Filtered(), storeInCache: true)).Should()
+                .Equal(new[] { 1, 2, 3 }, "a changed captured list refreshes the parameters of the next cached run");
+
+            var groupedCached = Prepare(Grouped(), storeInCache: true);
+            Rows(groupedCached).Should().Equal(new[] { 2, 3 });
+            Rows(Prepare(Grouped(), storeInCache: false)).Should().Equal(new[] { 2, 3 });
+            Prepare(Grouped(), storeInCache: true).Should().BeSameAs(groupedCached);
         }
         finally
         {

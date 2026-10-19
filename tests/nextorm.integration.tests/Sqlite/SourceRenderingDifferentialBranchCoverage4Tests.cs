@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
 
 namespace NextORM.Integration.Tests;
@@ -294,6 +295,88 @@ public sealed class SourceRenderingDifferentialBranchCoverage4Tests : ProviderTe
             .ToList();
 
         asOf.Should().Throw<NotSupportedException>().WithMessage("*FOR SYSTEM_TIME*");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // 6-8. ClickHouse-only join kinds and modifiers rejected by the shared SQLite dialect gates
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Distinguishing arm: <c>MakeJoin</c> 209-212 - a <c>LEFT SEMI JOIN</c> (declared through the
+    /// ClickHouse extension, which is provider-agnostic at declaration time) reaches the shared
+    /// <c>SupportsSemiAntiJoin</c> gate and is rejected by SQLite while the ordinary inner join over the
+    /// same class-owned rows runs.
+    /// </summary>
+    [Fact]
+    public void Join_SemiJoinOnSqlite_ShouldBeRejectedWhileTheInnerJoinRuns()
+    {
+        var live = Context.From<Sr4Marker>()
+            .Join(Context.From<Sr4Line>(), (m, l) => m.Id == l.MarkerId)
+            .OrderBy(p => p.Item1.Id)
+            .OrderBy(p => p.Item2.Id)
+            .Select(p => p.Item1.Id)
+            .ToList();
+
+        live.Should().Equal(new[] { 1, 1, 2, 3 }, "the live inner-join counterpart of the rejected shape");
+
+        var semi = () => Context.From<Sr4Marker>()
+            .SemiJoin(Context.From<Sr4Line>(), (m, l) => m.Id == l.MarkerId)
+            .Select(m => m.Id)
+            .ToList();
+
+        semi.Should().Throw<NotSupportedException>().WithMessage("*Semi join is not supported*");
+    }
+
+    /// <summary>
+    /// Distinguishing arm: <c>MakeJoin</c> 214-217 - a <c>PASTE JOIN</c> reaches the shared
+    /// <c>SupportsPasteJoin</c> gate and is rejected by SQLite while the inner join runs.
+    /// </summary>
+    [Fact]
+    public void Join_PasteJoinOnSqlite_ShouldBeRejectedWhileTheInnerJoinRuns()
+    {
+        var live = Context.From<Sr4Marker>()
+            .Join(Context.From<Sr4Line>(), (m, l) => m.Id == l.MarkerId)
+            .Select(p => p.Item1.Id)
+            .ToList();
+
+        live.Should().HaveCount(4, "the live inner-join counterpart of the rejected shape");
+
+        var paste = () => Context.From<Sr4Marker>()
+            .PasteJoin(Context.From<Sr4Line>())
+            .Select(p => p.Item1.Id)
+            .ToList();
+
+        paste.Should().Throw<NotSupportedException>().WithMessage("*PASTE join is not supported*");
+    }
+
+    /// <summary>
+    /// Distinguishing arm: <c>ValidateJoinModifiers</c> 336-339 - the ClickHouse strictness and GLOBAL
+    /// modifiers on a plain inner join are rejected by SQLite before any source is rendered, while the
+    /// unmodified join runs.
+    /// </summary>
+    [Fact]
+    public void Join_StrictnessAndGlobalModifiersOnSqlite_ShouldBeRejectedWhileTheInnerJoinRuns()
+    {
+        var live = Context.From<Sr4Marker>()
+            .Join(Context.From<Sr4Line>(), (m, l) => m.Id == l.MarkerId)
+            .Select(p => p.Item1.Id)
+            .ToList();
+
+        live.Should().Equal(new[] { 1, 1, 2, 3 });
+
+        var strict = () => Context.From<Sr4Marker>()
+            .Join(Context.From<Sr4Line>(), (m, l) => m.Id == l.MarkerId, j => j.WithStrictness(JoinStrictness.Any))
+            .Select(p => p.Item1.Id)
+            .ToList();
+
+        strict.Should().Throw<NotSupportedException>().WithMessage("*Any join modifier is not supported*");
+
+        var global = () => Context.From<Sr4Marker>()
+            .Join(Context.From<Sr4Line>(), (m, l) => m.Id == l.MarkerId, j => j.Global())
+            .Select(p => p.Item1.Id)
+            .ToList();
+
+        global.Should().Throw<NotSupportedException>().WithMessage("*GLOBAL join modifier is not supported*");
     }
 
     /// <summary>Marker row of the class-owned <c>sr4_marker</c> table.</summary>

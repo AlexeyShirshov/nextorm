@@ -79,6 +79,58 @@ public sealed class MariaDbDialectBranchCoverage3Tests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reopened ledger row <c>C8-D3-UNSUPPORTED-GROUPING</c> on the MariaDB dialect, which inherits the
+    /// MySQL capability flags: <c>SupportsCube</c>/<c>SupportsGroupingSets</c> are false while
+    /// <c>SupportsRollup</c> is true, so CUBE and GROUPING SETS fail closed and ROLLUP executes.
+    /// </summary>
+    [Theory]
+    [InlineData("cube")]
+    [InlineData("grouping_sets")]
+    public void UnsupportedGroupingModifiers_ShouldBeRejected(string grouping)
+    {
+        var context = _ctx!;
+
+        switch (grouping)
+        {
+            case "cube":
+                FluentActions.Invoking(() => context.From<Md3Marker>()
+                        .GroupByCube(x => new { x.Grp })
+                        .Select(x => new { x.Grp, Count = SqlFunctions.Sql.count() })
+                        .ToList())
+                    .Should().Throw<NotSupportedException>()
+                    .WithMessage("*CUBE grouping modifier is not supported by this SQL dialect*");
+                break;
+            case "grouping_sets":
+                FluentActions.Invoking(() => context.From<Md3Marker>()
+                        .GroupByGroupingSets(x => new { x.Grp }, new[] { 0 })
+                        .Select(x => new { x.Grp, Count = SqlFunctions.Sql.count() })
+                        .ToList())
+                    .Should().Throw<NotSupportedException>()
+                    .WithMessage("*GROUPING SETS modifier is not supported by this SQL dialect*");
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(grouping), grouping, "Unknown MariaDB grouping case.");
+        }
+    }
+
+    /// <summary>
+    /// The capability-specific control: <c>GroupByRollup</c> on the same dialect returns both groups plus
+    /// the grand-total row (a NULL group holding all three marker rows).
+    /// </summary>
+    [Fact]
+    public void GroupByRollup_ShouldAddTheGrandTotalRow()
+    {
+        var rollup = _ctx!.From<Md3Marker>()
+            .GroupByRollup(x => new { x.Grp })
+            .Select(x => new { x.Grp, Count = SqlFunctions.Sql.count() })
+            .ToList();
+
+        rollup.Should().HaveCount(3);
+        rollup.Single(r => r.Grp is null).Count.Should().Be(3);
+        rollup.Where(r => r.Grp is not null).Select(r => r.Count).Should().BeEquivalentTo(new[] { 2, 1 });
+    }
+
     public void Dispose()
     {
         if (_ctx is null)

@@ -7,7 +7,9 @@ using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
 using Microsoft.Data.SqlClient;
+using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.Postgres;
 using NextORM.SqlServer;
 
 namespace NextORM.Integration.Tests;
@@ -340,6 +342,177 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         rows.Should().HaveCount(4);
         rows.Should().Contain(r => r.Id == 1 && r.Qtr == "q1" && r.Val == 10);
         rows.Should().Contain(r => r.Id == 2 && r.Qtr == "q2" && r.Val == 40);
+    }
+
+    /// <summary>
+    /// The typed <c>PIVOT</c> over a derived source, whose grouping members come from the three
+    /// projection kinds the derived output-name rule distinguishes: a plain member read through under
+    /// its mapped column name (<c>category</c>), a plain member projected under a name that is not its
+    /// column name (aliased to <c>Renamed</c>) and a computed expression (aliased to <c>Label</c>).
+    /// The reshaped rows prove each grouping member resolves to an existing derived output column.
+    /// </summary>
+    [Fact]
+    public void Pivot_TypedDerivedSource_ShouldResolveMappedRenamedAndComputedGroupingColumns()
+    {
+        var ctx = _sut.DataProvider;
+        T232SqlServerFixture.EnsureSeeded(ctx);
+
+        var derived = ctx.From<IT232Sales>()
+            .Select(s => new { s.Category, Renamed = s.Category, Label = s.Category + "-x", s.Margin, s.Quarter });
+
+        var rows = ctx.From(derived)
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter,
+                (m, pv) => new
+                {
+                    m.Category,
+                    m.Renamed,
+                    m.Label,
+                    Q1 = pv.Value<decimal?>("1"),
+                    Q2 = pv.Value<decimal?>("2")
+                })
+            .Select(x => new { x.Category, x.Renamed, x.Label, x.Q1, x.Q2 })
+            .ToList()
+            .OrderBy(r => r.Category)
+            .ToList();
+
+        rows.Should().HaveCount(2);
+        rows[0].Should().BeEquivalentTo(
+            new { Category = "North", Renamed = "North", Label = "North-x", Q1 = (decimal?)10m, Q2 = (decimal?)20m });
+        rows[1].Should().BeEquivalentTo(
+            new { Category = "South", Renamed = "South", Label = "South-x", Q1 = (decimal?)5m, Q2 = (decimal?)null });
+    }
+
+    /// <summary>
+    /// The typed <c>UNPIVOT</c> over a derived source, with the same three grouping-member projection
+    /// kinds; the stacked rows prove the derived output names resolve for the typed path too.
+    /// </summary>
+    [Fact]
+    public void Unpivot_TypedDerivedSource_ShouldResolveMappedRenamedAndComputedGroupingColumns()
+    {
+        var ctx = _sut.DataProvider;
+        T232SqlServerFixture.EnsureSeeded(ctx);
+
+        var derived = ctx.From<IT232Quarterly>()
+            .Select(q => new { q.Category, Renamed = q.Category, Label = q.Category + "-x", q.Q1, q.Q2 });
+
+        var rows = ctx.From(derived)
+            .Unpivot(
+                (m, u) => new
+                {
+                    m.Category,
+                    m.Renamed,
+                    m.Label,
+                    Quarter = u.Name<string>("qtr"),
+                    Value = u.Value<decimal?>("val")
+                },
+                UnpivotColumn.Create("q1"),
+                UnpivotColumn.Create("q2"))
+            .Select(x => new { x.Category, x.Renamed, x.Label, x.Quarter, x.Value })
+            .ToList();
+
+        // SQL Server UNPIVOT drops the NULL source cell: North/q2 is present, South/q2 is not.
+        rows.Should().HaveCount(3);
+        rows.Should().Contain(r => r.Category == "North" && r.Renamed == "North" && r.Label == "North-x"
+            && r.Quarter == "q1" && r.Value == 10m);
+        rows.Should().Contain(r => r.Category == "North" && r.Quarter == "q2" && r.Value == 20m);
+        rows.Should().Contain(r => r.Category == "South" && r.Renamed == "South" && r.Label == "South-x"
+            && r.Quarter == "q1" && r.Value == 5m);
+    }
+
+    /// <summary>
+    /// Every modifier the <c>PIVOT</c>/<c>UNPIVOT</c> source gate rejects on a plain table/entity
+    /// source: the native operators apply to a table expression, so the modifier has to move to the
+    /// reshaped result. The plain-source message is asserted for each one, so a different
+    /// <see cref="NotSupportedException"/> (or an earlier validation error) cannot pass silently.
+    /// </summary>
+    [Fact]
+    public void Pivot_ShouldRejectEveryModifierOnAPlainSource()
+    {
+        var ctx = _sut.DataProvider;
+        T232SqlServerFixture.EnsureSeeded(ctx);
+
+        void AssertRejected(Func<EntityBuilder<IT232Sales>, EntityBuilder<IT232Sales>> apply, string modifier)
+        {
+            FluentActions
+                .Invoking(() => apply(ctx.From<IT232Sales>())
+                    .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1")))
+                .Should().Throw<NotSupportedException>(
+                    "the {0} modifier belongs to the reshaped result on a plain source", modifier)
+                .WithMessage("*plain table/entity source*");
+        }
+
+        AssertRejected(b => b.Where(s => s.Quarter == 1), "Where");
+        AssertRejected(b => b.Having(s => s.Quarter == 1), "Having");
+        AssertRejected(b => b.GroupBy(s => s.Quarter), "GroupBy");
+        AssertRejected(b => b.Distinct(), "Distinct");
+        AssertRejected(b => b.OrderBy(s => s.Quarter, OrderDirection.Asc), "OrderBy");
+        AssertRejected(b => b.Limit(5), "Limit");
+        AssertRejected(b => b.Offset(1), "Offset");
+        AssertRejected(b => b.Page(5, 1), "Page");
+        AssertRejected(b => b.ForUpdate(), "ForUpdate");
+        AssertRejected(b => b.ForShare(), "ForShare");
+        AssertRejected(b => b.ForSystemTime(TemporalClause.All()), "ForSystemTime");
+        AssertRejected(b => b.Window("gate_window"), "Window");
+        AssertRejected(b => b.SelectWhereMax(s => s.Quarter), "SelectWhereMax");
+        AssertRejected(b => b.Settings(("max_threads", "1")), "Settings");
+        AssertRejected(b => b.PreWhere(s => s.Quarter == 1), "PreWhere");
+        AssertRejected(b => b.LimitBy(1, s => s.Quarter), "LimitBy");
+        AssertRejected(b => b.Final(), "Final");
+        AssertRejected(b => b.DistinctOn(s => s.Quarter), "DistinctOn");
+
+        void AssertFromOptionsRejected(Action<FromOptions> options, string modifier)
+        {
+            FluentActions
+                .Invoking(() => ctx.From<IT232Sales>(options)
+                    .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1")))
+                .Should().Throw<NotSupportedException>(
+                    "the {0} source option belongs to the reshaped result on a plain source", modifier)
+                .WithMessage("*plain table/entity source*");
+        }
+
+        AssertFromOptionsRejected(o => o.TableSample(10), "TableSample");
+        AssertFromOptionsRejected(o => o.WithTableHint("nolock"), "TableHint");
+        AssertFromOptionsRejected(o => o.WithIndex("PK_t232_sales"), "IndexHint");
+        AssertFromOptionsRejected(o => o.Sample(0.5), "Sample");
+
+        // A typed CTE source carries its declaration but no derived query: the same plain-source arm.
+        var cte = ctx.From<IT232Sales>()
+            .Where(s => s.Quarter > 0)
+            .Select(s => new { s.Category, s.Margin, s.Quarter })
+            .AsCte("t232_gate_cte");
+
+        FluentActions
+            .Invoking(() => ctx.From(cte)
+                .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1")))
+            .Should().Throw<NotSupportedException>("the CTE declaration is a source modifier")
+            .WithMessage("*plain table/entity source*");
+    }
+
+    /// <summary>
+    /// The derived-source arm of the same gate: a modifier applied on the pivot builder over
+    /// <c>From(query)</c> is rejected with the message that names the derived query.
+    /// </summary>
+    [Fact]
+    public void Pivot_ShouldRejectModifiersOnADerivedSourceWithTheDerivedMessage()
+    {
+        var ctx = _sut.DataProvider;
+        T232SqlServerFixture.EnsureSeeded(ctx);
+
+        var derived = ctx.From<IT232Sales>().Select(s => new { s.Category, s.Margin, s.Quarter });
+
+        FluentActions
+            .Invoking(() => ctx.From(derived)
+                .Where(x => x.Quarter == 1)
+                .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.Quarter, PivotValue.Create("1")))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*derived query accepts no modifiers*");
+
+        FluentActions
+            .Invoking(() => ctx.From(derived)
+                .OrderBy(x => x.Quarter, OrderDirection.Asc)
+                .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.Quarter, PivotValue.Create("1")))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*derived query accepts no modifiers*");
     }
 
     private static int MergeTestKey() => Random.Shared.Next(1_000_000, int.MaxValue);

@@ -98,6 +98,10 @@ public sealed class PreparationDifferentialBranchCoverage4Tests : ProviderTestSu
             storeInCache: storeInCache,
             CancellationToken.None);
 
+    /// <summary>Prepares through the cached path (<c>storeInCache: true</c>), returning the plan holder.</summary>
+    private IPreparedQueryCommand<TResult> Prepare<TResult>(QueryCommand<TResult> command)
+        => Prepare(command, storeInCache: true);
+
     /// <summary>Executes an already prepared command against the live database.</summary>
     private List<TResult> Rows<TResult>(IPreparedQueryCommand<TResult> prepared) => Context.ToList(prepared);
 
@@ -279,6 +283,137 @@ public sealed class PreparationDifferentialBranchCoverage4Tests : ProviderTestSu
             .OrderBy(x => x.Id)
             .Select(x => new { x.Id, x.Name }), storeInCache: true));
         rows.Select(r => r.Name).Should().Equal("alpha", "beta", "gamma", "delta");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // 6. A lazy temporary table behind a join, a set operation and a derived subquery
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// The temporary-table detection walk over a JOIN source (<c>QueryCommand.HasTemporaryTableSource</c>
+    /// :44-45): the table is materialized first and the join reads its own live rows.
+    /// </summary>
+    [Fact]
+    public void TempTableSourceJoin_ShouldMaterializeBeforeTheJoinAndRead()
+    {
+        ResetPlanCache();
+
+        var temp = Context.From<Pd4Main>()
+            .Where(x => x.Grp == 1)
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id })
+            .AsTempTable();
+
+        var joined = Context.From(temp)
+            .CrossJoin(Context.From<Pd4Line>())
+            .OrderBy(p => p.Item2.Id)
+            .Select(p => p.Item2.Label);
+        Rows(Prepare(joined)).Should()
+            .Equal(new[] { "x", "x", "y", "y", "z", "z" },
+                "the temp-table join source is materialized before the join and pairs each group-1 marker with every line");
+    }
+
+    /// <summary>
+    /// The detection walk over a set-operation operand (<c>QueryCommand.HasTemporaryTableSource</c>
+    /// :19-20): the temp source and the plain operand are both read.
+    /// </summary>
+    [Fact]
+    public void TempTableSourceUnion_ShouldMaterializeAndReadBothOperands()
+    {
+        ResetPlanCache();
+
+        var temp = Context.From<Pd4Main>()
+            .Where(x => x.Grp == 1)
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id })
+            .AsTempTable();
+
+        var union = Context.From(temp)
+            .Select(t => t.GetInt32("id"))
+            .Union(Context.From<Pd4Line>().Select(l => l.Id));
+        Rows(Prepare(union)).Should()
+            .BeEquivalentTo(new[] { 1, 2, 10, 11, 12 }, "the temp source and the plain operand are both read");
+    }
+
+    /// <summary>
+    /// The detection walk over a derived subquery that reads the temp table
+    /// (<c>QueryCommand.HasTemporaryTableSource</c> :57-58): the derived form materializes it and reads rows.
+    /// </summary>
+    [Fact]
+    public void TempTableSourceDerived_ShouldMaterializeAndRead()
+    {
+        ResetPlanCache();
+
+        var temp = Context.From<Pd4Main>()
+            .Where(x => x.Grp == 1)
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id })
+            .AsTempTable();
+
+        var inner = Context.From(temp)
+            .OrderBy(t => t.GetInt32("id"))
+            .Select(t => new { Id = t.GetInt32("id") });
+        var derived = Context.From(inner)
+            .OrderBy(x => x.Id)
+            .Select(x => x.Id * 2);
+        Rows(Prepare(derived)).Should()
+            .Equal(new[] { 2, 4 }, "the detection walk descends into a derived subquery that reads the temp table");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // 7. Same context, cached -> uncached -> cached, with a captured-list refresh
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// The preparation differential the class exists for: one context, a cached preparation, an
+    /// uncached one (<c>storeInCache: false</c> — the local no-hash route, never the sticky
+    /// <c>Cache</c> flag) and a cached one again. Two cached runs must share one holder while the
+    /// uncached run owns a call-local one, every run must agree on the rows, and a grown captured list
+    /// must refresh the parameters of the next cached run.
+    /// </summary>
+    [Fact]
+    public void CachedUncachedCachedDifferential_JoinGroupingAndCapturedList_ShouldAgree()
+    {
+        ResetPlanCache();
+
+        var ids = new List<int> { 1, 2 };
+
+        QueryCommand<int> Filtered() => Context.From<Pd4Main>()
+            .Where(x => ids.Contains(x.Id))
+            .OrderBy(x => x.Id)
+            .Select(x => x.Id);
+        QueryCommand<int> Joined() => Context.From<Pd4Main>()
+            .Join(Context.From<Pd4Line>(), (m, l) => m.Id == l.MainId)
+            .Where(p => p.Item1.Grp == 1)
+            .OrderBy(p => p.Item1.Id)
+            .OrderBy(p => p.Item2.Id)
+            .Select(p => p.Item2.Id);
+        QueryCommand<int> Grouped() => Context.From<Pd4Main>()
+            .GroupBy(x => new { x.Grp })
+            .Having(g => g.Grp > 0)
+            .Select(g => g.Grp);
+
+        var filteredCached = Prepare(Filtered(), storeInCache: true);
+        Rows(filteredCached).Should().Equal(new[] { 1, 2 });
+
+        var filteredUncached = Prepare(Filtered(), storeInCache: false);
+        filteredUncached.Should().NotBeSameAs(filteredCached, "the uncached route builds a call-local plan");
+        Rows(filteredUncached).Should().Equal(new[] { 1, 2 }, "the uncached preparation reads the same rows");
+
+        Prepare(Filtered(), storeInCache: true).Should()
+            .BeSameAs(filteredCached, "the third, cached preparation reuses the first holder");
+
+        ids.Add(3);
+        Rows(Prepare(Filtered(), storeInCache: true)).Should()
+            .Equal(new[] { 1, 2, 3 }, "a changed captured list folds its new shape into the next cached run");
+
+        var joinedCached = Prepare(Joined(), storeInCache: true);
+        Rows(joinedCached).Should().Equal(new[] { 10, 11 }, "the group-1 markers join their two lines");
+        Rows(Prepare(Joined(), storeInCache: false)).Should().Equal(new[] { 10, 11 });
+        Prepare(Joined(), storeInCache: true).Should().BeSameAs(joinedCached);
+
+        var groupedCached = Prepare(Grouped(), storeInCache: true);
+        Rows(groupedCached).Should().Equal(new[] { 1, 2 });
+        Rows(Prepare(Grouped(), storeInCache: false)).Should().Equal(new[] { 1, 2 });
+        Prepare(Grouped(), storeInCache: true).Should().BeSameAs(groupedCached);
     }
 
     /// <summary>Marker row of the class-owned <c>pd4_main</c> table.</summary>

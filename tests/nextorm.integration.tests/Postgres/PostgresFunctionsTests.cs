@@ -718,4 +718,310 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         r.Bl.Should().Be(24);
         r.Ol.Should().Be(3);
     }
+
+    [Fact]
+    public void LastIndexOfOrdinalOverloads_ShouldReturnTheLastPosition()
+    {
+        // PostgreSQL has the reverse primitive the shared renderer composes. "dadfasd" (row 1) holds
+        // its last 'a' at zero-based index 4, and the ignore-case arm searches for the upper-case
+        // spelling, which cannot match unless both sides are case-folded.
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Plain = x.String!.LastIndexOf("a"),
+                Ordinal = x.String!.LastIndexOf("a", StringComparison.Ordinal),
+                OrdinalIgnoreCase = x.String!.LastIndexOf("A", StringComparison.OrdinalIgnoreCase),
+                Missing = x.String!.LastIndexOf("zzz", StringComparison.Ordinal)
+            })
+            .First();
+
+        r.Plain.Should().Be(4);
+        r.Ordinal.Should().Be(4);
+        r.OrdinalIgnoreCase.Should().Be(4);
+        r.Missing.Should().Be(-1);
+    }
+
+    [Fact]
+    public void SearchOrdinalOverloads_ShouldMatchByCodePoint()
+    {
+        // PostgreSQL opts into ordinal LIKE with the "C" collation; row 2 is "xxx", so the
+        // upper-case ordinal spellings must not match while the ignore-case forms do.
+        var r = _sut.ComplexEntity.Where(x => x.Id == 2)
+            .Select(x => new
+            {
+                ContainsOrdinal = x.String!.Contains("xx", StringComparison.Ordinal),
+                ContainsOrdinalUpper = x.String!.Contains("XX", StringComparison.Ordinal),
+                StartsWithOrdinal = x.String!.StartsWith("xx", StringComparison.Ordinal),
+                StartsWithOrdinalUpper = x.String!.StartsWith("XX", StringComparison.Ordinal),
+                EndsWithOrdinal = x.String!.EndsWith("xx", StringComparison.Ordinal),
+                EndsWithOrdinalUpper = x.String!.EndsWith("XX", StringComparison.Ordinal),
+                ContainsIgnoreCase = x.String!.Contains("XX", StringComparison.OrdinalIgnoreCase),
+                StartsWithIgnoreCase = x.String!.StartsWith("XX", StringComparison.OrdinalIgnoreCase),
+                EndsWithIgnoreCase = x.String!.EndsWith("XX", StringComparison.OrdinalIgnoreCase)
+            })
+            .First();
+
+        r.ContainsOrdinal.Should().BeTrue();
+        r.ContainsOrdinalUpper.Should().BeFalse();
+        r.StartsWithOrdinal.Should().BeTrue();
+        r.StartsWithOrdinalUpper.Should().BeFalse();
+        r.EndsWithOrdinal.Should().BeTrue();
+        r.EndsWithOrdinalUpper.Should().BeFalse();
+        r.ContainsIgnoreCase.Should().BeTrue();
+        r.StartsWithIgnoreCase.Should().BeTrue();
+        r.EndsWithIgnoreCase.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// The pair-of-columns range translator accepts only predicates, inspection functions and
+    /// captured range values. A range-returning function (projected or used as an operand), the empty
+    /// range and a multirange operand are rejected at translation with the documented messages.
+    /// </summary>
+    [Fact]
+    public void RangeColumnPairOperandGuards_ShouldBeRejected()
+    {
+        var ctx = (DataContext)_sut.DataProvider;
+
+        FluentActions.Invoking(() => ctx.From<CommonTestSuite.IRangeProbe>()
+                .Where(x => x.Id == 1
+                    && SqlFunctions.Postgres.range_union(x.During, new Range<int>(1, 10)) == new Range<int>(2, 9))
+                .Select(x => x.Id)
+                .ToList())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*returns a range and cannot be expressed over a pair of columns*");
+
+        FluentActions.Invoking(() => ctx.From<CommonTestSuite.IRangeProbe>()
+                .Where(x => SqlFunctions.Postgres.range_contains(x.During, SqlFunctions.Postgres.int4range(1, 10)))
+                .Select(x => x.Id)
+                .ToList())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*The PostgreSQL range function 'int4range' returns a range*");
+
+        FluentActions.Invoking(() => ctx.From<CommonTestSuite.IRangeProbe>()
+                .Where(x => SqlFunctions.Postgres.range_contains(x.During, Range<int>.Empty))
+                .Select(x => x.Id)
+                .ToList())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*The empty range cannot be expressed over a pair of columns*");
+
+        FluentActions.Invoking(() => ctx.From<CommonTestSuite.IRangeProbe>()
+                .Where(x => SqlFunctions.Postgres.overlaps(x.During, Array.Empty<Range<int>>()))
+                .Select(x => x.Id)
+                .ToList())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*is neither a range column pair nor a captured range value*");
+    }
+
+    [Fact]
+    public void ConditionalAndNullIfFunctions_ShouldReturnValues()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Nulled = SqlFunctions.Sql.nullif(x.String, "dadfasd"),
+                Kept = SqlFunctions.Sql.nullif(x.String, "other"),
+                ChosenFalse = SqlFunctions.Sql.iif(x.Id > 1, "big", "small"),
+                ChosenTrue = SqlFunctions.Sql.iif(x.Id == 1, "one", "other"),
+                Greatest = SqlFunctions.Sql.greatest(x.Id, 2L, 3L),
+                Least = SqlFunctions.Sql.least(x.Id, 2L, 3L)
+            })
+            .First();
+
+        r.Nulled.Should().BeNull();
+        r.Kept.Should().Be("dadfasd");
+        r.ChosenFalse.Should().Be("small");
+        r.ChosenTrue.Should().Be("one");
+        r.Greatest.Should().Be(3L);
+        r.Least.Should().Be(1L);
+    }
+
+    [Fact]
+    public void GreatestAndLeast_WithoutArguments_ShouldBeRejected()
+    {
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.Sql.greatest<long>())
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("greatest/least requires at least one argument.");
+
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.Sql.least<long>())
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("greatest/least requires at least one argument.");
+    }
+
+    [Fact]
+    public void DateFunctionGuards_ShouldBeRejected()
+    {
+        var field = "month";
+        var part = "year";
+
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.Sql.date_trunc(field, x.Datetime))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The date_trunc field must be a constant string.");
+
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.Sql.date_trunc("fortnight", x.Datetime))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("'fortnight' is not a supported date_trunc field for this provider.");
+
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.Sql.date_add(field, 1, x.Datetime))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The date_add field must be a constant string.");
+
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.Sql.date_add("fortnight", 1, x.Datetime))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("'fortnight' is not a supported date_add field for this provider.");
+
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.Sql.date_diff(field, x.Datetime, x.Datetime))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The date_diff field must be a constant string.");
+
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.Sql.date_diff("decade", x.Datetime, x.Datetime))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("'decade' is not a supported date_diff field for this provider.");
+
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.Sql.extract(part, x.Datetime))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The date part must be a constant string.");
+
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.Sql.extract("epoch", x.Datetime))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("'epoch' is a numeric date part; use date_part.");
+
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.Sql.date_part("year", x.Datetime))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("date_part only provides the numeric 'epoch' part; use extract for the 'year' part.");
+
+        FluentActions.Invoking(() => _sut.ComplexEntity
+                .Select(x => SqlFunctions.Sql.extract("fortnight", x.Datetime))
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("'fortnight' is not a supported date part for this provider.");
+    }
+
+    [Fact]
+    public void FullTextPredicates_ShouldMatchTheDocument()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Contains = SqlFunctions.Sql.contains(x.String, "dadfasd"),
+                FreeText = SqlFunctions.Sql.freetext(x.String, "dadfasd"),
+                Missing = SqlFunctions.Sql.freetext(x.String, "zzz")
+            })
+            .First();
+
+        r.Contains.Should().BeTrue();
+        r.FreeText.Should().BeTrue();
+        r.Missing.Should().BeFalse();
+    }
+
+    [Fact]
+    public void DistinctAndFilteredAggregates_ShouldCompute()
+    {
+        var r = _sut.SimpleEntity
+            .Select(x => new
+            {
+                Count = SqlFunctions.Sql.count(),
+                CountArgument = SqlFunctions.Sql.count(x.Id),
+                CountFiltered = SqlFunctions.Sql.count(() => x.Id <= 4),
+                CountBig = SqlFunctions.Sql.count_big(),
+                CountBigFiltered = SqlFunctions.Sql.count_big(() => x.Id > 5),
+                CountDistinct = SqlFunctions.Sql.count_distinct(x.Id),
+                CountBigDistinct = SqlFunctions.Sql.count_big_distinct(x.Id),
+                Min = SqlFunctions.Sql.min(x.Id),
+                Max = SqlFunctions.Sql.max(x.Id),
+                MinFiltered = SqlFunctions.Sql.min(x.Id, () => x.Id > 3),
+                MaxFiltered = SqlFunctions.Sql.max(x.Id, () => x.Id < 4),
+                Avg = SqlFunctions.Sql.avg((double)x.Id),
+                Sum = SqlFunctions.Sql.sum((long)x.Id),
+                AvgFiltered = SqlFunctions.Sql.avg((double)x.Id, () => x.Id <= 4),
+                SumFiltered = SqlFunctions.Sql.sum((long)x.Id, () => x.Id <= 4),
+                Stdev = SqlFunctions.Sql.stdev((double)x.Id),
+                Stdevp = SqlFunctions.Sql.stdevp((double)x.Id),
+                Var = SqlFunctions.Sql.var((double)x.Id),
+                Varp = SqlFunctions.Sql.varp((double)x.Id),
+                AvgDistinct = SqlFunctions.Sql.avg_distinct((double)x.Id),
+                SumDistinct = SqlFunctions.Sql.sum_distinct((long)x.Id),
+                StdevDistinct = SqlFunctions.Sql.stdev_distinct((double)x.Id),
+                StdevpDistinct = SqlFunctions.Sql.stdevp_distinct((double)x.Id),
+                VarDistinct = SqlFunctions.Sql.var_distinct((double)x.Id),
+                VarpDistinct = SqlFunctions.Sql.varp_distinct((double)x.Id)
+            })
+            .First();
+
+        r.Count.Should().Be(10);
+        r.CountArgument.Should().Be(10);
+        r.CountFiltered.Should().Be(4);
+        r.CountBig.Should().Be(10L);
+        r.CountBigFiltered.Should().Be(5L);
+        r.CountDistinct.Should().Be(10);
+        r.CountBigDistinct.Should().Be(10L);
+        r.Min.Should().Be(1);
+        r.Max.Should().Be(10);
+        r.MinFiltered.Should().Be(4);
+        r.MaxFiltered.Should().Be(3);
+        r.Avg.Should().BeApproximately(5.5, 1e-12);
+        r.Sum.Should().Be(55L);
+        r.AvgFiltered.Should().BeApproximately(2.5, 1e-12);
+        r.SumFiltered.Should().Be(10L);
+        r.Stdev.Should().BeApproximately(3.0276503540974917, 1e-12);
+        r.Stdevp.Should().BeApproximately(2.8722813232690143, 1e-12);
+        r.Var.Should().BeApproximately(9.166666666666666, 1e-12);
+        r.Varp.Should().BeApproximately(8.25, 1e-12);
+        r.AvgDistinct.Should().BeApproximately(5.5, 1e-12);
+        r.SumDistinct.Should().Be(55L);
+        r.StdevDistinct.Should().BeApproximately(3.0276503540974917, 1e-12);
+        r.StdevpDistinct.Should().BeApproximately(2.8722813232690143, 1e-12);
+        r.VarDistinct.Should().BeApproximately(9.166666666666666, 1e-12);
+        r.VarpDistinct.Should().BeApproximately(8.25, 1e-12);
+    }
+
+    [Fact]
+    public void OrderedSetAggregates_ShouldReturnTheOrderStatistics()
+    {
+        var r = _sut.ComplexEntity
+            .Where(x => x.Int != null)
+            .Select(x => new
+            {
+                PctCont = SqlFunctions.Postgres.percentile_cont(0.5, () => (double)x.Int!),
+                PctDisc = SqlFunctions.Postgres.percentile_disc(0.5, () => x.Int),
+                Mode = SqlFunctions.Postgres.mode(() => x.Int)
+            })
+            .First();
+
+        r.PctCont.Should().BeApproximately(1.0, 1e-12);
+        r.PctDisc.Should().Be(1);
+        r.Mode.Should().Be(1);
+    }
+
+    [Fact]
+    public void ClickHouseGlobalIn_OnPostgres_ShouldBeRejected()
+    {
+        FluentActions.Invoking(() => _sut.SimpleEntity
+                .Where(x => SqlFunctions.ClickHouse.global_in(x.Id, 1, 2, 3))
+                .Select(x => x.Id)
+                .First())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The GLOBAL IN predicate is not supported by this provider.");
+    }
 }

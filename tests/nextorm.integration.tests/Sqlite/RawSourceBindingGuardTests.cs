@@ -89,7 +89,8 @@ public sealed class RawSourceBindingGuardTests : ProviderTestSuite
             var composed = compose();
             FluentActions
                 .Invoking(() => composed.BindEntity<SimpleEntity>(new[] { "id" }))
-                .Should().Throw<InvalidOperationException>(name);
+                .Should().Throw<InvalidOperationException>(name)
+                .WithMessage("*must be called immediately after FromSql/From(string)*");
         }
     }
 
@@ -101,19 +102,50 @@ public sealed class RawSourceBindingGuardTests : ProviderTestSuite
         FluentActions
             .Invoking(() => ctx.From("simple_entity")
                 .BindEntity<TableAlias>(new[] { "id" }))
-            .Should().Throw<NotSupportedException>();
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*cannot target TableAlias*");
 
         FluentActions
             .Invoking(() => ctx.From(ctx.From("simple_entity"))
                 .BindEntity<SimpleEntity>(new[] { "id" }))
-            .Should().Throw<NotSupportedException>();
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*direct FromSql or From(string) source*");
 
         FluentActions
             .Invoking(() => ctx.From("simple_entity").BindEntity<SimpleEntity>(new[] { "id", " " }))
-            .Should().Throw<ArgumentException>();
+            .Should().Throw<ArgumentException>()
+            .WithMessage("*non-null and non-blank*");
 
         FluentActions
             .Invoking(() => ctx.From("simple_entity").BindEntity<SimpleEntity>(null!))
-            .Should().Throw<ArgumentNullException>();
+            .Should().Throw<ArgumentNullException>()
+            .WithMessage("*availableColumns*");
+    }
+
+    /// <summary>
+    /// SqlBuilder.cs:2203 — a raw-SQL source parameter and a captured variable with the same name would
+    /// bind two parameters named <c>id</c>; the build fails closed instead of letting the provider reject
+    /// the command. Distinct names execute and return the filtered rows.
+    /// </summary>
+    [Fact]
+    public void DuplicateParameterName_WithRawSqlSource_ShouldBeRejected()
+    {
+        var ctx = _sut.DataProvider;
+        var id = 2;
+        var floor = 3;
+
+        FluentActions
+            .Invoking(() => ctx.FromSql("select id from simple_entity where id > @id", new { id })
+                .Where(t => t["id"].AsInt > id)
+                .Select(t => t["id"].AsInt)
+                .ToList())
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*two parameters named 'id'*");
+
+        ctx.FromSql("select id from simple_entity where id > @floor", new { floor })
+            .OrderBy(t => t["id"].AsInt)
+            .Select(t => t["id"].AsInt)
+            .ToList()
+            .Should().Equal(4, 5, 6, 7, 8, 9, 10);
     }
 }

@@ -141,6 +141,54 @@ public sealed class PostgresFunctionExecutionTests : ProviderTestSuite
         r.FromString.Should().Equal("a", "b", "c");
     }
 
+    /// <summary>
+    /// The PostgreSQL 16 array-sampling functions: <c>array_shuffle</c> returns a permutation of its
+    /// input and <c>array_sample</c> exactly the requested number of its elements.
+    /// </summary>
+    [Fact]
+    public void ArrayShuffleAndSample_ShouldExecute()
+    {
+        var array = new[] { 3, 1, 2, 4 };
+
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Shuffle = SqlFunctions.Postgres.array_shuffle(array),
+                Sample = SqlFunctions.Postgres.array_sample(array, 2)
+            })
+            .First();
+
+        r.Shuffle.Should().BeEquivalentTo(array);
+        r.Sample.Should().HaveCount(2);
+        r.Sample.Should().OnlyContain(x => array.Contains(x));
+    }
+
+    /// <summary>
+    /// The <c>any</c>/<c>all</c> array quantifiers inside a cached WHERE: the second, plan-cache-hit
+    /// execution re-renders the predicate through <c>QueryPlanner.ExtractParams</c> with
+    /// <c>IsParamMode</c> true, which is the only path that renders the array operand without a SQL
+    /// builder (<c>ArraySqlTranslator.cs:70-73</c>). The sort keeps the fast
+    /// <c>ParamRefreshRecipe</c> out of the way, so a broken param-mode arm throws instead of
+    /// returning silently.
+    /// </summary>
+    [Fact]
+    public void ArrayQuantifiers_OnCacheHit_ShouldRefreshInParamMode()
+    {
+        var values = new[] { 1, 2 };
+
+        for (var i = 0; i < 2; i++)
+        {
+            var ids = _sut.SimpleEntity
+                .Where(x => x.Id == SqlFunctions.Postgres.any(values) || SqlFunctions.Postgres.all(x.Id, values))
+                .OrderBy(x => x.Id)
+                .Select(x => x.Id)
+                .ToList();
+
+            ids.Should().Equal(1, 2);
+        }
+    }
+
     [Fact]
     public void SessionInfoFunctions_ShouldExecute()
     {

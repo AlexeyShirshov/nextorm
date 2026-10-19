@@ -2,7 +2,9 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq.Expressions;
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.Postgres;
 
 namespace NextORM.Integration.Tests;
 
@@ -114,6 +116,12 @@ public sealed class PlanEqualityDifferentialBranchCoverage4Tests : ProviderTestS
 
     /// <summary>Drops every cached plan (and the raw candidate index) on this context.</summary>
     private void ResetPlanCache() => Context.PurgeQueryCache();
+
+    /// <summary>
+    /// Prepares the command in place (hashes included) without rendering SQL, so a provider-specific
+    /// clause that this dialect rejects at render time still reaches the provider-independent plan key.
+    /// </summary>
+    private static void Resolve(QueryCommand command) => command.PrepareCommand(dontCalculateHash: false, CancellationToken.None);
 
     /// <summary>A captured object whose member is read inside a predicate expression.</summary>
     private sealed class FloorProbe
@@ -559,6 +567,232 @@ public sealed class PlanEqualityDifferentialBranchCoverage4Tests : ProviderTestS
 
         Rows(Prepare(same)).Should().Equal(2, 3, 4);
         Rows(Prepare(other)).Should().Equal(3, 4);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // 10. Plan-key clause fields: grouping totals, LIMIT BY, DISTINCT ON and the extreme-row clause
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// Arms B (clause fields): <c>EqualsCore</c> <c>GroupByWithTotals</c> :76, <c>LimitBy</c> null
+    /// presence :82 and expression :86, <c>DistinctOn</c> null presence :93 and <c>ExtremeRow</c> null
+    /// presence :102. Every pair is built on this ONE context and prepared in place; the plain grouping
+    /// shape behind the fact still executes live. The provider-specific clauses are not rendered by the
+    /// SQLite dialect (the comparer is provider independent), so only their plan keys are asserted.
+    /// </summary>
+    [Fact]
+    public void ClauseFields_GroupTotalsLimitByDistinctOnAndExtremeRow_ShouldKeySeparately()
+    {
+        ResetPlanCache();
+
+        QueryCommand<int> PlainIds() => Context.From<Pd4Marker>().OrderBy(x => x.Id).Select(x => x.Id);
+        QueryCommand<int> PlainCounts() => Context.From<Pd4Marker>()
+            .GroupBy(x => new { x.Grp })
+            .Select(g => SqlFunctions.Sql.count());
+
+        var plainIds = PlainIds();
+        var plainCounts = PlainCounts();
+        var totals = Context.From<Pd4Marker>()
+            .GroupBy(x => new { x.Grp })
+            .WithTotals()
+            .Select(g => SqlFunctions.Sql.count());
+
+        Resolve(plainCounts);
+        Resolve(totals);
+
+        var comparer = plainCounts.GetQueryPlanEqualityComparer();
+        comparer.Equals(plainCounts, totals).Should().BeFalse("GROUP BY ... WITH TOTALS is part of the plan key");
+        comparer.GetHashCode(plainCounts).Should().NotBe(comparer.GetHashCode(totals));
+        Rows(Prepare(plainCounts)).Should().Equal(new[] { 2, 2 }, "the plain grouping shape executes live");
+
+        var limitByGroup = Context.From<Pd4Marker>().LimitBy(2, x => x.Grp).OrderBy(x => x.Id).Select(x => x.Id);
+        var limitByTag = Context.From<Pd4Marker>().LimitBy(2, x => x.Tag).OrderBy(x => x.Id).Select(x => x.Id);
+
+        Resolve(plainIds);
+        Resolve(limitByGroup);
+        Resolve(limitByTag);
+
+        comparer.Equals(plainIds, limitByGroup).Should().BeFalse(
+            "a LIMIT BY clause present on one side only is a different plan key");
+        comparer.Equals(limitByGroup, limitByTag).Should().BeFalse(
+            "the same LIMIT BY bounds with a different expression are a different plan key");
+        comparer.GetHashCode(limitByGroup).Should().NotBe(comparer.GetHashCode(limitByTag));
+        Rows(Prepare(plainIds)).Should().Equal(new[] { 1, 2, 3, 4 });
+
+        var distinctOn = Context.From<Pd4Marker>().DistinctOn(x => x.Grp).OrderBy(x => x.Id).Select(x => x.Id);
+        Resolve(distinctOn);
+
+        comparer.Equals(plainIds, distinctOn).Should().BeFalse(
+            "a DISTINCT ON clause present on one side only is a different plan key");
+
+        var extremeRow = Context.From<Pd4Marker>().SelectWhereMin<int?, long>(x => x.Score, x => x.Id);
+        Resolve(extremeRow);
+
+        comparer.Equals(plainIds, extremeRow).Should().BeFalse(
+            "an ExtremeRow (SelectWhereMin) clause present on one side only is a different plan key");
+        comparer.GetHashCode(plainIds).Should().NotBe(comparer.GetHashCode(extremeRow));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // 11. Plan-key source modifiers and flags: TABLESAMPLE, FOR SYSTEM TIME, FINAL, DocumentMode
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// Arms B (clause fields): <c>EqualsCore</c> <c>TableSample</c> :117, <c>Temporal</c> :119,
+    /// <c>Final</c> :123 and <c>DocumentMode</c> :159. Equal clauses must compare TRUE and hash equally;
+    /// a clause present on one side only must compare FALSE. All shapes are prepared in place on this
+    /// context and the plain baseline executes live.
+    /// </summary>
+    [Fact]
+    public void SourceModifiersAndDocumentFlag_ShouldKeySeparately()
+    {
+        ResetPlanCache();
+
+        QueryCommand<int> Plain() => Context.From<Pd4Marker>().OrderBy(x => x.Id).Select(x => x.Id);
+
+        var plain = Plain();
+        var sampleTen = Context.From<Pd4Marker>(o => o.TableSample(10)).OrderBy(x => x.Id).Select(x => x.Id);
+        var sampleTenAgain = Context.From<Pd4Marker>(o => o.TableSample(10)).OrderBy(x => x.Id).Select(x => x.Id);
+        var sampleTwenty = Context.From<Pd4Marker>(o => o.TableSample(20)).OrderBy(x => x.Id).Select(x => x.Id);
+        var temporal = Context.From<Pd4Marker>()
+            .ForSystemTime(TemporalClause.AsOf(new DateTime(2020, 1, 1)))
+            .OrderBy(x => x.Id)
+            .Select(x => x.Id);
+        var temporalAgain = Context.From<Pd4Marker>()
+            .ForSystemTime(TemporalClause.AsOf(new DateTime(2020, 1, 1)))
+            .OrderBy(x => x.Id)
+            .Select(x => x.Id);
+        var final = Context.From<Pd4Marker>().Final().OrderBy(x => x.Id).Select(x => x.Id);
+        var finalAgain = Context.From<Pd4Marker>().Final().OrderBy(x => x.Id).Select(x => x.Id);
+        var document = Plain();
+        document.DocumentMode = true;
+
+        Resolve(plain);
+        Resolve(sampleTen);
+        Resolve(sampleTenAgain);
+        Resolve(sampleTwenty);
+        Resolve(temporal);
+        Resolve(temporalAgain);
+        Resolve(final);
+        Resolve(finalAgain);
+        Resolve(document);
+
+        var comparer = plain.GetQueryPlanEqualityComparer();
+
+        comparer.Equals(plain, sampleTen).Should().BeFalse(
+            "a TABLESAMPLE clause present on one side only is a different plan key");
+        comparer.Equals(sampleTen, sampleTenAgain).Should().BeTrue("an identical TABLESAMPLE clause is one plan");
+        comparer.GetHashCode(sampleTen).Should().Be(comparer.GetHashCode(sampleTenAgain));
+        comparer.Equals(sampleTen, sampleTwenty).Should().BeFalse(
+            "a different TABLESAMPLE percentage is a different plan key");
+
+        comparer.Equals(plain, temporal).Should().BeFalse(
+            "a FOR SYSTEM TIME clause present on one side only is a different plan key");
+        comparer.Equals(temporal, temporalAgain).Should().BeTrue("an identical temporal clause is one plan");
+
+        comparer.Equals(plain, final).Should().BeFalse(
+            "the ClickHouse FINAL modifier present on one side only is a different plan key");
+        comparer.Equals(final, finalAgain).Should().BeTrue("the same FINAL modifier is one plan");
+        comparer.GetHashCode(final).Should().Be(comparer.GetHashCode(finalAgain));
+
+        comparer.Equals(plain, document).Should().BeFalse(
+            "the document terminal flag is part of the plan key even when the SQL is identical");
+        comparer.GetHashCode(plain).Should().NotBe(comparer.GetHashCode(document));
+
+        Rows(Prepare(Plain())).Should().Equal(new[] { 1, 2, 3, 4 },
+            "the plain baseline behind the flag facts executes live");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // 12. Plan-key per-parent paging and first/default terminal flags
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// Arms B (clause fields): <c>EqualsCore</c> <c>PerParentPaging</c> :166,
+    /// <c>PerParentPagingEmbedded</c> :170 and <c>DefaultOnEmpty</c> :175. The per-parent child commands
+    /// carry a top-N page and a shared partition selector, so only the paging/embedding flags differ;
+    /// each pair is prepared in place on this context and the plain child executes live.
+    /// </summary>
+    [Fact]
+    public void PerParentPagingAndDefaultOnEmpty_ShouldKeySeparately()
+    {
+        ResetPlanCache();
+
+        Expression<Func<Pd4Line, int>> partition = l => l.MarkerId;
+
+        QueryCommand<int> Child(bool perParent, bool embedded)
+        {
+            var command = Context.From<Pd4Line>().OrderBy(x => x.Id).Limit(1).Select(x => x.Id);
+            if (!perParent)
+                return command;
+
+            command.PerParentPaging = true;
+            command.PerParentPartition = partition;
+            command.PerParentPagingEmbedded = embedded;
+            return command;
+        }
+
+        var plainChild = Child(perParent: false, embedded: false);
+        var splitChild = Child(perParent: true, embedded: false);
+        var embeddedChild = Child(perParent: true, embedded: true);
+
+        Resolve(plainChild);
+        Resolve(splitChild);
+        Resolve(embeddedChild);
+
+        var comparer = plainChild.GetQueryPlanEqualityComparer();
+
+        comparer.Equals(plainChild, splitChild).Should().BeFalse(
+            "a per-parent paging child present on one side only is a different plan key");
+        comparer.Equals(splitChild, embeddedChild).Should().BeFalse(
+            "an embedded ranked child and a split child render different SQL and are different plan keys");
+
+        var defaultOnEmpty = Context.From<Pd4Line>().OrderBy(x => x.Id).Select(x => x.Id);
+        var strict = Context.From<Pd4Line>().OrderBy(x => x.Id).Select(x => x.Id);
+        defaultOnEmpty.DefaultOnEmpty = true;
+        Resolve(defaultOnEmpty);
+        Resolve(strict);
+
+        comparer.Equals(strict, defaultOnEmpty).Should().BeFalse(
+            "FirstOrDefault and First share SQL and paging, so the DefaultOnEmpty flag must key separately");
+        comparer.GetHashCode(strict).Should().NotBe(comparer.GetHashCode(defaultOnEmpty));
+
+        Rows(Prepare(strict)).Should().Equal(new[] { 10, 11, 12, 13 },
+            "the strict scalar baseline executes live");
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // 13. Plan-key grouping sets: a declaration list present on one side only
+    // ---------------------------------------------------------------------------------------------
+    /// <summary>
+    /// Arm B (list helper): <c>GroupingSetsEqual</c> :318 (a set list present on one side only). Both
+    /// commands carry the same <c>GroupingType</c>, so the comparison reaches the list helper; the
+    /// no-set declaration is prepared in place (SQLite rejects the rendered form) while the plain
+    /// grouping baseline executes live.
+    /// </summary>
+    [Fact]
+    public void GroupingSetNullPresence_ShouldKeySeparately()
+    {
+        ResetPlanCache();
+
+        QueryCommand<int> WithoutSets() => Context.From<Pd4Marker>()
+            .GroupByGroupingSets(x => new { x.Grp, x.Tag })
+            .Select(g => SqlFunctions.Sql.count());
+        QueryCommand<int> WithSets() => Context.From<Pd4Marker>()
+            .GroupByGroupingSets(x => new { x.Grp, x.Tag }, [0])
+            .Select(g => SqlFunctions.Sql.count());
+
+        var withoutSets = WithoutSets();
+        var withSets = WithSets();
+        Resolve(withoutSets);
+        Resolve(withSets);
+
+        var comparer = withoutSets.GetQueryPlanEqualityComparer();
+        comparer.Equals(withoutSets, withSets).Should().BeFalse(
+            "a grouping-set list present on one side only is a different plan key");
+        comparer.GetHashCode(withoutSets).Should().NotBe(comparer.GetHashCode(withSets));
+
+        Rows(Prepare(Context.From<Pd4Marker>()
+                .GroupBy(x => new { x.Grp })
+                .Select(g => SqlFunctions.Sql.count()))).Should()
+            .Equal(new[] { 2, 2 }, "the plain grouping baseline executes live");
     }
 
     /// <summary>Marker row of the class-owned <c>pd4_marker</c> table.</summary>

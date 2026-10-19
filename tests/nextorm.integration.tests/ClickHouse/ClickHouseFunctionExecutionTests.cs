@@ -163,6 +163,29 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
         r.Distinct.Should().Be("3,1,2");
     }
 
+    /// <summary>
+    /// The <c>range</c> arity arms of the ClickHouse array table: one argument (<c>0..end</c>), two
+    /// (<c>start..end</c>) and three (<c>start..end</c> with a step). Each array is joined to a string
+    /// so the assertion pins the element order without depending on the array materialiser.
+    /// </summary>
+    [Fact]
+    public void ArrayRangeArity_ShouldExecute()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                One = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.range(3), ","),
+                Two = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.range(1, 4), ","),
+                Three = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.range(1, 7, 2), ",")
+            })
+            .First();
+
+        r.One.Should().Be("0,1,2");
+        r.Two.Should().Be("1,2,3");
+        r.Three.Should().Be("1,3,5");
+    }
+
     [Fact]
     public void MapFunctions_ShouldExecute()
     {
