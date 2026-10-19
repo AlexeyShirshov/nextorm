@@ -4373,83 +4373,22 @@ public partial class QueryCommand
     /// </summary>
     internal void ApplyPreparationFrom(QueryCommand clone)
     {
-        // Adopt the stored cache-side raw description by reference under copy-on-write: the recipe's
-        // description and every block are marked shared, so any later raw write on either side goes
-        // through WriteDescription/Write* and splits before mutating. The node-owned definition memo is
-        // cleared exactly as the old WriteDescription path did; it never lives on the shared description.
-        if (clone._description is { } description)
-        {
-            description.MarkShared();
-            _description = description;
-        }
-        else
-        {
-            _description = null;
-        }
-        _definitionMemo = null;
+        // Adopt the stored cache-side state through the same copy path the cache clone itself uses, so
+        // the staged command is exactly what a normalized lookup compares against. The raw graph is
+        // verified separately by the descriptor, which is what makes adopting these members sound.
+        clone.CopyTo(this, copyAll: true);
 
-        // Copy only the non-description state CopyTo(copyAll: true) carried, in its order. Joins, CTEs,
-        // union, outer references, hints, windows, the raw clauses/options/flags and the terminal
-        // OneColumn flag travel with the adopted description (reassigning them here would write straight
-        // into the recipe); the adopted _preparation is never shared, so post-adopt writes on this
-        // command can neither mutate the recipe's preparation nor its description.
-        _selectList = clone._selectList;
-        _groupingList = clone._groupingList;
-        _isPrepared = clone._isPrepared;
-        _srcType = clone._srcType;
-        _dontCache = clone._dontCache;
-        ColumnsPlanHash = clone.ColumnsPlanHash;
-        JoinPlanHash = clone.JoinPlanHash;
-        WherePlanHash = clone.WherePlanHash;
-        SortingPlanHash = clone.SortingPlanHash;
-        PreparedCondition = clone.PreparedCondition;
-        PreparedHaving = clone.PreparedHaving;
-        InValuesShapeHash = clone.InValuesShapeHash;
-        LookupPartitions = clone.LookupPartitions;
-        ShapeScanned = clone.ShapeScanned;
-        // ShapeValuesStable is deliberately not copied, exactly like CopyTo: the adopted InValuesPartitions
-        // are not transferred either, so the clone keeps the pre-existing refresh path.
-        HasUnkeyedTupleInValues = clone.HasUnkeyedTupleInValues;
-        HasUnkeyedScalarInValues = clone.HasUnkeyedScalarInValues;
-        ResultPlanHash = clone.ResultPlanHash;
-        GroupingPlanHash = clone.GroupingPlanHash;
-        FromPlanHash = clone.FromPlanHash;
-        UnionPlanHash = clone.UnionPlanHash;
-        ReferencedQueriesPlanHash = clone.ReferencedQueriesPlanHash;
-        CtesPlanHash = clone.CtesPlanHash;
-        HintsPlanHash = clone.HintsPlanHash;
-        WindowsPlanHash = clone.WindowsPlanHash;
-        ResolvedQuoteIdentifiers = clone.ResolvedQuoteIdentifiers;
-        ResolvedNamingConvention = clone.ResolvedNamingConvention;
-        ResolvedKeywordCase = clone.ResolvedKeywordCase;
-        ResolvedCommandTimeout = clone.ResolvedCommandTimeout;
-        ResolvedEagerLoadMode = clone.ResolvedEagerLoadMode;
-        ResultType = clone.ResultType;
-        Paging = clone.Paging;
-        DefaultOnEmpty = clone.DefaultOnEmpty;
-        SingleScalar = clone.SingleScalar;
-        _limitByColumns = clone._limitByColumns;
-        _distinctOnColumns = clone._distinctOnColumns;
-        _extremeRowColumns = clone._extremeRowColumns;
-        _extremeRowGroupByColumns = clone._extremeRowGroupByColumns;
-        _perParentPartitionColumns = clone._perParentPartitionColumns;
-        _preWhere = clone._preWhere;
-        _arrayJoins = clone._arrayJoins;
-        _preparedArrayJoin = clone._preparedArrayJoin;
+        // Members CopyTo never carries: the clone's joins come from its Definition, so they must be
+        // adopted explicitly, together with the value-list base hash and the prepared ARRAY JOIN list.
+        // The array reference is adopted as-is, matching baseline 08004366 (`_joins = clone._joins`):
+        // the clone is the stored recipe/prepared command whose joins are already prepared, and the
+        // adopting command is marked prepared by the same path, so it never re-enters PrepareJoin and
+        // never writes an element of the adopted array.
+        _joins = clone._joins;
         _whereBasePlanHash = clone._whereBasePlanHash;
-        PreparedPreWhere = clone.PreparedPreWhere;
-        PreWhereShapeHash = clone.PreWhereShapeHash;
-        HasPreWhereInValues = clone.HasPreWhereInValues;
-        _queryPlanComparer = clone._queryPlanComparer;
-        _fromExpressionPlanComparer = clone._fromExpressionPlanComparer;
-        _expressionPlanComparer = clone._expressionPlanComparer;
-        _selectExpressionPlanComparer = clone._selectExpressionPlanComparer;
-        _joinExpressionPlanComparer = clone._joinExpressionPlanComparer;
-        _sortingExpressionPlanComparer = clone._sortingExpressionPlanComparer;
-        _customData = clone._customData;
-        // The prepared FROM edge is node state (the read path starts from it); Ctes/Union/ReferencedQueries
-        // are reachable through the adopted description and are intentionally not reassigned.
-        _from = clone._from;
+        _preparedArrayJoin = clone._preparedArrayJoin;
+        // Preparation-derived terminal shape read on the later uncached/render path.
+        OneColumn = clone.OneColumn;
     }
 
     /// <summary>The transformed raw edges an apply overwrites, so a rejected fast path can be undone.</summary>
