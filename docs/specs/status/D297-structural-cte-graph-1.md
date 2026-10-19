@@ -649,3 +649,33 @@ allocation checkpoint. По этому правилу AC4 не выполнен;
 Join4 устранена, две valid раунда получены. Пороги 2 640 / 3 482 / 5 199 B не понижались;
 E05 остаётся `na` по owner override.
 
+
+
+### rv2 — r=3 diagnostic and STOP (2026-10-19)
+
+ACT r=3: план переведён в состояние `incomplete` (r=3, n=1) по stop-condition — диагностика
+prepare-пути показала, что рычага для AC4 там нет. #297 остаётся OPEN, parity не заявляется.
+
+**Отгружено:** внутренний copy-on-write description + ленивое хранение preparation/binding +
+разделение на CTE-edge, без изменения публичного API и cache policy. Коммиты
+`a272ebed 5536c084 061ee27f f0d64307 526af310 ccee1930 92bd245d b8a648a0 9a723d47 a990effa c47d2f55 7419737d 5054d9a2`
+(+ ACT-коммит: status/doc).
+
+| # | Критерий | Вердикт | Основание |
+|---|---|---|---|
+| 1 | Two valid rounds | **met** | r04/r05 при `3daf3765`, assembly `8fee8c3c`, один непрерывный lock, DB pin, артефакты восстановлены |
+| 2 | Cte ≤1.20× | **met** | Cte 10 848.7–11 080.7 vs 11 152.9–11 264.9 B/query; nextorm/linq2db 1.128–1.169 |
+| 3 | RecursiveCte improves | **met** | 12 784.2–12 864.5 vs 13 632.2–13 632.3; ratio 1.444–1.488 (было 1.566–1.587) |
+| 4 | No time regression | **FAIL** | owner rule ≤1.00× из `3daf3765`: Cte 1.119–1.288×, RecursiveCte 1.118–1.177× |
+| 5 | No allocation regression elsewhere | **residual** | +32.0 B/query на `B_Nextorm_Cached_In_ListContains_Captured` (Default, r05); остальные 14 arm'ов отрицательны; prepared `A_*` max 1.0001 |
+| 6 | API/cache/suites | **met** | E19 11/11 полей и 7/7 сценариев на обоих ядрах; build 0W/0E; core 2658/2658; все dialect suites; integration 5083 / 4 888 passed / 0 failed / 195 pinned skips; skip-budget 0; оба валидатора 0 |
+
+**Диагностика (Phase A, `.pdca/T297/rv2/rv3/do/phase-a/report.md`):** prepare-путь исключён —
+hash getters 0 измеримого (h1 в пределах code-layout noise), lazy null-check ≤0.6 µs warm и только
+ценой преаллокации 320 B, `_from`/`_selectList` 0, `_ctes`/description <1 ns. Весь prepare-delta
+5.7 µs из 42–91 µs op-level разрыва AC4; остаток — post-prepare (render/binding/materialization/
+execute), в рамках time box не атрибутирован. Phase B не выполнялась, продуктовых правок нет.
+
+**Пороги 2 640 / 3 482 / 5 199 B остаются UNMET и не понижены.** `Next plan`: атрибутировать
+post-prepare разрыв (render/binding/materialization) либо принять документированный trade-off;
+решить судьбу +32 B residual на captured-Contains arm.
