@@ -1,0 +1,644 @@
+{
+ "A": {
+  "rounds": 6,
+  "arms": {
+   "cte": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 119192.01055555555,
+    "phases": {
+     "construct": {
+      "ticks": 78508676,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 43615.93111111111
+     },
+     "prepare": {
+      "ticks": 84190766,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 46772.647777777776
+     },
+     "plan": {
+      "ticks": 1648382,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 915.7677777777777
+     },
+     "bind": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 198958,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 110.53222222222222
+     },
+     "get_db_command": {
+      "ticks": 145555,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 80.8638888888889
+     },
+     "execute": {
+      "ticks": 33957572,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 18865.31777777778
+     },
+     "read_rows": {
+      "ticks": 6860865,
+      "calls": 5400,
+      "calls_per_query": 3.0,
+      "ns_per_query": 3811.5916666666667
+     },
+     "map_rows": {
+      "ticks": 2751042,
+      "calls": 3600,
+      "calls_per_query": 2.0,
+      "ns_per_query": 1528.3566666666666
+     },
+     "cow_description": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   },
+   "recursive": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 119028.135,
+    "phases": {
+     "construct": {
+      "ticks": 58663611,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 32590.895
+     },
+     "prepare": {
+      "ticks": 96616510,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 53675.83888888889
+     },
+     "plan": {
+      "ticks": 1594803,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 886.0016666666667
+     },
+     "bind": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 190608,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 105.89333333333333
+     },
+     "get_db_command": {
+      "ticks": 173872,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 96.59555555555555
+     },
+     "execute": {
+      "ticks": 37492893,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 20829.385
+     },
+     "read_rows": {
+      "ticks": 11216446,
+      "calls": 10800,
+      "calls_per_query": 6.0,
+      "ns_per_query": 6231.358888888889
+     },
+     "map_rows": {
+      "ticks": 3167051,
+      "calls": 9000,
+      "calls_per_query": 5.0,
+      "ns_per_query": 1759.4727777777778
+     },
+     "cow_description": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   },
+   "inlist": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 116114.26166666667,
+    "phases": {
+     "construct": {
+      "ticks": 34827153,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 19348.418333333335
+     },
+     "prepare": {
+      "ticks": 108361063,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 60200.59055555556
+     },
+     "plan": {
+      "ticks": 16577042,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 9209.467777777778
+     },
+     "bind": {
+      "ticks": 24808528,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 13782.515555555556
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "get_db_command": {
+      "ticks": 189304,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 105.16888888888889
+     },
+     "execute": {
+      "ticks": 47602740,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 26445.966666666667
+     },
+     "read_rows": {
+      "ticks": 8785270,
+      "calls": 5400,
+      "calls_per_query": 3.0,
+      "ns_per_query": 4880.705555555555
+     },
+     "map_rows": {
+      "ticks": 2224362,
+      "calls": 3600,
+      "calls_per_query": 2.0,
+      "ns_per_query": 1235.7566666666667
+     },
+     "cow_description": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   },
+   "leftjoin": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 81620.66166666667,
+    "phases": {
+     "construct": {
+      "ticks": 39626675,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 22014.819444444445
+     },
+     "prepare": {
+      "ticks": 50578843,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 28099.35722222222
+     },
+     "plan": {
+      "ticks": 1611963,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 895.535
+     },
+     "bind": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 181113,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 100.61833333333334
+     },
+     "get_db_command": {
+      "ticks": 121546,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 67.52555555555556
+     },
+     "execute": {
+      "ticks": 30142960,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 16746.088888888888
+     },
+     "read_rows": {
+      "ticks": 9354471,
+      "calls": 19800,
+      "calls_per_query": 11.0,
+      "ns_per_query": 5196.928333333333
+     },
+     "map_rows": {
+      "ticks": 9378368,
+      "calls": 18000,
+      "calls_per_query": 10.0,
+      "ns_per_query": 5210.204444444445
+     },
+     "cow_description": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   }
+  }
+ },
+ "B": {
+  "rounds": 6,
+  "arms": {
+   "cte": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 129938.86166666666,
+    "phases": {
+     "construct": {
+      "ticks": 81061892,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 45034.38444444445
+     },
+     "prepare": {
+      "ticks": 99718763,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 55399.31277777778
+     },
+     "plan": {
+      "ticks": 2425994,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 1347.7744444444445
+     },
+     "bind": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 168300,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 93.5
+     },
+     "get_db_command": {
+      "ticks": 154733,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 85.96277777777777
+     },
+     "execute": {
+      "ticks": 34969712,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 19427.617777777778
+     },
+     "read_rows": {
+      "ticks": 6961060,
+      "calls": 5400,
+      "calls_per_query": 3.0,
+      "ns_per_query": 3867.2555555555555
+     },
+     "map_rows": {
+      "ticks": 2942367,
+      "calls": 3600,
+      "calls_per_query": 2.0,
+      "ns_per_query": 1634.6483333333333
+     },
+     "cow_description": {
+      "ticks": 724827,
+      "calls": 7200,
+      "calls_per_query": 4.0,
+      "ns_per_query": 402.6816666666667
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   },
+   "recursive": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 131689.79722222223,
+    "phases": {
+     "construct": {
+      "ticks": 66247987,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 36804.43722222222
+     },
+     "prepare": {
+      "ticks": 109449341,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 60805.18944444445
+     },
+     "plan": {
+      "ticks": 2388931,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 1327.183888888889
+     },
+     "bind": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 151319,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 84.06611111111111
+     },
+     "get_db_command": {
+      "ticks": 192575,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 106.98611111111111
+     },
+     "execute": {
+      "ticks": 39211999,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 21784.443888888887
+     },
+     "read_rows": {
+      "ticks": 11531412,
+      "calls": 10800,
+      "calls_per_query": 6.0,
+      "ns_per_query": 6406.34
+     },
+     "map_rows": {
+      "ticks": 3338760,
+      "calls": 9000,
+      "calls_per_query": 5.0,
+      "ns_per_query": 1854.8666666666666
+     },
+     "cow_description": {
+      "ticks": 1240185,
+      "calls": 14400,
+      "calls_per_query": 8.0,
+      "ns_per_query": 688.9916666666667
+     },
+     "cow_clone": {
+      "ticks": 428742,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 238.19
+     }
+    }
+   },
+   "inlist": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 123230.865,
+    "phases": {
+     "construct": {
+      "ticks": 35229374,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 19571.874444444446
+     },
+     "prepare": {
+      "ticks": 119973219,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 66651.78833333333
+     },
+     "plan": {
+      "ticks": 20067689,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 11148.71611111111
+     },
+     "bind": {
+      "ticks": 25778261,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 14321.256111111112
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "get_db_command": {
+      "ticks": 210295,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 116.83055555555555
+     },
+     "execute": {
+      "ticks": 48143299,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 26746.277222222223
+     },
+     "read_rows": {
+      "ticks": 8938859,
+      "calls": 5400,
+      "calls_per_query": 3.0,
+      "ns_per_query": 4966.0327777777775
+     },
+     "map_rows": {
+      "ticks": 2250906,
+      "calls": 3600,
+      "calls_per_query": 2.0,
+      "ns_per_query": 1250.5033333333333
+     },
+     "cow_description": {
+      "ticks": 293892,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 163.27333333333334
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   },
+   "leftjoin": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 92024.52,
+    "phases": {
+     "construct": {
+      "ticks": 42855360,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 23808.533333333333
+     },
+     "prepare": {
+      "ticks": 63298326,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 35165.736666666664
+     },
+     "plan": {
+      "ticks": 2462013,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 1367.785
+     },
+     "bind": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 159279,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 88.48833333333333
+     },
+     "get_db_command": {
+      "ticks": 144401,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 80.22277777777778
+     },
+     "execute": {
+      "ticks": 31875044,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 17708.35777777778
+     },
+     "read_rows": {
+      "ticks": 9704812,
+      "calls": 19800,
+      "calls_per_query": 11.0,
+      "ns_per_query": 5391.562222222222
+     },
+     "map_rows": {
+      "ticks": 9711098,
+      "calls": 18000,
+      "calls_per_query": 10.0,
+      "ns_per_query": 5395.054444444444
+     },
+     "cow_description": {
+      "ticks": 382922,
+      "calls": 3600,
+      "calls_per_query": 2.0,
+      "ns_per_query": 212.73444444444445
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   }
+  }
+ }
+}

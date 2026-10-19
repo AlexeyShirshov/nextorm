@@ -1,0 +1,133 @@
+using System;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+
+namespace NextORM.Core.Probe;
+
+/// <summary>
+/// T297 r=4 P02 phase attribution probe. Temporary instrumentation compiled only into the throwaway
+/// probe copies under /tmp/opencode/t297-p02; never shipped.
+/// <para>
+/// Raw <see cref="Stopwatch.GetTimestamp"/> tick accumulators plus call counters. The probe is
+/// single-threaded by construction (one harness process, one pinned core) and uses plain static
+/// fields; the hot path performs no allocation and takes no lock.
+/// </para>
+/// <para>
+/// Timers are mutually exclusive at the leaf level: <see cref="Prepare"/> contains the nested
+/// Plan/Bind/EnumCreate/CowShape spans and must be corrected by subtraction during analysis, never by
+/// double-counting inside the probe.
+/// </para>
+/// </summary>
+public static class T297PhaseProbe
+{
+    /// <summary>Number of tracked phases (the width of every accumulator array).</summary>
+    public const int PhaseCount = 12;
+
+    /// <summary>Fluent command construction gap between two terminal calls.</summary>
+    public const int Construct = 0;
+    /// <summary><c>GetPreparedQueryCommand</c> span (contains Plan/Bind/EnumCreate/CowShape).</summary>
+    public const int Prepare = 1;
+    /// <summary>Plan-key construction plus plan-store lookup on the cached path.</summary>
+    public const int Plan = 2;
+    /// <summary><c>RefreshParameters</c> on a cached parameterized command.</summary>
+    public const int Bind = 3;
+    /// <summary>Lazy <c>CreateResultSetEnumerator</c> on a cached command.</summary>
+    public const int EnumCreate = 4;
+    /// <summary><c>RefreshInValuesShape</c> captured-collection shape refresh.</summary>
+    public const int CowShape = 5;
+    /// <summary><c>GetDbCommandCore</c> parameter/connection binding.</summary>
+    public const int GetDbCommand = 6;
+    /// <summary>Reader creation (<c>RunReader</c>/<c>RunReaderAsync</c>).</summary>
+    public const int Execute = 7;
+    /// <summary><c>DbDataReader.Read()</c> calls in the materialization loop.</summary>
+    public const int ReadRows = 8;
+    /// <summary>Row mapper calls in the materialization loop.</summary>
+    public const int MapRows = 9;
+    /// <summary>Tree-B-only COW description split (MarkShared/clone/WriteDescription).</summary>
+    public const int CowDescription = 10;
+    /// <summary>Tree-B-only shared-description adoption in the clone constructor.</summary>
+    public const int CowClone = 11;
+
+    /// <summary>Stable phase names, indexed by the phase constants above.</summary>
+    public static readonly string[] PhaseNames =
+    {
+        "construct", "prepare", "plan", "bind", "enum_create", "cow_shape",
+        "get_db_command", "execute", "read_rows", "map_rows", "cow_description", "cow_clone",
+    };
+
+    private static readonly long[] _ticks = new long[PhaseCount];
+    private static readonly long[] _calls = new long[PhaseCount];
+
+    // Per-thread by contract; plain static is enough for the single-threaded probe process.
+    private static long _lastEnd;
+
+    /// <summary>Stopwatch frequency (ticks per second) for converting accumulator values.</summary>
+    public static long Frequency => Stopwatch.Frequency;
+
+    /// <summary>Returns the current <see cref="Stopwatch.GetTimestamp"/> value without side effects.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long Tick() => Stopwatch.GetTimestamp();
+
+    /// <summary>
+    /// Terminal entry: charges the gap since the previous terminal end to <see cref="Construct"/> and
+    /// returns the entry tick that <see cref="OnPrepare"/> consumes.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long OnEntry()
+    {
+        var now = Stopwatch.GetTimestamp();
+        if (_lastEnd != 0)
+            _ticks[Construct] += now - _lastEnd;
+        _calls[Construct]++;
+        return now;
+    }
+
+    /// <summary>Charges entry-to-return time of <c>GetPreparedQueryCommand</c> to <see cref="Prepare"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void OnPrepare(long entry)
+    {
+        _ticks[Prepare] += Stopwatch.GetTimestamp() - entry;
+        _calls[Prepare]++;
+    }
+
+    /// <summary>Records the terminal end used by the next <see cref="OnEntry"/> Construct gap.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void OnEnd() => _lastEnd = Stopwatch.GetTimestamp();
+
+    /// <summary>Charges <paramref name="start"/>-to-now time to one leaf phase and bumps its counter.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void Add(int phase, long start)
+    {
+        _ticks[phase] += Stopwatch.GetTimestamp() - start;
+        _calls[phase]++;
+    }
+
+    /// <summary>Zeroes every accumulator, call counter and the terminal-end marker.</summary>
+    public static void Reset()
+    {
+        Array.Clear(_ticks);
+        Array.Clear(_calls);
+        _lastEnd = 0;
+    }
+
+    /// <summary>Returns a detached copy of the current accumulators.</summary>
+    public static ProbeSnapshot TakeSnapshot() => new((long[])_ticks.Clone(), (long[])_calls.Clone());
+}
+
+/// <summary>Immutable snapshot of the probe accumulators (arrays are private copies).</summary>
+public readonly struct ProbeSnapshot
+{
+    /// <summary>Accumulated raw Stopwatch ticks per phase, indexed by the phase constants.</summary>
+    public readonly long[] Ticks;
+    /// <summary>Call counters per phase, indexed by the phase constants.</summary>
+    public readonly long[] Calls;
+
+    /// <summary>Creates a detached snapshot from private accumulator copies.</summary>
+    /// <param name="ticks">Tick accumulator copies.</param>
+    /// <param name="calls">Call-counter copies.</param>
+    public ProbeSnapshot(long[] ticks, long[] calls)
+    {
+        Ticks = ticks;
+        Calls = calls;
+    }
+}
