@@ -16,11 +16,11 @@ public partial class QueryCommand
     /// </summary>
     public EagerLoadMode? EagerLoadMode
     {
-        get => _description?.EagerLoadMode;
+        get => _description?.Options.EagerLoadMode;
         internal set
         {
-            if (value == _description?.EagerLoadMode) return;
-            WriteDescription().EagerLoadMode = value;
+            if (value == _description?.Options.EagerLoadMode) return;
+            WriteOptions().EagerLoadMode = value;
         }
     }
 
@@ -49,11 +49,11 @@ public partial class QueryCommand
     /// </summary>
     internal EagerLoadShape EagerLoadShape
     {
-        get => _description?.EagerLoadShape ?? default;
+        get => _description?.Options.EagerLoadShape ?? default;
         set
         {
-            if (value.Equals(_description?.EagerLoadShape ?? default)) return;
-            WriteDescription().EagerLoadShape = value;
+            if (value.Equals(_description?.Options.EagerLoadShape ?? default)) return;
+            WriteOptions().EagerLoadShape = value;
         }
     }
 
@@ -66,11 +66,11 @@ public partial class QueryCommand
     /// </summary>
     internal bool HasPerParentEagerTopN
     {
-        get => _description?.HasPerParentEagerTopN ?? false;
+        get => _description?.Options.HasPerParentEagerTopN ?? false;
         set
         {
-            if (value == (_description?.HasPerParentEagerTopN ?? false)) return;
-            WriteDescription().HasPerParentEagerTopN = value;
+            if (value == (_description?.Options.HasPerParentEagerTopN ?? false)) return;
+            WriteOptions().HasPerParentEagerTopN = value;
         }
     }
 }
