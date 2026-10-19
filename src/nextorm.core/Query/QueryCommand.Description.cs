@@ -4,20 +4,16 @@ using Microsoft.Extensions.Logging;
 namespace NextORM.Core;
 
 /// <summary>
-/// Predicate half of a command's raw description: the lambdas applied as <c>WHERE</c>/<c>GROUP BY</c>/
-/// <c>HAVING</c>/<c>PREWHERE</c> and the disabled query-filter scope. Copied on write; the block is
-/// shared between command nodes only at clone/CTE-construction edges and is never mutated in place while
-/// shared.
+/// Predicate half of a command's raw description: the disabled selective query-filter scope. The
+/// <c>WHERE</c>/<c>GROUP BY</c>/<c>HAVING</c>/<c>PREWHERE</c> lambdas are node-owned fields, not
+/// description state. Copied on write; the block is shared between command nodes only at
+/// clone/CTE-construction edges and is never mutated in place while shared.
 /// </summary>
 internal sealed class QueryPredicates
 {
     internal static readonly QueryPredicates Empty = new() { Shared = true };
 
     internal bool Shared;
-    internal LambdaExpression? Condition;
-    internal LambdaExpression? Group;
-    internal LambdaExpression? Having;
-    internal LambdaExpression? PreWhere;
     internal QueryFilterScope FilterScope = QueryFilterScope.None;
 
     internal QueryPredicates()
@@ -26,10 +22,6 @@ internal sealed class QueryPredicates
 
     internal QueryPredicates(QueryPredicates other)
     {
-        Condition = other.Condition;
-        Group = other.Group;
-        Having = other.Having;
-        PreWhere = other.PreWhere;
         FilterScope = other.FilterScope;
     }
 }
@@ -67,24 +59,6 @@ internal sealed class QueryRelations
     }
 }
 
-/// <summary>Ordering half of a command's raw description (the declared <c>ORDER BY</c> keys).</summary>
-internal sealed class QueryOrdering
-{
-    internal static readonly QueryOrdering Empty = new() { Shared = true };
-
-    internal bool Shared;
-    internal Sorting[]? Sorting;
-
-    internal QueryOrdering()
-    {
-    }
-
-    internal QueryOrdering(QueryOrdering other)
-    {
-        Sorting = other.Sorting;
-    }
-}
-
 /// <summary>
 /// Clause half of a command's raw description: the provider clause objects, ClickHouse modifiers, trailing
 /// clauses, grouping modifiers and navigation-expansion metadata. Copied on write.
@@ -105,7 +79,6 @@ internal sealed class QueryClauses
     internal double SampleOffset;
     internal IReadOnlyList<KeyValuePair<string, string>>? Settings;
     internal IReadOnlyList<WindowDefinition>? Windows;
-    internal LambdaExpression[]? ArrayJoins;
     internal ArrayJoinKind ArrayJoinKind;
     internal GroupingType GroupingType;
     internal IReadOnlyList<int[]>? GroupingSets;
@@ -130,7 +103,6 @@ internal sealed class QueryClauses
         SampleOffset = other.SampleOffset;
         Settings = other.Settings;
         Windows = other.Windows;
-        ArrayJoins = other.ArrayJoins;
         ArrayJoinKind = other.ArrayJoinKind;
         GroupingType = other.GroupingType;
         GroupingSets = other.GroupingSets;
@@ -201,27 +173,53 @@ internal sealed class QueryOptions
 }
 
 /// <summary>
-/// Immutable memo of a <see cref="QueryDefinition"/> snapshot together with the node-owned paging it was
+/// Immutable memo of a <see cref="QueryDefinition"/> snapshot together with the node-owned inputs it was
 /// built from. The description holds one reference to the memo, so a reader of a shared description can
-/// never observe a definition and a paging snapshot from two different writes.
+/// never observe a definition and a snapshot from two different writes.
 /// </summary>
 internal sealed class DefinitionMemo
 {
-    internal DefinitionMemo(QueryDefinition definition, Paging paging)
+    internal DefinitionMemo(
+        QueryDefinition definition,
+        Paging paging,
+        LambdaExpression? exp,
+        Type? srcType,
+        LambdaExpression? condition,
+        LambdaExpression? group,
+        LambdaExpression? having,
+        LambdaExpression? preWhere,
+        LambdaExpression[]? arrayJoins,
+        Sorting[]? sorting)
     {
         Definition = definition;
         Paging = paging;
+        Exp = exp;
+        SrcType = srcType;
+        Condition = condition;
+        Group = group;
+        Having = having;
+        PreWhere = preWhere;
+        ArrayJoins = arrayJoins;
+        Sorting = sorting;
     }
 
     internal QueryDefinition Definition { get; }
     internal Paging Paging { get; }
+    internal LambdaExpression? Exp { get; }
+    internal Type? SrcType { get; }
+    internal LambdaExpression? Condition { get; }
+    internal LambdaExpression? Group { get; }
+    internal LambdaExpression? Having { get; }
+    internal LambdaExpression? PreWhere { get; }
+    internal LambdaExpression[]? ArrayJoins { get; }
+    internal Sorting[]? Sorting { get; }
 }
 
 /// <summary>
-/// Immutable-by-contract raw description of a <see cref="QueryCommand"/>: the projection/source, the eight
-/// grouped raw blocks and a flag word for the remaining raw booleans. A node owns at most one description;
-/// a description is shared with other nodes only on copy-on-write terms (every mutation replaces the
-/// command's own description and the touched block).
+/// Immutable-by-contract raw description of a <see cref="QueryCommand"/>: the five grouped raw blocks
+/// and a flag word for the remaining raw booleans. A node owns at most one description; a description is
+/// shared with other nodes only on copy-on-write terms (every mutation replaces the command's own
+/// description and the touched block).
 /// </summary>
 internal sealed class QueryDescription
 {
@@ -237,13 +235,10 @@ internal sealed class QueryDescription
     internal const ulong FlagNeedsOuterJoinNullSettings = 1UL << 9;
 
     internal bool Shared;
-    internal LambdaExpression? Exp;
-    internal Type? SrcType;
     internal Type? ProjectionType;
     internal ulong Flags;
     internal QueryPredicates Predicates = QueryPredicates.Empty;
     internal QueryRelations Relations = QueryRelations.Empty;
-    internal QueryOrdering Ordering = QueryOrdering.Empty;
     internal QueryClauses Clauses = QueryClauses.Empty;
     internal QueryOptions Options = QueryOptions.Empty;
     /// <summary>
@@ -259,7 +254,6 @@ internal sealed class QueryDescription
         Shared = true;
         Predicates.Shared = true;
         Relations.Shared = true;
-        Ordering.Shared = true;
         Clauses.Shared = true;
         Options.Shared = true;
     }
@@ -324,19 +318,6 @@ public partial class QueryCommand
         return block;
     }
 
-    private QueryOrdering WriteOrdering()
-    {
-        var description = WriteDescription();
-        var block = description.Ordering;
-        if (block.Shared)
-        {
-            block = new QueryOrdering(block);
-            description.Ordering = block;
-        }
-
-        return block;
-    }
-
     private QueryClauses WriteClauses()
     {
         var description = WriteDescription();
@@ -373,70 +354,22 @@ public partial class QueryCommand
     }
 
     /// <summary>The original projection lambda, or <c>null</c> for a command without an explicit projection.</summary>
-    protected LambdaExpression? _exp
-    {
-        get => _description?.Exp;
-        set
-        {
-            if (ReferenceEquals(value, _description?.Exp)) return;
-            WriteDescription().Exp = value;
-        }
-    }
+    protected LambdaExpression? _exp;
 
     /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
-    protected Type? _srcType
-    {
-        get => _description?.SrcType;
-        set
-        {
-            if (ReferenceEquals(value, _description?.SrcType)) return;
-            WriteDescription().SrcType = value;
-        }
-    }
+    protected Type? _srcType;
 
     /// <summary>The <c>WHERE</c> predicate lambda before preparation, or <c>null</c> when there is none.</summary>
-    protected LambdaExpression? _condition
-    {
-        get => _description?.Predicates.Condition;
-        set
-        {
-            if (ReferenceEquals(value, _description?.Predicates.Condition)) return;
-            WritePredicates().Condition = value;
-        }
-    }
+    protected LambdaExpression? _condition;
 
     /// <summary>The <c>GROUP BY</c> key selector before preparation, or <c>null</c> when there is no grouping.</summary>
-    protected LambdaExpression? _groupExp
-    {
-        get => _description?.Predicates.Group;
-        set
-        {
-            if (ReferenceEquals(value, _description?.Predicates.Group)) return;
-            WritePredicates().Group = value;
-        }
-    }
+    protected LambdaExpression? _groupExp;
 
     /// <summary>The <c>HAVING</c> predicate before preparation, or <c>null</c> when there is none.</summary>
-    protected LambdaExpression? _having
-    {
-        get => _description?.Predicates.Having;
-        set
-        {
-            if (ReferenceEquals(value, _description?.Predicates.Having)) return;
-            WritePredicates().Having = value;
-        }
-    }
+    protected LambdaExpression? _having;
 
     /// <summary>The ClickHouse <c>PREWHERE</c> predicate before preparation, or <c>null</c> when there is none.</summary>
-    protected LambdaExpression? _preWhere
-    {
-        get => _description?.Predicates.PreWhere;
-        set
-        {
-            if (ReferenceEquals(value, _description?.Predicates.PreWhere)) return;
-            WritePredicates().PreWhere = value;
-        }
-    }
+    protected LambdaExpression? _preWhere;
 
     /// <summary>The selective query-filter scope disabled for this command.</summary>
     private QueryFilterScope _filterScope
@@ -521,15 +454,7 @@ public partial class QueryCommand
     }
 
     /// <summary>The ClickHouse <c>ARRAY JOIN</c> expressions before preparation, or <c>null</c> when the clause is absent.</summary>
-    protected LambdaExpression[]? _arrayJoins
-    {
-        get => _description?.Clauses.ArrayJoins;
-        set
-        {
-            if (ReferenceEquals(value, _description?.Clauses.ArrayJoins)) return;
-            WriteClauses().ArrayJoins = value;
-        }
-    }
+    protected LambdaExpression[]? _arrayJoins;
 
     private IReadOnlyList<WindowDefinition>? _windows
     {
@@ -542,15 +467,7 @@ public partial class QueryCommand
     }
 
     /// <summary>The sort columns before preparation, or <c>null</c> when the query has no <c>ORDER BY</c>.</summary>
-    protected Sorting[]? _sorting
-    {
-        get => _description?.Ordering.Sorting;
-        set
-        {
-            if (ReferenceEquals(value, _description?.Ordering.Sorting)) return;
-            WriteOrdering().Sorting = value;
-        }
-    }
+    protected Sorting[]? _sorting;
 
     private void SetLogger(ILogger? value)
     {

@@ -174,6 +174,14 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     {
         _dataContext = dataProvider;
         Paging = source.Paging;
+        _exp = forCache ? null : source._exp;
+        _srcType = source._srcType;
+        _condition = forCache ? null : source._condition;
+        _groupExp = forCache ? null : source._groupExp;
+        _having = source._having;
+        _sorting = source._sorting;
+        _preWhere = source._preWhere;
+        _arrayJoins = CloneJoinArray(source._arrayJoins);
 
         // A live clone that does not need a private join/array-join array shares the source's immutable
         // description: the very first raw write on either side splits it (copy-on-write). This is the
@@ -181,16 +189,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         // field of the node.
         if (!forCache && source._joins is null && source._arrayJoins is null)
         {
-            var shared = source._description;
-            if (shared is null)
-            {
-                _description = new QueryDescription();
-                SetLogger(source.Logger);
-                ProjectionType = source.ProjectionType;
-                IdentitySlotAliases = source.IdentitySlotAliases;
-                return;
-            }
-
+            // Create the description on the source when it has none yet: the node-owned raw fields no
+            // longer force one at construction, but both nodes must observe the same description
+            // instance or their memoised definitions could never be reference-equal.
+            var shared = source._description ??= new QueryDescription();
             shared.MarkShared();
             _description = shared;
             return;
@@ -201,12 +203,6 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         var description = source._description?.CloneShellForWrite() ?? new QueryDescription();
         if (forCache)
         {
-            description.Exp = null;
-            description.Predicates = new QueryPredicates(description.Predicates)
-            {
-                Condition = null,
-                Group = null,
-            };
             description.Relations = new QueryRelations(description.Relations)
             {
                 Joins = CloneForCache(description.Relations.Joins),
@@ -220,10 +216,6 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             };
         }
 
-        description.Clauses = new QueryClauses(description.Clauses)
-        {
-            ArrayJoins = CloneJoinArray(description.Clauses.ArrayJoins),
-        };
         description.DefinitionCache = null;
         _description = description;
     }
@@ -274,12 +266,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
 
     /// <summary>
     /// Snapshot of this command's shape as a <see cref="QueryDefinition"/>, used by external readers and
-    /// the test surface. The record is materialised once per (description, paging) pair and memoised on
-    /// the description; any raw write installs a fresh description (copy-on-write) and clears the memo.
-    /// Paging is a node-owned public field, so the memo also records the paging it was built from: a
-    /// sibling that shares the description with a different limit/offset never receives this node's
-    /// snapshot. The internal clone paths do not read it — they transfer state directly and allocate no
-    /// record.
+    /// the test surface. The record is materialised once per (description, node-owned raw inputs) tuple
+    /// and memoised on the description; any raw write installs a fresh description (copy-on-write) and
+    /// clears the memo. Paging, the projection/predicate lambdas, the source type and the array joins are
+    /// node-owned rather than description state, so the memo records the values it was built from: a
+    /// sibling that shares the description with a different limit/offset or a different raw field never
+    /// receives this node's snapshot. The internal clone paths do not read it — they transfer state
+    /// directly and allocate no record.
     /// </summary>
     internal QueryDefinition Definition
     {
@@ -288,16 +281,43 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             var description = Description;
             var paging = Paging;
             if (description.DefinitionCache is { } memo
-                && PagingEquals(memo.Paging, paging))
+                && MemoMatches(memo, paging))
             {
                 return memo.Definition;
             }
 
             var definition = BuildDefinition();
-            description.DefinitionCache = new DefinitionMemo(definition, paging);
+            description.DefinitionCache = new DefinitionMemo(
+                definition,
+                paging,
+                _exp,
+                _srcType,
+                _condition,
+                _groupExp,
+                _having,
+                _preWhere,
+                _arrayJoins,
+                _sorting);
             return definition;
         }
     }
+
+    /// <summary>
+    /// Whether the memoised definition was built from this node's current paging and raw fields.
+    /// Reference equality is exact here: the node fields are replaced, never mutated, so a node that
+    /// writes one of them (a fluent step, navigation expansion or preparation) no longer matches the
+    /// memo a sibling published on the shared description.
+    /// </summary>
+    private bool MemoMatches(DefinitionMemo memo, in Paging paging)
+        => PagingEquals(memo.Paging, paging)
+            && ReferenceEquals(memo.Exp, _exp)
+            && ReferenceEquals(memo.SrcType, _srcType)
+            && ReferenceEquals(memo.Condition, _condition)
+            && ReferenceEquals(memo.Group, _groupExp)
+            && ReferenceEquals(memo.Having, _having)
+            && ReferenceEquals(memo.PreWhere, _preWhere)
+            && ReferenceEquals(memo.ArrayJoins, _arrayJoins)
+            && ReferenceEquals(memo.Sorting, _sorting);
 
     /// <summary>
     /// Compares the paging snapshot a memoised definition was built from with the command's current
@@ -1348,9 +1368,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     public virtual void ResetPreparation()
     {
-        // The node-owned preparation storage is reset in place; the fields it deliberately keeps
-        // (the eleven plan hashes other than ReferencedQueriesPlanHash, the node-owned shape flags and
-        // the comparers) survive exactly as they did when they were plain fields.
+        // The three preparation fields that live on the command itself are reset first, exactly as the
+        // pre-migration field implementation did; the rest of the node-owned preparation storage is
+        // reset in place. The storage deliberately keeps the eleven plan hashes other than
+        // ReferencedQueriesPlanHash, the node-owned shape flags and the comparers.
+        _isPrepared = false;
+        _selectList = null;
+        _from = null;
         _preparation?.Reset();
         // Correlated subqueries and outer references are registered while preparing (#148-B: the
         // navigation collection terminals add one referenced command per terminal). A re-preparation
