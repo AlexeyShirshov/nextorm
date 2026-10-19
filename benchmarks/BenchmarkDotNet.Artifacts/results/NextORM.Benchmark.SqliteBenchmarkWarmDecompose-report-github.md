@@ -10,102 +10,122 @@ Job=ShortRun  Runtime=.NET 10.0  IterationCount=3
 LaunchCount=1  WarmupCount=3  
 
 ```
-| Method                           | Toolchain              | Mean         | Median       | Ratio  | Gen0     | Gen1   | Allocated | Alloc Ratio |
-|--------------------------------- |----------------------- |-------------:|-------------:|-------:|---------:|-------:|----------:|------------:|
-| Gen_P0_From                      | Default                |     2.527 μs |     2.691 μs |  0.004 |   4.7798 |      - |   40000 B |        0.05 |
-| InAtIn_Inline_Warm_Reused        | Default                |     4.037 μs |     4.035 μs |  0.007 |        - |      - |         - |        0.00 |
-| Join4_Warm_Reused                | Default                |     4.637 μs |     4.642 μs |  0.008 |        - |      - |         - |        0.00 |
-| RecursiveCte_Warm_Reused         | Default                |     5.091 μs |     5.090 μs |  0.008 |        - |      - |         - |        0.00 |
-| Cte_Warm_Reused                  | Default                |     5.551 μs |     5.596 μs |  0.009 |        - |      - |         - |        0.00 |
-| Gen_P1_Where                     | Default                |    85.888 μs |    85.494 μs |  0.142 |  20.9961 |      - |  176004 B |        0.21 |
-| RecursiveCte_P0_Anchor           | Default                |   125.133 μs |   126.317 μs |  0.207 |  31.4941 |      - |  264005 B |        0.31 |
-| Gen_P2_Select                    | Default                |   132.811 μs |   134.742 μs |  0.220 |  39.7949 |      - |  333607 B |        0.40 |
-| InAtIn_Captured_Construct        | Default                |   174.032 μs |   173.225 μs |  0.288 |  34.6680 |      - |  291200 B |        0.35 |
-| InAtIn_Inline_Construct          | Default                |   187.567 μs |   190.778 μs |  0.310 |  37.1094 |      - |  310400 B |        0.37 |
-| RecursiveCte_P1_Step             | Default                |   191.097 μs |   189.733 μs |  0.316 |  45.1660 |      - |  379208 B |        0.45 |
-| Cte_P1_With                      | Default                |   224.920 μs |   215.136 μs |  0.372 |  40.0391 |      - |  338414 B |        0.40 |
-| Cte_P0_Body                      | Default                |   237.071 μs |   232.836 μs |  0.392 |  38.0859 |      - |  326413 B |        0.39 |
-| Cte_P2_From                      | Default                |   237.528 μs |   237.877 μs |  0.393 |  44.9219 |      - |  378415 B |        0.45 |
-| InAtIn_Captured_Prepare_NoHash   | Default                |   337.908 μs |   332.902 μs |  0.559 |  50.7813 |      - |  428800 B |        0.51 |
-| Cte_P3_Join                      | Default                |   350.230 μs |   350.497 μs |  0.579 |  64.4531 |      - |  542433 B |        0.64 |
-| RecursiveCte_P2_Operands         | Default                |   356.989 μs |   356.224 μs |  0.590 |  78.1250 |      - |  654413 B |        0.78 |
-| InAtIn_Inline_Prepare_NoHash     | Default                |   385.658 μs |   385.880 μs |  0.638 |  55.1758 |      - |  462400 B |        0.55 |
-| RecursiveCte_P3_UnionAll         | Default                |   388.219 μs |   385.909 μs |  0.642 |  87.8906 |      - |  739215 B |        0.88 |
-| RecursiveCte_Construct           | Default                |   425.570 μs |   422.494 μs |  0.704 | 112.7930 | 0.4883 |  945619 B |        1.12 |
-| RecursiveCte_P4_Declared         | Default                |   483.444 μs |   488.293 μs |  0.799 | 115.2344 | 0.9766 |  964819 B |        1.15 |
-| InAtIn_Captured_Prepare_Hash     | Default                |   490.703 μs |   489.579 μs |  0.811 |  65.4297 | 0.9766 |  553600 B |        0.66 |
-| Cte_P4_Select                    | Default                |   555.709 μs |   555.149 μs |  0.919 |  97.6563 |      - |  828068 B |        0.98 |
-| InAtIn_Inline_Prepare_Hash       | Default                |   562.570 μs |   562.996 μs |  0.930 |  66.4063 |      - |  562400 B |        0.67 |
-| Join4_Construct                  | Default                |   601.926 μs |   603.465 μs |  0.995 | 101.5625 |      - |  854486 B |        1.01 |
-| Cte_Construct                    | Default                |   606.475 μs |   600.917 μs |  1.003 |  97.6563 |      - |  842468 B |        1.00 |
-| InAtIn_Inline_Warm_PlanOnly      | Default                |   779.112 μs |   780.237 μs |  1.288 |  70.3125 |      - |  633600 B |        0.75 |
-| Cte_RawHit_P2_Comparers          | Default                |   916.857 μs |   927.633 μs |  1.516 | 117.1875 |      - | 1006484 B |        1.19 |
-| Cte_RawHit_P0_Capture            | Default                |   929.956 μs |   947.618 μs |  1.538 | 117.1875 |      - |  984884 B |        1.17 |
-| Cte_RawHit                       | Default                |   947.864 μs |   977.782 μs |  1.567 | 117.1875 |      - |  984884 B |        1.17 |
-| RecursiveCte_Prepare_NoHash      | Default                |   959.666 μs |   965.231 μs |  1.587 | 140.6250 |      - | 1197625 B |        1.42 |
-| RecursiveCte_RawHit              | Default                |   987.112 μs |   981.358 μs |  1.632 | 148.4375 |      - | 1256026 B |        1.49 |
-| RecursiveCte_RawHit_P0_Capture   | Default                | 1,026.395 μs | 1,034.647 μs |  1.697 | 148.4375 |      - | 1256026 B |        1.49 |
-| Join4_Prepare_NoHash             | Default                | 1,028.916 μs | 1,019.920 μs |  1.701 | 125.0000 |      - | 1088912 B |        1.29 |
-| RecursiveCte_RawHit_P2_Comparers | Default                | 1,088.651 μs | 1,121.852 μs |  1.800 | 148.4375 |      - | 1277626 B |        1.52 |
-| Cte_Prepare_NoHash               | Default                | 1,112.746 μs | 1,113.096 μs |  1.840 | 125.0000 |      - | 1098489 B |        1.30 |
-| Cte_RawHit_Lookup                | Default                | 1,181.279 μs | 1,176.620 μs |  1.953 | 117.1875 |      - | 1025684 B |        1.22 |
-| RecursiveCte_Warm_PlanOnly       | Default                | 1,545.002 μs | 1,563.871 μs |  2.554 | 140.6250 |      - | 1299226 B |        1.54 |
-| RecursiveCte_PlanKey             | Default                | 1,738.050 μs | 1,796.885 μs |  2.874 | 140.6250 |      - | 1302426 B |        1.55 |
-| Join4_Warm_PlanOnly              | Default                | 1,824.943 μs | 1,817.857 μs |  3.017 | 109.3750 |      - | 1008905 B |        1.20 |
-| RecursiveCte_RawHit_Lookup       | Default                | 1,844.905 μs | 1,812.468 μs |  3.050 | 156.2500 |      - | 1367229 B |        1.62 |
-| Cte_Warm_PlanOnly                | Default                | 2,139.203 μs | 2,226.068 μs |  3.537 | 109.3750 |      - | 1036084 B |        1.23 |
-| Cte_PlanKey                      | Default                | 2,174.567 μs | 1,788.856 μs |  3.595 | 109.3750 |      - | 1036084 B |        1.23 |
-| RecursiveCte_Prepare_Hash        | Default                | 2,210.228 μs | 1,702.054 μs |  3.654 | 156.2500 |      - | 1344829 B |        1.60 |
-| Cte_Prepare_Hash                 | Default                | 2,296.302 μs | 2,515.629 μs |  3.797 | 140.6250 |      - | 1190505 B |        1.41 |
-| Join4_Prepare_Hash               | Default                | 2,690.731 μs | 2,738.057 μs |  4.449 | 125.0000 |      - | 1163318 B |        1.38 |
-| Cte_Warm_EndToEnd                | Default                | 3,110.853 μs | 3,116.062 μs |  5.143 | 125.0000 |      - | 1124094 B |        1.33 |
-| RecursiveCte_Warm_EndToEnd       | Default                | 6,170.467 μs | 6,233.974 μs | 10.202 | 156.2500 |      - | 1360032 B |        1.61 |
-|                                  |                        |              |              |        |          |        |           |             |
-| Gen_P0_From                      | InProcessEmitToolchain |     2.664 μs |     2.757 μs |  0.005 |   4.7798 |      - |   40000 B |        0.05 |
-| InAtIn_Inline_Warm_Reused        | InProcessEmitToolchain |     5.007 μs |     5.013 μs |  0.009 |        - |      - |         - |        0.00 |
-| Join4_Warm_Reused                | InProcessEmitToolchain |     5.065 μs |     5.057 μs |  0.009 |        - |      - |         - |        0.00 |
-| Cte_Warm_Reused                  | InProcessEmitToolchain |     7.078 μs |     7.068 μs |  0.012 |        - |      - |         - |        0.00 |
-| RecursiveCte_Warm_Reused         | InProcessEmitToolchain |     7.399 μs |     7.365 μs |  0.013 |        - |      - |         - |        0.00 |
-| Gen_P1_Where                     | InProcessEmitToolchain |    66.142 μs |    66.856 μs |  0.113 |  19.2871 |      - |  161604 B |        0.19 |
-| RecursiveCte_P0_Anchor           | InProcessEmitToolchain |   113.460 μs |   113.061 μs |  0.193 |  31.4941 |      - |  264006 B |        0.31 |
-| Gen_P2_Select                    | InProcessEmitToolchain |   137.418 μs |   136.918 μs |  0.234 |  39.7949 |      - |  333608 B |        0.40 |
-| InAtIn_Captured_Construct        | InProcessEmitToolchain |   164.453 μs |   163.913 μs |  0.280 |  34.6680 |      - |  291201 B |        0.35 |
-| InAtIn_Inline_Construct          | InProcessEmitToolchain |   185.761 μs |   185.669 μs |  0.317 |  37.1094 |      - |  310401 B |        0.37 |
-| RecursiveCte_P1_Step             | InProcessEmitToolchain |   187.180 μs |   186.634 μs |  0.319 |  45.1660 | 0.2441 |  379209 B |        0.45 |
-| Cte_P0_Body                      | InProcessEmitToolchain |   208.636 μs |   207.387 μs |  0.356 |  38.8184 |      - |  326414 B |        0.39 |
-| Cte_P1_With                      | InProcessEmitToolchain |   215.950 μs |   217.022 μs |  0.368 |  40.2832 |      - |  338415 B |        0.40 |
-| Cte_P2_From                      | InProcessEmitToolchain |   220.281 μs |   221.229 μs |  0.375 |  45.1660 |      - |  378416 B |        0.45 |
-| RecursiveCte_P2_Operands         | InProcessEmitToolchain |   319.543 μs |   317.717 μs |  0.545 |  76.6602 |      - |  643215 B |        0.77 |
-| Cte_P3_Join                      | InProcessEmitToolchain |   349.185 μs |   350.610 μs |  0.595 |  64.4531 |      - |  542435 B |        0.65 |
-| RecursiveCte_P3_UnionAll         | InProcessEmitToolchain |   350.480 μs |   352.013 μs |  0.597 |  86.4258 | 0.4883 |  724817 B |        0.86 |
-| InAtIn_Captured_Prepare_NoHash   | InProcessEmitToolchain |   386.965 μs |   386.740 μs |  0.660 |  50.7813 |      - |  428802 B |        0.51 |
-| InAtIn_Inline_Prepare_NoHash     | InProcessEmitToolchain |   407.395 μs |   409.193 μs |  0.694 |  53.2227 |      - |  448002 B |        0.53 |
-| RecursiveCte_Construct           | InProcessEmitToolchain |   444.142 μs |   444.238 μs |  0.757 | 112.7930 | 0.4883 |  945621 B |        1.13 |
-| RecursiveCte_P4_Declared         | InProcessEmitToolchain |   451.283 μs |   453.594 μs |  0.769 | 113.2813 | 0.4883 |  948822 B |        1.13 |
-| Cte_P4_Select                    | InProcessEmitToolchain |   559.734 μs |   566.738 μs |  0.954 |  99.6094 |      - |  839272 B |        1.00 |
-| InAtIn_Captured_Prepare_Hash     | InProcessEmitToolchain |   573.053 μs |   573.293 μs |  0.977 |  63.4766 |      - |  538405 B |        0.64 |
-| Cte_Construct                    | InProcessEmitToolchain |   586.653 μs |   585.457 μs |  1.000 |  97.6563 |      - |  839268 B |        1.00 |
-| Join4_Construct                  | InProcessEmitToolchain |   658.924 μs |   653.555 μs |  1.123 | 101.5625 |      - |  854491 B |        1.02 |
-| InAtIn_Inline_Prepare_Hash       | InProcessEmitToolchain |   691.595 μs |   658.775 μs |  1.179 |  66.4063 |      - |  562405 B |        0.67 |
-| Cte_RawHit_P0_Capture            | InProcessEmitToolchain |   893.652 μs |   898.260 μs |  1.523 | 119.1406 | 1.9531 | 1004086 B |        1.20 |
-| Cte_RawHit                       | InProcessEmitToolchain |   910.053 μs |   920.369 μs |  1.551 | 119.1406 | 1.9531 | 1004086 B |        1.20 |
-| Cte_RawHit_P2_Comparers          | InProcessEmitToolchain |   912.351 μs |   916.014 μs |  1.555 | 122.0703 | 2.9297 | 1025688 B |        1.22 |
-| InAtIn_Inline_Warm_PlanOnly      | InProcessEmitToolchain |   994.096 μs |   992.306 μs |  1.695 |  74.2188 |      - |  633610 B |        0.75 |
-| RecursiveCte_Prepare_NoHash      | InProcessEmitToolchain | 1,003.166 μs |   998.241 μs |  1.710 | 142.5781 |      - | 1197634 B |        1.43 |
-| RecursiveCte_RawHit_P0_Capture   | InProcessEmitToolchain | 1,043.334 μs | 1,029.394 μs |  1.778 | 148.4375 | 3.9063 | 1256034 B |        1.50 |
-| RecursiveCte_RawHit              | InProcessEmitToolchain | 1,054.447 μs | 1,053.493 μs |  1.797 | 148.4375 | 3.9063 | 1256035 B |        1.50 |
-| Join4_Prepare_NoHash             | InProcessEmitToolchain | 1,074.504 μs | 1,075.606 μs |  1.832 | 128.9063 |      - | 1092120 B |        1.30 |
-| RecursiveCte_RawHit_P2_Comparers | InProcessEmitToolchain | 1,095.230 μs | 1,060.763 μs |  1.867 | 152.3438 | 3.9063 | 1277636 B |        1.52 |
-| Cte_Prepare_NoHash               | InProcessEmitToolchain | 1,164.454 μs | 1,165.007 μs |  1.985 | 132.8125 |      - | 1117700 B |        1.33 |
-| Cte_RawHit_Lookup                | InProcessEmitToolchain | 1,191.375 μs | 1,181.581 μs |  2.031 | 123.0469 | 1.9531 | 1036894 B |        1.24 |
-| Join4_Warm_PlanOnly              | InProcessEmitToolchain | 1,199.884 μs | 1,199.045 μs |  2.045 | 117.1875 |      - |  984910 B |        1.17 |
-| Cte_PlanKey                      | InProcessEmitToolchain | 1,229.575 μs | 1,229.308 μs |  2.096 | 123.0469 | 1.9531 | 1044094 B |        1.24 |
-| Join4_Prepare_Hash               | InProcessEmitToolchain | 1,262.809 μs | 1,258.955 μs |  2.153 | 132.8125 | 1.9531 | 1123323 B |        1.34 |
-| RecursiveCte_Prepare_Hash        | InProcessEmitToolchain | 1,331.873 μs | 1,335.529 μs |  2.270 | 160.1563 | 1.9531 | 1341636 B |        1.60 |
-| Cte_Warm_PlanOnly                | InProcessEmitToolchain | 1,340.352 μs | 1,344.518 μs |  2.285 | 125.0000 |      - | 1052095 B |        1.25 |
-| RecursiveCte_RawHit_Lookup       | InProcessEmitToolchain | 1,382.743 μs | 1,383.353 μs |  2.357 | 152.3438 | 1.9531 | 1277636 B |        1.52 |
-| RecursiveCte_PlanKey             | InProcessEmitToolchain | 1,397.589 μs | 1,397.209 μs |  2.382 | 152.3438 |      - | 1284836 B |        1.53 |
-| RecursiveCte_Warm_PlanOnly       | InProcessEmitToolchain | 1,431.973 μs | 1,432.587 μs |  2.441 | 152.3438 |      - | 1284835 B |        1.53 |
-| Cte_Prepare_Hash                 | InProcessEmitToolchain | 1,438.777 μs | 1,436.890 μs |  2.453 | 144.5313 | 1.9531 | 1209708 B |        1.44 |
-| Cte_Warm_EndToEnd                | InProcessEmitToolchain | 3,214.744 μs | 3,216.013 μs |  5.480 | 132.8125 |      - | 1131292 B |        1.35 |
-| RecursiveCte_Warm_EndToEnd       | InProcessEmitToolchain | 3,643.894 μs | 3,642.234 μs |  6.211 | 160.1563 |      - | 1360047 B |        1.62 |
+| Method                           | Toolchain              | Categories     | Mean          | Median        | Ratio  | Gen0     | Gen1   | Allocated | Alloc Ratio |
+|--------------------------------- |----------------------- |--------------- |--------------:|--------------:|-------:|---------:|-------:|----------:|------------:|
+| Gen_P0_From                      | Default                |                |      2.675 μs |      2.847 μs |  0.002 |   4.7798 |      - |   40000 B |        0.05 |
+| Except_Warm_Reused               | Default                | Warm_Except    |      4.365 μs |      4.338 μs |  0.004 |        - |      - |         - |        0.00 |
+| Intersect_Warm_Reused            | Default                | Warm_Intersect |      4.521 μs |      4.527 μs |  0.004 |        - |      - |         - |        0.00 |
+| Cte_Warm_Reused                  | Default                |                |     10.634 μs |      8.729 μs |  0.009 |        - |      - |         - |        0.00 |
+| RecursiveCte_Warm_Reused         | Default                |                |     11.710 μs |     10.903 μs |  0.010 |        - |      - |         - |        0.00 |
+| Join4_Warm_Reused                | Default                |                |     12.883 μs |     11.978 μs |  0.011 |        - |      - |         - |        0.00 |
+| InAtIn_Inline_Warm_Reused        | Default                |                |     13.566 μs |     11.324 μs |  0.011 |        - |      - |         - |        0.00 |
+| Gen_P1_Where                     | Default                |                |     70.680 μs |     70.967 μs |  0.058 |  19.2871 |      - |  161603 B |        0.20 |
+| Intersect_Construct              | Default                | Warm_Intersect |    119.513 μs |    121.302 μs |  0.098 |  41.9922 | 0.2441 |  352014 B |        0.43 |
+| RecursiveCte_P0_Anchor           | Default                |                |    121.279 μs |    120.974 μs |  0.099 |  31.4941 |      - |  264005 B |        0.32 |
+| Except_Construct                 | Default                | Warm_Except    |    121.312 μs |    120.538 μs |  0.099 |  41.9922 | 0.2441 |  352014 B |        0.43 |
+| Gen_P2_Select                    | Default                |                |    134.300 μs |    135.330 μs |  0.110 |  39.7949 |      - |  333607 B |        0.40 |
+| RecursiveCte_P1_Step             | Default                |                |    198.247 μs |    199.531 μs |  0.162 |  45.1660 |      - |  379208 B |        0.46 |
+| InAtIn_Captured_Construct        | Default                |                |    204.350 μs |    203.929 μs |  0.167 |  34.6680 |      - |  291200 B |        0.35 |
+| Cte_P2_From                      | Default                |                |    224.989 μs |    223.226 μs |  0.184 |  44.9219 |      - |  378415 B |        0.46 |
+| Cte_P1_With                      | Default                |                |    226.772 μs |    227.664 μs |  0.186 |  40.2832 |      - |  338414 B |        0.41 |
+| Cte_P0_Body                      | Default                |                |    293.789 μs |    292.297 μs |  0.241 |  37.1094 |      - |  326413 B |        0.39 |
+| Cte_P3_Join                      | Default                |                |    345.019 μs |    343.144 μs |  0.283 |  64.4531 |      - |  542433 B |        0.66 |
+| RecursiveCte_P2_Operands         | Default                |                |    378.774 μs |    378.512 μs |  0.310 |  76.6602 |      - |  643213 B |        0.78 |
+| Intersect_Prepare_NoHash         | Default                | Warm_Intersect |    380.121 μs |    368.944 μs |  0.312 |  62.5000 |      - |  526422 B |        0.64 |
+| RecursiveCte_P3_UnionAll         | Default                |                |    405.035 μs |    405.457 μs |  0.332 |  86.4258 | 0.9766 |  724815 B |        0.88 |
+| InAtIn_Captured_Prepare_NoHash   | Default                |                |    407.249 μs |    406.575 μs |  0.334 |  50.7813 |      - |  428800 B |        0.52 |
+| Except_Warm_PlanOnly             | Default                | Warm_Except    |    418.376 μs |    418.661 μs |  0.343 |  68.8477 | 0.4883 |  576823 B |        0.70 |
+| Intersect_Warm_PlanOnly          | Default                | Warm_Intersect |    455.590 μs |    451.476 μs |  0.373 |  68.8477 | 0.4883 |  576823 B |        0.70 |
+| Intersect_Prepare_Hash           | Default                | Warm_Intersect |    470.700 μs |    459.733 μs |  0.386 |  70.3125 |      - |  605625 B |        0.73 |
+| InAtIn_Inline_Prepare_NoHash     | Default                |                |    486.680 μs |    452.661 μs |  0.399 |  46.8750 |      - |  448000 B |        0.54 |
+| RecursiveCte_P4_Declared         | Default                |                |    488.568 μs |    489.833 μs |  0.400 | 113.2813 | 0.4883 |  948819 B |        1.15 |
+| Except_Prepare_Hash              | Default                | Warm_Except    |    508.986 μs |    506.796 μs |  0.417 |  70.3125 |      - |  605625 B |        0.73 |
+| InAtIn_Captured_Prepare_Hash     | Default                |                |    519.970 μs |    522.151 μs |  0.426 |  62.5000 |      - |  549600 B |        0.66 |
+| Except_Prepare_NoHash            | Default                | Warm_Except    |    659.097 μs |    602.161 μs |  0.540 |  62.5000 |      - |  526422 B |        0.64 |
+| Cte_P4_Select                    | Default                |                |    685.855 μs |    635.080 μs |  0.562 |  97.6563 |      - |  820068 B |        0.99 |
+| RecursiveCte_Construct           | Default                |                |    706.276 μs |    725.219 μs |  0.579 | 109.3750 |      - |  945620 B |        1.14 |
+| InAtIn_Inline_Construct          | Default                |                |    803.824 μs |    770.033 μs |  0.659 |  35.1563 |      - |  310400 B |        0.37 |
+| Cte_RawHit_P0_Capture            | Default                |                |    924.648 μs |    925.473 μs |  0.758 | 117.1875 |      - |  984884 B |        1.19 |
+| InAtIn_Inline_Warm_PlanOnly      | Default                |                |    979.519 μs |    999.045 μs |  0.803 |  70.3125 |      - |  633600 B |        0.77 |
+| RecursiveCte_RawHit_P0_Capture   | Default                |                |  1,020.583 μs |    992.628 μs |  0.836 | 148.4375 |      - | 1267226 B |        1.53 |
+| Cte_RawHit_P2_Comparers          | Default                |                |  1,027.007 μs |  1,017.863 μs |  0.842 | 117.1875 |      - | 1017684 B |        1.23 |
+| RecursiveCte_RawHit_P2_Comparers | Default                |                |  1,072.112 μs |  1,061.362 μs |  0.879 | 148.4375 |      - | 1277626 B |        1.54 |
+| InAtIn_Inline_Prepare_Hash       | Default                |                |  1,121.818 μs |  1,210.055 μs |  0.919 |  62.5000 |      - |  562400 B |        0.68 |
+| Join4_Warm_PlanOnly              | Default                |                |  1,483.858 μs |  1,464.454 μs |  1.216 | 109.3750 |      - |  992905 B |        1.20 |
+| Cte_Construct                    | Default                |                |  1,488.274 μs |  1,595.086 μs |  1.220 |  97.6563 |      - |  828068 B |        1.00 |
+| RecursiveCte_RawHit              | Default                |                |  1,512.445 μs |  1,501.810 μs |  1.240 | 140.6250 |      - | 1283226 B |        1.55 |
+| RecursiveCte_RawHit_Lookup       | Default                |                |  1,559.291 μs |  1,569.358 μs |  1.278 | 140.6250 |      - | 1277626 B |        1.54 |
+| RecursiveCte_Prepare_NoHash      | Default                |                |  1,686.582 μs |  1,285.711 μs |  1.382 | 140.6250 |      - | 1197625 B |        1.45 |
+| RecursiveCte_PlanKey             | Default                |                |  1,692.561 μs |  1,715.638 μs |  1.387 | 156.2500 |      - | 1308829 B |        1.58 |
+| Cte_Warm_PlanOnly                | Default                |                |  1,697.650 μs |  1,653.677 μs |  1.391 | 121.0938 |      - | 1044084 B |        1.26 |
+| Cte_Prepare_NoHash               | Default                |                |  1,737.031 μs |  1,578.499 μs |  1.424 | 125.0000 |      - | 1106489 B |        1.34 |
+| Join4_Prepare_Hash               | Default                |                |  2,108.768 μs |  2,230.495 μs |  1.728 | 132.8125 |      - | 1120118 B |        1.35 |
+| RecursiveCte_Prepare_Hash        | Default                |                |  2,429.156 μs |  2,474.333 μs |  1.991 | 156.2500 |      - | 1338429 B |        1.62 |
+| Cte_PlanKey                      | Default                |                |  2,731.198 μs |  2,045.481 μs |  2.238 | 125.0000 |      - | 1048905 B |        1.27 |
+| Cte_RawHit                       | Default                |                |  3,533.209 μs |  2,405.555 μs |  2.896 |  93.7500 |      - |  988084 B |        1.19 |
+| Cte_RawHit_Lookup                | Default                |                |  3,633.533 μs |  2,001.518 μs |  2.978 | 109.3750 |      - | 1029684 B |        1.24 |
+| Join4_Construct                  | Default                |                |  3,966.778 μs |  4,056.315 μs |  3.251 | 101.5625 |      - |  866492 B |        1.05 |
+| RecursiveCte_Warm_EndToEnd       | Default                |                |  4,624.323 μs |  4,534.522 μs |  3.790 | 156.2500 |      - | 1371232 B |        1.66 |
+| Cte_Prepare_Hash                 | Default                |                |  4,945.270 μs |  4,404.573 μs |  4.053 | 125.0000 |      - | 1205705 B |        1.46 |
+| Cte_Warm_EndToEnd                | Default                |                |  5,175.474 μs |  4,438.730 μs |  4.242 | 125.0000 |      - | 1123305 B |        1.36 |
+| Join4_Prepare_NoHash             | Default                |                | 12,710.439 μs | 12,387.288 μs | 10.417 | 125.0000 |      - | 1116158 B |        1.35 |
+| RecursiveCte_Warm_PlanOnly       | Default                |                | 17,253.305 μs | 20,403.275 μs | 14.141 | 125.0000 |      - | 1367094 B |        1.65 |
+|                                  |                        |                |               |               |        |          |        |           |             |
+| Gen_P0_From                      | InProcessEmitToolchain |                |      3.699 μs |      3.533 μs |  0.006 |   4.7760 |      - |   40000 B |        0.05 |
+| InAtIn_Inline_Warm_Reused        | InProcessEmitToolchain |                |      4.575 μs |      4.475 μs |  0.008 |        - |      - |         - |        0.00 |
+| Except_Warm_Reused               | InProcessEmitToolchain | Warm_Except    |      4.593 μs |      4.593 μs |  0.008 |        - |      - |         - |        0.00 |
+| Intersect_Warm_Reused            | InProcessEmitToolchain | Warm_Intersect |      4.605 μs |      4.602 μs |  0.008 |        - |      - |         - |        0.00 |
+| Join4_Warm_Reused                | InProcessEmitToolchain |                |      5.233 μs |      5.262 μs |  0.009 |        - |      - |         - |        0.00 |
+| Cte_Warm_Reused                  | InProcessEmitToolchain |                |      7.760 μs |      7.780 μs |  0.013 |        - |      - |         - |        0.00 |
+| RecursiveCte_Warm_Reused         | InProcessEmitToolchain |                |      8.560 μs |      8.616 μs |  0.014 |        - |      - |         - |        0.00 |
+| RecursiveCte_P0_Anchor           | InProcessEmitToolchain |                |    129.666 μs |    126.971 μs |  0.218 |  31.4941 |      - |  264007 B |        0.32 |
+| Intersect_Construct              | InProcessEmitToolchain | Warm_Intersect |    144.643 μs |    147.672 μs |  0.244 |  41.9922 | 0.2441 |  352015 B |        0.42 |
+| Gen_P1_Where                     | InProcessEmitToolchain |                |    160.638 μs |    160.945 μs |  0.271 |  19.2871 |      - |  161604 B |        0.19 |
+| InAtIn_Captured_Construct        | InProcessEmitToolchain |                |    186.068 μs |    186.350 μs |  0.313 |  34.6680 |      - |  291201 B |        0.35 |
+| InAtIn_Inline_Construct          | InProcessEmitToolchain |                |    202.817 μs |    202.352 μs |  0.342 |  37.1094 |      - |  310401 B |        0.37 |
+| RecursiveCte_P1_Step             | InProcessEmitToolchain |                |    203.704 μs |    204.754 μs |  0.343 |  45.1660 | 0.2441 |  379209 B |        0.45 |
+| Cte_P0_Body                      | InProcessEmitToolchain |                |    215.917 μs |    219.948 μs |  0.364 |  38.8184 |      - |  326414 B |        0.39 |
+| Cte_P1_With                      | InProcessEmitToolchain |                |    220.254 μs |    219.996 μs |  0.371 |  40.2832 |      - |  338415 B |        0.41 |
+| Cte_P2_From                      | InProcessEmitToolchain |                |    221.143 μs |    221.678 μs |  0.372 |  45.1660 |      - |  378416 B |        0.45 |
+| Except_Construct                 | InProcessEmitToolchain | Warm_Except    |    254.151 μs |    218.272 μs |  0.428 |  41.9922 | 0.2441 |  352015 B |        0.42 |
+| Gen_P2_Select                    | InProcessEmitToolchain |                |    284.760 μs |    298.270 μs |  0.480 |  41.5039 |      - |  348009 B |        0.42 |
+| Except_Prepare_NoHash            | InProcessEmitToolchain | Warm_Except    |    397.448 μs |    396.021 μs |  0.669 |  62.5000 | 0.4883 |  526424 B |        0.63 |
+| Cte_P3_Join                      | InProcessEmitToolchain |                |    407.378 μs |    382.041 μs |  0.686 |  66.4063 |      - |  557636 B |        0.67 |
+| InAtIn_Captured_Prepare_NoHash   | InProcessEmitToolchain |                |    414.028 μs |    412.209 μs |  0.697 |  50.7813 |      - |  428802 B |        0.51 |
+| RecursiveCte_P2_Operands         | InProcessEmitToolchain |                |    422.107 μs |    366.757 μs |  0.711 |  76.6602 |      - |  643215 B |        0.77 |
+| InAtIn_Inline_Prepare_NoHash     | InProcessEmitToolchain |                |    424.848 μs |    425.978 μs |  0.716 |  53.2227 |      - |  448002 B |        0.54 |
+| Intersect_Prepare_NoHash         | InProcessEmitToolchain | Warm_Intersect |    428.691 μs |    431.677 μs |  0.722 |  62.5000 | 0.4883 |  526424 B |        0.63 |
+| Except_Warm_PlanOnly             | InProcessEmitToolchain | Warm_Except    |    457.929 μs |    458.830 μs |  0.771 |  68.8477 | 0.4883 |  576826 B |        0.69 |
+| Intersect_Warm_PlanOnly          | InProcessEmitToolchain | Warm_Intersect |    474.360 μs |    471.868 μs |  0.799 |  68.8477 | 0.4883 |  576826 B |        0.69 |
+| RecursiveCte_Construct           | InProcessEmitToolchain |                |    495.878 μs |    498.150 μs |  0.835 | 114.2578 |      - |  960024 B |        1.15 |
+| Intersect_Prepare_Hash           | InProcessEmitToolchain | Warm_Intersect |    520.997 μs |    509.851 μs |  0.877 |  72.2656 | 0.9766 |  605629 B |        0.73 |
+| Except_Prepare_Hash              | InProcessEmitToolchain | Warm_Except    |    550.224 μs |    549.407 μs |  0.927 |  72.2656 | 0.9766 |  605629 B |        0.73 |
+| RecursiveCte_P3_UnionAll         | InProcessEmitToolchain |                |    577.282 μs |    506.077 μs |  0.972 |  85.9375 |      - |  724825 B |        0.87 |
+| Cte_P4_Select                    | InProcessEmitToolchain |                |    587.502 μs |    589.567 μs |  0.989 |  99.6094 |      - |  835272 B |        1.00 |
+| Cte_Construct                    | InProcessEmitToolchain |                |    593.825 μs |    597.037 μs |  1.000 |  99.6094 |      - |  835268 B |        1.00 |
+| InAtIn_Captured_Prepare_Hash     | InProcessEmitToolchain |                |    627.018 μs |    624.883 μs |  1.056 |  63.4766 |      - |  538405 B |        0.64 |
+| Join4_Construct                  | InProcessEmitToolchain |                |    677.640 μs |    677.388 μs |  1.141 | 101.5625 |      - |  854491 B |        1.02 |
+| InAtIn_Inline_Prepare_Hash       | InProcessEmitToolchain |                |    692.056 μs |    696.530 μs |  1.166 |  66.4063 |      - |  562405 B |        0.67 |
+| RecursiveCte_P4_Declared         | InProcessEmitToolchain |                |  1,004.861 μs |    982.474 μs |  1.692 | 113.2813 |      - |  963229 B |        1.15 |
+| InAtIn_Inline_Warm_PlanOnly      | InProcessEmitToolchain |                |  1,020.893 μs |  1,009.799 μs |  1.719 |  74.2188 |      - |  633610 B |        0.76 |
+| Cte_RawHit                       | InProcessEmitToolchain |                |  1,022.822 μs |  1,004.610 μs |  1.723 | 119.1406 | 1.9531 | 1000086 B |        1.20 |
+| Cte_RawHit_P0_Capture            | InProcessEmitToolchain |                |  1,042.894 μs |  1,051.385 μs |  1.756 | 119.1406 | 1.9531 | 1000091 B |        1.20 |
+| RecursiveCte_Prepare_NoHash      | InProcessEmitToolchain |                |  1,077.731 μs |  1,066.080 μs |  1.815 | 142.5781 |      - | 1208834 B |        1.45 |
+| Join4_Prepare_NoHash             | InProcessEmitToolchain |                |  1,130.406 μs |  1,129.211 μs |  1.904 | 128.9063 |      - | 1092120 B |        1.31 |
+| Cte_Prepare_NoHash               | InProcessEmitToolchain |                |  1,170.720 μs |  1,176.370 μs |  1.972 | 130.8594 |      - | 1110499 B |        1.33 |
+| RecursiveCte_RawHit              | InProcessEmitToolchain |                |  1,223.521 μs |  1,222.676 μs |  2.061 | 150.3906 | 3.9063 | 1270435 B |        1.52 |
+| RecursiveCte_RawHit_P0_Capture   | InProcessEmitToolchain |                |  1,242.611 μs |  1,243.870 μs |  2.093 | 150.3906 | 3.9063 | 1270435 B |        1.52 |
+| Cte_RawHit_P2_Comparers          | InProcessEmitToolchain |                |  1,270.752 μs |  1,284.636 μs |  2.140 | 121.0938 | 1.9531 | 1021692 B |        1.22 |
+| Join4_Warm_PlanOnly              | InProcessEmitToolchain |                |  1,273.620 μs |  1,259.414 μs |  2.145 | 117.1875 |      - |  984910 B |        1.18 |
+| Cte_PlanKey                      | InProcessEmitToolchain |                |  1,315.899 μs |  1,308.468 μs |  2.216 | 123.0469 |      - | 1040094 B |        1.25 |
+| Join4_Prepare_Hash               | InProcessEmitToolchain |                |  1,329.737 μs |  1,328.122 μs |  2.239 | 132.8125 | 1.9531 | 1123321 B |        1.34 |
+| RecursiveCte_Prepare_Hash        | InProcessEmitToolchain |                |  1,373.775 μs |  1,349.167 μs |  2.314 | 160.1563 | 1.9531 | 1352837 B |        1.62 |
+| RecursiveCte_RawHit_P2_Comparers | InProcessEmitToolchain |                |  1,380.690 μs |  1,403.967 μs |  2.325 | 154.2969 | 3.9063 | 1292036 B |        1.55 |
+| Cte_RawHit_Lookup                | InProcessEmitToolchain |                |  1,397.211 μs |  1,358.043 μs |  2.353 | 123.0469 |      - | 1032894 B |        1.24 |
+| Cte_Warm_PlanOnly                | InProcessEmitToolchain |                |  1,408.160 μs |  1,408.735 μs |  2.372 | 125.0000 |      - | 1048095 B |        1.25 |
+| Cte_Prepare_Hash                 | InProcessEmitToolchain |                |  1,467.728 μs |  1,457.794 μs |  2.472 | 142.5781 | 1.9531 | 1202507 B |        1.44 |
+| RecursiveCte_RawHit_Lookup       | InProcessEmitToolchain |                |  1,488.743 μs |  1,459.750 μs |  2.507 | 154.2969 | 1.9531 | 1292036 B |        1.55 |
+| RecursiveCte_Warm_PlanOnly       | InProcessEmitToolchain |                |  1,526.846 μs |  1,526.731 μs |  2.571 | 154.2969 | 1.9531 | 1299236 B |        1.56 |
+| RecursiveCte_PlanKey             | InProcessEmitToolchain |                |  1,543.925 μs |  1,574.434 μs |  2.600 | 154.2969 | 1.9531 | 1299236 B |        1.56 |
+| Cte_Warm_EndToEnd                | InProcessEmitToolchain |                |  3,311.929 μs |  3,297.107 μs |  5.578 | 132.8125 |      - | 1127292 B |        1.35 |
+| RecursiveCte_Warm_EndToEnd       | InProcessEmitToolchain |                |  4,160.743 μs |  4,245.266 μs |  7.007 | 164.0625 |      - | 1374468 B |        1.65 |
