@@ -673,8 +673,7 @@ def write_artifacts(evid, meta, runs, analysis, args):
     for arm in ARMS:
         rows = tables[arm]
         export[arm] = {
-            "phases": {phase: {k: v for k, v in rows[phase].items() if k != "pairs"}
-                       for phase in PHASES + ["prepare_exclusive"]},
+            "phases": {phase: dict(rows[phase]) for phase in PHASES + ["prepare_exclusive"]},
             "end_to_end": {k: v for k, v in rows["end_to_end"].items() if k != "pairs"},
             "phase_residual": {k: v for k, v in rows["phase_residual"].items() if k != "pairs"},
             "residual_unattributed": {k: v for k, v in rows["residual_unattributed"].items() if k != "pairs"},

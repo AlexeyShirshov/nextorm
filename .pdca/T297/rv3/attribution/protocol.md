@@ -1,6 +1,6 @@
 # E22 attribution protocol — T297 r=4 (P02)
 
-Generated 2026-10-19T11:05:08Z by `.pdca/T297/rv3/tools/run_r4.py attribute`.
+Generated 2026-10-19T11:06:44Z by `.pdca/T297/rv3/tools/run_r4.py attribute`.
 
 ## Lock and duplicate guard
 
