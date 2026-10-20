@@ -331,8 +331,29 @@ def build_allocations_table(results_dir: Path, lang: str) -> str:
     return "\n".join(lines)
 
 
+def _benchmark_source(class_name: str) -> Path:
+    """Locate a benchmark class source anywhere under the project.
+
+    Benchmark sources are grouped by topic (``Sqlite/``, ``Infrastructure/``, ...), so the
+    file is resolved recursively; a missing or duplicate class fails closed instead of
+    silently reading the wrong source.
+    """
+    matches = sorted(
+        path
+        for path in BENCH_SRC_DIR.rglob(f"{class_name}.cs")
+        if not {"bin", "obj"} & set(path.relative_to(BENCH_SRC_DIR).parts)
+    )
+    if not matches:
+        raise TableError(f"{class_name}.cs: not found under {BENCH_SRC_DIR}")
+    if len(matches) > 1:
+        raise TableError(
+            f"{class_name}.cs: ambiguous, found {[str(path) for path in matches]}"
+        )
+    return matches[0]
+
+
 def _verify_category_b_divisor() -> int:
-    source = (BENCH_SRC_DIR / f"{CATEGORY_B_CLASS}.cs").read_text(encoding="utf-8")
+    source = _benchmark_source(CATEGORY_B_CLASS).read_text(encoding="utf-8")
     match = re.search(r"private\s+const\s+int\s+Iterations\s*=\s*(\d+)\s*;", source)
     if not match:
         raise TableError(f"{CATEGORY_B_CLASS}.cs: cannot find the Iterations constant")

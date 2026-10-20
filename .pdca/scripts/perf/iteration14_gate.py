@@ -237,12 +237,28 @@ def _extract_method_body(text, start):
     return None
 
 
+def _benchmark_source_files(src_path):
+    """Return the benchmark ``*.cs`` sources, grouped by topic, skipping build output.
+
+    Sources live in topic subdirectories (``Sqlite/``, ``Infrastructure/``, ...), so a flat
+    ``glob`` misses every class; ``bin``/``obj`` are pruned so generated assembly info is
+    never parsed as a benchmark class.
+    """
+    if not src_path.is_dir():
+        return []
+    return sorted(
+        path
+        for path in src_path.rglob("*.cs")
+        if not {"bin", "obj"} & set(path.relative_to(src_path).parts)
+    )
+
+
 def parse_benchmark_sources(src_dir, wanted_types):
     """Parse the normalization contract from the benchmark sources.
 
     Returns ``{short_type: {"iterations": int|None, "methods": {name: {...}},
     "source": path}}`` for the classes named in *wanted_types*.  Only ``*.cs``
-    files directly in *src_dir* are read (never build artifacts), and for each
+    files under *src_dir* are read (never build artifacts), and for each
     ``[Benchmark]`` method we record whether it declares ``OperationsPerInvoke``
     and whether its body loops over the class constant ``Iterations``.
     """
@@ -250,7 +266,7 @@ def parse_benchmark_sources(src_dir, wanted_types):
     src_path = Path(src_dir)
     if not src_path.is_dir():
         return result
-    for path in sorted(src_path.glob("*.cs")):
+    for path in _benchmark_source_files(src_path):
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:

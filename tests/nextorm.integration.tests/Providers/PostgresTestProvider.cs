@@ -86,6 +86,11 @@ internal sealed class PostgresTestProvider : ITestProvider
 
     private const string SeedSql =
         """
+        -- pgcrypto is not in the core catalog: digest()/sha256() belong to the function-library
+        -- tests, so the extension has to exist before any test prepares such a query. Creating it
+        -- during seeding keeps those tests independent of one another (and of test order).
+        create extension if not exists pgcrypto;
+
         drop table if exists complex_entity;
         drop table if exists binary_entity;
         drop table if exists enum_entity;

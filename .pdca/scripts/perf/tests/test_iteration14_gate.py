@@ -117,12 +117,21 @@ def contract_src(tmp, type_name, iterations):
 
     The normalization contract is read from source, so a temp source tree is the
     only way to deliberately violate ``Iterations == logical_ops_per_invocation``.
+    Benchmark sources are grouped by topic, so the tree (minus build output) is
+    copied with its relative layout and the target class is found recursively.
     """
     src = tmp / "src"
     src.mkdir(exist_ok=True)
-    for path in Path(gate.BENCH_SRC_DIR).glob("*.cs"):
-        shutil.copyfile(path, src / path.name)
-    target = src / f"{type_name}.cs"
+    for path in Path(gate.BENCH_SRC_DIR).rglob("*.cs"):
+        relative = path.relative_to(gate.BENCH_SRC_DIR)
+        if {"bin", "obj"} & set(relative.parts):
+            continue
+        target = src / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, target)
+    matches = sorted(src.rglob(f"{type_name}.cs"))
+    assert len(matches) == 1, f"expected one {type_name}.cs under {src}, found {matches}"
+    target = matches[0]
     text = target.read_text(encoding="utf-8")
     text, count = re.subn(
         r"(const\s+int\s+Iterations\s*=\s*)\d+", r"\g<1>" + str(iterations), text, count=1

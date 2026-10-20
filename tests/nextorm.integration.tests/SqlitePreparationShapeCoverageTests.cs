@@ -262,7 +262,14 @@ public sealed class SqlitePreparationShapeCoverageTests : ProviderTestSuite
     [Fact]
     public void DynamicColumnsStoreWithJoin_ShouldBeRejectedWhileSingleSourceRuns()
     {
-        var live = _sut.DataProvider.From<PreparationDynamicStoreProbe>().ToList();
+        // The SQLite suite shares one database file for the whole process, and the dynamic-columns
+        // write tests insert rows with random keys without deleting them. The single-source read is
+        // therefore proved on an impossible key filter: it still prepares and executes the real
+        // query, but the expectation no longer depends on which test ran first.
+        var live = _sut.DataProvider
+            .From<PreparationDynamicStoreProbe>()
+            .Where(x => x.Id < 0)
+            .ToList();
         live.Should().BeEmpty();
 
         FluentActions

@@ -131,15 +131,8 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
-    public async Task CryptoHash_ShouldReturnSha256()
+    public void CryptoHash_ShouldReturnSha256()
     {
-        await using (var connection = new NpgsqlConnection(PostgresContainer.ConnectionString))
-        {
-            await connection.OpenAsync(TestContext.Current.CancellationToken);
-            await using var command = new NpgsqlCommand("create extension if not exists pgcrypto", connection);
-            await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
-        }
-
         var expected = Convert.FromHexString("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 
         var hashes = _sut.SimpleEntity
