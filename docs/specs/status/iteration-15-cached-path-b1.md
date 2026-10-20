@@ -131,7 +131,7 @@ dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=
 dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=stage-a --exporters json --artifacts benchmarks/BenchmarkDotNet.Artifacts/iteration15-b1/A2
 dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=stage-a --exporters json --artifacts benchmarks/BenchmarkDotNet.Artifacts/iteration15-b1/B2
 dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter '*SqliteBenchmarkWarmDecompose*' '*SqliteBenchmarkCachedPlan*' '*SqliteBenchmarkFeaturePlanBuild*' --job short --exporters json
-python3 eng/perf/iteration14_gate.py
+python3 scripts/perf/iteration14_gate.py
 dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance --exporters json --artifacts benchmarks/BenchmarkDotNet.Artifacts/iteration15-b1/acceptance
 ```
 
@@ -142,7 +142,7 @@ Coverage: per `.github/workflows/dotnet.yml` (`dotnet-coverage collect` → `rep
 
 | row | applies | predicate | sources / commands | owner |
 |---|---|---|---|---|
-| G1-PERF | #183 Stage B1, unconditional | **MEASURED** — 12 Stage A workloads within frozen budgets; `Prepared_ToList ≤780 B/op`; iteration14 gate incl. CTE zero rows; 7 acceptance cases; paired/interleaved runs | Stage A frozen budgets (`iteration-15-stage-a-manifest.json`, `acceptance-benchmarks.md:61-69`); the `stage-a` arms A1/B1/A2/B2; `--anyCategories=acceptance`; `eng/perf/iteration14_gate.py` | coder gathers, check accepts |
+| G1-PERF | #183 Stage B1, unconditional | **MEASURED** — 12 Stage A workloads within frozen budgets; `Prepared_ToList ≤780 B/op`; iteration14 gate incl. CTE zero rows; 7 acceptance cases; paired/interleaved runs | Stage A frozen budgets (`iteration-15-stage-a-manifest.json`, `acceptance-benchmarks.md:61-69`); the `stage-a` arms A1/B1/A2/B2; `--anyCategories=acceptance`; `scripts/perf/iteration14_gate.py` | coder gathers, check accepts |
 | G1-CACHE | #183 Stage B1, unconditional | structural equality incl. forced real-lookup collision, shadowing/nested/reentrancy/concurrency; no sticky `Cache=false`/`_dontCache`; build 0/0; coverage line≥85/branch≥75; real provider runs (skip ≠ pass) | targeted + boundary commands above; `PlanKeyStructureTests`; `CachedPathCharacterizationTests`; integration with `DOCKER_HOST` | coder executes, scout confirms scope, check accepts |
 | G1-CTE | only if `CteHoister.Hoist` / nested read-CTE path via `PrepareCtes` changed | predicate=false → N/A with proof (empty diff); predicate=true → active #166 prerequisite, stop/re-scope | `git diff 752943d -- src` and `git diff 752943d -- src/nextorm.core/Visitors/CteHoister.cs` | scout semantic owner, orchestrator stop/re-scope, check verifies |
 
@@ -171,7 +171,7 @@ not a plan revision and not a repeated DO.
 - 2026-10-04T18:19Z | DO | revision r1 | iteration n=1/3 | D:A4 acceptance: exit 0, wall 44.54s (<4min), 7/7 cases 0 failures; Cached_ToList/Prepared_ToList time ratio 1.6717 vs baseline 1.8699 (-10.6%), alloc ratio 7.0948 vs 7.4232 (-4.42%); no comparable ratio grows >20% (max per-case alloc delta +3.0%); Prepared_ToList 779.7 B/op <=780 | benchmarks/BenchmarkDotNet.Artifacts/iteration15-b1/acceptance/acceptance.log
 - 2026-10-04T18:19Z | DO | revision r1 | iteration n=1/3 | D:A4 stage-a B1 (exit 0, wall 77s): 12/12 arms within frozen budgets; equality/lookup arms improved vs Stage A: Where_CachedHit_PlanOnly 6528.17->6096.17 (-6.62%), Where_CachedHit_ToList 7259.84->6827.92 (-5.95%), Join_CachedHit_PlanOnly 12184.82->11832.91 (-2.89%), Join_CachedHit_ToList 12939.31->12587.31 (-2.72%); Where_Prepared_ToList 779.60<=780; no arm >20% growth | benchmarks/BenchmarkDotNet.Artifacts/iteration15-b1/B1/
 - 2026-10-04T18:19Z | DO | revision r1 | iteration n=1/3 | D:A4 paired A1 (core reverted to 752943d, benchmark rebuilt; B1 restored via git apply, sha256 match): alloc deltas attribute the cached-arm gains to the comparer change; all arm times +2..+38% under loadavg~9 (timing noise-dominated, allocations are the frozen axis); no paired regression | benchmarks/BenchmarkDotNet.Artifacts/iteration15-b1/A1/
-- 2026-10-04T18:19Z | DO | revision r1 | iteration n=1/3 | D:A4 iteration14 gate: dotnet --filter 3 classes --job short exit 0 (wall 12m41s), eng/perf/iteration14_gate.py --no-run exit 0, all 56 row/job verdicts within budget, zero rows Cte_Warm_Reused/RecursiveCte_Warm_Reused/Join4_Warm_Reused all 0.00 B/op | benchmarks/BenchmarkDotNet.Artifacts/iteration15-b1/iteration14/iteration14-gate.log
+- 2026-10-04T18:19Z | DO | revision r1 | iteration n=1/3 | D:A4 iteration14 gate: dotnet --filter 3 classes --job short exit 0 (wall 12m41s), scripts/perf/iteration14_gate.py --no-run exit 0, all 56 row/job verdicts within budget, zero rows Cte_Warm_Reused/RecursiveCte_Warm_Reused/Join4_Warm_Reused all 0.00 B/op | benchmarks/BenchmarkDotNet.Artifacts/iteration15-b1/iteration14/iteration14-gate.log
 - 2026-10-04T18:19Z | DO | revision r1 | iteration n=1/3 | D:A4 G1-CTE predicate=false: git diff --exit-code 752943d -- src/nextorm.core/Builders/CteHoister.cs empty; git diff --stat 752943d -- src = only QueryPlan.cs (+18) and ExpressionPlanEqualityComparer.cs (+160/-10); CRLF preserved | docs/specs/status/iteration-15-cached-path-b1.md
 - 2026-10-04T18:19Z | DO | revision r1 | iteration n=1/3 | D:A4 evidence-path note: --artifacts is ignored by NextormConfig.ArtifactsPath (BenchmarkArtifacts.Resolve looks for nextorm.sln, repo tracks nextorm.slnx), so stage-a/acceptance/iteration14 BDN runs emitted to repo-root BenchmarkDotNet.Artifacts/results; those runs left 44 tracked repo-root result files deleted (the earlier claim that the tracked dir was already restored was inaccurate); B1 pre-CHECK polish restored them via `git checkout 752943d -- BenchmarkDotNet.Artifacts/results/` (porcelain empty); per-run evidence copied into benchmarks/BenchmarkDotNet.Artifacts/iteration15-b1/{acceptance,B1,A1,iteration14}/ | benchmarks/BenchmarkDotNet.Artifacts/iteration15-b1/
 - 2026-10-04T18:26Z | DO | revision r1 | iteration n=1/3 | D:A4/D:A5 complete; entering CHECK (coverage 87.1/78.8 PASS, delta +0.0/+0.1; integration exit 0 3136 total 0F/193S all providers live; B1 results appended) | docs/specs/status/iteration-15-cached-path-b1.md
@@ -249,7 +249,7 @@ all arm times +2..+38% under loadavg ≈9 (timing noise-dominated; allocations a
 no paired regression. Evidence `.../b1/A1/`.
 
 **Iteration14 gate** — `dotnet --filter` 3 classes `--job short` exit 0 (wall 12 m 41 s);
-`eng/perf/iteration14_gate.py --no-run` exit 0; all **56 row/job verdicts within budget**; zero-row
+`scripts/perf/iteration14_gate.py --no-run` exit 0; all **56 row/job verdicts within budget**; zero-row
 arms `Cte_Warm_Reused`, `RecursiveCte_Warm_Reused`, `Join4_Warm_Reused` all **0.00 B/op**. Evidence
 `.../b1/iteration14/iteration14-gate.log`.
 

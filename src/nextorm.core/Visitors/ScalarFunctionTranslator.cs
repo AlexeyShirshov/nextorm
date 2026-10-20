@@ -53,7 +53,7 @@ internal static class ScalarFunctionTranslator
         if (declaringType == typeof(Math))
             return MathFunctionTranslator.TryTranslate(visitor, node);
 
-        if (declaringType == typeof(DateTime))
+        if (declaringType == typeof(DateTime) || declaringType == typeof(DateTimeOffset))
             return DateTimeFunctionTranslator.TryTranslate(visitor, node);
 
         if (declaringType == typeof(System.Text.RegularExpressions.Regex))

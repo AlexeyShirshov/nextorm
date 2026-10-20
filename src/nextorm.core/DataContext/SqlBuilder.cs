@@ -48,6 +48,11 @@ internal readonly struct SqlBuilder
         if (cmd.ExtremeRow is not null)
             return MakeExtremeRowSelect(cmd, selectInto);
 
+        // A per-parent eager top-N child is lowered to a ranked derived table whose page bounds apply
+        // inside each partition of the eager load's child key, instead of the global paging below.
+        if (cmd.PerParentPaging)
+            return MakePerParentPagingSelect(cmd, selectInto);
+
         var selectList = cmd.SelectList;
         var from = cmd.From;
         // A command whose declarations were hoisted into the enclosing statement's top-level WITH must
@@ -91,16 +96,32 @@ internal readonly struct SqlBuilder
             var hasDynamicStore = !cmd.IgnoreColumns && selectList is not null
                 && Array.Exists(selectList, static item => item.IsDynamicColumnsStore);
             var needAlias = hasJoins || _ctx.QueryProvider.OuterReferences?.Count > 0
-                || (hasDynamicStore && _ctx.Dialect.RequiresQualifiedSelectStar);
+                || (hasDynamicStore && _ctx.Dialect.RequiresQualifiedSelectStar)
+                || from?.SourceLock is not null;
+
+            // Source-level row locking is fail-closed: a dialect whose lock renderer does not opt in
+            // (MariaDB, SQLite, ClickHouse, in-memory) must reject it instead of silently emitting a
+            // whole-query or no lock. A table-hint dialect renders the lock on each source itself; a
+            // trailing-clause dialect collects the resolved aliases to emit FOR UPDATE OF after FROM/JOIN.
+            var hasAnySourceLock = from?.SourceLock is not null
+                || (joins is not null && Array.Exists(joins, static j => j.From.SourceLock is not null));
+            if (hasAnySourceLock && _ctx.Dialect.Lock is not { SupportsSourceLocks: true })
+                throw new NotSupportedException("Source-level row locking (FOR UPDATE OF) is not supported by this SQL dialect.");
+
+            var sourceLocks = !_ctx.ParamMode && hasAnySourceLock && _ctx.Dialect.Lock is { UsesTableHints: false }
+                ? new List<SourceLockTarget>()
+                : null;
+            var fromCtx = sourceLocks is null ? _ctx : _ctx with { SourceLocks = sourceLocks };
 
             // Whether the FROM source is rendered with an alias. A bare physical table with no joins and
             // no column shape stays unaliased; every derived/raw/shaped source is aliased even without
             // joins. Predicates and sort keys must be table-qualified whenever the source is aliased (a
             // projection item over a derived root resolves through that alias), and must stay unqualified
             // over an unaliased physical source. This mirrors the alias decision in MakeFrom; keep the
-            // two in sync.
+            // two in sync. A source lock forces an alias so the OF target can be declared.
             var dontNeedAlias = !needAlias
                 && from is not null
+                && from.SourceLock is null
                 && from.ColumnShape is null
                 && from.SubQuery is null
                 && from.TableExpressionOverride is null
@@ -136,14 +157,10 @@ internal readonly struct SqlBuilder
                         throw new NotSupportedException($"The FOR SYSTEM_TIME {temporal.Kind} clause is not supported by this SQL dialect");
                 }
 
-                var tableHints = cmd.TableHints;
-                if (cmd.RowLock is { } lockClause && _ctx.Dialect.Lock is { UsesTableHints: true } lockHint)
-                    tableHints = AppendHint(tableHints, lockHint.Render(lockClause.Mode, lockClause.Wait, _ctx.KeywordCase));
-
-                var fromStr = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(needAlias, entityType, hasJoins, tableHints, cmd.Temporal, cmd.IndexHints, cmd.IndexHintKind, scopeHints), out fromAlias);
+                var fromStr = SqlSourceRenderer.MakeFrom(in fromCtx, from, new FromRenderOptions(needAlias, entityType, hasJoins, cmd.TableHints, cmd.Temporal, cmd.IndexHints, cmd.IndexHintKind, scopeHints, GlobalLock: cmd.RowLock), out fromAlias);
                 if (!_ctx.ParamMode)
                 {
-                    sqlBuilder!.Append(Kw(" from ")).Append(fromStr);
+                    sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" from ")).Append(fromStr);
 
                     if (cmd.TableSample is { } tablesample)
                     {
@@ -177,8 +194,8 @@ internal readonly struct SqlBuilder
                 {
                     for (var (idx, cnt) = (0, joins!.Length); idx < cnt; idx++)
                     {
-                        var joinSql = SqlSourceRenderer.MakeJoin(in _ctx, joins[idx], entityType!, scopeHints);
-                        if (!_ctx.ParamMode) sqlBuilder!.Append(joinSql);
+                        var joinSql = SqlSourceRenderer.MakeJoin(in fromCtx, joins[idx], entityType!, scopeHints, cmd.RowLock);
+                        if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(joinSql);
                     }
                 }
 
@@ -203,7 +220,7 @@ internal readonly struct SqlBuilder
                     }
 
                     if (!_ctx.ParamMode)
-                        sqlBuilder!.AppendLine().Append(arrayJoinClause.Render(cmd.ArrayJoinKind, renderedArrayJoins!, _ctx.KeywordCase));
+                        sqlBuilder!.Append(SqlText.NewLine).Append(arrayJoinClause.Render(cmd.ArrayJoinKind, renderedArrayJoins!, _ctx.KeywordCase));
                 }
 
                 if (cmd.PreparedPreWhere is not null)
@@ -211,12 +228,12 @@ internal readonly struct SqlBuilder
                     if (!_ctx.Dialect.SupportsPreWhere)
                         throw new NotSupportedException("The PREWHERE clause is not supported by this SQL dialect");
 
-                    if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" prewhere "));
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" prewhere "));
                     SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedPreWhere, 0, dontNeedAlias);
                 }
                 if (cmd.PreparedCondition is not null)
                 {
-                    if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" where "));
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" where "));
                     SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0, dontNeedAlias);
                 }
 
@@ -259,7 +276,7 @@ internal readonly struct SqlBuilder
                                 throw new NotSupportedException("GROUP BY ... WITH TOTALS cannot be combined with GROUPING SETS.");
                         }
 
-                        sqlBuilder!.AppendLine().Append(Kw(" group by "));
+                        sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" group by "));
 
                         string groupingSql;
                         if (cmd.GroupingType == GroupingType.GroupingSets)
@@ -299,7 +316,7 @@ internal readonly struct SqlBuilder
                     var having = cmd.PreparedHaving ?? cmd.Having;
                     if (having is not null)
                     {
-                        if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" having "));
+                        if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
                         SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0, dontNeedAlias);
                     }
                 }
@@ -322,7 +339,7 @@ internal readonly struct SqlBuilder
                     }
 
                     if (!_ctx.ParamMode)
-                        sqlBuilder!.AppendLine().Append(Kw(" window ")).Append(string.Join(", ", renderedWindows!));
+                        sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" window ")).Append(string.Join(", ", renderedWindows!));
                 }
 
                 if (cmd.UnionQuery is not null)
@@ -332,7 +349,7 @@ internal readonly struct SqlBuilder
 
                     if (!_ctx.ParamMode)
                     {
-                        sqlBuilder!.AppendLine().Append(cmd.UnionType switch
+                        sqlBuilder!.Append(SqlText.NewLine).Append(cmd.UnionType switch
                         {
                             UnionType.Distinct => Kw(" union "),
                             UnionType.All => Kw(" union all "),
@@ -341,7 +358,7 @@ internal readonly struct SqlBuilder
                             UnionType.Except => Kw(" except "),
                             UnionType.ExceptAll => Kw(" except all "),
                             _ => throw new NotSupportedException(cmd.UnionType.ToString("G"))
-                        }).AppendLine();
+                        }).Append(SqlText.NewLine);
                     }
 
                     var builder = new SqlBuilder(_ctx with { AliasProvider = new DefaultAliasProvider() });
@@ -352,7 +369,7 @@ internal readonly struct SqlBuilder
                 var sortingList = cmd.Sorting;
                 if (sortingList is not null)
                 {
-                    if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" order by "));
+                    if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" order by "));
 
                     for (var (i, cnt) = (0, sortingList.Length); i < cnt; i++)
                     {
@@ -383,7 +400,7 @@ internal readonly struct SqlBuilder
                 }
                 else if (!pageApplied && !_ctx.ParamMode && _ctx.Dialect.GetPagingOrderBy(cmd) is { } pagingOrderBy)
                 {
-                    sqlBuilder!.AppendLine().Append(Kw(" order by ")).Append(pagingOrderBy);
+                    sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" order by ")).Append(pagingOrderBy);
                 }
 
                 if (cmd.LimitBy is { } limitBy)
@@ -407,7 +424,7 @@ internal readonly struct SqlBuilder
 
                     if (!_ctx.ParamMode)
                     {
-                        sqlBuilder!.AppendLine();
+                        sqlBuilder!.Append(SqlText.NewLine);
                         sqlBuilder.Append(limitByRenderer.Render(limitBy.Limit, limitBy.Offset, renderedLimitBy!, _ctx.KeywordCase));
                     }
                 }
@@ -419,14 +436,14 @@ internal readonly struct SqlBuilder
 
                     if (!_ctx.ParamMode)
                     {
-                        sqlBuilder!.AppendLine();
+                        sqlBuilder!.Append(SqlText.NewLine);
                         sqlBuilder.Append(_ctx.Dialect.MakeSettings(settings, _ctx.KeywordCase));
                     }
                 }
 
                 if (!pageApplied && !_ctx.ParamMode && !cmd.Paging.IsEmpty)
                 {
-                    sqlBuilder!.AppendLine();
+                    sqlBuilder!.Append(SqlText.NewLine);
                     _ctx.Dialect.MakePage(cmd.Paging, sqlBuilder, _ctx.KeywordCase);
                 }
             }
@@ -438,9 +455,19 @@ internal readonly struct SqlBuilder
                 if (_ctx.Dialect.Lock is not { } lockRenderer)
                     throw new NotSupportedException("The FOR UPDATE/FOR SHARE clause is not supported by this SQL dialect");
 
-                // Table-hint dialects already rendered the lock on the primary source.
+                // Table-hint dialects already rendered the lock on every physical source.
                 if (!lockRenderer.UsesTableHints)
-                    sqlBuilder!.AppendLine().Append(lockRenderer.Render(rowLock.Mode, rowLock.Wait, _ctx.KeywordCase));
+                    sqlBuilder!.Append(SqlText.NewLine).Append(lockRenderer.Render(rowLock.Mode, rowLock.Wait, _ctx.KeywordCase));
+            }
+
+            // A source-level lock renders one targeted clause per locked source, after FROM/JOIN.
+            if (!_ctx.ParamMode && sourceLocks is { Count: > 0 })
+            {
+                if (_ctx.Dialect.Lock is not { } sourceLockRenderer)
+                    throw new NotSupportedException("Source-level row locking (FOR UPDATE OF) is not supported by this SQL dialect");
+
+                foreach (var target in sourceLocks)
+                    sqlBuilder!.Append(SqlText.NewLine).Append(sourceLockRenderer.Render(target.Lock.Mode, target.Lock.Wait, _ctx.KeywordCase, target.Alias));
             }
 
 
@@ -621,6 +648,281 @@ internal readonly struct SqlBuilder
     }
 
     /// <summary>
+    /// Renders the child command of a per-parent eager load. The command's own
+    /// <c>Limit</c>/<c>Offset</c>/<c>Page</c> is applied independently to each partition of the eager
+    /// load's child key by lowering the command to a <c>row_number()</c> ranked derived table:
+    /// <code>
+    /// select &lt;entity columns&gt; from (
+    ///     select *, row_number() over (partition by &lt;child key&gt; order by &lt;sorting&gt;) as rn
+    ///     from &lt;source&gt; where &lt;condition&gt;
+    /// ) t1 where t1.rn &gt; &lt;offset&gt; and t1.rn &lt;= &lt;offset + limit&gt;
+    /// </code>
+    /// Mirrors the portable <see cref="MakePortableExtremeRowSelect"/> lowering, but keeps the page
+    /// bounds instead of <c>rn = 1</c> and drops the synthetic rank column from the projection.
+    /// </summary>
+    private string? MakePerParentPagingSelect(QueryCommand cmd, string? selectInto)
+    {
+        if (selectInto is not null)
+            throw new BuildSqlCommandException("A per-parent eager top-N child cannot be rendered as a SELECT ... INTO source.");
+
+        if (cmd.From is null || cmd.From.SubQuery is not null)
+            throw new BuildSqlCommandException("A per-parent eager top-N child requires a single physical-table source.");
+
+        var entityType = cmd.EntityType!;
+        var from = cmd.From!;
+        var rankColumn = MakeExtremeRowRankName(entityType);
+        var innerSql = MakePerParentPagingInner(cmd, entityType, from, rankColumn);
+        return MakePerParentPagingOuter(cmd, entityType, innerSql, rankColumn);
+    }
+
+    /// <summary>
+    /// Builds the inner derived table of the per-parent paging lowering: the filtered child rows plus
+    /// the synthetic <c>row_number()</c> partition rank.
+    /// </summary>
+    private string? MakePerParentPagingInner(QueryCommand cmd, Type entityType, FromExpression from, string rankColumn)
+    {
+        string? innerSql = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var inner = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var fromSql = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(false, entityType, false));
+                var rankSql = MakePerParentRankExpression(cmd, entityType, rankColumn);
+
+                if (!_ctx.ParamMode)
+                    inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(SqlText.NewLine).Append(Kw(" from ")).Append(fromSql);
+
+                if (cmd.PreparedCondition is { } condition)
+                {
+                    if (!_ctx.ParamMode)
+                        inner!.Append(SqlText.NewLine).Append(Kw(" where "));
+
+                    SqlSourceRenderer.MakeWhere(in _ctx, inner, entityType, condition, 0);
+                }
+
+                innerSql = inner?.ToString();
+            }
+            finally
+            {
+                if (inner is not null) StringBuilderPool.Shared.Return(inner);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return innerSql;
+    }
+
+    /// <summary>
+    /// Renders <c>row_number() over (partition by &lt;child key&gt; order by &lt;child sorting&gt;)</c>.
+    /// The window order follows the child query's own <c>ORDER BY</c>. A page with no window ordering is
+    /// rejected (a <c>row_number()</c> window without <c>ORDER BY</c> is invalid on providers such as
+    /// SQL Server), and a per-parent page without a partition key is rejected too. Parameter mode visits
+    /// the partition and sort expressions but emits nothing.
+    /// </summary>
+    private string MakePerParentRankExpression(QueryCommand cmd, Type entityType, string rankColumn)
+    {
+        var partition = cmd.PerParentPartitionColumns ?? [];
+        var sorting = cmd.Sorting ?? [];
+
+        // Shape validation is mode-independent, so it runs before and regardless of whether a SQL string
+        // is being built (it must also hold in the parameter pass). A partition key is mandatory: without
+        // one the emitted rank is global rather than per parent. An actual page also needs a window
+        // ordering, because a row_number() window with no ORDER BY is invalid on providers such as
+        // SQL Server; an unordered page must be rejected instead of emitting an invalid window.
+        if (partition.Length == 0)
+            throw new BuildSqlCommandException("A per-parent eager top-N child requires a partition key.");
+
+        if (sorting.Length == 0)
+            throw new BuildSqlCommandException(
+                "A per-parent eager top-N child requires a window ordering: a row_number() window with no " +
+                "ORDER BY is invalid on providers such as SQL Server.");
+
+        var builder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+        try
+        {
+            if (builder is not null)
+                builder.Append("row_number()").Append(Kw(" over ("));
+
+            // Partition first, matching the window grammar.
+            var wrotePartition = false;
+            for (var i = 0; i < partition.Length; i++)
+            {
+                if (builder is not null)
+                {
+                    builder.Append(i == 0 ? Kw("partition by ") : ", ");
+                    wrotePartition = true;
+                }
+
+                var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, partition[i], entityType, dontNeedAlias: true);
+                if (builder is not null) builder.Append(column);
+            }
+
+            for (var i = 0; i < sorting.Length; i++)
+            {
+                if (builder is not null)
+                {
+                    if (i == 0)
+                        builder.Append(wrotePartition ? Kw(" order by ") : Kw("order by "));
+                    else
+                        builder.Append(", ");
+                }
+
+                if (sorting[i].PreparedExpression is { } prepared)
+                {
+                    var sort = SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
+                    if (builder is not null) builder.Append(sort);
+                }
+                else if (builder is not null)
+                {
+                    builder.Append(sorting[i].ColumnIndex);
+                }
+
+                if (builder is not null && sorting[i].Direction == OrderDirection.Desc)
+                    builder.Append(Kw(" desc"));
+            }
+
+            if (builder is not null)
+                builder.Append(')').Append(_ctx.Dialect.MakeColumnAlias(rankColumn, _ctx.KeywordCase));
+
+            return builder?.ToString() ?? string.Empty;
+        }
+        finally
+        {
+            if (builder is not null) StringBuilderPool.Shared.Return(builder);
+        }
+    }
+
+    /// <summary>
+    /// Wraps the ranked inner source in the outer statement: the entity projection (dropping the
+    /// synthetic rank column), the per-partition page-bound filter and the child's output ordering.
+    /// </summary>
+    private string? MakePerParentPagingOuter(QueryCommand cmd, Type entityType, string? innerSql, string rankColumn)
+    {
+        string? result = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            string? alias = null;
+            if (!_ctx.ParamMode)
+            {
+                // Register the derived table as a physical-shaped source so member access of the
+                // command's select list resolves to its aliased columns.
+                _ctx.ColumnsProvider.Add(entityType, false);
+                alias = _ctx.AliasProvider!.GetNextAlias(new FromExpression(entityType));
+            }
+
+            var outer = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var entityColumns = BuildExtremeRowEntitySelectList(entityType);
+
+                if (!_ctx.ParamMode)
+                {
+                    outer!.Append(Kw("select "));
+                    if (cmd.Tag is { Length: > 0 } tag)
+                        outer.Append(MakeTagComment(tag)).Append(' ');
+
+                    for (var i = 0; i < entityColumns.Length; i++)
+                    {
+                        if (i > 0) outer.Append(", ");
+
+                        var item = entityColumns[i];
+                        var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias: false, renameAware: true);
+                        outer.Append(column);
+
+                        if (needAliasForColumn)
+                            outer.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
+                    }
+
+                    outer.Append(SqlText.NewLine).Append(Kw(" from ")).Append('(').Append(innerSql).Append(')')
+                        .Append(_ctx.Dialect.MakeTableAlias(alias!, _ctx.KeywordCase));
+
+                    AppendPerParentRankFilter(cmd, outer, alias!, rankColumn);
+                    // A nested derived source (the embedded single-query join) cannot carry a
+                    // statement-level ORDER BY: SQL Server rejects one inside a derived table, and the
+                    // order is instead applied on the outer pair command, which resolves the child keys
+                    // against this source's join alias. A top-level split child statement keeps it so the
+                    // loaded children preserve the child query's order.
+                    if (!cmd.PerParentPagingEmbedded)
+                        AppendOrderBy(cmd, entityType, outer);
+                }
+                else
+                {
+                    // Parameter pass: walk the same expressions in the same order as the SQL pass.
+                    for (var i = 0; i < entityColumns.Length; i++)
+                        SqlSourceRenderer.MakeColumn(in _ctx, entityColumns[i], entityType, dontNeedAlias: false, renameAware: true);
+
+                    if (!cmd.PerParentPagingEmbedded && cmd.Sorting is { Length: > 0 } sorting)
+                    {
+                        for (var i = 0; i < sorting.Length; i++)
+                        {
+                            if (sorting[i].PreparedExpression is { } prepared)
+                                SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
+                        }
+                    }
+                }
+
+                result = outer?.ToString();
+            }
+            finally
+            {
+                if (outer is not null) StringBuilderPool.Shared.Return(outer);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Appends the per-partition page-bound filter on the ranked derived table. Only the bounds the
+    /// command actually requests are emitted, and the inclusive upper bound is computed in
+    /// <see cref="long"/> arithmetic so a near-<see cref="int.MaxValue"/> offset plus limit cannot
+    /// overflow into a wrong window.
+    /// </summary>
+    private void AppendPerParentRankFilter(QueryCommand cmd, StringBuilder outer, string alias, string rankColumn)
+    {
+        var offset = cmd.Paging.Offset;
+        var limit = cmd.Paging.Limit;
+        var hasLower = offset > 0;
+        var hasUpper = limit > 0;
+
+        if (!hasLower && !hasUpper)
+        {
+            // Paging.IsEmpty would not have routed here, but keep the renderer total: with no bound the
+            // ranked source is filtered to its first row's rank (never removes a partition).
+            outer.Append(SqlText.NewLine).Append(Kw(" where ")).Append(alias).Append('.')
+                .Append(_ctx.Dialect.MakeColumnReference(rankColumn)).Append(" >= 1");
+            return;
+        }
+
+        outer.Append(SqlText.NewLine).Append(Kw(" where "));
+
+        if (hasLower)
+        {
+            outer.Append(alias).Append('.').Append(_ctx.Dialect.MakeColumnReference(rankColumn))
+                .Append(" > ").Append(offset);
+        }
+
+        if (hasLower && hasUpper)
+            outer.Append(Kw(" and "));
+
+        if (hasUpper)
+        {
+            outer.Append(alias).Append('.').Append(_ctx.Dialect.MakeColumnReference(rankColumn))
+                .Append(" <= ").Append((long)offset + limit);
+        }
+    }
+
+    /// <summary>
     /// Renders a <c>SelectWhereMax</c>/<c>SelectWhereMin</c> command. Compatibility is validated first,
     /// then the dialect's optional <see cref="ISqlDialect.ExtremeRowRenderer"/> decides - from a
     /// prepared description, before any side effect - whether to render natively; otherwise the command
@@ -704,7 +1006,7 @@ internal readonly struct SqlBuilder
                 var rankSql = MakeExtremeRowRankExpression(cmd, entityType, rankColumn);
 
                 if (!_ctx.ParamMode)
-                    inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(Kw(" from ")).Append(fromSql);
+                    inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(SqlText.NewLine).Append(Kw(" from ")).Append(fromSql);
 
                 AppendExtremeRowSourceFilter(cmd, entityType, inner);
 
@@ -740,7 +1042,7 @@ internal readonly struct SqlBuilder
             return;
 
         if (!_ctx.ParamMode)
-            inner!.AppendLine().Append(Kw(" where "));
+            inner!.Append(SqlText.NewLine).Append(Kw(" where "));
 
         if (hasNotNullFilter)
         {
@@ -817,7 +1119,7 @@ internal readonly struct SqlBuilder
                 var fromSql = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(false, entityType, false));
 
                 if (!_ctx.ParamMode)
-                    source!.Append(Kw("select ")).Append('*').Append(Kw(" from ")).Append(fromSql);
+                    source!.Append(Kw("select ")).Append('*').Append(SqlText.NewLine).Append(Kw(" from ")).Append(fromSql);
 
                 AppendExtremeRowSourceFilter(cmd, entityType, source);
 
@@ -1034,12 +1336,12 @@ internal readonly struct SqlBuilder
                         }
                     }
 
-                    outer.AppendLine().Append(Kw("from ")).Append('(').Append(innerSql).Append(')')
+                    outer.Append(SqlText.NewLine).Append(Kw(" from ")).Append('(').Append(innerSql).Append(')')
                         .Append(_ctx.Dialect.MakeTableAlias(alias!, _ctx.KeywordCase));
 
                     if (rankColumn is not null)
                     {
-                        outer.AppendLine().Append(Kw(" where ")).Append(alias).Append('.')
+                        outer.Append(SqlText.NewLine).Append(Kw(" where ")).Append(alias).Append('.')
                             .Append(_ctx.Dialect.MakeColumnReference(rankColumn)).Append(" = 1");
                     }
 
@@ -1089,7 +1391,7 @@ internal readonly struct SqlBuilder
         if (cmd.Sorting is not { Length: > 0 } sorting)
             return;
 
-        target.AppendLine().Append(Kw("order by "));
+        target.Append(SqlText.NewLine).Append(Kw("order by "));
         for (var i = 0; i < sorting.Length; i++)
         {
             if (i > 0) target.Append(", ");
@@ -1734,23 +2036,6 @@ internal readonly struct SqlBuilder
         slot = ordinal - 1;
         member = memberProperty.Name;
         return true;
-    }
-
-    /// <summary>
-    /// Returns <paramref name="hints"/> with <paramref name="hint"/> appended, or a single-element list
-    /// when <paramref name="hints"/> is <c>null</c> or empty. Used to fold a row-locking table hint into
-    /// the command's own table hints.
-    /// </summary>
-    private static IReadOnlyList<string> AppendHint(IReadOnlyList<string>? hints, string hint)
-    {
-        if (hints is not { Count: > 0 })
-            return [hint];
-
-        var combined = new string[hints.Count + 1];
-        for (var i = 0; i < hints.Count; i++)
-            combined[i] = hints[i];
-        combined[^1] = hint;
-        return combined;
     }
 
     /// <summary>

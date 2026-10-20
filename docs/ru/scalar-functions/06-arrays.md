@@ -25,7 +25,8 @@ var same = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where (id = any(@p0))
+select id
+ from complex_entity where (id = any(@p0))
 ```
 
 Runtime-параметр-массив использует тот же механизм [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)), поэтому массив не нужно знать в момент
@@ -41,7 +42,8 @@ var rows = prepared.ToList(new long[] { 1, 2, 3 });
 ```
 
 ```sql
-select id from complex_entity where id = any(@norm_p0)
+select id
+ from complex_entity where id = any(@norm_p0)
 ```
 
 Функции и операторы для массивов отображаются в свои имена PostgreSQL:
@@ -85,7 +87,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm_p0, 1) = 3
+select cardinality(@norm_p1) as "N"
+ from complex_entity where array_length(@norm_p0, 1) = 3
 ```
 
 ## Массивы (ClickHouse)
@@ -165,7 +168,7 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 > ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)): одна колонка-запись `ROW(...)`
 > (арность 1..7) или зарегистрированный вызывающим именованный composite материализуется в
 > соответствующий `System.Tuple<...>`/именованный тип (см.
-> [Сырой SQL](../guide/12-raw-sql.md#сырые-postgresql-строки-и-composite-типы)); `ValueTuple`,
+> [Сырой SQL](../guide/14-raw-sql.md#сырые-postgresql-строки-и-composite-типы)); `ValueTuple`,
 > арность ≥8, вложенный/пустой `ROW`, несколько или смешанные колонки-записи, незарегистрированный
 > именованный composite и composite, объявленный как `System.Tuple`, остаются под гардом
 > `NotSupportedException`. `untuple` не поддерживается, так как меняет набор колонок результата,
@@ -230,7 +233,8 @@ var tags = dataContext.From<IArrayEntity>()
 ```
 
 ```sql
-select id, arrayJoin(tags) as `Tag` from array_entity where id = 1
+select id, arrayJoin(tags) as `Tag`
+ from array_entity where id = 1
 ```
 
 `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[LEFT] ARRAY JOIN`, которая разворачивает
@@ -245,7 +249,9 @@ var ids = dataContext.From<IArrayEntity>()
 ```
 
 ```sql
-select id from array_entity left array join tags
+select id
+ from array_entity
+ left array join tags
 ```
 
 `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` добавляют ту же клаузу, но возвращают
@@ -262,8 +268,9 @@ var rows = dataContext.From<IArrayEntity>()
 ```
 
 ```sql
-select id, __nextorm_aj_element as `Tag` from array_entity
-array join tags as __nextorm_aj_element
+select id, __nextorm_aj_element as `Tag`
+ from array_entity
+ array join tags as __nextorm_aj_element
 where __nextorm_aj_element = 'b'
 ```
 

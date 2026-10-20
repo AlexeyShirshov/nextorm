@@ -98,7 +98,7 @@
 ### 3.2. `docs/index.md`
 
 - `## Status` — `1.0.9-a` → `1.0.9-b`.
-- `### Guide` — добавлена глава 29 «Implicit navigation queries» (`guide/29-implicit-navigation.md`).
+- `### Guide` — добавлена глава 29 «Implicit navigation queries» (`guide/31-implicit-navigation.md`).
 - `### Advanced` — добавлена страница «EF Core query-filter bridge»
   (`advanced/ef-core-query-filters.md`, порядок как в `docs/advanced/toc.yml`).
 - `## Releases` — добавлен раздел `### 1.0.9-b` (issues #39–#186 + новые страницы + удаления из API).

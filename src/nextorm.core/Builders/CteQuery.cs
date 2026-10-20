@@ -84,6 +84,26 @@ public sealed class CteDefinition
     /// anchor. Legacy <c>WithRecursive</c> declarations leave it <c>null</c> and keep their behavior.
     /// </summary>
     internal CteReference? RecursiveReference { get; init; }
+
+    /// <summary>
+    /// Rejects a legacy recursive declaration whose body is a distinct <c>UNION</c> on a dialect that
+    /// requires <c>UNION ALL</c> in a recursive CTE (SQL Server). The typed recursive API always builds
+    /// <c>UNION ALL</c> and carries <see cref="RecursiveReference"/>, so it is never affected. Called while
+    /// the query is prepared, before the body is prepared and before the plan cache is consulted.
+    /// </summary>
+    /// <param name="dialect">The dialect of the context preparing the query, or <c>null</c> when unavailable.</param>
+    /// <exception cref="NotSupportedException">The dialect requires <c>UNION ALL</c> and this is a legacy distinct-<c>UNION</c> recursive declaration.</exception>
+    internal void EnsureRecursiveUnionSupported(ISqlDialect? dialect)
+    {
+        if (dialect?.RequiresRecursiveCteUnionAll == true
+            && Recursive
+            && RecursiveReference is null
+            && Query.UnionType == UnionType.Distinct)
+        {
+            throw new NotSupportedException(
+                "SQL Server does not support UNION (distinct) in a legacy recursive CTE. Use UnionAll or the typed AsRecursiveCte API.");
+        }
+    }
 }
 
 /// <summary>

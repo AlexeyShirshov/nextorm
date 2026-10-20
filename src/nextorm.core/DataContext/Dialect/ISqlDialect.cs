@@ -1059,11 +1059,33 @@ public interface ISqlDialect
     /// True when the provider accepts <paramref name="part"/> as an <c>extract</c>/<c>date_part</c>
     /// date part. The ANSI parts are accepted by default; a dialect adds the parts it can express
     /// natively (<c>quarter</c>, <c>week</c>, <c>dow</c>, <c>isodow</c>, <c>epoch</c>) by overriding
-    /// this together with <see cref="MakeDatePart"/>.
+    /// this together with <see cref="MakeDatePart(string, string)"/>.
     /// </summary>
     bool SupportsDatePart(string part);
     /// <summary>Renders the current local or UTC date/time.</summary>
     string MakeNow(bool utc);
+    /// <summary>
+    /// True when the dialect renders supported <see cref="DateTimeOffset"/> operations
+    /// (<c>Now</c>/<c>UtcNow</c>, date parts and date arithmetic) as server-side SQL. When false (the
+    /// default), those operations fail closed with <see cref="NotSupportedException"/> instead of being
+    /// evaluated on the client, and <see cref="MakeDateTimeOffsetNow(bool)"/> also throws.
+    /// </summary>
+    bool SupportsDateTimeOffsetTranslation => false;
+    /// <summary>
+    /// Renders the server-side current <see cref="DateTimeOffset"/>: the value is produced by the
+    /// database (never the client clock), either with a preserved offset or as the provider's canonical
+    /// offset-zero instant. A dialect that declares <see cref="SupportsDateTimeOffsetTranslation"/>
+    /// overrides this; the default fails closed.
+    /// </summary>
+    string MakeDateTimeOffsetNow(bool utc) =>
+        throw new NotSupportedException("DateTimeOffset.Now/UtcNow translation is not supported by this SQL dialect.");
+    /// <summary>
+    /// Renders a date/time part extraction for a <see cref="DateTimeOffset"/> value. A provider whose
+    /// native date parts follow the session time zone overrides this to normalize to UTC first; the
+    /// default delegates to <see cref="MakeDatePart(string, string)"/>. <paramref name="part"/> is a
+    /// validated date-part name.
+    /// </summary>
+    string MakeDatePart(string part, string value, bool isDateTimeOffset) => MakeDatePart(part, value);
     /// <summary>Renders a math function call with the given already-rendered arguments.</summary>
     string MakeMathFunction(string name, IReadOnlyList<string> args);
     /// <summary>
@@ -1093,6 +1115,14 @@ public interface ISqlDialect
     /// arguments; <paramref name="field"/> is a validated date-part name.
     /// </summary>
     string MakeDateAdd(string field, string amount, string value);
+    /// <summary>
+    /// Renders <see cref="DateTimeOffset"/> date addition. A provider whose native date-add needs
+    /// DateTimeOffset-specific adaptation (timezone normalization, fractional scaling, preserving the
+    /// offset) overrides this; the default delegates to <see cref="MakeDateAdd(string, string, string)"/>.
+    /// <paramref name="field"/> is a validated date-part name.
+    /// </summary>
+    string MakeDateAdd(string field, string amount, string value, bool isDateTimeOffset) =>
+        MakeDateAdd(field, amount, value);
     /// <summary>
     /// Renders the difference between two already-rendered timestamps in <paramref name="field"/> units;
     /// <paramref name="field"/> is a validated date-part name.
@@ -1238,6 +1268,15 @@ public interface ISqlDialect
     /// the CLR integer the function declares.
     /// </summary>
     string WrapCount(string countExpression, bool big);
+    /// <summary>
+    /// Wraps a fully rendered ranking window-function expression (<c>row_number()</c>, <c>rank()</c>,
+    /// <c>dense_rank()</c>, <c>ntile()</c>) whose declared CLR result is a CLR integer, or returns it
+    /// unchanged. Declared as a default interface method returning the expression unchanged so existing
+    /// external implementations keep compiling; ClickHouse overrides it because its ranking window
+    /// functions return <c>UInt64</c>, which the row reader cannot materialise into the declared
+    /// <see cref="int"/> (the many-to-many <c>JoinInto</c> link occurrence is the first victim).
+    /// </summary>
+    string WrapIntegerWindowResult(string windowExpression) => windowExpression;
     /// <summary>
     /// Renders a subquery predicate (exists/any/all). <paramref name="asPredicate"/> is true when the
     /// expression is used as a condition (WHERE/HAVING) rather than as a projected value; a dialect
@@ -1463,6 +1502,15 @@ public interface ISqlDialect
     /// typed recursive API: a legacy <c>WithRecursive</c> declaration is never checked against it.
     /// </summary>
     bool SupportsRecursiveCte => false;
+
+    /// <summary>
+    /// Whether a recursive common table expression must be declared with <c>UNION ALL</c> rather than a
+    /// distinct <c>UNION</c>. Declared as a default interface method returning <c>false</c> so existing
+    /// implementations keep compiling. When <c>true</c>, a legacy <c>WithRecursive</c> declaration whose
+    /// body is a distinct <c>UNION</c> is unsupported and is rejected while the query is prepared, before
+    /// it reaches the server or the plan cache (SQL Server).
+    /// </summary>
+    bool RequiresRecursiveCteUnionAll => false;
 
     /// <summary>
     /// Whether the dialect can return the affected rows of a multi-table <c>UPDATE ... FROM ... JOIN</c>

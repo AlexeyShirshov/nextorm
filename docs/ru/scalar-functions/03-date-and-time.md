@@ -13,7 +13,8 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQLite
-select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as integer) as 'Month', cast(strftime('%d', dt) as integer) as 'Day' from complex_entity where (id = 1)
+select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as integer) as 'Month', cast(strftime('%d', dt) as integer) as 'Day'
+ from complex_entity where (id = 1)
 ```
 
 ```sql
@@ -53,6 +54,68 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 сессионного `DATEFIRST`); для нормализованного значения используйте `extract("dow", value)` или
 `extract("isodow", value)`.
 
+## DateTimeOffset
+
+`DateTimeOffset` — поддерживаемый тип колонки и скалярного значения на всех провайдерах: драйвер
+читает его обратно без конвертера значений. Объявленный/хранимый SQL-тип зависит от провайдера:
+
+| Провайдер | Тип |
+|---|---|
+| PostgreSQL | `timestamp with time zone` |
+| SQL Server | `datetimeoffset` |
+| MySQL / MariaDB | `datetime` |
+| ClickHouse | `DateTime64(6)` |
+| SQLite | динамическая типизация (выделенного типа нет) |
+
+### Серверная трансляция
+
+Поддерживаемые операции `DateTimeOffset` рендерятся как SQL и вычисляются **на сервере** — клиентские
+часы и локальная зона клиента никогда не захватываются, и никакая операция не вычисляется молча как
+клиентский параметр:
+
+| C# | SQL |
+|---|---|
+| `DateTimeOffset.Now` | SQL Server `sysdatetimeoffset()`; PostgreSQL `now()`; MySQL/MariaDB `utc_timestamp(6)`; ClickHouse `now64(6, 'UTC')`; SQLite `strftime('%Y-%m-%d %H:%M:%f','now') \|\| '+00:00'` |
+| `DateTimeOffset.UtcNow` | SQL Server `todatetimeoffset(sysutcdatetime(), '+00:00')`; у остальных провайдеров то же, что `Now` |
+| `.Year` `.Month` `.Day` `.Hour` `.Minute` `.Second` `.DayOfYear` | извлечение части даты, специфичное для провайдера, с явной нормализацией в UTC в PostgreSQL (`... at time zone 'UTC'`) и ClickHouse (`toTimeZone(value, 'UTC')`) |
+| `.AddYears` `.AddMonths` `.AddDays` `.AddHours` `.AddMinutes` `.AddSeconds` `.AddMilliseconds` | прибавление даты средствами провайдера (см. [Арифметику дат](#арифметика-дат)); значимая дробная часть интервала сохраняется, а не усекается до целых единиц |
+
+Nullable-значения и `DateTimeOffset?` в `Where`/`Select`/`OrderBy` подчиняются обычным правилам: SQL
+`NULL` остаётся `null`, а `HasValue`/`Value` прозрачны.
+
+Члены, у которых **нет** SQL-трансляции, **падают fail-closed** с `NotSupportedException` во время
+построения запроса — до любого клиентского вычисления или постоянного свёртывания:
+
+* `.Offset`, `.UtcDateTime`, `.LocalDateTime`, `.Date`, `.Ticks` и `.DayOfWeek` — в том числе как
+  получатель дальнейшего доступа (`e.Value.Offset.TotalMinutes`, `e.Value.UtcDateTime.Year`,
+  `e.Value.Date.AddDays(1)`);
+* `.ToOffset(...)` — независимо от того, константный аргумент или динамический;
+* `.AddTicks(...)` и `.Add(TimeSpan)` — сейчас под guard'ом; их серверная трансляция отложена до
+  следующего релиза;
+* дробные `.AddYears`/`.AddMonths` — параметр CLR имеет тип `int`.
+
+`value.ToString(format)` и `string.Format` по-прежнему транслируются (см.
+[Форматирование дат и чисел в строки](#форматирование-дат-и-чисел-в-строки)). Колонка табличного
+параметра и элемент PostgreSQL-массива типа `DateTimeOffset` отображаются на форму timestamp with
+time zone.
+
+### Ограничения зоны и точности по провайдерам
+
+Только SQL Server хранит offset как часть значения; остальные провайдеры хранят instant (или wall
+time) и материализуют `DateTimeOffset` с нулевым offset'ом (канонический `+00:00`):
+
+| Провайдер | Часы и offset | Части и арифметика |
+|---|---|---|
+| SQL Server | `datetimeoffset` сохраняет offset значения; `Now` — `sysdatetimeoffset()`, `UtcNow` — `todatetimeoffset(sysutcdatetime(), '+00:00')`. | Нативный `datepart` (по offset значения) и нативный `dateadd`, сохраняющий offset; дробное значение в day/hour/minute/second/millisecond масштабируется в более мелкую единицу `dateadd`, чтобы не усечься. |
+| PostgreSQL | `now()` возвращает instant, не зависящий от сессионной зоны; `timestamp with time zone` хранит instant, поэтому материализованное значение имеет нулевой offset. | Части и `Add*` работают по UTC wall time (`at time zone 'UTC'`), а `Add*` перетипизируется в `timestamptz`, поэтому результат не зависит от сессионного `TimeZone` и DST. |
+| MySQL / MariaDB | `utc_timestamp(6)`; колонка `datetime` хранит wall time и **не** сохраняет offset, поэтому исходный offset не восстанавливается. | Нативные части даты сохранённого wall time и нативный `date_add`; дробное значение в day/hour/minute масштабируется в более мелкую единицу. |
+| ClickHouse | `now64(6, 'UTC')`; `DateTime64(6)` **не** хранит offset. Микросекундная точность сохраняется при материализации. | Части и `Add*` явно нормализуются в UTC (`toTimeZone(value, 'UTC')`); дробное значение в крупной единице масштабируется в `addMicroseconds`, чтобы дробь не потерялась. |
+| SQLite | `strftime('%Y-%m-%d %H:%M:%f','now') \|\| '+00:00'`; динамическая типизация хранит UTC instant как текст, с миллисекундной точностью. | Части и арифметика UTC-текста через `strftime`/модификаторы даты; текст с offset'ом трактуется как instant. |
+
+В ClickHouse значение материализуется через адаптацию читателя: драйвер отдаёт `DateTime64` как
+`System.DateTime`, которое переинтерпретируется как `DateTimeOffset` с нулевым offset'ом, с
+сохранением микросекунд.
+
 ## Расширенные дата и время PostgreSQL
 
 Эти функции входят в расширенную библиотеку скалярных функций
@@ -76,30 +139,6 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 Для построения дат и арифметики в остальном используется переносимый набор: `date_from_parts`
 (рендерит PostgreSQL `make_date`), `date_add`, `date_diff`, `date_trunc` и члены `DateTime` (см.
 [Арифметику дат](#арифметика-дат) ниже).
-
-## Runtime-настройки и последовательности (PostgreSQL)
-
-Также входят в расширенную скалярную библиотеку
-([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions),
-только PostgreSQL). Имя последовательности приводится к `regclass`:
-
-| C# | SQL |
-|---|---|
-| `SqlFunctions.Postgres.current_setting(name)` / `current_setting(name, missingOk)` | `current_setting(name[, missing_ok])` |
-| `SqlFunctions.Postgres.set_config(name, value, isLocal)` | `set_config(name, value, is_local)` |
-| `SqlFunctions.Postgres.nextval(sequence)` | `nextval(cast(sequence as regclass))` |
-| `SqlFunctions.Postgres.setval(sequence, value)` | `setval(cast(sequence as regclass), value)` |
-| `SqlFunctions.Postgres.currval(sequence)` | `currval(cast(sequence as regclass))` |
-| `SqlFunctions.Postgres.lastval()` | `lastval()` |
-
-```csharp
-var next = dataContext.From<IComplexEntity>()
-    .Select(e => SqlFunctions.Postgres.nextval("order_id_seq"))
-    .First();
-```
-
-`currval`/`lastval` в PostgreSQL привязаны к сессии и потому требуют того же соединения, которое
-последним продвинуло последовательность.
 
 ## Форматирование дат и чисел в строки
 
@@ -133,7 +172,7 @@ var rows = dataContext.From<IComplexEntity>()
 ```sql
 -- PostgreSQL
 select id, ('Total: '||to_char(m, 'FM9999999999999990.' || repeat('0', 2))) as total, to_char(dt, 'YYYY-MM') as month
-from complex_entity
+ from complex_entity
 ```
 
 | C# | PostgreSQL | SQL Server | MySQL/MariaDB | SQLite | ClickHouse |
@@ -158,36 +197,6 @@ public static class DemoUdf
 На PostgreSQL ту же задачу решает `SqlFunctions.Postgres.to_char(value, 'YYYY-MM')`
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
 
-## Информация о сессии и сервере
-
-`SqlFunctions.Sql.current_user()`, `session_user()`, `current_schema()`, `current_database()` и
-`version()` — кросс-провайдерные
-([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)):
-
-| C# | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |
-|---|---|---|---|---|---|
-| `current_user()` | `current_user` | `current_user` | `current_user()` | `currentUser()` | — |
-| `session_user()` | `session_user` | `session_user` | `session_user()` | — | — |
-| `current_schema()` | `current_schema` | `schema_name()` | `schema()` | — | — |
-| `current_database()` | `current_database()` | `db_name()` | `database()` | `currentDatabase()` | — |
-| `version()` | `version()` | `@@version` | `version()` | `version()` | `sqlite_version()` |
-
-Провайдер, который не умеет функцию, выбрасывает `NotSupportedException`.
-
-## Генераторы UUID
-
-`SqlFunctions.Sql.gen_random_uuid()` (случайный v4) и `uuidv7()` — кросс-провайдерные
-([`UuidGenerators`](xref:NextORM.Core.ISqlDialect.UuidGenerators)):
-
-| C# | PostgreSQL | SQL Server | MySQL | MariaDB | ClickHouse | SQLite |
-|---|---|---|---|---|---|---|
-| `gen_random_uuid()` | `gen_random_uuid()` (13+) | `newid()` | — | `UUID_v4()` | `generateUUIDv4()` | — |
-| `uuidv7()` | `uuidv7()` (18+) | — | — | `UUID_v7()` (11.7+) | `generateUUIDv7()` | — |
-
-У MySQL есть только `UUID()` (v1), у SQLite генератора UUID нет, поэтому оба отклоняют вызов. Это
-серверные генераторы, вычисляемые на каждую строку базой; `Guid.NewGuid()` — клиентское значение и
-заменой не является.
-
 ## Усечение даты (PostgreSQL, SQL Server, ClickHouse)
 
 `SqlFunctions.Sql.date_trunc(field, value)` усекает отметку времени до части даты
@@ -205,9 +214,11 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- PostgreSQL / SQL Server 2022+
-select date_trunc('month', dt) as "Month" from complex_entity
+select date_trunc('month', dt) as "Month"
+ from complex_entity
 -- ClickHouse
-select dateTrunc('month', dt) as `Month` from complex_entity
+select dateTrunc('month', dt) as `Month`
+ from complex_entity
 ```
 
 ## Арифметика дат
@@ -244,15 +255,20 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQL Server
-select dateadd(day, 1, dt) as [NextDay], eomonth(dt) as [MonthEnd] from complex_entity
+select dateadd(day, 1, dt) as [NextDay], eomonth(dt) as [MonthEnd]
+ from complex_entity
 -- PostgreSQL
-select dt + (1 * interval '1 day') as "NextDay", (date_trunc('month', dt) + interval '1 month - 1 day') as "MonthEnd" from complex_entity
+select dt + (1 * interval '1 day') as "NextDay", (date_trunc('month', dt) + interval '1 month - 1 day') as "MonthEnd"
+ from complex_entity
 -- ClickHouse
-select addDays(dt, 1) as `NextDay`, toLastDayOfMonth(dt) as `MonthEnd` from complex_entity
+select addDays(dt, 1) as `NextDay`, toLastDayOfMonth(dt) as `MonthEnd`
+ from complex_entity
 -- MySQL/MariaDB
-select date_add(dt, interval 1 day) as `NextDay`, last_day(dt) as `MonthEnd` from complex_entity
+select date_add(dt, interval 1 day) as `NextDay`, last_day(dt) as `MonthEnd`
+ from complex_entity
 -- SQLite
-select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1 month', '-1 day') as 'MonthEnd' from complex_entity
+select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1 month', '-1 day') as 'MonthEnd'
+ from complex_entity
 ```
 
 | C# | SQL Server | PostgreSQL | ClickHouse | MySQL/MariaDB | SQLite |
@@ -294,7 +310,7 @@ var rows = dataContext.From<IComplexEntity>()
 select sysdatetime() as [Now], sysdatetimeoffset() as [NowOffset], sysutcdatetime() as [UtcNow],
        switchoffset(sysdatetimeoffset(), '-08:00') as [Switched], todatetimeoffset(dt, 120) as [Offset],
        timefromparts(1, 2, 3, 4, 7) as [Time], datetime2fromparts(2020, 1, 2, 3, 4, 5, 6, 3) as [Stamp]
-from complex_entity
+ from complex_entity
 ```
 
 | C# | SQL |
@@ -316,8 +332,8 @@ from complex_entity
 нативной функции. `timefromparts` материализуется как `TimeSpan`, конструкторы
 `smalldatetime`/`datetime`/`datetime2` — как `DateTime`, а функции часов и смещения — как
 `DateTime` / `DateTimeOffset`, соответствующие типу результата T-SQL. Это датовая половина
-поверхности, специфичной для SQL Server; остальное описано в
-[Условные функции](04-conditionals-and-conversion.md#метаданные-checksum-и-прочие-скаляры-sql-server).
+скалярной поверхности, специфичной для SQL Server; остальные T-SQL-скаляры описаны на
+соответствующих категорийных страницах.
 
 ## Приведение и части даты (ClickHouse)
 
@@ -345,5 +361,6 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart` from complex_entity
+select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart`
+ from complex_entity
 ```

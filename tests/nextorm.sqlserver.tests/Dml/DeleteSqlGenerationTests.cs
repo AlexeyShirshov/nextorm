@@ -1,0 +1,165 @@
+﻿using FluentAssertions;
+using NextORM.Core;
+
+namespace NextORM.SqlServer.Tests;
+
+/// <summary>SQL generation of the delete builder on SQL Server (no database connection).</summary>
+public class DeleteSqlGenerationTests
+{
+    [Fact]
+    public void Delete_Where_ShouldRenderPredicate()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == 1)
+            .ToSql()
+            .Should().Be("delete from merge_entity where id = 1");
+    }
+
+    [Fact]
+    public void Delete_All_ShouldRenderNoWhere()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.CreateDeleteBuilder<IMergeEntity>()
+            .All()
+            .ToSql()
+            .Should().Be("delete from merge_entity");
+    }
+
+    [Fact]
+    public void Delete_UppercaseKeywords_ShouldCaseDelete()
+    {
+        using var ctx = SqlServerTestContext.CreateUppercase();
+
+        ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == 1)
+            .ToSql()
+            .Should().Be("DELETE FROM merge_entity WHERE id = 1");
+    }
+
+    [Fact]
+    public void Delete_ReturningEntity_ShouldRenderDeletedOutput()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == 1)
+            .Returning()
+            .ToSql()
+            .Should().Be("delete from merge_entity output deleted.id, deleted.name, deleted.age, deleted.total where id = 1");
+    }
+
+    [Fact]
+    public void Delete_ReturningProjection_ShouldRenderDeletedOutput()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == 1)
+            .Returning(x => new { x.Id, x.Name })
+            .ToSql()
+            .Should().Be("delete from merge_entity output deleted.id, deleted.name where id = 1");
+    }
+
+    [Fact]
+    public void Delete_OutputInto_ShouldRenderDeletedInto()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == 1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputInto("audit_log")
+            .ToSql()
+            .Should().Be("delete from merge_entity output deleted.id, deleted.name into audit_log (id, name) where id = 1");
+    }
+
+    [Fact]
+    public void Delete_OutputIntoThenOutput_ShouldRenderBoth()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == 1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoThenOutput("audit_log")
+            .ToSql()
+            .Should().Be("delete from merge_entity output deleted.id, deleted.name into audit_log (id, name) output deleted.id, deleted.name where id = 1");
+    }
+
+    [Fact]
+    public void Delete_OutputIntoTableVariable_ShouldDeclareIntoAndReadBack()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == 1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .ToSql()
+            .Should().Be("declare @t table (id bigint, name nvarchar(100)); delete from merge_entity output deleted.id, deleted.name into @t (id, name) where id = 1; select id, name\n from @t");
+    }
+
+    [Fact]
+    public void Truncate_ShouldRenderTruncateTable()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.CreateTruncateBuilder<IMergeEntity>().ToSql().Should().Be("truncate table merge_entity");
+    }
+
+    [Fact]
+    public void DeleteJoin_Where_ShouldRenderTargetAliasFromJoin()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.From<IComplexEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .Where(p => p.Item1.String == "x")
+            .ToSql()
+            .Should().Be("delete [t1] from complex_entity as [t1] join simple_entity as [t2] on t1.id = cast(t2.id as bigint) where t1.somestring = 'x'");
+    }
+
+    [Fact]
+    public void DeleteJoin_NoFilter_ShouldRenderWithoutWhere()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.From<IComplexEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .ToSql()
+            .Should().Be("delete [t1] from complex_entity as [t1] join simple_entity as [t2] on t1.id = cast(t2.id as bigint)");
+    }
+
+    [Fact]
+    public void DeleteJoin_DmlScopeHint_ShouldApplyToTargetAndJoinedTables()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("nolock")
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .ToSql();
+
+        sql.Should().Be("delete [t1] from complex_entity as [t1] with (nolock) join simple_entity as [t2] with (nolock) on t1.id = cast(t2.id as bigint)");
+        (sql.Split("with (").Length - 1).Should().Be(2);
+    }
+
+    [Fact]
+    public void DeleteJoin_DmlScopeHint_ShouldMergeWithJoinTableHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // V07 DELETE side (structural): the target gets the scope hint; the joined table merges its
+        // per-join table hint first, then the scope hint, into a single WITH clause.
+        var sql = ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("nolock")
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id, j => j.WithJoinTableHint("rowlock"))
+            .ToSql();
+
+        sql.Should().Be("delete [t1] from complex_entity as [t1] with (nolock) join simple_entity as [t2] with (rowlock, nolock) on t1.id = cast(t2.id as bigint)");
+        (sql.Split("with (").Length - 1).Should().Be(2);
+    }
+}

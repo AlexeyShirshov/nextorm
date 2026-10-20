@@ -86,6 +86,11 @@ internal sealed class PostgresTestProvider : ITestProvider
 
     private const string SeedSql =
         """
+        -- pgcrypto is not in the core catalog: digest()/sha256() belong to the function-library
+        -- tests, so the extension has to exist before any test prepares such a query. Creating it
+        -- during seeding keeps those tests independent of one another (and of test order).
+        create extension if not exists pgcrypto;
+
         drop table if exists complex_entity;
         drop table if exists binary_entity;
         drop table if exists enum_entity;
@@ -101,6 +106,11 @@ internal sealed class PostgresTestProvider : ITestProvider
         drop table if exists eager_note;
         drop table if exists eager_child;
         drop table if exists eager_parent;
+        drop table if exists eager_composite_child;
+        drop table if exists eager_composite_parent;
+        drop table if exists eager_cj_link;
+        drop table if exists eager_cj_child;
+        drop table if exists eager_cj_parent;
         drop table if exists query_filter_target;
         drop table if exists query_filter_entity;
         drop table if exists extrema_entity;
@@ -226,6 +236,21 @@ internal sealed class PostgresTestProvider : ITestProvider
             text varchar(100)
         );
 
+        create table eager_composite_parent
+        (
+            row_id integer primary key,
+            tenant integer not null,
+            link_id integer not null
+        );
+
+        create table eager_composite_child
+        (
+            id integer primary key,
+            tenant integer not null,
+            parent_id integer not null,
+            sort_key integer not null
+        );
+
         create table eager_tag
         (
             id integer primary key,
@@ -236,6 +261,28 @@ internal sealed class PostgresTestProvider : ITestProvider
         (
             id integer primary key,
             parent_id integer not null,
+            child_id integer not null
+        );
+
+        -- Composite-junction M:N fixtures (#223): two parent foreign-key components plus one child.
+        create table eager_cj_parent
+        (
+            row_id integer primary key,
+            tenant integer not null,
+            link_id integer not null,
+            name varchar(100)
+        );
+
+        create table eager_cj_child
+        (
+            id integer primary key,
+            name varchar(100)
+        );
+
+        create table eager_cj_link
+        (
+            parent_tenant integer not null,
+            parent_link_id integer not null,
             child_id integer not null
         );
 

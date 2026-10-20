@@ -1,0 +1,412 @@
+diff --git a/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs b/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs
+index 9ab521e2..b701632c 100644
+--- a/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs
++++ b/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs
+@@ -4373,83 +4373,22 @@ public partial class QueryCommand
+     /// </summary>
+     internal void ApplyPreparationFrom(QueryCommand clone)
+     {
+-        // Adopt the stored cache-side raw description by reference under copy-on-write: the recipe's
+-        // description and every block are marked shared, so any later raw write on either side goes
+-        // through WriteDescription/Write* and splits before mutating. The node-owned definition memo is
+-        // cleared exactly as the old WriteDescription path did; it never lives on the shared description.
+-        if (clone._description is { } description)
+-        {
+-            description.MarkShared();
+-            _description = description;
+-        }
+-        else
+-        {
+-            _description = null;
+-        }
+-        _definitionMemo = null;
+-
+-        // Copy only the non-description state CopyTo(copyAll: true) carried, in its order. Joins, CTEs,
+-        // union, outer references, hints, windows, the raw clauses/options/flags and the terminal
+-        // OneColumn flag travel with the adopted description (reassigning them here would write straight
+-        // into the recipe); the adopted _preparation is never shared, so post-adopt writes on this
+-        // command can neither mutate the recipe's preparation nor its description.
+-        _selectList = clone._selectList;
+-        _groupingList = clone._groupingList;
+-        _isPrepared = clone._isPrepared;
+-        _srcType = clone._srcType;
+-        _dontCache = clone._dontCache;
+-        ColumnsPlanHash = clone.ColumnsPlanHash;
+-        JoinPlanHash = clone.JoinPlanHash;
+-        WherePlanHash = clone.WherePlanHash;
+-        SortingPlanHash = clone.SortingPlanHash;
+-        PreparedCondition = clone.PreparedCondition;
+-        PreparedHaving = clone.PreparedHaving;
+-        InValuesShapeHash = clone.InValuesShapeHash;
+-        LookupPartitions = clone.LookupPartitions;
+-        ShapeScanned = clone.ShapeScanned;
+-        // ShapeValuesStable is deliberately not copied, exactly like CopyTo: the adopted InValuesPartitions
+-        // are not transferred either, so the clone keeps the pre-existing refresh path.
+-        HasUnkeyedTupleInValues = clone.HasUnkeyedTupleInValues;
+-        HasUnkeyedScalarInValues = clone.HasUnkeyedScalarInValues;
+-        ResultPlanHash = clone.ResultPlanHash;
+-        GroupingPlanHash = clone.GroupingPlanHash;
+-        FromPlanHash = clone.FromPlanHash;
+-        UnionPlanHash = clone.UnionPlanHash;
+-        ReferencedQueriesPlanHash = clone.ReferencedQueriesPlanHash;
+-        CtesPlanHash = clone.CtesPlanHash;
+-        HintsPlanHash = clone.HintsPlanHash;
+-        WindowsPlanHash = clone.WindowsPlanHash;
+-        ResolvedQuoteIdentifiers = clone.ResolvedQuoteIdentifiers;
+-        ResolvedNamingConvention = clone.ResolvedNamingConvention;
+-        ResolvedKeywordCase = clone.ResolvedKeywordCase;
+-        ResolvedCommandTimeout = clone.ResolvedCommandTimeout;
+-        ResolvedEagerLoadMode = clone.ResolvedEagerLoadMode;
+-        ResultType = clone.ResultType;
+-        Paging = clone.Paging;
+-        DefaultOnEmpty = clone.DefaultOnEmpty;
+-        SingleScalar = clone.SingleScalar;
+-        _limitByColumns = clone._limitByColumns;
+-        _distinctOnColumns = clone._distinctOnColumns;
+-        _extremeRowColumns = clone._extremeRowColumns;
+-        _extremeRowGroupByColumns = clone._extremeRowGroupByColumns;
+-        _perParentPartitionColumns = clone._perParentPartitionColumns;
+-        _preWhere = clone._preWhere;
+-        _arrayJoins = clone._arrayJoins;
+-        _preparedArrayJoin = clone._preparedArrayJoin;
++        // Adopt the stored cache-side state through the same copy path the cache clone itself uses, so
++        // the staged command is exactly what a normalized lookup compares against. The raw graph is
++        // verified separately by the descriptor, which is what makes adopting these members sound.
++        clone.CopyTo(this, copyAll: true);
++
++        // Members CopyTo never carries: the clone's joins come from its Definition, so they must be
++        // adopted explicitly, together with the value-list base hash and the prepared ARRAY JOIN list.
++        // The array reference is adopted as-is, matching baseline 08004366 (`_joins = clone._joins`):
++        // the clone is the stored recipe/prepared command whose joins are already prepared, and the
++        // adopting command is marked prepared by the same path, so it never re-enters PrepareJoin and
++        // never writes an element of the adopted array.
++        _joins = clone._joins;
+         _whereBasePlanHash = clone._whereBasePlanHash;
+-        PreparedPreWhere = clone.PreparedPreWhere;
+-        PreWhereShapeHash = clone.PreWhereShapeHash;
+-        HasPreWhereInValues = clone.HasPreWhereInValues;
+-        _queryPlanComparer = clone._queryPlanComparer;
+-        _fromExpressionPlanComparer = clone._fromExpressionPlanComparer;
+-        _expressionPlanComparer = clone._expressionPlanComparer;
+-        _selectExpressionPlanComparer = clone._selectExpressionPlanComparer;
+-        _joinExpressionPlanComparer = clone._joinExpressionPlanComparer;
+-        _sortingExpressionPlanComparer = clone._sortingExpressionPlanComparer;
+-        _customData = clone._customData;
+-        // The prepared FROM edge is node state (the read path starts from it); Ctes/Union/ReferencedQueries
+-        // are reachable through the adopted description and are intentionally not reassigned.
+-        _from = clone._from;
++        _preparedArrayJoin = clone._preparedArrayJoin;
++        // Preparation-derived terminal shape read on the later uncached/render path.
++        OneColumn = clone.OneColumn;
+     }
+ 
+     /// <summary>The transformed raw edges an apply overwrites, so a rejected fast path can be undone.</summary>
+diff --git a/tests/nextorm.core.tests/Caching/CachedPreparationRecipeTests.cs b/tests/nextorm.core.tests/Caching/CachedPreparationRecipeTests.cs
+index fee19776..13ac171d 100644
+--- a/tests/nextorm.core.tests/Caching/CachedPreparationRecipeTests.cs
++++ b/tests/nextorm.core.tests/Caching/CachedPreparationRecipeTests.cs
+@@ -1,8 +1,6 @@
+ using System.ComponentModel.DataAnnotations;
+ using System.Data.Common;
+-using System.Linq.Expressions;
+ using System.Reflection;
+-using System.Runtime.CompilerServices;
+ using System.Security.Cryptography;
+ using System.Text;
+ using System.Text.Encodings.Web;
+@@ -1067,295 +1065,6 @@ public sealed class CachedPreparationRecipeTests
+         ordinary.Should().Contain("ccorr201_guard_raw");
+     }
+ 
+-    // -------------------------------------------------------------------------------------------
+-    // E41 — the staged recipe adopts the cache-side description by reference under copy-on-write
+-    // -------------------------------------------------------------------------------------------
+-
+-    /// <summary>
+-    /// Every value <c>ApplyPreparationFrom</c> must stage is exactly what the old
+-    /// <c>CopyTo(copyAll: true)</c> path plus its four legacy assignments produced — but the raw
+-    /// description is now adopted by reference instead of being copied member by member.
+-    /// </summary>
+-    [Fact]
+-    public void ApplyPreparationFrom_AdoptedDescription_ParityWithCopyTo()
+-    {
+-        ResetRecipeCache();
+-        using var ctx = CreateSqlServerContext();
+-
+-        var raw = SimpleShape(ctx)
+-            .Distinct()
+-            .WithTag("e41")
+-            .WithCommandTimeout(42)
+-            .WithQuotedIdentifiers()
+-            .Page(10, 5);
+-        raw.Cache = false;
+-
+-        var prepared = (QueryCommand<int>)raw.Clone();
+-        PrepareSql(ctx, prepared);
+-        var recipe = prepared.CloneForCache();
+-
+-        // (a) the new path: adopt the description + copy the non-description state.
+-        var adopted = (QueryCommand<int>)raw.Clone();
+-        adopted.ApplyPreparationFrom(recipe);
+-
+-        // (b) the old path: CopyTo(copyAll: true) + the four legacy assignments.
+-        var copied = (QueryCommand<int>)raw.Clone();
+-        CopyToOldPath(recipe, copied);
+-
+-        var fields = typeof(QueryCommand).GetFields(
+-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+-        fields.Should().HaveCount(18, "the parity contract covers all QueryCommand instance fields");
+-
+-        foreach (var field in fields)
+-        {
+-            var adoptedValue = field.GetValue(adopted);
+-            var copiedValue = field.GetValue(copied);
+-            switch (field.Name)
+-            {
+-                case "_definitionMemo":
+-                    adoptedValue.Should().BeNull("the node-owned memo is cleared on adoption");
+-                    copiedValue.Should().BeNull("the old path cleared the memo through WriteDescription");
+-                    break;
+-                case "_description":
+-                    CompareDescriptionContents(adoptedValue, copiedValue);
+-                    break;
+-                case "_preparation":
+-                    CompareFieldValues("_preparation", adoptedValue, copiedValue);
+-                    break;
+-                case "_binding":
+-                    CompareFieldValues("_binding", adoptedValue, copiedValue);
+-                    break;
+-                case "Paging":
+-                    adoptedValue.Should().Be(copiedValue, "Paging is a node-owned value");
+-                    break;
+-                default:
+-                    if (field.FieldType.IsValueType)
+-                        adoptedValue.Should().Be(copiedValue, $"{field.Name} must match the old copy path");
+-                    else
+-                        adoptedValue.Should().BeSameAs(copiedValue, $"{field.Name} must match the old copy path");
+-                    break;
+-            }
+-        }
+-    }
+-
+-    /// <summary>
+-    /// The red arm of the adoption: with a plain alias (no <c>MarkShared</c>) a post-adopt raw write
+-    /// would mutate the stored recipe through the shared description. With the shared guard every write
+-    /// splits first, so the recipe and a second apply stay exactly as prepared.
+-    /// </summary>
+-    [Fact]
+-    public void ApplyPreparationFrom_AdoptedDescription_IsolatesRecipeFromPostAdoptWrites()
+-    {
+-        ResetRecipeCache();
+-        using var ctx = CreateSqlServerContext();
+-
+-        var raw = SimpleShape(ctx)
+-            .Distinct()
+-            .WithTag("e41")
+-            .WithCommandTimeout(42)
+-            .Page(10, 5);
+-        raw.Cache = false;
+-
+-        var prepared = (QueryCommand<int>)raw.Clone();
+-        PrepareSql(ctx, prepared);
+-        var recipe = prepared.CloneForCache();
+-
+-        var before = SnapshotRecipeState(recipe);
+-
+-        var adopted = (QueryCommand<int>)raw.Clone();
+-        adopted.ApplyPreparationFrom(recipe);
+-
+-        // Every one of these routes a raw write through WriteDescription/Write* and must split first.
+-        adopted.Tag = "mutated";
+-        adopted.CommandTimeout = 99;
+-        adopted.IsDistinct = false;
+-        adopted.LimitBy = new LimitByClause((Expression<Func<SimpleEntity, int>>)(x => x.Id), 5, 1);
+-        adopted.Paging = new Paging { Limit = 3, Offset = 1 };
+-
+-        SnapshotRecipeState(recipe).Should().Be(before,
+-            "post-adopt writes on the adopting command must never reach the stored recipe");
+-
+-        // Reading Definition publishes a node-owned memo only; the shared description is not written.
+-        adopted.Definition.Should().NotBeNull();
+-        SnapshotRecipeState(recipe).Should().Be(before,
+-            "the definition memo is node-owned and never stored on the shared description");
+-
+-        // A second fresh command applying the same (still pristine) recipe matches ordinary preparation.
+-        var second = (QueryCommand<int>)raw.Clone();
+-        second.ApplyPreparationFrom(recipe);
+-        second.IsPrepared.Should().BeTrue("the recipe is a prepared cache-side command");
+-
+-        var fromRecipe = PrepareSql(ctx, second, storeInCache: false);
+-
+-        using var fresh = CreateSqlServerContext();
+-        var ordinary = PrepareSql(fresh, (QueryCommand<int>)raw.Clone(), storeInCache: false);
+-        fromRecipe.Should().Be(ordinary,
+-            "a later apply of the untouched recipe must stay differential-equal to ordinary preparation");
+-    }
+-
+-    /// <summary>Runs the pre-E41 apply path: <c>CopyTo(copyAll: true)</c> plus its four extra assignments.</summary>
+-    private static void CopyToOldPath(QueryCommand source, QueryCommand target)
+-    {
+-        typeof(QueryCommand)
+-            .GetMethod("CopyTo", BindingFlags.Instance | BindingFlags.NonPublic)!
+-            .Invoke(source, [target, true]);
+-
+-        SetCommandProperty(target, "_joins", GetCommandProperty(source, "_joins"));
+-        SetCommandProperty(target, "_whereBasePlanHash", GetCommandProperty(source, "_whereBasePlanHash"));
+-        target._preparedArrayJoin = source._preparedArrayJoin;
+-        target.OneColumn = source.OneColumn;
+-    }
+-
+-    private static object? GetCommandProperty(QueryCommand command, string name)
+-        => typeof(QueryCommand)
+-            .GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
+-            .GetValue(command);
+-
+-    private static void SetCommandProperty(QueryCommand command, string name, object? value)
+-        => typeof(QueryCommand)
+-            .GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
+-            .SetValue(command, value);
+-
+-    private static readonly BindingFlags DeclaredInstanceFields =
+-        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+-
+-    private static readonly Type[] DescriptionBlockTypes =
+-    [
+-        typeof(QueryDescription),
+-        typeof(QueryPredicates),
+-        typeof(QueryRelations),
+-        typeof(QueryClauses),
+-        typeof(QueryOptions),
+-    ];
+-
+-    /// <summary>Flattens a description tree into ordered (path, value) pairs, ignoring only the Shared flags.</summary>
+-    private static List<(string Path, object? Value)> DescribeContents(object? root)
+-    {
+-        var entries = new List<(string, object?)>();
+-        DescribeInto("description", root, entries);
+-        return entries;
+-    }
+-
+-    private static void DescribeInto(string path, object? value, List<(string, object?)> entries)
+-    {
+-        if (value is null)
+-        {
+-            entries.Add((path, null));
+-            return;
+-        }
+-
+-        if (DescriptionBlockTypes.Contains(value.GetType()))
+-        {
+-            foreach (var field in value.GetType().GetFields(DeclaredInstanceFields).OrderBy(it => it.Name, StringComparer.Ordinal))
+-            {
+-                if (field.Name == "Shared") continue;
+-                var child = field.GetValue(value);
+-                if (child is not null && DescriptionBlockTypes.Contains(child.GetType()))
+-                    DescribeInto(path + "." + field.Name, child, entries);
+-                else
+-                    entries.Add((path + "." + field.Name, child));
+-            }
+-
+-            return;
+-        }
+-
+-        entries.Add((path, value));
+-    }
+-
+-    /// <summary>Compares two descriptions field by field and fails naming the first differing member.</summary>
+-    private static void CompareDescriptionContents(object? left, object? right)
+-    {
+-        var leftEntries = DescribeContents(left);
+-        var rightEntries = DescribeContents(right);
+-        leftEntries.Count.Should().Be(rightEntries.Count, "both descriptions must expose the same member set");
+-
+-        for (var index = 0; index < leftEntries.Count; index++)
+-        {
+-            var (path, leftValue) = leftEntries[index];
+-            var (rightPath, rightValue) = rightEntries[index];
+-            rightPath.Should().Be(path);
+-            if (leftValue is null || rightValue is null)
+-            {
+-                leftValue.Should().BeNull($"description member {path} differs");
+-                rightValue.Should().BeNull($"description member {path} differs");
+-                continue;
+-            }
+-
+-            leftValue.Should().Be(rightValue, $"first differing description member: {path}");
+-        }
+-    }
+-
+-    /// <summary>Compares every declared field of an internal state object (comparers by reference).</summary>
+-    private static void CompareFieldValues(string owner, object? left, object? right)
+-    {
+-        if (left is null || right is null)
+-        {
+-            left.Should().BeSameAs(right, $"{owner} must be null on both sides");
+-            return;
+-        }
+-
+-        left.GetType().Should().BeSameAs(right.GetType(), $"{owner} must have the same type");
+-        foreach (var field in left.GetType().GetFields(DeclaredInstanceFields).OrderBy(it => it.Name, StringComparer.Ordinal))
+-        {
+-            var leftValue = field.GetValue(left);
+-            var rightValue = field.GetValue(right);
+-            if (field.FieldType.IsValueType)
+-                leftValue.Should().Be(rightValue, $"{owner}.{field.Name} differs");
+-            else
+-                leftValue.Should().BeSameAs(rightValue, $"{owner}.{field.Name} must be shared by reference");
+-        }
+-    }
+-
+-    /// <summary>A stable textual snapshot of the recipe's description and preparation (including reference ids).</summary>
+-    private static string SnapshotRecipeState(QueryCommand command)
+-    {
+-        var builder = new StringBuilder();
+-        AppendSnapshot(builder, "_description", GetCommandField(command, "_description"));
+-        AppendSnapshot(builder, "_preparation", GetCommandField(command, "_preparation"));
+-        AppendSnapshot(builder, "_binding", GetCommandField(command, "_binding"));
+-        return builder.ToString();
+-    }
+-
+-    private static object? GetCommandField(QueryCommand command, string name)
+-        => typeof(QueryCommand).GetField(name, DeclaredInstanceFields)!.GetValue(command);
+-
+-    private static void AppendSnapshot(StringBuilder builder, string path, object? value)
+-    {
+-        if (value is null)
+-        {
+-            builder.Append(path).Append("=null\n");
+-            return;
+-        }
+-
+-        var type = value.GetType();
+-        if (DescriptionBlockTypes.Contains(type)
+-            || type == typeof(QueryCommandPreparation)
+-            || type == typeof(QueryCommandBinding))
+-        {
+-            foreach (var field in type.GetFields(DeclaredInstanceFields).OrderBy(it => it.Name, StringComparer.Ordinal))
+-            {
+-                if (field.Name == "Shared") continue;
+-                AppendSnapshot(builder, path + "." + field.Name, field.GetValue(value));
+-            }
+-
+-            return;
+-        }
+-
+-        if (value is string text)
+-        {
+-            builder.Append(path).Append("=\"").Append(text).Append("\"\n");
+-            return;
+-        }
+-
+-        if (type.IsValueType)
+-        {
+-            builder.Append(path).Append('=').Append(value).Append('\n');
+-            return;
+-        }
+-
+-        builder.Append(path).Append("=ref#").Append(RuntimeHelpers.GetHashCode(value)).Append('\n');
+-    }
+-
+     // -------------------------------------------------------------------------------------------
+     // Export document model
+     // -------------------------------------------------------------------------------------------

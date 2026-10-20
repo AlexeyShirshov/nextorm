@@ -24,6 +24,34 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
 
     }
     /// <summary>
+    /// Initializes a command of type <typeparamref name="TResult"/>, optionally taking ownership of the
+    /// shape's joins; see <see cref="QueryCommand"/>'s ownership-aware constructor.
+    /// </summary>
+    internal QueryCommand(IDataContext? dataProvider, QueryDefinition definition, bool ownJoins)
+        : base(dataProvider, definition, ownJoins)
+    {
+
+    }
+    /// <summary>
+    /// Initializes a command of type <typeparamref name="TResult"/> by transferring the shape of an
+    /// existing command, without materialising a <see cref="QueryDefinition"/>; see
+    /// <see cref="QueryCommand"/>'s copy constructor.
+    /// </summary>
+    internal QueryCommand(IDataContext? dataProvider, QueryCommand source, bool forCache)
+        : base(dataProvider, source, forCache)
+    {
+
+    }
+    /// <summary>
+    /// Initializes a command of type <typeparamref name="TResult"/> from a stack-only
+    /// <see cref="QueryShape"/>; see <see cref="QueryCommand"/>'s shape constructor.
+    /// </summary>
+    internal QueryCommand(IDataContext? dataProvider, QueryShape shape, bool ownJoins)
+        : base(dataProvider, shape, ownJoins)
+    {
+
+    }
+    /// <summary>
     /// Prepares the command and records <typeparamref name="TResult"/> in the result plan. The result
     /// type hash is folded into the plan key only when <paramref name="dontCalculateHash"/> is <c>false</c>.
     /// </summary>
@@ -621,13 +649,15 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <returns>A new command used as the clone destination.</returns>
     protected override QueryCommand CreateSelf()
     {
-        return new QueryCommand<TResult>(_dataContext, Definition);
+        // Copy-constructor path: no QueryDefinition record per fluent step.
+        return new QueryCommand<TResult>(_dataContext, this, forCache: false);
     }
     /// <summary>Creates an empty command of the same concrete type with the cache-safe parts of the shape, used to build a cached clone.</summary>
     /// <returns>A new command with projections, conditions and grouping stripped for the plan cache.</returns>
     protected override QueryCommand CreateSelfForClone()
     {
-        return new QueryCommand<TResult>(null, Definition with { Exp = null, Condition = null, Joins = CloneForCache(Joins), Group = null });
+        // Cache clone: deep-clones the joins and clears the raw shape, without a QueryDefinition record.
+        return new QueryCommand<TResult>(null, this, forCache: true);
     }
     /// <summary>
     /// Builds the command that returns the last row of the ordered query by reversing every
@@ -651,7 +681,8 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
             reversed[i] = flipped;
         }
 
-        var cmd = new QueryCommand<TResult>(_dataContext, Definition with { Sorting = reversed });
+        var cmd = new QueryCommand<TResult>(_dataContext, this, forCache: false);
+        cmd._sorting = reversed;
         CopyTo(cmd, true);
         cmd.ResetPreparationPreservingFrom();
         return cmd;
@@ -698,13 +729,10 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     {
         if (columnIndex < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIndex));
 
-        var cmd = new QueryCommand<TResult>(_dataContext, Definition with
-        {
-            Sorting = _sorting is null
-                ? [new Sorting(columnIndex) { Direction = direction }]
-                : [.. _sorting, new Sorting(columnIndex) { Direction = direction }],
-        });
-
+        var cmd = new QueryCommand<TResult>(_dataContext, this, forCache: false);
+        cmd._sorting = _sorting is null
+            ? [new Sorting(columnIndex) { Direction = direction }]
+            : [.. _sorting, new Sorting(columnIndex) { Direction = direction }];
         CopyTo(cmd, true);
         cmd.ResetPreparationPreservingFrom();
         return cmd;
@@ -733,11 +761,8 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         ArgumentNullException.ThrowIfNull(orderExp);
 
         var sorting = new Sorting(orderExp) { Direction = direction };
-        var cmd = new QueryCommand<TResult>(_dataContext, Definition with
-        {
-            Sorting = _sorting is null ? [sorting] : [.. _sorting, sorting],
-        });
-
+        var cmd = new QueryCommand<TResult>(_dataContext, this, forCache: false);
+        cmd._sorting = _sorting is null ? [sorting] : [.. _sorting, sorting];
         CopyTo(cmd, true);
         cmd.ResetPreparationPreservingFrom();
         return cmd;
@@ -787,7 +812,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     }
     private QueryCommand<TResult> WithPaging(Paging paging)
     {
-        var cmd = new QueryCommand<TResult>(_dataContext, Definition);
+        var cmd = new QueryCommand<TResult>(_dataContext, this, forCache: false);
         CopyTo(cmd, true);
         cmd.Paging = paging;
         cmd.ResetPreparationPreservingFrom();
@@ -1002,7 +1027,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         if (_dataContext is not NextORM.Core.DataContext)
             throw new NotSupportedException("FOR JSON / FOR XML requires a relational database provider.");
 
-        var cmd = new QueryCommand<string>(_dataContext, configured.Definition);
+        var cmd = new QueryCommand<string>(_dataContext, configured, forCache: false);
         configured.CopyTo(cmd, true);
         cmd.ForJsonClause = configured.ForJsonClause;
         cmd.ForXmlClause = configured.ForXmlClause;

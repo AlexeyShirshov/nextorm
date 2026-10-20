@@ -1,23 +1,33 @@
 # nextorm.examples.mssql.adventureworks
 
-Runnable nextorm port of the AdventureWorks 2022 OLTP database (`Sales`, `Production`, `Person`,
-`Purchasing`). Provider: `nextorm.sqlserver`.
+Comparison project for the AdventureWorks 2022 OLTP database (`Sales`, `Production`, `Person`,
+`Purchasing`): every query is implemented **twice** — with nextorm and with
+[linq2db](https://github.com/linq2db/linq2db) — then both arms are executed against the same database
+and benchmarked.
 
-The point of this project is to show **how a real SQL query becomes nextorm code**. Every method in
-[`AdventureWorksQueries.cs`](AdventureWorksQueries.cs) models exactly one query file in [`Sql/`](Sql) —
-the method comment names it, and the tables below map each SQL construct to the nextorm construct that
-replaces it. Read a `Sql/*.sql` file next to its method and you can translate your own queries.
+The project shows **how a real SQL query becomes nextorm code, and how it looks in another LINQ ORM**.
+Every method pair models exactly one query file in [`Sql/`](Sql): the method comment names it, and the
+tables below map each SQL construct to the nextorm construct that replaces it.
+
+> **Consumes the current checkout (not a published package).** Unlike the postgres and clickhouse
+> examples, this project references `nextorm.core`/`nextorm.sqlserver` from `src/` via `ProjectReference`
+> instead of the published `nextorm.*` NuGet packages, so it can demonstrate the working-tree typed
+> `Pivot`/`Unpivot` surface (#232). The run and build commands below are unchanged.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| [`Sql/*.sql`](Sql) | Original T-SQL model queries — the reference the C# is verified against |
+| [`Sql/*.sql`](Sql) | Original T-SQL model queries — the reference both arms are verified against |
 | [`AdventureWorksQueries.cs`](AdventureWorksQueries.cs) | nextorm implementation of the 5 demo queries + 6 course-style exercises |
-| [`Entities.cs`](Entities.cs) | `[SqlTable]` / `[Column]` entity interfaces for the AdventureWorks schemas |
+| [`Entities.cs`](Entities.cs) | nextorm `[SqlTable]` / `[Column]` entity interfaces |
+| [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of the same eleven queries |
+| [`Linq2DbEntities.cs`](Linq2DbEntities.cs) | linq2db `[Table]` / `[Column]` POCOs for the same tables |
+| [`Comparison.cs`](Comparison.cs) | Runs both arms, prints `[ OK ]`/`[FAIL]`/`[DIFF]`, compares row counts |
+| [`Benchmarks.cs`](Benchmarks.cs) | BenchmarkDotNet class: one `[Benchmark]` per arm and query |
 | [`DemoUdf.cs`](DemoUdf.cs) | Provider `[SqlFunction("format")]` UDF for T-SQL `FORMAT` |
 | [`DemoDatabase.cs`](DemoDatabase.cs) | Testcontainers provisioning and `.bak` restore |
-| [`Program.cs`](Program.cs) | Entry point; runs every query, catching per-query failures, and prints a summary |
+| [`Program.cs`](Program.cs) | Entry point: comparison run, or `--benchmark` |
 
 ## Running
 
@@ -26,10 +36,36 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
   dotnet run --project examples/nextorm.examples.mssql.adventureworks -c Debug
 ```
 
-Pass `--connection "<cs>"` (or set `ADVENTUREWORKS_CONNECTION`) to skip the container and restore. The
-program runs every query, prints `[ OK ]`/`[FAIL]` per query, and ends with an `n/m succeeded` summary —
-a `FAIL` is a documented engine gap (`NotSupportedException`/`QueryPreparationException`); any other error
-still aborts the run. See [`../README.md`](../README.md) for details.
+Pass `--connection "<cs>"` (or set `ADVENTUREWORKS_CONNECTION`) to skip the container and restore. Add
+`--only Name1,Name2` to run a subset and `--benchmark` to run the BenchmarkDotNet comparison.
+
+The plain run executes both arms per query, prints the first rows of each and a per-query verdict, then
+an `n/m queries matched in both arms` summary. `[ OK ]` means both arms returned the same number of
+rows; `[FAIL]` means one arm hit a documented engine gap; `[DIFF]` means the row counts differ. Any
+other exception still aborts the run. See [`../README.md`](../README.md) for the shared run notes.
+
+### Benchmarks
+
+`--benchmark` reuses the provisioned database and runs BenchmarkDotNet in-process (`Job.ShortRun` +
+`InProcessEmitToolchain`, `[MemoryDiagnoser]`). Every query has a `Nextorm_*` baseline and a
+`Linq2Db_*` arm; a filtered run:
+
+```bash
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.mssql.adventureworks -c Release -- \
+  --benchmark --filter '*RollingKpi*'
+```
+
+Set `NEXTORM_EXAMPLES_BENCH_FULL=1` for the full out-of-process BenchmarkDotNet job.
+
+### The linq2db arm
+
+Window functions use `Sql.Window.*`, month/quarter buckets use the same
+`DATEADD(quarter, DATEDIFF(quarter, 0, …), 0)` idiom translated through `Sql.DateAdd`/`Sql.DateDiff`,
+`STDEV` uses `AnalyticFunctions.StdDev`, and `FORMAT` is emitted with `Sql.Expr` (as in the nextorm
+arm's `DemoUdf`). The `PIVOT` query is expressed as the equivalent conditional aggregation
+(`SUM(CASE WHEN quarter = n …)`), which is exactly what `PIVOT` rewrites to — this is noted in
+[`Linq2DbQueries.cs`](Linq2DbQueries.cs).
 
 ## SQL → nextorm: general rules
 
@@ -39,9 +75,9 @@ SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Se
 | SQL (T-SQL) | nextorm |
 |---|---|
 | `FROM t` | `ctx.From<IT>()`, where `IT` is an interface marked `[SqlTable("Schema.t")]` |
-| `WITH x AS (SELECT …)` | declare it as a CTE: `ctx.With("x", query).From("x")`; a later CTE reads an earlier one by name (`ctx.From("x")`). CTE columns are read by name (`t.GetInt32("id")`) because the CTE source is untyped |
+| `WITH x AS (SELECT …)` | declare it as a CTE: string API `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt32("id")`, because the name carries no type) or the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference); a later CTE reads an earlier one the same way |
 | `SELECT a AS x` | `.Select(t => new { x = t.A })` (anonymous type = result row) |
-| `JOIN u ON a = b` / `LEFT JOIN` | `.Join(ctx.From<IU>(), (t, u) => …)` / `.LeftJoin(...)`; joined items are `p.Item1`, `p.Item2`, … |
+| `JOIN u ON a = b` / `LEFT JOIN` | `.Join<IU>((t, u) => …)` / `.LeftJoin<IU>((t, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
 | `WHERE c` | `.Where(t => c)` |
 | `GROUP BY a, b` | `.GroupBy(t => new { t.A, t.B })` |
 | `HAVING c` | `.Having(g => c)` (repeat the aggregate) or a derived query + `.Where(...)` |
@@ -49,7 +85,7 @@ SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Se
 | `TOP n` / `LIMIT n` | `.Limit(n)` |
 | `COUNT(*)`, `SUM(x)`, `AVG`, `MIN`, `MAX`, `STDEV`, `COUNT(DISTINCT x)` | `SqlFunctions.Sql.count()`, `.sum(x)`, `.avg(x)`, `.min(x)`, `.max(x)`, `.stdev(x)`, `.count_distinct(x)` |
 | `CASE WHEN c THEN a ELSE b END` | ternary `c ? a : b` |
-| `PIVOT (…)` | `EntityBuilder.Pivot(...)` emits native T-SQL `PIVOT` and accepts a derived query as the source (query 5 pivots a 5-table join with a computed `Margin`/`FOR` column) |
+| `PIVOT (…)` | `EntityBuilder.Pivot(...)` (SQL Server provider extension in `NextORM.SqlServer` — add `using NextORM.SqlServer;`) emits native T-SQL `PIVOT` and accepts a derived query as the source (query 5 pivots a 5-table join with a computed `Margin`/`FOR` column) |
 | `LAG(x) OVER (PARTITION BY p ORDER BY o)` | `SqlFunctions.Sql.lag(x).Over(partitionBy: () => p, orderBy: () => o)` |
 | `MAX(x) OVER()` | `SqlFunctions.Sql.max_over(x).Over()` |
 | `ROW_NUMBER()` / `RANK()` / `NTILE(n) OVER (…)` | `SqlFunctions.Sql.row_number()` / `.rank()` / `.ntile(n)` `.Over(…)` |
@@ -73,9 +109,13 @@ Two nextorm-specific rules that trip people up:
 * **Derived queries as a `FROM` source and as a join side** — `ctx.From(derived).Join(...)` works, and a
   `QueryCommand<T>` can be joined directly; a `Where` may precede the join (it is pushed onto the derived
   query), while other modifiers must stay inside the derived query. The reference queries declare their
-  subqueries as CTEs, so the example uses `ctx.With(name, query)` / `ctx.From(name)` (see rule 1);
-  queries 1, 3 and 4 are expressed this way and are **WORKING**.
-* **Native `PIVOT` over a derived source** — `EntityBuilder.Pivot(...)` emits native T-SQL `PIVOT` and
+  subqueries as CTEs, all through the typed `query.AsCte(name)` / `ctx.From(Cte<T>)` API (rule 1):
+  queries 1, 3 and 4 chain typed descriptors, and query 1 names its slots (`WithAlias(Alias.Root)`,
+  `Alias.SalesPerson`, `Alias.Manager`); all are **WORKING**. The alias chain
+  must be rooted at a **named** projection (`CustomerMetricRow`), not an anonymous type: the alias
+  generator renders the chain's concrete type and cannot emit an anonymous one.
+* **Native `PIVOT` over a derived source** — `EntityBuilder.Pivot(...)` (the SQL Server provider extension
+  in `NextORM.SqlServer`; add `using NextORM.SqlServer;`) emits native T-SQL `PIVOT` and
   accepts a derived query as the source, so query 5 pivots the 5-table join with its computed `Margin`
   and `FOR` column directly (`FOR QuarterNum IN (1,2,3,4)` over the numeric `datepart(quarter, …)`; the
   string `'Q' + datepart(...)` form needs an explicit T-SQL `CAST`). Every method carries a `WORKING`
@@ -88,10 +128,10 @@ Markers: **OK** — expressed with the regular LINQ API; **≡** — same result
 
 | # | SQL | Method | Coverage | Notes |
 |---|---|---|---|---|
-| 1 | [`mssql_vip_churn.sql`](Sql/mssql_vip_churn.sql) | `AdventureWorksQueries.VipChurn` | OK | two CTEs (`CustomerOrders`, `CustomerMetrics` grouping the first); `MAX(OrderDate) OVER()` → `max_over(...).Over()`; `LAG(…) OVER(…)` → `lag(...).Over(...)`; `DATEDIFF(day,…)` → `date_diff("day",…)`; `FORMAT(…)` → `DemoUdf.Format`; manager `LEFT JOIN` on the CTE |
-| 2 | [`mssql_rolling_kpi.sql`](Sql/mssql_rolling_kpi.sql) | `AdventureWorksQueries.RollingKpi` | OK | CTE `MonthlySales`; `DATEADD(month, DATEDIFF(month,0,…),0)` → `date_trunc("month",…)`; cumulative/3-month `AVG` frames → `sum_over`/`avg_over` with `WindowFrame`; `FORMAT(…)` → `DemoUdf.Format` |
-| 3 | [`mssql_supply_chain.sql`](Sql/mssql_supply_chain.sql) | `AdventureWorksQueries.SupplyChain` | OK | two CTEs (`SupplierDelays`, `ProductionImpact`) joined by name; `DATEADD(day,5,…)` → `date_add("day",5,…)`; `DATEDIFF(day,…)` → `date_diff("day",…)` |
-| 4 | [`mssql_product_abc_xyz.sql`](Sql/mssql_product_abc_xyz.sql) | `AdventureWorksQueries.ProductAbcXyz` | OK | three chained CTEs; `DATEADD(quarter,…)` → `date_trunc("quarter",…)`; `STDEV` → `stdev`; `AVG(CAST(qty AS FLOAT))` → `avg((double)qty)`; `SUM(...) OVER(ORDER BY … DESC)/SUM(...) OVER()` → `sum_over(...).Over(desc(...)) / sum_over(...).Over()` |
+| 1 | [`mssql_vip_churn.sql`](Sql/mssql_vip_churn.sql) | `AdventureWorksQueries.VipChurn` | OK | two **typed** CTEs (`AsCte`), the second grouped into the named `CustomerMetricRow`; joined slots are named (`WithAlias(Alias.Root)`, `Alias.SalesPerson`, `Alias.Manager`, addressed as `p.Root`/`p.SalesPerson`/`p.Manager`); `MAX(OrderDate) OVER()` → `max_over(...).Over()`; `LAG(…) OVER(…)` → `lag(...).Over(...)`; `DATEDIFF(day,…)` → `date_diff("day",…)`; `FORMAT(…)` → `DemoUdf.Format`; manager `LEFT JOIN` on the CTE |
+| 2 | [`mssql_rolling_kpi.sql`](Sql/mssql_rolling_kpi.sql) | `AdventureWorksQueries.RollingKpi` | OK | typed CTE `MonthlySales` (`AsCte`); `DATEADD(month, DATEDIFF(month,0,…),0)` → `date_trunc("month",…)`; cumulative/3-month `AVG` frames → `sum_over`/`avg_over` with `WindowFrame`; `FORMAT(…)` → `DemoUdf.Format` |
+| 3 | [`mssql_supply_chain.sql`](Sql/mssql_supply_chain.sql) | `AdventureWorksQueries.SupplyChain` | OK | two typed CTEs (`AsCte`: `SupplierDelays`, `ProductionImpact`) joined by member; `DATEADD(day,5,…)` → `date_add("day",5,…)`; `DATEDIFF(day,…)` → `date_diff("day",…)` |
+| 4 | [`mssql_product_abc_xyz.sql`](Sql/mssql_product_abc_xyz.sql) | `AdventureWorksQueries.ProductAbcXyz` | OK | three chained **typed** CTEs (`AsCte`); `DATEADD(quarter,…)` → `date_trunc("quarter",…)`; `STDEV` → `stdev` (projected `(double?)`, so the one-quarter-per-product case stays distinct from zero); `AVG(CAST(qty AS FLOAT))` → `avg((double)qty)`; `SUM(...) OVER(ORDER BY … DESC)/SUM(...) OVER()` → `sum_over(...).Over(desc(...)) / sum_over(...).Over()` |
 | 5 | [`mssql_quarterly_pivot.sql`](Sql/mssql_quarterly_pivot.sql) | `AdventureWorksQueries.QuarterlyPivot` | OK | native `Pivot` over a **derived query**: the join 5 tables and the computed `Margin`/`FOR` column live in the derived query, `PIVOT ... FOR QuarterNum IN (1,2,3,4)` over the numeric `datepart(quarter, …)` (string `'Q'+datepart` needs an explicit T-SQL `CAST`, so the numeric quarter is pivoted); pivot cells stay nullable |
 
 ## Course exercises (6–11)

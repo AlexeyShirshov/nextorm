@@ -69,7 +69,8 @@ Id = 3
 Сгенерированный SQL - это обычный `select` по отображённым таблице и столбцу:
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 ## Использование строки подключения
@@ -110,9 +111,9 @@ using var dataContext = builder.CreateDataContext();
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:9`,
-`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:20`,
-`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:37`;
+Source: `tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:9`,
+`tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:20`,
+`tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:37`;
 `tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs:32`;
-`tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:115`;
-generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:111`.
+`tests/nextorm.sqlite.tests/Raw/ConnectionManagementTests.cs:115`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:111`.

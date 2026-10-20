@@ -213,7 +213,7 @@ public EntityBuilder<T> AcrossShards(ShardSelection sel);
 5. **Где хранить топологию** (in-memory конфиг vs провайдер с runtime-refresh) и как триггерить
    version-bump.
 6. **Совместимость с динамической схемой результата** (`TableFunctionSchema`/`ResultSchema`, см.
-   [Dynamic result schema](../../guide/11-table-valued-functions.md#dynamic-result-schema)) — не конфликтуют ли понятия «динамическая схема».
+   [Dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema)) — не конфликтуют ли понятия «динамическая схема».
 7. **Канонизация ключа хэша** для смешанных типов (десятичные `decimal`, `DateTimeOffset`, enum).
 
 ## 10. Файлы к изменению
@@ -227,7 +227,7 @@ public EntityBuilder<T> AcrossShards(ShardSelection sel);
   `DI/DataContextBuilder.cs`, `Query/QueryCommand.QueryPreparer.cs`, `Cache/DbPreparedQueryCommand.cs`.
 - Тесты: `tests/nextorm.core.tests/ShardingTests.cs` (+ ring/extractor), SQL-gen провайдеров,
   `tests/nextorm.integration.tests/CommonTestSuite.Sharding.cs`.
-- Документация: новый гайд по шардированию (+RU), `docs/providers/overview.md` (+RU),
+- Документация: новый гайд по шардированию (+RU), `docs/connecting-providers/overview.md` (+RU),
   `docs/advanced/limitations.md` (+RU), `docs/specs/design/API-NAMING-REVIEW.md`,
   `docs/specs/design/code-smells-review.md`.
 

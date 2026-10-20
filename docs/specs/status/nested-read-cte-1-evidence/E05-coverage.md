@@ -73,4 +73,4 @@ Policy verdict (branch `1.0.9-b`, **not** `main`): below the hard thresholds `85
 ## Retained (NOT rerun in r2; product behavior unchanged since their green run)
 
 - C6 acceptance — valid, `E06-perf.md` / `E06-acceptance.log` provenance (DO r1).
-- C7 `eng/perf/iteration14_gate.py` — valid, `E07-gate.md` / `E07-gate.log` provenance (DO r1).
+- C7 `scripts/perf/iteration14_gate.py` — valid, `E07-gate.md` / `E07-gate.log` provenance (DO r1).

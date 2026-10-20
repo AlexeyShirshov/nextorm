@@ -1,13 +1,16 @@
 # nextorm examples
 
-Three runnable console applications that model realistic demo databases. Each one provisions its
-database with [Testcontainers](https://dotnet.testcontainers.org/) on first run (downloading and
-caching the official dataset into a named Docker volume), then executes the five demo queries and
-prints the result rows. The examples only read, so the loaded database is reused on later runs.
+Three runnable **comparison** console applications over realistic demo databases. Each query in a
+project is implemented twice — with nextorm and with [linq2db](https://github.com/linq2db/linq2db) —
+and both arms are executed against the same provisioned database, then benchmarked with
+BenchmarkDotNet. Each example provisions its database with
+[Testcontainers](https://dotnet.testcontainers.org/) on first run (downloading and caching the official
+dataset into a named Docker volume); the examples only read, so the loaded database is reused on later
+runs.
 
-The model SQL lives next to the code, in each project's `Sql/` folder, and every C# method names the
-file it models. Each project README maps every SQL construct to the nextorm construct that replaces
-it — start there to understand how to translate a query.
+The model SQL lives next to the code, in each project's `Sql/` folder, and every C# method pair names
+the file it models. Each project README maps every SQL construct to the nextorm construct that replaces
+it — start there to understand how to translate a query in either direction.
 
 | Project | Provider | Dataset | Model SQL |
 |---|---|---|---|
@@ -15,9 +18,13 @@ it — start there to understand how to translate a query.
 | [`nextorm.examples.mssql.adventureworks`](nextorm.examples.mssql.adventureworks/README.md) | `nextorm.sqlserver` | AdventureWorks 2022 | [Sql/](nextorm.examples.mssql.adventureworks/Sql) |
 | [`nextorm.examples.clickhouse.analytics`](nextorm.examples.clickhouse.analytics/README.md) | `nextorm.clickhouse` | ClickHouse `datasets.hits_v1` | [Sql/](nextorm.examples.clickhouse.analytics/Sql) |
 
-> The three projects consume the **published `nextorm.*` NuGet packages** (version pinned by
-> `NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props)) instead of referencing
-> `src/` directly, so they double as a real consumer of what ships on nuget.org.
+> The postgres and clickhouse projects consume the **published `nextorm.*` NuGet packages** (version
+> pinned by `NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props)) instead of
+> referencing `src/` directly, so they double as a real consumer of what ships on nuget.org.
+> **`nextorm.examples.mssql.adventureworks` is an explicit exception** (#232): it references
+> `nextorm.core`/`nextorm.sqlserver` from `src/` via `ProjectReference` so it can demonstrate the
+> current-checkout typed `Pivot`/`Unpivot` surface, which is not in a published package yet. Its run
+> and build commands are the same as the other examples.
 
 ## Running
 
@@ -46,9 +53,29 @@ The provisioned database is cached in a named volume (`nextorm-examples-{aviasal
 so a warm run skips the dataset copy and the load and only starts a container against the existing
 volume. Set `NEXTORM_EXAMPLES_RELOAD=true` to delete the volume and rebuild from scratch.
 
-All queries run to completion: the program reports `[ OK ]`/`[FAIL]` per query and ends with an
-`n/m succeeded` summary. Only documented engine gaps (`NotSupportedException`/`QueryPreparationException`)
-are recorded as `FAIL`; any other error still aborts the run.
+All queries run to completion: each arm prints its rows, the runner reports
+`[ OK ]`/`[FAIL]`/`[DIFF]` per query and the program ends with an `n/m queries matched in both arms`
+summary. Only documented engine gaps (`NotSupportedException`, `QueryPreparationException`,
+`LinqToDBException`) are recorded as `FAIL`; any other error still aborts the run. Use
+`--only Name1,Name2` to run a subset.
+
+## Comparison arms
+
+Each project contains the nextorm implementation (`*Queries.cs` + `Entities.cs`), its linq2db
+counterpart (`Linq2DbQueries.cs` + `Linq2DbEntities.cs`), the side-by-side runner (`Comparison.cs`) and
+a BenchmarkDotNet class (`Benchmarks.cs`). `--benchmark` runs the comparison instead of the plain pass:
+
+```bash
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.postgres.aviasales -c Release -- \
+  --benchmark --filter '*AircraftDelayChains*'
+```
+
+The benchmark uses `Job.ShortRun` + `InProcessEmitToolchain` (warmup 3 / iterations 3) and
+`[MemoryDiagnoser]`; set `NEXTORM_EXAMPLES_BENCH_FULL=1` for the full out-of-process job. The measured
+code is only "build + execute + materialise" — no printing or JSON formatting. Every query has a
+`Nextorm_*` baseline and a `Linq2Db_*` arm; `Incremental` on ClickHouse is linq2db-only because the
+nextorm arm throws the documented gap.
 
 ## Notes on the nextorm API
 
@@ -80,11 +107,12 @@ instead of being masked:
 
 * **Derived query as the primary `FROM` source** — `ctx.From(derivedQuery).Join(...)` still fails during
   preparation (`QueryPreparationException: Select must return new anonymous type`). The reference
-  queries declare those subqueries as `WITH`, and the examples express them with the CTE API
-  `With(name, query).From(name)` — which supports `Join`, `GroupBy`, `Having`, `OrderBy` and `Limit` —
+  queries declare those subqueries as `WITH`, and the examples express them with the typed CTE API
+  `query.AsCte(name)` / `ctx.From(cte)` — which supports `Join`, `GroupBy`, `Having`, `OrderBy` and
+  `Limit` (the string `With(name, query).From(name)` API remains available) —
   so none of the demo queries hit this gap. Tracked in
   [`sql-capabilities-gap-analysis.md`](../docs/specs/roadmap/sql-capabilities-gap-analysis.md) (known
-  gap 10); see the [CTE guide](../docs/guide/08-cte.md).
+  gap 10); see the [CTE guide](../docs/guide/10-cte.md).
 * **T-SQL `FORMAT`** — no portable built-in, so the example declares a provider-specific
   `[SqlFunction("format")]` UDF (`DemoUdf.Format`) instead of projecting the raw `DateTime`.
 * **SQL Server `PIVOT`** — the native `EntityBuilder.Pivot` now exists, but it accepts only a plain
@@ -107,19 +135,20 @@ breakdown for ClickHouse. All of them are `WORKING` except where noted in the me
 
 ## Verified
 
-Every project is built (`dotnet build`, 0 warnings) and the queries are run against the provisioned
+Every project is built (`dotnet build`, 0 warnings) and both arms are run against the provisioned
 datasets. The examples deliberately express the original SQL without workarounds, so a run executes
 **every query to the end**: each `Program` catches the documented engine-gap exceptions, prints
-`[ OK ]`/`[FAIL]`, and finishes with a `n/m succeeded` summary. A `FAIL` means the query hit a
-documented gap and threw instead of falling back to raw SQL; any other error still aborts.
+`[ OK ]`/`[FAIL]`/`[DIFF]`, and finishes with an `n/m queries matched in both arms` summary. `FAIL`
+means one arm hit a documented gap; `DIFF` means the two arms returned different row counts; any other
+error still aborts.
 
-Last run against Testcontainers (Podman):
+Last run against Testcontainers (Podman), 2026-10-17:
 
-| Project | Result | Remaining `FAIL`s (documented gaps) |
+| Project | Matched in both arms | Remaining `FAIL`s (documented gaps) |
 |---|---|---|
-| postgres aviasales | 11/11 | — |
-| mssql adventureworks | 11/11 | — |
-| clickhouse analytics | 10/11 | `Incremental` (`uniqMerge` / `-Merge` has no LINQ surface on the released packages) |
+| postgres aviasales | 11/11 | — (query 8 uses linq2db `FromSql` for `percentile_disc`) |
+| mssql adventureworks | 11/11 | — (query 5 uses conditional aggregation instead of `PIVOT` on the linq2db arm) |
+| clickhouse analytics | 10/11 | `Incremental` — nextorm has no `uniqMerge` surface; the linq2db arm runs it through `FromSql` |
 
 The detailed, dated verification log (per-query failures and the roadmap item that tracks each) lives in
 [`VERIFICATION.md`](VERIFICATION.md) — update it on every re-run.

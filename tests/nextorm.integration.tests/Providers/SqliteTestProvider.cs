@@ -132,10 +132,20 @@ internal sealed class SqliteTestProvider : ITestProvider
         create table eager_parent (id integer primary key, name text);
         create table eager_child (id integer primary key, parent_id int not null, name text);
         create table eager_note (id integer primary key, parent_id int not null, text text);
+        -- Composite parent-link key fixture (#211 variant matrix :236): (tenant, link_id) is not the
+        -- table key (row_id), so a partition on either component alone blends two parents.
+        create table eager_composite_parent (row_id integer primary key, tenant int not null, link_id int not null);
+        create table eager_composite_child (id integer primary key, tenant int not null, parent_id int not null, sort_key int not null);
 
         -- Many-to-many JoinInto fixtures (#135): the tag child plus the junction linking it to a parent.
         create table eager_tag (id integer primary key, name text);
         create table eager_link (id integer primary key, parent_id int not null, child_id int not null);
+
+        -- Composite-junction M:N fixtures (#223): the junction carries two parent foreign-key components,
+        -- so the join must match the full (tenant, link_id) principal key rather than one component.
+        create table eager_cj_parent (row_id integer primary key, tenant int not null, link_id int not null, name text);
+        create table eager_cj_child (id integer primary key, name text);
+        create table eager_cj_link (parent_tenant int not null, parent_link_id int not null, child_id int not null);
 
         -- Global query filter fixtures (#108 D6): the filtered source table and the INSERT ... SELECT
         -- target table. Both carry the tenant/soft-delete columns the shared suite filters on.

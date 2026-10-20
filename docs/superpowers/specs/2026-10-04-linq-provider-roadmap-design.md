@@ -174,6 +174,8 @@ var q =
 
 DAG: `0 → 1 → 2`; далее 3–5 частично параллельны; 6 зависит от 4–5; EF model import может стартовать после contract'ов 1, EF Include/loading зависит от 6; 8 закрывает inventory; 9 — после всех required. Многоэтапные частичные релизы **явно не** маркируются как full.
 
+> **Phase 6 — child-loading contract.** Не изобретать параллельные правила для nested collections: семантика уже отгруженного builder-пути — assignment rule (clear+refill / новый list / fail-closed), dedup identity (составной ancestor-key), filter-scope (объединение `IgnoreFilters` родителя и ребёнка), ordering и per-parent top-N (`row_number() over (partition by …)`), единый режим на весь граф — описана в `docs/relationships/relationships.md`, `docs/relationships/eager-loading.md` и `docs/relationships/eager-loading-per-parent-paging.md`. Phase 6 обязан переиспользовать её, а не расходиться.
+
 ## 12. Verification / приёмка
 
 - Unit-тесты: normalization, binding, lowering, shape; тесты invalid tree/provider diagnostics.

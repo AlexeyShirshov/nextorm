@@ -29,7 +29,7 @@ Deliver a real, attributable performance improvement on the fresh-fluent cached 
 8. Verify B1 forced-hash ctor preserves the `QueryPlan.cs:103` invariant; test the 4→5 spill and `Equals`/`GetHashCode` coherence.
 9. Build the stage-attribution harness (`N ∈ {1,16,256,4096}`, consumed checksum, old+new methods in one class).
 10. Add tests (unit + integration).
-11. Run gate `eng/perf/iteration14_gate.py --job short` (fail-closed).
+11. Run gate `scripts/perf/iteration14_gate.py --job short` (fail-closed).
 12. Harness: ≥5 alternating rounds, `taskset -c 3` + priority, CPU/wall cross-check, `--inProcess false` + in-process, `--statisticalTest 99.9%`, nonparametric CI; discard rounds with loadavg>2.
 13. Regenerate preserved patches if improved.
 14. Docs EN+RU + internal results.
@@ -107,7 +107,7 @@ Time attribution fails again on a calm host → loop-back to DO defect eliminati
 - tests/nextorm.core.tests/ExpressionPlanEqualityComparerTests.cs
 - tests/nextorm.core.tests/PlanKeyStructureTests.cs
 - tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs
-- benchmarks/nextorm.benchmark/StageAttributionBenchmark.cs (new)
+- benchmarks/nextorm.benchmark/Diagnostics/StageAttributionBenchmark.cs (new)
 - docs/specs/performance/iteration-15-cached-path-results.md
 - docs/specs/status/iteration-15-cached-path-183-4.md
 2026-10-05 | DO | r=1 | n=1/3 | boundary sweep: integration exit 0 (SQLite 665/622/43; PG 776/751/25; SQL Server 698/655/43; MySQL+MariaDB 702/623/79; ClickHouse 173/173/0; 0 failed, 193 skips total); coverage line 87.1% branch 78.7%
@@ -120,7 +120,7 @@ Time attribution fails again on a calm host → loop-back to DO defect eliminati
 - B1 — done | evidence: status:83, /tmp/opencode/do-a/build-final.log
 - B2 — done | evidence: status:85, /tmp/opencode/do-b/test-sqlite-char.log
 - counters — done | evidence: src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs:28-45,167, tests/nextorm.core.tests/ExpressionPlanEqualityComparerNodeTests.cs
-- harness — done | evidence: benchmarks/nextorm.benchmark/StageAttributionBenchmark.cs
+- harness — done | evidence: benchmarks/nextorm.benchmark/Diagnostics/StageAttributionBenchmark.cs
 - tests — done | evidence: tests/nextorm.core.tests/ParamRefreshRecipeTests.cs, tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs
 - docs — done | evidence: docs/specs/performance/iteration-15-cached-path-results.md
 - boundary sweep — done | evidence: docs/specs/status/iteration-15-cached-path-183-4-evidence/, status:112-113
@@ -192,7 +192,7 @@ Acceptance text unchanged; **AC4 is not claimed met** (open — `accept-with-ope
 | G1-UNIT | touched filtered selectors only | `dotnet test tests/nextorm.core.tests -c Debug --no-build --filter "FullyQualifiedName~ParamRefreshRecipe\|FullyQualifiedName~ExpressionPlanEqualityComparer\|FullyQualifiedName~PlanKeyStructure"`; `dotnet test tests/nextorm.sqlite.tests -c Debug --no-build --filter "FullyQualifiedName~CachedPathCharacterization"` | recipe 23/23, comparer 47/47, plankey 19/19, sqlite-char 19/19, exit 0 | `/tmp/opencode/do-d4/{core-recipe,core-comparer,core-plankey,sqlite-char}.log` | coder | required |
 | G1-INTEGRATION | all five providers (skip≠pass) | `DOCKER_HOST=… dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor` | exit 0, Failed 0, PG+SQLServer+MySQL+ClickHouse+SQLite executed | `…/integration.log`, `…/integration-junit.xml` | coder | required |
 | G1-COVERAGE | coverage thresholds | workflow `dotnet-coverage collect` → `reportgenerator` (`coverage.settings.xml`) | line ≥85 / branch ≥75 | `…/coverage/report/Summary.txt` | coder | required |
-| G1-ALLOC-GATE | alloc budget gate (fail-closed) | `eng/perf/iteration14_gate.py --job short` | exit 0, 0 failing rows | `…/gate-new.log` | coder | required |
+| G1-ALLOC-GATE | alloc budget gate (fail-closed) | `scripts/perf/iteration14_gate.py --job short` | exit 0, 0 failing rows | `…/gate-new.log` | coder | required |
 | G1-ALLOC-DELTA | old vs new B/op per arm | derive from `bdn-{old,new}-filter*/…-report-full-compressed.json` | Where −1944.03 / −1944.04; Join −359.96 / −424.00 B/op | `…/bop-summary.{json,txt}` | coder | required |
 | G1-ACCEPTANCE | acceptance category | `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance` | exactly 7 cases, exit 0 | `…/acceptance-new.log` | coder | required |
 | G1-SLOPE | stage-attribution slope | `StageAttributionBenchmark`, out-of-process, N∈{1,16,256,4096}, ≥5 rounds | slope new/old ratio, median, R² | `…/slope/slope-summary.{json,txt}` | coder | required |
@@ -304,7 +304,7 @@ Status: **AC4 met (2026-10-05, interleaved 10-pair ABAB; 0/10 & 1/10 blocks ≥1
 - `tests/nextorm.core.tests/ExpressionPlanEqualityComparerTests.cs`
 - `tests/nextorm.core.tests/PlanKeyStructureTests.cs`
 - `tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs`
-- `benchmarks/nextorm.benchmark/StageAttributionBenchmark.cs` (new)
+- `benchmarks/nextorm.benchmark/Diagnostics/StageAttributionBenchmark.cs` (new)
 
 **Verified facts:** build 0/0; unit recipe 23/23, comparer 47/47, plankey 19/19, sqlite-char 19/19; integration exit 0 Failed 0 all-5 providers; coverage line 87.1 / branch 78.7; allocation gate exit 0 56/56; acceptance `--anyCategories=acceptance` 7/7 exit 0; deterministic B/op per op Where −1944.03/−1944.04, Join −359.96/−424.00; D1 red→green (`InvalidCastException` → pass).
 

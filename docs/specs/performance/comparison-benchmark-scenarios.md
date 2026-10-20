@@ -1,11 +1,17 @@
 # Comparison benchmarks tier 1 — query-shape scenarios
 
-Статус: дизайн согласован (user review пройден 2026-10-04). Реализовано в D188 (2026-10-09): SQLite projection/aggregates/paging/streaming (buffered+unbuffered DTO и синхронная zero-materialization raw-reader подгруппа) и JSON/CSV cross-library. Async reader-арм отложен (триггер: запрос async raw-reader сравнения).
-Tracking: [GitHub issue #188](https://github.com/AlexeyShirshov/nextorm/issues/188), milestone `1.0.9-rc2`.
+Статус: **реализовано и закрыто** — D188 (2026-10-09), issue
+[#188](https://github.com/AlexeyShirshov/nextorm/issues/188) **CLOSED**, milestone `1.0.9-rc2`.
+Документ поддерживается как **as-built спека**: инвентарь армов и правила fairness для
+`SqliteBenchmark{Projection,Aggregates,Paging,Streaming,WriteJson,Csv}`. Это не отчёт о прогонах —
+числа, рейтинги и сравнения живут в `benchmark-report.md` и в публичной странице
+`docs/comparisons/benchmarks.md`; методологические уроки (шум ShortRun, `/mnt/c`, отношения против
+абсолютов) — `decisions-and-lessons.md` §4.1.
+Async reader-арм не реализован; триггер возврата — запрос async raw-reader сравнения.
 Branch: `1.0.9-rc2`.
 Зависимость: исторически zero/raw-reader подгруппа item 10 (#188) зависела от [#189](https://github.com/AlexeyShirshov/nextorm/issues/189). В цикле D188 N=2 (2026-10-09) синхронный raw-reader арм реализован напрямую через публичный `ToDataReader` (D134), без подмены материализацией, другим провайдером или materialize→serialize; perf-предикат #189 на него не распространяется. Async reader-арм остаётся отложенным (см. статус).
 
-## 1. Контекст и пробел
+## 1. Контекст и пробел (историческая справка)
 
 Кросс-библиотечное сравнение (Nextorm / Dapper / linq2db / EF Core) на SQLite покрывало:
 
@@ -39,7 +45,7 @@ Branch: `1.0.9-rc2`.
 ### 3.1 Граница тайминга
 
 - Семантическая сверка армов, подготовка prepared/compiled-команд, проверка counts/checksums/pages/сериализованного вывода выполняются в конструкторе/`[GlobalSetup]` вне измеряемой области.
-- `Prepare()` / `CompiledQuery.Compile` / `CompileAsyncQuery` создаются вне timed-body; Category A измеряет только повторное исполнение reusable-команды. Граница подготовки читающего арма: `ToDataReader` открывает читатель через `PrepareResultCommand` с `storeInCache: false` (`DataContext.cs:565-572`), поэтому подготовленная `DbPreparedQueryCommand` не кладётся в общий кэш контекста. `_nextormReader.Prepare()` в конструкторе делает больше, чем «помечает prepared»: из-за `storeInCache:false` сам прогрев тоже уходит в cache-miss ветку, рендерит SQL и создаёт `DbCommand` — но это происходит вне timed-body, в конструкторе. На повторных вызовах `PrepareCommand` пропускается и выполняется `RefreshInValuesShape()` (`QueryPlanner.cs:574-575`), однако `storeInCache:false` на каждый вызов оставляет lookup/store плана выключенными (`QueryPlanner.cs:612`, `:732`) и снова рендерит SQL (`MakeSelectInternal`, `QueryPlanner.cs:663-665`) и создаёт новый `DbCommand` (`_createCommand`, `QueryPlanner.cs:691`). То есть измеряемый арм включает повторный рендер SQL и создание команды на каждый вызов, а не исполнение закэшированного плана.
+- `Prepare()` / `CompiledQuery.Compile` / `CompileAsyncQuery` создаются вне timed-body; Category A измеряет только повторное исполнение reusable-команды. Граница подготовки читающего арма: `ToDataReader` открывает читатель через `DataContext.PrepareResultCommand(..., storeInCache: false)`, поэтому подготовленная `DbPreparedQueryCommand` не кладётся в общий кэш контекста. `_nextormReader.Prepare()` в конструкторе делает больше, чем «помечает prepared»: из-за `storeInCache: false` сам прогрев тоже уходит в cache-miss ветку, рендерит SQL и создаёт `DbCommand` — но это происходит вне timed-body, в конструкторе. На повторных вызовах `QueryPlanner.GetPreparedQueryCommand` пропускает `PrepareCommand` для уже подготовленной команды и вызывает `QueryCommand.RefreshInValuesShape()`, однако `storeInCache: false` на каждый вызов оставляет lookup/store плана выключенными (гейты `queryCommand.Cache && storeInCache`) и снова рендерит SQL (`QueryPlanner.MakeSelect`) и создаёт новый `DbCommand` (`_createCommand`). То есть измеряемый арм включает повторный рендер SQL и создание команды на каждый вызов, а не исполнение закэшированного плана.
 - Sink сбрасывается вне timed-body; `BenchmarkSerializationSink` не удерживает сериализованный payload.
 - Никакие production-пути/API, фикстуры или пакеты не меняются.
 
@@ -111,7 +117,7 @@ Branch: `1.0.9-rc2`.
 - Setup-проверки вне timed-области; результаты не подменяются клиентской агрегацией/материализацией.
 - Zero-materialization означает отсутствие entity/DTO-материализации, **не** нулевые аллокации.
 
-## 7. Критерии приёмки
+## 7. Критерии приёмки (D188, исторические)
 
 - Новые классы компилируются, помечены `[MemoryDiagnoser]`, запускаются через `--filter`; BDN рапортует 0 failures; каждый класс — исполненный прогон (ShortRun) с сохранённым отчётом.
 - `dotnet build nextorm.slnx -c Debug` и `-c Release` — 0 warning / 0 error.
@@ -143,8 +149,8 @@ Branch: `1.0.9-rc2`.
 
 ## 11. Ссылки
 
-- `benchmarks/nextorm.benchmark/SqliteBenchmarkProjection.cs`, `...Aggregates.cs`, `...Paging.cs`, `...Streaming.cs`, `...WriteJson.cs`, `...Csv.cs`
-- `benchmarks/nextorm.benchmark/BenchmarkRowSink.cs`, `BenchmarkSerializationSink.cs`, `BenchmarkComparisonValidation.cs`
-- `benchmarks/nextorm.benchmark/Linq2DbDataContext.cs`, `EFDataContext.cs`, `TestDataContext.cs`, `BenchDb.cs`, `NextormConfig.cs`
+- `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkProjection.cs`, `...Aggregates.cs`, `...Paging.cs`, `...Streaming.cs`, `...WriteJson.cs`, `...Csv.cs`
+- `benchmarks/nextorm.benchmark/Infrastructure/BenchmarkRowSink.cs`, `BenchmarkSerializationSink.cs`, `BenchmarkComparisonValidation.cs`
+- `benchmarks/nextorm.benchmark/Infrastructure/Linq2DbDataContext.cs`, `EFDataContext.cs`, `TestDataContext.cs`, `BenchDb.cs`, `NextormConfig.cs`
 - `docs/comparisons/benchmarks.md`, `docs/specs/performance/benchmark-report.md`, `docs/specs/performance/acceptance-benchmarks.md`
 - `docs/specs/comparison/linq2db-comparison.md` (раздел «Benchmarked performance»), `docs/specs/ru/comparison/linq2db-comparison.md`

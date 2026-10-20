@@ -315,7 +315,9 @@ internal sealed class BatchRunner
                 throw MissingResultSet(plan, i + 1);
         }
 
-        return new BatchResult(sets, resultTypes, columnNames);
+        // The driver reports one affected-row total for the whole batch; the reader is still owned by
+        // the caller's using, so this only reads metadata (no release, no ownership change).
+        return new BatchResult(sets, resultTypes, columnNames, CommandReaderOwner.ReadRecordsAffected(reader));
     }
 
     private static async Task<BatchResult> ReadMultipleAsync(DbDataReader reader, BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers, CancellationToken cancellationToken)
@@ -343,7 +345,8 @@ internal sealed class BatchRunner
             }
         }
 
-        return new BatchResult(sets, resultTypes, columnNames);
+        // See ReadMultiple: one driver total for the whole batch, read as metadata only.
+        return new BatchResult(sets, resultTypes, columnNames, CommandReaderOwner.ReadRecordsAffected(reader));
     }
 
     private static string[] SnapshotColumns(DbDataReader reader)

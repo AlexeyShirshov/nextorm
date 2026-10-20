@@ -12,102 +12,116 @@
       href: getting-started/03-entities-and-metadata.md
     - name: Внедрение зависимостей
       href: getting-started/04-dependency-injection.md
+- name: Движок
+  items:
+    - name: Обзор
+      href: engine/index.md
+    - name: "Построение запроса: fluent к SQL"
+      href: engine/01-query-pipeline.md
+    - name: Исполнение и строки
+      href: engine/02-execution-and-rows.md
+    - name: Кэш планов и переиспользование
+      href: engine/03-plan-cache-and-reuse.md
+- name: Связи
+  items:
+    - name: Связи и однозапросная загрузка
+      href: relationships/relationships.md
+    - name: Неявные навигационные запросы
+      href: relationships/implicit-navigation.md
+    - name: Жадная загрузка дочерних коллекций
+      href: relationships/eager-loading.md
+    - name: Постраничная выборка на родителя при жадной загрузке
+      href: relationships/eager-loading-per-parent-paging.md
 - name: Руководство
   items:
+    - name: Источники запроса
+      href: guide/01-query-sources.md
+    - name: Проекции
+      href: guide/02-projections.md
     - name: Фильтрация (WHERE)
-      href: guide/01-filtering-where.md
+      href: guide/03-filtering-where.md
     - name: Соединения (JOIN)
-      href: guide/02-joins.md
+      href: guide/04-joins.md
     - name: Группировка и агрегаты
-      href: guide/03-grouping-and-aggregates.md
+      href: guide/05-grouping-and-aggregates.md
     - name: Сортировка и постраничный вывод
-      href: guide/04-sorting-and-paging.md
+      href: guide/06-sorting-and-paging.md
     - name: Подзапросы
-      href: guide/05-subqueries.md
+      href: guide/07-subqueries.md
     - name: Операции над множествами
-      href: guide/06-set-operations.md
+      href: guide/08-set-operations.md
     - name: SELECT DISTINCT
-      href: guide/07-distinct.md
+      href: guide/09-distinct.md
     - name: Обобщённые табличные выражения (CTE)
-      href: guide/08-cte.md
+      href: guide/10-cte.md
     - name: Оконные функции
-      href: guide/09-window-functions.md
+      href: guide/11-window-functions.md
     - name: Пользовательские функции
-      href: guide/10-user-defined-functions.md
+      href: guide/12-user-defined-functions.md
     - name: Табличные функции
-      href: guide/11-table-valued-functions.md
+      href: guide/13-table-valued-functions.md
     - name: Сырой SQL
-      href: guide/12-raw-sql.md
+      href: guide/14-raw-sql.md
     - name: Хинты запросов
-      href: guide/13-query-hints.md
+      href: guide/15-query-hints.md
     - name: Поддержка JSON в разных провайдерах
-      href: guide/14-json.md
+      href: guide/16-json.md
     - name: Изменение данных (INSERT)
-      href: guide/15-insert-statement.md
+      href: guide/17-insert-statement.md
     - name: Изменение данных (DELETE)
-      href: guide/16-delete-statement.md
+      href: guide/18-delete-statement.md
     - name: Изменение данных (UPDATE)
-      href: guide/17-update-statement.md
+      href: guide/19-update-statement.md
     - name: Материализация запроса в таблицу
-      href: guide/18-create-table-as.md
+      href: guide/20-create-table-as.md
     - name: Изменение данных (MERGE)
-      href: guide/19-merge-statement.md
+      href: guide/21-merge-statement.md
     - name: Массовая вставка (bulk)
-      href: guide/20-bulk-insert.md
+      href: guide/22-bulk-insert.md
     - name: Транзакции
-      href: guide/21-transactions.md
+      href: guide/23-transactions.md
     - name: Колонки-длительности (TimeSpan)
-      href: guide/22-duration-columns.md
+      href: guide/24-duration-columns.md
     - name: Выполнение утверждений одним батчем
-      href: guide/23-sql-batch.md
+      href: guide/25-sql-batch.md
     - name: Оптимистичная конкурентность и отслеживание изменений
-      href: guide/24-optimistic-concurrency.md
+      href: guide/26-optimistic-concurrency.md
     - name: Range-колонки (пара скалярных колонок)
-      href: guide/25-range-columns.md
+      href: guide/27-range-columns.md
     - name: Потоковое чтение больших объектов (BLOB/CLOB)
-      href: guide/26-large-objects.md
+      href: guide/28-large-objects.md
     - name: Динамические колонки
-      href: guide/27-dynamic-columns.md
+      href: guide/29-dynamic-columns.md
     - name: Потоковое сохранение данных
-      href: guide/28-streaming-data.md
-    - name: Неявные навигационные запросы
-      href: guide/29-implicit-navigation.md
+      href: guide/30-streaming-data.md
+    - name: Специфичные для провайдеров возможности
+      href: guide/31-provider-specific-features.md
+    - name: Наследование и производные сущности
+      href: guide/32-inheritance-and-derived-entities.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор
-          href: guide/provider-specific/overview.md
+          href: guide/provider-specific-sql/overview.md
         - name: ClickHouse
-          href: guide/provider-specific/clickhouse.md
+          href: guide/provider-specific-sql/clickhouse.md
         - name: PostgreSQL
-          href: guide/provider-specific/postgresql.md
+          href: guide/provider-specific-sql/postgresql.md
         - name: SQL Server
-          href: guide/provider-specific/sqlserver.md
+          href: guide/provider-specific-sql/sqlserver.md
         - name: MySQL и MariaDB
-          href: guide/provider-specific/mysql.md
+          href: guide/provider-specific-sql/mysql.md
     - name: SQLite
-      href: guide/provider-specific/sqlite.md
+      href: guide/provider-specific-sql/sqlite.md
 - name: Инфраструктура
   items:
-    - name: "Переиспользование запросов: кэш и Prepare"
-      href: infrastructure/01-query-reuse-and-caching.md
     - name: Подключения
-      href: infrastructure/02-connections.md
+      href: infrastructure/01-connections.md
     - name: Интерцепторы
-      href: infrastructure/03-interceptors.md
+      href: infrastructure/02-interceptors.md
     - name: Конвертеры значений и JSON-колонки
-      href: infrastructure/04-value-converters.md
+      href: infrastructure/03-value-converters.md
     - name: Логирование
-      href: infrastructure/05-logging.md
-- name: Запросы
-  items:
-    - name: Обзор
-      href: querying/index.md
-    - name: Проекции
-      href: querying/01-projections.md
-    - name: Источники запроса
-      href: querying/02-query-sources.md
-    - name: Провайдер-специфика
-      href: querying/03-provider-specifics.md
+      href: infrastructure/04-logging.md
 - name: Скалярные функции
   items:
     - name: Обзор
@@ -128,24 +142,28 @@
       href: scalar-functions/07-json-and-xml.md
     - name: Справочник по провайдерам
       href: scalar-functions/08-reference.md
-- name: Провайдеры
+    - name: Системные функции
+      href: scalar-functions/09-system-functions.md
+    - name: Последовательности и генераторы UUID
+      href: scalar-functions/10-sequences.md
+- name: Подключение провайдеров
   items:
     - name: Обзор провайдеров
-      href: providers/overview.md
+      href: connecting-providers/overview.md
     - name: SQLite
-      href: providers/sqlite.md
+      href: connecting-providers/sqlite.md
     - name: SQL Server
-      href: providers/sqlserver.md
+      href: connecting-providers/sqlserver.md
     - name: PostgreSQL
-      href: providers/postgres.md
+      href: connecting-providers/postgres.md
     - name: MySQL
-      href: providers/mysql.md
+      href: connecting-providers/mysql.md
     - name: MariaDB
-      href: providers/mariadb.md
+      href: connecting-providers/mariadb.md
     - name: ClickHouse
-      href: providers/clickhouse.md
+      href: connecting-providers/clickhouse.md
     - name: In-memory
-      href: providers/in-memory.md
+      href: connecting-providers/in-memory.md
 - name: Сравнения
   href: comparisons/
 - name: Продвинутое
@@ -154,15 +172,11 @@
       href: advanced/query-filters.md
     - name: Интеграция с Entity Framework Core
       href: advanced/integration-efcore.md
-    - name: Мост фильтров запросов EF Core
-      href: advanced/ef-core-query-filters.md
-    - name: Жадная загрузка дочерних коллекций
-      href: advanced/eager-loading.md
-    - name: Связи и однозапросная загрузка
-      href: advanced/relationships.md
     - name: Ограничения и что вне области
       href: advanced/limitations.md
     - name: Нативные стратегии выбора экстремальной строки
       href: advanced/select-where-extrema-native.md
+    - name: "Расширяемость: пользовательские SQL-диалекты и рендереры"
+      href: advanced/extensibility.md
     - name: Краткий справочник API
       href: advanced/api-reference.md

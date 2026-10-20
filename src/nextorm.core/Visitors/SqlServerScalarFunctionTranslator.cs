@@ -56,7 +56,8 @@ internal static class SqlServerScalarFunctionTranslator
         nameof(SqlServerFunctions.formatmessage), nameof(SqlServerFunctions.getansinull),
         nameof(SqlServerFunctions.isdate), nameof(SqlServerFunctions.isnumeric),
         nameof(SqlServerFunctions.parsename), nameof(SqlServerFunctions.publishingservername),
-        nameof(SqlServerFunctions.str)
+        nameof(SqlServerFunctions.str),
+        nameof(SqlServerFunctions.next_value_for), nameof(SqlServerFunctions.nextval)
     };
 
     /// <summary>The functions whose <c>params</c> array is flattened back into individual arguments.</summary>
@@ -82,6 +83,18 @@ internal static class SqlServerScalarFunctionTranslator
         nameof(SqlServerFunctions.json_contains), nameof(SqlServerFunctions.json_path_exists)
     };
 
+    /// <summary>
+    /// The sequence-expression functions whose single argument is a constant name: it selects the
+    /// quoted identifier <c>NEXT VALUE FOR</c> consumes and must never be bound as a SQL parameter.
+    /// </summary>
+    private static readonly HashSet<string> SequenceFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(SqlServerFunctions.next_value_for), nameof(SqlServerFunctions.nextval)
+    };
+
+    /// <summary>The maximum length of one SQL Server identifier component (<c>sysname</c>).</summary>
+    private const int MaxIdentifierLength = 128;
+
     /// <summary>Translates a SQL Server-only scalar call; returns <c>false</c> when it is not one of them.</summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
@@ -92,6 +105,12 @@ internal static class SqlServerScalarFunctionTranslator
 
         if (visitor.Dialect.SqlServerFunctions is not { } functions || !functions.Supports(name))
             throw new NotSupportedException($"The {name} function is not supported by this provider.");
+
+        if (SequenceFunctions.Contains(name))
+        {
+            EmitSequence(visitor, name, node.Arguments);
+            return true;
+        }
 
         var isFormatMessage = name is nameof(SqlServerFunctions.formatmessage);
         var isVariadic = isFormatMessage || VariadicFunctions.Contains(name);
@@ -138,6 +157,65 @@ internal static class SqlServerScalarFunctionTranslator
 
         visitor.Builder!.Append(expression);
         return true;
+    }
+
+    /// <summary>
+    /// Renders a SQL Server sequence expression (<c>NEXT VALUE FOR</c>). The single argument must be a
+    /// compile-time string naming one object, written as one component (<c>[name]</c>) or two
+    /// (<c>[schema].[name]</c>). Each component is bracket-quoted by the dialect (an embedded <c>]</c>
+    /// is doubled) so raw name text can never escape the identifier; the constant is consumed here and
+    /// is never emitted as a parameter (also in the parameter-extraction pass).
+    /// </summary>
+    private static void EmitSequence(BaseExpressionVisitor visitor, string name, IReadOnlyList<Expression> args)
+    {
+        if (args.Count != 1)
+            throw new NotSupportedException($"The {name} function requires exactly one sequence name.");
+
+        if (TypeFacts.UnwrapConvert(args[0]) is not ConstantExpression { Value: string raw })
+            throw new NotSupportedException($"The {name} function requires a constant string sequence name.");
+
+        var quoted = QuoteSequenceName(visitor, name, raw);
+
+        if (visitor.IsParamMode)
+            return;
+
+        visitor.NeedAliasForColumn = true;
+        visitor.Builder!.Append(visitor.Dialect.SqlServerFunctions!.Render(name, [quoted]));
+    }
+
+    /// <summary>
+    /// Splits a raw sequence name on <c>.</c> into one or two nonempty components and quotes each with
+    /// the dialect identifier quoter, joining them again with <c>.</c>. Empty, NUL-containing,
+    /// over-long (<c>&gt;128</c>) and more-than-two-component names are rejected before any SQL is
+    /// emitted.
+    /// </summary>
+    private static string QuoteSequenceName(BaseExpressionVisitor visitor, string name, string raw)
+    {
+        if (raw.Length == 0)
+            throw new NotSupportedException($"The {name} sequence name must not be empty.");
+
+        if (raw.IndexOf('\0') >= 0)
+            throw new NotSupportedException($"The {name} sequence name must not contain a NUL character.");
+
+        var parts = raw.Split('.');
+
+        var quoted = new string[parts.Length];
+        for (var i = 0; i < parts.Length; i++)
+        {
+            var part = parts[i];
+            if (part.Length == 0)
+                throw new NotSupportedException($"The {name} sequence name must not contain an empty component.");
+
+            if (part.Length > MaxIdentifierLength)
+                throw new NotSupportedException($"The {name} sequence name component must not exceed {MaxIdentifierLength} characters.");
+
+            quoted[i] = visitor.Dialect.QuoteIdentifier(part);
+        }
+
+        if (parts.Length > 2)
+            throw new NotSupportedException($"The {name} sequence name must have at most two components (schema.name).");
+
+        return string.Join('.', quoted);
     }
 
     /// <summary>

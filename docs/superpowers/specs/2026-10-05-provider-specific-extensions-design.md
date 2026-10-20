@@ -150,12 +150,12 @@
 
 ## 8. Документация
 
-- EN/RU страницы: `docs/guide/07-distinct.md`, `docs/guide/03-grouping-and-aggregates.md`, `docs/guide/provider-specific/postgresql.md`, `docs/guide/provider-specific/sqlserver.md`, `docs/advanced/api-reference.md` и их RU-зеркала — обновляют `using`/импорты и DocFX xref'ы на extension-host-классы.
+- EN/RU страницы: `docs/guide/09-distinct.md`, `docs/guide/05-grouping-and-aggregates.md`, `docs/guide/provider-specific-sql/postgresql.md`, `docs/guide/provider-specific-sql/sqlserver.md`, `docs/advanced/api-reference.md` и их RU-зеркала — обновляют `using`/импорты и DocFX xref'ы на extension-host-классы.
 - MSSQL AdventureWorks sample: компиляция + формулировки в `examples/**`/`readme`/`VERIFICATION`.
 - Вводящие в заблуждение комментарии про CH-forwarding в `.csproj`/test-summaries обновляются.
 - К историческим #122-документам **дописывается** новый фактический audit-статус, а не переписывается история так, будто прежнего вынесения не было.
 - Все затронутые старые xref'ы находятся ignore-aware поиском по докам на этапе реализации; публичные доки нигде не ссылаются на внутренние `docs/specs/**` или на этот design-артефакт.
-- Migration/break guidance для удаления PG `DistinctOn` и SQLServer `Pivot`/`Unpivot` (и обновлённых `using`/provider reference) фиксируется в GitHub issue #191 (milestone 1.0.9-rc2) и на уже перечисленных существующих EN/RU-страницах (`docs/guide/07-distinct.md`, `docs/guide/03-grouping-and-aggregates.md`, `docs/guide/provider-specific/sqlserver.md`, `docs/advanced/api-reference.md` + RU-зеркала). Отдельный артефакт release-notes в этой задаче **не** создаётся; если release-notes страница уже существует, она может сослаться на эту миграцию, но это не обязательный новый артефакт scope.
+- Migration/break guidance для удаления PG `DistinctOn` и SQLServer `Pivot`/`Unpivot` (и обновлённых `using`/provider reference) фиксируется в GitHub issue #191 (milestone 1.0.9-rc2) и на уже перечисленных существующих EN/RU-страницах (`docs/guide/09-distinct.md`, `docs/guide/05-grouping-and-aggregates.md`, `docs/guide/provider-specific-sql/sqlserver.md`, `docs/advanced/api-reference.md` + RU-зеркала). Отдельный артефакт release-notes в этой задаче **не** создаётся; если release-notes страница уже существует, она может сослаться на эту миграцию, но это не обязательный новый артефакт scope.
 
 ## 9. Рабочее дерево и изоляция
 

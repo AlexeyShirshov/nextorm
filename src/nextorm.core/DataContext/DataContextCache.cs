@@ -28,6 +28,7 @@ public static class DataContextCache
     private readonly static TimedDictionary<ExpressionKey, Func<object?, object?>> _inValuesCache = new();
     private readonly static ConcurrentDictionary<string, Func<IDataContext, object>> _queryFilterContextAccessors = new();
     private static long _cacheSlidingExpirationTicks;
+    private static long _jsonRowWriterCacheGeneration;
 
     /// <summary>
     /// Process-wide gate serializing every mutation of <see cref="Metadata"/>. The EF Core model mapper
@@ -110,6 +111,18 @@ public static class DataContextCache
     }
 
     /// <summary>
+    /// Process-wide generation of the per-context JSON row-writer caches. Every
+    /// <see cref="JsonRowWriterCache"/> remembers the generation it was populated under and drops its
+    /// entries when it observes a newer one, so <see cref="Clear"/> invalidates context-owned writers
+    /// without reaching into another context's instance. Internal: an engine detail, not public cache
+    /// surface.
+    /// </summary>
+    internal static long JsonRowWriterCacheGeneration => Volatile.Read(ref _jsonRowWriterCacheGeneration);
+
+    /// <summary>Advances <see cref="JsonRowWriterCacheGeneration"/>, invalidating every context's writers.</summary>
+    internal static void InvalidateJsonRowWriterCaches() => Interlocked.Increment(ref _jsonRowWriterCacheGeneration);
+
+    /// <summary>
     /// Clears every process-wide cache in the engine: the metadata, table-valued-parameter metadata,
     /// select-list, expression and in-values caches owned by this class, the compiled row-mapper cache,
     /// the projection-alias and FROM caches, the compiled <c>JoinInto</c> identity-selector cache, and
@@ -120,10 +133,13 @@ public static class DataContextCache
     /// when that thread next touches the cache (the store is invalidated through a process-wide
     /// generation counter). A context's per-instance caches (for example
     /// <c>InMemoryDataContext.CommandIndex</c>) are not reached; clear those with
-    /// <c>PurgeQueryCache()</c>.
+    /// <c>PurgeQueryCache()</c>. The context-owned JSON row-writer caches are invalidated here through
+    /// the <see cref="JsonRowWriterCacheGeneration"/> counter: each of them drops its entries lazily on
+    /// its next lookup.
     /// </remarks>
     public static void Clear()
     {
+        InvalidateJsonRowWriterCaches();
         _metadata.Clear();
         _tvpMetadata.Clear();
         _autoPublishedJunctionMetadata.Clear();

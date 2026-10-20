@@ -53,7 +53,7 @@ Existing first-wins suppression is insufficient (encounter-order dependent).
 ## Concrete tasks
 - **D1 — fix now:** `JoinAliasGeneratorDiagnosticTests.cs:93–178,240`: characterize a real last-step fixture; add GeneratorDriver red/green, group suppression, diagnostic-location/order, duplicate and invalid-shape regressions. Record baseline results before production edits.
 - **D2 — fix now:** `JoinAliasGenerator.cs:683–787`: group by existing C# signature identity, distinguish complete rendered bodies, collapse identical bodies, suppress conflicting groups deterministically. `:110–117`: retain NORMGEN007 identity, make its explanation actionable.
-- **D3 — fix now:** `docs/guide/02-joins.md:216` + `docs/ru/guide/02-joins.md:221`: add NORMGEN007 guidance + verified remediation. Update `AnalyzerReleases.Unshipped.md:14` only if inaccurate.
+- **D3 — fix now:** `docs/guide/04-joins.md:216` + `docs/ru/guide/04-joins.md:221`: add NORMGEN007 guidance + verified remediation. Update `AnalyzerReleases.Unshipped.md:14` only if inaccurate.
 - **D4 — fix now:** run checks, collect provenance/artifacts, persist CHECK-ready evidence. Do not edit frozen signatures to make tests pass.
 - **Deferred:** signature-disambiguating API (trigger: approved compatibility design); stale AGENTS source-generator Layout claim (trigger: next Layout maintenance).
 - **Mode:** sequential D1→D2→D3→D4 in the current worktree. No worktrees/commits/merges/pushes.
@@ -143,7 +143,7 @@ Verify supported duplicate collapse + deterministic generation + intermediate `I
 - **D206-PREFLIGHT** — done.
 - **D206-RECON** — done; **+3 retained tests** in `tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs`.
 - **D206-TEST** — keep the existing fixtures/`RunSource`; retain the frozen surface assertions as-is.
-- **D206-DOC** — EN `docs/guide/02-joins.md` + RU `docs/ru/guide/02-joins.md` (defensive NORMGEN007 wording).
+- **D206-DOC** — EN `docs/guide/04-joins.md` + RU `docs/ru/guide/04-joins.md` (defensive NORMGEN007 wording).
 - **D206-EVIDENCE** — rv2 manifest + logs under `artifacts/pdca/D206/rv2/`.
 - **D206-GAP** — retain R01/R02 in #206 under the same milestone `1.0.9-rc2`; reopen trigger = a committed supported-syntax reproducer **or** an approved design that invalidates the purity proof.
 
@@ -160,7 +160,7 @@ Verify supported duplicate collapse + deterministic generation + intermediate `I
 | Container providers | required integration TEST |
 
 ### Docs plan
-EN `docs/guide/02-joins.md` + RU `docs/ru/guide/02-joins.md`; no generated pages; no links into `docs/specs`.
+EN `docs/guide/04-joins.md` + RU `docs/ru/guide/04-joins.md`; no generated pages; no links into `docs/specs`.
 
 ### Perf decision
 **No benchmark** — the generator algorithm is unchanged and generation happens at build time (`JoinAliasGenerator.cs:145-157,763`), not per query or per row.
@@ -204,7 +204,7 @@ GAP rows stay `open` (never `na`/`met`).
 | 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-PREFLIGHT **done** | scope validated (`scripts/validate_inner_loop.py brief`) exit 0 |
 | 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-RECON **done** | alias suite 103 passed; `artifacts/pdca/D206/rv2/recon.log` |
 | 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-TEST **done** | R03/R07 oracle tests green; `tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs` |
-| 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-DOC **done** (limitation only) | `docs/guide/02-joins.md`, `docs/ru/guide/02-joins.md`; R05 workaround sub-obligation retained open |
+| 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-DOC **done** (limitation only) | `docs/guide/04-joins.md`, `docs/ru/guide/04-joins.md`; R05 workaround sub-obligation retained open |
 | 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-EVIDENCE **done** | `artifacts/pdca/D206/rv2/manifest.json`; validator exit 0 |
 | 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-GAP **retained/open** | R01/R02 + R05 workaround GAP; `artifacts/pdca/D206/rv2/GAP.md` |
 | 2026-10-10T14:53Z | DO->CHECK | r2 | n1/3 | DO to CHECK boundary: C1 0/21, C2 0/103, C3 0, C4 0, C5 0, C6 0, C7 0, C8 0, C9 0; coverage line 88.4% branch 80.4%; docs-build exit 0; integration 3635 total 0 failed | `artifacts/pdca/D206/rv2/{recon.log,build-release.log,coverage-report/Summary.json,integration.log,docs-build.log,hygiene.log,manifest.json}` |

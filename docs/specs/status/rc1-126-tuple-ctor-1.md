@@ -39,9 +39,9 @@ clear the "phase 2" notes from `docs/advanced/limitations.md` EN+RU.
   integration `tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:1213,1225,1238`;
   cross-provider `CommonTestSuite.SqlCommand.cs:108`; **no tuple tests** in `tests/nextorm.sqlite.tests`,
   `tests/nextorm.mysql.tests`, `tests/nextorm.mariadb.tests`, nor a core guard-rejection test.
-- Docs: `docs/advanced/limitations.md:29` + RU; `docs/providers/overview.md:111` + RU;
-  `docs/scalar-functions/06-arrays.md:143-155` + RU; `docs/guide/provider-specific/clickhouse.md:234-236`;
-  `docs/guide/12-raw-sql.md:540`; specs `docs/specs/roadmap/sql-capabilities-gap-analysis.md:46,450-455,714`,
+- Docs: `docs/advanced/limitations.md:29` + RU; `docs/connecting-providers/overview.md:111` + RU;
+  `docs/scalar-functions/06-arrays.md:143-155` + RU; `docs/guide/provider-specific-sql/clickhouse.md:234-236`;
+  `docs/guide/14-raw-sql.md:540`; specs `docs/specs/roadmap/sql-capabilities-gap-analysis.md:46,450-455,714`,
   `docs/specs/comparison/capability-matrix.md:94`, `docs/specs/comparison/linq2db-comparison.md:87,173-175`;
   no `todo_*` file for #126.
 - Open design question (from run 1): whether `.ItemN` positional field access is representable on

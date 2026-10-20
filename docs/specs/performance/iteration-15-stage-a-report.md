@@ -2,7 +2,8 @@
 
 - Task: #183 (cycle 2, Stage A). Base commit: `01f3e9202ed710f6a459012e80fd2bcfa4c19708`.
 - Branch / worktree: `collection/1.0.9-b-5/group-1` / `nextorm-worktrees/1.0.9-b-5/group-1`.
-- Design: `docs/specs/performance/iteration-15-cached-path-design.md` (approval `5137ec8`).
+- Design: закрыт вместе с #183; исходный дизайн (`iteration-15-cached-path-design.md`) удалён, итог —
+  `decisions-and-lessons.md` R13 и `iteration-15-cached-path-results.md` (approval `5137ec8`).
 - Machine-readable evidence: `docs/specs/performance/iteration-15-stage-a-manifest.json`.
 - **No `src/nextorm.core` edit in Stage A**: `git diff --exit-code 01f3e92 -- src/nextorm.core` exits `0`
   (empty diff). `CteHoister` predicate: `git diff --exit-code 01f3e92 -- src/nextorm.core/Builders/CteHoister.cs`
@@ -181,7 +182,7 @@ command instance) — the same mechanism the production plan-cache tests assert.
 
 Normalization: `B/op = Memory.BytesAllocatedPerOperation / 100` logical ops. Budget =
 `ceil(observed × 1.20)` B/op (a `>20 %` allocation-growth budget aligned with the acceptance rule).
-`Prepared_ToList` stays at the existing **no-growth 780 B/op** (`eng/perf/iteration14-budgets.json`).
+`Prepared_ToList` stays at the existing **no-growth 780 B/op** (`scripts/perf/iteration14-budgets.json`).
 
 | Arm | Observed B/op | Frozen budget B/op |
 |-----|--------------:|-------------------:|
@@ -245,8 +246,8 @@ Command: `rg -c -- '<pattern>' <files>`. Ratios are `count / 1391`.
 | `GC.Collect` | 0 | 0.00000 | — |
 | `Console.Write` | 4 | 0.00288 | `StageADiagnostics.cs:89,90,91` (STAGE-A JSON emit channel), `Program.cs:36` (commented-out dev line) |
 
-Files: `benchmarks/nextorm.benchmark/Program.cs` (36), `benchmarks/nextorm.benchmark/SqliteBenchmarkStageA.cs`
-(198), `benchmarks/nextorm.benchmark/StageADiagnostics.cs` (429),
+Files: `benchmarks/nextorm.benchmark/Program.cs` (36), `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStageA.cs`
+(198), `benchmarks/nextorm.benchmark/Diagnostics/StageADiagnostics.cs` (429),
 `tests/nextorm.core.tests/PlanKeyStructureTests.cs` (336),
 `tests/nextorm.sqlite.tests/DataContextCacheClearTests.cs` (100),
 `tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs` (292). All suppression/slop markers are

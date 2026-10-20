@@ -68,7 +68,7 @@ public sealed class AddNextOrmFromDbContextTests : EfCoreMetadataCleanup
         var ctx = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var sql = NextOrmSql.Of(ctx, ctx.From<DiRow>().Select(x => new { x.Id }));
 
-        sql.Should().Be("SELECT di_id AS 'Id' FROM di_entity");
+        sql.Should().Be("SELECT di_id AS 'Id'\n FROM di_entity");
     }
 
     [Fact]
@@ -87,7 +87,7 @@ public sealed class AddNextOrmFromDbContextTests : EfCoreMetadataCleanup
         var ctx = scope.ServiceProvider.GetRequiredService<IDataContext>();
         var sql = NextOrmSql.Of(ctx, ctx.From<DiRow>().Select(x => new { x.Id }));
 
-        sql.Should().Be("SELECT \"di_id\" AS 'Id' FROM \"di_entity\"");
+        sql.Should().Be("SELECT \"di_id\" AS 'Id'\n FROM \"di_entity\"");
     }
 
     [Fact]

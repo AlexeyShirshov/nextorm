@@ -1,0 +1,2 @@
+command: python3 .pdca/scripts/validate_inner_loop.py brief .pdca/T245/rv1/scope-d245-1-instrumentation.json
+rc=0

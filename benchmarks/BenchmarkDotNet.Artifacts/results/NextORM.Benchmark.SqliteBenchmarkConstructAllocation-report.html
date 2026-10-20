@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.SqliteBenchmarkConstructAllocation-20261019-064925</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host]   : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  ShortRun : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  IterationCount=3  LaunchCount=1  
+WarmupCount=3  Categories=B_Construct  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                    </th><th>Toolchain       </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>B_Nextorm_Construct_Cte</td><td>InProcessEmitToolchain</td><td>4.018 &mu;s</td><td>1.098 &mu;s</td><td>0.0602 &mu;s</td><td>0.8240</td><td>-</td><td>6.81 KB</td>
+</tr><tr><td>B_Nextorm_Construct_Cte</td><td>Default</td><td>4.949 &mu;s</td><td>8.762 &mu;s</td><td>0.4803 &mu;s</td><td>0.8240</td><td>-</td><td>6.97 KB</td>
+</tr><tr><td>B_Nextorm_Construct_RecursiveCte</td><td>InProcessEmitToolchain</td><td>5.547 &mu;s</td><td>4.245 &mu;s</td><td>0.2327 &mu;s</td><td>1.0071</td><td>0.0076</td><td>8.24 KB</td>
+</tr><tr><td>B_Nextorm_Construct_RecursiveCte</td><td>Default</td><td>6.418 &mu;s</td><td>11.864 &mu;s</td><td>0.6503 &mu;s</td><td>1.0071</td><td>-</td><td>8.46 KB</td>
+</tr></tbody></table>
+</body>
+</html>

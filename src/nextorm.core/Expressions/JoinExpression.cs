@@ -176,6 +176,23 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// </summary>
     internal QueryFilterScope? FilterScope { get; set; }
     /// <summary>
+    /// The per-parent paging child's own ordered keys (<c>ORDER BY</c> expressions rooted at the child
+    /// entity type), or <see langword="null"/> when this join is not an embedded per-parent paging
+    /// source. The pair command appends them after its parent ordering so each parent's stitched
+    /// children keep the child query's order; the renderer resolves the child parameter to this join's
+    /// own outer alias. Internal rendering metadata, never part of the public surface, and it does not
+    /// replace the child command's own ordering (the ranking window still uses that).
+    /// </summary>
+    internal Sorting[]? EagerPerParentOrdering { get; init; }
+    /// <summary>
+    /// The 1-based accumulated-projection item (<c>Item1</c> = the root entity) that holds this join's
+    /// direct parent, for a nested single-query <c>LoadWith</c> join. Set at plan time where the tree is
+    /// known, so a repeated CLR type resolves to its actual direct parent instead of the most recent
+    /// same-typed sibling. <c>0</c> when unset (a plain <c>JoinInto</c> falls back to the structural
+    /// resolver). Internal rendering metadata, never part of the public surface.
+    /// </summary>
+    internal int EagerParentItemNumber { get; set; }
+    /// <summary>
     /// Returns the command's own copy-on-write clone used by preparation (see
     /// <c>QueryPreparer.PrepareJoin</c>). Builders share <see cref="JoinExpression"/> elements by
     /// reference across clones, so preparation must mutate only this command's copy. The copy bases its
@@ -200,6 +217,8 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             JoinIntoIdentity = JoinIntoIdentity,
             SuppressCartesianWarning = SuppressCartesianWarning,
             FilterScope = FilterScope,
+            EagerPerParentOrdering = EagerPerParentOrdering,
+            EagerParentItemNumber = EagerParentItemNumber,
         };
     internal JoinExpression CloneForCache()
     {
@@ -220,6 +239,8 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             JoinIntoIdentity = JoinIntoIdentity,
             SuppressCartesianWarning = SuppressCartesianWarning,
             FilterScope = FilterScope,
+            EagerPerParentOrdering = EagerPerParentOrdering,
+            EagerParentItemNumber = EagerParentItemNumber,
         };
     }
     // public override int GetHashCode()

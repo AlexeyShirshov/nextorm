@@ -36,7 +36,7 @@
 | D0 | frozen contract, D-plan, collection row, baselines to `/tmp/opencode/118/` | this file, `collection-1.0.9-b.md` | done (this round) |
 | D1 | core API: `ResultSet` struct + `ReadSets`/`ReadSetsAsync` + cursor guards + mapping helpers | `src/nextorm.core/DataContext/ResultSet.cs` (new), `ProcedureResult.cs` | done (this round) |
 | D2 | behavioural test suite for the full contract (sync + async edge cases) | `tests/nextorm.sqlite.tests/RawResultSetTraversalTests.cs` | done (24 traversal tests; V8/V9/V12 async variants + V16/V18) |
-| D3 | docs EN+RU (`docs/guide/12-raw-sql.md`, `docs/advanced/api-reference.md` + `docs/ru/**`) | docs | done (EN+RU incl. `ResultSet` api-reference + pointer fix) |
+| D3 | docs EN+RU (`docs/guide/14-raw-sql.md`, `docs/advanced/api-reference.md` + `docs/ru/**`) | docs | done (EN+RU incl. `ResultSet` api-reference + pointer fix) |
 | D4 | coverage close-out + perf acceptance (cached path unchanged) | tests/benchmarks | done (88.2 line / 78.9 branch; `ProcedureResultSetsBenchmark`; acceptance 7/7) |
 | D5 | audits: `nextorm-code-auditor` + `nextorm-design-engineer` | — | done |
 | D6 | final status record / collection close-out | this file | done |
@@ -74,7 +74,7 @@
 
 ## 5. Docs plan (D3)
 
-- EN: `docs/guide/12-raw-sql.md` (new "Result-set cursors" subsection beside the existing multiple-result-sets text) and `docs/advanced/api-reference.md` (add `ResultSet`).
+- EN: `docs/guide/14-raw-sql.md` (new "Result-set cursors" subsection beside the existing multiple-result-sets text) and `docs/advanced/api-reference.md` (add `ResultSet`).
 - RU mirrors under `docs/ru/**` in the same change; renumber/link hygiene per `AGENTS.md`; no links to `docs/specs/**` from public pages.
 
 ## 6. Perf plan (D4)
@@ -108,6 +108,6 @@
 - **Activation on first `MoveNext`/`MoveNextAsync`.** The one-shot/mode guard is claimed eagerly by `BeginSetTraversal()`, but `_traversalActive` and reader activation happen inside the iterator cores, so an un-enumerated `ReadSets*` sequence never blocks `OutputParameters`/`ReturnValue`.
 - **Async lifetime fix.** `ReadCurrentSetAsync<T>` deliberately does NOT `InvalidateCurrentCursor()` on completion: an inner lazy read that finishes after the outer cursor advanced must not zero `_resultSetIndex` and impersonate that advance. The consumed flag keeps a stale copy from re-reading the set.
 - **Tests.** `RawResultSetTraversalTests` now covers V1–V18 incl. V16 (disposed owner ⇒ `ObjectDisposedException`), V18 (cancellation ⇒ `OperationCanceledException`, traversal invalidated, restart forbidden) and the async V8/V9/V12 variants; plus integration `~ResultSet` 42/42 and `~Raw` 170/170 across SQLite/PostgreSQL/SQL Server/MySQL. RED→GREEN on the sqlite traversal suite: **4 failed → 0**; full suite 7115 total / 0 failed / 188 capability skips (all providers live).
-- **Docs.** `docs/guide/12-raw-sql.md` + `docs/advanced/api-reference.md` and their `docs/ru/**` mirrors updated with the result-set cursors and `ResultSet`; a stale pointer in the api-reference link was fixed. `dotnet docfx docs/docfx.json` 0 Warning / 0 Error.
+- **Docs.** `docs/guide/14-raw-sql.md` + `docs/advanced/api-reference.md` and their `docs/ru/**` mirrors updated with the result-set cursors and `ResultSet`; a stale pointer in the api-reference link was fixed. `dotnet docfx docs/docfx.json` 0 Warning / 0 Error.
 - **Flake hardening (#125).** Test-only serialization of the shared-global EF query-filter integration classes via `[Collection("EF query filter lifecycle")]`; assertions unchanged.
 - **Deferred-with-trigger.** Deterministic (non-sleep) eviction for the sliding-expiration lifecycle test — reopen if it recurs under verified isolation.

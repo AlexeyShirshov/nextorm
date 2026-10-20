@@ -1,0 +1,36 @@
+test_duplicate_case_rejected (test_t247_json_gate.CaseAccessTests) ... ok
+test_missing_mean_and_allocation_rejected (test_t247_json_gate.CaseAccessTests) ... ok
+test_ratio_math (test_t247_json_gate.CaseAccessTests) ... ok
+test_zero_matched_cases_rejected (test_t247_json_gate.CaseAccessTests) ... ok
+test_all_fail (test_t247_json_gate.CheckVerdictTests) ... ok
+test_all_pass (test_t247_json_gate.CheckVerdictTests) ... ok
+test_discordant (test_t247_json_gate.CheckVerdictTests) ... ok
+test_compare_command_discordant_is_inconclusive (test_t247_json_gate.CommandTests) ... ok
+test_compare_command_pass (test_t247_json_gate.CommandTests) ... ok
+test_compare_command_zero_match_is_input_error (test_t247_json_gate.CommandTests) ... ok
+test_phases_command_attributes_and_labels_residual (test_t247_json_gate.CommandTests) ... ok
+test_phases_command_missing_compile_arm (test_t247_json_gate.CommandTests) ... ok
+test_preflight_prerequisites_resolve (test_t247_json_gate.CommandTests) ... ok
+test_allocation_cap_exact_boundary (test_t247_json_gate.CompareFixtureTests) ... ok
+test_byte_control_mismatch_fails (test_t247_json_gate.CompareFixtureTests) ... ok
+test_discordant_rounds_are_inconclusive (test_t247_json_gate.CompareFixtureTests) ... ok
+test_fewer_than_two_rounds_is_input_error (test_t247_json_gate.CompareFixtureTests) ... ok
+test_good_fixture_passes (test_t247_json_gate.CompareFixtureTests) ... ok
+test_intercept_nonpositive_fails (test_t247_json_gate.CompareFixtureTests) ... ok
+test_missing_acceptance_evidence_is_input_error (test_t247_json_gate.CompareFixtureTests) ... ok
+test_missing_case_is_input_error (test_t247_json_gate.CompareFixtureTests) ... ok
+test_ratio_failure (test_t247_json_gate.CompareFixtureTests) ... ok
+test_degenerate_x_rejected (test_t247_json_gate.InterceptFitTests) ... ok
+test_exact_linear_points (test_t247_json_gate.InterceptFitTests) ... ok
+test_negative_intercept (test_t247_json_gate.InterceptFitTests) ... ok
+test_too_few_points_rejected (test_t247_json_gate.InterceptFitTests) ... ok
+test_no_cli_option_configures_a_threshold (test_t247_json_gate.ThresholdImmutabilityTests) ... ok
+test_parser_rejects_threshold_flags (test_t247_json_gate.ThresholdImmutabilityTests) ... ok
+test_pinned_values (test_t247_json_gate.ThresholdImmutabilityTests) ... ok
+test_thresholds_are_a_frozen_mapping (test_t247_json_gate.ThresholdImmutabilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 30 tests in 0.325s
+
+OK
+TESTS_RC=0

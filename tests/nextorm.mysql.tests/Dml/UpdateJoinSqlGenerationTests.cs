@@ -1,0 +1,89 @@
+using FluentAssertions;
+using NextORM.Core;
+
+namespace NextORM.MySql.Tests;
+
+/// <summary>
+/// SQL generation of the multi-table <c>UPDATE ... JOIN ... SET</c> builder on MySQL: the join
+/// specification sits between <c>UPDATE</c> and <c>SET</c>, and the <c>SET</c> list is qualified by the
+/// target alias.
+/// </summary>
+public class UpdateJoinSqlGenerationTests
+{
+    [Fact]
+    public void UpdateJoin_SetConstant_ShouldRenderJoinBeforeSet()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        ctx.From<IMergeEntity>()
+            .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.Name, "x")
+            .ToSql()
+            .Should().Be("update merge_entity as `t1` join merge_entity as `t2` on t1.id = t2.id set t1.name = @p0");
+    }
+
+    [Fact]
+    public void UpdateJoin_FromCte_ShouldHoistWith()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var e = ctx.From<ISimpleEntity>();
+        var scope = ctx.With("c", e.Where(x => x.Id > 0).Select(x => new { x.Id }));
+
+        var sql = e
+            .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.Id, 0)
+            .ToSql();
+
+        sql.Should().StartWith("with c as (select id\n from simple_entity");
+        sql.Should().Contain("update simple_entity as `t1` join c as `t2` on t1.id = t2.id set t1.id = @p0");
+    }
+
+    [Fact]
+    public void UpdateJoin_SetJoinedColumn_ShouldQualifyBothSides()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        ctx.From<ISimpleEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id)
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.Id, p => p.Item2.Id)
+            .Where(p => p.Item1.Id == 1)
+            .ToSql()
+            .Should().Be("update simple_entity as `t1` join simple_entity as `t2` on t1.id = t2.id set t1.id = t2.id where t1.id = 1");
+    }
+
+    [Fact]
+    public void UpdateJoin_DmlScopeHint_ShouldFoldIntoInlineComment()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = ctx.From<IMergeEntity>()
+            .WithTablesInScopeHint("NO_RANGE_OPTIMIZATION(t1)")
+            .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.Name, "x")
+            .ToSql();
+
+        sql.Should().Be("update /*+ NO_RANGE_OPTIMIZATION(t1) */ merge_entity as `t1` join merge_entity as `t2` on t1.id = t2.id set t1.name = @p0");
+        (sql.Split("/*+").Length - 1).Should().Be(1);
+    }
+
+    [Fact]
+    public void UpdateJoin_DmlScopeHint_ShouldComposeWithJoinHintInOneComment()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = ctx.From<IMergeEntity>()
+            .WithTablesInScopeHint("NO_RANGE_OPTIMIZATION(t1)")
+            .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinHint("JOIN_ORDER(t1,t2)"))
+            .CreateUpdateJoinBuilder()
+            .Set(p => p.Item1.Name, "x")
+            .ToSql();
+
+        sql.Should().Be("update /*+ NO_RANGE_OPTIMIZATION(t1) JOIN_ORDER(t1,t2) */ merge_entity as `t1` join merge_entity as `t2` on t1.id = t2.id set t1.name = @p0");
+        (sql.Split("/*+").Length - 1).Should().Be(1);
+    }
+}

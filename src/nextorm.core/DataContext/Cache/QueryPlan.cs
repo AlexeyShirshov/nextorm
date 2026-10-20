@@ -20,6 +20,11 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     // and therefore the hash — must not change. Keeping it in a readonly field makes GetHashCode
     // stable even after GetCacheVersion() mutates the plan, which a dictionary key requires.
     private readonly int _hashPlan;
+    // The resolved eager-load strategy and the structural eager-load graph are captured here (not only
+    // read back from the command) so plan identity stays stable after GetCacheVersion swaps in an equal
+    // clone, exactly like _hashPlan.
+    private readonly EagerLoadMode _eagerLoadMode;
+    private readonly EagerLoadShape _eagerLoadShape;
     // Non-null only for the test-only collision seam. When set, ComputeHash returns it verbatim, so
     // the "_hashPlan == ComputeHash(...)" invariant (asserted by GetCacheVersion) holds even for a
     // forced collision; production plans leave it null and hash structurally as before.
@@ -37,6 +42,8 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         QueryCommand = cmd;
         _sql = sql;
         _comparer = cmd.GetQueryPlanEqualityComparer();
+        _eagerLoadMode = cmd.ResolvedEagerLoadMode;
+        _eagerLoadShape = cmd.EagerLoadShape;
         _hashPlan = ComputeHash(cmd, sql, _comparer);
     }
 
@@ -57,6 +64,8 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         _sql = sql;
         _comparer = cmd.GetQueryPlanEqualityComparer();
         _forcedHash = forcedHash;
+        _eagerLoadMode = cmd.ResolvedEagerLoadMode;
+        _eagerLoadShape = cmd.EagerLoadShape;
         _hashPlan = ComputeHash(cmd, sql, _comparer);
     }
 
@@ -76,6 +85,10 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
             {
                 var hash = new XxHash32();
                 hash.Add(cmd, comparer);
+                // The eager strategy/shape are hashed explicitly as well as through the comparer, so the
+                // captured plan identity is self-consistent even if a command is later re-cloned.
+                hash.Add((int)_eagerLoadMode);
+                _eagerLoadShape.AddTo(ref hash);
                 hash.Add(sql);
                 return hash.ToHashCode();
             }
@@ -113,7 +126,10 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         if (ReferenceEquals(this, obj)) return true;
         if (obj is null) return false;
 
-        return _sql == obj._sql && _comparer.Equals(QueryCommand, obj.QueryCommand);
+        return _sql == obj._sql
+            && _eagerLoadMode == obj._eagerLoadMode
+            && _eagerLoadShape.Equals(obj._eagerLoadShape)
+            && _comparer.Equals(QueryCommand, obj.QueryCommand);
     }
 
     /// <summary>

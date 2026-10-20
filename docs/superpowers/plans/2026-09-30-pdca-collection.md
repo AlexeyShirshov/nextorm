@@ -224,7 +224,7 @@ Run: `perl -pi -e 's/\r?\n/\r\n/g' AGENTS.md`
 ### Task 6: Детерминированный тест git-модели коллекции
 
 **Files:**
-- Create: `tests/pdca-collection/git-model-sim.sh` (скрипт-проверка git-механики; вне продуктового кода)
+- Create: `tests/pdca-collection/git-model-sim.sh` (скрипт-проверка git-механики; вне продуктового кода). **Перенесён** в репозиторий скилла: `AlexeyShirshov/skills: opencode/pdca-collection/tests/git-model-sim.sh` — тест принадлежит контракту скилла, а не nextorm.
 
 **Interfaces:**
 - Consumes: ничего (изолированный temp-repo).
@@ -236,13 +236,13 @@ Run: `perl -pi -e 's/\r?\n/\r\n/g' AGENTS.md`
 
 - [ ] **Step 2: Запустить тест и убедиться, что он проходит**
 
-Run: `bash tests/pdca-collection/git-model-sim.sh`
+Run: `bash opencode/pdca-collection/tests/git-model-sim.sh` (из чекаута `AlexeyShirshov/skills`)
 Expected: `OK: group-A merged, group-B merged, 2 merge commits`.
 
 - [ ] **Step 3: Проверить сценарий конфликта (Review Focus)**
 
 Добавить в скрипт второй кейс: обе группы меняют одну строку → `git merge --no-ff` второй группы даёт конфликт → скрипт ассертит `merge упал` (ненулевой код) и «группа failed».
-Run: `bash tests/pdca-collection/git-model-sim.sh`
+Run: `bash opencode/pdca-collection/tests/git-model-sim.sh` (из чекаута `AlexeyShirshov/skills`)
 Expected: `OK: conflict detected, group marked failed`.
 
 - [ ] **Step 4: Commit**

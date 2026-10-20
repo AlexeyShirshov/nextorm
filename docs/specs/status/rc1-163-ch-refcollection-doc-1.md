@@ -26,8 +26,8 @@ Decision = **verification/disposition closure** (not implementation). #163 is al
 - the rejection test exists
   (`tests/nextorm.integration.tests/ClickHouseImplicitNavigationTests.cs:100`,
   `Reference_to_collection_is_rejected_with_a_precise_diagnostic`);
-- EN+RU docs state the accepted limitation (`docs/guide/29-implicit-navigation.md`,
-  `docs/ru/guide/29-implicit-navigation.md`, `docs/advanced/limitations.md`,
+- EN+RU docs state the accepted limitation (`docs/guide/31-implicit-navigation.md`,
+  `docs/ru/guide/31-implicit-navigation.md`, `docs/advanced/limitations.md`,
   `docs/ru/advanced/limitations.md`);
 - the authoritative milestone is `1.0.9-rc1` (verified from the issue), not the earlier `1.0.9-rc2`
   mention in the historical SCOPE SIGN-OFF r3.
@@ -88,7 +88,7 @@ Disposition: **close as completed** (D3, after CHECK PASS) once E163 evidence is
 | R163-01 | E163-01 | Gate + precise diagnostic in source | read `src/nextorm.core/ISqlDialect.cs` (DIM) + `src/nextorm.clickhouse/ClickHouseDialect.cs` override; explicit PASS/FAIL | source pointers | coder | always | rv1 |
 | R163-01 | E163-02 | Rejection test exists and asserts precise message | read `tests/nextorm.integration.tests/ClickHouseImplicitNavigationTests.cs:100`; explicit PASS/FAIL | test pointer | coder | always | rv1 |
 | R163-02 | E163-03 | Real ClickHouse container rejection test | `DOCKER_HOST=... dotnet test tests/nextorm.integration.tests -c Debug --filter "FullyQualifiedName~ClickHouseImplicitNavigationTests.Reference_to_collection_is_rejected_with_a_precise_diagnostic"`; exit 0, 0 failed | `/tmp/nextorm-d163/ch-rejection.log` | coder | always | rv1 |
-| R163-03 | E163-04 | EN+RU docs state accepted limitation + precise rejection | read `docs/guide/29-implicit-navigation.md`, `docs/ru/guide/29-implicit-navigation.md`, `docs/advanced/limitations.md`, `docs/ru/advanced/limitations.md`; explicit PASS/FAIL | doc pointers | coder | always | rv1 |
+| R163-03 | E163-04 | EN+RU docs state accepted limitation + precise rejection | read `docs/guide/31-implicit-navigation.md`, `docs/ru/guide/31-implicit-navigation.md`, `docs/advanced/limitations.md`, `docs/ru/advanced/limitations.md`; explicit PASS/FAIL | doc pointers | coder | always | rv1 |
 | R163-04 | E163-05 | Framing audit — no residual affirmative defect framing | `git grep -n -i -E 'clickhouse\|#163\|reference.{0,12}collection\|reference→collection\|коррелир' -- docs readme.md`; manual classification of each hit | `/tmp/nextorm-d163/framing-audit.log` | coder | always | rv1 |
 | R163-05 | E163-06 | Build 0/0 | `dotnet build nextorm.slnx -c Debug`; exit 0, 0 warnings / 0 errors | `/tmp/nextorm-d163/build-debug.log` | coder | always | rv1 |
 | R163-05 | E163-07 | No production/test/config change | `git diff -- src tests` empty; `git status --porcelain` shows only status docs | `/tmp/nextorm-d163/prod-diff.log` | coder | always | rv1 |

@@ -1,2 +1,0 @@
-brief_exit=0
-report_exit=0

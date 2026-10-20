@@ -19,7 +19,8 @@ var values = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select abs((id - 5)) from complex_entity
+select abs((id - 5))
+ from complex_entity
 ```
 
 The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
@@ -82,3 +83,17 @@ The remaining math functions are part of the extended scalar library
 [`SupportsRandomSeed`](xref:NextORM.Core.ISqlDialect.SupportsRandomSeed) (PostgreSQL only). The
 PostgreSQL function returns `void`, so a projected value is always `null` and the call is made for its
 side effect (subsequent `random()` calls in the session become reproducible).
+
+## SQL Server random
+
+`SqlFunctions.SqlServer.rand()` / `rand(seed)` render `rand()` / `rand(seed)` and are gated per name
+by [`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions) (SQL Server only; every other
+provider throws `NotSupportedException`):
+
+| C# | SQL |
+|---|---|
+| `rand()` / `rand(seed)` | `rand()` / `rand(seed)` |
+
+`rand` without a seed is **non-deterministic** and evaluated by the server; a fixed integer seed makes
+the sequence reproducible. The PostgreSQL `random()`/`setseed()` equivalent is in the
+[extended math](#postgresql-extended-math) section above.

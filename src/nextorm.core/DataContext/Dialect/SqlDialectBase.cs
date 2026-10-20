@@ -636,6 +636,13 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual string MakeNow(bool utc) => utc ? "now() at time zone 'utc'" : "now()";
     /// <inheritdoc/>
+    public virtual bool SupportsDateTimeOffsetTranslation => false;
+    /// <inheritdoc/>
+    public virtual string MakeDateTimeOffsetNow(bool utc) =>
+        throw new NotSupportedException("DateTimeOffset.Now/UtcNow translation is not supported by this SQL dialect.");
+    /// <inheritdoc/>
+    public virtual string MakeDatePart(string part, string value, bool isDateTimeOffset) => MakeDatePart(part, value);
+    /// <inheritdoc/>
     public virtual string MakeMathFunction(string name, IReadOnlyList<string> args) =>
         $"{name}({string.Join(", ", args)})";
     /// <summary>
@@ -673,6 +680,9 @@ public abstract class SqlDialectBase : ISqlDialect
 
         return $"{value} + ({amount} * interval '{unit}')";
     }
+    /// <inheritdoc/>
+    public virtual string MakeDateAdd(string field, string amount, string value, bool isDateTimeOffset) =>
+        MakeDateAdd(field, amount, value);
     /// <inheritdoc/>
     public virtual string MakeDateDiff(string field, string start, string end) =>
         MakeDateDiffCore(field, start, end, big: false);
@@ -793,6 +803,9 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <inheritdoc/>
     public virtual string WrapCount(string countExpression, bool big) => countExpression;
+
+    /// <inheritdoc/>
+    public virtual string WrapIntegerWindowResult(string windowExpression) => windowExpression;
 
     /// <inheritdoc/>
     public virtual string MakeSubqueryPredicate(string keyword, string query, bool asPredicate) => $"{keyword}({query})";
@@ -992,6 +1005,13 @@ public abstract class SqlDialectBase : ISqlDialect
     /// recursive API, never a legacy <c>WithRecursive</c> declaration.
     /// </summary>
     public virtual bool SupportsRecursiveCte => true;
+
+    /// <summary>
+    /// Defaults to <c>false</c>. When <c>true</c>, a recursive CTE body must be <c>UNION ALL</c>: a legacy
+    /// <c>WithRecursive</c> declaration whose body is a distinct <c>UNION</c> is rejected during preparation
+    /// (before execution and before the plan cache). SQL Server overrides it to <c>true</c>.
+    /// </summary>
+    public virtual bool RequiresRecursiveCteUnionAll => false;
 
     /// <summary>Defaults to <c>false</c>; only PostgreSQL returns the affected rows of a multi-table <c>UPDATE ... FROM ... JOIN</c>.</summary>
     public virtual bool SupportsUpdateJoinReturning => false;

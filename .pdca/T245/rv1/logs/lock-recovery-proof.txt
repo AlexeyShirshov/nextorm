@@ -1,0 +1,141 @@
+=== PROOF 2026-10-18T16:49:17Z ===
+--- ps full ---
+    PID    PPID                  STARTED ELAPSED STAT COMMAND
+2002215     669 Sun Oct 18 21:25:32 2026    1424 Sl   /home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false
+2002312     669 Sun Oct 18 21:25:34 2026    1422 Sl   /home/alex/.dotnet/dotnet /home/alex/.dotnet/sdk/10.0.401/MSBuild.dll /noautoresponse /nologo /nodemode:1 /nodeReuse:true /low:false
+--- cpu ---
+    PID %CPU     TIME
+2002215  1.4 00:00:20
+2002312  1.4 00:00:20
+--- children ---
+pid=2002215 children:[]
+pid=2002312 children:[]
+--- fdinfo/3 ---
+### 2002215
+pos:	0
+flags:	0100000
+mnt_id:	62
+ino:	187859
+lock:	1: FLOCK  ADVISORY  WRITE 0 08:30:187859 0 EOF
+### 2002312
+pos:	0
+flags:	0100000
+mnt_id:	62
+ino:	187859
+lock:	1: FLOCK  ADVISORY  WRITE 0 08:30:187859 0 EOF
+--- fd list ---
+### 2002215
+total 0
+lr-x------ 1 alex alex 64 Oct 18 21:48 0 -> pipe:[23834929]
+l-wx------ 1 alex alex 64 Oct 18 21:48 1 -> pipe:[23834930]
+lr-x------ 1 alex alex 64 Oct 18 21:48 10 -> /dev/urandom
+lr-x------ 1 alex alex 64 Oct 18 21:48 100 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/Microsoft.Win32.Registry.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 101 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/Microsoft.Win32.Registry.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 102 -> /home/alex/.dotnet/sdk/10.0.401/NuGet.Frameworks.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 103 -> /home/alex/.dotnet/sdk/10.0.401/NuGet.Frameworks.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 104 -> /home/alex/.dotnet/sdk/10.0.401/Microsoft.Build.Utilities.Core.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 105 -> /home/alex/.dotnet/sdk/10.0.401/Microsoft.Build.Utilities.Core.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 106 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/System.Numerics.Vectors.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 107 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/System.Numerics.Vectors.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 108 -> /home/alex/.dotnet/sdk/10.0.401/Sdks/Microsoft.NET.Sdk/tools/net10.0/Microsoft.NET.Build.Tasks.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 109 -> /home/alex/.dotnet/sdk/10.0.401/Sdks/Microsoft.NET.Sdk/tools/net10.0/Microsoft.NET.Build.Tasks.dll
+lrwx------ 1 alex alex 64 Oct 18 21:48 11 -> socket:[23817098]
+lr-x------ 1 alex alex 64 Oct 18 21:48 110 -> /home/alex/.dotnet/sdk/10.0.401/NuGet.Build.Tasks.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 111 -> /home/alex/.dotnet/sdk/10.0.401/NuGet.Build.Tasks.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 112 -> /home/alex/.dotnet/sdk/10.0.401/NuGet.Common.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 113 -> /home/alex/.dotnet/sdk/10.0.401/NuGet.Common.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 114 -> /home/alex/.dotnet/sdk/10.0.401/NuGet.Commands.dll
+### 2002312
+total 0
+lr-x------ 1 alex alex 64 Oct 18 21:48 0 -> pipe:[23840209]
+l-wx------ 1 alex alex 64 Oct 18 21:48 1 -> pipe:[23840210]
+lr-x------ 1 alex alex 64 Oct 18 21:48 10 -> /dev/urandom
+lr-x------ 1 alex alex 64 Oct 18 21:48 100 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/Microsoft.Win32.Registry.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 101 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/Microsoft.Win32.Registry.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 102 -> /home/alex/.dotnet/sdk/10.0.401/NuGet.Frameworks.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 103 -> /home/alex/.dotnet/sdk/10.0.401/NuGet.Frameworks.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 104 -> /home/alex/.dotnet/sdk/10.0.401/Microsoft.Build.Utilities.Core.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 105 -> /home/alex/.dotnet/sdk/10.0.401/Microsoft.Build.Utilities.Core.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 106 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/System.Numerics.Vectors.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 107 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/System.Numerics.Vectors.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 108 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/System.Xml.XDocument.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 109 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/System.Xml.XDocument.dll
+lrwx------ 1 alex alex 64 Oct 18 21:48 11 -> socket:[23833470]
+lr-x------ 1 alex alex 64 Oct 18 21:48 110 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/System.Private.Xml.Linq.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 111 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/System.Private.Xml.Linq.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 112 -> /home/alex/.dotnet/sdk/10.0.401/Sdks/Microsoft.NET.Sdk/tools/net10.0/Microsoft.NET.Build.Tasks.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 113 -> /home/alex/.dotnet/sdk/10.0.401/Sdks/Microsoft.NET.Sdk/tools/net10.0/Microsoft.NET.Build.Tasks.dll
+lr-x------ 1 alex alex 64 Oct 18 21:48 114 -> /home/alex/.dotnet/shared/Microsoft.NETCore.App/10.0.12/System.Security.Cryptography.dll
+
+--- active clients scan (must be empty except foreign T297 waiter) ---
+(none)
+--- foreign T297 waiter record (NOT to be killed) ---
+    PID    PPID                  STARTED ELAPSED STAT COMMAND
+2006493 2006488 Sun Oct 18 21:27:43 2026    1304 S    python3 .pdca/scripts/perf/t244_evidence.py measure --repo . --phase baseline --round 1 --output .pdca/T297/rv2/baseline/round-01 --lock-timeout 1800
+cmdline:
+python3 .pdca/scripts/perf/t244_evidence.py measure --repo . --phase baseline --round 1 --output .pdca/T297/rv2/baseline/round-01 --lock-timeout 1800 
+fdinfo/3 (no lock: line => poller, not holder):
+pos:	0
+flags:	02102002
+mnt_id:	62
+ino:	187859
+--- /proc/locks matching inode/name ---
+(no matching entry)
+--- flock -n probe (expect BUSY rc=1) ---
+probe_rc=1
+--- lock inode ---
+inode=187859 dev=2096 size=0 /tmp/opencode/nextorm-bdn-host.lock
+--- lsof holders ---
+COMMAND     PID USER   FD   TYPE DEVICE SIZE/OFF   NODE NAME
+dotnet  2002215 alex    3r   REG   8,48        0 187859 /tmp/opencode/nextorm-bdn-host.lock
+dotnet  2002312 alex    3r   REG   8,48        0 187859 /tmp/opencode/nextorm-bdn-host.lock
+python3 2006493 alex    3u   REG   8,48        0 187859 /tmp/opencode/nextorm-bdn-host.lock
+=== PRECONDITION VERDICT: PASS ===
+
+=== STEP B: targeted recovery 2026-10-18T16:49:31Z ===
+kill_TERM_rc=0
+--- ps after TERM (must be empty) ---
+    PID    PPID                  STARTED STAT COMMAND
+ps_rc=1
+--- lock probe after TERM (expect rc=0 free) ---
+probe_rc=1
+--- lsof after ---
+COMMAND     PID USER   FD   TYPE DEVICE SIZE/OFF   NODE NAME
+python3 2006493 alex    3uW  REG   8,48        0 187859 /tmp/opencode/nextorm-bdn-host.lock
+
+=== STEP C: flock --close semantics decision 2026-10-18T16:50:48Z ===
+flock --version: flock from util-linux 2.37.2
+flock --help excerpt:
+ -o, --close              close file descriptor before running command
+ -F, --no-fork            execute command without forking
+man 1 flock: '-o, --close  Close the file descriptor on which the lock is held before executing command.
+               This is useful if command spawns a child process which should not be holding the lock.'
+man 1 flock: '-F, --no-fork  ... incompatible with --close as there would otherwise be nothing left to hold the lock.'
+DECISION: use 'flock -x --close' (documented: fd closed before the command executes, so the child/descendant
+          tree does not inherit the lock fd while the flock parent keeps holding it until the command exits).
+          Never use --no-fork (it replaces flock and would leave nothing holding the lock with --close).
+
+=== STEP B OUTCOME / DEVIATION NOTE 2026-10-18T17:27:23Z ===
+- kill -TERM -- 2002215 2002312 rc=0 at 2026-10-18T16:49:31Z.
+- 5 s later: ps -p 2002215,2002312 -> rc=1, no rows (both node servers exited).
+- probe after TERM: rc=1 (BUSY) - NOT the brief's expected rc=0. Cause is NOT residual leakage:
+  the foreign T297 lane (pid 2006493) had been polling the lock since 16:28:05Z and acquired it
+  legitimately the moment the orphaned descriptors closed. Its fdinfo/3 now reads
+  'lock: 1: FLOCK  ADVISORY  WRITE 2006493 08:30:187859 0 EOF' and its child
+  2044695 'dotnet run --project benchmarks/nextorm.benchmark ... --filter *...FairCached.B_*'
+  is a real baseline measurement. No SIGKILL, no unlink, no pkill, no signal to the foreign lane;
+  the executor waited for that measurement window instead of interfering.
+- lock re-probed rc=0 at 2026-10-18T17:27:13Z (after the T297 round and the Release build).
+
+=== STEP C OUTCOME 2026-10-18T17:27:23Z ===
+- wrapper: flock -x --close ... (see measurement-wrapper.txt and the DECISION block above).
+- build attempt 1: waiter queued 16:51:35Z, superseded 17:16:52Z after 1500 s behind the foreign
+  T297 round (rc 143 = waiter SIGTERM; the build command never started). Log:
+  logs/build-release-benchmark.attempt-1.log
+- build attempt 2: waiter queued 17:16:54Z, acquired 17:26:47Z, command
+  'MSBUILDDISABLENODEREUSE=1 DOTNET_CLI_USE_MSBUILD_SERVER=0 dotnet build
+  benchmarks/nextorm.benchmark -c Release --disable-build-servers -nodeReuse:false'
+  rc=0, Build succeeded, 0 Warning(s), 0 Error(s), elapsed 4.97 s. Log: logs/build-release-benchmark.log
+- post-build: flock -n probe rc=0; lsof on the lock file empty; no MSBuild node server holds the lock;
+  benchmark assembly sha256 unchanged 5d499f38ef5bfe2c1f3a13d697435afbc5346a9bc5bc0d729b506d716f3f4379
+  (incremental/deterministic: the T297-built bytes are reproducible from the same inputs).

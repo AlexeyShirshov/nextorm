@@ -1,0 +1,13 @@
+{
+  "unit": "T245",
+  "scope": {
+    "projects": ["tests/nextorm.core.tests", "tests/nextorm.sqlite.tests", "tests/nextorm.postgres.tests", "tests/nextorm.sqlserver.tests", "tests/nextorm.mariadb.tests"],
+    "selectors": ["FullyQualifiedName~T240CommandConstructionTests|FullyQualifiedName~T240BuilderConstructionTests|FullyQualifiedName~InMemoryTests", "FullyQualifiedName~SqlGenerationTests"],
+    "files": [],
+    "rebuild": "affected",
+    "boundary": "no DO->CHECK boundary in this step; boundary sweep is D245-4",
+    "rationale": "entry-state capture of the existing set-operation assertions and SQL snapshots; no source edits in this step",
+    "integration_projects": ["tests/nextorm.integration.tests"],
+    "integration_boundary_runs": 1
+  }
+}

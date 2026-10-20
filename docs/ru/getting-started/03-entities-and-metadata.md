@@ -49,7 +49,8 @@ public interface ISimpleEntity
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 * **Имя таблицы** - берётся из `[SqlTable]` (предпочтительно) или `[Table]`. Когда нет ни того, ни другого,
@@ -60,7 +61,7 @@ select id from simple_entity
 * **`[Key]` и `[DatabaseGenerated]`** - `KeyAttribute` помечает первичный ключ, а
   `DatabaseGeneratedAttribute` - столбец, генерируемый базой данных (`DatabaseGeneratedOption.Identity`
   или `.Computed`). Запросы их игнорируют, но билдер вставки читает их: столбцы identity/computed
-  исключаются из записываемых значений (см. [Изменение данных (INSERT)](../guide/15-insert-statement.md)).
+  исключаются из записываемых значений (см. [Изменение данных (INSERT)](../guide/17-insert-statement.md)).
   Если ключ не объявлен, свойство с именем `Id` или `<TypeName>Id` считается ключом по соглашению.
 * **Бинарные столбцы** - свойство `byte[]` отображается на бинарный столбец (`bytea` в PostgreSQL,
   `varbinary`/`image` в SQL Server, `blob` в SQLite). `byte[]` можно также проецировать напрямую
@@ -115,7 +116,8 @@ var rows = await dataContext.From<Product>()
 ```
 
 ```sql
-select Id, Name from Product
+select Id, Name
+ from Product
 ```
 
 Голый интерфейс годится как источник запроса, пока проекция даёт скаляр, анонимный тип, кортеж или DTO -
@@ -135,7 +137,8 @@ var names = await dataContext.From<IProduct>()
 ```
 
 ```sql
-select Name from IProduct
+select Name
+ from IProduct
  where (Id > 1)
 ```
 
@@ -167,7 +170,8 @@ var rows = await dataContext.From<Product>()
     .Select(p => new { p.Id, p.Name })
     .ToListAsync();
 
-// select id, name from product where (id > 1)
+// select id, name
+// from product where (id > 1)
 ```
 
 Соглашение применяется только к именам, производным от имени типа/свойства CLR. Имя, объявленное через
@@ -244,7 +248,8 @@ await foreach (var row in dataContext.From("simple_entity")
 ```
 
 ```sql
-select id from simple_entity
+select id
+ from simple_entity
 ```
 
 Методы-аксессоры [`TableAlias`](xref:NextORM.Core.TableAlias) (каждый принимает имя столбца и возвращает значение CLR для этого типа):
@@ -299,9 +304,12 @@ var rows = await dataContext.From<ISimpleEntity>()
     .Select(e => new { e.Id })
     .ToListAsync();
 
-// select "id" from "simple_entity" where ("id" > 1)     (PostgreSQL, SQLite)
-// select [id] from [simple_entity] where ([id] > 1)     (SQL Server)
-// select `id` from `simple_entity` where (`id` > 1)     (MySQL, MariaDB, ClickHouse)
+// select "id"
+// from "simple_entity" where ("id" > 1)     (PostgreSQL, SQLite)
+// select [id]
+// from [simple_entity] where ([id] > 1)     (SQL Server)
+// select `id`
+// from `simple_entity` where (`id` > 1)     (MySQL, MariaDB, ClickHouse)
 ```
 
 Каждый провайдер использует свой разделитель и удваивает внутренний (`"a""b"`, `[a]]b]`, `` `a``b` ``).
@@ -343,10 +351,10 @@ public interface IOrder
 
 ---
 
-Source: `tests/nextorm.integration.tests/Entities.cs:7`;
-`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:37`;
-`tests/nextorm.sqlite.tests/MetadataRegistrationTests.cs:18`;
+Source: `tests/nextorm.integration.tests/Support/Entities.cs:7`;
+`tests/nextorm.integration.tests/CommonTestSuite/Raw/CommonTestSuite.SqlCommand.cs:37`;
+`tests/nextorm.sqlite.tests/Metadata/MetadataRegistrationTests.cs:18`;
 `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs:111`;
 `src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs:16`;
 `src/nextorm.core/DataContext/DataContextCache.cs:20`;
-`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:116`.
+`tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:116`.

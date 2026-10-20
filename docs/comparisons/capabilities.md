@@ -84,7 +84,7 @@ construct.
 | Area | Nextorm | linq2db | EF Core |
 |---|---|---|---|
 | Entity class optional (query without a mapped type) | yes | partial | no |
-| Navigation properties / associations / eager loading | partial (declarative O2M/M2O/O2O/M2M relationship metadata and the single-query `JoinInto` loader, plus level-1 `LoadWith` eager loading and declared-relationship implicit navigation; convention-over-FK inference is absent in linq2db too) | yes | yes |
+| Navigation properties / associations / eager loading | partial (declarative O2M/M2O/O2O/M2M relationship metadata and the single-query `JoinInto` loader, plus `LoadWith` eager loading — split or single-query, nested graphs level 2+ with a single graph-wide mode and per-level ordering/top-N — and declared-relationship implicit navigation; convention-over-FK inference is absent in linq2db too) | yes | yes |
 | Context configuration, logging, DI and plan cache (`Prepare()`) | yes | yes | yes |
 | Change tracking / identity map | no (by design) | partial | yes |
 | Migrations | no | partial (schema API; migrations via third-party) | yes |
@@ -96,4 +96,4 @@ construct.
 
 - [Benchmarks](benchmarks.md) — the shipped scenarios.
 - [Limitations and out-of-scope features](../advanced/limitations.md).
-- [Provider overview](../providers/overview.md).
+- [Provider overview](../connecting-providers/overview.md).

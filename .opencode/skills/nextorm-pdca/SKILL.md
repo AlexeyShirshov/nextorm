@@ -32,7 +32,7 @@ description: "Проектный оверлей nextorm к глобальном�
    конкретного потребителя, которого разблокирует.
 3. **Measure, never assert.** «Аллоцирует / медленнее» — только из кода (аллокация
    на per-row пути) или в пользу perf-аналитика. Дельты <~20% — шум на этой машине
-   (разброс до 19%; `docs/specs/performance/performance-findings.md`).
+   (разброс до 19%; `docs/specs/performance/decisions-and-lessons.md`).
 4. **Не переоткрывать settled findings без нового измерения.** Регистры смотреть
    on-demand (только нужную находку): `docs/specs/design/solid-review.md` (F1..F13),
    `docs/specs/design/code-smells-review.md`, `docs/specs/design/API-NAMING-REVIEW.md`
@@ -61,7 +61,10 @@ description: "Проектный оверлей nextorm к глобальном�
    обнаружении в CHECK — **loop-back CHECK → PLAN**, а не сноска в отчёте. Слабая постановка
    **повышает** планку PLAN, а не понижает. Контракт: `pdca-dotnet` §PLAN → «PLAN owns the quality of the plan».
 10. **Поиск — ignore-aware; символы — `roslyn`.** Для C#-символов (типы/члены/`refs`/`callers`/overloads/
-    implementations/renames) — только инструмент `roslyn`, не текстовый поиск. Для текста (доки,
+    implementations/renames) — только инструмент `roslyn`, не текстовый поиск. В V2 `roslyn` не
+    top-level: вызов — **внутри `execute`** (`const r = await tools.roslyn({ action: "members",
+    target: "Ns.Type" }); return r`), батч — одним `execute` (`Promise.all`); если его нет в каталоге
+    Code Mode, сначала `search({ query: "roslyn" })`. Для текста (доки,
     комментарии, строковые литералы, имена SQL) — `rg`/`git grep` с ограничением по исходникам
      (`rg -n --glob '*.cs' "<lit>" src tests`). **Никогда `grep -r`/`grep -rn`/`find`** по дереву: они
      игнорируют `.gitignore` и читают `bin/`/`obj/`/`TestResults/` (≈1.3 GB артефактов под `src`/`tests`),
@@ -219,18 +222,30 @@ Critical/Warning/Suggestion + роутинг специалистам:
 Этот оверлей не вводит отдельную схему контракта.
 
 **Frozen evidence manifest (nextorm).** Путь — базовый дефолт `pdca-dotnet` §«Versioned evidence
-contract» (`artifacts/pdca/<task>/rv<k>/manifest.json`, `<task>` — `D<issue>`/kebab-slug,
-`<k>` — ревизия контракта `rv`); nextorm его **не переопределяет** и не дублирует. Схема — там же
-(оверлей схему не дублирует); валидируется in-repo
-`python3 scripts/validate_inner_loop.py manifest <путь>` (покрытие `required_rows` + форма строк и
-evidence). Пишет его DO на границе DO→CHECK; CHECK открывает его первым и по каждой строке читает
-`path`.
+contract» (`.pdca/<task>/rv<k>/manifest.json`, `<task>` — `D<issue>`/kebab-slug, `<k>` — ревизия
+контракта `rv`). `.pdca/` — фиксированный workspace-корень скилла (§«Skill workspace» базового
+`pdca`), nextorm его **не переопределяет** и не дублирует, а схему не копирует: она — там же.
+Валидируется in-repo `python3 .pdca/scripts/validate_inner_loop.py manifest <путь>` (покрытие
+`required_rows` + форма строк и evidence). Пишет его DO на границе DO→CHECK; CHECK открывает его
+первым и по каждой строке читает `path`.
 
-**Проектные evidence-корни (nextorm).** Портативный агент `check` даёт scoped `read` только на
-generic-корни (`docs/specs/status/**`, `artifacts/**`, `TestResults/**`); nextorm-специфику
-объявляют **на стороне проекта**, а не в общем агенте/ассете:
-- статус/контракт — `docs/specs/status/**`;
-- evidence-артефакты — `artifacts/**` (в т.ч. `artifacts/pdca/**`);
+**Локальный provenance-гейт (nextorm).** До того как CHECK прочитает манифест, обязателен прогон
+`python3 .pdca/scripts/pdca_evidence.py lint --repo . --manifest .pdca/<task>/rv<k>/manifest.json`
+с rc 0: он пересчитывает frozen-tree тем же рецептом и требует
+`manifest.tree == recomputed == tree/tree_binding каждого receipt` (включая невыбранные), ловит
+path-escape, дубли id и плейсхолдерные деревья. Гейт **принят в канонический контракт**
+`pdca-dotnet` (R234-03G закрыт): `scripts/pdca_evidence.py` вместе с harness/tests/fixtures — это
+**источник** в глобальном скилле, а проект запускает свои копии из `.pdca/scripts/`
+(§«Skill workspace»); §«Versioned evidence contract» / §«CHECK completeness gate» требуют **обе**
+команды. Сам `lint` проверяет и двустороннее покрытие `required_rows` ↔ `rows`;
+`validate_inner_loop.py manifest` остаётся обязательным для формы строк
+(status/evidence/reason/predicate).
+
+**Проектные evidence-корни (nextorm).** Портативный агент `check` даёт scoped `read` на `.pdca/**`,
+`TestResults/**` и на исторические `docs/specs/status/**`, `artifacts/**`; nextorm-специфику
+объявляют **на стороне проекта**, а не в общем агенте/асете:
+- статус/контракт — `.pdca/status/**` (новые циклы); `docs/specs/status/**` — историческое, read-only;
+- evidence-артефакты — `.pdca/<task>/rv<k>/**` (новые циклы); `artifacts/**` — историческое evidence, read-only;
 - тест-артефакты — `TestResults/**`;
 - scratch вне worktree — `/tmp/nextorm*/**` (через `external_directory`, см. проектный `opencode.json`).
 

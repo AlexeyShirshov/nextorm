@@ -2,7 +2,7 @@
 
 > A query filter is a predicate bound to an entity type in the mapping metadata; nextorm `and`s it into every query in which the entity participates — the primary `FROM`, join sources, subqueries and eagerly-loaded children — unless the query calls `IgnoreFilters()`.
 
-**Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Provider overview](../providers/overview.md) · [Filtering (`Where`)](../guide/01-filtering-where.md)
+**Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Provider overview](../connecting-providers/overview.md) · [Filtering (`Where`)](../guide/03-filtering-where.md)
 
 ## Overview
 
@@ -59,11 +59,13 @@ var ids = ctx.From<Document>()
 
 ```sql
 -- PostgreSQL
-select id from documents
+select id
+ from documents
  where ((id = 10 and not (is_deleted)) and tenant_id = @p0)
 
 -- SQL Server
-select id from documents
+select id
+ from documents
  where ((id = 10 and not ((is_deleted) = 1)) and tenant_id = @p0)
 ```
 
@@ -170,11 +172,13 @@ The tenant filter is still applied; only the soft-delete predicate is dropped:
 
 ```sql
 -- PostgreSQL
-select id from documents
+select id
+ from documents
  where (id = 10 and tenant_id = @p0)
 
 -- SQL Server
-select id from documents
+select id
+ from documents
  where (id = 10 and tenant_id = @p0)
 ```
 
@@ -198,19 +202,21 @@ For example, the filter of a joined entity is injected into that join's `ON`, wh
 
 ```csharp
 var rows = ctx.From<Attachment>()
-    .Join(ctx.From<Document>(), (a, d) => a.DocumentId == d.Id)
+    .Join<Document>((a, d) => a.DocumentId == d.Id)
     .Select(p => p.Item1.Id)
     .ToList();
 ```
 
 ```sql
 -- PostgreSQL
-select t1.id from attachments as "t1"
+select t1.id
+ from attachments as "t1"
  join documents as "t2" on ((t1.document_id = t2.id and not (t2.is_deleted)) and t2.tenant_id = @p0)
  where not (t1.is_deleted)
 
 -- SQL Server
-select t1.id from attachments as [t1]
+select t1.id
+ from attachments as [t1]
  join documents as [t2] on ((t1.document_id = t2.id and not ((t2.is_deleted) = 1)) and t2.tenant_id = @p0)
  where not ((t1.is_deleted) = 1)
 ```
@@ -228,20 +234,24 @@ var rows = ctx.From<Document>()
 
 ```sql
 -- PostgreSQL
-select t1.id, (select t2.id from attachments as "t2"
+select t1.id, (select t2.id
+ from attachments as "t2"
  where (t2.document_id = t1.id and not (t2.is_deleted))
-limit 1) as "sid" from documents as "t1"
+limit 1) as "sid"
+ from documents as "t1"
  where (not (t1.is_deleted) and t1.tenant_id = @p0)
 
 -- SQL Server
-select t1.id, (select top(1) t2.id from attachments as [t2]
- where (t2.document_id = t1.id and not ((t2.is_deleted) = 1))) as [sid] from documents as [t1]
+select t1.id, (select top(1) t2.id
+ from attachments as [t2]
+ where (t2.document_id = t1.id and not ((t2.is_deleted) = 1))) as [sid]
+ from documents as [t1]
  where (not ((t1.is_deleted) = 1) and t1.tenant_id = @p0)
 ```
 
 The main source of a join is the first table, so a filter declared for `T1` applies to `Item1` exactly as in a plain query.
 
-The disable scope is carried by the query that starts it, so a type listed in a selective `IgnoreFilters` is disabled wherever it appears in that query, and `IgnoreFilters()` disables every filter everywhere in the query — including eagerly-loaded children declared with [`LoadWith`](eager-loading.md). This holds identically in split and single-query (`EagerLoadMode.SingleQuery`) mode: the child side's effective scope is the **union** of its own `IgnoreFilters` scope and the parent's, `IgnoreFilters()` (`All`) absorbs that union, and a child's selective scope disables only filters on that child. See [Eager loading](eager-loading.md#single-query-mode-eagerloadmodesinglequery).
+The disable scope is carried by the query that starts it, so a type listed in a selective `IgnoreFilters` is disabled wherever it appears in that query, and `IgnoreFilters()` disables every filter everywhere in the query — including eagerly-loaded children declared with [`LoadWith`](../relationships/eager-loading.md), at every nesting level. This holds identically in split and single-query (`EagerLoadMode.SingleQuery`) mode: each level's effective scope is the **union** of its own `IgnoreFilters` scope and its parent's, `IgnoreFilters()` (`All`) absorbs that union, and a selective scope disables only filters on the entity types it names. A root `IgnoreFilters` therefore reaches every descendant, and a scope applied inside a child reaches that child and all of its own descendants. See [Eager loading](../relationships/eager-loading.md#single-query-mode-eagerloadmodesinglequery).
 
 ## UPDATE and DELETE (DML)
 
@@ -322,14 +332,16 @@ ctx.CreateInsertBuilder<ArchivedDocument>()
 insert into documents (id, tenant_id, is_deleted) values (@p0, @p1, @p2)
 
 insert into archived_documents (id, tenant_id, is_deleted)
-select id, tenant_id as "TenantId", is_deleted as "IsDeleted" from documents
+select id, tenant_id as "TenantId", is_deleted as "IsDeleted"
+ from documents
  where (((id > 0) and not (is_deleted)) and tenant_id = @p0)
 
 -- SQL Server
 insert into documents (id, tenant_id, is_deleted) values (@p0, @p1, @p2)
 
 insert into archived_documents (id, tenant_id, is_deleted)
-select id, tenant_id as [TenantId], is_deleted as [IsDeleted] from documents
+select id, tenant_id as [TenantId], is_deleted as [IsDeleted]
+ from documents
  where (((id > 0) and not ((is_deleted) = 1)) and tenant_id = @p0)
 ```
 
@@ -486,11 +498,13 @@ var rows = dataContext
 
 ```sql
 -- PostgreSQL
-select id from (select id, tenant_id, is_deleted from documents) as "t1"
+select id
+ from (select id, tenant_id, is_deleted from documents) as "t1"
  where (((t1.id > 10) and not (t1.is_deleted)) and t1.tenant_id = @p0)
 
 -- SQL Server
-select id from (select id, tenant_id, is_deleted from documents) as [t1]
+select id
+ from (select id, tenant_id, is_deleted from documents) as [t1]
  where (((t1.id > 10) and not ((t1.is_deleted) = 1)) and t1.tenant_id = @p0)
 ```
 
@@ -554,7 +568,7 @@ public interface IQueryFilterMetadata
 ## Limitations
 
 - **Process-global, first-registration-wins.** Filters are registered **process-globally** and the first registration for an entity type wins (consistent with nextorm metadata): a later `From<T>(cfg)` / `HasQueryFilter` for the same type is ignored — filters are not scoped to a `DataContext`.
-- **Disable scope follows the entry builder.** The selective scope is carried by the builder that starts the query; calling `IgnoreFilters` on a builder that is then used as a join source is not propagated. Use one of the type/key overloads on the query's entry builder instead. Eagerly-loaded `LoadWith` children are the exception: they inherit the entry builder's scope by union (see [Eager loading](eager-loading.md)).
+- **Disable scope follows the entry builder.** The selective scope is carried by the builder that starts the query; calling `IgnoreFilters` on a builder that is then used as a join source is not propagated. Use one of the type/key overloads on the query's entry builder instead. Eagerly-loaded `LoadWith` children are the exception: they inherit the entry builder's scope by union at every nested level (see [Eager loading](../relationships/eager-loading.md)).
 - **Key-form mutations apply filters but do not expose `IgnoreFilters`.** `Update(entity)` and `Delete(entity)` honour the target filter, but their immediate terminal has no fluent `IgnoreFilters`; use the predicate form (`CreateUpdateBuilder<T>().Where(...)` / `CreateDeleteBuilder<T>().Where(...)`) when you need to disable a filter on a mutation.
 - **Plan lifetime.** A context value read by a filter is captured as a runtime parameter (plan-cache safe). The prepared plan retains the first `IDataContext` instance for its lifetime (bounded, one per plan shape).
-- **Open adapter units.** The ClickHouse no-EF-adapter slice and the MariaDB-specific shared-connection certification are tracked open units in milestone `1.0.9-b`; until they land, use the supported EF adapters (see [EF Core query-filter bridge](ef-core-query-filters.md)).
+- **Open adapter units.** The ClickHouse no-EF-adapter slice and the MariaDB-specific shared-connection certification are tracked open units in milestone `1.0.9-b`; until they land, use the supported EF adapters (see [EF Core query-filter bridge](integration-efcore.md#global-query-filters-from-the-ef-model)).

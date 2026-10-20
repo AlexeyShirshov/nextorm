@@ -19,7 +19,7 @@
 - нет намеренного rollback, повторной записи или recovery-вызова `Complete`;
 - валидность всего результата после ошибки не гарантируется;
 - destination остаётся открытым и принадлежит вызывающему.
-Обоснование: опубликованные EN/RU документы уже описывают partial-output (`docs/guide/28-streaming-data.md:95-97`, RU `:96-98`); CSV закрепляет аналогичный контракт (`tests/nextorm.sqlite.tests/CsvStreamTests.cs:293,301,322,370`); Q5 оставлен несогласованным (`docs/specs/roadmap/todo_json_streaming.md:282`). Откат/валидный хвост отвергнуты (произвольный non-seekable destination, ошибка внутри строки/неисправный sink). Эскалация не требуется — политика decidable по evidence.
+Обоснование: опубликованные EN/RU документы уже описывают partial-output (`docs/guide/30-streaming-data.md:95-97`, RU `:96-98`); CSV закрепляет аналогичный контракт (`tests/nextorm.sqlite.tests/CsvStreamTests.cs:293,301,322,370`); Q5 оставлен несогласованным (`docs/specs/roadmap/todo_json_streaming.md:282`). Откат/валидный хвост отвергнуты (произвольный non-seekable destination, ошибка внутри строки/неисправный sink). Эскалация не требуется — политика decidable по evidence.
 
 ## Scope / out of scope
 В области: существующие sync/async `WriteJson`/`WriteJsonAsync`, array/NdJson, обе публичные поверхности (`QueryCommand.TResult.cs:145-190`, `EntityBuilderExtensions.cs:158-203`), ошибки/отмена, ownership, fail-closed.
@@ -52,18 +52,18 @@ V01 sync×array×serialize/read-abort — тест; V02 sync×array×CT — guar
 - `tests/nextorm.sqlite.tests/JsonStreamingTests.cs`
 - `src/nextorm.core/Query/QueryCommand.TResult.cs` [XML docs]
 - `src/nextorm.core/Builders/EntityBuilderExtensions.cs` [XML docs]
-- `docs/guide/28-streaming-data.md`, `docs/ru/guide/28-streaming-data.md`
+- `docs/guide/30-streaming-data.md`, `docs/ru/guide/30-streaming-data.md`
 - `docs/advanced/api-reference.md`, `docs/ru/advanced/api-reference.md`
 - `docs/specs/roadmap/todo_json_streaming.md` (Q5)
 - `docs/specs/status/rc2-179-json-error-policy-1.md` [этот файл]
 - `docs/specs/status/rc2-180-json-stream-provider-conversion-1.md` [cross-ref: superseded only «Q5 policy deferred», не сама D180]
-Не трогать: `docs/guide/14-json.md:40-41`, `docs/guide/26-large-objects.md:11` + RU. Executable production delta ожидается 0; если DO выявит необходимость runtime fix — replan.
+Не трогать: `docs/guide/16-json.md:40-41`, `docs/guide/28-large-objects.md:11` + RU. Executable production delta ожидается 0; если DO выявит необходимость runtime fix — replan.
 
 ## Predecessors / assumptions / prerequisites
 - #176/#177/#178/#180 — plans ready, НЕ DO done (`rc2-176-…:12`, `rc2-177-…:8`, `rc2-178-…:12`, `rc2-180-…:11`). #180 `:24/:48/:61/:77` явно откладывает runtime partial-output/recovery policy на #179.
 - Collection table `docs/specs/status/collection-1.0.9-rc2.md:40-44` устарела (D176–D180 показаны pending при ready-статусах) — синхронизировать; **но этот PLAN-шаг сам collection status не правит**.
 - **ALL-barrier не пройден** (`collection-1.0.9-rc2.md:9`): индивидуальный DO не стартует до барьера.
-- Пересечение с #177 по `28-streaming-data.md`/roadmap/тестам — сериализовать.
+- Пересечение с #177 по `30-streaming-data.md`/roadmap/тестам — сериализовать.
 - Base `1.0.9-rc2 @ 18659e41`; CRLF; .NET 10; TreatWarningsAsErrors; чужой diff не перезаписывать.
 
 ## Test strategy
@@ -86,7 +86,7 @@ V01 sync×array×serialize/read-abort — тест; V02 sync×array×CT — guar
 Один shared tree, последовательное исполнение пересекающихся footprints; worktree не нужен.
 
 ## Docs plan
-EN+RU `28-streaming-data.md` (partial-output/error явно), `api-reference.md` (+RU), XML docs обоих public surfaces, Q5 закрыть решением, cross-ref #180. Public docs не ссылаются на specs. Крупный блок не выделяется (существующий гайд 28).
+EN+RU `30-streaming-data.md` (partial-output/error явно), `api-reference.md` (+RU), XML docs обоих public surfaces, Q5 закрыть решением, cross-ref #180. Public docs не ссылаются на specs. Крупный блок не выделяется (существующий гайд 28).
 
 ## Evidence contract rv1 (planned)
 E179-01/R01–04 V01–V12,V16,V18 (core unit + SQLite filtered); E179-02/R05 V13–V15 (byte-prefix unchanged); E179-03/R06 V17,V20 (core/sqlite/clickhouse); E179-04/R06 V19 integration (providers executed, skips ≠ pass); E179-05/R07 EN/RU/XML/Q5/#180 diff (CHECK); E179-06 build `0/0`; E179-07 coverage commands `dotnet.yml:44-59` (PASS or WARNING-only-off-main; missing report = fail); E179-08 acceptance baseline/after; E179-09 scope/base/CRLF/executable-delta=0 (CHECK). Все P1; CHECK re-gather ≤2 раунда, owner check; отсутствующий отчёт = не доказано, не N/A.

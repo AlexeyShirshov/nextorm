@@ -1,0 +1,31 @@
+{
+  "tool": "t247_json_gate",
+  "task": "T247",
+  "issue": 247,
+  "subcommand": "fault-checks",
+  "generated_utc": "2026-10-18T03:06:55Z",
+  "repo": "/home/alex/sources/nextorm",
+  "evidence_root": ".pdca/T247/rv2/logs/smoke",
+  "output_dir": ".pdca/T247/rv2/logs/smoke/fault-checks",
+  "source_fingerprint": {
+    "head": "1b140d23cd12ecc19af4bfbad3563b6e8281aa63",
+    "porcelain_sha256": "f3a4297f6b4ce869eceb4a6d3c5e674b13d4ab1fd8688e51a334b6ea58151046",
+    "dirty_paths": 2,
+    "pathspec": [
+      "src",
+      "benchmarks/nextorm.benchmark",
+      "Directory.Build.props",
+      "Directory.Packages.props",
+      "global.json",
+      "nextorm.slnx",
+      ".editorconfig"
+    ]
+  },
+  "children": [],
+  "discovered_case_count": 0,
+  "executed_case_count": 0,
+  "reason_code": "fault-specs-not-pinned",
+  "status": "input-error",
+  "error": "no .pdca/T247/rv2/logs/smoke/fault-checks/faults.json",
+  "instruction": "pin exactly three fault specs (id/file/find/replace/test_argv) at D247-03/D247-04; each fault must be killed and the tests must pass after restoration"
+}

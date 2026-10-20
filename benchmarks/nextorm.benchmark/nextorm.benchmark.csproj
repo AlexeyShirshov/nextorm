@@ -13,6 +13,8 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" />
     <PackageReference Include="System.Linq.Async" />
+    <!-- T217 (#217) E217-14: real-ClickHouse perf probe (DTO vs DateTime reading). -->
+    <PackageReference Include="Testcontainers.ClickHouse" />
   </ItemGroup>
 
   <ItemGroup>

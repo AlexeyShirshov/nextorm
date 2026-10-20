@@ -33,7 +33,7 @@ Close finding 25's outdated claim that `WITH TIES` combined with `DISTINCT`/`DIS
 - Public API: `EntityBuilder<TEntity>.WithTies()` `src/nextorm.core/Builders/EntityBuilder.cs:2167` (summary `:2162-2166`; does not mention DISTINCT); `Distinct()` `:1799`; `DistinctOn<TResult>(...)` `:1816`.
 - Finding 25: `docs/specs/design/code-smells-review.md:1851-1863` (section head `:1790`; severity 🟡, status ОТКРЫТА; not in "не рекомендуется"/"Исключения"). Its cited ranges `EntityBuilder.cs:477-504`, `:570-576`, `SqlBuilder.cs:66-70` are STALE.
 - Existing WITH TIES tests: PostgreSQL `tests/nextorm.postgres.tests/SqlGenerationTests.cs:3812,3822,3832` (ns `NextORM.Postgres.Tests`, `SqlOf` `:25`); SQL Server `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:2642,2652,2662` (ns `NextORM.SqlServer.Tests`, `SqlOf` `:23`). No test asserts DISTINCT+WITH TIES rejection; call-order coverage is absent.
-- Docs EN/RU: `docs/guide/04-sorting-and-paging.md:246-247` and `docs/ru/guide/04-sorting-and-paging.md:246-247` already state combining with `DISTINCT`/`DISTINCT ON` is rejected; timing/exception not stated. No public doc links `docs/specs`.
+- Docs EN/RU: `docs/guide/06-sorting-and-paging.md:246-247` and `docs/ru/guide/06-sorting-and-paging.md:246-247` already state combining with `DISTINCT`/`DISTINCT ON` is rejected; timing/exception not stated. No public doc links `docs/specs`.
 - Provenance: `docs/specs/status/native-extreme-row-144-1.md:303` (debt 6; original issue cited `:302`); mapping `:314` → #157.
 
 ## Minimal solution
@@ -82,7 +82,7 @@ Rejection fixtures: reuse established provider fixtures, positive limit (e.g. `2
 - **D1** Write this status file; record baseline commands/results before changing tests/docs.
 - **D2** PostgreSQL regression tests: `tests/nextorm.postgres.tests/SqlGenerationTests.cs` (WITH TIES area ~`:3812-3832`). Add AC1/AC3 theories. Construct the query outside `Assert.Throws`; invoke only SQL generation inside it; assert exception type + exact message.
 - **D3** SQL Server regression tests: `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs` (~`:2642-2662`). Add AC2 theory, same assertion discipline.
-- **D4** Public documentation: XML `<summary>` only in `src/nextorm.core/EntityBuilder.cs` (`:2162-2166`); `docs/guide/04-sorting-and-paging.md:246-247`; `docs/ru/guide/04-sorting-and-paging.md:246-247`. Preserve existing limit/dialect statements; add the timing statement.
+- **D4** Public documentation: XML `<summary>` only in `src/nextorm.core/EntityBuilder.cs` (`:2162-2166`); `docs/guide/06-sorting-and-paging.md:246-247`; `docs/ru/guide/06-sorting-and-paging.md:246-247`. Preserve existing limit/dialect statements; add the timing statement.
 - **D5** Verify + obtain fresh references: run required commands; inspect discovery/results; obtain new test locations via Roslyn; confirm guard/signatures unchanged; preserve CRLF.
 - **D6** After D5 passes: reconcile finding 25 in `docs/specs/design/code-smells-review.md:1851-1863`; update this status file with evidence + final references; rerun doc/scope checks.
 
@@ -94,8 +94,8 @@ No runtime implementation task is authorized.
 2. `tests/nextorm.postgres.tests/SqlGenerationTests.cs`
 3. `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs`
 4. `src/nextorm.core/EntityBuilder.cs` — XML documentation trivia only
-5. `docs/guide/04-sorting-and-paging.md`
-6. `docs/ru/guide/04-sorting-and-paging.md`
+5. `docs/guide/06-sorting-and-paging.md`
+6. `docs/ru/guide/06-sorting-and-paging.md`
 7. `docs/specs/design/code-smells-review.md` — finding 25 only
 
 Evidence logs under `/tmp/nextorm-D157-r1/` (not source edits). Build outputs are generated artifacts.
@@ -136,8 +136,8 @@ Commands (argument arrays; capture stdout/stderr + actual exit codes):
 | C5 | `["dotnet","test","tests/nextorm.sqlserver.tests","-c","Debug"]` |
 | C6 | `["git","diff","--check"]` |
 | C7 | `["git","diff","--name-only"]` |
-| C8 | `["git","diff","--unified=5","--","src/nextorm.core/EntityBuilder.cs","tests/nextorm.postgres.tests/SqlGenerationTests.cs","tests/nextorm.sqlserver.tests/SqlGenerationTests.cs","docs/guide/04-sorting-and-paging.md","docs/ru/guide/04-sorting-and-paging.md","docs/specs/design/code-smells-review.md"]` |
-| C9 | `["git","grep","-n","-F","specs/","--","docs/guide/04-sorting-and-paging.md","docs/ru/guide/04-sorting-and-paging.md"]` |
+| C8 | `["git","diff","--unified=5","--","src/nextorm.core/EntityBuilder.cs","tests/nextorm.postgres.tests/SqlGenerationTests.cs","tests/nextorm.sqlserver.tests/SqlGenerationTests.cs","docs/guide/06-sorting-and-paging.md","docs/ru/guide/06-sorting-and-paging.md","docs/specs/design/code-smells-review.md"]` |
+| C9 | `["git","grep","-n","-F","specs/","--","docs/guide/06-sorting-and-paging.md","docs/ru/guide/06-sorting-and-paging.md"]` |
 | C10 | `["git","status","--short","--untracked-files=all"]` |
 
 Fresh test references: Roslyn `action=members`, symbols `NextORM.Postgres.Tests.SqlGenerationTests` and `NextORM.SqlServer.Tests.SqlGenerationTests`, after implementation.
@@ -209,7 +209,7 @@ Fresh references (Roslyn `action=members`, after implementation):
 | C5 | `dotnet test tests/nextorm.sqlserver.tests -c Debug` | 0 | total 712 / passed 712 / failed 0 / skipped 0 — `/tmp/nextorm-D157-r1/sqlserver-project.log` |
 | C6 | `git diff --check` | 0 | clean |
 | C7 | `git diff --name-only` | 0 | allowlist only |
-| C9 | `git grep -n -F specs/ -- docs/guide/04-sorting-and-paging.md docs/ru/guide/04-sorting-and-paging.md` | 1 | no matches (expected) |
+| C9 | `git grep -n -F specs/ -- docs/guide/06-sorting-and-paging.md docs/ru/guide/06-sorting-and-paging.md` | 1 | no matches (expected) |
 | C10 | `git status --short --untracked-files=all` | 0 | D157 footprint + preexisting untracked files |
 
 Per-case evidence: PG DISTINCT 2/2, PG DISTINCT ON 2/2, SQL Server DISTINCT 2/2 executed (exit 0 each;

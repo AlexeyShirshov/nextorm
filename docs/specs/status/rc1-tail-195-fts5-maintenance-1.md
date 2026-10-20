@@ -117,9 +117,9 @@ of the other provider test projects; real execution lives in `tests/nextorm.inte
 and terminal behavior. Tests and docs are separate DO streams and are not edited by the implementation
 stream.
 
-Docs plan (6 pages, EN/RU mirrors): `docs/providers/sqlite.md`, `docs/guide/provider-specific/sqlite.md`,
-`docs/advanced/limitations.md` and `docs/ru/providers/sqlite.md`,
-`docs/ru/guide/provider-specific/sqlite.md`, `docs/ru/advanced/limitations.md` — replace the
+Docs plan (6 pages, EN/RU mirrors): `docs/connecting-providers/sqlite.md`, `docs/guide/provider-specific-sql/sqlite.md`,
+`docs/advanced/limitations.md` and `docs/ru/connecting-providers/sqlite.md`,
+`docs/ru/guide/provider-specific-sql/sqlite.md`, `docs/ru/advanced/limitations.md` — replace the
 "FTS5 maintenance/control deferred to #195/#196" notes with the shipped builder surface; the
 comparison/spec pages are tracked separately.
 
@@ -162,7 +162,7 @@ Evidence contract rv=1 (rows EN-01..EN-09):
 | EN-04 | `DOCKER_HOST=… dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor` | executed not skipped; SQLite FTS5 tests pass | PASS (r2) — full integration `DOCKER_HOST=… dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor` → exit 0 → Total 3311 / Passed 3114 / Failed 0 / Skipped 197, all 5 providers executed (PostgreSQL, SQL Server, MySQL, ClickHouse, SQLite); `/tmp/nextorm-d195-r1/integration-r2.log`. D195 confirmation filter `--filter FullyQualifiedName~Fts5Maintenance` → 11/11 passed, 0 failed, 0 skipped; `/tmp/nextorm-d195-r1/d195-fts5maintenance-r2.log` | tests (D195) |
 | EN-05 | `dotnet build nextorm.slnx -c Debug` | `0 Warning(s) 0 Error(s)` | PASS — exit 0, `Build succeeded`, `0 Warning(s) 0 Error(s)`; `/tmp/nextorm-d195-r1/build-debug.log` | coder (D195) |
 | EN-06 | coverage `.github/workflows/dotnet.yml:45` collect + `:55-59` reportgenerator | line ≥ 85 / branch ≥ 75 (hard only on `main`) | PASS (r2) — coverage collect+reportgenerator → exit 0 → Line 88.6% / Branch 80% (25164/31423), thresholds 85/75; report `/tmp/nextorm-d195-r1/coverage-report-r2/Summary.txt`; per-class `SqliteFts5Command` 100%/100%, `SqliteFts5CommandBuilder` 100%/100%, `SqlMutationBuilder` 96.0%/92.4%; logs `coverage-r2.log`, `coverage-report-r2.log` | coder (D195) |
-| EN-07 | docs audit (6 pages EN/RU) | deferred notes replaced; EN/RU parity | PASS — 6 pages EN/RU updated; `sqlite.md`/`guide/provider-specific/sqlite.md`/`advanced/limitations.md` in both trees document the shipped builder surface with parity | docs (D195) |
+| EN-07 | docs audit (6 pages EN/RU) | deferred notes replaced; EN/RU parity | PASS — 6 pages EN/RU updated; `sqlite.md`/`guide/provider-specific-sql/sqlite.md`/`advanced/limitations.md` in both trees document the shipped builder surface with parity | docs (D195) |
 | EN-08 | `dotnet docfx docs/docfx.json` | 0 errors | PASS — exit 0, 2 pre-existing warnings, 0 errors; `/tmp/nextorm-d195-r1/docfx.log` | docs (D195) |
 | EN-09 | `git diff --check` + final reconciliation | no whitespace errors; planned files only | PASS — `git diff --check` exit 0; 5 source files (2 new) + this status file; CRLF verified (total lines == CRLF lines on all 6) | coder (D195) |
 
@@ -370,11 +370,11 @@ Tests:
 
 Docs pages (6, EN/RU):
 
-- `docs/providers/sqlite.md`
-- `docs/guide/provider-specific/sqlite.md`
+- `docs/connecting-providers/sqlite.md`
+- `docs/guide/provider-specific-sql/sqlite.md`
 - `docs/advanced/limitations.md`
-- `docs/ru/providers/sqlite.md`
-- `docs/ru/guide/provider-specific/sqlite.md`
+- `docs/ru/connecting-providers/sqlite.md`
+- `docs/ru/guide/provider-specific-sql/sqlite.md`
 - `docs/ru/advanced/limitations.md`
 
 Task/status:
@@ -423,7 +423,7 @@ overlay) — none may be downgraded, deferred or dropped.
 - 2026-10-07T00:36Z | DO | r=1 | n=1/3 | CRLF normalized; `dotnet build nextorm.slnx -c Debug` exit 0, Build succeeded, 0 Warning(s) 0 Error(s) | `/tmp/nextorm-d195-r1/build-debug.log`
 - 2026-10-07T00:50Z | PLAN | r=1 | n=1/3 | plan recorded | FC195-1
 - 2026-10-07T00:50Z | DO | r=1 | n=1/3 | implementation complete (command+enum, renderer+guard, immutable builder, factory+dispatch) | `src/nextorm.core/{Query/Mutations/SqliteFts5Command.cs,Builders/SqliteFts5CommandBuilder.cs,DataContext/SqlMutationBuilder.cs,DataContext/DataContextExtensions.cs,DataContext/DataContext.cs}`
-- 2026-10-07T00:50Z | DO | r=1 | n=1/3 | docs EN+RU complete (6 pages) | `docs/{providers/sqlite.md,guide/provider-specific/sqlite.md,advanced/limitations.md}` + `docs/ru/{providers/sqlite.md,guide/provider-specific/sqlite.md,advanced/limitations.md}`
+- 2026-10-07T00:50Z | DO | r=1 | n=1/3 | docs EN+RU complete (6 pages) | `docs/{connecting-providers/sqlite.md,guide/provider-specific-sql/sqlite.md,advanced/limitations.md}` + `docs/ru/{connecting-providers/sqlite.md,guide/provider-specific-sql/sqlite.md,advanced/limitations.md}`
 - 2026-10-07T00:50Z | DO | r=1 | n=1/3 | tests complete: core 1702/0/0, sqlite 1130/0/1, providers 786/710/292/199/579 all 0 failed, SQLite integration 87/0/0, full integration 3311 total / 3114 passed / 0 failed / 197 skipped (all 5 providers executed) | `/tmp/nextorm-d195-r1/{core-tests,sqlite-tests,postgres-tests,sqlserver-tests,mysql-tests,mariadb-tests,clickhouse-tests,integration-sqlite,integration}.log`
 - 2026-10-07T00:50Z | DO | r=1 | n=1/3 | evidence green: coverage line 88.6% (47547/53639) / branch 80% (25168/31427), docfx 0 errors (2 pre-existing warnings), `git diff --check` exit 0 | `/tmp/nextorm-d195-r1/{coverage-report/Summary.txt,docfx.log}`
 - 2026-10-07T00:58Z | CHECK | r=1 | n=1/3 | FAIL: P1 `D195-FTS5-IDENTIFIER-QUOTING` — `MakeSqliteFts5` emitted `command.TableName` verbatim when `quoteIdentifiers == false` (the `DataContextBuilder` default) and only conditionally quoted `rank`; FC195-1 requires always-quoted identifiers (breaks unusual names, permits identifier/SQL injection) | defect key `D195-FTS5-IDENTIFIER-QUOTING`

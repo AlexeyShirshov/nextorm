@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
@@ -28,6 +29,28 @@ public sealed class WindowFunction<T>
     public T Over(
         Expression<Func<object?>>? partitionBy = null,
         Expression<Func<object?>>? orderBy = null,
+        WindowFrame? frame = null) => default!;
+
+    /// <summary>
+    /// Completes the window function with a single partition expression and a single ordered key
+    /// (<c>asc</c>/<c>desc</c>), plus an optional frame. This is the scalar counterpart of the array
+    /// overload below for callers that do not build arrays.
+    /// <para>
+    /// The overload is declared with <see cref="OverloadResolutionPriorityAttribute"/> priority <c>-1</c>
+    /// so that the existing <see cref="Over(Expression{Func{object?}}?, Expression{Func{object?}}?, WindowFrame?)"/>
+    /// overload wins whenever it is applicable. Without that, an untyped <c>default</c> or <c>null</c> in the
+    /// <c>orderBy</c> position (for example <c>Over(partitionBy: e, orderBy: default)</c>) would be ambiguous
+    /// between the two overloads and would stop compiling; the attribute only orders resolution, the
+    /// signature itself is additive.
+    /// </para>
+    /// </summary>
+    /// <param name="partitionBy">The partition key expression (a lambda closing over the outer query parameter), or <c>null</c> for no <c>PARTITION BY</c>.</param>
+    /// <param name="orderBy">The single ordered key of the window.</param>
+    /// <param name="frame">An optional <c>ROWS</c>/<c>RANGE</c>/<c>GROUPS</c> frame.</param>
+    [OverloadResolutionPriority(-1)]
+    public T Over(
+        Expression<Func<object?>>? partitionBy,
+        WindowOrder orderBy,
         WindowFrame? frame = null) => default!;
 
     /// <summary>Completes the window function with a single ordered key and an optional frame.</summary>

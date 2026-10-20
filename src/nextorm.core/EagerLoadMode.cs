@@ -13,4 +13,16 @@ public enum EagerLoadMode
     SplitQuery = 1,
     /// <summary>Single-query loading: one denormalized <c>LEFT JOIN</c> command stitched in memory.</summary>
     SingleQuery = 2,
+    /// <summary>
+    /// Correlated per-parent loading. Recognized but not supported in this release: a query that resolves
+    /// to this mode is rejected with <see cref="NotSupportedException"/> before any SQL is generated or
+    /// cached. The value is reserved for the correlated/per-parent top-N work tracked separately.
+    /// </summary>
+    Correlated = 3,
+    /// <summary>
+    /// Automatic strategy selection. Resolved once during preparation by the conservative E1 rule, which
+    /// selects <see cref="SplitQuery"/> for every supported load; it never silently reinterprets a
+    /// per-parent top-N or correlated request.
+    /// </summary>
+    Auto = 4,
 }

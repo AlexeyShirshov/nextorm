@@ -495,7 +495,11 @@ internal static class JsonRowWriterFactory
             writeItem);
     }
 
-    private static string ResolveMemberName(string? rawName, JsonStreamOptions options)
+    /// <summary>
+    /// Resolves one captured member name through the naming policy exactly as the compiled writer does.
+    /// Shared with the writer-key builder so the cached key can never disagree with the emitted name.
+    /// </summary>
+    internal static string ResolveMemberName(string? rawName, JsonStreamOptions options)
     {
         if (string.IsNullOrEmpty(rawName))
             throw new NotSupportedException("JSON streaming validation [names]: A nested JSON object member has no name; only the root object is unnamed.");

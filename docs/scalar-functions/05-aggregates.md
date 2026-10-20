@@ -15,13 +15,17 @@ var names = dataContext.From<IComplexEntity>()
 
 ```sql
 -- PostgreSQL / SQL Server
-select string_agg(somestring, ',') from complex_entity
+select string_agg(somestring, ',')
+ from complex_entity
 -- ClickHouse
-select arrayStringConcat(groupArray(somestring), ',') from complex_entity
+select arrayStringConcat(groupArray(somestring), ',')
+ from complex_entity
 -- MySQL/MariaDB
-select group_concat(somestring separator ',') from complex_entity
+select group_concat(somestring separator ',')
+ from complex_entity
 -- SQLite
-select group_concat(somestring, ',') from complex_entity
+select group_concat(somestring, ',')
+ from complex_entity
 ```
 
 | C# | SQL | Providers |
@@ -39,7 +43,7 @@ render the ANSI `filter (where ...)` clause, ClickHouse renders its `-If` combin
 (`countIf`/`sumIf`/...) and MySQL/MariaDB and SQL Server reject the call. On PostgreSQL the ANSI clause
 requires server version 9.4 or later; a dialect configured with an older `Version` rejects the call with
 `NotSupportedException`, while an unset version assumes 9.4+ (see
-[PostgreSQL provider](../providers/postgres.md#server-version)):
+[PostgreSQL provider](../connecting-providers/postgres.md#server-version)):
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -55,7 +59,7 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (where (b = true)) as "Total"
-from complex_entity group by nullableint
+ from complex_entity group by nullableint
 ```
 
 On ClickHouse the same query renders `toInt32(countIf((id > 10)))` and `sumIf(id, (b = true))`.
@@ -63,7 +67,7 @@ On ClickHouse the same query renders `toInt32(countIf((id > 10)))` and `sumIf(id
 ## Set-returning helpers (PostgreSQL)
 
 `SqlFunctions.Postgres.generate_series` and `SqlFunctions.Postgres.unnest` are pre-declared
-[`[SqlTableFunction]`](../guide/11-table-valued-functions.md) sources, so no user-defined wrapper is needed:
+[`[SqlTableFunction]`](../guide/13-table-valued-functions.md) sources, so no user-defined wrapper is needed:
 
 ```csharp
 var numbers = dataContext

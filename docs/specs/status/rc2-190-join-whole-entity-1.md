@@ -142,7 +142,7 @@ Select(p => p.ItemN)
 | **D190-03 — cache correctness** | `SelectExpressionPlanEqualityComparer.cs:41-76,116`; `RowMapperFactory.cs:456-481`; перечисленные comparer/plan-key/join tests. Сначала тесты distinguish/reuse, затем только необходимая коррекция ключа/signature. D173 folding не включать. |
 | **D190-04 — providers и интеграции** | Существующие `tests/nextorm.postgres.tests/**/{TypedCteSqlGenerationTests,JoinReturningIdentitySqlGenerationTests}.cs`; планируемый `tests/nextorm.integration.tests/CommonTestSuite.JoinWholeEntity.cs`; существующие `CommonTestSuite.Cte.cs:136,163` и `PostgresJoinAritiesTests.cs:16`. Планируемые provider-local `JoinWholeEntitySqlGenerationTests.cs` в sqlite/postgres/sqlserver/mysql/mariadb/clickhouse tests, если существующие focused classes не покрывают нужный SQL shape. |
 | **D190-05 — qualification** | Финальная сборка, единственный boundary sweep с coverage, branch delta, mutation outcome, acceptance benchmark; planned artifacts `artifacts/pdca/rc2-190/`. |
-| **D190-06 — docs и reconciliation** | `docs/advanced/limitations.md:20`, `docs/ru/advanced/limitations.md:20`, `docs/guide/02-joins.md:104-106`, `docs/ru/guide/02-joins.md:106`, `docs/specs/design/code-smells-review.md:1770-1773`, `docs/specs/design/API-NAMING-REVIEW.md` §«Закрытие планов», текущий status file. |
+| **D190-06 — docs и reconciliation** | `docs/advanced/limitations.md:20`, `docs/ru/advanced/limitations.md:20`, `docs/guide/04-joins.md:104-106`, `docs/ru/guide/04-joins.md:106`, `docs/specs/design/code-smells-review.md:1770-1773`, `docs/specs/design/API-NAMING-REVIEW.md` §«Закрытие планов», текущий status file. |
 
 **Deferred findings:**
 
@@ -726,7 +726,7 @@ run_logged EV190-PERF timeout 240 dotnet run \
 - **Requirement / row:** R190-08 / EV190-DOCS; **rv:** rv1.
 - **Проверка:** EN/RU, XML-doc decision, публичные ссылки и DocFX.
 - **Виды/источники:** actual article diffs и DocFX output.
-- **Вызовы:** `git diff -- docs/advanced/limitations.md docs/ru/advanced/limitations.md docs/guide/02-joins.md docs/ru/guide/02-joins.md`; `run_logged EV190-DOCFX dotnet docfx docs/docfx.json`; targeted text review новых links и snippets.
+- **Вызовы:** `git diff -- docs/advanced/limitations.md docs/ru/advanced/limitations.md docs/guide/04-joins.md docs/ru/guide/04-joins.md`; `run_logged EV190-DOCFX dotnet docfx docs/docfx.json`; targeted text review новых links и snippets.
 - **Результат/логи:** DocFX exit 0; оба языка согласованы; нет новых публичных links на specs; XML-doc N/A обоснован отсутствием нового API/противоречащих comments.
 - **Артефакты:** `$E/EV190-DOCFX/*`, `$E/docs-audit.md`; generated `docs/_site/` не коммитить.
 - **Владелец:** coder; check validates.

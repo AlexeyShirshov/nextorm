@@ -188,6 +188,16 @@ internal static class WindowFunctionTranslator
             visitor.Builder!.Length = windowStart;
             visitor.Builder!.Append(visitor.Dialect.WrapCount(rendered, big: false));
         }
+        else if (declaringType.GetGenericArguments()[0] == typeof(int))
+        {
+            // The ranking window functions (row_number/rank/dense_rank/ntile) are declared as
+            // WindowFunction<int>, but some providers return an unsigned 64-bit value (ClickHouse
+            // returns UInt64) that the row reader cannot materialise into the declared int. The
+            // dialect decides whether the rendered expression needs a narrowing cast.
+            var rendered = visitor.Builder!.ToString(windowStart, visitor.Builder!.Length - windowStart);
+            visitor.Builder!.Length = windowStart;
+            visitor.Builder!.Append(visitor.Dialect.WrapIntegerWindowResult(rendered));
+        }
 
         return true;
     }

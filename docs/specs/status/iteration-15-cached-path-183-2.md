@@ -64,7 +64,7 @@ A (текущий цикл) → B1 (equality-scope allocations, `ExpressionPlanE
   `Cached_ToList`; controls Any/First/Single/Where; prepared control; Iteration/LargeIteration symmetry;
   warm/cold; matched SQL/types/rows; отдельно timed runs и diagnostic batches; CPU/alloc профили;
   inclusive CPU не суммировать; если seams не хватает — вернуть PLAN, не внедрять незапланированную
-  instrumentation); **CLOSED 2026-10-04** — `benchmarks/nextorm.benchmark/SqliteBenchmarkStageA.cs`, `StageADiagnostics.cs`; mandatory acceptance 7/7 exit 0 (wall 45.788s).
+  instrumentation); **CLOSED 2026-10-04** — `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkStageA.cs`, `StageADiagnostics.cs`; mandatory acceptance 7/7 exit 0 (wall 45.788s).
 - A3 correctness characterization (coder; closures same shape/diff values; повторные captures/dedup/pN;
   WHERE/JOIN/projection, null, converter; IN/lookup изменение; Any/Count/All ↔ DML/CTE; structural
   mismatch при hash collision на lookup; nested shadowing/reentrancy; cache clear/lifetime; fallback
@@ -153,7 +153,7 @@ B1, B2, C — активны в текущем milestone; #166 deferred с trigg
 
 | row | applies | predicate | status |
 |---|---|---|---|
-| G1-PERF | #183 Stage A, всегда | **MEASURED** — ровно 7 acceptance-кейсов без failures; читаемые CPU/alloc-профили реального benchmark-процесса; plan/parameter counts; доказанные representative hits; paired baseline; frozen budgets; `eng/perf/iteration14_gate.py` проходит | **met** |
+| G1-PERF | #183 Stage A, всегда | **MEASURED** — ровно 7 acceptance-кейсов без failures; читаемые CPU/alloc-профили реального benchmark-процесса; plan/parameter counts; доказанные representative hits; paired baseline; frozen budgets; `scripts/perf/iteration14_gate.py` проходит | **met** |
 | G1-CACHE | #183 Stage A, всегда | structural/cache/parameter characterization; полное структурное равенство (в т.ч. hash collision); отсутствие sticky `queryCommand.Cache=false`/`_dontCache`; scope (нет `src/nextorm.core` изменений); build 0/0; coverage line≥85/branch≥75; реальные provider runs (skip ≠ pass) | **met** |
 | G1-CTE | только если изменён `CteHoister.Hoist`/nested read-CTE path | predicate=false → N/A с доказательством (пустой diff); predicate=true → активный prerequisite #166, stop/re-scope | **N/A** — predicate=false; proof: `git diff 01f3e92 -- src` пуст (production `src` byte-identical) |
 
@@ -177,7 +177,7 @@ re-gather, не ревизия плана и не повтор DO.
 - Unit + provider suites all pass, **0 failures**: core 1482P; sqlite 992P / 1S (env-gated LobStream probe); postgres 742P; sqlserver 556P; mysql 257P; mariadb 157P; clickhouse 491P — logs `/tmp/nextorm-a5/test-*.log`.
 - Coverage aggregate: **line 87.1% / branch 78.7%** — artifacts `tests/coverage/` (`report/Summary.txt`, `coverage.cobertura.xml`).
 - Integration with `DOCKER_HOST`: **exit 0**; 4 DB providers executed, 0 failed (total 3136, errors 0, skipped 193 capability-based) — log `/tmp/nextorm-a5/integration.log`.
-- `eng/perf/iteration14_gate.py`: **exit 0** (all 56 row/job verdicts within budget) — log `/tmp/nextorm-a5/iteration14_gate.log`.
+- `scripts/perf/iteration14_gate.py`: **exit 0** (all 56 row/job verdicts within budget) — log `/tmp/nextorm-a5/iteration14_gate.log`.
 - Mandatory acceptance: **7/7 cases exit 0**, wall 45.788s — manifest `docs/specs/performance/iteration-15-stage-a-manifest.json`, report `docs/specs/performance/iteration-15-stage-a-report.md`.
 - `git diff 01f3e92 -- src/nextorm.core`: **empty** → G1-CTE predicate=false.
 - rawSQL boundary: `CachedPathCharacterizationTests.RawSqlOverride_FormAndValueChange_ShouldKeyThePlanBySqlTextOnly` (`tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs:272`) — SQL-text-only plan identity, form/value change; prepared `SqlStmt` null → `ExtractParams` bypass; B2 fallback preservation is a mandatory obligation (report §8).

@@ -2,7 +2,7 @@
 
 > Фильтр запроса — это предикат, привязанный к типу сущности в метаданных отображения; nextorm добавляет его через `and` в каждый запрос, где сущность участвует — основной `FROM`, источники соединений, подзапросы и жадно загружаемые дочерние записи — если только запрос не вызывает `IgnoreFilters()`.
 
-**Предварительные требования:** [Быстрый старт](../getting-started/02-quickstart.md) · [Обзор провайдеров](../providers/overview.md) · [Фильтрация (`Where`)](../guide/01-filtering-where.md)
+**Предварительные требования:** [Быстрый старт](../getting-started/02-quickstart.md) · [Обзор провайдеров](../connecting-providers/overview.md) · [Фильтрация (`Where`)](../guide/03-filtering-where.md)
 
 ## Обзор
 
@@ -59,11 +59,13 @@ var ids = ctx.From<Document>()
 
 ```sql
 -- PostgreSQL
-select id from documents
+select id
+ from documents
  where ((id = 10 and not (is_deleted)) and tenant_id = @p0)
 
 -- SQL Server
-select id from documents
+select id
+ from documents
  where ((id = 10 and not ((is_deleted) = 1)) and tenant_id = @p0)
 ```
 
@@ -170,11 +172,13 @@ var deleted = ctx.From<Document>()
 
 ```sql
 -- PostgreSQL
-select id from documents
+select id
+ from documents
  where (id = 10 and tenant_id = @p0)
 
 -- SQL Server
-select id from documents
+select id
+ from documents
  where (id = 10 and tenant_id = @p0)
 ```
 
@@ -198,19 +202,21 @@ select id from documents
 
 ```csharp
 var rows = ctx.From<Attachment>()
-    .Join(ctx.From<Document>(), (a, d) => a.DocumentId == d.Id)
+    .Join<Document>((a, d) => a.DocumentId == d.Id)
     .Select(p => p.Item1.Id)
     .ToList();
 ```
 
 ```sql
 -- PostgreSQL
-select t1.id from attachments as "t1"
+select t1.id
+ from attachments as "t1"
  join documents as "t2" on ((t1.document_id = t2.id and not (t2.is_deleted)) and t2.tenant_id = @p0)
  where not (t1.is_deleted)
 
 -- SQL Server
-select t1.id from attachments as [t1]
+select t1.id
+ from attachments as [t1]
  join documents as [t2] on ((t1.document_id = t2.id and not ((t2.is_deleted) = 1)) and t2.tenant_id = @p0)
  where not ((t1.is_deleted) = 1)
 ```
@@ -228,20 +234,24 @@ var rows = ctx.From<Document>()
 
 ```sql
 -- PostgreSQL
-select t1.id, (select t2.id from attachments as "t2"
+select t1.id, (select t2.id
+ from attachments as "t2"
  where (t2.document_id = t1.id and not (t2.is_deleted))
-limit 1) as "sid" from documents as "t1"
+limit 1) as "sid"
+ from documents as "t1"
  where (not (t1.is_deleted) and t1.tenant_id = @p0)
 
 -- SQL Server
-select t1.id, (select top(1) t2.id from attachments as [t2]
- where (t2.document_id = t1.id and not ((t2.is_deleted) = 1))) as [sid] from documents as [t1]
+select t1.id, (select top(1) t2.id
+ from attachments as [t2]
+ where (t2.document_id = t1.id and not ((t2.is_deleted) = 1))) as [sid]
+ from documents as [t1]
  where (not ((t1.is_deleted) = 1) and t1.tenant_id = @p0)
 ```
 
 Основной источник соединения — первая таблица, поэтому фильтр, объявленный для `T1`, применяется к `Item1` так же, как в обычном запросе.
 
-Область отключения несёт тот запрос, который её начинает, поэтому тип, указанный в селективном `IgnoreFilters`, отключается везде, где он встречается в этом запросе, а `IgnoreFilters()` отключает все фильтры во всём запросе — включая жадно загружаемые дочерние записи, объявленные через [`LoadWith`](eager-loading.md). Это одинаково в split- и single-query (`EagerLoadMode.SingleQuery`) режимах: эффективная область дочерней стороны — это **объединение** её собственной области `IgnoreFilters` и родительской, `IgnoreFilters()` (`All`) поглощает это объединение, а селективная область ребёнка отключает фильтры только у этого ребёнка. См. [Eager loading](eager-loading.md#режим-single-query-eagerloadmodesinglequery).
+Область отключения несёт тот запрос, который её начинает, поэтому тип, указанный в селективном `IgnoreFilters`, отключается везде, где он встречается в этом запросе, а `IgnoreFilters()` отключает все фильтры во всём запросе — включая жадно загружаемые дочерние записи, объявленные через [`LoadWith`](../relationships/eager-loading.md), на каждом уровне вложенности. Это одинаково в split- и single-query (`EagerLoadMode.SingleQuery`) режимах: эффективная область каждого уровня — это **объединение** его собственной области `IgnoreFilters` и области его родителя, `IgnoreFilters()` (`All`) поглощает это объединение, а селективная область отключает фильтры только у названных в ней типов сущностей. Поэтому корневой `IgnoreFilters` доходит до каждого потомка, а область, применённая внутри ребёнка, доходит до этого ребёнка и всех его потомков. См. [Eager loading](../relationships/eager-loading.md#режим-single-query-eagerloadmodesinglequery).
 
 ## UPDATE и DELETE (DML)
 
@@ -322,14 +332,16 @@ ctx.CreateInsertBuilder<ArchivedDocument>()
 insert into documents (id, tenant_id, is_deleted) values (@p0, @p1, @p2)
 
 insert into archived_documents (id, tenant_id, is_deleted)
-select id, tenant_id as "TenantId", is_deleted as "IsDeleted" from documents
+select id, tenant_id as "TenantId", is_deleted as "IsDeleted"
+ from documents
  where (((id > 0) and not (is_deleted)) and tenant_id = @p0)
 
 -- SQL Server
 insert into documents (id, tenant_id, is_deleted) values (@p0, @p1, @p2)
 
 insert into archived_documents (id, tenant_id, is_deleted)
-select id, tenant_id as [TenantId], is_deleted as [IsDeleted] from documents
+select id, tenant_id as [TenantId], is_deleted as [IsDeleted]
+ from documents
  where (((id > 0) and not ((is_deleted) = 1)) and tenant_id = @p0)
 ```
 
@@ -486,11 +498,13 @@ var rows = dataContext
 
 ```sql
 -- PostgreSQL
-select id from (select id, tenant_id, is_deleted from documents) as "t1"
+select id
+ from (select id, tenant_id, is_deleted from documents) as "t1"
  where (((t1.id > 10) and not (t1.is_deleted)) and t1.tenant_id = @p0)
 
 -- SQL Server
-select id from (select id, tenant_id, is_deleted from documents) as [t1]
+select id
+ from (select id, tenant_id, is_deleted from documents) as [t1]
  where (((t1.id > 10) and not ((t1.is_deleted) = 1)) and t1.tenant_id = @p0)
 ```
 
@@ -554,7 +568,7 @@ public interface IQueryFilterMetadata
 ## Ограничения
 
 - **Процессно-глобальная регистрация, побеждает первая.** Фильтры регистрируются **глобально на процесс**, и для типа сущности побеждает первая регистрация (согласовано с метаданными nextorm): последующий `From<T>(cfg)` / `HasQueryFilter` для того же типа игнорируется — фильтры не привязаны к `DataContext`.
-- **Область отключения наследует входной билдер.** Селективную область несёт билдер, который начинает запрос; вызов `IgnoreFilters` на билдере, который затем используется как источник соединения, не пробрасывается. Используйте перегрузку по типам/ключам на входном билдере запроса. Исключение — жадно загружаемые дочерние записи `LoadWith`: они наследуют область входного билдера объединением (см. [Eager loading](eager-loading.md)).
+- **Область отключения наследует входной билдер.** Селективную область несёт билдер, который начинает запрос; вызов `IgnoreFilters` на билдере, который затем используется как источник соединения, не пробрасывается. Используйте перегрузку по типам/ключам на входном билдере запроса. Исключение — жадно загружаемые дочерние записи `LoadWith`: они наследуют область входного билдера объединением на каждом уровне вложенности (см. [Eager loading](../relationships/eager-loading.md)).
 - **Key-формы мутаций применяют фильтры, но не предоставляют `IgnoreFilters`.** `Update(entity)` и `Delete(entity)` учитывают фильтр цели, но у их немедленного терминала нет fluent-вызова `IgnoreFilters`; используйте предикатную форму (`CreateUpdateBuilder<T>().Where(...)` / `CreateDeleteBuilder<T>().Where(...)`), когда нужно отключить фильтр на мутации.
 - **Время жизни плана.** Значение контекста, читаемое фильтром, захватывается как runtime-параметр (безопасно для кэша плана). Подготовленный план сохраняет первый экземпляр `IDataContext` на всё время существования (ограниченно, один на форму плана).
-- **Открытые единицы по адаптерам.** Срез «ClickHouse без EF-адаптера» и сертификация общего соединения специально для MariaDB отслеживаются как открытые единицы вехи `1.0.9-b`; до их появления используйте поддерживаемые EF-адаптеры (см. [Мост фильтров запросов EF Core](ef-core-query-filters.md)).
+- **Открытые единицы по адаптерам.** Срез «ClickHouse без EF-адаптера» и сертификация общего соединения специально для MariaDB отслеживаются как открытые единицы вехи `1.0.9-b`; до их появления используйте поддерживаемые EF-адаптеры (см. [Мост фильтров запросов EF Core](integration-efcore.md#глобальные-фильтры-запросов-из-ef-модели)).

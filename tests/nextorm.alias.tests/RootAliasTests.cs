@@ -74,8 +74,8 @@ public class RootAliasTests
             // A single-table root query needs no table alias, but the source must stay the physical
             // table (no derived/nested projection, no flattening) and slot 1 must resolve to its column.
             var last = sql.Statements[^1];
-            last.Should().Be("select Id from orders");
-            last.Should().NotContain("select * from (");
+            last.Should().Be("select Id\n from orders");
+            last.Should().NotContain("select *\n from (");
         }
         finally
         {
@@ -144,7 +144,7 @@ public class RootAliasTests
             rooted.Select(p => p.Root.Id).ToList().Should().Equal(1);
 
             // No derived wrapper and no flattening: the single-table root still reads the physical table.
-            sql.Statements[^1].Should().Be("select Id from orders");
+            sql.Statements[^1].Should().Be("select Id\n from orders");
         }
         finally
         {
@@ -263,7 +263,7 @@ public class RootAliasTests
             var last = sql.Statements[^1];
             // The derived builder source must stay a derived table aliased to the root slot ('t1'), not be
             // unwrapped to the physical table (issue #160, D:160-03, rv=3).
-            last.Should().Contain("(select Id, BuyerId, ApproverId from orders) as 't1'");
+            last.Should().Contain("(select Id, BuyerId, ApproverId\n from orders) as 't1'");
             last.Should().NotContain("orders as 't1'");
         }
         finally

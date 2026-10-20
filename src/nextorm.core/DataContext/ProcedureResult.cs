@@ -72,6 +72,17 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable, IEnumerable
     }
 
     /// <summary>
+    /// The number of rows the command's DML statements affected, as reported by the provider, or
+    /// <c>-1</c> when the command has no affected-row metadata (a query) or when the value is not
+    /// available yet. The value is captured when the reader is released — by <see cref="Dispose"/>
+    /// (<see cref="DisposeAsync"/>) or implicitly when <see cref="OutputParameters"/> /
+    /// <see cref="ReturnValue"/> closes it — and is not affected by how far the result sets were read.
+    /// Reading this property never touches a reader: it is safe before, during and after disposal and
+    /// does not throw once the result has been disposed.
+    /// </summary>
+    public int RecordsAffected => _owner.RecordsAffected;
+
+    /// <summary>
     /// Returns an enumerator over the column-bearing result sets of the command in order, yielding a
     /// <see cref="ResultSet"/> cursor for each. Leading, intermediate and trailing result sets without
     /// columns (DDL/DML) are skipped and do not count toward <see cref="ResultSet.Index"/>; a set with

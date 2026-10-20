@@ -1,0 +1,13 @@
+{
+  "unit": "T245",
+  "scope": {
+    "projects": ["tests/nextorm.core.tests"],
+    "selectors": ["FullyQualifiedName~T240CommandConstructionTests"],
+    "files": ["benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkWarmDecompose.cs"],
+    "rebuild": "affected",
+    "boundary": "no DO->CHECK boundary here; the single boundary sweep is D245-4",
+    "rationale": "benchmark-project-only instrumentation; the affected unit project proves the set-operation command path still compiles and behaves",
+    "integration_projects": ["tests/nextorm.integration.tests"],
+    "integration_boundary_runs": 1
+  }
+}

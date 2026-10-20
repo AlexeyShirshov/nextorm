@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.SqliteBenchmarkJsonFixedCost-20261018-132814</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host]     : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  DefaultJob : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=DefaultJob  Categories=json-fixed  
+</code></pre>
+
+<table>
+<thead><tr><th>Method               </th><th>Rows</th><th>Mean     </th><th>Median   </th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>Nextorm_SteadyWriter_3Col</td><td>1</td><td>235.4 ns</td><td>233.4 ns</td><td>0.01</td><td>0.0534</td><td>-</td><td>-</td><td>448 B</td><td>0.10</td>
+</tr><tr><td>Nextorm_ToList_3Col</td><td>1</td><td>18,429.5 ns</td><td>18,366.6 ns</td><td>1.00</td><td>0.4883</td><td>-</td><td>-</td><td>4600 B</td><td>1.00</td>
+</tr><tr><td>Nextorm_WriteJson_1Col</td><td>1</td><td>533,646.8 ns</td><td>536,191.4 ns</td><td>28.98</td><td>0.9766</td><td>-</td><td>-</td><td>12512 B</td><td>2.72</td>
+</tr><tr><td>Nextorm_WriteJson_ObjectStr</td><td>1</td><td>1,010,509.5 ns</td><td>1,008,827.4 ns</td><td>54.87</td><td>-</td><td>-</td><td>-</td><td>14425 B</td><td>3.14</td>
+</tr><tr><td>Nextorm_WriteJson_ObjectNum</td><td>1</td><td>1,341,510.8 ns</td><td>1,336,410.8 ns</td><td>72.84</td><td>3.9063</td><td>1.9531</td><td>-</td><td>40159 B</td><td>8.73</td>
+</tr><tr><td>Nextorm_WriteJson_3Col</td><td>1</td><td>1,934,792.4 ns</td><td>1,932,614.3 ns</td><td>105.05</td><td>3.9063</td><td>-</td><td>-</td><td>49630 B</td><td>10.79</td>
+</tr><tr><td>Nextorm_CompileOnly_3Col</td><td>1</td><td>2,034,228.6 ns</td><td>2,007,286.4 ns</td><td>110.45</td><td>3.9063</td><td>-</td><td>-</td><td>39855 B</td><td>8.66</td>
+</tr><tr><td>Nextorm_WriteJson_8Col</td><td>1</td><td>3,410,092.8 ns</td><td>3,405,302.5 ns</td><td>185.16</td><td>7.8125</td><td>3.9063</td><td>-</td><td>70232 B</td><td>15.27</td>
+</tr><tr><td>Nextorm_SteadyWriter_3Col</td><td>10</td><td>2,057.7 ns</td><td>2,069.9 ns</td><td>0.07</td><td>0.6027</td><td>-</td><td>-</td><td>5056 B</td><td>0.76</td>
+</tr><tr><td>Nextorm_ToList_3Col</td><td>10</td><td>29,358.9 ns</td><td>28,829.8 ns</td><td>1.00</td><td>0.7324</td><td>-</td><td>-</td><td>6688 B</td><td>1.00</td>
+</tr><tr><td>Nextorm_WriteJson_1Col</td><td>10</td><td>598,655.7 ns</td><td>593,238.7 ns</td><td>20.49</td><td>0.9766</td><td>-</td><td>-</td><td>13383 B</td><td>2.00</td>
+</tr><tr><td>Nextorm_WriteJson_ObjectNum</td><td>10</td><td>1,219,005.6 ns</td><td>1,212,360.2 ns</td><td>41.71</td><td>3.9063</td><td>1.9531</td><td>-</td><td>40699 B</td><td>6.09</td>
+</tr><tr><td>Nextorm_WriteJson_ObjectStr</td><td>10</td><td>1,235,234.1 ns</td><td>1,208,199.0 ns</td><td>42.27</td><td>-</td><td>-</td><td>-</td><td>15289 B</td><td>2.29</td>
+</tr><tr><td>Nextorm_CompileOnly_3Col</td><td>10</td><td>1,934,269.1 ns</td><td>1,922,414.6 ns</td><td>66.19</td><td>3.9063</td><td>-</td><td>-</td><td>40207 B</td><td>6.01</td>
+</tr><tr><td>Nextorm_WriteJson_3Col</td><td>10</td><td>2,060,713.2 ns</td><td>2,032,911.3 ns</td><td>70.52</td><td>3.9063</td><td>-</td><td>-</td><td>51326 B</td><td>7.67</td>
+</tr><tr><td>Nextorm_WriteJson_8Col</td><td>10</td><td>3,475,412.4 ns</td><td>3,404,305.8 ns</td><td>118.93</td><td>7.8125</td><td>-</td><td>-</td><td>74948 B</td><td>11.21</td>
+</tr><tr><td>Nextorm_SteadyWriter_3Col</td><td>100</td><td>15,308.6 ns</td><td>15,283.8 ns</td><td>0.13</td><td>2.1667</td><td>0.0916</td><td>-</td><td>18328 B</td><td>0.67</td>
+</tr><tr><td>Nextorm_ToList_3Col</td><td>100</td><td>122,659.9 ns</td><td>118,600.7 ns</td><td>1.01</td><td>2.9297</td><td>-</td><td>-</td><td>27553 B</td><td>1.00</td>
+</tr><tr><td>Nextorm_WriteJson_1Col</td><td>100</td><td>568,074.1 ns</td><td>564,386.6 ns</td><td>4.67</td><td>1.9531</td><td>0.9766</td><td>-</td><td>22139 B</td><td>0.80</td>
+</tr><tr><td>Nextorm_WriteJson_ObjectNum</td><td>100</td><td>1,238,220.8 ns</td><td>1,216,001.6 ns</td><td>10.18</td><td>3.9063</td><td>-</td><td>-</td><td>40703 B</td><td>1.48</td>
+</tr><tr><td>Nextorm_WriteJson_ObjectStr</td><td>100</td><td>1,250,460.4 ns</td><td>1,232,117.1 ns</td><td>10.28</td><td>1.9531</td><td>-</td><td>-</td><td>23955 B</td><td>0.87</td>
+</tr><tr><td>Nextorm_CompileOnly_3Col</td><td>100</td><td>1,760,643.8 ns</td><td>1,732,127.9 ns</td><td>14.48</td><td>3.9063</td><td>-</td><td>-</td><td>40615 B</td><td>1.47</td>
+</tr><tr><td>Nextorm_WriteJson_3Col</td><td>100</td><td>2,246,443.1 ns</td><td>2,240,980.1 ns</td><td>18.47</td><td>7.8125</td><td>3.9063</td><td>-</td><td>67257 B</td><td>2.44</td>
+</tr><tr><td>Nextorm_WriteJson_8Col</td><td>100</td><td>3,478,547.6 ns</td><td>3,471,751.1 ns</td><td>28.60</td><td>7.8125</td><td>-</td><td>-</td><td>129931 B</td><td>4.72</td>
+</tr><tr><td>Nextorm_SteadyWriter_3Col</td><td>1000</td><td>148,781.6 ns</td><td>147,225.1 ns</td><td>0.16</td><td>13.4277</td><td>2.1973</td><td>-</td><td>114176 B</td><td>0.48</td>
+</tr><tr><td>Nextorm_ToList_3Col</td><td>1000</td><td>915,547.0 ns</td><td>918,277.7 ns</td><td>1.00</td><td>27.3438</td><td>7.8125</td><td>-</td><td>236317 B</td><td>1.00</td>
+</tr><tr><td>Nextorm_WriteJson_1Col</td><td>1000</td><td>921,159.8 ns</td><td>913,717.3 ns</td><td>1.01</td><td>11.7188</td><td>3.9063</td><td>-</td><td>108435 B</td><td>0.46</td>
+</tr><tr><td>Nextorm_WriteJson_ObjectNum</td><td>1000</td><td>1,501,764.8 ns</td><td>1,506,132.9 ns</td><td>1.64</td><td>3.9063</td><td>-</td><td>-</td><td>40121 B</td><td>0.17</td>
+</tr><tr><td>Nextorm_WriteJson_ObjectStr</td><td>1000</td><td>1,522,990.5 ns</td><td>1,523,232.0 ns</td><td>1.66</td><td>11.7188</td><td>3.9063</td><td>-</td><td>110360 B</td><td>0.47</td>
+</tr><tr><td>Nextorm_CompileOnly_3Col</td><td>1000</td><td>1,979,962.4 ns</td><td>1,947,774.3 ns</td><td>2.16</td><td>3.9063</td><td>-</td><td>-</td><td>40359 B</td><td>0.17</td>
+</tr><tr><td>Nextorm_WriteJson_3Col</td><td>1000</td><td>3,218,603.2 ns</td><td>3,195,106.5 ns</td><td>3.52</td><td>23.4375</td><td>7.8125</td><td>-</td><td>225656 B</td><td>0.95</td>
+</tr><tr><td>Nextorm_WriteJson_8Col</td><td>1000</td><td>6,611,506.7 ns</td><td>6,567,411.7 ns</td><td>7.22</td><td>78.1250</td><td>15.6250</td><td>-</td><td>677048 B</td><td>2.86</td>
+</tr><tr><td>Nextorm_SteadyWriter_3Col</td><td>10000</td><td>1,575,930.4 ns</td><td>1,563,815.3 ns</td><td>0.15</td><td>277.3438</td><td>277.3438</td><td>277.3438</td><td>1072345 B</td><td>0.46</td>
+</tr><tr><td>Nextorm_CompileOnly_3Col</td><td>10000</td><td>1,748,063.2 ns</td><td>1,751,292.3 ns</td><td>0.17</td><td>3.9063</td><td>-</td><td>-</td><td>40647 B</td><td>0.02</td>
+</tr><tr><td>Nextorm_WriteJson_1Col</td><td>10000</td><td>4,301,983.1 ns</td><td>4,248,728.1 ns</td><td>0.41</td><td>109.3750</td><td>-</td><td>-</td><td>972473 B</td><td>0.42</td>
+</tr><tr><td>Nextorm_WriteJson_ObjectNum</td><td>10000</td><td>4,554,754.7 ns</td><td>4,537,856.2 ns</td><td>0.43</td><td>-</td><td>-</td><td>-</td><td>40277 B</td><td>0.02</td>
+</tr><tr><td>Nextorm_WriteJson_ObjectStr</td><td>10000</td><td>5,317,577.0 ns</td><td>5,310,447.8 ns</td><td>0.51</td><td>109.3750</td><td>-</td><td>-</td><td>974438 B</td><td>0.42</td>
+</tr><tr><td>Nextorm_ToList_3Col</td><td>10000</td><td>10,549,347.3 ns</td><td>10,476,419.4 ns</td><td>1.00</td><td>265.6250</td><td>250.0000</td><td>-</td><td>2323647 B</td><td>1.00</td>
+</tr><tr><td>Nextorm_WriteJson_3Col</td><td>10000</td><td>14,383,433.5 ns</td><td>14,338,063.5 ns</td><td>1.37</td><td>203.1250</td><td>15.6250</td><td>-</td><td>1808914 B</td><td>0.78</td>
+</tr><tr><td>Nextorm_WriteJson_8Col</td><td>10000</td><td>37,893,495.7 ns</td><td>37,515,160.5 ns</td><td>3.60</td><td>714.2857</td><td>-</td><td>-</td><td>6147951 B</td><td>2.65</td>
+</tr></tbody></table>
+</body>
+</html>

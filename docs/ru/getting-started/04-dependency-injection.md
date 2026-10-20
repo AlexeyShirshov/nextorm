@@ -78,6 +78,20 @@ var reporting = scope.ServiceProvider.GetRequiredKeyedService<IDataContext>("rep
 > [`IDataContext`](xref:NextORM.Core.IDataContext) при использовании пути параметров. Именно путь типа обеспечивает то, что конкретный тип и
 > интерфейс разрешаются в один и тот же экземпляр.
 
+## Интерцепторы через DI
+
+Интерцептор можно зарегистрировать по типу сервиса, а не готовым экземпляром; builder разрешает его из области, создавшей builder:
+
+```csharp
+services.AddScoped<TimingInterceptor>();
+
+services.AddNextOrmContext(builder => builder
+    .UseSqlite("app.db")
+    .AddInterceptor<TimingInterceptor>()); // или .AddInterceptor(typeof(TimingInterceptor))
+```
+
+Разрешение происходит один раз на создание контекста, поэтому scoped-, singleton- и transient-времена жизни соблюдаются, а владение освобождением остаётся за контейнером. Type-регистрация требует builder с DI — на отдельном builder она падает при `CreateDataContext()`, а незарегистрированный сервис — ошибкой `GetRequiredService` самого контейнера до вызова фабрики контекста. Порядок, дедупликацию и контракт ошибок см. в [«Интерцепторы»](../infrastructure/02-interceptors.md).
+
 ## Настройка построителя напрямую
 
 [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) можно также использовать без контейнера - именно это и вызывает DI-фабрика:
@@ -142,15 +156,15 @@ builder.UsePostgres("Host=localhost;Database=app");
 * [Установка](01-installation.md)
 * [Быстрый старт](02-quickstart.md)
 * [Сущности и метаданные](03-entities-and-metadata.md)
-* [Логирование](../infrastructure/05-logging.md)
+* [Логирование](../infrastructure/04-logging.md)
 * [Индекс документации](../index.md)
 
 ---
 
-Source: `tests/nextorm.core.tests/DependencyInjectionTests.cs:13`,
-`tests/nextorm.core.tests/DependencyInjectionTests.cs:43`,
-`tests/nextorm.core.tests/DependencyInjectionTests.cs:58`,
-`tests/nextorm.core.tests/DependencyInjectionTests.cs:71`;
+Source: `tests/nextorm.core.tests/DependencyInjection/DependencyInjectionTests.cs:13`,
+`tests/nextorm.core.tests/DependencyInjection/DependencyInjectionTests.cs:43`,
+`tests/nextorm.core.tests/DependencyInjection/DependencyInjectionTests.cs:58`,
+`tests/nextorm.core.tests/DependencyInjection/DependencyInjectionTests.cs:71`;
 `src/nextorm.core/DI/ServiceCollectionExtensions.cs:73`;
 `src/nextorm.core/DI/DataContextBuilder.cs:20`;
 `src/nextorm.sqlite/DI/SqliteDataContextOptionsBuilderExtensions.cs:8`;

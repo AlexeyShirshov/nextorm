@@ -1,4 +1,4 @@
-# Строковые и массивные агрегаты
+# Агрегаты строк и массивов
 
 `SqlFunctions.Sql.string_agg` доступен в PostgreSQL, SQL Server 2017+, ClickHouse, MySQL/MariaDB и SQLite
 ([`SupportsStringAgg`](xref:NextORM.Core.ISqlDialect.SupportsStringAgg), по умолчанию берёт значение зонтичного
@@ -16,13 +16,17 @@ var names = dataContext.From<IComplexEntity>()
 
 ```sql
 -- PostgreSQL / SQL Server
-select string_agg(somestring, ',') from complex_entity
+select string_agg(somestring, ',')
+ from complex_entity
 -- ClickHouse
-select arrayStringConcat(groupArray(somestring), ',') from complex_entity
+select arrayStringConcat(groupArray(somestring), ',')
+ from complex_entity
 -- MySQL/MariaDB
-select group_concat(somestring separator ',') from complex_entity
+select group_concat(somestring separator ',')
+ from complex_entity
 -- SQLite
-select group_concat(somestring, ',') from complex_entity
+select group_concat(somestring, ',')
+ from complex_entity
 ```
 
 | C# | SQL | Провайдеры |
@@ -40,7 +44,7 @@ select group_concat(somestring, ',') from complex_entity
 а MySQL/MariaDB и SQL Server отклоняют вызов. В PostgreSQL ANSI-предложение требует версии сервера 9.4
 или новее; диалект, настроенный на более старую `Version`, отклоняет вызов через
 `NotSupportedException`, а незаданная версия предполагает 9.4+ (см.
-[провайдер PostgreSQL](../providers/postgres.md#версия-сервера)):
+[провайдер PostgreSQL](../connecting-providers/postgres.md#версия-сервера)):
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -56,7 +60,7 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (where (b = true)) as "Total"
-from complex_entity group by nullableint
+ from complex_entity group by nullableint
 ```
 
 В ClickHouse тот же запрос генерирует `toInt32(countIf((id > 10)))` и `sumIf(id, (b = true))`.
@@ -64,7 +68,7 @@ from complex_entity group by nullableint
 ## Функции, возвращающие наборы (PostgreSQL)
 
 `SqlFunctions.Postgres.generate_series` и `SqlFunctions.Postgres.unnest` — это предобъявленные источники
-[`[SqlTableFunction]`](../guide/11-table-valued-functions.md), поэтому отдельная обёртка не нужна:
+[`[SqlTableFunction]`](../guide/13-table-valued-functions.md), поэтому отдельная обёртка не нужна:
 
 ```csharp
 var numbers = dataContext

@@ -523,7 +523,421 @@ public class JoinAliasGeneratorDiagnosticTests
             .Should().NotContain(d => d.Severity == DiagnosticSeverity.Error);
     }
 
+    [Fact]
+    public void Aliased_chain_consumed_by_a_later_query_keeps_the_downstream_aliases()
+    {
+        // #230: an aliased chain (Buyer) projected into a CTE and consumed by a later query whose chain
+        // itself carries aliases (Root/Seller). The aliased chain's builder type is generated and absent
+        // on the generator's input pass, so the consuming expression is an error type; the generator must
+        // still recover the downstream chain from syntax and emit Root/Seller.
+        const string source =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public sealed class MidRow { public int Id { get; set; } }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(IDataContext ctx, EntityBuilder<Person> people)\n" +
+            "    {\n" +
+            "        var inner = ctx.From<Order>().WithAlias(Alias.Order)\n" +
+            "            .Join<Person>(people, (o, p) => o.Order.Id == p.Id, Alias.Customer)\n" +
+            "            .Join<Person>(people, (p, per) => p.Customer.Id == per.Id, Alias.Person)\n" +
+            "            .Select(p => new { Id = p.Order.Id })\n" +
+            "            .AsCte(\"inner\");\n" +
+            "        var mid = ctx.From(inner)\n" +
+            "            .GroupBy(x => new { x.Id })\n" +
+            "            .Select(x => new MidRow { Id = x.Id })\n" +
+            "            .AsCte(\"mid\");\n" +
+            "        _ = ctx.From(mid).WithAlias(Alias.Metrics)\n" +
+            "            .Join<Person>(people, (m, p) => m.Metrics.Id == p.Id, Alias.SalesPerson)\n" +
+            "            .Join<Person>(people, (p, per) => p.SalesPerson.Id == per.Id, Alias.Manager);\n" +
+            "    }\n" +
+            "}\n";
+
+        var harness = RunSource(source);
+        harness.Run.Diagnostics.Should().BeEmpty();
+        harness.Run.GeneratedTrees.Should().HaveCount(1);
+
+        var generated = harness.Run.GeneratedTrees[0].ToString();
+        TestContext.Current.AddAttachment("230-generated.cs", generated);
+        TestContext.Current.AddAttachment("230-compiler.txt", string.Join("\n", harness.Output.GetDiagnostics(TestContext.Current.CancellationToken).Select(d => d.ToString())));
+
+        generated.Should().Contain("Alias.OrderMarker");
+        generated.Should().Contain("Alias.MetricsMarker");
+        generated.Should().Contain("Alias.SalesPersonMarker");
+        generated.Should().Contain("Alias.ManagerMarker");
+        generated.Should().Contain("AliasJoin_A1_Metrics_A2_SalesPerson<global::Harness.MidRow, TJoin>");
+    }
+
+    [Fact]
+    public void Alias_over_an_anonymous_chain_type_reports_NORMGEN009()
+    {
+        // #229: the emitted extension signatures name the chain's concrete projected type, which cannot
+        // name an anonymous type. The generator must fail closed with NORMGEN009 and never emit source
+        // containing the invalid `global::<anonymous type: …>` token.
+        const string source =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(IDataContext ctx, EntityBuilder<Person> people)\n" +
+            "    {\n" +
+            "        var inner = ctx.From<Order>().Select(o => new { o.Id }).AsCte(\"inner\");\n" +
+            "        _ = ctx.From(inner).WithAlias(Alias.Root);\n" +
+            "    }\n" +
+            "}\n";
+
+        var harness = RunSource(source);
+
+        harness.Run.Diagnostics.Should().ContainSingle(d => d.Id == "NORMGEN009");
+        harness.Run.Diagnostics.Single(d => d.Id == "NORMGEN009").Severity.Should().Be(DiagnosticSeverity.Error);
+        harness.Run.GeneratedTrees.Should().NotBeEmpty();
+        harness.Run.GeneratedTrees.Single().ToString().Should().NotContain("<anonymous type:");
+    }
+
     // ---------------------------------------------------------------------------------------------
+    [Fact]
+    public void Alias_over_an_intermediate_anonymous_join_step_reports_NORMGEN009()
+    {
+        // E02 (#229 intermediate / non-last step): the first alias step joins an anonymous-typed CTE
+        // while the chain continues with a LATER named alias join. The anonymous step still appears in
+        // the emitted receiver/return signatures, so the chain must fail closed exactly once with
+        // NORMGEN009 and never emit the invalid `global::<anonymous type: …>` token.
+        const string source =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(IDataContext ctx, EntityBuilder<Person> people)\n" +
+            "    {\n" +
+            "        var inner = ctx.From<Order>().Select(o => new { o.Id }).AsCte(\"inner\");\n" +
+            "        _ = ctx.From<Order>().Join(inner, (o, p) => true, Alias.A).Join<Person>(people, (p, q) => true, Alias.B);\n" +
+            "    }\n" +
+            "}\n";
+
+        var harness = RunSource(source);
+
+        TestContext.Current.AddAttachment("E02-generated-trees.txt",
+            string.Join("\n----\n", harness.Run.GeneratedTrees.Select(tree => tree.ToString())));
+
+        harness.Run.Diagnostics.Should().ContainSingle(d => d.Id == "NORMGEN009");
+        harness.Run.Diagnostics.Single(d => d.Id == "NORMGEN009").Severity.Should().Be(DiagnosticSeverity.Error);
+        harness.Run.GeneratedTrees.Should().NotBeEmpty();
+        harness.Run.GeneratedTrees.Should().OnlyContain(tree => !tree.ToString().Contains("<anonymous type:"));
+    }
+
+    [Fact]
+    public void Error_path_chain_with_Where_and_OrderBy_keeps_the_downstream_aliases()
+    {
+        // E06 (#230 recovering walk): the syntax walk from the error-typed `ctx.From(mid)` root must
+        // traverse element-preserving operators beyond GroupBy/Select/AsCte. Here the middle chain
+        // projects a NAMED DTO and then applies Where and OrderBy before AsCte, so the walk must step
+        // through both operators to reach the Select that establishes the element type; the outer
+        // aliased chain still emits every alias.
+        const string source =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public sealed class MidRow { public int Id { get; set; } }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(IDataContext ctx, EntityBuilder<Person> people)\n" +
+            "    {\n" +
+            "        var inner = ctx.From<Order>().WithAlias(Alias.Order)\n" +
+            "            .Join<Person>(people, (o, p) => o.Order.Id == p.Id, Alias.Customer)\n" +
+            "            .Select(p => new { Id = p.Order.Id })\n" +
+            "            .AsCte(\"inner\");\n" +
+            "        var mid = ctx.From(inner)\n" +
+            "            .Select(x => new MidRow { Id = x.Id })\n" +
+            "            .Where(x => x.Id > 0)\n" +
+            "            .OrderBy(x => x.Id)\n" +
+            "            .AsCte(\"mid\");\n" +
+            "        _ = ctx.From(mid).WithAlias(Alias.Metrics)\n" +
+            "            .Join<Person>(people, (m, p) => m.Metrics.Id == p.Id, Alias.SalesPerson)\n" +
+            "            .Join<Person>(people, (p, per) => p.SalesPerson.Id == per.Id, Alias.Manager);\n" +
+            "    }\n" +
+            "}\n";
+
+        var harness = RunSource(source);
+        harness.Run.Diagnostics.Should().BeEmpty();
+        harness.Run.GeneratedTrees.Should().HaveCount(1);
+
+        var generated = harness.Run.GeneratedTrees[0].ToString();
+        TestContext.Current.AddAttachment("E06-where-orderby-generated.cs", generated);
+
+        generated.Should().Contain("Alias.OrderMarker");
+        generated.Should().Contain("Alias.MetricsMarker");
+        generated.Should().Contain("Alias.SalesPersonMarker");
+        generated.Should().Contain("Alias.ManagerMarker");
+        generated.Should().Contain("AliasJoin_A1_Metrics_A2_SalesPerson<global::Harness.MidRow, TJoin>");
+        generated.Should().NotContain("<anonymous type:");
+    }
+
+    [Fact]
+    public void Valid_named_aliased_chain_acquires_no_NORMGEN009()
+    {
+        // E08 negative: the fail-closed diagnostic is reserved for anonymous chain types; a valid
+        // aliased chain over a NAMED projection type emits its alias surface and no NORMGEN009.
+        const string source =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public sealed class NamedRow { public int Id { get; set; } }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(IDataContext ctx, EntityBuilder<Person> people)\n" +
+            "    {\n" +
+            "        var cte = ctx.From<Order>().Select(o => new NamedRow { Id = o.Id }).AsCte(\"named\");\n" +
+            "        _ = ctx.From(cte).WithAlias(Alias.Root).Join<Person>(people, (r, p) => true, Alias.Seller);\n" +
+            "    }\n" +
+            "}\n";
+
+        var harness = RunSource(source);
+
+        harness.Run.Diagnostics.Should().NotContain(d => d.Id == "NORMGEN009");
+        harness.Run.GeneratedTrees.Should().NotBeEmpty();
+        harness.Run.GeneratedTrees.Should().OnlyContain(tree => !tree.ToString().Contains("<anonymous type:"));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // E06/E07 recovery coverage: every member of the three frozen allowlists is driven with an
+    // error-typed chain. The walk (ResolveQueryElementType) descends one strictly nested receiver per
+    // step, so it terminates; per node it is total (query-root operator => element type, preserving
+    // operator => recurse, otherwise => null). The invariant per member: the generator does not crash,
+    // a valid named chain acquires no NORMGEN009, and the emitted surface (if any) carries the
+    // recovered NAMED element type — a wrong alias, an anonymous token or a spurious NORMGEN009 fail.
+    // ---------------------------------------------------------------------------------------------
+
+    private static readonly string[] ExpectedQueryRootOperators =
+        ["CreateQueryBuilder", "From", "FromSql", "FromTableFunction"];
+
+    private static readonly string[] ExpectedElementPreservingOperators =
+    [
+        "As", "AsCte", "AsRecursiveCte", "Distinct", "DistinctOn", "ForShare", "ForUpdate", "GroupBy",
+        "Having", "Limit", "Offset", "OrderBy", "OrderByDescending", "Prepare", "Skip", "Take",
+        "ThenBy", "ThenByDescending", "ToCommand", "Where", "WithKeywordCase"
+    ];
+
+    private static readonly string[] ExpectedElementWrappers =
+        ["Cte", "EntityBuilder", "MutationCteQuery", "QueryCommand", "TempTableSource"];
+
+    /// <summary>Per-operator source template map: the recovery-walk suffix appended after the named
+    /// <c>Select</c> (a trailing <c>.AsCte("mid")</c> turns the chain into the consumed CTE).</summary>
+    private static readonly Dictionary<string, string> PreservingOperatorSuffixes = new(StringComparer.Ordinal)
+    {
+        ["Where"] = ".Where(x => x.Id > 0)",
+        ["GroupBy"] = ".GroupBy(x => new { x.Id })",
+        ["Having"] = ".Having(x => x.Id > 0)",
+        ["OrderBy"] = ".OrderBy(x => x.Id)",
+        ["OrderByDescending"] = ".OrderByDescending(x => x.Id)",
+        ["ThenBy"] = ".OrderBy(x => x.Id).ThenBy(x => x.Id)",
+        ["ThenByDescending"] = ".OrderBy(x => x.Id).ThenByDescending(x => x.Id)",
+        ["Limit"] = ".Limit(10)",
+        ["Offset"] = ".Offset(5)",
+        ["Skip"] = ".Skip(5)",
+        ["Take"] = ".Take(10)",
+        ["Distinct"] = ".Distinct()",
+        ["DistinctOn"] = ".DistinctOn(x => x.Id)",
+        ["AsCte"] = ".AsCte(\"inner2\")",
+        ["AsRecursiveCte"] = ".AsRecursiveCte(\"inner2\", c => c)",
+        ["ToCommand"] = ".ToCommand()",
+        ["Prepare"] = ".Prepare()",
+        ["ForUpdate"] = ".ForUpdate()",
+        ["ForShare"] = ".ForShare()",
+        ["WithKeywordCase"] = ".WithKeywordCase()",
+        ["As"] = ".As(x => x)",
+    };
+
+    public static IEnumerable<object[]> RecoveryWalkMembers()
+    {
+        // Each member carries its determinate expected outcome (kind, member, expectedEmitted, reason):
+        // the alias surface is emitted with the recovered named MidRow element type, or it is absent
+        // (fail-closed). The theory asserts the encoded branch for every member, so no case is vacuous.
+        foreach (var member in ExpectedQueryRootOperators)
+            yield return new object[] { "root", member, true, "query-root operator recovers the Cte<MidRow> argument element type" };
+        foreach (var member in ExpectedElementPreservingOperators)
+            yield return new object[] { "preserving", member, true, "preserving operator: the walk descends to the named Select projection" };
+        foreach (var member in ExpectedElementWrappers)
+            yield return new object[] { "wrapper", member, true, "wrapper: UnwrapElement unwraps Wrapper<MidRow> to MidRow" };
+    }
+
+    [Fact]
+    public void Recovery_allowlists_match_the_expected_members()
+    {
+        // Set-membership guard (E06 re-open trigger): a member added, renamed or removed in the frozen
+        // generator must fail here and force a matching theory case (template or unreachable reason).
+        ReadGeneratorStringSet("QueryRootOperators").OrderBy(static m => m, StringComparer.Ordinal)
+            .Should().Equal(ExpectedQueryRootOperators);
+        ReadGeneratorStringSet("ElementPreservingOperators").OrderBy(static m => m, StringComparer.Ordinal)
+            .Should().Equal(ExpectedElementPreservingOperators);
+        ReadGeneratorStringSet("ElementWrappers").OrderBy(static m => m, StringComparer.Ordinal)
+            .Should().Equal(ExpectedElementWrappers);
+    }
+
+    [Theory]
+    [MemberData(nameof(RecoveryWalkMembers))]
+    public void Error_path_recovery_handles_every_walk_member(string kind, string member, bool expectedEmitted, string reason)
+    {
+        var source = kind switch
+        {
+            "root" => BuildRootMemberSource(member),
+            "preserving" => BuildPreservingMemberSource(member),
+            "wrapper" => BuildWrapperMemberSource(member),
+            _ => throw new InvalidOperationException($"unknown allowlist kind '{kind}'"),
+        };
+
+        Harness harness = null!;
+        Action run = () => harness = RunSource(source);
+        run.Should().NotThrow($"recovery for allowlist {kind} member '{member}' must not crash the generator");
+
+        harness.Run.Diagnostics.Should().NotContain(
+            d => d.Id == "NORMGEN009",
+            $"'{member}' drives a valid named chain and must not acquire NORMGEN009");
+
+        var generated = string.Join("\n", harness.Run.GeneratedTrees.Select(static tree => tree.ToString()));
+        TestContext.Current.AddAttachment($"E06-recovery-{kind}-{member}.txt",
+            generated + "\n---DIAGNOSTICS---\n" + string.Join("\n", harness.Run.Diagnostics.Select(static d => d.ToString())));
+
+        generated.Should().NotContain("<anonymous type:");
+
+        // The walk is total: each member has a determinate outcome encoded in the MemberData. When
+        // expectedEmitted, the surface must be present and carry the recovered named MidRow element
+        // type; otherwise it must be absent (fail-closed). Both branches are asserted explicitly, so
+        // no member is vacuous. A surface with any other element type is a wrong alias and fails here.
+        if (expectedEmitted)
+        {
+            generated.Should().Contain(
+                "Alias.RootMarker",
+                $"recovery for {kind} member '{member}' must emit the alias surface ({reason})");
+            generated.Should().Contain(
+                "AliasJoin_A1_Root_A2_Seller<global::Harness.MidRow, TJoin>",
+                $"an emitted surface for {kind} member '{member}' must carry the recovered named element type ({reason})");
+        }
+        else
+        {
+            generated.Should().NotContain(
+                "Alias.RootMarker",
+                $"recovery for {kind} member '{member}' must fail closed with no alias surface ({reason})");
+        }
+    }
+
+    [Theory]
+    [InlineData("Cte")]
+    [InlineData("QueryCommand")]
+    [InlineData("EntityBuilder")]
+    [InlineData("TempTableSource")]
+    [InlineData("MutationCteQuery")]
+    public void Error_path_recovery_unwraps_a_wrapper_typed_root_argument(string wrapper)
+    {
+        // E07 UnwrapElement: the recovery walk reads a wrapper-typed argument (`Cte<T>`/`QueryCommand<T>`/
+        // `EntityBuilder<T>`/`TempTableSource<T>`/`MutationCteQuery<T>`) and unwraps it to its element
+        // type. All five ElementWrappers members share this one UnwrapElement branch; MutationCteQuery is
+        // closed here (a parameter of that public type is enough — the source is compiled, not run).
+        var harness = RunSource(BuildWrapperMemberSource(wrapper));
+
+        harness.Run.Diagnostics.Should().NotContain(d => d.Id == "NORMGEN009");
+        harness.Run.GeneratedTrees.Should().HaveCount(1);
+        var generated = harness.Run.GeneratedTrees.Single().ToString();
+        generated.Should().NotContain("<anonymous type:");
+        generated.Should().Contain("AliasJoin_A1_Root_A2_Seller<global::Harness.MidRow, TJoin>");
+    }
+
+    [Fact]
+    public void Error_path_recovery_with_a_non_wrapper_parameter_fails_closed()
+    {
+        // E07 ResolveIdentifierElementType parameter branch (:453-454) IS reachable in the error path:
+        // a parameter declared as a plain named type unwraps to null (not an ElementWrappers member),
+        // so ResolveQueryElementType returns null, ResolveRootFromSyntax returns null and no alias
+        // surface is fabricated (fail-closed, no NORMGEN009).
+        var source = ErrorReceiverSource(
+            "IDataContext ctx, EntityBuilder<Person> people, MidRow target",
+            "unknown.From(target)");
+
+        var harness = RunSource(source);
+
+        harness.Run.Diagnostics.Should().NotContain(d => d.Id == "NORMGEN009");
+        var generated = string.Join("\n", harness.Run.GeneratedTrees.Select(static tree => tree.ToString()));
+        generated.Should().NotContain("Alias.RootMarker");
+        generated.Should().NotContain("Alias.SellerMarker");
+    }
+
+    private static HashSet<string> ReadGeneratorStringSet(string fieldName)
+    {
+        var field = GeneratorType.GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException($"generator field '{fieldName}' was not found");
+        return (HashSet<string>)field.GetValue(null)!;
+    }
+
+    private static string RecoveryHeader()
+        => "using NextORM.Core;\n" +
+           "using NextORM.Generated.AliasHarness;\n" +
+           "namespace Harness;\n" +
+           "public sealed class Order { public int Id { get; set; } }\n" +
+           "public sealed class Person { public int Id { get; set; } }\n" +
+           "public sealed class MidRow { public int Id { get; set; } }\n";
+
+    private static string BuildRootMemberSource(string member)
+        => ErrorReceiverSource(
+            "IDataContext ctx, EntityBuilder<Person> people, Cte<MidRow> target",
+            "unknown." + member + "(target)");
+
+    private static string BuildPreservingMemberSource(string member)
+    {
+        if (!PreservingOperatorSuffixes.TryGetValue(member, out var suffix))
+        {
+            throw new InvalidOperationException(
+                $"No recovery template for ElementPreservingOperators member '{member}': add one or " +
+                "declare it unreachable-by-construction with a reason.");
+        }
+
+        return RecoveryHeader() +
+           "public static class Cases\n{\n" +
+           "    public static void Run(IDataContext ctx, EntityBuilder<Person> people)\n    {\n" +
+           "        var inner = ctx.From<Order>().WithAlias(Alias.Order)\n" +
+           "            .Join<Person>(people, (o, p) => o.Order.Id == p.Id, Alias.Customer)\n" +
+           "            .Select(o => new { Id = o.Order.Id })\n" +
+           "            .AsCte(\"inner\");\n" +
+           "        var mid = ctx.From(inner).Select(x => new MidRow { Id = x.Id })" + suffix + ".AsCte(\"mid\");\n" +
+           "        _ = ctx.From(mid).WithAlias(Alias.Root)\n" +
+           "            .Join<Person>(people, (r, p) => r.Root.Id == p.Id, Alias.Seller);\n" +
+           "    }\n}\n";
+    }
+
+    /// <summary>
+    /// Error-typed receiver chain: the root operator is invoked on the undefined <c>unknown</c> receiver,
+    /// so the invocation is an error type regardless of overload resolution and the #230 syntactic
+    /// recovery (ResolveRootFromSyntax -> ResolveQueryElementType) is actually entered.
+    /// </summary>
+    private static string ErrorReceiverSource(string parameters, string rootInvocation)
+        => RecoveryHeader() +
+           "public static class Cases\n{\n" +
+           "    public static void Run(" + parameters + ")\n    {\n" +
+           "        var inner = ctx.From<Order>().WithAlias(Alias.Order)\n" +
+           "            .Join<Person>(people, (o, p) => o.Order.Id == p.Id, Alias.Customer)\n" +
+           "            .Select(o => new { Id = o.Order.Id })\n" +
+           "            .AsCte(\"inner\");\n" +
+           "        var mid = " + rootInvocation + ".AsCte(\"mid\");\n" +
+           "        _ = ctx.From(mid).WithAlias(Alias.Root)\n" +
+           "            .Join<Person>(people, (r, p) => r.Root.Id == p.Id, Alias.Seller);\n" +
+           "    }\n}\n";
+
+    private static string BuildWrapperMemberSource(string wrapper)
+        => ErrorReceiverSource(
+            "IDataContext ctx, EntityBuilder<Person> people, " + wrapper + "<MidRow> target",
+            "unknown.From(target)");
+
     // Harness plumbing.
     // ---------------------------------------------------------------------------------------------
 
@@ -598,7 +1012,6 @@ public class JoinAliasGeneratorDiagnosticTests
 
         var baseDirectory = AppContext.BaseDirectory;
         paths.Add(Path.Combine(baseDirectory, "nextorm.core.dll"));
-        paths.Add(Path.Combine(baseDirectory, "OneOf.dll"));
         foreach (var file in Directory.EnumerateFiles(baseDirectory, "Microsoft.Extensions.*.dll")) paths.Add(file);
 
         var references = ImmutableArray.CreateBuilder<MetadataReference>();

@@ -9,46 +9,60 @@
 - [Entities and metadata](getting-started/03-entities-and-metadata.md)
 - [Dependency injection](getting-started/04-dependency-injection.md)
 
+### Engine
+
+- [How the engine works](engine/index.md)
+- [Query pipeline: fluent to SQL](engine/01-query-pipeline.md)
+- [Execution and rows](engine/02-execution-and-rows.md)
+- [Plan cache and reuse](engine/03-plan-cache-and-reuse.md)
+
+### Relationships
+
+- [Relationships and single-query loading](relationships/relationships.md)
+- [Implicit navigation queries](relationships/implicit-navigation.md)
+- [Eager loading child collections](relationships/eager-loading.md)
+- [Per-parent paging in eager loading](relationships/eager-loading-per-parent-paging.md)
+
 ### Guide
 
-- [Querying and projections](querying/index.md)
-- [Filtering (WHERE)](guide/01-filtering-where.md)
-- [Joins](guide/02-joins.md)
-- [Grouping and aggregates](guide/03-grouping-and-aggregates.md)
-- [Sorting and paging](guide/04-sorting-and-paging.md)
-- [Subqueries](guide/05-subqueries.md)
-- [Set operations](guide/06-set-operations.md)
-- [SELECT DISTINCT](guide/07-distinct.md)
-- [Common table expressions (CTE)](guide/08-cte.md)
-- [Window functions](guide/09-window-functions.md)
-- [User-defined functions](guide/10-user-defined-functions.md)
-- [Table-valued functions](guide/11-table-valued-functions.md)
-- [Raw SQL](guide/12-raw-sql.md)
-- [Query hints](guide/13-query-hints.md)
-- [JSON support across providers](guide/14-json.md)
-- [Data modification (INSERT)](guide/15-insert-statement.md)
-- [Data modification (DELETE)](guide/16-delete-statement.md)
-- [Data modification (UPDATE)](guide/17-update-statement.md)
-- [Materializing a query into a table](guide/18-create-table-as.md)
-- [Data merging (MERGE / upsert)](guide/19-merge-statement.md)
-- [Bulk insert](guide/20-bulk-insert.md)
-- [Transactions](guide/21-transactions.md)
-- [Duration (TimeSpan) columns](guide/22-duration-columns.md)
-- [Executing statements in one batch](guide/23-sql-batch.md)
-- [Optimistic concurrency and change tracking](guide/24-optimistic-concurrency.md)
-- [Range columns (pair of scalar columns)](guide/25-range-columns.md)
-- [Streaming large objects (BLOB/CLOB)](guide/26-large-objects.md)
-- [Dynamic columns](guide/27-dynamic-columns.md)
-- [Streaming data to a Stream](guide/28-streaming-data.md)
-- [Implicit navigation queries](guide/29-implicit-navigation.md)
+- [Query sources](guide/01-query-sources.md)
+- [Projections](guide/02-projections.md)
+- [Filtering (WHERE)](guide/03-filtering-where.md)
+- [Joins](guide/04-joins.md)
+- [Grouping and aggregates](guide/05-grouping-and-aggregates.md)
+- [Sorting and paging](guide/06-sorting-and-paging.md)
+- [Subqueries](guide/07-subqueries.md)
+- [Set operations](guide/08-set-operations.md)
+- [SELECT DISTINCT](guide/09-distinct.md)
+- [Common table expressions (CTE)](guide/10-cte.md)
+- [Window functions](guide/11-window-functions.md)
+- [User-defined functions](guide/12-user-defined-functions.md)
+- [Table-valued functions](guide/13-table-valued-functions.md)
+- [Raw SQL](guide/14-raw-sql.md)
+- [Query hints](guide/15-query-hints.md)
+- [JSON support across providers](guide/16-json.md)
+- [Data modification (INSERT)](guide/17-insert-statement.md)
+- [Data modification (DELETE)](guide/18-delete-statement.md)
+- [Data modification (UPDATE)](guide/19-update-statement.md)
+- [Materializing a query into a table](guide/20-create-table-as.md)
+- [Data merging (MERGE / upsert)](guide/21-merge-statement.md)
+- [Bulk insert](guide/22-bulk-insert.md)
+- [Transactions](guide/23-transactions.md)
+- [Duration (TimeSpan) columns](guide/24-duration-columns.md)
+- [Executing statements in one batch](guide/25-sql-batch.md)
+- [Optimistic concurrency and change tracking](guide/26-optimistic-concurrency.md)
+- [Range columns (pair of scalar columns)](guide/27-range-columns.md)
+- [Streaming large objects (BLOB/CLOB)](guide/28-large-objects.md)
+- [Dynamic columns](guide/29-dynamic-columns.md)
+- [Streaming data to a Stream](guide/30-streaming-data.md)
+- [Provider-specific features](guide/31-provider-specific-features.md)
 
 ### Infrastructure
 
-- [Query reuse: cache vs Prepare](infrastructure/01-query-reuse-and-caching.md)
-- [Connections](infrastructure/02-connections.md)
-- [Interceptors](infrastructure/03-interceptors.md)
-- [Value converters and JSON columns](infrastructure/04-value-converters.md)
-- [Logging](infrastructure/05-logging.md)
+- [Connections](infrastructure/01-connections.md)
+- [Interceptors](infrastructure/02-interceptors.md)
+- [Value converters and JSON columns](infrastructure/03-value-converters.md)
+- [Logging](infrastructure/04-logging.md)
 
 ### Scalar functions
 
@@ -61,14 +75,16 @@
 - [Arrays](scalar-functions/06-arrays.md)
 - [JSON and XML](scalar-functions/07-json-and-xml.md)
 - [Provider reference](scalar-functions/08-reference.md)
+- [System functions](scalar-functions/09-system-functions.md)
+- [Sequences and UUID generators](scalar-functions/10-sequences.md)
 
-### Providers
+### Connecting providers
 
-- [Provider overview](providers/overview.md)
-- [SQLite](providers/sqlite.md)
-- [SQL Server](providers/sqlserver.md)
-- [PostgreSQL](providers/postgres.md)
-- [In-memory](providers/in-memory.md)
+- [Provider overview](connecting-providers/overview.md)
+- [SQLite](connecting-providers/sqlite.md)
+- [SQL Server](connecting-providers/sqlserver.md)
+- [PostgreSQL](connecting-providers/postgres.md)
+- [In-memory](connecting-providers/in-memory.md)
 
 ### Comparisons
 
@@ -78,11 +94,9 @@
 
 - [Global query filters](advanced/query-filters.md)
 - [Entity Framework Core integration](advanced/integration-efcore.md)
-- [EF Core query-filter bridge](advanced/ef-core-query-filters.md)
-- [Eager loading child collections](advanced/eager-loading.md)
-- [Relationships and single-query loading](advanced/relationships.md)
 - [Limitations and out-of-scope features](advanced/limitations.md)
 - [Native extreme-row strategies](advanced/select-where-extrema-native.md)
+- [Extensibility: custom SQL dialects and renderers](advanced/extensibility.md)
 - [API reference](advanced/api-reference.md)
 
 ### Русская документация
@@ -92,7 +106,7 @@
 - [Быстрый старт (англ.)](getting-started/02-quickstart.md)
 
 Полное руководство на английском: [Getting started](getting-started/01-installation.md) ·
-[Guide](#guide) · [Providers](#providers). Русский перевод в работе.
+[Guide](#guide) · [Connecting providers](#connecting-providers). Русский перевод в работе.
 
 ## Overview
 
@@ -105,7 +119,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.9-rc2) is a prof of concept.
+The current status (1.0.9-rc3) is a prof of concept.
 
 ## Installation
 
@@ -131,9 +145,47 @@ cache (used automatically by [`EntityBuilder`](xref:NextORM.Core.EntityBuilder)/
 [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1).
 
 They differ in cost, lifetime and thread-safety rules. Which one to use, what each one costs per call and
-its limitations are covered in the [Query reuse guide](infrastructure/01-query-reuse-and-caching.md).
+its limitations are covered in the [plan cache and reuse guide](engine/03-plan-cache-and-reuse.md).
 
 ## Releases
+
+### 1.0.9-rc3
+
+- [SQL Server: `OPTION (MAXRECURSION n)` больше не теряется при хоистинге рекурсивного CTE в источник мутации](https://github.com/AlexeyShirshov/nextorm/issues/275)
+- [SQL Server: legacy `WithRecursive` с отличным `UNION` отклоняется fail-closed вместо невалидного T-SQL](https://github.com/AlexeyShirshov/nextorm/issues/265)
+- [Perf: аллокации warm-path `Count`/`Sum` снижены (Count 2979.84 → 408 B/op, Sum 3389.44 → 970 B/op)](https://github.com/AlexeyShirshov/nextorm/issues/243)
+- [Evidence pipeline: канонический global `pdca-dotnet` admission и свёртка `required_rows` в покрытие](https://github.com/AlexeyShirshov/nextorm/issues/242)
+- [Единообразная обработка отмены при построении сортировки/группировки](https://github.com/AlexeyShirshov/nextorm/issues/241)
+- [Perf: снижена стоимость конструирования fluent-команды (отдельный скоуп/дизайн)](https://github.com/AlexeyShirshov/nextorm/issues/240)
+- [D233/T233: обновлены устаревшие `file:line` в `API-NAMING-REVIEW.md`](https://github.com/AlexeyShirshov/nextorm/issues/239)
+- [PDCA skill: ложные `incomplete`/`STOP` из-за дополнительных audit-provenance gates больше не возникают](https://github.com/AlexeyShirshov/nextorm/issues/238)
+- [Identifier safety: экранирование скобок в SQL Server и raw-имена `UNPIVOT`/`Column<T>`](https://github.com/AlexeyShirshov/nextorm/issues/237)
+- [Build blocker: устранены NU1902/NU1903 для транзитивного `System.Security.Cryptography.Pkcs`](https://github.com/AlexeyShirshov/nextorm/issues/236)
+- [Evidence caveats из T218: сертификация E07, allocation-oracle E08, запись sweep-cap E10](https://github.com/AlexeyShirshov/nextorm/issues/235)
+- [Evidence pipeline hardening: атомарный генератор evidence и линт устаревших хэшей](https://github.com/AlexeyShirshov/nextorm/issues/234)
+- [Window functions: перегрузка `Over` с одним `partitionBy` и одним `WindowOrder`, без массивов](https://github.com/AlexeyShirshov/nextorm/issues/233)
+- [SQL Server `PIVOT`/`UNPIVOT`: типизированная проекция результата вместо `TableAlias` по имени](https://github.com/AlexeyShirshov/nextorm/issues/232)
+- [Join aliases: alias-цепочка, использованная в следующем запросе, больше не теряет нижестоящие цепочки](https://github.com/AlexeyShirshov/nextorm/issues/230)
+- [Join aliases: anonymous-projection цепочка выдаёт диагностику вместо невалидного C#](https://github.com/AlexeyShirshov/nextorm/issues/229)
+- [Flaky ClickHouse integration test `FloatNativeParity_GroupedSingleFloat64` стабилизирован](https://github.com/AlexeyShirshov/nextorm/issues/227)
+- [`ProcedureResult`/`BatchResult`: раскрыто число затронутых строк (`RecordsAffected`)](https://github.com/AlexeyShirshov/nextorm/issues/226)
+- [JoinInto: composite-junction M:N — документационный дельта-набор](https://github.com/AlexeyShirshov/nextorm/issues/225)
+- [SQL-форматирование: `from`/`join` с новой строки](https://github.com/AlexeyShirshov/nextorm/issues/224)
+- [JoinInto: composite-junction M:N — SQL link carrier](https://github.com/AlexeyShirshov/nextorm/issues/223)
+- [Джойны: перегрузки без явного источника (`Join`/`LeftJoin`/`RightJoin`/`FullJoin` по типу)](https://github.com/AlexeyShirshov/nextorm/issues/222)
+- [Интерцепторы: регистрация через DI (generic/factory-перегрузки)](https://github.com/AlexeyShirshov/nextorm/issues/221)
+- [Документация: выделен раздел «Движок» (Engine), Querying растворён в Guide](https://github.com/AlexeyShirshov/nextorm/issues/220)
+- [Session/server-identity функции: `SERVER_NAME`, `HOST_ID`/`HOST_NAME`, `APP_NAME`, `SUSER_NAME` и аналоги по провайдерам](https://github.com/AlexeyShirshov/nextorm/issues/219)
+- [SQL Server последовательности (`NEXT VALUE FOR`): недостающая кросс-провайдерная поддержка](https://github.com/AlexeyShirshov/nextorm/issues/218)
+- [Полноценная поддержка `DateTimeOffset`: трансляция `Now`/`UtcNow` и частей даты](https://github.com/AlexeyShirshov/nextorm/issues/217)
+- [Row locking: разведены лок всего запроса (`FOR UPDATE`) и `FOR UPDATE OF` на конкретный источник](https://github.com/AlexeyShirshov/nextorm/issues/216)
+- [Убрана зависимость OneOf](https://github.com/AlexeyShirshov/nextorm/issues/215)
+- [TODO: JoinInto — составные ключи, составные junction-селекторы и M:N под single-query](https://github.com/AlexeyShirshov/nextorm/issues/213)
+- [TODO: eager-load nested — level 2+ `LoadWith`](https://github.com/AlexeyShirshov/nextorm/issues/212)
+- [TODO: eager-load per-parent `Take`/`Skip` — коррелированная детская выборка](https://github.com/AlexeyShirshov/nextorm/issues/211)
+- [TODO: eager-load strategy — явный выбор стратегии загрузки и авто-диспетчер](https://github.com/AlexeyShirshov/nextorm/issues/209)
+- [Единообразная обработка отмены при построении проекции](https://github.com/AlexeyShirshov/nextorm/issues/207)
+- Принятые ограничения (закрыты как `not_planned`): [COW/shared-description для структурного CTE-графа](https://github.com/AlexeyShirshov/nextorm/issues/297) (аллокации снижены, но время не уложилось в ≤1.00× — откат), [остаточные аллокации warm CTE/RecursiveCte](https://github.com/AlexeyShirshov/nextorm/issues/244) (Cte 1.18–1.22×, RecursiveCte 1.59–1.61×, время 0.55–0.61×, `*_Warm_Reused` 0 B), [диаграмма пути команды](https://github.com/AlexeyShirshov/nextorm/issues/228) (правка применена вне трекинга), [гарантия порядка eager-load](https://github.com/AlexeyShirshov/nextorm/issues/210) (свёрнуто в #211), [паритет cached-пути M12 #3](https://github.com/AlexeyShirshov/nextorm/issues/201) (остаток вынесен в #240).
 
 ### 1.0.9-rc2
 

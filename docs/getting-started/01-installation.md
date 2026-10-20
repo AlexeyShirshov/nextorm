@@ -10,13 +10,18 @@ NextORM is split into a small, driver-free core package and one package per rela
 
 * `nextorm` (assembly `nextorm.core`) contains the query builder and compiler, entity metadata, the
   dependency-injection helpers, the plan cache **and the in-memory provider** ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext)). It
-  references `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Logging`,
-  `Microsoft.Extensions.ObjectPool` and `OneOf`, but no database driver.
+  references `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Logging` and
+  `Microsoft.Extensions.ObjectPool`, but no database driver.
 * `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb` and
   `nextorm.clickhouse` each add one concrete context
   ([`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext), [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext), [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext), [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext),
   [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext)) and a `Use…` registration extension.
   The provider packages depend on `nextorm` transitively.
+
+> **Note:** `nextorm` no longer references `OneOf`. The dependency was unused and has been
+> removed, so `OneOf` is no longer provided transitively. If your own code used `OneOf` types that
+> were previously available through `nextorm`, add a direct `OneOf` `PackageReference` to your
+> project.
 
 All current releases are prereleases, so every install command must opt in to
 prerelease versions.
@@ -84,4 +89,4 @@ The packages target `net10.0` and enable implicit usings and nullable reference 
 Source: `docs/index.md:91`; `src/nextorm.core/nextorm.core.csproj:4`;
 `src/nextorm.sqlite/nextorm.sqlite.csproj:7`; `src/nextorm.sqlserver/nextorm.sqlserver.csproj:16`;
 `src/nextorm.postgres/nextorm.postgres.csproj:8`;
-in-memory availability: `tests/nextorm.core.tests/DependencyInjectionTests.cs:16`.
+in-memory availability: `tests/nextorm.core.tests/DependencyInjection/DependencyInjectionTests.cs:16`.

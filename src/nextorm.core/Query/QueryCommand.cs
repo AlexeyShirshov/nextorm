@@ -4,6 +4,56 @@ using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
+/// <summary>
+/// A stack-only carrier for the projection-shape fields a fluent builder transfers into a new
+/// <see cref="QueryCommand"/>. It exists so the builder-to-command hot path does not materialise a
+/// <see cref="QueryDefinition"/> record (a heap allocation) just for the constructor to copy it out
+/// again. Value type by design: it never escapes the construction call and is never boxed.
+/// </summary>
+internal readonly struct QueryShape
+{
+    /// <summary>Projection lambda of the query, or <c>null</c> when <see cref="SrcType"/> is used.</summary>
+    public LambdaExpression? Exp { get; init; }
+    /// <summary>Entity type of the query when there is no projection lambda.</summary>
+    public Type? SrcType { get; init; }
+    /// <summary>Optional predicate applied as a <c>WHERE</c> clause.</summary>
+    public LambdaExpression? Condition { get; init; }
+    /// <summary>The selective query-filter scope disabled for this command, or <c>null</c> for none.</summary>
+    public QueryFilterScope? FilterScope { get; init; }
+    /// <summary>Joins accumulated by the builder.</summary>
+    public JoinExpression[]? Joins { get; init; }
+    /// <summary>Paging (limit/offset) applied to the query.</summary>
+    public Paging Paging { get; init; }
+    /// <summary>Ordering accumulated by the builder.</summary>
+    public Sorting[]? Sorting { get; init; }
+    /// <summary>Optional grouping lambda.</summary>
+    public LambdaExpression? Group { get; init; }
+    /// <summary>Optional <c>HAVING</c> lambda.</summary>
+    public LambdaExpression? Having { get; init; }
+    /// <summary>Optional logger used by the command.</summary>
+    public ILogger? Logger { get; init; }
+    /// <summary>Whether the query was marked <c>DISTINCT</c>.</summary>
+    public bool IsDistinct { get; init; }
+    /// <summary>Whether the query carries the ClickHouse <c>FINAL</c> modifier.</summary>
+    public bool Final { get; init; }
+    /// <summary>The ClickHouse <c>SAMPLE</c> ratio, or <c>null</c> when the modifier is absent.</summary>
+    public double? SampleRatio { get; init; }
+    /// <summary>The ClickHouse <c>SAMPLE ... OFFSET</c> value; zero when absent.</summary>
+    public double SampleOffset { get; init; }
+    /// <summary>The trailing ClickHouse <c>SETTINGS</c> entries, or <c>null</c> when there are none.</summary>
+    public IReadOnlyList<KeyValuePair<string, string>>? Settings { get; init; }
+    /// <summary>Optional ClickHouse <c>PREWHERE</c> predicate.</summary>
+    public LambdaExpression? PreWhere { get; init; }
+    /// <summary>Optional ClickHouse <c>ARRAY JOIN</c> expressions, or <c>null</c> when absent.</summary>
+    public IReadOnlyList<LambdaExpression>? ArrayJoins { get; init; }
+    /// <summary>Named window definitions declared for the query, or <c>null</c> when there are none.</summary>
+    public IReadOnlyList<WindowDefinition>? Windows { get; init; }
+    /// <summary>The <c>ARRAY JOIN</c> kind (plain or <c>LEFT</c>).</summary>
+    public ArrayJoinKind ArrayJoinKind { get; init; }
+    /// <summary>Whether the last <c>ARRAY JOIN</c> expression is aliased as the element.</summary>
+    public bool BindArrayJoinElement { get; init; }
+}
+
 public partial class QueryCommand : IQueryRegistry, ICloneable
 {
 
@@ -37,6 +87,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private IReadOnlyList<WindowDefinition>? _windows;
     /// <summary>Whether the command has been prepared and its cached plan hashes are current.</summary>
     protected bool _isPrepared;
+
+    /// <summary>
+    /// Whether this command instance has ever completed a preparation. Unlike <see cref="_isPrepared"/> it
+    /// is not cleared by <see cref="ResetPreparation"/>: it distinguishes a genuinely fresh command (which
+    /// may reuse a pre-preparation recipe) from one being re-prepared in place. Clones start <see langword="false"/>.
+    /// </summary>
+    internal bool HasEverPrepared;
     /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
     protected Type? _srcType;
     /// <summary>
@@ -132,6 +189,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     internal bool ShapeScanned;
     /// <summary>
+    /// Whether every value list and lookup collection matched by the shape scan is shape-stable
+    /// (an inline array of immutable values or a value-type <c>new</c> expression). A stable shape
+    /// cannot change between two executions of a cached plan, so a prepared command can skip the
+    /// per-execution refresh of <see cref="InValuesShapeHash"/> and the evaluated partitions.
+    /// </summary>
+    internal bool ShapeValuesStable;
+    /// <summary>
     /// Whether a tuple-valued <c>IN</c>/<c>Contains</c> appears in a clause whose captured-collection
     /// shape is <b>not</b> folded into the plan key (HAVING, a JOIN condition, a SELECT column or a
     /// subquery nested in one of those). The rendered SQL of such a clause depends on the collection's
@@ -164,16 +228,36 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private SelectExpression[]? _distinctOnColumns;
     private SelectExpression[]? _extremeRowColumns;
     private SelectExpression[]? _extremeRowGroupByColumns;
+    private SelectExpression[]? _perParentPartitionColumns;
     /// <summary>The sort columns before preparation, or <c>null</c> when the query has no <c>ORDER BY</c>.</summary>
     protected Sorting[]? _sorting;
 
     /// <summary>
     /// Initializes a command from a query shape, copying each collaborator and leaving the command
-    /// unprepared.
+    /// unprepared. The shape's arrays are defensively copied: a definition can be supplied by a caller
+    /// (the public <c>CreateCommand</c>) and its <see cref="QueryDefinition.Joins"/> array is
+    /// caller-owned.
     /// </summary>
     /// <param name="dataProvider">The context that executes the command, or <c>null</c> for an unbound clone.</param>
     /// <param name="definition">The shape to copy from.</param>
     protected QueryCommand(IDataContext? dataProvider, QueryDefinition definition)
+        : this(dataProvider, definition, ownJoins: false)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a command from a query shape, optionally taking ownership of the shape's joins.
+    /// </summary>
+    /// <param name="dataProvider">The context that executes the command, or <c>null</c> for an unbound clone.</param>
+    /// <param name="definition">The shape to copy from.</param>
+    /// <param name="ownJoins">
+    /// When <c>true</c>, <see cref="QueryDefinition.Joins"/> was produced by this command's own
+    /// construction path (the self-clone path and the fluent builders) and is not reachable from any
+    /// live command, so it is installed directly instead of being copied again. Every definition supplied
+    /// from outside — in particular the public <c>CreateCommand</c> — passes <c>false</c>, keeping a
+    /// caller-owned array isolated from the command.
+    /// </param>
+    internal QueryCommand(IDataContext? dataProvider, QueryDefinition definition, bool ownJoins)
     {
         _dataContext = dataProvider;
         _exp = definition.Exp;
@@ -182,14 +266,18 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         IdentitySlotAliases = definition.IdentitySlotAliases;
         _condition = definition.Condition;
         _filterScope = definition.FilterScope ?? (definition.IgnoreFilters ? QueryFilterScope.AllFilters : QueryFilterScope.None);
-        // Own a private array: the clone boundaries (CreateSelf/CreateSelfForClone, the with-derived
-        // commands built from Definition and the DML/paging clones) hand the source's _joins here, and
-        // preparation writes the prepared copy back into the array (PrepareJoin). Sharing the array
-        // would let one command's preparation rewrite a source's or sibling's joins while it is already
-        // prepared, so a later re-render (storeInCache:false) read the sibling's injected conditions.
-        // The elements stay shared by design: they are immutable apart from preparation, which replaces
-        // the element with a copy instead of mutating it.
-        _joins = definition.Joins is { } joins ? (JoinExpression[])joins.Clone() : null;
+        // Own a private array: the DML/paging clones and the external definition callers hand the
+        // source's _joins here, and preparation writes the prepared copy back into the array
+        // (PrepareJoin). Sharing the array would let one command's preparation rewrite a source's or
+        // sibling's joins while it is already prepared, so a later re-render (storeInCache:false) read
+        // the sibling's injected conditions. The elements stay shared by design: they are immutable apart
+        // from preparation, which replaces the element with a copy instead of mutating it. ownJoins is
+        // set only where the array was just produced for this command and no other command can reach it:
+        // the fluent builders (EntityBuilder._joins?.ToArray()); every definition supplied from outside
+        // keeps the defensive copy.
+        _joins = definition.Joins is { } joins
+            ? (ownJoins ? joins : (JoinExpression[])joins.Clone())
+            : null;
         Paging = definition.Paging;
         _sorting = definition.Sorting;
         _groupExp = definition.Group;
@@ -203,6 +291,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         TableSample = definition.TableSample;
         Temporal = definition.Temporal;
         RowLock = definition.RowLock;
+        SourceLockClause = definition.PrimarySourceLock;
         Final = definition.Final;
         SampleRatio = definition.SampleRatio;
         SampleOffset = definition.SampleOffset;
@@ -215,43 +304,147 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         BindArrayJoinElement = definition.BindArrayJoinElement;
     }
     /// <summary>
-    /// Snapshot of this command's shape as a <see cref="QueryDefinition"/>, used by the clone and
-    /// re-ordering paths to build a variant with <c>with</c> instead of repeating every collaborator.
+    /// Initializes a command by transferring the shape of an existing command. This is the copy
+    /// constructor the internal clone and derivation paths use instead of materialising an intermediate
+    /// <see cref="QueryDefinition"/> record and copying it field by field: the fields are read straight
+    /// from <paramref name="source"/>, so a fluent step allocates one command and no shape record.
     /// </summary>
-    internal QueryDefinition Definition => new()
+    /// <param name="dataProvider">The context that executes the command, or <c>null</c> for an unbound clone.</param>
+    /// <param name="source">The command whose shape is transferred.</param>
+    /// <param name="forCache">
+    /// When <c>true</c>, the clone is the plan-cache key: the raw projection, condition and grouping are
+    /// cleared and the joins are deep-cloned, exactly as the removed <c>CacheCloneDefinition</c> did.
+    /// When <c>false</c>, the raw shape travels and the joins get a private array.
+    /// </param>
+    internal QueryCommand(IDataContext? dataProvider, QueryCommand source, bool forCache)
     {
-        Exp = _exp,
-        SrcType = _srcType,
-        ProjectionType = ProjectionType,
-        IdentitySlotAliases = IdentitySlotAliases,
-        Condition = _condition,
-        IgnoreFilters = !_filterScope.IsEmpty,
-        FilterScope = _filterScope,
-        Joins = _joins,
-        Paging = Paging,
-        Sorting = _sorting,
-        Group = _groupExp,
-        Having = _having,
-        Logger = Logger,
-        IsDistinct = IsDistinct,
-        GroupByWithTotals = GroupByWithTotals,
-        LimitBy = LimitBy,
-        DistinctOn = DistinctOn,
-        ExtremeRow = ExtremeRow,
-        TableSample = TableSample,
-        Temporal = Temporal,
-        RowLock = RowLock,
-        Final = Final,
-        SampleRatio = SampleRatio,
-        SampleOffset = SampleOffset,
-        Settings = Settings,
-        PreWhere = _preWhere,
-        ArrayJoins = _arrayJoins,
-        Windows = _windows,
-        ArrayJoinKind = ArrayJoinKind,
-        BindArrayJoinElement = BindArrayJoinElement,
-        NavigationPaths = NavigationPaths,
-    };
+        _dataContext = dataProvider;
+        _exp = forCache ? null : source._exp;
+        _srcType = source._srcType;
+        ProjectionType = source.ProjectionType;
+        IdentitySlotAliases = source.IdentitySlotAliases;
+        _condition = forCache ? null : source._condition;
+        _filterScope = source._filterScope;
+        // Own a private array, exactly like the definition constructor: preparation writes the prepared
+        // copy back into the array (PrepareJoin), so sharing it would let one command's preparation
+        // rewrite a source's or sibling's joins. The cache clone deep-clones instead.
+        _joins = forCache ? CloneForCache(source._joins) : CloneJoinArray(source._joins);
+        Paging = source.Paging;
+        _sorting = source._sorting;
+        _groupExp = forCache ? null : source._groupExp;
+        _having = source._having;
+        Logger = source.Logger;
+        IsDistinct = source.IsDistinct;
+        GroupByWithTotals = source.GroupByWithTotals;
+        LimitBy = source.LimitBy;
+        DistinctOn = source.DistinctOn;
+        ExtremeRow = source.ExtremeRow;
+        TableSample = source.TableSample;
+        Temporal = source.Temporal;
+        RowLock = source.RowLock;
+        SourceLockClause = source.SourceLockClause;
+        Final = source.Final;
+        SampleRatio = source.SampleRatio;
+        SampleOffset = source.SampleOffset;
+        Settings = source.Settings;
+        NavigationPaths = source.NavigationPaths;
+        _preWhere = source._preWhere;
+        _arrayJoins = CloneJoinArray(source._arrayJoins);
+        _windows = source._windows;
+        ArrayJoinKind = source.ArrayJoinKind;
+        BindArrayJoinElement = source.BindArrayJoinElement;
+    }
+
+    /// <summary>
+    /// Initializes a command from a stack-only <see cref="QueryShape"/>. The fluent builders pass their
+    /// fields this way so a builder-to-command step allocates the command but no <see cref="QueryDefinition"/>
+    /// record; the public <c>CreateCommand</c> definition overload keeps the caller-owned-array defence.
+    /// </summary>
+    /// <param name="dataProvider">The context that executes the command, or <c>null</c> for an unbound clone.</param>
+    /// <param name="shape">The shape transferred from the builder.</param>
+    /// <param name="ownJoins">
+    /// When <c>true</c>, <see cref="QueryShape.Joins"/> is a fresh array no other command can reach
+    /// (the builder's <c>_joins?.ToArray()</c>), so it is installed directly instead of being copied.
+    /// </param>
+    internal QueryCommand(IDataContext? dataProvider, QueryShape shape, bool ownJoins)
+    {
+        _dataContext = dataProvider;
+        _exp = shape.Exp;
+        _srcType = shape.SrcType;
+        _condition = shape.Condition;
+        _filterScope = shape.FilterScope ?? QueryFilterScope.None;
+        _joins = shape.Joins is { } joins
+            ? (ownJoins ? joins : CloneJoinArray(joins)!)
+            : null;
+        Paging = shape.Paging;
+        _sorting = shape.Sorting;
+        _groupExp = shape.Group;
+        _having = shape.Having;
+        Logger = shape.Logger;
+        IsDistinct = shape.IsDistinct;
+        Final = shape.Final;
+        SampleRatio = shape.SampleRatio;
+        SampleOffset = shape.SampleOffset;
+        Settings = shape.Settings;
+        _preWhere = shape.PreWhere;
+        _arrayJoins = shape.ArrayJoins?.ToArray();
+        _windows = shape.Windows;
+        ArrayJoinKind = shape.ArrayJoinKind;
+        BindArrayJoinElement = shape.BindArrayJoinElement;
+    }
+
+    /// <summary>Shallow-clones a collaborator array with a private copy, or returns <c>null</c>.</summary>
+    /// <typeparam name="T">The array element type.</typeparam>
+    /// <param name="items">The array to copy, or <c>null</c>.</param>
+    /// <returns>A private copy of <paramref name="items"/>, or <c>null</c>.</returns>
+    private static T[]? CloneJoinArray<T>(T[]? items) => items is null ? null : (T[])items.Clone();
+
+    /// <summary>
+    /// Snapshot of this command's shape as a <see cref="QueryDefinition"/>, used by external readers and
+    /// the test surface. Each read materialises a fresh record and it is deliberately not used by the
+    /// internal clone paths (they transfer state directly and allocate no record).
+    /// </summary>
+    internal QueryDefinition Definition => BuildDefinition(_exp, _condition, _joins, _groupExp);
+    /// <summary>Materialises the shape record once, substituting the four collaborator overrides.</summary>
+    private QueryDefinition BuildDefinition(
+        LambdaExpression? exp,
+        LambdaExpression? condition,
+        JoinExpression[]? joins,
+        LambdaExpression? group) => new()
+        {
+            Exp = exp,
+            SrcType = _srcType,
+            ProjectionType = ProjectionType,
+            IdentitySlotAliases = IdentitySlotAliases,
+            Condition = condition,
+            IgnoreFilters = !_filterScope.IsEmpty,
+            FilterScope = _filterScope,
+            Joins = joins,
+            Paging = Paging,
+            Sorting = _sorting,
+            Group = group,
+            Having = _having,
+            Logger = Logger,
+            IsDistinct = IsDistinct,
+            GroupByWithTotals = GroupByWithTotals,
+            LimitBy = LimitBy,
+            DistinctOn = DistinctOn,
+            ExtremeRow = ExtremeRow,
+            TableSample = TableSample,
+            Temporal = Temporal,
+            RowLock = RowLock,
+            PrimarySourceLock = SourceLockClause,
+            Final = Final,
+            SampleRatio = SampleRatio,
+            SampleOffset = SampleOffset,
+            Settings = Settings,
+            PreWhere = _preWhere,
+            ArrayJoins = _arrayJoins,
+            Windows = _windows,
+            ArrayJoinKind = ArrayJoinKind,
+            BindArrayJoinElement = BindArrayJoinElement,
+            NavigationPaths = NavigationPaths,
+        };
     /// <summary>
     /// Applies the reference-navigation expansion performed at the start of preparation (#148-B D3):
     /// installs the rewritten lambdas and appends the injected navigation <c>LEFT JOIN</c>s after the
@@ -449,6 +642,30 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <summary>The prepared group-by columns of <see cref="ExtremeRow"/>, or <c>null</c> when the clause has no group.</summary>
     internal SelectExpression[]? ExtremeRowGroupByColumns => _extremeRowGroupByColumns;
     /// <summary>
+    /// Whether this command is the child query of an eager load that carries a per-parent
+    /// <c>Limit</c>/<c>Offset</c>/<c>Page</c>. When set, the builder lowers the command to a
+    /// <c>row_number() over (partition by &lt;child key&gt; ...)</c> derived table and applies the page
+    /// bounds to each partition, so the paging is per parent instead of global. It is an internal
+    /// execution detail of the eager loader; a command with no eager load never sets it.
+    /// </summary>
+    internal bool PerParentPaging { get; set; }
+    /// <summary>
+    /// The child-side partition selector used by <see cref="PerParentPaging"/> (the load's child key
+    /// selector, whose parameter is the child entity type). Prepared into
+    /// <see cref="PerParentPartitionColumns"/> during preparation.
+    /// </summary>
+    internal LambdaExpression? PerParentPartition { get; set; }
+    /// <summary>The prepared partition columns of <see cref="PerParentPaging"/>, or <c>null</c> when absent.</summary>
+    internal SelectExpression[]? PerParentPartitionColumns => _perParentPartitionColumns;
+    /// <summary>
+    /// Whether a <see cref="PerParentPaging"/> command is rendered as a nested derived source (the
+    /// single-query eager join) rather than as a top-level statement (the split child loader). A nested
+    /// derived table must not carry the child's output <c>ORDER BY</c> - it is meaningless inside the
+    /// join and is rejected by SQL Server - while the split statement keeps it so the loaded children
+    /// preserve the child query's order. Set before preparation; a rendering detail, not query state.
+    /// </summary>
+    internal bool PerParentPagingEmbedded { get; set; }
+    /// <summary>
     /// The <c>TABLESAMPLE</c> table modifier, or <c>null</c> when the query has none. A dialect that does
     /// not support it rejects the command when its SQL is built.
     /// </summary>
@@ -463,6 +680,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// has none. A dialect that does not support it rejects the command when its SQL is built.
     /// </summary>
     internal LockClause? RowLock { get; set; }
+    /// <summary>
+    /// The source-level row lock requested for the primary physical source, or <c>null</c> when none was
+    /// requested. During preparation it is transferred to the resolved <c>FromExpression.SourceLock</c>
+    /// (and validated); a whole-query <see cref="RowLock"/> cannot be combined with it.
+    /// </summary>
+    internal LockClause? SourceLockClause { get; set; }
     /// <summary>Whether the query carries the ClickHouse <c>FINAL</c> modifier.</summary>
     public bool Final { get; internal set; }
     /// <summary>The ClickHouse <c>SAMPLE</c> ratio (a value in <c>[0, 1]</c>), or <c>null</c> when absent.</summary>
@@ -605,6 +828,17 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// with suppression applying to the first plan-cache population.
     /// </summary>
     internal bool PendingJoinIntoCartesianWarning { get; set; }
+
+    /// <summary>
+    /// Whether this denormalized pair command (<c>JoinInto</c> or a single-query <c>LoadWith</c>) joins at
+    /// least one side with an outer join, so a provider whose outer join fills the unmatched side with
+    /// defaults (ClickHouse) must inject its query-local null-producing setting
+    /// (<see cref="ISqlDialect.OuterJoinNullSettings"/>). Set by <c>EntityBuilder.CreatePairCommand</c> on
+    /// the SQL path only; the provider-neutral injection lives in
+    /// <c>NavigationExpansion.ApplyProviderOuterJoinNullSettings</c>, which also honors it for a command
+    /// whose joins come from a navigation expansion.
+    /// </summary>
+    internal bool NeedsOuterJoinNullSettings { get; set; }
 
     /// <summary>
     /// The raw-source global-filter skips collected during the current preparation, or <see langword="null"/>
@@ -854,6 +1088,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _distinctOnColumns = null;
         _extremeRowColumns = null;
         _extremeRowGroupByColumns = null;
+        _perParentPartitionColumns = null;
         PreparedPreWhere = null;
         _preparedArrayJoin = null;
         PreWhereShapeHash = 0;
@@ -866,6 +1101,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         HasTopLevelInValues = false;
         LookupPartitions = null;
         ShapeScanned = false;
+        ShapeValuesStable = false;
         HasUnkeyedTupleInValues = false;
         HasUnkeyedScalarInValues = false;
         _whereBasePlanHash = 0;
@@ -934,6 +1170,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         }
         else
         {
+            // The tail is shared: a.Union(b) stores the caller's operand b by reference, and
+            // CopyTo(copyAll:true) hands the same tail to the next clone. Appending in place would
+            // therefore rewrite a live command — the caller's operand b, or the command this clone was
+            // derived from — so chaining (a.Union(b).Except(c)) would silently give b an EXCEPT.
+            // Own a private copy of the tail before appending; ownership recursion keeps every level
+            // private, and the rendered SQL is unchanged.
+            _union = _union.Clone();
             _union.SetOperation(queryCommand, unionType);
         }
     }

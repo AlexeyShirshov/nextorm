@@ -380,15 +380,25 @@ public sealed class BatchResult : IEnumerable<ResultSet>, IAsyncEnumerable<Resul
     private bool _traversalActive;
     private bool _currentCursorConsumed;
 
-    internal BatchResult(IReadOnlyList<IList> sets, IReadOnlyList<Type> resultTypes, IReadOnlyList<string[]> columnNames)
+    internal BatchResult(IReadOnlyList<IList> sets, IReadOnlyList<Type> resultTypes, IReadOnlyList<string[]> columnNames, int recordsAffected)
     {
         _sets = sets;
         _resultTypes = resultTypes;
         _columnNames = columnNames;
+        RecordsAffected = recordsAffected;
     }
 
     /// <summary>The number of result sets the batch produced, in the order the queries were added.</summary>
     public int ResultSetCount => _sets.Count;
+
+    /// <summary>
+    /// The number of rows the batch's statements affected, as reported by the driver in one total, or
+    /// <c>-1</c> when the batch has no affected-row metadata. The value is captured when the batch
+    /// reader is released and is part of the eagerly materialised result, so this instance owns no
+    /// reader: it never touches a database, is safe to read at any time, and is <em>not</em> derived
+    /// from <see cref="ResultSetCount"/> or from the number of materialised rows.
+    /// </summary>
+    public int RecordsAffected { get; }
 
     /// <summary>
     /// Returns the next result set, in the order the result queries were added. Each set may be read once;

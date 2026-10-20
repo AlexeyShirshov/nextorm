@@ -1,0 +1,7 @@
+product-diff 9d633521..HEAD -- src
+ src/nextorm.core/Query/QueryCommand.Description.cs | 349 ++++++---------------
+ .../Query/QueryCommand.EagerLoading.cs             |  18 +-
+ src/nextorm.core/Query/QueryCommand.cs             | 217 ++++++-------
+ 3 files changed, 206 insertions(+), 378 deletions(-)
+b03ffcf8d194e489b3a0be11e870b274e181f9498bd7ab788c942bcb78000ea7  -
+db-sha 32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295  /tmp/nextorm-bench/test.db

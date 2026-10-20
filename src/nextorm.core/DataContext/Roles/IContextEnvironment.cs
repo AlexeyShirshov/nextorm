@@ -69,4 +69,12 @@ public interface IContextEnvironment
     /// external implementations keep compiling.
     /// </summary>
     int? CommandTimeout => null;
+
+    /// <summary>
+    /// The context-wide default eager-load strategy applied to <c>LoadWith</c> collections when a query
+    /// declares no explicit mode (see <c>DataContextBuilder.UseEagerLoadMode</c>). The default
+    /// implementation returns <see cref="NextORM.Core.EagerLoadMode.SplitQuery"/> so existing external
+    /// implementations keep compiling and keep the historical behavior.
+    /// </summary>
+    EagerLoadMode EagerLoadMode => NextORM.Core.EagerLoadMode.SplitQuery;
 }

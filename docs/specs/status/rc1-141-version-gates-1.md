@@ -130,7 +130,7 @@ equivalence of selected counts is recorded.
 2026-10-05T19:31:15Z | DO | r2 | 1/3 | integration suite executed on all 5 providers; exit 0, Total 3136, Failed 0, Skipped 193; per-provider counts captured | /tmp/nextorm-D141-ContractA-strong/logs/E141-integration.log
 2026-10-05T19:31:43Z | DO | r2 | 1/3 | validator re-run exit 2; sole failure is the comprehensive-boundary-sweep cap (3) - recorded as Notice, evidence not restructured | /tmp/nextorm-D141-ContractA-strong/E141-evidence.json
 2026-10-05T19:36:58Z | CHECK | r2 | 1/3 | coverage: collect exit 0 (8086 total, 5591 passed, 0 failed, 2495 skipped), reportgenerator exit 0; overall line 87.1% / branch 78.7% (23180/29418); changed-file branch: DataContext.cs 80.0%, SqlDialectBase.cs 69.8%, SqlMutationBuilder.cs 92.6%, PostgresDataContext.cs 61.5%, PostgresDialect.cs 80.2%, ISqlDialect.cs n/a (interface default, 0 instruments); nextorm.mariadb/mysql excluded by coverage.settings.xml so MDB branch cannot gate -> explicit MDB assertion count = 8 VersionGate facts / 9 FluentAssertions assertions; manual mutation 7/7 killed (M1 pg boundary 9.4 refused, M2 pg unset unsupported, M3 pg mismatch guard bypassed, M4 guard keyed by base type, M5 mdb boundary permits 12.x, M6 mdb unset permits UPDATE RETURNING, M7 UPDATE capability reverted to SupportsReturning) each with build exit 0 + assertion failure + restore + green project suite; suppression slop-scan 0/0 | /tmp/nextorm-D141-ContractA-strong/check/ ; mutation M1..M7.patch and *.log
-2026-10-05T19:44:01Z | DO | r2 | 2/3 | CHECK->DO loop-back n=2: fixed defect 141-DOC-MDB-GUARD (scoped the one-version-per-concrete-context-type guard to PostgreSQL in EN+RU providers/{mariadb,overview}.md, advanced/limitations.md and specs records; MariaDB documented as guard-free because its gated UPDATE RETURNING is not plan-cached); MariaDbDataContext versioned ctors now forward Version to the version-aware base ctor via a new protected MySqlDataContext 4-arg ctor, so DataContext.ServerVersion agrees with the dialect; added DialectCapabilityContractTests.SupportsUpdateReturning_ShouldDefaultToSupportsReturning (contract now 3 facts) and MDB ServerVersionSnapshot_ShouldAgreeWithTheDialect; strengthened PG CacheIsolation_* with a BeSameAs warm-cache-reuse assertion; build exit 0 (0 warnings/0 errors); inner pg-VersionGate 14/14, mdb-VersionGate 9/9, core-Returning 55/55, contract 3/3; boundary pg-full 756/756, mdb-full 166/166, core-full 1524/1524; docfx exit 0 (0 errors) | /tmp/nextorm-D141-ContractA-strong/r2/ ; /tmp/nextorm-D141-ContractA-strong/docs/docfx-r2.log
+2026-10-05T19:44:01Z | DO | r2 | 2/3 | CHECK->DO loop-back n=2: fixed defect 141-DOC-MDB-GUARD (scoped the one-version-per-concrete-context-type guard to PostgreSQL in EN+RU connecting-providers/{mariadb,overview}.md, advanced/limitations.md and specs records; MariaDB documented as guard-free because its gated UPDATE RETURNING is not plan-cached); MariaDbDataContext versioned ctors now forward Version to the version-aware base ctor via a new protected MySqlDataContext 4-arg ctor, so DataContext.ServerVersion agrees with the dialect; added DialectCapabilityContractTests.SupportsUpdateReturning_ShouldDefaultToSupportsReturning (contract now 3 facts) and MDB ServerVersionSnapshot_ShouldAgreeWithTheDialect; strengthened PG CacheIsolation_* with a BeSameAs warm-cache-reuse assertion; build exit 0 (0 warnings/0 errors); inner pg-VersionGate 14/14, mdb-VersionGate 9/9, core-Returning 55/55, contract 3/3; boundary pg-full 756/756, mdb-full 166/166, core-full 1524/1524; docfx exit 0 (0 errors) | /tmp/nextorm-D141-ContractA-strong/r2/ ; /tmp/nextorm-D141-ContractA-strong/docs/docfx-r2.log
 ```
 
 ## DO-unit closures (cycle N=1, plan revision r=2, attempt n=1)
@@ -245,7 +245,7 @@ report row is actually missing**. The evidence JSON was intentionally not restru
 
 | Defect key | First seen | Revisions / attempts observed | Fixes applied | Evidence | Last repeat / outcome |
 |---|---|---|---|---|---|
-| `141-DOC-MDB-GUARD` | CHECK, cycle N=1, r=2, n=1 | r2/n1 | 1 | `check/` finding #1; this file `## Integration count reconciliation` and progress-log r2/n2 entry; `/tmp/nextorm-D141-ContractA-strong/r2/`; `/tmp/nextorm-D141-ContractA-strong/docs/docfx-r2.log` | Fixed in DO loop-back r2/n2: the one-version-per-concrete-context-type guard is scoped to PostgreSQL in EN+RU `providers/mariadb.md`, `providers/overview.md`, `advanced/limitations.md` and the `linq2db-backlog-gap-analysis.md` / `sql-capabilities-gap-analysis.md` records; MariaDB documented as guard-free (UPDATE RETURNING is not plan-cached). Verified by 0/0 build, green affected suites and docfx exit 0. No repeat. |
+| `141-DOC-MDB-GUARD` | CHECK, cycle N=1, r=2, n=1 | r2/n1 | 1 | `check/` finding #1; this file `## Integration count reconciliation` and progress-log r2/n2 entry; `/tmp/nextorm-D141-ContractA-strong/r2/`; `/tmp/nextorm-D141-ContractA-strong/docs/docfx-r2.log` | Fixed in DO loop-back r2/n2: the one-version-per-concrete-context-type guard is scoped to PostgreSQL in EN+RU `connecting-providers/mariadb.md`, `connecting-providers/overview.md`, `advanced/limitations.md` and the `linq2db-backlog-gap-analysis.md` / `sql-capabilities-gap-analysis.md` records; MariaDB documented as guard-free (UPDATE RETURNING is not plan-cached). Verified by 0/0 build, green affected suites and docfx exit 0. No repeat. |
 
 ## Notices
 
@@ -260,16 +260,16 @@ Branch `1.0.9-rc1`, HEAD `815e0127`; 32 entries = 28 modified + 4 untracked, **0
 ```
  M docs/advanced/api-reference.md
  M docs/advanced/limitations.md
- M docs/guide/03-grouping-and-aggregates.md
- M docs/providers/mariadb.md
- M docs/providers/overview.md
- M docs/providers/postgres.md
+ M docs/guide/05-grouping-and-aggregates.md
+ M docs/connecting-providers/mariadb.md
+ M docs/connecting-providers/overview.md
+ M docs/connecting-providers/postgres.md
  M docs/ru/advanced/api-reference.md
  M docs/ru/advanced/limitations.md
- M docs/ru/guide/03-grouping-and-aggregates.md
- M docs/ru/providers/mariadb.md
- M docs/ru/providers/overview.md
- M docs/ru/providers/postgres.md
+ M docs/ru/guide/05-grouping-and-aggregates.md
+ M docs/ru/connecting-providers/mariadb.md
+ M docs/ru/connecting-providers/overview.md
+ M docs/ru/connecting-providers/postgres.md
  M docs/ru/scalar-functions/05-aggregates.md
  M docs/scalar-functions/05-aggregates.md
  M docs/specs/comparison/linq2db-backlog-gap-analysis.md

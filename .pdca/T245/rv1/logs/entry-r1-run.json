@@ -1,0 +1,30 @@
+{
+  "block": "entry-r1",
+  "label": "C-FAIR entry round 1",
+  "argv": "env -u NEXTORM_BENCH_FULL NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkFeaturesFairCached.B_* --exporters json --artifacts .pdca/T245/rv1/bdn/entry-r1",
+  "lock": "flock -x /tmp/opencode/nextorm-bdn-host.lock bash /tmp/opencode/t245-entry-r1.sh (single lock held for the whole block, no nesting, no inherited fd)",
+  "started_utc": "2026-10-18T16:18:52Z",
+  "finished_utc": "2026-10-18T16:25:48Z",
+  "rc": 0,
+  "wall_seconds": 416,
+  "bdn_reported_runtime_seconds": 420.5,
+  "executed_benchmarks": 55,
+  "quiet_attempts": 2,
+  "quiet_median": 4.37,
+  "quiet_p95": 6.68,
+  "head_before": "e7813beb048c2918946c31260c6a27fe30d55ecb",
+  "head_after": "080043669ee19ba9eff8f19602fe0af51dc7698f",
+  "head_changed": true,
+  "head_change_detail": "foreign commit 08004366 '#297 plan: T297-cow rv2 contract, owner unfreeze override, COW acceptance' at 2026-10-18T16:23:32Z, inside the measurement interval; touched only .pdca/status/T297-cow-1.md and docs/specs/status/D297-structural-cte-graph-1.md (0 files under src/ tests/ benchmarks/)",
+  "scoped_fingerprint_before_after_identical": true,
+  "full_fingerprint_before_after_identical": true,
+  "foreign_process_lines": 4,
+  "foreign_process_detail": "pid 2001250 (ppid 1948512) polled 'flock -n /tmp/opencode/nextorm-bdn-host.lock -c exit 0' every 15 s from 16:25:35Z to 16:25:50Z (lock-contention probe, not a build/test/coverage/BDN process); no foreign BDN/testhost/coverage/build process observed",
+  "db_sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+  "artifacts": ".pdca/T245/rv1/bdn/entry-r1",
+  "valid": false,
+  "validity_reasons": [
+    "HEAD_CHANGED_DURING_INTERVAL",
+    "FOREIGN_LOCK_WAITER_PROCESS"
+  ]
+}

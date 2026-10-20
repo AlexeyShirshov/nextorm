@@ -68,7 +68,7 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 ## Resume (2026-10-06)
 
 - Blocker resolved: the author answered Q140 with **option A** — #140 is not a missing capability; the schema-less ("free/partial column list" without a caller-declared `TRow`) use case is already covered by `[DynamicColumns] Dictionary<string,object?>`, the raw `ToDataReader`/`ResultSet` path, and `jsonb_each`/`jsonb_each_text`/`jsonb_object_keys`; `jsonb_to_record`/`jsonb_to_recordset` require a declared schema (PostgreSQL requires a column definition list). #140 is closed on GitHub.
-- D140 is re-scoped to a **docs-only** cycle: document the workaround paths in EN+RU (`docs/guide/provider-specific/postgresql.md` + RU, `docs/advanced/limitations.md` + RU, and the table-valued-functions guide where the record contract is stated), then close the loop; no production code.
+- D140 is re-scoped to a **docs-only** cycle: document the workaround paths in EN+RU (`docs/guide/provider-specific-sql/postgresql.md` + RU, `docs/advanced/limitations.md` + RU, and the table-valued-functions guide where the record contract is stated), then close the loop; no production code.
 - The `incomplete "группа остановлена"` marks on D134/D194/D150/D193/D198/D195/D196 were an artifact of the outside-cycle blocker; those tasks were **never executed** and are re-armed to `pending`.
 - D161 (#161) and D197 (#197) remain `done` — their commits are valid.
 - Verification state: **unverified** (collection not yet verified).

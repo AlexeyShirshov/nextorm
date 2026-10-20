@@ -5,9 +5,11 @@ description: Run nextorm's runnable examples under examples/ (postgres aviasales
 
 # Running nextorm examples
 
-Three console apps under `examples/`, each provisions its own database with Testcontainers, loads a
-cached dataset into a **named Docker volume** on first run (subsequent runs reuse the loaded database),
-executes every query and prints `[ OK ]`/`[FAIL]` plus an `n/m succeeded` summary:
+Three **comparison** console apps under `examples/`, each provisions its own database with
+Testcontainers, loads a cached dataset into a **named Docker volume** on first run (subsequent runs
+reuse the loaded database), executes every query twice — nextorm and linq2db — and prints
+`[ OK ]`/`[FAIL]`/`[DIFF]` plus an `n/m queries matched in both arms` summary. `--benchmark` switches
+the same binary to a BenchmarkDotNet comparison (see below):
 
 | Project (under `examples/`) | Provider | Dataset | Env var | Fallback env var |
 |---|---|---|---|---|
@@ -47,11 +49,33 @@ setsid env DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/pod
   dotnet examples/nextorm.examples.<name>/bin/linux/Debug/net10.0/nextorm.examples.<name>.dll \
   > /tmp/opencode/<name>.log 2>&1 < /dev/null & disown
 # then poll
-grep -aE "^\[ OK \]|^\[FAIL\]|queries succeeded" /tmp/opencode/<name>.log
+grep -aE "^\[ OK \]|^\[FAIL\]|^\[DIFF\]|queries matched" /tmp/opencode/<name>.log
 ```
 
 Prefer the already-built DLL over `dotnet run` — `dotnet run` keeps MSBuild workers alive (memory) and
 the log only appears at the end.
+
+Useful arguments: `--connection "<cs>"` (skip provisioning), `--only Name1,Name2` (subset of queries;
+names are the method names, e.g. `AircraftDelayChains` or `Sessions`), `--log-sql` (nextorm SQL).
+
+## Benchmarks (`--benchmark`)
+
+`--benchmark` provisions/reuses the database once and then runs BenchmarkDotNet in-process
+(`Job.ShortRun` + `InProcessEmitToolchain`, warmup 3 / iterations 3, `[MemoryDiagnoser]`). Every query
+has a `Nextorm_*` baseline and a `Linq2Db_*` arm; `Incremental` on ClickHouse is linq2db-only.
+`--filter '*Name*'` forwards a BenchmarkDotNet filter:
+
+```bash
+cd /home/alex/sources/nextorm
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet examples/nextorm.examples.postgres.aviasales/bin/linux/Debug/net10.0/nextorm.examples.postgres.aviasales.dll \
+  --benchmark --filter '*AircraftDelayChains*'
+```
+
+Use a **Release** build for numbers you intend to quote (BenchmarkDotNet warns on Debug), and keep the
+run detached like a normal example: provisioning dominates the wall time. Reports land under
+`BenchmarkDotNet.Artifacts/` in the current working directory. `NEXTORM_EXAMPLES_BENCH_FULL=1` switches
+to the full out-of-process job (slow; do not use for a smoke check).
 
 ## Persistence and reloading
 
@@ -70,15 +94,16 @@ reprovisions) or remove the volume manually through the Podman socket.
 
 ## Expected results (last verified against Testcontainers)
 
-| Example | Result | Documented `FAIL`s |
+| Example | Result (matched in both arms) | Documented `FAIL`s |
 |---|---|---|
 | postgres aviasales | **11/11** | — |
 | mssql adventureworks | **11/11** | — |
-| clickhouse analytics | **10/11** | `Incremental` (`uniqMerge` / `-Merge` over an `AggregateFunction` state has no LINQ surface) |
+| clickhouse analytics | **10/11** | `Incremental`: the nextorm arm throws (`uniqMerge` has no LINQ surface); the linq2db arm runs it |
 
-A `[FAIL]` is expected only for documented engine gaps (`NotSupportedException` /
-`QueryPreparationException`); the `Program` catches those, but **any other exception aborts the run** —
-so a nonzero/missing summary means a real regression, not a known gap.
+A `[FAIL]` is expected only for documented engine gaps (`NotSupportedException`,
+`QueryPreparationException`, `LinqToDBException`); the `Program` catches those, but **any other exception
+aborts the run** — so a nonzero/missing summary means a real regression, not a known gap. `[DIFF]` means
+the two arms returned different row counts and is a real mismatch to investigate.
 
 **The authoritative, dated log is [`examples/VERIFICATION.md`](../../../examples/VERIFICATION.md)** — read
 it before running to compare, and update it after every run (results, per-query reason, and the roadmap

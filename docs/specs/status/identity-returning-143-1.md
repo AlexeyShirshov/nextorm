@@ -53,7 +53,7 @@ Feature rows (all mandatory): repeated same CLR type/identical names → test al
 - Mutation checks (temporary, restored): kill mutants for removing slot from key; dropping stored alias during copy; first-match; skipping missing-property/Range validation; swapping target slot; dropping converter metadata; enabling Returning without a call.
 
 ## Docs plan
-Update EN+RU: `docs/guide/08-cte.md`, `docs/guide/17-update-statement.md`, `docs/guide/16-delete-statement.md` and `docs/ru/guide/` twins; XML for new overloads. Describe both identity spellings, whole mapped-item results, item order, target semantics, PG/INNER/arity limits, supported CTE/derived paths, explicit rejections. Remove identity prohibition only. No public rename, no guide renumbering, no links to `docs/specs`.
+Update EN+RU: `docs/guide/10-cte.md`, `docs/guide/19-update-statement.md`, `docs/guide/18-delete-statement.md` and `docs/ru/guide/` twins; XML for new overloads. Describe both identity spellings, whole mapped-item results, item order, target semantics, PG/INNER/arity limits, supported CTE/derived paths, explicit rejections. Remove identity prohibition only. No public rename, no guide renumbering, no links to `docs/specs`.
 
 ## Decisions
 - Perf measurement: REQUIRED. Affects preparation, cached translation, materialization (`MemberTranslator.cs:531-615`, `QueryCommand.QueryPreparer.cs:599-681`, `RowMaterializerBuilder.cs:110-187,226-254`). Capture pre-change + final Release seven-case `--anyCategories=acceptance` vs `docs/specs/performance/acceptance-benchmarks.md`; add focused prepared identity standalone/CTE measurements at arities 2 and 8.

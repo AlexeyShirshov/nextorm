@@ -4,6 +4,10 @@
 
 Stage A — DONE @752943d. B1 — incomplete/unaccepted/uncommitted. B2 — incomplete/unaccepted/uncommitted. #183 closes `DONE (with limitation)` под директиву владельца и решение эскалации (a): владелец явно разрешил не останавливать группу по метрике времени; неатрибутируемое время — приемлемый негативный исход, а не провал задачи. Ни B1, ни B2 не поставлены (not shipped).
 
+> **Обновление (2026-10-05).** Это итог цикла 2. Позже B1+B2 были поставлены отдельным коммитом
+> `322f9be2` (`src/nextorm.core/DataContext/Cache/ParamRefreshRecipe.cs`); итоговый эффект измерен в
+> Итерации 16 `benchmark-report.md`, сводка — `decisions-and-lessons.md` R13.
+
 ## Stage A (измерения)
 
 Крупнейшая non-execution аллокация — construction (586 KB/invocation), далее lookup/equality/parameter refresh (316 KB/invocation); refresh-needed 6528.104 B/op против no-refresh контроля 5184.188 B/op → диагностическая дельта 1343.916 B/op (точно на 3 прогонах, остаток 832.14 B/op; время indicative only).
@@ -42,7 +46,8 @@ Stage A — DONE @752943d. B1 — incomplete/unaccepted/uncommitted. B2 — inco
 
 Подтверждённые Stage A доли: construction (586 KB/invocation) > lookup/equality+refresh (316 KB/invocation); `PrepareCommand` не является крупнейшей остаточной non-DB стоимостью выше неопределённости.
 
-Поэтому отдельный письменный дизайн `m12-3-prepare-command-design.md` сейчас НЕ создаётся; зафиксировано измеренное основание.
+Поэтому отдельный письменный дизайн `m12-3-prepare-command-design.md` не создавался на этом шаге; он был
+написан позже под T201, реализован (D201-3) и закрыт вместе с #201 — итог в `decisions-and-lessons.md` R14.
 
 Триггер пересмотра: если construction будет адресован и prepare станет доминирующей статьёй, либо если неопределённость измерения снижена на тихом хосте.
 
@@ -65,7 +70,7 @@ AC4 **met** (2026-10-05, interleaved 10-pair ABAB; 0/10 min и 1/10 p10 блок
 - `Join_CachedHit_PlanOnly` / `Join_CachedHit_ToList` — **Δ −359.96 / −424.00 B/op** (per-op; raw per-100-invocation −35,996 / −42,400).
 - Harness `StageAttributionBenchmark.CachedHit_PlanOnly_Param` per-hit (N=256/4096): 6528.13 → 4584.09 B/op (Δ −1944.04).
 
-Гейт аллокаций `eng/perf/iteration14_gate.py` → **exit 0**, 56 row/jobs в бюджете, 0 проваливших.
+Гейт аллокаций `scripts/perf/iteration14_gate.py` → **exit 0**, 56 row/jobs в бюджете, 0 проваливших.
 
 Acceptance-категория → **7/7, exit 0, 39.46 с BDN** (внешне ~39–43 с); отношение `Cached_ToList`/`Prepared_ToList` — **0.90** (`acceptance-new.log`; `Cached_PlanOnly_Param` 0.30, `Prepared_ToList` baseline 1.00).
 

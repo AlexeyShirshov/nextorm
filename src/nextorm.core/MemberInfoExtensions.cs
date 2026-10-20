@@ -12,7 +12,7 @@ public static class MemberInfoExtensions
     // so the resolved column name is stable for a given naming convention for the lifetime of the
     // process. Caching it turns the per-member metadata lookup + linear scan into a dictionary read
     // on the SQL-build path.
-    private static readonly ConcurrentDictionary<(PropertyInfo, INamingConvention?), string> _columnNames = new();
+    private static readonly ConcurrentDictionary<(PropertyInfo, INamingConvention?, Type?), string> _columnNames = new();
 
     /// <summary>
     /// Drops the cached column names, all of them or only those of <paramref name="entityType"/>. Called
@@ -31,7 +31,9 @@ public static class MemberInfoExtensions
 
         foreach (var key in _columnNames.Keys)
         {
-            if (key.Item1.DeclaringType == entityType)
+            if (key.Item1.DeclaringType == entityType
+                || key.Item1.ReflectedType == entityType
+                || key.Item3 == entityType)
                 _columnNames.TryRemove(key, out _);
         }
     }
@@ -41,16 +43,54 @@ public static class MemberInfoExtensions
     /// when the metadata does not declare it. Auto-derived names are translated through
     /// <paramref name="convention"/>; declared names are returned verbatim.
     /// </summary>
+    /// <param name="mi">The CLR member to resolve.</param>
+    /// <param name="convention">The naming convention applied to auto-derived names, or <see langword="null"/>.</param>
     public static string GetPropertyColumnName(this MemberInfo mi, INamingConvention? convention = null)
+        => GetPropertyColumnName(mi, convention, null);
+
+    /// <summary>
+    /// Column name registered for the member in the shared entity metadata cache, or an empty string
+    /// when the metadata does not declare it. Auto-derived names are translated through
+    /// <paramref name="convention"/>; declared names are returned verbatim.
+    /// </summary>
+    /// <param name="mi">The CLR member to resolve.</param>
+    /// <param name="convention">The naming convention applied to auto-derived names, or <see langword="null"/>.</param>
+    /// <param name="entityType">
+    /// The entity type the member is accessed through. Required for a member inherited from a base class:
+    /// the member is reflected against the base type, while the mapping (and any fluent column override)
+    /// belongs to the derived entity. When <see langword="null"/>, the reflected and declaring types are
+    /// used as a fallback.
+    /// </param>
+    internal static string GetPropertyColumnName(this MemberInfo mi, INamingConvention? convention, Type? entityType)
     {
         if (mi is PropertyInfo pi)
         {
-            var key = (pi, convention);
+            var key = (pi, convention, entityType);
 
             if (_columnNames.TryGetValue(key, out var cached))
                 return cached;
 
-            if (DataContextCache.Metadata.TryGetValue(pi.DeclaringType!, pi, out var prop))
+            // A member of a lambda over a derived entity is reflected against the type that declares
+            // it (DeclaringType), not the entity type, and metadata is keyed by the entity type. When
+            // the caller names the entity type, its mapping is authoritative: a property absent from it
+            // is not mapped, even if the base type has a mapping of its own.
+            IPropertyMetadata? prop = null;
+            var resolved = false;
+
+            if (entityType is not null && DataContextCache.Metadata.TryGetValue(entityType, out _))
+            {
+                resolved = DataContextCache.Metadata.TryGetValue(entityType, pi, out prop);
+            }
+            else
+            {
+                if (pi.ReflectedType is { } reflected)
+                    resolved = DataContextCache.Metadata.TryGetValue(reflected, pi, out prop);
+
+                if (!resolved && pi.DeclaringType is { } declaring && declaring != pi.ReflectedType)
+                    resolved = DataContextCache.Metadata.TryGetValue(declaring, pi, out prop);
+            }
+
+            if (resolved)
             {
                 var name = prop!.ColumnName;
                 if (prop.IsColumnNameAuto && convention is not null)
@@ -59,10 +99,24 @@ public static class MemberInfoExtensions
                 _columnNames.TryAdd(key, name);
                 return name;
             }
+
+            if (entityType is not null && DataContextCache.Metadata.ContainsKey(entityType))
+                _columnNames.TryAdd(key, string.Empty);
         }
 
         return string.Empty;
     }
+
+    /// <summary>
+    /// Whether two <see cref="PropertyInfo"/> instances denote the same declared property. Reflection
+    /// creates distinct instances whose equality includes <see cref="MemberInfo.ReflectedType"/>: a
+    /// property inherited by a derived entity is reflected as the base declaration, while metadata built
+    /// for the derived entity holds the same token reflected against the derived type. Comparing the
+    /// module and metadata token treats both as the same mapping.
+    /// </summary>
+    internal static bool SameProperty(PropertyInfo left, PropertyInfo right)
+        => ReferenceEquals(left, right)
+            || (left.Module == right.Module && left.MetadataToken == right.MetadataToken);
     /// <summary>
     /// Looks up the metadata for <paramref name="pi"/> in the entity metadata registered for
     /// <paramref name="type"/>. Because the metadata is keyed by type, the property is matched by
@@ -79,7 +133,7 @@ public static class MemberInfoExtensions
         {
             foreach (var item in entity.Properties)
             {
-                if (item.PropertyInfo == pi)
+                if (SameProperty(item.PropertyInfo, pi))
                 {
                     prop = item;
                     return true;

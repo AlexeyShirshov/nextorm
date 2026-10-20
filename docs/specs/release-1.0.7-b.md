@@ -60,7 +60,7 @@
       (core, sqlite, sqlserver, postgres), core 83.9%.
 - [x] Docs EN + RU синхронны (по 2 новые главы 30/31 в каждой); `dotnet docfx docs/docfx.json` —
       **0 errors, 0 warnings** (починен битый xref `NextORM.Core.SqlFunctions.PostgresFunctions` →
-      `NextORM.Core.PostgresFunctions` в `providers/postgres.md`, EN+RU — §3).
+      `NextORM.Core.PostgresFunctions` в `connecting-providers/postgres.md`, EN+RU — §3).
 - [x] `dotnet pack` всех 7 пакетов с `-p:Version=1.0.7-beta` — ок; зависимости в nuspec проверены:
       `nextorm.mariadb → nextorm.mysql 1.0.7-beta`, провайдеры → `nextorm 1.0.7-beta`.
 - [x] `nextorm-code-auditor` (25.09.2026, HEAD `da5caad` + uncommitted): **release-blocking P0/P1 нет**.
@@ -87,7 +87,7 @@
 
 ### 3.4. Битый xref (DocFX)
 
-- `docs/providers/postgres.md` и `docs/ru/providers/postgres.md`:
+- `docs/connecting-providers/postgres.md` и `docs/ru/connecting-providers/postgres.md`:
   `xref:NextORM.Core.SqlFunctions.PostgresFunctions` → `xref:NextORM.Core.PostgresFunctions`
   (тип объявлен как `NextORM.Core.PostgresFunctions`, `src/nextorm.core/Query/SqlFunctions.Postgres.cs`).
 

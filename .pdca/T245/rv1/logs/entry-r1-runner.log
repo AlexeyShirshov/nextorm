@@ -1,0 +1,12 @@
+[2026-10-18T16:16:27Z] entry-r1 start pid=1990394 (lock held by caller or inherited fd )
+[2026-10-18T16:16:27Z] DB pin ok 32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295 (2/2)
+[2026-10-18T16:16:27Z] HEAD before=e7813beb048c2918946c31260c6a27fe30d55ecb
+[2026-10-18T16:16:27Z] quiet probe attempt 1/4 starting
+[2026-10-18T16:16:56Z] quiet probe attempt 1/4: median=19.95 p95=28.29 admitted=0
+[2026-10-18T16:16:56Z] not admitted, sleeping 90 s before re-sampling
+[2026-10-18T16:18:23Z] quiet probe attempt 2/4 starting
+[2026-10-18T16:18:52Z] quiet probe attempt 2/4: median=4.37 p95=6.68 admitted=1
+[2026-10-18T16:18:52Z] admitted on attempt 2 (median=4.37 p95=6.68)
+[2026-10-18T16:18:52Z] BDN start utc=2026-10-18T16:18:52Z
+[2026-10-18T16:25:54Z] BDN finished utc=2026-10-18T16:25:48Z rc=0 wall_s=416
+[2026-10-18T16:25:54Z] HEAD after=080043669ee19ba9eff8f19602fe0af51dc7698f foreign_lines=4

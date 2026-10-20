@@ -1,0 +1,245 @@
+{
+  "executions": [
+    {
+      "artifact_revision": "1b140d23cd12ecc19af4bfbad3563b6e8281aa63",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".pdca/scripts/perf/tests",
+        "-p",
+        "test_t247_json_gate.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-10-18T03:02:12Z",
+      "id": "d1-driver-tests",
+      "kind": "other",
+      "log": ".pdca/T247/rv2/logs/t247_driver_tests.log",
+      "phase": "inner",
+      "selected_count": 30,
+      "source_revision": "1b140d23cd12ecc19af4bfbad3563b6e8281aa63",
+      "started_at": "2026-10-18T03:02:11Z",
+      "state": "finished"
+    },
+    {
+      "artifact_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "command": [
+        "python3",
+        ".pdca/scripts/perf/t247_json_gate.py",
+        "baseline",
+        "--rounds",
+        "2",
+        "--evidence-root",
+        ".pdca/T247/rv2"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-10-18T07:29:28Z",
+      "id": "d1-baseline-rv2",
+      "kind": "other",
+      "log": ".pdca/T247/rv2/logs/baseline-driver.log",
+      "phase": "boundary",
+      "selected_count": 146,
+      "source_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "started_at": "2026-10-18T05:45:24Z",
+      "state": "finished"
+    },
+    {
+      "artifact_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "command": [
+        "python3",
+        ".pdca/scripts/perf/t247_json_gate.py",
+        "phase",
+        "--rounds",
+        "2",
+        "--evidence-root",
+        ".pdca/T247/rv2"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-10-18T08:58:48Z",
+      "id": "d1-phase-rv2",
+      "kind": "other",
+      "log": ".pdca/T247/rv2/logs/phase-driver.log",
+      "phase": "boundary",
+      "selected_count": 128,
+      "source_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "started_at": "2026-10-18T07:29:41Z",
+      "state": "finished"
+    },
+    {
+      "artifact_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "command": [
+        "python3",
+        ".pdca/scripts/perf/t247_json_gate.py",
+        "phases",
+        "--evidence-root",
+        ".pdca/T247/rv2"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-10-18T08:58:53Z",
+      "id": "d1-phases-rv2",
+      "kind": "other",
+      "log": ".pdca/T247/rv2/logs/phases.log",
+      "phase": "boundary",
+      "selected_count": 2,
+      "source_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "started_at": "2026-10-18T08:58:49Z",
+      "state": "finished"
+    },
+    {
+      "artifact_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".pdca/scripts/perf/tests",
+        "-p",
+        "test_t247_json_gate.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-10-18T08:59:09Z",
+      "id": "d1-driver-tests-c99cc512",
+      "kind": "other",
+      "log": ".pdca/T247/rv2/logs/t247_driver_tests_recheck.log",
+      "phase": "inner",
+      "selected_count": 33,
+      "source_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+      "started_at": "2026-10-18T08:59:07Z",
+      "state": "finished"
+    },
+    {
+      "artifact_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
+      "command": [
+        "dotnet",
+        "build",
+        "nextorm.slnx",
+        "-c",
+        "Debug"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-10-18T09:08:32Z",
+      "id": "d2-build-sln",
+      "kind": "build",
+      "log": ".pdca/T247/rv2/logs/build-after-cache.log",
+      "phase": "boundary",
+      "selected_count": 1,
+      "source_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
+      "started_at": "2026-10-18T09:08:32Z",
+      "state": "finished"
+    },
+    {
+      "artifact_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+        "-c",
+        "Debug"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-10-18T09:07:55Z",
+      "id": "d2-core-tests-build",
+      "kind": "build",
+      "log": ".pdca/T247/rv2/logs/build-core-tests.log",
+      "phase": "inner",
+      "selected_count": 1,
+      "source_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
+      "started_at": "2026-10-18T09:07:55Z",
+      "state": "finished"
+    },
+    {
+      "artifact_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~Json"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-10-18T09:07:57Z",
+      "id": "d2-core-json-tests",
+      "kind": "unit",
+      "log": ".pdca/T247/rv2/logs/test-core-json.log",
+      "phase": "inner",
+      "selected_count": 175,
+      "source_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
+      "started_at": "2026-10-18T09:07:57Z",
+      "state": "finished"
+    },
+    {
+      "artifact_revision": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+      "command": [
+        "python3",
+        ".pdca/scripts/perf/t247_measure.py",
+        "final",
+        "--rounds",
+        "2",
+        "--evidence-root",
+        ".pdca/T247/rv2"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-10-18T10:37:46Z",
+      "id": "d4-final-rv2",
+      "kind": "other",
+      "log": ".pdca/T247/rv2/logs/final-driver.log",
+      "phase": "boundary",
+      "selected_count": 146,
+      "source_revision": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+      "started_at": "2026-10-18T09:13:20Z",
+      "state": "finished"
+    },
+    {
+      "artifact_revision": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".pdca/scripts/perf/tests",
+        "-p",
+        "test_t247_json_gate.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-10-18T10:39:02Z",
+      "id": "d4-driver-tests-final-compare",
+      "kind": "other",
+      "log": ".pdca/T247/rv2/logs/t247_driver_tests-final-compare.log",
+      "phase": "inner",
+      "selected_count": 34,
+      "source_revision": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+      "started_at": "2026-10-18T10:39:00Z",
+      "state": "finished"
+    }
+  ],
+  "scope": {
+    "boundary": "dotnet test tests/nextorm.core.tests -c Debug --filter \"FullyQualifiedName~Json\"",
+    "files": [
+      "src/nextorm.core/Query/Json/JsonRowWriterCache.cs",
+      "src/nextorm.core/Query/Json/JsonRowWriterFactory.cs",
+      "src/nextorm.core/DataContext/DataContext.cs",
+      "src/nextorm.core/DataContext/DataContextCache.cs",
+      "tests/nextorm.core.tests/Json/JsonRowWriterCacheTests.cs"
+    ],
+    "integration_boundary_runs": 1,
+    "integration_projects": [
+      "tests/nextorm.integration.tests"
+    ],
+    "projects": [
+      "tests/nextorm.core.tests"
+    ],
+    "rationale": "D247-02 is the production cache unit: a new internal JsonRowWriterCache + semantic key, the internal ResolveMemberName sharing, the context-owned cache wiring in DataContext and the process-wide invalidation generation in DataContextCache, plus one focused unit test file. Compiled inputs change, so rebuild is \"affected\"; the inner loop is the affected nextorm.core.tests JSON subset (one project build, then --no-build filtered runs) and the full boundary sweep belongs to the DO->CHECK flow boundary, not this unit.",
+    "rebuild": "affected",
+    "selectors": [
+      "FullyQualifiedName~Json"
+    ]
+  },
+  "unit": "D247-02"
+}

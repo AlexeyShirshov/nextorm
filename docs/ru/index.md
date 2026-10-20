@@ -9,46 +9,60 @@
 - [Сущности и метаданные](getting-started/03-entities-and-metadata.md)
 - [Внедрение зависимостей](getting-started/04-dependency-injection.md)
 
+### Движок
+
+- [Как работает движок](engine/index.md)
+- [Построение запроса: fluent к SQL](engine/01-query-pipeline.md)
+- [Исполнение и строки](engine/02-execution-and-rows.md)
+- [Кэш планов и переиспользование](engine/03-plan-cache-and-reuse.md)
+
+### Связи
+
+- [Связи и однозапросная загрузка](relationships/relationships.md)
+- [Неявные навигационные запросы](relationships/implicit-navigation.md)
+- [Жадная загрузка дочерних коллекций](relationships/eager-loading.md)
+- [Постраничная выборка на родителя при жадной загрузке](relationships/eager-loading-per-parent-paging.md)
+
 ### Руководство
 
-- [Запросы и проекции](querying/index.md)
-- [Фильтрация (WHERE)](guide/01-filtering-where.md)
-- [Соединения (JOIN)](guide/02-joins.md)
-- [Группировка и агрегаты](guide/03-grouping-and-aggregates.md)
-- [Сортировка и постраничный вывод](guide/04-sorting-and-paging.md)
-- [Подзапросы](guide/05-subqueries.md)
-- [Операции над множествами](guide/06-set-operations.md)
-- [SELECT DISTINCT](guide/07-distinct.md)
-- [Обобщённые табличные выражения (CTE)](guide/08-cte.md)
-- [Оконные функции](guide/09-window-functions.md)
-- [Пользовательские функции](guide/10-user-defined-functions.md)
-- [Табличные функции](guide/11-table-valued-functions.md)
-- [Сырой SQL](guide/12-raw-sql.md)
-- [Хинты запросов](guide/13-query-hints.md)
-- [Поддержка JSON в разных провайдерах](guide/14-json.md)
-- [Изменение данных (INSERT)](guide/15-insert-statement.md)
-- [Изменение данных (DELETE)](guide/16-delete-statement.md)
-- [Изменение данных (UPDATE)](guide/17-update-statement.md)
-- [Материализация запроса в таблицу](guide/18-create-table-as.md)
-- [Слияние данных (MERGE / upsert)](guide/19-merge-statement.md)
-- [Массовая вставка (bulk)](guide/20-bulk-insert.md)
-- [Транзакции](guide/21-transactions.md)
-- [Колонки-длительности (TimeSpan)](guide/22-duration-columns.md)
-- [Выполнение утверждений одним батчем](guide/23-sql-batch.md)
-- [Оптимистичная конкурентность и отслеживание изменений](guide/24-optimistic-concurrency.md)
-- [Range-колонки (диапазон, хранимый парой скалярных колонок)](guide/25-range-columns.md)
-- [Потоковое чтение больших объектов (BLOB/CLOB)](guide/26-large-objects.md)
-- [Динамические колонки](guide/27-dynamic-columns.md)
-- [Потоковое сохранение данных](guide/28-streaming-data.md)
-- [Неявные навигационные запросы](guide/29-implicit-navigation.md)
+- [Источники запроса](guide/01-query-sources.md)
+- [Проекции](guide/02-projections.md)
+- [Фильтрация (WHERE)](guide/03-filtering-where.md)
+- [Соединения (JOIN)](guide/04-joins.md)
+- [Группировка и агрегаты](guide/05-grouping-and-aggregates.md)
+- [Сортировка и постраничный вывод](guide/06-sorting-and-paging.md)
+- [Подзапросы](guide/07-subqueries.md)
+- [Операции над множествами](guide/08-set-operations.md)
+- [SELECT DISTINCT](guide/09-distinct.md)
+- [Обобщённые табличные выражения (CTE)](guide/10-cte.md)
+- [Оконные функции](guide/11-window-functions.md)
+- [Пользовательские функции](guide/12-user-defined-functions.md)
+- [Табличные функции](guide/13-table-valued-functions.md)
+- [Сырой SQL](guide/14-raw-sql.md)
+- [Хинты запросов](guide/15-query-hints.md)
+- [Поддержка JSON в разных провайдерах](guide/16-json.md)
+- [Изменение данных (INSERT)](guide/17-insert-statement.md)
+- [Изменение данных (DELETE)](guide/18-delete-statement.md)
+- [Изменение данных (UPDATE)](guide/19-update-statement.md)
+- [Материализация запроса в таблицу](guide/20-create-table-as.md)
+- [Слияние данных (MERGE / upsert)](guide/21-merge-statement.md)
+- [Массовая вставка (bulk)](guide/22-bulk-insert.md)
+- [Транзакции](guide/23-transactions.md)
+- [Колонки-длительности (TimeSpan)](guide/24-duration-columns.md)
+- [Выполнение утверждений одним батчем](guide/25-sql-batch.md)
+- [Оптимистичная конкурентность и отслеживание изменений](guide/26-optimistic-concurrency.md)
+- [Range-колонки (диапазон, хранимый парой скалярных колонок)](guide/27-range-columns.md)
+- [Потоковое чтение больших объектов (BLOB/CLOB)](guide/28-large-objects.md)
+- [Динамические колонки](guide/29-dynamic-columns.md)
+- [Потоковое сохранение данных](guide/30-streaming-data.md)
+- [Специфичные для провайдеров возможности](guide/31-provider-specific-features.md)
 
 ### Инфраструктура
 
-- [Переиспользование запросов: кэш и Prepare](infrastructure/01-query-reuse-and-caching.md)
-- [Подключения](infrastructure/02-connections.md)
-- [Интерцепторы](infrastructure/03-interceptors.md)
-- [Конвертеры значений и JSON-колонки](infrastructure/04-value-converters.md)
-- [Логирование](infrastructure/05-logging.md)
+- [Подключения](infrastructure/01-connections.md)
+- [Интерцепторы](infrastructure/02-interceptors.md)
+- [Конвертеры значений и JSON-колонки](infrastructure/03-value-converters.md)
+- [Логирование](infrastructure/04-logging.md)
 
 ### Скалярные функции
 
@@ -61,14 +75,16 @@
 - [Массивы](scalar-functions/06-arrays.md)
 - [JSON и XML](scalar-functions/07-json-and-xml.md)
 - [Справочник по провайдерам](scalar-functions/08-reference.md)
+- [Системные функции](scalar-functions/09-system-functions.md)
+- [Последовательности и генераторы UUID](scalar-functions/10-sequences.md)
 
-### Провайдеры
+### Подключение провайдеров
 
-- [Обзор провайдеров](providers/overview.md)
-- [SQLite](providers/sqlite.md)
-- [SQL Server](providers/sqlserver.md)
-- [PostgreSQL](providers/postgres.md)
-- [In-memory](providers/in-memory.md)
+- [Обзор провайдеров](connecting-providers/overview.md)
+- [SQLite](connecting-providers/sqlite.md)
+- [SQL Server](connecting-providers/sqlserver.md)
+- [PostgreSQL](connecting-providers/postgres.md)
+- [In-memory](connecting-providers/in-memory.md)
 
 ### Сравнения
 
@@ -78,11 +94,9 @@
 
 - [Глобальные фильтры запросов](advanced/query-filters.md)
 - [Интеграция с Entity Framework Core](advanced/integration-efcore.md)
-- [Мост фильтров EF Core](advanced/ef-core-query-filters.md)
-- [Жадная загрузка дочерних коллекций](advanced/eager-loading.md)
-- [Связи и однозапросная загрузка](advanced/relationships.md)
 - [Ограничения и что вне области](advanced/limitations.md)
 - [Нативные стратегии выбора экстремальной строки](advanced/select-where-extrema-native.md)
+- [Расширяемость: пользовательские SQL-диалекты и рендереры](advanced/extensibility.md)
 - [Краткий справочник API](advanced/api-reference.md)
 
 ### Введение

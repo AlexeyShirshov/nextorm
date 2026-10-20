@@ -3,7 +3,8 @@
 **Status:** live run **DEFERRED**. The skill and the `lane` agent are loaded only
 at opencode start (config is load-once), so this session cannot execute the new
 skill live. The mechanical parts are covered now by
-`tests/pdca-collection/git-model-sim.sh` (green); the agent-orchestration path
+`AlexeyShirshov/skills: opencode/pdca-collection/tests/git-model-sim.sh` (green; скрипт живёт
+в репозитории скилла, не в nextorm); the agent-orchestration path
 runs after a restart.
 
 ## Input (synthetic)
@@ -29,7 +30,7 @@ runs after a restart.
 
 ## Verified now (no restart)
 
-- [x] Git mechanics — `bash tests/pdca-collection/git-model-sim.sh` → `OK: group-A merged, group-B merged, 2 merge commits` and `OK: conflict detected, group marked failed`.
+- [x] Git mechanics — `bash opencode/pdca-collection/tests/git-model-sim.sh` (из чекаута `AlexeyShirshov/skills`) → `OK: group-A merged, group-B merged, 2 merge commits` и `OK: conflict detected, group marked failed`.
 - [x] Skill frontmatter valid; sections `Коллекция (P/D/C/A)`, `Лейн`, `Git-модель`, `Сбой`, `Статус коллекции`, `Отчёт`, `Параметры`, `Связь с pdca-dotnet`, `Fallback` present.
 - [x] `lane` agent frontmatter valid (`mode: subagent`, `edit/bash: deny`, task allow-list).
 - [x] `AGENTS.md` §Git exception present, surrounding text unchanged.

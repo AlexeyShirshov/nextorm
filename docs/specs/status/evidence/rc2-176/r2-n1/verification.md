@@ -4,7 +4,7 @@
 
 All hand-written touched files are UTF-8 and CRLF (checked byte-wise):
 
-- `docs/guide/28-streaming-data.md`, `docs/ru/guide/28-streaming-data.md`,
+- `docs/guide/30-streaming-data.md`, `docs/ru/guide/30-streaming-data.md`,
   `docs/specs/roadmap/todo_json_streaming.md`
 - `src/nextorm.core/nextorm.core.csproj`
 - `benchmarks/nextorm.benchmark/SqliteBenchmarkJsonStreamPhase2.cs`
@@ -16,7 +16,7 @@ the CRLF-normalized source set.
 ## `git diff --check` (scoped)
 
 ```
-git diff --check -- docs/guide/28-streaming-data.md docs/ru/guide/28-streaming-data.md \
+git diff --check -- docs/guide/30-streaming-data.md docs/ru/guide/30-streaming-data.md \
   docs/specs/roadmap/todo_json_streaming.md src/nextorm.core/nextorm.core.csproj \
   src/nextorm.core/Query/QueryCommand.QueryPreparer.cs src/nextorm.core/Query/Json/JsonRowWriterFactory.cs \
   src/nextorm.core/Query/Json/JsonShapePlan.cs src/nextorm.core/Query/QueryCommand.cs \

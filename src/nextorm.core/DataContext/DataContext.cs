@@ -17,11 +17,16 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private bool _disposed;
     private readonly ContextEnvironment _environment;
     private readonly Version? _serverVersion;
+    private readonly NextORM.Core.EagerLoadMode _eagerLoadMode;
     private readonly QueryCache _queryCache;
     private readonly DbConnectionManager _connectionManager;
     private readonly QueryExecutor _executor;
     private readonly QueryPlanner _planner;
     private readonly InterceptorHooks _interceptors;
+    // Compiled JSON row writers owned by this context: a bounded LRU, so a repeated warm export does
+    // not recompile the same shape. Entries are pure delegates (no reader, destination or command) and
+    // are invalidated on PurgeQueryCache or by the process-wide DataContextCache.Clear generation.
+    private readonly JsonRowWriterCache _jsonRowWriters = new();
 
     /// <summary>
     /// Creates a context from builder options (logger factory, mapping mode, naming convention and
@@ -59,6 +64,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             optionsBuilder.CommandTimeout);
 
         QueryCacheEnabled = optionsBuilder.QueryCacheEnabled;
+
+        // The context-wide default eager-load strategy is snapshotted here; it never mutates a
+        // static/global value, so two contexts can carry different defaults concurrently.
+        _eagerLoadMode = optionsBuilder.EagerLoadMode;
 
         _queryCache = new QueryCache(QueryPlanStore.Clear);
 
@@ -191,6 +200,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <c>WithCommandTimeout</c>.
     /// </summary>
     public int? CommandTimeout => _environment.CommandTimeout;
+    /// <summary>
+    /// The context-wide default eager-load strategy applied to <c>LoadWith</c> collections when a query
+    /// declares no explicit mode (set with <c>DataContextBuilder.UseEagerLoadMode</c>). Defaults to
+    /// <see cref="EagerLoadMode.SplitQuery"/>. A query-level <c>LoadWith(..., mode)</c> overrides it.
+    /// </summary>
+    public EagerLoadMode EagerLoadMode => _eagerLoadMode;
     /// <summary>User-owned bag of arbitrary state attached to this context.</summary>
     public Dictionary<string, object> Properties => _environment.Properties;
     /// <summary>
@@ -332,8 +347,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     /// <summary>
     /// Streams a query's projected rows as JSON to a caller-owned stream, without a row mapper. The
-    /// command is prepared once with the no-mapper flag (a live <c>DocumentMode</c> clone) and
-    /// the shape plan and row writer are built per call; no writer cache is used.
+    /// command is prepared once with the no-mapper flag (a live <c>DocumentMode</c> clone); the shape
+    /// plan is built per call and the compiled row writer is served from the context-owned bounded
+    /// writer cache, so a repeated warm export does not recompile the same shape.
     /// </summary>
     /// <typeparam name="TResult">The projected result type; it is never materialized on this path.</typeparam>
     /// <param name="queryCommand">The command whose projection drives the JSON shape.</param>
@@ -414,7 +430,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
 
         var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options, cmd.JsonShape);
-        return (prepared, JsonRowWriterFactory.Build(plan), plan, false);
+        return (prepared, _jsonRowWriters.GetOrBuild(plan), plan, false);
     }
 
     // Clones the caller's command into a JSON-stream preparation. DocumentMode is the planner's existing
@@ -1176,11 +1192,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (command.Source is null)
             return SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, parameterProvider: parameterProvider);
 
-        var (withSql, sourceSql, sourceParameters) = _planner.RenderSource(command.Source, parameterProvider, null, null, parameterNamePrefix);
+        var (withSql, sourceSql, sourceParameters, maxRecursionStmt) = _planner.RenderSource(command.Source, parameterProvider, null, null, parameterNamePrefix);
         var (insertSql, parameters) = SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, sourceSql, sourceParameters, parameterProvider);
 
-        // A data-modifying CTE (or a hoisted read CTE) must precede INSERT, not sit inside the SELECT.
-        return (withSql is null ? insertSql : withSql + insertSql, parameters);
+        // A data-modifying CTE (or a hoisted read CTE) must precede INSERT, not sit inside the SELECT; the
+        // recursion limit is a statement tail, so it is appended after the whole INSERT ... SELECT.
+        return (AppendMaxRecursionStmt(withSql is null ? insertSql : withSql + insertSql, maxRecursionStmt), parameters);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildUpdateSql(UpdateCommand command)
@@ -1243,9 +1260,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             if (command.Source is null)
                 return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, null, null, keyAccumulator, null, null, keyFilterSql, this);
 
-            var (withInsert, sourceInsert, sourceInsertParameters) = _planner.RenderSource(command.Source);
+            var (withInsert, sourceInsert, sourceInsertParameters, keyMaxRecursionStmt) = _planner.RenderSource(command.Source);
             var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, sourceInsert, sourceInsertParameters, keyAccumulator, null, null, keyFilterSql, this);
-            return (withInsert is null ? insertSql : withInsert + insertSql, insertParameters);
+            return (AppendMaxRecursionStmt(withInsert is null ? insertSql : withInsert + insertSql, keyMaxRecursionStmt), insertParameters);
         }
 
         // Full MERGE: render the search conditions into the same accumulator the VALUES rows use, so their
@@ -1282,11 +1299,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             return (sql, parameters);
         }
 
-        var (withSql, sourceSql, _) = _planner.RenderSource(command.Source, provider, accumulator);
+        var (withSql, sourceSql, _, maxRecursionStmt) = _planner.RenderSource(command.Source, provider, accumulator);
         // The source parameters already sit in the shared accumulator, so MakeMerge must not re-add them;
         // passing them again would duplicate every @pN.
         var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this);
-        return (withSql is null ? fullSql : withSql + fullSql, fullParameters);
+        // MERGE is terminated with ';' (SQL Server): OPTION goes before that terminator, not after it.
+        return (AppendMaxRecursionStmt(withSql is null ? fullSql : withSql + fullSql, maxRecursionStmt), fullParameters);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildTruncateSql(TruncateCommand command)
@@ -1310,12 +1328,27 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var quoteIdentifiers = command.Source.QuoteIdentifiers ?? QuoteIdentifiers;
         var keywordCase = command.Source.KeywordCase ?? KeywordCase;
         var selectInto = SqlMutationBuilder.ResolveCreateTableAsInto(Dialect, quoteIdentifiers, command, keywordCase);
-        var (withSql, sourceSql, sourceParameters) = _planner.RenderSource(command.Source, selectInto);
-        return SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, sourceParameters, command, keywordCase);
+        var (withSql, sourceSql, sourceParameters, maxRecursionStmt) = _planner.RenderSource(command.Source, selectInto);
+        var (sql, parameters) = SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, sourceParameters, command, keywordCase);
+        return (AppendMaxRecursionStmt(sql, maxRecursionStmt), parameters);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildDropTableSql(DropTableCommand command)
         => (SqlMutationBuilder.MakeDropTableIfExists(Dialect, command.QuoteIdentifiers ?? QuoteIdentifiers, command.TargetName, command.KeywordCase ?? KeywordCase), []);
+
+    // The recursion limit returned by MakeWithClause is a statement tail, not a WITH fragment: it must follow
+    // the whole statement body and precede an optional terminal ';' (T-SQL requires OPTION before the MERGE
+    // terminator). A null value leaves the statement byte-identical to the pre-#275 output.
+    private static string AppendMaxRecursionStmt(string sql, string? maxRecursionStmt)
+    {
+        if (maxRecursionStmt is null)
+            return sql;
+
+        var trimmed = sql.TrimEnd();
+        return trimmed.EndsWith(';')
+            ? trimmed[..^1] + " " + maxRecursionStmt + ";"
+            : trimmed + " " + maxRecursionStmt;
+    }
 
     // A per-statement placeholder prefix for captured members: the shared parameter provider already
     // keeps inline values unique, but a member (closure variable) is named after the member, so two
@@ -1379,8 +1412,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                         Array.Empty<Parameter>()));
 
                 var selectInto = SqlMutationBuilder.ResolveCreateTableAsInto(Dialect, quoteIdentifiers, createTableAs, keywordCase);
-                var (withSql, sourceSql, _) = _planner.RenderSource(createTableAs.Source, provider, accumulator, selectInto, BatchParameterPrefix(i));
-                (sql, _) = SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, accumulator, createTableAs, keywordCase);
+                var (withSql, sourceSql, _, maxRecursionStmt) = _planner.RenderSource(createTableAs.Source, provider, accumulator, selectInto, BatchParameterPrefix(i));
+                var (ctasSql, _) = SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, accumulator, createTableAs, keywordCase);
+                // Statement-local: the option must stay inside this step's string, before the batch joins steps.
+                sql = AppendMaxRecursionStmt(ctasSql, maxRecursionStmt);
             }
             else if (step.Mutation is { } mutation)
             {
@@ -1389,8 +1424,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             }
             else
             {
-                var (withSql, sourceSql, _) = _planner.RenderSource(step.Query!, provider, accumulator, null, BatchParameterPrefix(i));
-                sql = withSql is null ? sourceSql : withSql + sourceSql;
+                var (withSql, sourceSql, _, maxRecursionStmt) = _planner.RenderSource(step.Query!, provider, accumulator, null, BatchParameterPrefix(i));
+                sql = AppendMaxRecursionStmt(withSql is null ? sourceSql : withSql + sourceSql, maxRecursionStmt);
                 results.Add(new BatchResultSpec(step.Query!, sql));
             }
 
@@ -1604,6 +1639,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     private void DisposeStaff()
     {
+        // The disposable context also drops its owned scalar artifacts: they retain plan-cache keys, and
+        // a disposed context must not keep anything alive through the fast path.
+        _queryCache.ClearScalarArtifacts();
         _connectionManager.DisposeConnection();
         Disposed?.Invoke(this, EventArgs.Empty);
     }
@@ -1737,7 +1775,61 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         => await _executor.SingleOrDefaultAsync(preparedQueryCommand, @params, cancellationToken).ConfigureAwait(false);
 
     /// <summary>Clears all cached query plans held by this context.</summary>
-    public void PurgeQueryCache() => _queryCache.PurgeQueryCache();
+    public void PurgeQueryCache()
+    {
+        // The retained JSON writers reference no plan, but they belong to the same per-context cache
+        // lifetime: a purge drops them so a disposed/purged context releases everything it compiled.
+        _jsonRowWriters.Clear();
+        _queryCache.PurgeQueryCache();
+    }
+
+    /// <summary>
+    /// The context-owned compiled JSON row-writer cache. Test/evidence observability only: the cache is
+    /// an engine detail and is not part of the public context surface.
+    /// </summary>
+    internal JsonRowWriterCache JsonRowWriterCacheForTesting => _jsonRowWriters;
+
+    /// <summary>
+    /// Executes a supported scalar terminal (T243/D243 fast path) from the context-owned immutable
+    /// artifact, when the normalized plan is still owned by the plan store. The current invocation's
+    /// arguments are bound to the cached plan here; the artifact itself is never mutated and neither the
+    /// command nor the plan key is prepared or executed on its behalf.
+    /// </summary>
+    /// <typeparam name="TResult">The terminal's result type.</typeparam>
+    /// <param name="key">The normalized terminal key of the current invocation.</param>
+    /// <param name="params">The current invocation's positional arguments (empty on the fast path).</param>
+    /// <param name="result">The executed scalar value when the fast path ran.</param>
+    /// <returns><see langword="true"/> when a warm plan was found and executed.</returns>
+    internal bool TryExecuteScalarArtifact<TResult>(in ScalarArtifactKey key, ReadOnlySpan<object?> @params, out TResult? result)
+    {
+        var artifact = _queryCache.FindScalarArtifact(key);
+        if (artifact?.PlanKey is { } planKey
+            && QueryPlanStore.TryGet(GetType(), planKey, out var holder, out _)
+            && holder is IPreparedQueryCommand<TResult> prepared)
+        {
+            result = ExecuteScalar(prepared, @params, false);
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Records the plan key a supported scalar terminal prepared under, so a later equivalent invocation
+    /// can execute the plan without rebuilding the command, the raw descriptor or the normalized key.
+    /// The artifact is published only when the plan store really owns that key; an uncacheable
+    /// preparation leaves the artifact inert and every call keeps the ordinary path.
+    /// </summary>
+    /// <typeparam name="TResult">The terminal's result type.</typeparam>
+    /// <param name="key">The normalized terminal key of the invocation.</param>
+    /// <param name="command">The command the ordinary path just executed (not retained).</param>
+    internal void PublishScalarArtifact<TResult>(in ScalarArtifactKey key, QueryCommand<TResult> command)
+    {
+        var planKey = command.GetOrCreatePlanKey(null);
+        if (QueryPlanStore.TryGet(GetType(), planKey, out _, out _))
+            _queryCache.GetOrAddScalarArtifact(key).PlanKey = planKey;
+    }
 }
 
 /// <summary>

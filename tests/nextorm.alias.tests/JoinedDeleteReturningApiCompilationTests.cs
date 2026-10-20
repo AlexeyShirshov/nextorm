@@ -140,7 +140,6 @@ public class JoinedDeleteReturningApiCompilationTests
 
         var baseDirectory = AppContext.BaseDirectory;
         paths.Add(Path.Combine(baseDirectory, "nextorm.core.dll"));
-        paths.Add(Path.Combine(baseDirectory, "OneOf.dll"));
         foreach (var file in Directory.EnumerateFiles(baseDirectory, "Microsoft.Extensions.*.dll")) paths.Add(file);
 
         var references = ImmutableArray.CreateBuilder<MetadataReference>();

@@ -63,7 +63,8 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 ```sql
-select id from complex_entity where somestring like '%a%'
+select id
+ from complex_entity where somestring like '%a%'
 ```
 
 A runtime value in `Contains` cannot be escaped at translation time, so the wildcards are concatenated
@@ -79,7 +80,8 @@ var prepared = dataContext.From<IComplexEntity>()
 
 ```sql
 -- SQLite: % and the concatenation operator; SQL Server uses '+' and @needle
-select id from complex_entity where somestring like '%'||$needle||'%'
+select id
+ from complex_entity where somestring like '%'||$needle||'%'
 ```
 
 > On SQL Server there is no boolean scalar type, so a **projected** predicate (for example
@@ -138,7 +140,8 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- PostgreSQL
-select id from complex_entity where somestring collate "C" = 'x' collate "C"
+select id
+ from complex_entity where somestring collate "C" = 'x' collate "C"
 ```
 
 `collate` takes the provider-native collation name; it must be a constant. The in-memory provider has no
@@ -173,7 +176,8 @@ var rows = e
 
 ```sql
 -- PostgreSQL
-select somestring collate "C" as "String" from complex_entity
+select somestring collate "C" as "String"
+ from complex_entity
  where somestring collate "C" = 'x' order by somestring collate "C"
 ```
 
@@ -315,3 +319,30 @@ var rows = dataContext.From<IComplexEntity>()
     })
     .ToList();
 ```
+
+## SQL Server string, hashing and compression functions
+
+The remaining T-SQL-only string, hashing and compression scalars live on `SqlFunctions.SqlServer` and
+are gated per name by [`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions); SQL Server is the
+only provider that implements the flag, so every other provider throws `NotSupportedException`:
+
+| C# | SQL |
+|---|---|
+| `stuff(value, start, length, newValue)` | `stuff(...)` |
+| `str(value)` / `str(value, length)` / `str(value, length, decimalPlaces)` | `str(...)` |
+| `formatmessage(message, args...)` / `formatmessage(messageId, args...)` | `formatmessage(...)` |
+| `parsename(objectName, piece)` | `parsename(...)` |
+| `hashbytes(algorithm, data)` | `hashbytes(...)` |
+| `checksum(values...)` / `binary_checksum(values...)` | `checksum(...)` / `binary_checksum(...)` |
+| `compress(value)` (string and `byte[]`) / `decompress(value)` | `compress(...)` / `decompress(...)` |
+
+* `str` fixes the total length (default 10) and decimal places (default 0); `formatmessage` accepts a
+  format string or a `sys.messages` id and at most 20 formatting arguments (more throws
+  `NotSupportedException`).
+* `parsename` splits a four-part object name and takes a constant piece in `1..4`.
+* `hashbytes` takes a constant algorithm name (such as `"SHA2_256"`) and a `byte[]` value;
+  `checksum`/`binary_checksum` are non-cryptographic change-detection checksums, not a substitute for
+  `hashbytes`, and require at least one argument (`checksum()`/`binary_checksum()` throw; the
+  `checksum(*)` wildcard form is not exposed).
+* `compress`/`decompress` use GZIP and produce/consume `varbinary(max)`; `decompress` returns `null`
+  for an invalid or truncated value.

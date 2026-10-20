@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace NextORM.Core;
@@ -18,8 +19,35 @@ public class DataContextBuilder
     private bool _logSensitiveData;
     private int? _commandTimeout;
     private Func<DataContextBuilder, IDataContext>? _factory;
-    private readonly List<IQueryInterceptor> _queryInterceptors = [];
-    private readonly List<IConnectionInterceptor> _connectionInterceptors = [];
+    // One ordered list holds every interceptor registration: either an already-created interceptor
+    // instance or a Type to resolve from the captured IServiceProvider when a context is created.
+    // Registration order is the invocation order in each event pipeline.
+    private readonly List<object> _interceptorEntries = [];
+    private readonly IServiceProvider? _serviceProvider;
+    // Resolved for the current creation only (cleared by CreateDataContext), so a transient service
+    // is resolved once per context and never reused across creations.
+    private IQueryInterceptor[]? _resolvedQueryInterceptors;
+    private IConnectionInterceptor[]? _resolvedConnectionInterceptors;
+
+    /// <summary>
+    /// Creates a standalone builder whose interceptors must be supplied as instances.
+    /// </summary>
+    public DataContextBuilder()
+    {
+    }
+
+    /// <summary>
+    /// Creates a builder backed by <paramref name="serviceProvider"/>, so interceptor service keys
+    /// registered with <see cref="AddInterceptor(Type)"/>/<see cref="AddInterceptor{T}()"/> are
+    /// resolved from that provider (its scope, not the root) when a context is created.
+    /// </summary>
+    /// <param name="serviceProvider">The service provider that owns the interceptor services.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="serviceProvider"/> is <see langword="null"/>.</exception>
+    internal DataContextBuilder(IServiceProvider serviceProvider)
+    {
+        ArgumentNullException.ThrowIfNull(serviceProvider);
+        _serviceProvider = serviceProvider;
+    }
     /// <summary>
     /// Whether command parameter values are written to the configured logger. Defaults to
     /// <see langword="false"/>; enable it only for local diagnostics, since parameter values may contain
@@ -73,6 +101,15 @@ public class DataContextBuilder
     public bool QueryCacheEnabled { get; private set; } = true;
     // public bool CacheQueryCommand { get; set; } = true;
     // public bool CacheExpressions { get; set; } = true;
+
+    /// <summary>
+    /// The context-wide default eager-load strategy applied to <c>LoadWith</c> collections when a query
+    /// declares no explicit mode. Defaults to <see cref="EagerLoadMode.SplitQuery"/> (the historical
+    /// behavior); set through <see cref="UseEagerLoadMode"/>. A query override
+    /// (<c>LoadWith(..., mode)</c>) always wins over this default, and configuring a context never
+    /// changes a static/global value.
+    /// </summary>
+    public EagerLoadMode EagerLoadMode { get; private set; } = EagerLoadMode.SplitQuery;
     /// <summary>
     /// Factory invoked by <see cref="CreateDataContext"/> to materialize the configured context.
     /// <see langword="null"/> until one of the provider extensions (for example
@@ -210,6 +247,43 @@ public class DataContextBuilder
     }
 
     /// <summary>
+    /// Sets the context-wide default eager-load strategy used by <c>LoadWith</c> when a query declares
+    /// no explicit mode. The default is <see cref="EagerLoadMode.SplitQuery"/> (the historical behavior).
+    /// An explicit <c>LoadWith(..., mode)</c> always overrides this setting.
+    /// <para>
+    /// <see cref="EagerLoadMode.Default"/> is rejected: it is an inheritance sentinel, not a context
+    /// setting. <see cref="EagerLoadMode.Correlated"/> is accepted as configuration, but a
+    /// <c>LoadWith</c> that resolves to it fails with <see cref="NotSupportedException"/> during
+    /// preparation (correlated/per-parent top-N execution is not implemented in this release).
+    /// </para>
+    /// </summary>
+    /// <param name="mode">The context default; one of SplitQuery, SingleQuery, Correlated or Auto.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="mode"/> is <see cref="EagerLoadMode.Default"/> or an undefined numeric value.
+    /// </exception>
+    public DataContextBuilder UseEagerLoadMode(EagerLoadMode mode)
+    {
+        switch (mode)
+        {
+            case EagerLoadMode.SplitQuery:
+            case EagerLoadMode.SingleQuery:
+            case EagerLoadMode.Correlated:
+            case EagerLoadMode.Auto:
+                EagerLoadMode = mode;
+                return this;
+            case EagerLoadMode.Default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(mode), mode,
+                    "EagerLoadMode.Default is an inheritance sentinel, not a context setting; pass a concrete strategy.");
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(mode), mode,
+                    $"'{mode}' is not a defined EagerLoadMode value; use SplitQuery, SingleQuery, Correlated or Auto.");
+        }
+    }
+
+    /// <summary>
     /// Enables sliding expiration for the process-wide caches: an entry that is not read within
     /// <paramref name="ttl"/> is evicted lazily. Pass <see cref="TimeSpan.Zero"/> to disable it (the
     /// default). The setting is process-wide because the caches are static, so it applies to every
@@ -232,10 +306,15 @@ public class DataContextBuilder
     /// <param name="interceptor">The interceptor to register; must not be <see langword="null"/>.</param>
     /// <returns>This builder, to allow chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="interceptor"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// An instance that also implements <see cref="IConnectionInterceptor"/> is attached to both
+    /// event pipelines. Registration is deduplicated by the instance's runtime type: a later
+    /// registration of the same type is ignored (first registration wins).
+    /// </remarks>
     public DataContextBuilder AddInterceptor(IQueryInterceptor interceptor)
     {
         ArgumentNullException.ThrowIfNull(interceptor);
-        _queryInterceptors.Add(interceptor);
+        AddEntry(interceptor);
         return this;
     }
 
@@ -247,26 +326,153 @@ public class DataContextBuilder
     /// <param name="interceptor">The interceptor to register; must not be <see langword="null"/>.</param>
     /// <returns>This builder, to allow chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="interceptor"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// An instance that also implements <see cref="IQueryInterceptor"/> is attached to both event
+    /// pipelines. Registration is deduplicated by the instance's runtime type: a later registration
+    /// of the same type is ignored (first registration wins).
+    /// </remarks>
     public DataContextBuilder AddInterceptor(IConnectionInterceptor interceptor)
     {
         ArgumentNullException.ThrowIfNull(interceptor);
-        _connectionInterceptors.Add(interceptor);
+        AddEntry(interceptor);
         return this;
     }
 
-    internal IQueryInterceptor[] QueryInterceptors => [.. _queryInterceptors];
+    /// <summary>
+    /// Registers an interceptor service key to resolve from the provider captured by this builder when
+    /// a context is created. The type is validated immediately; the service is resolved once per
+    /// <see cref="CreateDataContext"/> call, honouring the DI lifetime and keeping DI ownership of the
+    /// resolved instance.
+    /// </summary>
+    /// <param name="interceptorType">The closed reference type (concrete class, interface or abstract class) to resolve.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="interceptorType"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="interceptorType"/> is an open generic or value type, or is not assignable to
+    /// <see cref="IQueryInterceptor"/> or <see cref="IConnectionInterceptor"/>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A context is created on a builder without a captured provider (a standalone builder).
+    /// </exception>
+    /// <remarks>
+    /// Every registration - an instance or a type - shares one key: the instance's runtime type for an
+    /// instance, the supplied <see cref="Type"/> for a type entry. The first registration of a key wins,
+    /// including mixed instance/type entries, so a later registration of the same key is ignored.
+    /// </remarks>
+    public DataContextBuilder AddInterceptor(Type interceptorType)
+    {
+        ArgumentNullException.ThrowIfNull(interceptorType);
 
-    internal IConnectionInterceptor[] ConnectionInterceptors => [.. _connectionInterceptors];
+        if (!IsValidInterceptorType(interceptorType))
+        {
+            throw new ArgumentException(
+                $"Type '{interceptorType}' must be a closed reference type assignable to IQueryInterceptor or IConnectionInterceptor.",
+                nameof(interceptorType));
+        }
+
+        AddEntry(interceptorType);
+        return this;
+    }
 
     /// <summary>
-    /// Creates a data context from the current configuration by invoking <see cref="Factory"/>.
+    /// Registers an interceptor service key to resolve from the provider captured by this builder when
+    /// a context is created; see <see cref="AddInterceptor(Type)"/>.
+    /// </summary>
+    /// <typeparam name="T">A closed reference type assignable to <see cref="IQueryInterceptor"/> or <see cref="IConnectionInterceptor"/>.</typeparam>
+    /// <returns>This builder, to allow chaining.</returns>
+    /// <exception cref="ArgumentException"><typeparamref name="T"/> is not a valid interceptor type.</exception>
+    /// <exception cref="InvalidOperationException">A context is created on a builder without a captured provider.</exception>
+    /// <remarks>
+    /// Every registration - an instance or a type - shares one key: the instance's runtime type for an
+    /// instance, the supplied <see cref="Type"/> for a type entry. The first registration of a key wins,
+    /// including mixed instance/type entries, so a later registration of the same key is ignored.
+    /// <para>
+    /// <typeparamref name="T"/> is constrained to <see langword="class"/> at compile time; the runtime
+    /// check additionally rejects open-generic and non-assignable types immediately.
+    /// </para>
+    /// </remarks>
+    public DataContextBuilder AddInterceptor<T>() where T : class
+        => AddInterceptor(typeof(T));
+
+    private void AddEntry(object entry)
+    {
+        var key = entry is Type type ? type : entry.GetType();
+        foreach (var existing in _interceptorEntries)
+        {
+            var existingKey = existing is Type existingType ? existingType : existing.GetType();
+            if (existingKey == key)
+                return;
+        }
+
+        _interceptorEntries.Add(entry);
+    }
+
+    private static bool IsValidInterceptorType(Type interceptorType)
+        => !interceptorType.IsValueType
+           && !interceptorType.ContainsGenericParameters
+           && (typeof(IQueryInterceptor).IsAssignableFrom(interceptorType)
+               || typeof(IConnectionInterceptor).IsAssignableFrom(interceptorType));
+
+    /// <summary>
+    /// Resolves the interceptor registrations into the two event pipelines, completing the work (and
+    /// any missing-service failure) before the context factory runs. The result is cached only for the
+    /// duration of one creation; the cached arrays are exposed to the context constructor through
+    /// <see cref="QueryInterceptors"/> and <see cref="ConnectionInterceptors"/>.
+    /// </summary>
+    internal (IQueryInterceptor[] Query, IConnectionInterceptor[] Connection) ResolveInterceptors()
+    {
+        if (_resolvedQueryInterceptors is not null && _resolvedConnectionInterceptors is not null)
+            return (_resolvedQueryInterceptors, _resolvedConnectionInterceptors);
+
+        var query = new List<IQueryInterceptor>();
+        var connection = new List<IConnectionInterceptor>();
+        foreach (var entry in _interceptorEntries)
+        {
+            var instance = entry is Type type ? ResolveType(type) : entry;
+            if (instance is IQueryInterceptor queryInterceptor)
+                query.Add(queryInterceptor);
+            if (instance is IConnectionInterceptor connectionInterceptor)
+                connection.Add(connectionInterceptor);
+        }
+
+        _resolvedQueryInterceptors = [.. query];
+        _resolvedConnectionInterceptors = [.. connection];
+        return (_resolvedQueryInterceptors, _resolvedConnectionInterceptors);
+    }
+
+    private object ResolveType(Type type)
+    {
+        if (_serviceProvider is null)
+            throw new InvalidOperationException($"Interceptor type '{type}' requires a DI-backed DataContextBuilder.");
+
+        return _serviceProvider.GetRequiredService(type);
+    }
+
+    internal IQueryInterceptor[] QueryInterceptors => ResolveInterceptors().Query;
+
+    internal IConnectionInterceptor[] ConnectionInterceptors => ResolveInterceptors().Connection;
+
+    /// <summary>
+    /// Creates a data context from the current configuration by invoking <see cref="Factory"/>. Any
+    /// interceptor service keys are resolved from the captured provider before the factory is invoked,
+    /// so a missing registration (or a type entry on a standalone builder) fails before a context is
+    /// constructed.
     /// </summary>
     /// <returns>The configured <see cref="IDataContext"/>.</returns>
-    /// <exception cref="InvalidOperationException">No factory has been configured on this builder.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// No factory has been configured on this builder, the provider does not have an interceptor
+    /// registration, or a type entry was registered on a builder without a captured provider.
+    /// </exception>
     public IDataContext CreateDataContext()
     {
         if (_factory is null)
             throw new InvalidOperationException("Context is not set");
+
+        // Resolution is scoped to this call so a transient interceptor is resolved per creation and
+        // never reused across calls; the factory reads the cached arrays through the two properties.
+        _resolvedQueryInterceptors = null;
+        _resolvedConnectionInterceptors = null;
+        ResolveInterceptors();
 
         return _factory(this);
     }

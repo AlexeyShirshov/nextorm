@@ -40,5 +40,19 @@ internal class EntityMetadata : IEntityMetadata
 
     /// <summary>Looks up a mapped property by its CLR member; <see langword="null"/> when it is not mapped.</summary>
     internal IPropertyMetadata? FindProperty(PropertyInfo property)
-        => _propertiesByInfo.TryGetValue(property, out var metadata) ? metadata : null;
+    {
+        if (_propertiesByInfo.TryGetValue(property, out var metadata))
+            return metadata;
+
+        // A member reflected against a base type keeps that ReflectedType, so it does not compare equal
+        // to the derived entity's PropertyInfo in the dictionary. Fall back to the declared-property
+        // identity for inherited members (rare, one linear pass on a miss).
+        for (var i = 0; i < _propertiesMeta.Count; i++)
+        {
+            if (MemberInfoExtensions.SameProperty(_propertiesMeta[i].PropertyInfo, property))
+                return _propertiesMeta[i];
+        }
+
+        return null;
+    }
 }

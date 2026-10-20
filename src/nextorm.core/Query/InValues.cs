@@ -63,6 +63,11 @@ internal readonly struct InValuesPartition
 /// </summary>
 internal static class InValues
 {
+    // The unkeyed captured-collection scans call these probes several times per preparation. The
+    // visitors are stateless apart from Found, so keep one of each per thread instead of allocating.
+    [ThreadStatic] private static TupleInValuesProbe? _tupleInValuesProbe;
+    [ThreadStatic] private static ScalarInValuesProbe? _scalarInValuesProbe;
+
     /// <summary>
     /// The single pinned rejection message for a provider that has no row-value constructor (SQL
     /// Server). Shared by the preparation-time provider preflight and the render-time defensive guard so
@@ -84,7 +89,10 @@ internal static class InValues
     /// </summary>
     internal static bool ContainsTupleInValues(Expression expression)
     {
-        var probe = new TupleInValuesProbe();
+        // The probe is a stateless visitor apart from Found; reuse one per thread instead of allocating
+        // it on every prepare (the unkeyed scans call these probes several times per command).
+        var probe = _tupleInValuesProbe ??= new TupleInValuesProbe();
+        probe.Reset();
         probe.Visit(expression);
         return probe.Found;
     }
@@ -92,6 +100,8 @@ internal static class InValues
     private sealed class TupleInValuesProbe : ExpressionVisitor
     {
         public bool Found { get; private set; }
+
+        public void Reset() => Found = false;
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
@@ -115,7 +125,9 @@ internal static class InValues
     /// </summary>
     internal static bool ContainsScalarInValues(Expression expression)
     {
-        var probe = new ScalarInValuesProbe();
+        // Same scratch-probe discipline as ContainsTupleInValues: one stateless visitor per thread.
+        var probe = _scalarInValuesProbe ??= new ScalarInValuesProbe();
+        probe.Reset();
         probe.Visit(expression);
         return probe.Found;
     }
@@ -123,6 +135,8 @@ internal static class InValues
     private sealed class ScalarInValuesProbe : ExpressionVisitor
     {
         public bool Found { get; private set; }
+
+        public void Reset() => Found = false;
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
@@ -374,13 +388,19 @@ internal static class InValues
     /// <param name="command">The command whose plan key the shape belongs to.</param>
     /// <param name="partitions">The evaluated value-list partitions, or <c>null</c>.</param>
     /// <param name="hasMatch">Whether the condition contained any value-list or lookup node.</param>
+    /// <param name="valuesStable">
+    /// Whether every matched value list and lookup collection is shape-stable (an inline array of
+    /// immutable values or a value-type <c>new</c> expression). A stable shape cannot change between
+    /// two executions of a cached plan, so its partitions and hash need not be re-evaluated on reuse.
+    /// </param>
     /// <returns>The shape hash, or <c>0</c> when nothing matched.</returns>
-    public static int ComputeShapeHash(Expression condition, QueryCommand command, out Dictionary<Expression, InValuesPartition>? partitions, out bool hasMatch)
+    public static int ComputeShapeHash(Expression condition, QueryCommand command, out Dictionary<Expression, InValuesPartition>? partitions, out bool hasMatch, out bool valuesStable)
     {
         var visitor = new ShapeVisitor(command);
         visitor.Visit(condition);
         partitions = visitor.Partitions;
         hasMatch = visitor.HasMatch;
+        valuesStable = visitor.AllValuesStable;
         return visitor.HasMatch ? visitor.Hash : 0;
     }
 
@@ -389,12 +409,15 @@ internal static class InValues
         private XxHash32 _hash = new();
         public Dictionary<Expression, InValuesPartition>? Partitions { get; private set; }
         public bool HasMatch { get; private set; }
+        public bool AllValuesStable { get; private set; } = true;
         public int Hash => _hash.ToHashCode();
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             if (TryGetArguments(node, out _, out var valuesExp, out var elementType, out _))
             {
+                if (!IsStableValueExpression(valuesExp)) AllValuesStable = false;
+
                 var partition = EvaluatePartition(valuesExp, command, elementType);
                 Partitions ??= new Dictionary<Expression, InValuesPartition>(ReferenceEqualityComparer.Instance);
                 Partitions[valuesExp] = partition;
@@ -449,6 +472,8 @@ internal static class InValues
             if (!DictionaryLookup.TryGetLookup(node, out var collectionExp, out var keyExp)
                 || !keyExp.Has<ParameterExpression>())
                 return;
+
+            if (!IsStableValueExpression(collectionExp)) AllValuesStable = false;
 
             var entries = DictionaryLookup.Evaluate(collectionExp, command);
             command.LookupPartitions ??= new Dictionary<Expression, List<LookupEntry>>(ReferenceEqualityComparer.Instance);

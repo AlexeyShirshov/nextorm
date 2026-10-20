@@ -44,6 +44,10 @@ internal sealed class ClickHouseTestProvider : ITestProvider
     public bool SupportsBatch => false;
     public bool SupportsStoredProcedures => false;
 
+    // The ClickHouse driver reports 0 for every statement (measured in D226 D1), so the shared
+    // known-total / sentinel assertions do not apply; the provider cannot serve as a DML oracle.
+    public bool SupportsAffectedRowMetadata => false;
+
     /// <summary>ClickHouse emulates a table parameter with a native array expanded server-side with <c>arrayJoin(@p)</c>.</summary>
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => false;
@@ -468,13 +472,26 @@ internal sealed class ClickHouseTestProvider : ITestProvider
         // Implicit-navigation reference fixtures (#148-B D8): ClickHouse does not derive
         // CommonTestSuite, so the reference-navigation cases are re-pinned by
         // ClickHouseImplicitNavigationTests over these Memory tables.
+        "drop table if exists eager_composite_child",
+        "drop table if exists eager_composite_parent",
+        "drop table if exists eager_note",
         "drop table if exists eager_link",
         "drop table if exists eager_tag",
         "drop table if exists eager_child",
         "drop table if exists eager_parent",
         "create table eager_parent (id Int32, name Nullable(String)) engine = Memory",
         "create table eager_child (id Int32, parent_id Int32, name Nullable(String)) engine = Memory",
+        "create table eager_note (id Int32, parent_id Int32, text Nullable(String)) engine = Memory",
+        "create table eager_composite_parent (row_id Int32, tenant Int32, link_id Int32) engine = Memory",
+        "create table eager_composite_child (id Int32, tenant Int32, parent_id Int32, sort_key Int32) engine = Memory",
         "create table eager_tag (id Int32, name Nullable(String)) engine = Memory",
-        "create table eager_link (id Int32, parent_id Int32, child_id Int32) engine = Memory"
+        "create table eager_link (id Int32, parent_id Int32, child_id Int32) engine = Memory",
+        // Composite-junction M:N fixtures (#223): two parent foreign-key components plus one child.
+        "drop table if exists eager_cj_link",
+        "drop table if exists eager_cj_child",
+        "drop table if exists eager_cj_parent",
+        "create table eager_cj_parent (row_id Int32, tenant Int32, link_id Int32, name Nullable(String)) engine = Memory",
+        "create table eager_cj_child (id Int32, name Nullable(String)) engine = Memory",
+        "create table eager_cj_link (parent_tenant Int32, parent_link_id Int32, child_id Int32) engine = Memory"
     ];
 }

@@ -140,8 +140,8 @@ Independent units in one sequential tree; per-unit inner loops are filtered, com
 
 ## 8. Documentation plan
 
-- Update `docs/guide/08-cte.md` and `docs/ru/guide/08-cte.md`: typed CTE and **Composing over a CTE** (EN :64/:360, RU :363).
-- Update `docs/guide/02-joins.md` and RU mirror: **Named join aliases**, **Joining a subquery**, chained-join/arity (EN :108/:354/:442, RU :356).
+- Update `docs/guide/10-cte.md` and `docs/ru/guide/10-cte.md`: typed CTE and **Composing over a CTE** (EN :64/:360, RU :363).
+- Update `docs/guide/04-joins.md` and RU mirror: **Named join aliases**, **Joining a subquery**, chained-join/arity (EN :108/:354/:442, RU :356).
 - Show short/full equivalence, direct first/continued joins, anonymous alias inference, options distinction, unchanged eight-slot/provider boundaries. No new guide, renumbering, or TOC change.
 - XML-document every added public source overload (CS1591 enforced: `src/Directory.Build.props:11`, `TreatWarningsAsErrors=true`); generator emitted members keep the documented suppression `JoinAliasGenerator.cs:464`. Record additions in `docs/specs/design/API-NAMING-REVIEW.md`; no unimplemented PublicAPI freeze; no public links to specs.
 
@@ -233,7 +233,7 @@ Completing evidence, binding actual test identities, or obtaining missing report
 | 2026-10-07T16:07Z | DO | r1 | n1/3 | Finding A follow-up issue created | https://github.com/AlexeyShirshov/nextorm/issues/206 |
 | 2026-10-07T16:07Z | DO | r1 | n1/3 | Finding B verification recorded (no code change) | this log, Finding B note |
 | — | DO | r1 | n1/3 | Task NOT marked done (DO→CHECK boundary; collection docs still pending) | — |
-| 2026-10-07T16:20Z | DO | r1 | n1/3 | D06 docs: EN+RU `guide/08-cte.md` (+ «Joining a typed CTE directly») and `guide/02-joins.md` (named aliases / subquery / chained arity) updated; registry `API-NAMING-REVIEW.md` §#159 added | `git diff --stat` |
+| 2026-10-07T16:20Z | DO | r1 | n1/3 | D06 docs: EN+RU `guide/10-cte.md` (+ «Joining a typed CTE directly») and `guide/04-joins.md` (named aliases / subquery / chained arity) updated; registry `API-NAMING-REVIEW.md` §#159 added | `git diff --stat` |
 | 2026-10-07T16:20Z | DO | r1 | n1/3 | CRLF normalized on all 5 edited docs; footprint-scoped `git diff --check` exit 0 | `C-DIFF` (scoped) |
 | 2026-10-07T16:22Z | DO | r1 | n1/3 | `dotnet docfx docs/docfx.json` exit 0; 2 pre-existing duplicate-source warnings, 0 errors | `$E/C-DOCS-d06.log` |
 | 2026-10-07T16:22Z | DO | r1 | n1/3 | Debug build exit 0, 0 warnings / 0 errors; Release `--no-incremental` exit 0, 0/0 (real compile) | `$E/C-BUILD-debug-d06.log`, `$E/C-BUILD-release-d06.log` |
@@ -241,7 +241,7 @@ Completing evidence, binding actual test identities, or obtaining missing report
 
 ### D06 documentation/registry verification (r1/n1)
 
-- Docs pages updated (EN+RU): `docs/guide/08-cte.md` + `docs/ru/guide/08-cte.md` (Typed CTE cross-reference + new “Joining a typed CTE directly” / “Прямое соединение типизированного CTE” subsection: short/full equivalence, seven operators, options distinction, dependencies/identity/filters, arities 2–7); `docs/guide/02-joins.md` + `docs/ru/guide/02-joins.md` (Named join aliases — generated `Cte<T>` overload with inferred joined type; Joining a subquery — direct CTE is joined by name, not a derived table; Chained joins/arity 2..8 — CTE continuation cap at eight). No new page/renumbering/TOC change; no `docs/specs/**` links.
+- Docs pages updated (EN+RU): `docs/guide/10-cte.md` + `docs/ru/guide/10-cte.md` (Typed CTE cross-reference + new “Joining a typed CTE directly” / “Прямое соединение типизированного CTE” subsection: short/full equivalence, seven operators, options distinction, dependencies/identity/filters, arities 2–7); `docs/guide/04-joins.md` + `docs/ru/guide/04-joins.md` (Named join aliases — generated `Cte<T>` overload with inferred joined type; Joining a subquery — direct CTE is joined by name, not a derived table; Chained joins/arity 2..8 — CTE continuation cap at eight). No new page/renumbering/TOC change; no `docs/specs/**` links.
 - Registry: `docs/specs/design/API-NAMING-REVIEW.md` — new audit entry “issue #159” with N159-1 (P2, BC/Шаг 5) + N159-2 (ℹ️ naming); records the additive public overload counts (16 `EntityBuilder<TEntity>`, 14 `EntityBuilder`, 84 `JoinedEntityBuilder<T1..Tn>` arities 2–7, plus generated alias-Cte overloads) and 0 new public types.
 - XML-doc: every added public overload carries full `<summary>`/`<typeparam>`/`<param>`/`<returns>`/`<exception>`; Release `--no-incremental` build 0 warnings / 0 errors ⇒ CS1591 clean.
 - docfx exit 0. Footprint-scoped `git diff --check` exit 0 (global diff-check flags only unrelated modified `BenchmarkDotNet.Artifacts/**` trailing whitespace, outside the plan footprint and not committed).
@@ -393,7 +393,7 @@ r=2 replaces **only** acceptance criterion **R159-12** with **R159-12'**. Every 
 ### 18.4 r=2 DO units
 
 - **D:r2-1 — characterizing tests, test-only.** Roslyn/text-check whether SA/TVF characterizing tests already exist; add the missing E159-R2-SA / E159-R2-TVF tests in the existing `tests/nextorm.core.tests/TypedCteTests.cs` C3 regression area; run filtered. If a test reveals an actual changed Semi/Anti or TVF behaviour, **STOP** — fixing product code is a new milestone-1.0.9-rc2 slice, not r=2.
-- **D:r2-2 — docs.** EN+RU `docs/guide/02-joins.md`: "TableAlias join now honours an explicit source" / «TableAlias join теперь учитывает явно заданный источник», naming the supported explicit sources (raw SQL / Table override / derived / TVF / `Cte<T>`) and the mapped fallback. No public `docs/specs` links.
+- **D:r2-2 — docs.** EN+RU `docs/guide/04-joins.md`: "TableAlias join now honours an explicit source" / «TableAlias join теперь учитывает явно заданный источник», naming the supported explicit sources (raw SQL / Table override / derived / TVF / `Cte<T>`) and the mapped fallback. No public `docs/specs` links.
 - **D:r2-3 — status.** Mark historical R159-12 superseded (near §2 `:41`) and point the r=1 E159-12/R159-12 closure (near `:361`) at R159-12' + the mapped-fallback/explicit-source distinction.
 
 ### 18.5 V2 verification
@@ -407,7 +407,7 @@ r=2 replaces **only** acceptance criterion **R159-12** with **R159-12'**. Every 
 |---|---|---|---|---|---|
 | 2026-10-07T18:19Z | PLAN | r2 | n1/3 | r=2 persisted: §18 added; durable state N=1 r=2 n=1/3; supersession of rv=1 (only R159-12 → R159-12'); E159-12/E159-20/E159-17 closed; new E159-R2-SA/E159-R2-TVF | this section |
 | 2026-10-07T18:19Z | DO | r2 | n1/3 | D:r2-1 tests: no prior SA/TVF characterizing test found; both added to `TypedCteTests.cs`; filtered run exit 0, 2 total / 0 failed / 0 skipped (no changed Semi/Anti or TVF behaviour observed) | `$E2/D-r2-1-sa-tvf.log` |
-| 2026-10-07T18:19Z | DO | r2 | n1/3 | D:r2-2 docs: EN `guide/02-joins.md` + RU mirror note "TableAlias join honours an explicit source"; no public specs links | `git diff --stat` |
+| 2026-10-07T18:19Z | DO | r2 | n1/3 | D:r2-2 docs: EN `guide/04-joins.md` + RU mirror note "TableAlias join honours an explicit source"; no public specs links | `git diff --stat` |
 | 2026-10-07T18:19Z | DO | r2 | n1/3 | D:r2-3 status: historical R159-12 marked superseded near `:41`; r=1 closure near `:361` pointed at R159-12' + mapped-fallback/explicit-source distinction | this section |
 | 2026-10-07T18:20Z | DO | r2 | n1/3 | **V2 verification green:** core 1756/0, sqlite 1159/0 (1 skipped pre-existing), sqlserver 723/0, postgres 801/0, mysql 302/0, clickhouse 590/0, alias 46/0 — all exit 0, 0 failed | `$E2/V2-*.log` |
 

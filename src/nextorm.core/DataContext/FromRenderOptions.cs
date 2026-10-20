@@ -20,6 +20,12 @@ namespace NextORM.Core;
 /// so alias resolution can bind by occurrence identity instead of by CLR type. <c>null</c> for an
 /// ordinary FROM/join source, which keeps the type-based resolution unchanged.
 /// </param>
+/// <param name="GlobalLock">
+/// The whole-query <c>FOR UPDATE</c>/<c>FOR SHARE</c> lock of the statement, when a table-hint dialect
+/// (SQL Server) must render it as a hint on every physical source. <c>null</c> when the statement has
+/// no whole-query lock, or when a per-source lock (on <c>FromExpression.SourceLock</c>) takes precedence
+/// for this source.
+/// </param>
 internal readonly record struct FromRenderOptions(
     bool NeedAlias,
     Type? EntityType,
@@ -29,4 +35,5 @@ internal readonly record struct FromRenderOptions(
     IReadOnlyList<string>? IndexHints = null,
     IndexHintKind IndexHintKind = IndexHintKind.Use,
     IReadOnlyList<string>? TablesInScopeHints = null,
-    ParameterExpression? SourceParameter = null);
+    ParameterExpression? SourceParameter = null,
+    LockClause? GlobalLock = null);

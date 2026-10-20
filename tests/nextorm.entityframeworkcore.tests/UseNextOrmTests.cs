@@ -25,7 +25,7 @@ public sealed class UseNextOrmTests : EfCoreMetadataCleanup
         using var ctx = db.GetNextOrmContext();
         var sql = NextOrmSql.Of(ctx, ctx.From<BridgeRow>().Select(x => new { x.Id }));
 
-        sql.Should().Be("SELECT bridge_id AS 'Id' FROM bridge_entity");
+        sql.Should().Be("SELECT bridge_id AS 'Id'\n FROM bridge_entity");
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public sealed class UseNextOrmTests : EfCoreMetadataCleanup
         using var ctx = db.GetNextOrmContext();
         var sql = NextOrmSql.Of(ctx, ctx.From<BridgeRow>().Select(x => new { x.Id }));
 
-        sql.Should().Be("select bridge_id as 'Id' from bridge_entity");
+        sql.Should().Be("select bridge_id as 'Id'\n from bridge_entity");
     }
 
     [Fact]

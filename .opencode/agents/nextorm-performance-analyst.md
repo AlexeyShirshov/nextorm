@@ -23,17 +23,21 @@ the context that owns it; do not do the deep analysis yourself.
   builders/visitors, or a `SqliteBenchmark*` arm:
   **`nextorm-db-perf-analyst`**.
 
+- Routing evidence is `file:line` facts: C# symbols resolve with `roslyn` — in V2 inside
+  `execute` (`const r = await tools.roslyn({ action: "refs", target: "NextORM.Core.X.Y" }); return r`) —
+  never with symbol-grep (`rg`/`grep`/`sed`).
+
 If the symptom genuinely spans both, start with the context that appears first
 on the hot path and state the assumption.
 
 ## Shared baseline (read before routing)
 
-- `docs/specs/performance/performance-findings.md` — findings `M1..M12`, `I1..I6` and the
-  methodology caveats.
+- `docs/specs/performance/decisions-and-lessons.md` — decisions `R1..R10`, findings `M1..M13`,
+  `I1..I6`, rejected prototypes and the methodology caveats.
 - `docs/specs/performance/prepared-vs-cached.md` — the two reuse paths (implicit plan cache
   vs `Prepare()`), their per-call cost and rules; cache/`Prepare()` questions
   route to **`nextorm-db-perf-analyst`**.
-- `docs/specs/performance/benchmark-report.md`, `docs/specs/performance/performance optimizations.md`.
+- `docs/specs/performance/benchmark-report.md` (the run registry — all numbers live there).
 - Benchmarks: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *<Class>*`
   (ShortRun by default; `NEXTORM_BENCH_FULL=1` for the full out-of-process job).
   Artifacts: `benchmarks/BenchmarkDotNet.Artifacts`.

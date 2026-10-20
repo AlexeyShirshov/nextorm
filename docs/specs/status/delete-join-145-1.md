@@ -34,7 +34,7 @@ The 14 `public static DeleteJoinReturningBuilder<...> Returning<T1..Tn>(this Joi
 - Core SQL-generation + integration parity for arities 2–8 (both identity and projected).
 
 ## Docs plan
-Update EN+RU `docs/guide/08-cte.md`, `docs/guide/16-delete-statement.md`, `docs/guide/17-update-statement.md`, API reference and register; XML on the new public surface. No public docs links to `docs/specs`.
+Update EN+RU `docs/guide/10-cte.md`, `docs/guide/18-delete-statement.md`, `docs/guide/19-update-statement.md`, API reference and register; XML on the new public surface. No public docs links to `docs/specs`.
 
 ## Decisions
 - Perf: not needed (construction-time only; no runtime/SQL-path change).

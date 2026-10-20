@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.SqliteBenchmarkCsvFixedCost-20261017-200635</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
+LaunchCount=1  WarmupCount=3  Categories=csv-fixed  
+</code></pre>
+
+<table>
+<thead><tr><th>Method         </th><th>Rows</th><th>Mean  </th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>Nextorm_ToList_3Col</td><td>1</td><td>17.00 &mu;s</td><td>1.00</td><td>0.4883</td><td>-</td><td>4.49 KB</td><td>1.00</td>
+</tr><tr><td>Nextorm_WriteCsv_1Col</td><td>1</td><td>197.95 &mu;s</td><td>11.67</td><td>1.2207</td><td>0.9766</td><td>11.67 KB</td><td>2.60</td>
+</tr><tr><td>Nextorm_WriteCsv_3Col</td><td>1</td><td>571.14 &mu;s</td><td>33.68</td><td>2.9297</td><td>1.9531</td><td>28.08 KB</td><td>6.25</td>
+</tr><tr><td>Nextorm_WriteCsv_8Col</td><td>1</td><td>1,620.96 &mu;s</td><td>95.60</td><td>7.8125</td><td>5.8594</td><td>73.42 KB</td><td>16.34</td>
+</tr><tr><td>Nextorm_ToList_3Col</td><td>10</td><td>24.09 &mu;s</td><td>1.00</td><td>0.7935</td><td>-</td><td>6.53 KB</td><td>1.00</td>
+</tr><tr><td>Nextorm_WriteCsv_1Col</td><td>10</td><td>204.22 &mu;s</td><td>8.48</td><td>1.4648</td><td>1.2207</td><td>12.52 KB</td><td>1.92</td>
+</tr><tr><td>Nextorm_WriteCsv_3Col</td><td>10</td><td>587.99 &mu;s</td><td>24.41</td><td>2.9297</td><td>1.9531</td><td>29.65 KB</td><td>4.54</td>
+</tr><tr><td>Nextorm_WriteCsv_8Col</td><td>10</td><td>1,618.20 &mu;s</td><td>67.19</td><td>7.8125</td><td>5.8594</td><td>78.81 KB</td><td>12.07</td>
+</tr><tr><td>Nextorm_ToList_3Col</td><td>100</td><td>97.54 &mu;s</td><td>1.00</td><td>3.1738</td><td>0.1221</td><td>26.91 KB</td><td>1.00</td>
+</tr><tr><td>Nextorm_WriteCsv_1Col</td><td>100</td><td>235.42 &mu;s</td><td>2.41</td><td>2.4414</td><td>1.2207</td><td>20.97 KB</td><td>0.78</td>
+</tr><tr><td>Nextorm_WriteCsv_3Col</td><td>100</td><td>697.86 &mu;s</td><td>7.15</td><td>4.8828</td><td>3.9063</td><td>45.12 KB</td><td>1.68</td>
+</tr><tr><td>Nextorm_WriteCsv_8Col</td><td>100</td><td>1,924.30 &mu;s</td><td>19.73</td><td>15.6250</td><td>13.6719</td><td>132.21 KB</td><td>4.91</td>
+</tr><tr><td>Nextorm_WriteCsv_1Col</td><td>1000</td><td>544.80 &mu;s</td><td>0.66</td><td>12.6953</td><td>2.9297</td><td>105.35 KB</td><td>0.46</td>
+</tr><tr><td>Nextorm_ToList_3Col</td><td>1000</td><td>829.38 &mu;s</td><td>1.00</td><td>27.3438</td><td>6.8359</td><td>230.78 KB</td><td>1.00</td>
+</tr><tr><td>Nextorm_WriteCsv_3Col</td><td>1000</td><td>1,637.11 &mu;s</td><td>1.97</td><td>23.4375</td><td>7.8125</td><td>199.78 KB</td><td>0.87</td>
+</tr><tr><td>Nextorm_WriteCsv_8Col</td><td>1000</td><td>4,815.62 &mu;s</td><td>5.81</td><td>78.1250</td><td>23.4375</td><td>666.5 KB</td><td>2.89</td>
+</tr><tr><td>Nextorm_WriteCsv_1Col</td><td>10000</td><td>3,678.40 &mu;s</td><td>0.43</td><td>113.2813</td><td>3.9063</td><td>949.16 KB</td><td>0.42</td>
+</tr><tr><td>Nextorm_ToList_3Col</td><td>10000</td><td>8,526.10 &mu;s</td><td>1.00</td><td>265.6250</td><td>203.1250</td><td>2269.26 KB</td><td>1.00</td>
+</tr><tr><td>Nextorm_WriteCsv_3Col</td><td>10000</td><td>10,906.99 &mu;s</td><td>1.28</td><td>203.1250</td><td>15.6250</td><td>1746.12 KB</td><td>0.77</td>
+</tr><tr><td>Nextorm_WriteCsv_8Col</td><td>10000</td><td>31,962.75 &mu;s</td><td>3.75</td><td>687.5000</td><td>-</td><td>6007.91 KB</td><td>2.65</td>
+</tr></tbody></table>
+</body>
+</html>

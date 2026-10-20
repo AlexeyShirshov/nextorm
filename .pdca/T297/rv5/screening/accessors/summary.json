@@ -1,0 +1,1604 @@
+{
+ "A": {
+  "rounds": 6,
+  "arms": {
+   "cte": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 130075.27555555555,
+    "phases": {
+     "construct": {
+      "ticks": 84989701,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 47216.500555555554
+     },
+     "prepare": {
+      "ticks": 90611496,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 50339.72
+     },
+     "plan": {
+      "ticks": 1841057,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 1022.8094444444445
+     },
+     "bind": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 98783,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 54.879444444444445
+     },
+     "get_db_command": {
+      "ticks": 195583,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 108.65722222222222
+     },
+     "execute": {
+      "ticks": 39502946,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 21946.08111111111
+     },
+     "read_rows": {
+      "ticks": 7521907,
+      "calls": 5400,
+      "calls_per_query": 3.0,
+      "ns_per_query": 4178.837222222222
+     },
+     "map_rows": {
+      "ticks": 2969227,
+      "calls": 3600,
+      "calls_per_query": 2.0,
+      "ns_per_query": 1649.5705555555555
+     },
+     "cow_description": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_call": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "planner_gate": {
+      "ticks": 557238,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 309.57666666666665
+     },
+     "planner_recipe": {
+      "ticks": 85758500,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 47643.61111111111
+     },
+     "prepare_pipeline": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prep_preamble": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "nav_expand": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "get_from": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_from": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_join": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_columns": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_where": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_prewhere": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_arrayjoin": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_grouping": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_sorting": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_union": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_ctes": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_hints": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "unkeyed_scans": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "from_hash": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   },
+   "recursive": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 138723.35944444445,
+    "phases": {
+     "construct": {
+      "ticks": 74074306,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 41152.392222222225
+     },
+     "prepare": {
+      "ticks": 105776423,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 58764.679444444446
+     },
+     "plan": {
+      "ticks": 1791067,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 995.0372222222222
+     },
+     "bind": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 104773,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 58.20722222222222
+     },
+     "get_db_command": {
+      "ticks": 180560,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 100.31111111111112
+     },
+     "execute": {
+      "ticks": 46562494,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 25868.05222222222
+     },
+     "read_rows": {
+      "ticks": 12151715,
+      "calls": 10800,
+      "calls_per_query": 6.0,
+      "ns_per_query": 6750.952777777778
+     },
+     "map_rows": {
+      "ticks": 3486678,
+      "calls": 9000,
+      "calls_per_query": 5.0,
+      "ns_per_query": 1937.0433333333333
+     },
+     "cow_description": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_call": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "planner_gate": {
+      "ticks": 583094,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 323.9411111111111
+     },
+     "planner_recipe": {
+      "ticks": 101186694,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 56214.83
+     },
+     "prepare_pipeline": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prep_preamble": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "nav_expand": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "get_from": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_from": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_join": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_columns": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_where": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_prewhere": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_arrayjoin": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_grouping": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_sorting": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_union": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_ctes": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_hints": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "unkeyed_scans": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "from_hash": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   },
+   "inlist": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 120008.94277777777,
+    "phases": {
+     "construct": {
+      "ticks": 35122370,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 19512.42777777778
+     },
+     "prepare": {
+      "ticks": 113932563,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 63295.86833333333
+     },
+     "plan": {
+      "ticks": 17101399,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 9500.777222222223
+     },
+     "bind": {
+      "ticks": 25387053,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 14103.918333333333
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "get_db_command": {
+      "ticks": 189169,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 105.09388888888888
+     },
+     "execute": {
+      "ticks": 48561320,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 26978.51111111111
+     },
+     "read_rows": {
+      "ticks": 8958716,
+      "calls": 5400,
+      "calls_per_query": 3.0,
+      "ns_per_query": 4977.064444444444
+     },
+     "map_rows": {
+      "ticks": 2265262,
+      "calls": 3600,
+      "calls_per_query": 2.0,
+      "ns_per_query": 1258.4788888888888
+     },
+     "cow_description": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_call": {
+      "ticks": 0,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 0.0
+     },
+     "planner_gate": {
+      "ticks": 179913,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 99.95166666666667
+     },
+     "planner_recipe": {
+      "ticks": 22236815,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 12353.78611111111
+     },
+     "prepare_pipeline": {
+      "ticks": 47463879,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 26368.821666666667
+     },
+     "prep_preamble": {
+      "ticks": 916906,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 509.39222222222224
+     },
+     "nav_expand": {
+      "ticks": 671311,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 372.9505555555556
+     },
+     "get_from": {
+      "ticks": 437198,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 242.88777777777779
+     },
+     "prepare_from": {
+      "ticks": 245873,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 136.5961111111111
+     },
+     "prepare_join": {
+      "ticks": 155773,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 86.54055555555556
+     },
+     "prepare_columns": {
+      "ticks": 15170667,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 8428.148333333333
+     },
+     "prepare_where": {
+      "ticks": 21587055,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 11992.808333333332
+     },
+     "prepare_prewhere": {
+      "ticks": 136212,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 75.67333333333333
+     },
+     "prepare_arrayjoin": {
+      "ticks": 129655,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 72.03055555555555
+     },
+     "prepare_grouping": {
+      "ticks": 750348,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 416.86
+     },
+     "prepare_sorting": {
+      "ticks": 163543,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 90.85722222222222
+     },
+     "prepare_union": {
+      "ticks": 69714,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 38.73
+     },
+     "prepare_ctes": {
+      "ticks": 620385,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 344.65833333333336
+     },
+     "prepare_hints": {
+      "ticks": 149139,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 82.855
+     },
+     "unkeyed_scans": {
+      "ticks": 2758848,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 1532.6933333333334
+     },
+     "from_hash": {
+      "ticks": 1725682,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 958.7122222222222
+     }
+    }
+   },
+   "leftjoin": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 83477.045,
+    "phases": {
+     "construct": {
+      "ticks": 40538570,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 22521.42777777778
+     },
+     "prepare": {
+      "ticks": 51884817,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 28824.898333333334
+     },
+     "plan": {
+      "ticks": 1734673,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 963.7072222222222
+     },
+     "bind": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 93152,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 51.75111111111111
+     },
+     "get_db_command": {
+      "ticks": 180136,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 100.07555555555555
+     },
+     "execute": {
+      "ticks": 30725555,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 17069.75277777778
+     },
+     "read_rows": {
+      "ticks": 9523307,
+      "calls": 19800,
+      "calls_per_query": 11.0,
+      "ns_per_query": 5290.726111111111
+     },
+     "map_rows": {
+      "ticks": 9709149,
+      "calls": 18000,
+      "calls_per_query": 10.0,
+      "ns_per_query": 5393.971666666666
+     },
+     "cow_description": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_call": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "planner_gate": {
+      "ticks": 147126,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 81.73666666666666
+     },
+     "planner_recipe": {
+      "ticks": 48256627,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 26809.237222222222
+     },
+     "prepare_pipeline": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prep_preamble": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "nav_expand": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "get_from": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_from": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_join": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_columns": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_where": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_prewhere": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_arrayjoin": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_grouping": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_sorting": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_union": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_ctes": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_hints": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "unkeyed_scans": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "from_hash": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   }
+  }
+ },
+ "B": {
+  "rounds": 6,
+  "arms": {
+   "cte": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 130684.3411111111,
+    "phases": {
+     "construct": {
+      "ticks": 80868250,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 44926.805555555555
+     },
+     "prepare": {
+      "ticks": 100589860,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 55883.25555555556
+     },
+     "plan": {
+      "ticks": 2500340,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 1389.0777777777778
+     },
+     "bind": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 178144,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 98.96888888888888
+     },
+     "get_db_command": {
+      "ticks": 145389,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 80.77166666666666
+     },
+     "execute": {
+      "ticks": 35134812,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 19519.34
+     },
+     "read_rows": {
+      "ticks": 6999156,
+      "calls": 5400,
+      "calls_per_query": 3.0,
+      "ns_per_query": 3888.42
+     },
+     "map_rows": {
+      "ticks": 2788375,
+      "calls": 3600,
+      "calls_per_query": 2.0,
+      "ns_per_query": 1549.0972222222222
+     },
+     "cow_description": {
+      "ticks": 902750,
+      "calls": 7200,
+      "calls_per_query": 4.0,
+      "ns_per_query": 501.52777777777777
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_call": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "planner_gate": {
+      "ticks": 591520,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 328.6222222222222
+     },
+     "planner_recipe": {
+      "ticks": 94807635,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 52670.90833333333
+     },
+     "prepare_pipeline": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prep_preamble": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "nav_expand": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "get_from": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_from": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_join": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_columns": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_where": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_prewhere": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_arrayjoin": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_grouping": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_sorting": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_union": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_ctes": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_hints": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "unkeyed_scans": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "from_hash": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   },
+   "recursive": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 131907.98277777777,
+    "phases": {
+     "construct": {
+      "ticks": 66578084,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 36987.82444444444
+     },
+     "prepare": {
+      "ticks": 109818970,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 61010.53888888889
+     },
+     "plan": {
+      "ticks": 2463604,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 1368.668888888889
+     },
+     "bind": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 171447,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 95.24833333333333
+     },
+     "get_db_command": {
+      "ticks": 197033,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 109.46277777777777
+     },
+     "execute": {
+      "ticks": 38837833,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 21576.573888888888
+     },
+     "read_rows": {
+      "ticks": 11481445,
+      "calls": 10800,
+      "calls_per_query": 6.0,
+      "ns_per_query": 6378.580555555555
+     },
+     "map_rows": {
+      "ticks": 3398107,
+      "calls": 9000,
+      "calls_per_query": 5.0,
+      "ns_per_query": 1887.8372222222222
+     },
+     "cow_description": {
+      "ticks": 1302909,
+      "calls": 14400,
+      "calls_per_query": 8.0,
+      "ns_per_query": 723.8383333333334
+     },
+     "cow_clone": {
+      "ticks": 492066,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 273.37
+     },
+     "prepare_call": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "planner_gate": {
+      "ticks": 603554,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 335.3077777777778
+     },
+     "planner_recipe": {
+      "ticks": 104389278,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 57994.043333333335
+     },
+     "prepare_pipeline": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prep_preamble": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "nav_expand": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "get_from": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_from": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_join": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_columns": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_where": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_prewhere": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_arrayjoin": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_grouping": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_sorting": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_union": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_ctes": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_hints": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "unkeyed_scans": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "from_hash": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   },
+   "inlist": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 128232.00222222222,
+    "phases": {
+     "construct": {
+      "ticks": 36480940,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 20267.18888888889
+     },
+     "prepare": {
+      "ticks": 125671478,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 69817.48777777777
+     },
+     "plan": {
+      "ticks": 20532989,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 11407.21611111111
+     },
+     "bind": {
+      "ticks": 26598246,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 14776.803333333333
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "get_db_command": {
+      "ticks": 213960,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 118.86666666666666
+     },
+     "execute": {
+      "ticks": 49419372,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 27455.206666666665
+     },
+     "read_rows": {
+      "ticks": 9573365,
+      "calls": 5400,
+      "calls_per_query": 3.0,
+      "ns_per_query": 5318.5361111111115
+     },
+     "map_rows": {
+      "ticks": 2231870,
+      "calls": 3600,
+      "calls_per_query": 2.0,
+      "ns_per_query": 1239.9277777777777
+     },
+     "cow_description": {
+      "ticks": 293845,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 163.24722222222223
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_call": {
+      "ticks": 0,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 0.0
+     },
+     "planner_gate": {
+      "ticks": 261150,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 145.08333333333334
+     },
+     "planner_recipe": {
+      "ticks": 23532096,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 13073.386666666667
+     },
+     "prepare_pipeline": {
+      "ticks": 52900684,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 29389.268888888888
+     },
+     "prep_preamble": {
+      "ticks": 1732546,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 962.5255555555556
+     },
+     "nav_expand": {
+      "ticks": 718750,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 399.30555555555554
+     },
+     "get_from": {
+      "ticks": 450930,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 250.51666666666668
+     },
+     "prepare_from": {
+      "ticks": 276968,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 153.8711111111111
+     },
+     "prepare_join": {
+      "ticks": 241856,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 134.36444444444444
+     },
+     "prepare_columns": {
+      "ticks": 16182288,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 8990.16
+     },
+     "prepare_where": {
+      "ticks": 22533031,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 12518.350555555555
+     },
+     "prepare_prewhere": {
+      "ticks": 125839,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 69.91055555555556
+     },
+     "prepare_arrayjoin": {
+      "ticks": 120196,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 66.77555555555556
+     },
+     "prepare_grouping": {
+      "ticks": 1102162,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 612.3122222222222
+     },
+     "prepare_sorting": {
+      "ticks": 107497,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 59.720555555555556
+     },
+     "prepare_union": {
+      "ticks": 191690,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 106.49444444444444
+     },
+     "prepare_ctes": {
+      "ticks": 720683,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 400.37944444444446
+     },
+     "prepare_hints": {
+      "ticks": 163874,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 91.0411111111111
+     },
+     "unkeyed_scans": {
+      "ticks": 3369329,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 1871.8494444444445
+     },
+     "from_hash": {
+      "ticks": 1959693,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 1088.7183333333332
+     }
+    }
+   },
+   "leftjoin": {
+    "runs": 6,
+    "queries": 1800,
+    "end_to_end_ns_per_query": 92253.76222222223,
+    "phases": {
+     "construct": {
+      "ticks": 42376466,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 23542.481111111112
+     },
+     "prepare": {
+      "ticks": 64199950,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 35666.63888888889
+     },
+     "plan": {
+      "ticks": 2509534,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 1394.1855555555555
+     },
+     "bind": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "enum_create": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "cow_shape": {
+      "ticks": 173586,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 96.43666666666667
+     },
+     "get_db_command": {
+      "ticks": 126383,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 70.21277777777777
+     },
+     "execute": {
+      "ticks": 31641452,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 17578.584444444445
+     },
+     "read_rows": {
+      "ticks": 9545935,
+      "calls": 19800,
+      "calls_per_query": 11.0,
+      "ns_per_query": 5303.297222222222
+     },
+     "map_rows": {
+      "ticks": 10046673,
+      "calls": 18000,
+      "calls_per_query": 10.0,
+      "ns_per_query": 5581.485
+     },
+     "cow_description": {
+      "ticks": 349863,
+      "calls": 3600,
+      "calls_per_query": 2.0,
+      "ns_per_query": 194.36833333333334
+     },
+     "cow_clone": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_call": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "planner_gate": {
+      "ticks": 179878,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 99.93222222222222
+     },
+     "planner_recipe": {
+      "ticks": 59426857,
+      "calls": 1800,
+      "calls_per_query": 1.0,
+      "ns_per_query": 33014.92055555555
+     },
+     "prepare_pipeline": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prep_preamble": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "nav_expand": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "get_from": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_from": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_join": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_columns": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_where": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_prewhere": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_arrayjoin": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_grouping": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_sorting": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_union": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_ctes": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "prepare_hints": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "unkeyed_scans": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     },
+     "from_hash": {
+      "ticks": 0,
+      "calls": 0,
+      "calls_per_query": 0.0,
+      "ns_per_query": 0.0
+     }
+    }
+   }
+  }
+ }
+}

@@ -221,7 +221,7 @@ else
   2.94 KB). Регресса не обнаружено: лишняя делегирующая индирекция `AnyCommand` находится на
   холодном пути построения команды и в пределе шума.
 - **Риск.** SQL-рендеринг на горячем пути: перед дальнейшим дроблением зафиксировать
-  benchmark-базу (`docs/specs/performance/performance-findings.md`). **Отдельно про измерения:** быстрый режим
+  benchmark-базу (`docs/specs/performance/benchmark-report.md`). **Отдельно про измерения:** быстрый режим
   (`Job.ShortRun` + InProcess — дефолт) на этом дереве даёт разброс **до ±30% на одном и том
   же коде** (два прогона подряд: `Cached_PlanOnly_Param` 528.9 vs 378.1 µs, `Cached_ToList`
   1577 vs 2074 µs), поэтому выводы о регрессах меньше ~30% по нему делать нельзя. Надёжный
@@ -841,8 +841,8 @@ Release, 2 прогона на плечо): `NextormPreparedSync` (GetEnumerable
 
 ## Оговорка для performance-работ
 
-`docs/specs/performance/performance-findings.md` и `docs/specs/performance/performance optimizations.md` описывают оптимизации
-горячего пути. Перед рефакторингом F1/F6 зафиксируйте benchmark-базу
+`docs/specs/performance/decisions-and-lessons.md` описывает принятые решения, отклонённые гипотезы и уроки
+об измерениях. Перед рефакторингом F1/F6 зафиксируйте benchmark-базу
 (`docs/specs/performance/benchmark-report.md`); иначе есть реальный риск откатить уже сделанную работу.
 Несколько текущих оптимизаций завязаны на конкретные внутренние типы (например, `ParamMap`,
 `MapperCacheKey`, `IsRuntimeParam`) и должны быть сохранены при экстракции.

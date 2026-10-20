@@ -23,8 +23,8 @@ SQL Server: `OUTPUT … INTO` a table variable (`DECLARE @t TABLE (...)`); gener
 - **Exact gap:** no `DECLARE @t TABLE (...)` generation and no acceptance of an explicit declaration; `OutputIntoClause.TableName` (`MutationCommand.cs:78-85`) is only an existing table name; `DECLARE @t`/table-variable search = 0 in src/tests.
 - Analog: PG `SupportsReturning=>true` `PostgresDialect.cs:42`, SQLite `:32`; render `MakeReturning ISqlDialect.cs:1495`; MySQL/MariaDB no RETURNING/OUTPUT. MERGE uses OUTPUT without INTO (`SqlMutationBuilder.cs:932-948`).
 - Tests: `tests/nextorm.sqlserver.tests/InsertSqlGenerationTests.cs:74,382,395,408,421`; `UpdateSqlGenerationTests.cs:10,107,121`; `DeleteSqlGenerationTests.cs:7,67,80`; reject `sqlite InsertSqlGenerationTests.cs:590`, `postgres :658`, `mysql :335`; real DB `SqlServerSpecificTests.cs:20,614,647` (use `create table output_audit`, **not** `DECLARE @t TABLE`); common DML no OutputInto.
-- Docs EN/RU: `docs/guide/15-insert-statement.md:490-532` (`:524` "does not declare a table variable … #127"), `docs/ru/guide/15-insert-statement.md:493-535` (`:527` references #127). Specs `roadmap/sql-capabilities-gap-analysis.md:405` (phases 1/3 shipped; `todo_output_into.md` not in tree), `evidence-02-resultset-unification.md:332,422` (#15).
-- **Contradictions:** issue cites `docs/guide/17-insert-statement.md` (actual `15-insert-statement.md`); status file was absent.
+- Docs EN/RU: `docs/guide/17-insert-statement.md:490-532` (`:524` "does not declare a table variable … #127"), `docs/ru/guide/17-insert-statement.md:493-535` (`:527` references #127). Specs `roadmap/sql-capabilities-gap-analysis.md:405` (phases 1/3 shipped; `todo_output_into.md` not in tree), `evidence-02-resultset-unification.md:332,422` (#15).
+- **Contradictions:** issue cites `docs/guide/17-insert-statement.md` (actual `17-insert-statement.md`); status file was absent.
 - Open PLAN questions: generate `DECLARE` from the result form vs accept explicit declaration (or both); which mutations (INSERT/UPDATE/DELETE; MERGE-into?); sync+async; LINQ surface; real-SQL Server container tests; docs EN+RU; whether the table variable is declared in the same batch (SQL Server requirement).
 
 ## Escalation decision
@@ -69,7 +69,7 @@ SQL Server: `OUTPUT … INTO` a table variable (`DECLARE @t TABLE (...)`); gener
 | D127-E07 | nullable/value/reference source values | value `id`/`age`; nullable reference `name` NULL round-trip at `SqlServerSpecificTests.cs:1937-1954` | closed |
 | D127-E08 | INSERT empty-result set | tests/nextorm.integration.tests/SqlServerSpecificTests.cs:2130; artifacts/d127/rc1-127-computed-empty-1/sqlserver-class.log | closed |
 | D127-E09 | computed source value through OutputInto table-variable | SqlServerSpecificTests.cs:2174 (Insert), :2221 (Update), :2277 (Delete); artifacts/d127/rc1-127-computed-empty-1/sqlserver-class.log | closed |
-| D127-E10 | EN+RU docs: no "phase" wording, comparison table vs existing-table output, no public→specs links | `docs/guide/15-insert-statement.md:531-572,576-582`, `docs/ru/guide/15-insert-statement.md:534-577,579-585`; link audit found no `docs/**` or `readme.md` hits | closed |
+| D127-E10 | EN+RU docs: no "phase" wording, comparison table vs existing-table output, no public→specs links | `docs/guide/17-insert-statement.md:531-572,576-582`, `docs/ru/guide/17-insert-statement.md:534-577,579-585`; link audit found no `docs/**` or `readme.md` hits | closed |
 
 Run evidence: `artifacts/d127/test-sqlserver.log:4-8` (697 total / 697 succeeded / 0 failed / 0 skipped);
 `artifacts/d127/sqlserver-class.log:22-23` (`Total: 87, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0`, `EXIT=0`);
@@ -144,7 +144,7 @@ Recon persisted (run 10 start).
 
 ## Docs / build evidence (D127 finish)
 
-- Docs EN+RU rewritten: `docs/guide/15-insert-statement.md`, `docs/ru/guide/15-insert-statement.md` —
+- Docs EN+RU rewritten: `docs/guide/17-insert-statement.md`, `docs/ru/guide/17-insert-statement.md` —
   removed "does not declare a table variable … #127"; documented `OutputIntoTableVariable` (variable
   name `@[A-Za-z_]\w*`; `columnDefinitions` is trusted caller-supplied SQL text embedded verbatim, not a
   parameter; declared columns are storage columns with no IDENTITY/COMPUTED/DEFAULT copying; unordered
@@ -152,7 +152,7 @@ Recon persisted (run 10 start).
   (`OutputInto`/`OutputIntoThenOutput`/`OutputIntoTableVariable`); referenced the closed issue #15. No
   public→specs links added.
 - Stray `17-insert-statement.md` refs: none exist in tracked public docs (all public references already
-  point to `15-insert-statement.md`); repo-wide the string only survives in archived spec experiment
+  point to `17-insert-statement.md`); repo-wide the string only survives in archived spec experiment
   `.patch` artifacts and this status note, which were left untouched.
 - `dotnet docfx docs/docfx.json` → **exit 0**; 2 warnings (both pre-existing
   `AnalyzerReleases.{Shipped,Unshipped}.md` duplicate-source in `nextorm.core.sourcegenerator`), 0 errors —

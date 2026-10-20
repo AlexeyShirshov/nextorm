@@ -32,6 +32,8 @@ public partial class QueryCommand
         dst.InValuesShapeHash = InValuesShapeHash;
         dst.LookupPartitions = LookupPartitions;
         dst.ShapeScanned = ShapeScanned;
+        // ShapeValuesStable is deliberately not copied: a clone's evaluated InValuesPartitions are not
+        // transferred either, so a clone must keep the pre-existing refresh path instead of skipping it.
         dst.HasUnkeyedTupleInValues = HasUnkeyedTupleInValues;
         dst.HasUnkeyedScalarInValues = HasUnkeyedScalarInValues;
         dst.ResultPlanHash = ResultPlanHash;
@@ -56,6 +58,13 @@ public partial class QueryCommand
         dst.ResolvedKeywordCase = ResolvedKeywordCase;
         dst.CommandTimeout = CommandTimeout;
         dst.ResolvedCommandTimeout = ResolvedCommandTimeout;
+        // The eager-load strategy and shape participate in the plan key (QueryPlanEqualityComparer), so
+        // the cached clone must carry them; otherwise the hash captured at construction would not match
+        // the recomputed hash in QueryPlan.GetCacheVersion and the Debug.Assert would fail.
+        dst.EagerLoadMode = EagerLoadMode;
+        dst.ResolvedEagerLoadMode = ResolvedEagerLoadMode;
+        dst.EagerLoadShape = EagerLoadShape;
+        dst.HasPerParentEagerTopN = HasPerParentEagerTopN;
         // Outer references participate in the plan key (QueryPlanEqualityComparer), so the cached
         // clone must carry them; otherwise the hash captured at construction would not match the
         // recomputed hash in QueryPlan.GetCacheVersion and the Debug.Assert would fail.
@@ -82,9 +91,14 @@ public partial class QueryCommand
         dst.ExtremeRow = ExtremeRow;
         dst._extremeRowColumns = _extremeRowColumns;
         dst._extremeRowGroupByColumns = _extremeRowGroupByColumns;
+        dst.PerParentPaging = PerParentPaging;
+        dst.PerParentPagingEmbedded = PerParentPagingEmbedded;
+        dst.PerParentPartition = PerParentPartition;
+        dst._perParentPartitionColumns = _perParentPartitionColumns;
         dst.TableSample = TableSample;
         dst.Temporal = Temporal;
         dst.RowLock = RowLock;
+        dst.SourceLockClause = SourceLockClause;
         dst.Final = Final;
         dst.SampleRatio = SampleRatio;
         dst.SampleOffset = SampleOffset;
@@ -158,13 +172,16 @@ public partial class QueryCommand
     /// <returns>A new command bound to this command's data context.</returns>
     protected virtual QueryCommand CreateSelf()
     {
-        return new QueryCommand(_dataContext, Definition);
+        // Copy-constructor path: transfers the shape field by field, so no QueryDefinition record is
+        // allocated on the per-step clone path.
+        return new QueryCommand(_dataContext, this, forCache: false);
     }
     /// <summary>Creates an empty command of the same type for a plan-cache key, detached from the data context.</summary>
     /// <returns>A new command with the mutable expressions cleared for later copying.</returns>
     protected virtual QueryCommand CreateSelfForClone()
     {
-        return new QueryCommand(null, Definition with { Exp = null, Condition = null, Joins = CloneForCache(_joins), Group = null });
+        // The cache clone deep-clones the joins and clears the raw shape, again without a shape record.
+        return new QueryCommand(null, this, forCache: true);
     }
 
     /// <summary>Deep-clones the join expressions so a cached plan cannot observe later mutations.</summary>

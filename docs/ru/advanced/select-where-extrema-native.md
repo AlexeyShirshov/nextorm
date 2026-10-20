@@ -2,12 +2,12 @@
 
 > Для запроса `SelectWhereMax`/`SelectWhereMin` с `ExtremeRowTies.One` PostgreSQL и ClickHouse рендерят нативную SQL-стратегию вместо переносимого понижения до оконной функции — автоматически, по провайдеру и форме запроса, без opt-in и без переключателя на экземпляре.
 
-**Предварительные требования:** [Выбор экстремальной строки](../guide/07-distinct.md) · [Обзор провайдеров](../providers/overview.md) · [Краткий справочник API](api-reference.md)
+**Предварительные требования:** [Выбор экстремальной строки](../guide/09-distinct.md) · [Обзор провайдеров](../connecting-providers/overview.md) · [Краткий справочник API](api-reference.md)
 
 ## Обзор
 
 [`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) и
-[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) оставляют строку, значение которой под селектором наибольшее или наименьшее в источнике — глобально или по группам. Это фильтр строк, а не агрегат: выжившая строка сохраняет все колонки. Семантика не изменилась относительно переносимой реализации — полный контракт см. в разделе [Выбор экстремальной строки](../guide/07-distinct.md).
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) оставляют строку, значение которой под селектором наибольшее или наименьшее в источнике — глобально или по группам. Это фильтр строк, а не агрегат: выжившая строка сохраняет все колонки. Семантика не изменилась относительно переносимой реализации — полный контракт см. в разделе [Выбор экстремальной строки](../guide/09-distinct.md).
 
 Эта страница описывает *то, как* запрос с `One` доходит до базы. Выбор стратегии автоматический и детерминированный **по провайдеру и форме/типу запроса**:
 
@@ -51,31 +51,36 @@ var perTeam = dataContext.From<Player>()
 ```sql
 -- PostgreSQL, глобально (SelectWhereMax): внутренний ORDER BY ... LIMIT 1
 select t1.id, t1.score, t1.team_id as "TeamId", t1.name
-from (select * from players
+ from (select *
+ from players
  where score is not null order by "score" desc limit 1) as "t1"
 
 -- PostgreSQL, по группам (SelectWhereMin по new { TeamId }): DISTINCT ON по колонкам группы
 select t1.id, t1.score, t1.team_id as "TeamId", t1.name
-from (select distinct on ("team_id") * from (select * from players
+ from (select distinct on ("team_id") *
+ from (select *
+ from players
  where score is not null) __nextorm_extreme order by "team_id", "score") as "t1"
 ```
 
 ```sql
 -- ClickHouse, глобально (SelectWhereMax): один агрегат argMax над кортежем payload
 select t1.id, t1.score, t1.team_id as `TeamId`, t1.name
-from (select tupleElement(`__nextorm_extreme_tuple`, 1) as `id`, tupleElement(`__nextorm_extreme_tuple`, 2) as `score`, tupleElement(`__nextorm_extreme_tuple`, 3) as `team_id`, tupleElement(`__nextorm_extreme_tuple`, 4) as `name`
-from (
+ from (select tupleElement(`__nextorm_extreme_tuple`, 1) as `id`, tupleElement(`__nextorm_extreme_tuple`, 2) as `score`, tupleElement(`__nextorm_extreme_tuple`, 3) as `team_id`, tupleElement(`__nextorm_extreme_tuple`, 4) as `name`
+ from (
  select argMax(tuple(`id`, `score`, `team_id`, `name`), `score`) as `__nextorm_extreme_tuple`
- from (select * from players
+ from (select *
+ from players
  where score is not null) as `__nextorm_extreme_src`
  having count() > 0)) as `t1`
 
 -- ClickHouse, по группам (SelectWhereMin по new { TeamId }): агрегат рядом с колонками группы и GROUP BY
 select t1.id, t1.score, t1.team_id as `TeamId`, t1.name
-from (select `team_id`, tupleElement(`__nextorm_extreme_tuple`, 1) as `id`, tupleElement(`__nextorm_extreme_tuple`, 2) as `score`, tupleElement(`__nextorm_extreme_tuple`, 4) as `name`
-from (
+ from (select `team_id`, tupleElement(`__nextorm_extreme_tuple`, 1) as `id`, tupleElement(`__nextorm_extreme_tuple`, 2) as `score`, tupleElement(`__nextorm_extreme_tuple`, 4) as `name`
+ from (
  select `team_id`, argMin(tuple(`id`, `score`, `team_id`, `name`), `score`) as `__nextorm_extreme_tuple`
- from (select * from players
+ from (select *
+ from players
  where score is not null) as `__nextorm_extreme_src`
  group by `team_id`)) as `t1`
 ```
@@ -105,49 +110,13 @@ from (
 
 ## Расширяемость диалектов
 
-Нативная стратегия — это публичная возможность диалекта, а не жёстко зашитая ветка по провайдеру:
+Нативная стратегия — это публичная возможность диалекта, а не жёстко зашитая ветка по провайдеру: [`ISqlDialect.ExtremeRowRenderer`](xref:NextORM.Core.ISqlDialect.ExtremeRowRenderer) — необязательный хост рендерера (default-член интерфейса, возвращающий `null`), а `PostgresDialect`/`ClickHouseDialect` намеренно не `sealed`, поэтому внешняя сборка может поставить собственную публичную реализацию [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer). Возврат `null` из переопределения — или рендерер, чей `CanRender` отвечает `false`, — сохраняет переносимое понижение до оконной функции.
 
-- [`ISqlDialect.ExtremeRowRenderer`](xref:NextORM.Core.ISqlDialect.ExtremeRowRenderer) — необязательный рендерер, объявленный default-членом интерфейса, возвращающим `null`; [`SqlDialectBase.ExtremeRowRenderer`](xref:NextORM.Core.SqlDialectBase.ExtremeRowRenderer) переопределяет его виртуально с тем же значением по умолчанию. `null` означает отсутствие нативной стратегии.
-- [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) предоставляет `CanRender(`[`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription)`)` — решение без побочных эффектов, принимаемое до сборки любого SQL, — и `Render(`[`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest)`)`, возвращающий источник строки-победителя. Только положительный `CanRender` ведёт к `Render`, и у `Render` нет позднего отката к переносимому пути.
-- [`ExtremeRowRenderColumn`](xref:NextORM.Core.ExtremeRowRenderColumn), [`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription) и [`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest) несут только факты формы (CLR-тип, nullable, признаки прямой отображённости и конвертера, а также подготовленный источник и алиасы), но никогда — выражение или контекст построения. См. [Краткий справочник API](api-reference.md).
-- Каждый из трёх DTO также предоставляет **публичный eager-конструктор**, поэтому сборка без friend-доступа может их создать и управлять своим [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer). Конструирование немедленно и структурно проверяет ссылки и элементы коллекций: обязательная ссылка `null` даёт `ArgumentNullException`; элемент `null`, пустой строковый элемент алиаса или `SourceSql`, пустой/состоящий только из пробелов, даёт `ArgumentException`; необъявленное значение `KeywordCase` даёт `ArgumentException`. Оно **не** выполняет разбор SQL и не проверяет типы провайдера/безопасность, не добавляет правил о минимальном количестве, согласованности размеров списков или непересечении алиасов (пустые формы и перекрывающиеся алиасы допустимы), никогда не читает `ExtremeRowDescription.Payload` и никогда не вызывает `CanRender`/`Render`. Коллекции **заимствуются**, не копируются и не делаются неизменяемыми: через свойство наблюдается тот же экземпляр, и вызывающий не должен изменять его, пока DTO используется, в том числе из конкурентного вызова. Внутренний ленивый путь подготовки payload/кандидата (и невалидируемое trusted-конструирование запроса на горячем пути) остаётся деталью реализации и **не** является публичным API.
-
-`PostgresDialect` и `ClickHouseDialect` намеренно **не `sealed`**: их наследуемость вместе с публичными конструкторами (`PostgresDialect()`, `PostgresDialect(Version?)`, `ClickHouseDialect()`), общим синглтоном `Instance` и виртуальным хостом `ExtremeRowRenderer` — это и есть поддерживаемая внешняя граница расширяемости, публичное обещание совместимости, а не тестовая деталь. Пользовательский диалект может наследоваться от любого из них, переопределить хост и вернуть собственную публичную реализацию [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer); встроенные рендереры (`PostgresExtremeRowRenderer`, `ClickHouseExtremeRowRenderer`) `internal` и в этот контракт не входят. Возврат `null` из переопределения — или рендерер, чей `CanRender` отвечает `false`, — сохраняет переносимое понижение до оконной функции; значения по умолчанию провайдера и конструкторы не меняются.
-
-```csharp
-// Сборка-потребитель без friend-доступа наследует диалект провайдера и ставит свой рендерер.
-public sealed class MyPostgresDialect : PostgresDialect
-{
-    public override IExtremeRowRenderer? ExtremeRowRenderer => MyRenderer.Instance;
-}
-
-// Нативно обрабатывается только глобальная (несгруппированная) форма с одним ключом; любая
-// другая форма уходит на переносимый путь, потому что CanRender отвечает false.
-public sealed class MyRenderer : IExtremeRowRenderer
-{
-    public static readonly MyRenderer Instance = new();
-
-    public bool CanRender(ExtremeRowDescription description)
-        => description.Groups.Count == 0 && description.Keys.Count == 1;
-
-    public string Render(ExtremeRowRenderRequest request)
-    {
-        var direction = request.IsMax ? "desc" : "asc";
-        return request.SourceSql
-            + " order by \"" + request.KeyAliases[0] + "\" " + direction + " limit 1";
-    }
-}
-
-// Второй пример: возврат null из переопределения принудительно включает переносимое
-// понижение до оконной функции для каждого запроса, без установки рендерера.
-public sealed class PortablePostgresDialect : PostgresDialect
-{
-    public override IExtremeRowRenderer? ExtremeRowRenderer => null;
-}
-```
+Как собрать такой диалект и зарегистрировать его на контексте, см. в [Расширяемость: пользовательские SQL-диалекты и рендереры](extensibility.md).
 
 ## См. также
 
-- [Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)](../guide/07-distinct.md)
+- [Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)](../guide/09-distinct.md)
+- [Расширяемость: пользовательские SQL-диалекты и рендереры](extensibility.md)
 - [Краткий справочник API](api-reference.md)
-- [Обзор провайдеров](../providers/overview.md)
+- [Обзор провайдеров](../connecting-providers/overview.md)

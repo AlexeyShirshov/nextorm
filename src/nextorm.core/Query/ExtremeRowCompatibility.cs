@@ -67,6 +67,9 @@ internal static class ExtremeRowCompatibility
         if (cmd.RowLock is not null)
             throw NotCompatible("row locking (FOR UPDATE/FOR SHARE)");
 
+        if (cmd.SourceLockClause is not null || HasJoinSourceLock(cmd))
+            throw NotCompatible("source-level row locking (FOR UPDATE OF/FOR SHARE OF)");
+
         if (cmd.TableHints is { Count: > 0 })
             throw NotCompatible("table hints");
 
@@ -94,6 +97,25 @@ internal static class ExtremeRowCompatibility
 
     private static BuildSqlCommandException NotCompatible(string modifier)
         => new($"SelectWhereMax/SelectWhereMin cannot be combined with {modifier}.");
+
+    /// <summary>
+    /// True when any declared join carries a source-level row lock. Mirrors the primary-source
+    /// <c>SourceLockClause</c> check so a source-only lock cannot bypass the extreme-row restriction
+    /// through a null <c>RowLock</c>.
+    /// </summary>
+    private static bool HasJoinSourceLock(QueryCommand cmd)
+    {
+        if (cmd.Joins is not { Length: > 0 } joins)
+            return false;
+
+        for (var i = 0; i < joins.Length; i++)
+        {
+            if (joins[i].From.SourceLock is not null)
+                return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// True when any prepared select column projects a <see cref="WindowFunction{T}"/> call (an

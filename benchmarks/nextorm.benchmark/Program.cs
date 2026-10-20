@@ -22,6 +22,26 @@ using NextORM.Benchmark;
 if (args.Length > 0 && args[0] == "--stage-a")
     return StageADiagnostics.Run(args.Length > 1 ? args[1] : "all");
 
+// T217 (#217) E217-14: bounded real-ClickHouse perf probe (DTO vs DateTime reading over identical
+// rows). Benchmark-project-only entry point; it never touches nextorm.core.
+if (args.Length > 0 && args[0] == "--t217-perf-probe")
+    return await T217DtoPerfProbe.RunAsync(args.Length > 1 ? args[1] : ".");
+
+// T245 (#245) D245-1: allocation attribution probe (per-candidate bytes/query) for the warm
+// EXCEPT/INTERSECT path. Benchmark-project-only; it never touches nextorm.core and runs no BDN job.
+if (args.Length > 0 && args[0] == "--t245-attribution")
+    return await T245AttributionProbe.RunAsync(
+        args.Length > 1
+            ? args[1]
+            : Environment.GetEnvironmentVariable("NEXTORM_T245_ATTRIBUTION_OUT") ?? ".pdca/T245/rv1/attribution");
+
+// T297-G8 (#297): BenchmarkDotNet launches one process per benchmark, so the class-level static
+// collector never sees more than the last probe of a BDN run. This env-gated entry point runs all
+// 32 probe bodies in a single process and writes the evidence; benchmark-project-only, and with
+// the flag absent this file behaves exactly as before.
+if (Environment.GetEnvironmentVariable("NEXTORM_G8_PROBE_ONLY") == "1")
+    return SqliteBenchmarkG8Shape.RunAllProbes();
+
 BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
 return 0;
 

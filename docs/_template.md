@@ -42,5 +42,5 @@ the examples.
 
 ---
 
-Source: `tests/nextorm.integration.tests/CommonTestSuite.<Area>.cs:<line>`,
-`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:<line>`.
+Source: `tests/nextorm.integration.tests/CommonTestSuite/<Topic>/CommonTestSuite.<Area>.cs:<line>`,
+`tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:<line>`.

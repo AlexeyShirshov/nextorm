@@ -11,7 +11,7 @@ No concrete consumer, no agreed API/semantics, and no new, testable acceptance c
 - `docs/specs/roadmap/todo_navigation_properties.md:335-338` — explicitly deferred pending a concrete consumer + agreed API/semantics.
 - `docs/advanced/relationships.md:67` — the historical `NORM.ChildCollection(...)` form is not provided; Roslyn finds no symbol/stub.
 - `docs/advanced/relationships.md:65-73` — existing `JoinInto` requires a declared `ICollection<TChild>`; no anonymous-projection requirements.
-- `docs/guide/28-streaming-data.md:169-170`; `tests/nextorm.core.tests/JsonShapeWriterTests.cs:327` — JSON child-collection queries already excluded/rejected; re-pinning that guard would not deliver #172.
+- `docs/guide/30-streaming-data.md:169-170`; `tests/nextorm.core.tests/JsonShapeWriterTests.cs:327` — JSON child-collection queries already excluded/rejected; re-pinning that guard would not deliver #172.
 - `docs/specs/status/rc2-176-json-nested-1.md:131,187` — #176 leaves collection projection deferred to #172.
 - `docs/specs/status/rc2-172-child-collection-projection-1.md:7,12,15,18-19,27,44-48` — prior GAP, #172 open, neither done nor superseded.
 

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.T216LockingBenchmarks-20261013-153026</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
+IterationCount=3  LaunchCount=1  WarmupCount=3  
+Categories=T216  
+</code></pre>
+
+<table>
+<thead><tr><th>Method           </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>NoLock_Prepared</td><td>410.2 &mu;s</td><td>72.17 &mu;s</td><td>3.96 &mu;s</td><td>86.9141</td><td>0.4883</td><td>712.51 KB</td>
+</tr><tr><td>NoLock_Cached</td><td>425.5 &mu;s</td><td>89.12 &mu;s</td><td>4.89 &mu;s</td><td>62.9883</td><td>0.4883</td><td>517.2 KB</td>
+</tr><tr><td>SourceLockJoin_Cached</td><td>720.4 &mu;s</td><td>53.12 &mu;s</td><td>2.91 &mu;s</td><td>82.0313</td><td>-</td><td>671.13 KB</td>
+</tr><tr><td>WholeLockJoin_Cached</td><td>740.4 &mu;s</td><td>40.63 &mu;s</td><td>2.23 &mu;s</td><td>85.9375</td><td>-</td><td>703.94 KB</td>
+</tr><tr><td>SourceLockJoin_Prepared</td><td>911.1 &mu;s</td><td>184.15 &mu;s</td><td>10.09 &mu;s</td><td>119.1406</td><td>0.9766</td><td>975.04 KB</td>
+</tr><tr><td>WholeLockJoin_Prepared</td><td>937.4 &mu;s</td><td>38.64 &mu;s</td><td>2.12 &mu;s</td><td>120.1172</td><td>0.9766</td><td>982.86 KB</td>
+</tr></tbody></table>
+</body>
+</html>

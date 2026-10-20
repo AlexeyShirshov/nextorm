@@ -1,17 +1,27 @@
 using System.Linq.Expressions;
+using System.Reflection;
 using Microsoft.Extensions.Logging;
 
 namespace NextORM.Core;
 
 /// <summary>
 /// Translates the <see cref="SqlFunctions"/> helpers (<c>SqlFunctions.Parameter</c>,
-/// <c>SqlFunctions.Column&lt;T&gt;</c>) and the <see cref="CommonFunctions"/>
+/// <c>SqlFunctions.Column&lt;T&gt;</c>), the translation-only PIVOT/UNPIVOT markers
+/// (<see cref="PivotValues.Value{T}"/>, <see cref="UnpivotValues.Value{T}"/>,
+/// <see cref="UnpivotValues.Name{T}"/>) and the <see cref="CommonFunctions"/>
 /// built-ins (aggregates, <c>EXISTS</c>/<c>ANY</c>/<c>ALL</c> and <c>IN</c> subqueries, value-list
 /// <c>IN</c>) into SQL. Extracted from <see cref="BaseExpressionVisitor.VisitMethodCall"/>; the
 /// branch order, the visitor walk and therefore the parameter numbering are unchanged.
 /// </summary>
 internal static class NormSqlTranslator
 {
+    // The exact generic method *definitions* of the translation-only markers. Recognition compares
+    // the declaring method against these, so an unrelated type with a same-named Value/Name method
+    // (or a non-generic method) is never translated as a marker.
+    private static readonly MethodInfo s_pivotValue = MarkerDefinition(typeof(PivotValues), nameof(PivotValues.Value));
+    private static readonly MethodInfo s_unpivotValue = MarkerDefinition(typeof(UnpivotValues), nameof(UnpivotValues.Value));
+    private static readonly MethodInfo s_unpivotName = MarkerDefinition(typeof(UnpivotValues), nameof(UnpivotValues.Name));
+
     /// <summary>
     /// Returns <c>false</c> for a call whose declaring type is neither <see cref="SqlFunctions"/> nor
     /// <see cref="CommonFunctions"/>; otherwise translates it (or throws, like the original branches)
@@ -36,18 +46,100 @@ internal static class NormSqlTranslator
     }
 
     /// <summary>
-    /// Handles <c>SqlFunctions.Column&lt;T&gt;(entity, "name")</c> before the generic function
-    /// translators: the call is a marker, so running the scalar/window/in-values probes first only adds
-    /// work on the SQL-build path.
+    /// Handles <c>SqlFunctions.Column&lt;T&gt;(entity, "name")</c> and the translation-only
+    /// PIVOT/UNPIVOT marker accessors before the generic function translators: each call is a marker,
+    /// so running the scalar/window/in-values probes first only adds work on the SQL-build path.
     /// </summary>
     internal static bool TryTranslateColumnReference(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
+        if (TryTranslateMarker(visitor, node))
+            return true;
+
         if (node.Method.DeclaringType != typeof(SqlFunctions)
             || node.Method.Name != nameof(SqlFunctions.Column))
             return false;
 
         TranslateColumn(visitor, node);
         return true;
+    }
+
+    /// <summary>Returns the generic method definition of the single-argument marker accessor.</summary>
+    private static MethodInfo MarkerDefinition(Type markerType, string name)
+    {
+        var method = markerType.GetMethod(name, [typeof(string)])
+            ?? throw new InvalidOperationException($"The marker accessor {markerType.Name}.{name}(string) was not found.");
+        return method.IsGenericMethodDefinition ? method : method.GetGenericMethodDefinition();
+    }
+
+    /// <summary>
+    /// Recognises the translation-only PIVOT/UNPIVOT marker accessors by their exact generic method
+    /// definition and emits the referenced result column, bound to the single <see cref="TableAlias"/>
+    /// PIVOT/UNPIVOT source in scope — the same source-qualified identifier plus
+    /// <see cref="BaseExpressionVisitor.ColumnName"/> route
+    /// (<see cref="BaseExpressionVisitor.AppendColumnReference"/>) that <c>SqlFunctions.Column&lt;T&gt;</c>
+    /// uses. The marker carries no source argument, so an unbound (or otherwise ambiguous) marker
+    /// source fails closed instead of emitting an unqualified or wrong identifier.
+    /// </summary>
+    private static bool TryTranslateMarker(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var marker = MarkerOf(node.Method);
+        if (marker is null)
+            return false;
+
+        if (node.Arguments is not [ConstantExpression { Value: string columnName }] || string.IsNullOrEmpty(columnName))
+            throw new BuildSqlCommandException(
+                $"The {marker} marker requires a compile-time constant column name.");
+
+        if (visitor.IsParamMode)
+            return true;
+
+        var index = visitor.ColumnsProvider.FindAlias(typeof(TableAlias), null, false)
+            ?? throw new BuildSqlCommandException(
+                $"The {marker} marker requires a bound PIVOT/UNPIVOT result source; no TableAlias source is in scope, " +
+                $"so the column '{columnName}' cannot be resolved.");
+
+        // The marker carries no source argument, so it cannot choose between two distinguishable
+        // TableAlias-bound sources in scope (for example a PIVOT result joined with a raw TableAlias
+        // source): the lookup below would silently bind the first one and emit a wrong identifier.
+        // Fail closed instead; the source-naming SqlFunctions.Column<T>(source, "name") route stays
+        // available for a query that really has more than one such source.
+        if (HasAmbiguousTableAliasSource(visitor))
+            throw new BuildSqlCommandException(
+                $"The {marker} marker matches more than one TableAlias source in scope, so the column '{columnName}' " +
+                $"is ambiguous: the marker does not name its PIVOT/UNPIVOT result source. Reference the intended " +
+                $"source explicitly with SqlFunctions.Column<T>(source, \"{columnName}\").");
+
+        if (!visitor.DontNeedAlias && visitor.ColumnsProvider.HasAliases && visitor.AliasProvider is { } aliases)
+            visitor.Builder!.Append(aliases.FindAlias(index)).Append('.');
+
+        visitor.AppendAlwaysQuotedIdentifier(columnName);
+        visitor.ColumnName = columnName;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether the marker's alias lookup is ambiguous: a second same-typed (<see cref="TableAlias"/>)
+    /// source is visible in the very scope <see cref="TryTranslateMarker"/> searched. The probe asks
+    /// the public lookup for the (zero-based) second matching source, so a non-null answer proves the
+    /// marker cannot select its PIVOT/UNPIVOT result source by itself.
+    /// </summary>
+    private static bool HasAmbiguousTableAliasSource(BaseExpressionVisitor visitor)
+        => visitor.ColumnsProvider.FindAlias(typeof(TableAlias), 1, false) is not null;
+
+    /// <summary>The marker type name for an exactly recognised accessor, or <c>null</c>.</summary>
+    private static string? MarkerOf(MethodInfo method)
+    {
+        if (!method.IsGenericMethod)
+            return null;
+
+        var definition = method.GetGenericMethodDefinition();
+        if (definition == s_pivotValue)
+            return nameof(PivotValues);
+
+        if (definition == s_unpivotValue || definition == s_unpivotName)
+            return nameof(UnpivotValues);
+
+        return null;
     }
 
     /// <summary>Emits <c>SqlFunctions.Parameter</c>/<c>SqlFunctions.Column&lt;T&gt;</c>; any other <see cref="SqlFunctions"/> method throws.</summary>

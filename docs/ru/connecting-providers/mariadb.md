@@ -1,0 +1,126 @@
+# Провайдер MariaDB
+
+> Используйте `nextorm.mariadb` для MariaDB 10.4+; он переиспользует отрисовку MySQL и добавляет варианты операций над множествами `INTERSECT ALL`/`EXCEPT ALL`.
+
+**Предварительные требования:** [Обзор провайдеров](overview.md) · [MySQL](mysql.md)
+
+## Обзор
+
+[`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext) (`src/nextorm.mariadb/MariaDbDataContext.cs`) наследуется от [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), поэтому
+использует тот же драйвер `MySqlConnector` и то же управление соединением и параметрами. Он
+возвращает [`Instance`](xref:NextORM.MariaDb.MariaDbDialect.Instance) из свойства `Dialect`.
+
+[`MariaDbDialect`](xref:NextORM.MariaDb.MariaDbDialect) (`src/nextorm.mariadb/MariaDbDialect.cs`) наследуется от [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) и меняет
+набор возможностей: `INTERSECT ALL` и `EXCEPT ALL` поддерживаются в MariaDB 10.4 и новее, поэтому
+[`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) равно `true`, а MariaDB 10.3+ рендерит оконные
+квантили `percentile_cont`/`percentile_disc` (`... within group (order by ...) over (...)`), поэтому
+[`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow) тоже равно `true`; `UPDATE ... RETURNING` включается только при явно
+настроенной версии сервера 13.0+ ([`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning)). Агрегат произвольного значения
+`any_agg` при этом **отключён**, потому что в MariaDB нет `ANY_VALUE` в 10.4–12.x (возможность SQL-2023
+`T626` всё ещё ожидается, ориентир — 13.2). Всё остальное (параметры, квотирование, `concat`, coalesce,
+разбиение на страницы, имена агрегатов, написание `if(...)` для переносимого `iif`) наследуется без
+изменений.
+
+## Регистрация провайдера
+
+На [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) доступны две перегрузки
+(`src/nextorm.mariadb/DI/MariaDbDataContextOptionsBuilderExtensions.cs`):
+
+```csharp
+using NextORM.Core;
+using NextORM.MariaDb;
+
+var builder = new DataContextBuilder()
+    .UseMariaDb("Server=localhost;Port=3306;Database=app;User ID=app;Password=secret");
+
+using var ctx = builder.CreateDataContext();   // IDataContext
+```
+
+Также можно создать контекст напрямую:
+
+```csharp
+using NextORM.Core;
+using NextORM.MariaDb;
+
+using IDataContext ctx = new MariaDbDataContext(
+    "Server=localhost;Database=app;User ID=app;Password=secret", new DataContextBuilder());
+```
+
+## Версия сервера
+
+Диалект можно привязать к версии сервера, которая гейтит `UPDATE ... RETURNING`. Настройка **явная** —
+nextorm никогда не опрашивает живой сервер. Передайте версию через параметр `Version` конструктора
+контекста. В отличие от PostgreSQL, **незаданная** версия **не** включает возможность: без явной 13.0+
+терминал `Returning()` у `UPDATE` бросает `NotSupportedException`. `RETURNING` у insert и delete не
+меняется (MariaDB отклоняет их как и раньше), как и гейт `ANY_VALUE` (`any_agg`, ориентир — 13.2).
+
+```csharp
+// Явная 13.0+: UPDATE ... RETURNING включён.
+using var ctx = new MariaDbDataContext(
+    "Server=localhost;Database=app;...", new DataContextBuilder(), new Version(13, 0));
+```
+
+В отличие от PostgreSQL, MariaDB **не** накладывает защиту «одна версия на конкретный тип контекста»:
+её единственная версионно-гейтируемая ось (`UPDATE ... RETURNING`) — мутация, чей SQL не кладётся в
+кэш планов, поэтому один и тот же конкретный тип контекста можно создавать с разными версиями.
+Строго типизированный подкласс всё ещё удобен, чтобы зафиксировать одну версию:
+
+```csharp
+public sealed class MariaDb130DataContext : MariaDbDataContext
+{
+    public MariaDb130DataContext(string connectionString, DataContextBuilder builder)
+        : base(connectionString, builder, new Version(13, 0)) { }
+}
+```
+
+## Операции над множествами
+
+```csharp
+ctx.From<ISimpleEntity>().Select(x => x.Id).IntersectAll(ctx.From<ISimpleEntity>().Select(x => x.Id));
+ctx.From<ISimpleEntity>().Select(x => x.Id).ExceptAll(ctx.From<ISimpleEntity>().Select(x => x.Id));
+```
+
+```sql
+select id
+ from simple_entity
+ intersect all
+select id
+ from simple_entity
+```
+
+## Различия провайдера
+
+MariaDB отличается от [MySQL](mysql.md) возможностью операций над множествами, оконными квантилями, версионным гейтом `UPDATE ... RETURNING` и агрегатом произвольного значения:
+
+| Аспект | MariaDB |
+|---|---|
+| Плейсхолдер параметра | `@name` |
+| Конкатенация | `concat(a, b)` |
+| Coalesce | `coalesce` |
+| Квотирование идентификаторов | обратные кавычки (`` as `t1` ``) |
+| Псевдоним производной таблицы | требуется |
+| `*ALL` | поддерживается (MariaDB 10.4+) |
+| `UPDATE ... RETURNING` | включается только при явной версии сервера 13.0+ (`SupportsUpdateReturning`); иначе `NotSupportedException` |
+| Версия сервера | настраивается явно через `Version` у контекста |
+| Текстовый JSON | наследуется от MySQL (`JSON_EXTRACT`/`JSON_SET`) |
+| Session/info-функции | наследуются от MySQL (`current_user()`, `session_user()`, `schema()`, `database()`, `version()`) |
+| Произвольное значение | не поддерживается (в 10.4–12.x нет `ANY_VALUE`; ожидается MDEV-10426, ориентир — 13.2) |
+| Условная функция | наследуется от MySQL (`iif(cond, a, b)` → `if(cond, a, b)`) |
+| Оконные квантили | `percentile_cont`/`percentile_disc` как `... within group (order by x) over (...)` (MariaDB 10.3+) |
+| Нативные функции | поверхность `SqlFunctions.MySql`, унаследованная от MySQL, **минус** `uuid_to_bin`/`bin_to_uuid`, **плюс** имена MariaDB (расширенный regexp, `nvl`/`nvl2`, `add_months`/`months_between`, `to_char`/`to_date`/`to_number`, `kdf`, `xxh3`/`xxh32`, `json_detailed`/`json_compact`, доступ к последовательностям) |
+| Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` |
+
+## См. также
+
+- [Обзор провайдеров](overview.md)
+- [Специфичный для MySQL и MariaDB SQL](../guide/provider-specific-sql/mysql.md)
+- [MySQL](mysql.md)
+- [ClickHouse](clickhouse.md)
+- [In-memory](in-memory.md)
+- [Ограничения и что вне области](../advanced/limitations.md)
+
+---
+
+Source: `src/nextorm.mariadb/MariaDbDialect.cs`, `src/nextorm.mariadb/MariaDbDataContext.cs`,
+`src/nextorm.mariadb/DI/MariaDbDataContextOptionsBuilderExtensions.cs`,
+`tests/nextorm.mariadb.tests/Dialect/MariaDbDialectTests.cs`, `tests/nextorm.mariadb.tests/SqlGeneration/SqlGenerationTests.cs`.

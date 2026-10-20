@@ -1,0 +1,48 @@
+E41 reflection parity — ApplyPreparationFrom_AdoptedDescription_ParityWithCopyTo
+
+Command:
+  dotnet test tests/nextorm.core.tests -c Debug --no-build \
+    --filter "FullyQualifiedName~CteDescriptionCowTests|FullyQualifiedName~CachedPreparationRecipeTests"
+Exit code: 0
+Summary: total 35 / succeeded 35 / failed 0 / skipped 0
+Log: .pdca/T297/rv7/logs/e41-core-focused.log
+
+Compared value spaces (both sides constructed from the same raw command):
+  (a) new path: adopted = raw.Clone(); adopted.ApplyPreparationFrom(recipe)
+  (b) old path: copied  = raw.Clone(); recipe.CopyTo(copied, copyAll: true)
+                             + _joins, _whereBasePlanHash, _preparedArrayJoin, OneColumn
+
+Declared QueryCommand instance fields (18) — all compared:
+  _dataContext           reference-equal  PASS
+  _customData            reference-equal  PASS (null on both)
+  Paging                 value-equal      PASS
+  _selectList            reference-equal  PASS
+  _isPrepared            value-equal      PASS (true)
+  _srcType               reference-equal  PASS
+  _exp                   reference-equal  PASS (both keep the fresh raw lambda; CopyTo never carried it)
+  _condition             reference-equal  PASS (fresh raw lambda, not carried by either path)
+  _groupExp              reference-equal  PASS (fresh raw lambda, not carried by either path)
+  _having                reference-equal  PASS (fresh raw lambda, not carried by either path)
+  _preWhere              reference-equal  PASS
+  _arrayJoins            reference-equal  PASS
+  _sorting               reference-equal  PASS (fresh raw sorting, not carried by either path)
+  _from                  reference-equal  PASS (prepared FROM edge)
+  _definitionMemo        null on both     PASS
+  _description           deep contents    PASS (root ProjectionType, Flags, Predicates/Relations/
+                                              Clauses/Options walked field-by-field; only Shared ignored)
+  _preparation           all fields       PASS (comparers by reference, everything else value/reference
+                                              equal; _whereBasePlanHash and _preparedArrayJoin included
+                                              exactly once)
+  _binding               all fields       PASS (DontCache equal; HasEverPrepared false and
+                                              TypedRecursiveAnchor null on both, matching CopyTo)
+
+First differing member: none (the assertion message names the path when it ever differs).
+
+COW isolation — ApplyPreparationFrom_AdoptedDescription_IsolatesRecipeFromPostAdoptWrites
+  Green (guard present): PASS — recipe description/preparation/binding snapshot identical before and
+  after Tag/CommandTimeout/IsDistinct/LimitBy/Paging writes on the adopter and after reading Definition;
+  a second apply renders SQL identical to ordinary preparation.
+  Log: .pdca/T297/rv7/logs/e41-core-focused.log (part of the 35)
+  Red arm (guard removed, temporary local build): FAIL, exit 2, total 2 / failed 1 / passed 1
+  (isolation fails; parity passes because it ignores the Shared flags by contract)
+  Log: .pdca/T297/rv7/logs/e41-red-isolation.log; build: e41-red-build.log

@@ -1,0 +1,2 @@
+attempt 1: median=14.38% p95=86.22% min=3.52% max=93.65% admitted=false (2026-10-18T18:29:15Z..2026-10-18T18:29:45Z)
+attempt 2: median=5.07% p95=9.10% min=2.12% max=11.11% admitted=true (2026-10-18T18:31:15Z..2026-10-18T18:31:45Z)

@@ -127,6 +127,12 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server <c>MERGE</c> supports an explicit <c>ON &lt;condition&gt;</c> and <c>WHEN ... AND &lt;condition&gt;</c>.</summary>
     public override bool SupportsMergeConditionalBranches => true;
 
+    /// <summary>
+    /// SQL Server requires a recursive CTE body to use <c>UNION ALL</c>; a distinct <c>UNION</c> is rejected
+    /// by the server, so preparation rejects it locally before execution and before the plan cache.
+    /// </summary>
+    public override bool RequiresRecursiveCteUnionAll => true;
+
     /// <summary>SQL Server requires a terminating semicolon after <c>MERGE</c>.</summary>
     public override string MakeMergeStatementTerminator(KeywordCase keywordCase = KeywordCase.Lower) => ";";
 
@@ -162,10 +168,12 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override string MakeIdentityFunction(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select scope_identity()");
 
     /// <summary>
-    /// SQL Server bracket-quotes identifiers. Single quoted aliases (the base default) are accepted
-    /// for columns but produce a syntax error for table and derived table aliases.
+    /// SQL Server bracket-quotes identifiers, doubling an embedded <c>]</c> so the result is a single
+    /// safe identifier (the same bracket semantics as <see cref="QuoteIdentifier"/>). Single quoted
+    /// aliases (the base default) are accepted for columns but produce a syntax error for table and
+    /// derived table aliases.
     /// </summary>
-    public override string Escape(string keyword) => "[" + keyword + "]";
+    public override string Escape(string keyword) => QuoteIdentifier(keyword);
 
     /// <summary>SQL Server quotes a physical identifier with brackets, doubling an embedded <c>]</c>.</summary>
     public override string QuoteIdentifier(string name) => "[" + name.Replace("]", "]]") + "]";
@@ -520,6 +528,52 @@ public sealed class SqlServerDialect : SqlDialectBase
         return $"dateadd({part}, {scaled}, {value})";
     }
 
+    /// <summary>SQL Server has a native <c>datetimeoffset</c>, so DTO operations are supported and preserve the value's offset.</summary>
+    public override bool SupportsDateTimeOffsetTranslation => true;
+
+    /// <summary>Renders the native offset-bearing <c>sysdatetimeoffset()</c>, or a zero-offset value built from the UTC clock.</summary>
+    public override string MakeDateTimeOffsetNow(bool utc) =>
+        utc ? "todatetimeoffset(sysutcdatetime(), '+00:00')" : "sysdatetimeoffset()";
+
+    /// <summary>
+    /// <c>dateadd</c> truncates a fractional amount in the requested unit, so a
+    /// <see cref="System.DateTimeOffset"/> amount is scaled to the next finer unit that keeps the
+    /// fraction. A ×1000 scale (seconds→milliseconds, milliseconds→microseconds) is an <c>int</c>
+    /// product that overflows <c>dateadd</c>'s 32-bit amount for a large whole value (for example
+    /// <c>AddSeconds(2_200_000)</c>), so the whole part is added in the requested unit and only the
+    /// fractional remainder is scaled into the finer unit. Year/month amounts are CLR <c>int</c> and
+    /// unchanged; the <c>datetimeoffset</c> operand is used directly so its offset is preserved.
+    /// </summary>
+    public override string MakeDateAdd(string field, string amount, string value, bool isDateTimeOffset)
+    {
+        if (!isDateTimeOffset)
+            return MakeDateAdd(field, amount, value);
+
+        // The ×1000 scaling is split so the emitted amount always fits the int parameter of dateadd:
+        // the whole part stays in the coarse unit and only the fraction (< 1) is scaled, so even a
+        // large literal amount such as AddSeconds(2_200_000) compiles to dateadd(second, 2200000, ...).
+        if (field is "second" or "milliseconds")
+        {
+            var (coarse, fine) = field == "second" ? ("second", "millisecond") : ("millisecond", "microsecond");
+            var whole = $"cast(floor({amount}) as int)";
+            var remainder = $"cast(({amount} - floor({amount})) * 1000 as int)";
+
+            return $"dateadd({coarse}, {whole}, dateadd({fine}, {remainder}, {value}))";
+        }
+
+        var (part, factor) = field switch
+        {
+            "day" => ("hour", 24),
+            "hour" => ("minute", 60),
+            "minute" => ("second", 60),
+            _ => (field, 1)
+        };
+
+        var scaled = factor == 1 ? amount : $"({amount}) * {factor}";
+
+        return $"dateadd({part}, {scaled}, {value})";
+    }
+
     /// <summary>Renders <c>datediff(part, start, end)</c> with the singular T-SQL part names.</summary>
     public override string MakeDateDiff(string field, string start, string end) =>
         $"datediff({TSqlDatePart(field)}, {start}, {end})";
@@ -641,7 +695,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         sqlBuilder.Append(Kw(keywordCase, "offset ")).Append(paging.Offset).Append(Kw(keywordCase, " rows"));
 
         if (paging.Limit > 0)
-            sqlBuilder.AppendLine().Append(Kw(keywordCase, "fetch next ")).Append(paging.Limit)
+            sqlBuilder.Append(SqlText.NewLine).Append(Kw(keywordCase, "fetch next ")).Append(paging.Limit)
                 .Append(Kw(keywordCase, paging.HasWithTies ? " rows with ties" : " rows only"));
     }
 
@@ -727,7 +781,9 @@ internal sealed class SqlServerSessionInfoFunctions : ISessionInfoFunctions
     public static readonly SqlServerSessionInfoFunctions Instance = new();
 
     public bool Supports(string name) =>
-        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version";
+        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version"
+            or "sqlserver.server_name" or "sqlserver.host_id" or "sqlserver.host_name"
+            or "sqlserver.app_name" or "sqlserver.suser_name" or "sqlserver.original_login";
 
     public string Render(string name) => name switch
     {
@@ -736,6 +792,12 @@ internal sealed class SqlServerSessionInfoFunctions : ISessionInfoFunctions
         "current_schema" => "schema_name()",
         "current_database" => "db_name()",
         "version" => "@@version",
+        "sqlserver.server_name" => "@@SERVERNAME",
+        "sqlserver.host_id" => "HOST_ID()",
+        "sqlserver.host_name" => "HOST_NAME()",
+        "sqlserver.app_name" => "APP_NAME()",
+        "sqlserver.suser_name" => "SUSER_NAME()",
+        "sqlserver.original_login" => "ORIGINAL_LOGIN()",
         _ => throw new NotSupportedException($"The {name} session information function is not supported by SQL Server.")
     };
 }
@@ -819,6 +881,9 @@ internal sealed class SqlServerLockRenderer : ILockRenderer
 
     public bool UsesTableHints => true;
 
+    /// <summary>SQL Server supports a per-source lock as a table hint placed on the chosen source.</summary>
+    public bool SupportsSourceLocks => true;
+
     public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
         Render(mode, LockWaitMode.Wait, keywordCase);
 
@@ -830,6 +895,13 @@ internal sealed class SqlServerLockRenderer : ILockRenderer
             LockWaitMode.SkipLocked => ", readpast",
             _ => throw new ArgumentOutOfRangeException(nameof(wait), wait, "Unknown locking wait mode.")
         });
+
+    /// <summary>
+    /// The table-hint token is placed on the chosen source by the builder, so the resolved target alias
+    /// does not change the token; the overload is additive and never widens a targeted lock.
+    /// </summary>
+    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase, string? targetAlias)
+        => Render(mode, wait, keywordCase);
 }
 
 internal sealed class SqlServerIndexHintRenderer : IIndexHintRenderer
@@ -967,6 +1039,9 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
 {
     internal static readonly SqlServerSpecificFunctions Instance = new();
 
+    /// <summary>The SQL Server identity surface is exposed next to the T-SQL scalar library.</summary>
+    bool ISqlServerFunctions.SupportsSessionIdentity => true;
+
     /// <inheritdoc/>
     public bool Supports(string name) => name is
         "patindex" or "quotename" or "soundex" or "difference" or "string_escape" or "unicode" or
@@ -985,7 +1060,8 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "type_id" or "type_name" or
         "filegroup_id" or "filegroup_name" or "file_id" or "file_idex" or "file_name" or
         "current_timezone" or "current_timezone_id" or "formatmessage" or "getansinull" or
-        "isdate" or "isnumeric" or "parsename" or "publishingservername" or "str";
+        "isdate" or "isnumeric" or "parsename" or "publishingservername" or "str" or
+        "next_value_for" or "nextval";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1068,6 +1144,9 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "parsename" => $"parsename({args[0]}, {args[1]})",
         "publishingservername" => "publishingservername()",
         "str" => $"str({string.Join(", ", args)})",
+        // The sequence name arrives already bracket-quoted by the translator; both aliases render the
+        // same T-SQL sequence expression.
+        "next_value_for" or "nextval" => $"next value for {args[0]}",
         _ => throw new NotSupportedException($"The {name} function is not supported by SQL Server.")
     };
 

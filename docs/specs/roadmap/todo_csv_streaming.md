@@ -10,7 +10,7 @@
 > `AsTempTable` и CSV в in-memory-контексте **отгружены** и покрыты тестами (§1).
 > Общая буферизованная материализация (срез c) в объём #112 не входит.
 
-> Публичное поведение и ограничения опубликованы в `docs/guide/28-streaming-data.md`
+> Публичное поведение и ограничения опубликованы в `docs/guide/30-streaming-data.md`
 > (+RU) и `docs/advanced/limitations.md` (+RU). Публичные страницы на `docs/specs/**`
 > не ссылаются.
 
@@ -41,7 +41,7 @@
   SQL Server; CSV-хук и общий путь теперь делят один маппинг (см. (c)).
 - Неизвестный или неконвертируемый storage-тип числовой колонки SQL Server бросает
   `NotSupportedException` **до записи заголовка** и любой строки данных.
-- Публичное поведение и ограничения: `docs/guide/28-streaming-data.md` + `docs/ru/guide/28-streaming-data.md`,
+- Публичное поведение и ограничения: `docs/guide/30-streaming-data.md` + `docs/ru/guide/30-streaming-data.md`,
   строка в `docs/advanced/limitations.md` + `docs/ru/advanced/limitations.md`.
 - **Fail-closed ленивого temp-источника `AsTempTable`.** `DataContext.PrepareResultCommand`
   проверяет `QueryCommand.HasTemporaryTableSource()` и бросает `NotSupportedException`
@@ -63,6 +63,10 @@
 
 - Триггер: повторяющиеся мелкие экспорты; добавить кэш плана с ключом
   (форма проекции, провайдер, опции).
+- Tracking: [#250](https://github.com/AlexeyShirshov/nextorm/issues/250) (milestone `1.0.9-rc3`).
+  Замер (SQLite, 2026-10-17): fixed-часть ≈ 200–207 µs на колонку плюс ~8–9 КБ аллокаций на колонку
+  за вызов; 3-колоночный экспорт на 100 строк — 698 µs, из них ~590 µs (85 %) — сборка плана;
+  на 10 000 строк доля падает до 5.4 %. Harness: `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkCsvFixedCost.cs`.
 
 ### (b) Memory-bound бинарных (`byte[]`) полей — частично закрыто (поддерживаемый direct-binary sequential-путь)
 
@@ -100,5 +104,5 @@ whole-field getter (`GetFieldValue<byte[]>`) на этом пути не ком�
 - `src/nextorm.core/Query/QueryCommandExtensions.cs`,
   `src/nextorm.core/Builders/EntityBuilderExtensions.cs`,
   `src/nextorm.core/Query/Csv/`, `src/nextorm.core/Query/CsvStreamOptions.cs`.
-- `docs/guide/28-streaming-data.md`, `docs/ru/guide/28-streaming-data.md`,
+- `docs/guide/30-streaming-data.md`, `docs/ru/guide/30-streaming-data.md`,
   `docs/advanced/limitations.md`, `docs/ru/advanced/limitations.md`.

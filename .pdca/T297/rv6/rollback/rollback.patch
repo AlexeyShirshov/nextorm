@@ -1,0 +1,1065 @@
+commit 4432fbcbdad96f2389f80b756a1e93bc91fae1cd
+Author: Alexey Shirshov <alex.shirshov@vk.com>
+Date:   Mon Oct 19 16:55:15 2026 +0500
+
+    #297 r=5: flatten COW description storage (P03a)
+
+diff --git a/src/nextorm.core/Query/QueryCommand.Description.cs b/src/nextorm.core/Query/QueryCommand.Description.cs
+index 8c8f7f83..6a409b8b 100644
+--- a/src/nextorm.core/Query/QueryCommand.Description.cs
++++ b/src/nextorm.core/Query/QueryCommand.Description.cs
+@@ -3,175 +3,6 @@ using Microsoft.Extensions.Logging;
+ 
+ namespace NextORM.Core;
+ 
+-/// <summary>
+-/// Predicate half of a command's raw description: the disabled selective query-filter scope. The
+-/// <c>WHERE</c>/<c>GROUP BY</c>/<c>HAVING</c>/<c>PREWHERE</c> lambdas are node-owned fields, not
+-/// description state. Copied on write; the block is shared between command nodes only at
+-/// clone/CTE-construction edges and is never mutated in place while shared.
+-/// </summary>
+-internal sealed class QueryPredicates
+-{
+-    internal static readonly QueryPredicates Empty = new() { Shared = true };
+-
+-    internal bool Shared;
+-    internal QueryFilterScope FilterScope = QueryFilterScope.None;
+-
+-    internal QueryPredicates()
+-    {
+-    }
+-
+-    internal QueryPredicates(QueryPredicates other)
+-    {
+-        FilterScope = other.FilterScope;
+-    }
+-}
+-
+-/// <summary>
+-/// Relation half of a command's raw description: joins, CTE declarations, correlated referenced queries,
+-/// outer references, the registry they resolve against and the set-operation operand.
+-/// </summary>
+-internal sealed class QueryRelations
+-{
+-    internal static readonly QueryRelations Empty = new() { Shared = true };
+-
+-    internal bool Shared;
+-    internal JoinExpression[]? Joins;
+-    internal IReadOnlyList<CteDefinition>? Ctes;
+-    internal List<QueryCommand>? ReferencedQueries;
+-    internal List<Expression>? OuterRefs;
+-    internal IQueryRegistry? OuterRegistry;
+-    internal QueryCommand? Union;
+-    internal UnionType UnionType;
+-
+-    internal QueryRelations()
+-    {
+-    }
+-
+-    internal QueryRelations(QueryRelations other)
+-    {
+-        Joins = other.Joins;
+-        Ctes = other.Ctes;
+-        ReferencedQueries = other.ReferencedQueries;
+-        OuterRefs = other.OuterRefs;
+-        OuterRegistry = other.OuterRegistry;
+-        Union = other.Union;
+-        UnionType = other.UnionType;
+-    }
+-}
+-
+-/// <summary>
+-/// Clause half of a command's raw description: the provider clause objects, ClickHouse modifiers, trailing
+-/// clauses, grouping modifiers and navigation-expansion metadata. Copied on write.
+-/// </summary>
+-internal sealed class QueryClauses
+-{
+-    internal static readonly QueryClauses Empty = new() { Shared = true };
+-
+-    internal bool Shared;
+-    internal LimitByClause? LimitBy;
+-    internal DistinctOnClause? DistinctOn;
+-    internal ExtremeRowClause? ExtremeRow;
+-    internal TableSampleClause? TableSample;
+-    internal TemporalClause? Temporal;
+-    internal LockClause? RowLock;
+-    internal LockClause? SourceLockClause;
+-    internal double? SampleRatio;
+-    internal double SampleOffset;
+-    internal IReadOnlyList<KeyValuePair<string, string>>? Settings;
+-    internal IReadOnlyList<WindowDefinition>? Windows;
+-    internal ArrayJoinKind ArrayJoinKind;
+-    internal GroupingType GroupingType;
+-    internal IReadOnlyList<int[]>? GroupingSets;
+-    internal ForJsonClause? ForJsonClause;
+-    internal ForXmlClause? ForXmlClause;
+-    internal IReadOnlyDictionary<ParameterExpression, string>? NavigationPaths;
+-
+-    internal QueryClauses()
+-    {
+-    }
+-
+-    internal QueryClauses(QueryClauses other)
+-    {
+-        LimitBy = other.LimitBy;
+-        DistinctOn = other.DistinctOn;
+-        ExtremeRow = other.ExtremeRow;
+-        TableSample = other.TableSample;
+-        Temporal = other.Temporal;
+-        RowLock = other.RowLock;
+-        SourceLockClause = other.SourceLockClause;
+-        SampleRatio = other.SampleRatio;
+-        SampleOffset = other.SampleOffset;
+-        Settings = other.Settings;
+-        Windows = other.Windows;
+-        ArrayJoinKind = other.ArrayJoinKind;
+-        GroupingType = other.GroupingType;
+-        GroupingSets = other.GroupingSets;
+-        ForJsonClause = other.ForJsonClause;
+-        ForXmlClause = other.ForXmlClause;
+-        NavigationPaths = other.NavigationPaths;
+-    }
+-}
+-
+-/// <summary>
+-/// Option half of a command's raw description: diagnostics/hints, identifier and naming overrides, eager
+-/// loading strategy, per-parent paging details and in-memory navigation lowering data. Optional: the block
+-/// stays on the shared empty singleton until a non-default value is written.
+-/// </summary>
+-internal sealed class QueryOptions
+-{
+-    internal static readonly QueryOptions Empty = new() { Shared = true };
+-
+-    internal bool Shared;
+-    internal ILogger? Logger;
+-    internal string? Tag;
+-    internal IReadOnlyList<string>? Hints;
+-    internal IReadOnlyList<string>? TableHints;
+-    internal IReadOnlyList<string>? IndexHints;
+-    internal IndexHintKind IndexHintKind;
+-    internal IReadOnlyList<string>? TablesInScopeHints;
+-    internal bool? QuoteIdentifiers;
+-    internal INamingConvention? NamingConvention;
+-    internal KeywordCase? KeywordCase;
+-    internal int? CommandTimeout;
+-    internal EagerLoadMode? EagerLoadMode;
+-    internal EagerLoadShape EagerLoadShape;
+-    internal bool HasPerParentEagerTopN;
+-    internal bool PerParentPaging;
+-    internal LambdaExpression? PerParentPartition;
+-    internal bool PerParentPagingEmbedded;
+-    internal bool IgnoreColumns;
+-    internal JunctionChildFilter? JunctionChildFilter;
+-    internal InMemoryNavigationChain? NavigationChain;
+-
+-    internal QueryOptions()
+-    {
+-    }
+-
+-    internal QueryOptions(QueryOptions other)
+-    {
+-        Logger = other.Logger;
+-        Tag = other.Tag;
+-        Hints = other.Hints;
+-        TableHints = other.TableHints;
+-        IndexHints = other.IndexHints;
+-        IndexHintKind = other.IndexHintKind;
+-        TablesInScopeHints = other.TablesInScopeHints;
+-        QuoteIdentifiers = other.QuoteIdentifiers;
+-        NamingConvention = other.NamingConvention;
+-        KeywordCase = other.KeywordCase;
+-        CommandTimeout = other.CommandTimeout;
+-        EagerLoadMode = other.EagerLoadMode;
+-        EagerLoadShape = other.EagerLoadShape;
+-        HasPerParentEagerTopN = other.HasPerParentEagerTopN;
+-        PerParentPaging = other.PerParentPaging;
+-        PerParentPartition = other.PerParentPartition;
+-        PerParentPagingEmbedded = other.PerParentPagingEmbedded;
+-        IgnoreColumns = other.IgnoreColumns;
+-        JunctionChildFilter = other.JunctionChildFilter;
+-        NavigationChain = other.NavigationChain;
+-    }
+-}
+-
+ /// <summary>
+ /// Immutable memo of a <see cref="QueryDefinition"/> snapshot together with the node-owned inputs it was
+ /// built from. The memo belongs to one <see cref="QueryCommand"/> node, never to a shared description:
+@@ -230,10 +61,10 @@ internal readonly struct DefinitionMemo
+ }
+ 
+ /// <summary>
+-/// Immutable-by-contract raw description of a <see cref="QueryCommand"/>: the five grouped raw blocks
+-/// and a flag word for the remaining raw booleans. A node owns at most one description; a description is
+-/// shared with other nodes only on copy-on-write terms (every mutation replaces the command's own
+-/// description and the touched block).
++/// Immutable-by-contract raw description of a <see cref="QueryCommand"/>: every raw slot (the former
++/// predicate/relation/clause/option blocks flattened into this single root) and a flag word for the
++/// remaining raw booleans. A node owns at most one description; a description is shared with other nodes
++/// only on copy-on-write terms (a write replaces the command's own description once).
+ /// </summary>
+ internal sealed class QueryDescription
+ {
+@@ -249,26 +80,74 @@ internal sealed class QueryDescription
+     internal const ulong FlagNeedsOuterJoinNullSettings = 1UL << 9;
+ 
+     internal bool Shared;
++    /// <summary>
++    /// True while <see cref="ReferencedQueries"/> and <see cref="OuterRefs"/> may still be referenced by
++    /// another node. Those two lists are appended in place, so their owner must copy them before the first
++    /// append; this mirrors the sharing flag of the former relation block.
++    /// </summary>
++    internal bool SharedRelations;
+     internal Type? ProjectionType;
+     internal ulong Flags;
+-    internal QueryPredicates Predicates = QueryPredicates.Empty;
+-    internal QueryRelations Relations = QueryRelations.Empty;
+-    internal QueryClauses Clauses = QueryClauses.Empty;
+-    internal QueryOptions Options = QueryOptions.Empty;
+ 
+-    /// <summary>Marks this description and every block it references as shared by more than one node.</summary>
++    internal QueryFilterScope FilterScope = QueryFilterScope.None;
++
++    internal JoinExpression[]? Joins;
++    internal IReadOnlyList<CteDefinition>? Ctes;
++    internal List<QueryCommand>? ReferencedQueries;
++    internal List<Expression>? OuterRefs;
++    internal IQueryRegistry? OuterRegistry;
++    internal QueryCommand? Union;
++    internal UnionType UnionType;
++
++    internal LimitByClause? LimitBy;
++    internal DistinctOnClause? DistinctOn;
++    internal ExtremeRowClause? ExtremeRow;
++    internal TableSampleClause? TableSample;
++    internal TemporalClause? Temporal;
++    internal LockClause? RowLock;
++    internal LockClause? SourceLockClause;
++    internal double? SampleRatio;
++    internal double SampleOffset;
++    internal IReadOnlyList<KeyValuePair<string, string>>? Settings;
++    internal IReadOnlyList<WindowDefinition>? Windows;
++    internal ArrayJoinKind ArrayJoinKind;
++    internal GroupingType GroupingType;
++    internal IReadOnlyList<int[]>? GroupingSets;
++    internal ForJsonClause? ForJsonClause;
++    internal ForXmlClause? ForXmlClause;
++    internal IReadOnlyDictionary<ParameterExpression, string>? NavigationPaths;
++
++    internal ILogger? Logger;
++    internal string? Tag;
++    internal IReadOnlyList<string>? Hints;
++    internal IReadOnlyList<string>? TableHints;
++    internal IReadOnlyList<string>? IndexHints;
++    internal IndexHintKind IndexHintKind;
++    internal IReadOnlyList<string>? TablesInScopeHints;
++    internal bool? QuoteIdentifiers;
++    internal INamingConvention? NamingConvention;
++    internal KeywordCase? KeywordCase;
++    internal int? CommandTimeout;
++    internal EagerLoadMode? EagerLoadMode;
++    internal EagerLoadShape EagerLoadShape;
++    internal bool HasPerParentEagerTopN;
++    internal bool PerParentPaging;
++    internal LambdaExpression? PerParentPartition;
++    internal bool PerParentPagingEmbedded;
++    internal bool IgnoreColumns;
++    internal JunctionChildFilter? JunctionChildFilter;
++    internal InMemoryNavigationChain? NavigationChain;
++
++    /// <summary>Marks this description, including its in-place collections, as shared by more than one node.</summary>
+     internal void MarkShared()
+     {
+         Shared = true;
+-        Predicates.Shared = true;
+-        Relations.Shared = true;
+-        Clauses.Shared = true;
+-        Options.Shared = true;
++        SharedRelations = true;
+     }
+ 
+     /// <summary>
+-    /// Returns a description shell this command can mutate. The source shell and its blocks are marked
+-    /// shared, so the returned copy owns only the shell until it replaces a block.
++    /// Returns a description shell this command can mutate. The source shell is marked shared, so the
++    /// returned copy owns only the shell until it replaces a slot.
+     /// </summary>
+     internal QueryDescription CloneShellForWrite()
+     {
+@@ -305,56 +184,16 @@ public partial class QueryCommand
+         return description;
+     }
+ 
+-    private QueryPredicates WritePredicates()
+-    {
+-        var description = WriteDescription();
+-        var block = description.Predicates;
+-        if (block.Shared)
+-        {
+-            block = new QueryPredicates(block);
+-            description.Predicates = block;
+-        }
+-
+-        return block;
+-    }
+-
+-    private QueryRelations WriteRelations()
+-    {
+-        var description = WriteDescription();
+-        var block = description.Relations;
+-        if (block.Shared)
+-        {
+-            block = new QueryRelations(block);
+-            description.Relations = block;
+-        }
+-
+-        return block;
+-    }
+-
+-    private QueryClauses WriteClauses()
+-    {
+-        var description = WriteDescription();
+-        var block = description.Clauses;
+-        if (block.Shared)
+-        {
+-            block = new QueryClauses(block);
+-            description.Clauses = block;
+-        }
+-
+-        return block;
+-    }
+-
+-    private QueryOptions WriteOptions()
++    /// <summary>
++    /// Returns the command's mutable description before a relation write and drops the relation-collection
++    /// sharing condition, mirroring the former relation block: once a relation slot is written this node's
++    /// relation state owns its field slots, so a later append may reuse the collections.
++    /// </summary>
++    private QueryDescription WriteRelations()
+     {
+         var description = WriteDescription();
+-        var block = description.Options;
+-        if (block.Shared)
+-        {
+-            block = new QueryOptions(block);
+-            description.Options = block;
+-        }
+-
+-        return block;
++        description.SharedRelations = false;
++        return description;
+     }
+ 
+     private bool GetFlag(ulong flag) => _description is { } description && (description.Flags & flag) != 0;
+@@ -387,81 +226,81 @@ public partial class QueryCommand
+     /// <summary>The selective query-filter scope disabled for this command.</summary>
+     private QueryFilterScope _filterScope
+     {
+-        get => _description?.Predicates.FilterScope ?? QueryFilterScope.None;
++        get => _description?.FilterScope ?? QueryFilterScope.None;
+         set
+         {
+-            var current = _description?.Predicates.FilterScope ?? QueryFilterScope.None;
++            var current = _description?.FilterScope ?? QueryFilterScope.None;
+             if (ReferenceEquals(value, current) || value.Equals(current)) return;
+-            WritePredicates().FilterScope = value;
++            WriteDescription().FilterScope = value;
+         }
+     }
+ 
+     private JoinExpression[]? _joins
+     {
+-        get => _description?.Relations.Joins;
++        get => _description?.Joins;
+         set
+         {
+-            if (ReferenceEquals(value, _description?.Relations.Joins)) return;
++            if (ReferenceEquals(value, _description?.Joins)) return;
+             WriteRelations().Joins = value;
+         }
+     }
+ 
+     private IReadOnlyList<CteDefinition>? _ctes
+     {
+-        get => _description?.Relations.Ctes;
++        get => _description?.Ctes;
+         set
+         {
+-            if (ReferenceEquals(value, _description?.Relations.Ctes)) return;
++            if (ReferenceEquals(value, _description?.Ctes)) return;
+             WriteRelations().Ctes = value;
+         }
+     }
+ 
+     private IReadOnlyList<string>? _hints
+     {
+-        get => _description?.Options.Hints;
++        get => _description?.Hints;
+         set
+         {
+-            if (ReferenceEquals(value, _description?.Options.Hints)) return;
+-            WriteOptions().Hints = value;
++            if (ReferenceEquals(value, _description?.Hints)) return;
++            WriteDescription().Hints = value;
+         }
+     }
+ 
+     private List<QueryCommand>? _referencedQueries
+     {
+-        get => _description?.Relations.ReferencedQueries;
++        get => _description?.ReferencedQueries;
+         set
+         {
+-            if (ReferenceEquals(value, _description?.Relations.ReferencedQueries)) return;
++            if (ReferenceEquals(value, _description?.ReferencedQueries)) return;
+             WriteRelations().ReferencedQueries = value;
+         }
+     }
+ 
+     private List<Expression>? _outerRefs
+     {
+-        get => _description?.Relations.OuterRefs;
++        get => _description?.OuterRefs;
+         set
+         {
+-            if (ReferenceEquals(value, _description?.Relations.OuterRefs)) return;
++            if (ReferenceEquals(value, _description?.OuterRefs)) return;
+             WriteRelations().OuterRefs = value;
+         }
+     }
+ 
+     private QueryCommand? _union
+     {
+-        get => _description?.Relations.Union;
++        get => _description?.Union;
+         set
+         {
+-            if (ReferenceEquals(value, _description?.Relations.Union)) return;
++            if (ReferenceEquals(value, _description?.Union)) return;
+             WriteRelations().Union = value;
+         }
+     }
+ 
+     private UnionType _unionType
+     {
+-        get => _description?.Relations.UnionType ?? default;
++        get => _description?.UnionType ?? default;
+         set
+         {
+-            if (value == (_description?.Relations.UnionType ?? default)) return;
++            if (value == (_description?.UnionType ?? default)) return;
+             WriteRelations().UnionType = value;
+         }
+     }
+@@ -471,11 +310,11 @@ public partial class QueryCommand
+ 
+     private IReadOnlyList<WindowDefinition>? _windows
+     {
+-        get => _description?.Clauses.Windows;
++        get => _description?.Windows;
+         set
+         {
+-            if (ReferenceEquals(value, _description?.Clauses.Windows)) return;
+-            WriteClauses().Windows = value;
++            if (ReferenceEquals(value, _description?.Windows)) return;
++            WriteDescription().Windows = value;
+         }
+     }
+ 
+@@ -486,7 +325,7 @@ public partial class QueryCommand
+     {
+         // A null logger must overwrite an inherited one: baseline assigned the definition's logger
+         // unconditionally, so a derivation created without logging cannot keep the source's logger.
+-        if (ReferenceEquals(value, _description?.Options.Logger)) return;
+-        WriteOptions().Logger = value;
++        if (ReferenceEquals(value, _description?.Logger)) return;
++        WriteDescription().Logger = value;
+     }
+ }
+diff --git a/src/nextorm.core/Query/QueryCommand.EagerLoading.cs b/src/nextorm.core/Query/QueryCommand.EagerLoading.cs
+index ba04049e..0782d1ae 100644
+--- a/src/nextorm.core/Query/QueryCommand.EagerLoading.cs
++++ b/src/nextorm.core/Query/QueryCommand.EagerLoading.cs
+@@ -16,11 +16,11 @@ public partial class QueryCommand
+     /// </summary>
+     public EagerLoadMode? EagerLoadMode
+     {
+-        get => _description?.Options.EagerLoadMode;
++        get => _description?.EagerLoadMode;
+         internal set
+         {
+-            if (value == _description?.Options.EagerLoadMode) return;
+-            WriteOptions().EagerLoadMode = value;
++            if (value == _description?.EagerLoadMode) return;
++            WriteDescription().EagerLoadMode = value;
+         }
+     }
+ 
+@@ -49,11 +49,11 @@ public partial class QueryCommand
+     /// </summary>
+     internal EagerLoadShape EagerLoadShape
+     {
+-        get => _description?.Options.EagerLoadShape ?? default;
++        get => _description?.EagerLoadShape ?? default;
+         set
+         {
+-            if (value.Equals(_description?.Options.EagerLoadShape ?? default)) return;
+-            WriteOptions().EagerLoadShape = value;
++            if (value.Equals(_description?.EagerLoadShape ?? default)) return;
++            WriteDescription().EagerLoadShape = value;
+         }
+     }
+ 
+@@ -66,11 +66,11 @@ public partial class QueryCommand
+     /// </summary>
+     internal bool HasPerParentEagerTopN
+     {
+-        get => _description?.Options.HasPerParentEagerTopN ?? false;
++        get => _description?.HasPerParentEagerTopN ?? false;
+         set
+         {
+-            if (value == (_description?.Options.HasPerParentEagerTopN ?? false)) return;
+-            WriteOptions().HasPerParentEagerTopN = value;
++            if (value == (_description?.HasPerParentEagerTopN ?? false)) return;
++            WriteDescription().HasPerParentEagerTopN = value;
+         }
+     }
+ }
+diff --git a/src/nextorm.core/Query/QueryCommand.cs b/src/nextorm.core/Query/QueryCommand.cs
+index 9c1573d7..860e5308 100644
+--- a/src/nextorm.core/Query/QueryCommand.cs
++++ b/src/nextorm.core/Query/QueryCommand.cs
+@@ -201,22 +201,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+         }
+ 
+         // The cache clone (and any live clone that must own a private join/array-join array) builds an
+-        // owned description from the source's blocks.
++        // owned description from the source's flat raw slots.
+         var description = source._description?.CloneShellForWrite() ?? new QueryDescription();
+-        if (forCache)
+-        {
+-            description.Relations = new QueryRelations(description.Relations)
+-            {
+-                Joins = CloneForCache(description.Relations.Joins),
+-            };
+-        }
+-        else
+-        {
+-            description.Relations = new QueryRelations(description.Relations)
+-            {
+-                Joins = CloneJoinArray(description.Relations.Joins),
+-            };
+-        }
++        description.Joins = forCache
++            ? CloneForCache(description.Joins)
++            : CloneJoinArray(description.Joins);
+ 
+         _description = description;
+     }
+@@ -385,11 +374,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal IReadOnlyDictionary<ParameterExpression, string>? NavigationPaths
+ {
+-    get => _description?.Clauses.NavigationPaths;
++    get => _description?.NavigationPaths;
+     set
+     {
+-        if (ReferenceEquals(value, _description?.Clauses.NavigationPaths)) return;
+-        WriteClauses().NavigationPaths = value;
++        if (ReferenceEquals(value, _description?.NavigationPaths)) return;
++        WriteDescription().NavigationPaths = value;
+     }
+ }
+ 
+@@ -402,11 +391,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal JunctionChildFilter? JunctionChildFilter
+ {
+-    get => _description?.Options.JunctionChildFilter;
++    get => _description?.JunctionChildFilter;
+     set
+     {
+-        if (ReferenceEquals(value, _description?.Options.JunctionChildFilter)) return;
+-        WriteOptions().JunctionChildFilter = value;
++        if (ReferenceEquals(value, _description?.JunctionChildFilter)) return;
++        WriteDescription().JunctionChildFilter = value;
+     }
+ }
+ 
+@@ -418,11 +407,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal InMemoryNavigationChain? NavigationChain
+ {
+-    get => _description?.Options.NavigationChain;
++    get => _description?.NavigationChain;
+     set
+     {
+-        if (ReferenceEquals(value, _description?.Options.NavigationChain)) return;
+-        WriteOptions().NavigationChain = value;
++        if (ReferenceEquals(value, _description?.NavigationChain)) return;
++        WriteDescription().NavigationChain = value;
+     }
+ }
+ 
+@@ -462,7 +451,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     }
+ 
+     /// <summary>The logger that receives command-preparation diagnostics, or <c>null</c> when logging is disabled.</summary>
+-    public ILogger? Logger { get => _description?.Options.Logger; }
++    public ILogger? Logger { get => _description?.Logger; }
+     /// <summary>The prepared <c>FROM</c> source, or <c>null</c> before preparation.</summary>
+     public FromExpression? From { get => _from; set => _from = value; }
+     /// <summary>The prepared projection columns, or <c>null</c> before preparation.</summary>
+@@ -614,11 +603,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal LimitByClause? LimitBy
+ {
+-    get => _description?.Clauses.LimitBy;
++    get => _description?.LimitBy;
+     set
+     {
+-        if (ReferenceEquals(value, _description?.Clauses.LimitBy)) return;
+-        WriteClauses().LimitBy = value;
++        if (ReferenceEquals(value, _description?.LimitBy)) return;
++        WriteDescription().LimitBy = value;
+     }
+ }
+     /// <summary>The prepared key columns of <see cref="LimitBy"/>, or <c>null</c> when there is none.</summary>
+@@ -629,11 +618,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal DistinctOnClause? DistinctOn
+ {
+-    get => _description?.Clauses.DistinctOn;
++    get => _description?.DistinctOn;
+     set
+     {
+-        if (ReferenceEquals(value, _description?.Clauses.DistinctOn)) return;
+-        WriteClauses().DistinctOn = value;
++        if (ReferenceEquals(value, _description?.DistinctOn)) return;
++        WriteDescription().DistinctOn = value;
+     }
+ }
+     /// <summary>The prepared key columns of <see cref="DistinctOn"/>, or <c>null</c> when there is none.</summary>
+@@ -644,11 +633,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal ExtremeRowClause? ExtremeRow
+ {
+-    get => _description?.Clauses.ExtremeRow;
++    get => _description?.ExtremeRow;
+     set
+     {
+-        if (ReferenceEquals(value, _description?.Clauses.ExtremeRow)) return;
+-        WriteClauses().ExtremeRow = value;
++        if (ReferenceEquals(value, _description?.ExtremeRow)) return;
++        WriteDescription().ExtremeRow = value;
+     }
+ }
+     /// <summary>The prepared value-selector columns of <see cref="ExtremeRow"/>, or <c>null</c> when there is none.</summary>
+@@ -664,11 +653,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal bool PerParentPaging
+ {
+-    get => _description?.Options.PerParentPaging ?? false;
++    get => _description?.PerParentPaging ?? false;
+     set
+     {
+-        if (value == (_description?.Options.PerParentPaging ?? false)) return;
+-        WriteOptions().PerParentPaging = value;
++        if (value == (_description?.PerParentPaging ?? false)) return;
++        WriteDescription().PerParentPaging = value;
+     }
+ }
+     /// <summary>
+@@ -678,11 +667,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal LambdaExpression? PerParentPartition
+ {
+-    get => _description?.Options.PerParentPartition;
++    get => _description?.PerParentPartition;
+     set
+     {
+-        if (ReferenceEquals(value, _description?.Options.PerParentPartition)) return;
+-        WriteOptions().PerParentPartition = value;
++        if (ReferenceEquals(value, _description?.PerParentPartition)) return;
++        WriteDescription().PerParentPartition = value;
+     }
+ }
+     /// <summary>The prepared partition columns of <see cref="PerParentPaging"/>, or <c>null</c> when absent.</summary>
+@@ -696,11 +685,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal bool PerParentPagingEmbedded
+ {
+-    get => _description?.Options.PerParentPagingEmbedded ?? false;
++    get => _description?.PerParentPagingEmbedded ?? false;
+     set
+     {
+-        if (value == (_description?.Options.PerParentPagingEmbedded ?? false)) return;
+-        WriteOptions().PerParentPagingEmbedded = value;
++        if (value == (_description?.PerParentPagingEmbedded ?? false)) return;
++        WriteDescription().PerParentPagingEmbedded = value;
+     }
+ }
+     /// <summary>
+@@ -709,11 +698,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal TableSampleClause? TableSample
+ {
+-    get => _description?.Clauses.TableSample;
++    get => _description?.TableSample;
+     set
+     {
+-        if (ReferenceEquals(value, _description?.Clauses.TableSample)) return;
+-        WriteClauses().TableSample = value;
++        if (ReferenceEquals(value, _description?.TableSample)) return;
++        WriteDescription().TableSample = value;
+     }
+ }
+     /// <summary>
+@@ -722,11 +711,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal TemporalClause? Temporal
+ {
+-    get => _description?.Clauses.Temporal;
++    get => _description?.Temporal;
+     set
+     {
+-        if (ReferenceEquals(value, _description?.Clauses.Temporal)) return;
+-        WriteClauses().Temporal = value;
++        if (ReferenceEquals(value, _description?.Temporal)) return;
++        WriteDescription().Temporal = value;
+     }
+ }
+     /// <summary>
+@@ -735,11 +724,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal LockClause? RowLock
+ {
+-    get => _description?.Clauses.RowLock;
++    get => _description?.RowLock;
+     set
+     {
+-        if (ReferenceEquals(value, _description?.Clauses.RowLock)) return;
+-        WriteClauses().RowLock = value;
++        if (ReferenceEquals(value, _description?.RowLock)) return;
++        WriteDescription().RowLock = value;
+     }
+ }
+     /// <summary>
+@@ -749,11 +738,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal LockClause? SourceLockClause
+ {
+-    get => _description?.Clauses.SourceLockClause;
++    get => _description?.SourceLockClause;
+     set
+     {
+-        if (ReferenceEquals(value, _description?.Clauses.SourceLockClause)) return;
+-        WriteClauses().SourceLockClause = value;
++        if (ReferenceEquals(value, _description?.SourceLockClause)) return;
++        WriteDescription().SourceLockClause = value;
+     }
+ }
+     /// <summary>Whether the query carries the ClickHouse <c>FINAL</c> modifier.</summary>
+@@ -765,31 +754,31 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// <summary>The ClickHouse <c>SAMPLE</c> ratio (a value in <c>[0, 1]</c>), or <c>null</c> when absent.</summary>
+     public double? SampleRatio
+ {
+-    get => _description?.Clauses.SampleRatio;
++    get => _description?.SampleRatio;
+     internal set
+     {
+-        if (value == _description?.Clauses.SampleRatio) return;
+-        WriteClauses().SampleRatio = value;
++        if (value == _description?.SampleRatio) return;
++        WriteDescription().SampleRatio = value;
+     }
+ }
+     /// <summary>The ClickHouse <c>SAMPLE ... OFFSET</c> value; zero when absent.</summary>
+     public double SampleOffset
+ {
+-    get => _description?.Clauses.SampleOffset ?? 0d;
++    get => _description?.SampleOffset ?? 0d;
+     internal set
+     {
+-        if (value == (_description?.Clauses.SampleOffset ?? 0d)) return;
+-        WriteClauses().SampleOffset = value;
++        if (value == (_description?.SampleOffset ?? 0d)) return;
++        WriteDescription().SampleOffset = value;
+     }
+ }
+     /// <summary>The trailing ClickHouse <c>SETTINGS</c> entries, or <c>null</c> when there are none.</summary>
+     public IReadOnlyList<KeyValuePair<string, string>>? Settings
+ {
+-    get => _description?.Clauses.Settings;
++    get => _description?.Settings;
+     internal set
+     {
+-        if (ReferenceEquals(value, _description?.Clauses.Settings)) return;
+-        WriteClauses().Settings = value;
++        if (ReferenceEquals(value, _description?.Settings)) return;
++        WriteDescription().Settings = value;
+     }
+ }
+     /// <summary>The ClickHouse <c>PREWHERE</c> predicate, or <c>null</c> when there is none.</summary>
+@@ -809,11 +798,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// <summary>The <c>ARRAY JOIN</c> kind (plain or <c>LEFT</c>) shared by <see cref="ArrayJoinExpressions"/>.</summary>
+     public ArrayJoinKind ArrayJoinKind
+ {
+-    get => _description?.Clauses.ArrayJoinKind ?? default;
++    get => _description?.ArrayJoinKind ?? default;
+     internal set
+     {
+-        if (value == (_description?.Clauses.ArrayJoinKind ?? default)) return;
+-        WriteClauses().ArrayJoinKind = value;
++        if (value == (_description?.ArrayJoinKind ?? default)) return;
++        WriteDescription().ArrayJoinKind = value;
+     }
+ }
+     /// <summary>
+@@ -827,11 +816,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+ }
+     internal bool IgnoreColumns
+ {
+-    get => _description?.Options.IgnoreColumns ?? false;
++    get => _description?.IgnoreColumns ?? false;
+     set
+     {
+-        if (value == (_description?.Options.IgnoreColumns ?? false)) return;
+-        WriteOptions().IgnoreColumns = value;
++        if (value == (_description?.IgnoreColumns ?? false)) return;
++        WriteDescription().IgnoreColumns = value;
+     }
+ }
+     /// <summary>The commands referenced by correlated subqueries in this command's expressions, in registration order; empty until preparation registers one.</summary>
+@@ -1082,11 +1071,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     public string? Tag
+ {
+-    get => _description?.Options.Tag;
++    get => _description?.Tag;
+     internal set
+     {
+-        if (ReferenceEquals(value, _description?.Options.Tag)) return;
+-        WriteOptions().Tag = value;
++        if (ReferenceEquals(value, _description?.Tag)) return;
++        WriteDescription().Tag = value;
+     }
+ }
+     /// <summary>
+@@ -1096,11 +1085,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     public IReadOnlyList<string>? TableHints
+ {
+-    get => _description?.Options.TableHints;
++    get => _description?.TableHints;
+     internal set
+     {
+-        if (ReferenceEquals(value, _description?.Options.TableHints)) return;
+-        WriteOptions().TableHints = value;
++        if (ReferenceEquals(value, _description?.TableHints)) return;
++        WriteDescription().TableHints = value;
+     }
+ }
+     /// <summary>
+@@ -1111,21 +1100,21 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     public IReadOnlyList<string>? IndexHints
+ {
+-    get => _description?.Options.IndexHints;
++    get => _description?.IndexHints;
+     internal set
+     {
+-        if (ReferenceEquals(value, _description?.Options.IndexHints)) return;
+-        WriteOptions().IndexHints = value;
++        if (ReferenceEquals(value, _description?.IndexHints)) return;
++        WriteDescription().IndexHints = value;
+     }
+ }
+     /// <summary>The intent of <see cref="IndexHints"/> (<c>USE</c>, <c>FORCE</c> or <c>IGNORE</c>).</summary>
+     public IndexHintKind IndexHintKind
+ {
+-    get => _description?.Options.IndexHintKind ?? default;
++    get => _description?.IndexHintKind ?? default;
+     internal set
+     {
+-        if (value == (_description?.Options.IndexHintKind ?? default)) return;
+-        WriteOptions().IndexHintKind = value;
++        if (value == (_description?.IndexHintKind ?? default)) return;
++        WriteDescription().IndexHintKind = value;
+     }
+ }
+     /// <summary>
+@@ -1137,11 +1126,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     public IReadOnlyList<string>? TablesInScopeHints
+ {
+-    get => _description?.Options.TablesInScopeHints;
++    get => _description?.TablesInScopeHints;
+     internal set
+     {
+-        if (ReferenceEquals(value, _description?.Options.TablesInScopeHints)) return;
+-        WriteOptions().TablesInScopeHints = value;
++        if (ReferenceEquals(value, _description?.TablesInScopeHints)) return;
++        WriteDescription().TablesInScopeHints = value;
+     }
+ }
+     /// <summary>
+@@ -1152,11 +1141,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     public bool? QuoteIdentifiers
+ {
+-    get => _description?.Options.QuoteIdentifiers;
++    get => _description?.QuoteIdentifiers;
+     internal set
+     {
+-        if (value == _description?.Options.QuoteIdentifiers) return;
+-        WriteOptions().QuoteIdentifiers = value;
++        if (value == _description?.QuoteIdentifiers) return;
++        WriteDescription().QuoteIdentifiers = value;
+     }
+ }
+     /// <summary>
+@@ -1180,11 +1169,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     public INamingConvention? NamingConvention
+ {
+-    get => _description?.Options.NamingConvention;
++    get => _description?.NamingConvention;
+     internal set
+     {
+-        if (ReferenceEquals(value, _description?.Options.NamingConvention)) return;
+-        WriteOptions().NamingConvention = value;
++        if (ReferenceEquals(value, _description?.NamingConvention)) return;
++        WriteDescription().NamingConvention = value;
+     }
+ }
+     /// <summary>
+@@ -1208,11 +1197,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     public KeywordCase? KeywordCase
+ {
+-    get => _description?.Options.KeywordCase;
++    get => _description?.KeywordCase;
+     internal set
+     {
+-        if (value == _description?.Options.KeywordCase) return;
+-        WriteOptions().KeywordCase = value;
++        if (value == _description?.KeywordCase) return;
++        WriteDescription().KeywordCase = value;
+     }
+ }
+     /// <summary>
+@@ -1236,11 +1225,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     public int? CommandTimeout
+ {
+-    get => _description?.Options.CommandTimeout;
++    get => _description?.CommandTimeout;
+     internal set
+     {
+-        if (value == _description?.Options.CommandTimeout) return;
+-        WriteOptions().CommandTimeout = value;
++        if (value == _description?.CommandTimeout) return;
++        WriteDescription().CommandTimeout = value;
+     }
+ }
+     /// <summary>
+@@ -1264,11 +1253,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     public ForJsonClause? ForJsonClause
+ {
+-    get => _description?.Clauses.ForJsonClause;
++    get => _description?.ForJsonClause;
+     internal set
+     {
+-        if (value == _description?.Clauses.ForJsonClause) return;
+-        WriteClauses().ForJsonClause = value;
++        if (value == _description?.ForJsonClause) return;
++        WriteDescription().ForJsonClause = value;
+     }
+ }
+     /// <summary>
+@@ -1277,11 +1266,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     public ForXmlClause? ForXmlClause
+ {
+-    get => _description?.Clauses.ForXmlClause;
++    get => _description?.ForXmlClause;
+     internal set
+     {
+-        if (value == _description?.Clauses.ForXmlClause) return;
+-        WriteClauses().ForXmlClause = value;
++        if (value == _description?.ForXmlClause) return;
++        WriteDescription().ForXmlClause = value;
+     }
+ }
+     /// <summary>The <c>GROUP BY</c> key selector, or <c>null</c> when the query has no grouping.</summary>
+@@ -1293,11 +1282,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     public GroupingType GroupingType
+ {
+-    get => _description?.Clauses.GroupingType ?? default;
++    get => _description?.GroupingType ?? default;
+     internal set
+     {
+-        if (value == (_description?.Clauses.GroupingType ?? default)) return;
+-        WriteClauses().GroupingType = value;
++        if (value == (_description?.GroupingType ?? default)) return;
++        WriteDescription().GroupingType = value;
+     }
+ }
+     /// <summary>
+@@ -1307,11 +1296,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     public IReadOnlyList<int[]>? GroupingSets
+ {
+-    get => _description?.Clauses.GroupingSets;
++    get => _description?.GroupingSets;
+     internal set
+     {
+-        if (ReferenceEquals(value, _description?.Clauses.GroupingSets)) return;
+-        WriteClauses().GroupingSets = value;
++        if (ReferenceEquals(value, _description?.GroupingSets)) return;
++        WriteDescription().GroupingSets = value;
+     }
+ }
+     /// <summary>The <c>HAVING</c> predicate lambda, or <c>null</c> when there is none.</summary>
+@@ -1331,10 +1320,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// </summary>
+     internal IQueryRegistry? OuterRegistry
+ {
+-    get => _description?.Relations.OuterRegistry;
++    get => _description?.OuterRegistry;
+     set
+     {
+-        if (ReferenceEquals(value, _description?.Relations.OuterRegistry)) return;
++        if (ReferenceEquals(value, _description?.OuterRegistry)) return;
+         WriteRelations().OuterRegistry = value;
+     }
+ }
+@@ -1400,7 +1389,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+ #endif
+ 
+         var referenced = _referencedQueries ?? throw new InvalidOperationException("Referenced queries must be initialized");
+-        if (_description!.Relations.Shared)
++        if (_description!.SharedRelations)
+         {
+             referenced = [.. referenced];
+             WriteRelations().ReferencedQueries = referenced;
+@@ -1429,7 +1418,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+ #endif
+ 
+         var referenced = _referencedQueries;
+-        if (referenced is null || _description!.Relations.Shared)
++        if (referenced is null || _description!.SharedRelations)
+         {
+             referenced = referenced is null ? [] : [.. referenced];
+             WriteRelations().ReferencedQueries = referenced;
+@@ -1480,7 +1469,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+         if (OuterRegistry is { } owner) return owner.AddOuterReference(node);
+ 
+         var outerRefs = _outerRefs;
+-        if (outerRefs is null || _description!.Relations.Shared)
++        if (outerRefs is null || _description!.SharedRelations)
+         {
+             outerRefs = outerRefs is null ? [] : [.. outerRefs];
+             WriteRelations().OuterRefs = outerRefs;

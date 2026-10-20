@@ -16,3 +16,7 @@
   href: 07-json-and-xml.md
 - name: Provider reference
   href: 08-reference.md
+- name: System functions
+  href: 09-system-functions.md
+- name: Sequences and UUID generators
+  href: 10-sequences.md

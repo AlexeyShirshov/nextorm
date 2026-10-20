@@ -397,6 +397,12 @@ public class ClickHouseDialect : SqlDialectBase
     public override string WrapCount(string countExpression, bool big) =>
         big ? $"toInt64({countExpression})" : $"toInt32({countExpression})";
 
+    // ClickHouse's ranking window functions (row_number/rank/dense_rank/ntile) return UInt64, which the
+    // row reader cannot materialise into the int the function declares (WindowFunction<int>), so the
+    // rendered window is narrowed to Int32 (the many-to-many JoinInto link occurrence reads it as int).
+    /// <summary>Casts a ranking window-function expression to <c>Int32</c> so it maps to the declared <see cref="int"/>.</summary>
+    public override string WrapIntegerWindowResult(string windowExpression) => $"toInt32({windowExpression})";
+
     /// <summary>ClickHouse implements the <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c> aggregates.</summary>
     public override ISequenceAggregateRenderer SequenceAggregates => ClickHouseSequenceAggregateRenderer.Instance;
 
@@ -456,13 +462,13 @@ public class ClickHouseDialect : SqlDialectBase
     public override string WrapTableFunction(string name, string call)
     {
         if (name is "numbers" or "numbers_mt")
-            return $"(select toInt64(number) as number from {call})";
+            return $"(select toInt64(number) as number\n from {call})";
 
         if (name == "generateRandom")
         {
             var inner = call["generateRandom(".Length..^1];
             var args = inner.Length == 0 ? GenerateRandomStructure : $"{GenerateRandomStructure}, {inner}";
-            return $"(select toInt64(id) as id, value, name from generateRandom({args}))";
+            return $"(select toInt64(id) as id, value, name\n from generateRandom({args}))";
         }
 
         return call;
@@ -706,6 +712,50 @@ public class ClickHouseDialect : SqlDialectBase
         return $"{function}({value}, {scaled})";
     }
 
+    /// <summary>ClickHouse stores a <see cref="System.DateTimeOffset"/> as a UTC-normalized <c>DateTime64</c>, so DTO operations are supported.</summary>
+    public override bool SupportsDateTimeOffsetTranslation => true;
+
+    /// <summary>
+    /// Renders the UTC server clock at microsecond precision. ClickHouse <c>DateTime64</c> does not
+    /// preserve an offset, so a materialized <see cref="System.DateTimeOffset"/> canonicalises to +00:00.
+    /// </summary>
+    public override string MakeDateTimeOffsetNow(bool utc) => "now64(6, 'UTC')";
+
+    /// <summary>
+    /// DTO date parts are taken from an explicit UTC-normalized value so the result does not depend on
+    /// the column's declared time zone, then rendered through the native <c>toXxx</c> accessors.
+    /// </summary>
+    public override string MakeDatePart(string part, string value, bool isDateTimeOffset) =>
+        isDateTimeOffset ? MakeDatePart(part, $"toTimeZone({value}, 'UTC')") : MakeDatePart(part, value);
+
+    /// <summary>
+    /// DTO date addition runs on an explicit UTC-normalized <c>DateTime64</c> value. ClickHouse
+    /// <c>addXxx</c> truncates a fractional interval to whole units, so a coarse-unit DTO amount is
+    /// scaled to <c>addMicroseconds</c> (the finest <c>addXxx</c> matching the documented
+    /// <c>DateTime64(6)</c> precision), keeping a significant fraction instead of collapsing it to a
+    /// no-op. Integer amounts stay correct through the same scaling.
+    /// </summary>
+    public override string MakeDateAdd(string field, string amount, string value, bool isDateTimeOffset)
+    {
+        if (!isDateTimeOffset)
+            return MakeDateAdd(field, amount, value);
+
+        var normalized = $"toTimeZone({value}, 'UTC')";
+        var factor = field switch
+        {
+            "day" => 86_400_000_000L,
+            "hour" => 3_600_000_000L,
+            "minute" => 60_000_000L,
+            "second" => 1_000_000L,
+            "milliseconds" => 1_000L,
+            _ => 0L
+        };
+
+        return factor == 0
+            ? MakeDateAdd(field, amount, normalized)
+            : $"addMicroseconds({normalized}, ({amount}) * {factor})";
+    }
+
     /// <summary>ClickHouse computes date differences through <c>dateDiff(unit, start, end)</c>.</summary>
     public override string MakeDateDiff(string field, string start, string end)
     {
@@ -800,13 +850,18 @@ internal sealed class ClickHouseSessionInfoFunctions : ISessionInfoFunctions
 {
     public static readonly ClickHouseSessionInfoFunctions Instance = new();
 
-    public bool Supports(string name) => name is "current_user" or "current_database" or "version";
+    public bool Supports(string name) =>
+        name is "current_user" or "current_database" or "version"
+            or "connection_id" or "clickhouse.host_name" or "clickhouse.tcp_port";
 
     public string Render(string name) => name switch
     {
         "current_user" => "currentUser()",
         "current_database" => "currentDatabase()",
         "version" => "version()",
+        "connection_id" => "CAST(connectionId() AS UInt64)",
+        "clickhouse.host_name" => "hostName()",
+        "clickhouse.tcp_port" => "CAST(tcpPort() AS Int32)",
         _ => throw new NotSupportedException($"The {name} session information function is not supported by ClickHouse.")
     };
 }

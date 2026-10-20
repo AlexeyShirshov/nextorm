@@ -1,0 +1,302 @@
+{
+ "events": [
+  {
+   "artifact_revision": "1b140d23cd12ecc19af4bfbad3563b6e8281aa63",
+   "at": "2026-10-18T03:02:11Z",
+   "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    ".pdca/scripts/perf/tests",
+    "-p",
+    "test_t247_json_gate.py"
+   ],
+   "event": "start",
+   "id": "d1-driver-tests",
+   "kind": "other",
+   "phase": "inner",
+   "source_revision": "1b140d23cd12ecc19af4bfbad3563b6e8281aa63"
+  },
+  {
+   "at": "2026-10-18T03:02:12Z",
+   "event": "finish",
+   "exit_code": 0,
+   "id": "d1-driver-tests",
+   "log": ".pdca/T247/rv2/logs/t247_driver_tests.log",
+   "selected_count": 30,
+   "state": "finished"
+  },
+  {
+   "artifact_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+   "at": "2026-10-18T05:45:24Z",
+   "command": [
+    "python3",
+    ".pdca/scripts/perf/t247_json_gate.py",
+    "baseline",
+    "--rounds",
+    "2",
+    "--evidence-root",
+    ".pdca/T247/rv2"
+   ],
+   "event": "start",
+   "id": "d1-baseline-rv2",
+   "kind": "other",
+   "phase": "boundary",
+   "source_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6"
+  },
+  {
+   "at": "2026-10-18T07:29:28Z",
+   "event": "finish",
+   "exit_code": 0,
+   "id": "d1-baseline-rv2",
+   "log": ".pdca/T247/rv2/logs/baseline-driver.log",
+   "selected_count": 146,
+   "state": "finished"
+  },
+  {
+   "artifact_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+   "at": "2026-10-18T07:29:41Z",
+   "command": [
+    "python3",
+    ".pdca/scripts/perf/t247_json_gate.py",
+    "phase",
+    "--rounds",
+    "2",
+    "--evidence-root",
+    ".pdca/T247/rv2"
+   ],
+   "event": "start",
+   "id": "d1-phase-rv2",
+   "kind": "other",
+   "phase": "boundary",
+   "source_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6"
+  },
+  {
+   "at": "2026-10-18T08:58:48Z",
+   "event": "finish",
+   "exit_code": 0,
+   "id": "d1-phase-rv2",
+   "log": ".pdca/T247/rv2/logs/phase-driver.log",
+   "selected_count": 128,
+   "state": "finished"
+  },
+  {
+   "id": "d1-phases-rv2",
+   "event": "start",
+   "phase": "boundary",
+   "kind": "other",
+   "command": [
+    "python3",
+    ".pdca/scripts/perf/t247_json_gate.py",
+    "phases",
+    "--evidence-root",
+    ".pdca/T247/rv2"
+   ],
+   "source_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+   "artifact_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+   "at": "2026-10-18T08:58:49Z"
+  },
+  {
+   "id": "d1-phases-rv2",
+   "event": "finish",
+   "state": "finished",
+   "exit_code": 0,
+   "selected_count": 2,
+   "at": "2026-10-18T08:58:53Z",
+   "log": ".pdca/T247/rv2/logs/phases.log"
+  },
+  {
+   "id": "d1-driver-tests-c99cc512",
+   "event": "start",
+   "phase": "inner",
+   "kind": "other",
+   "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    ".pdca/scripts/perf/tests",
+    "-p",
+    "test_t247_json_gate.py"
+   ],
+   "source_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+   "artifact_revision": "c99cc512450006f7d96cadc6fffde78ce9fe5ad6",
+   "at": "2026-10-18T08:59:07Z"
+  },
+  {
+   "id": "d1-driver-tests-c99cc512",
+   "event": "finish",
+   "state": "finished",
+   "exit_code": 0,
+   "selected_count": 33,
+   "at": "2026-10-18T08:59:09Z",
+   "log": ".pdca/T247/rv2/logs/t247_driver_tests_recheck.log"
+  },
+  {
+   "id": "d2-build-sln",
+   "event": "start",
+   "phase": "boundary",
+   "kind": "build",
+   "command": [
+    "dotnet",
+    "build",
+    "nextorm.slnx",
+    "-c",
+    "Debug"
+   ],
+   "source_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
+   "artifact_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
+   "at": "2026-10-18T09:08:32Z",
+   "note": "full solution build gate on the D247-02 tree (boundary build, not an inner-loop run): 0 warnings / 0 errors"
+  },
+  {
+   "id": "d2-build-sln",
+   "event": "finish",
+   "state": "finished",
+   "exit_code": 0,
+   "selected_count": 1,
+   "at": "2026-10-18T09:08:32Z",
+   "log": ".pdca/T247/rv2/logs/build-after-cache.log",
+   "note": "full solution build gate on the D247-02 tree (boundary build, not an inner-loop run): 0 warnings / 0 errors",
+   "phase": "boundary"
+  },
+  {
+   "id": "d2-core-tests-build",
+   "event": "start",
+   "phase": "inner",
+   "kind": "build",
+   "command": [
+    "dotnet",
+    "build",
+    "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+    "-c",
+    "Debug"
+   ],
+   "source_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
+   "artifact_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
+   "at": "2026-10-18T09:07:55Z",
+   "note": "affected test-project build before the first filtered run"
+  },
+  {
+   "id": "d2-core-tests-build",
+   "event": "finish",
+   "state": "finished",
+   "exit_code": 0,
+   "selected_count": 1,
+   "at": "2026-10-18T09:07:55Z",
+   "log": ".pdca/T247/rv2/logs/build-core-tests.log",
+   "note": "affected test-project build before the first filtered run"
+  },
+  {
+   "id": "d2-core-json-tests",
+   "event": "start",
+   "phase": "inner",
+   "kind": "unit",
+   "command": [
+    "dotnet",
+    "test",
+    "tests/nextorm.core.tests",
+    "-c",
+    "Debug",
+    "--no-build",
+    "--filter",
+    "FullyQualifiedName~Json"
+   ],
+   "source_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
+   "artifact_revision": "9247ccd386db5b9d9fb4f5b9ed3e0eb9c8587da7",
+   "at": "2026-10-18T09:07:57Z",
+   "note": "focused JSON subset: 175 selected/passed, 0 failed (8 new cache tests included)"
+  },
+  {
+   "id": "d2-core-json-tests",
+   "event": "finish",
+   "state": "finished",
+   "exit_code": 0,
+   "selected_count": 175,
+   "at": "2026-10-18T09:07:57Z",
+   "log": ".pdca/T247/rv2/logs/test-core-json.log",
+   "note": "focused JSON subset: 175 selected/passed, 0 failed (8 new cache tests included)"
+  },
+  {
+   "artifact_revision": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+   "at": "2026-10-18T09:13:20Z",
+   "command": [
+    "python3",
+    ".pdca/scripts/perf/t247_measure.py",
+    "final",
+    "--rounds",
+    "2",
+    "--evidence-root",
+    ".pdca/T247/rv2"
+   ],
+   "event": "start",
+   "id": "d4-final-rv2",
+   "kind": "other",
+   "phase": "boundary",
+   "source_revision": "c9aa86906c900130f5ec21bb80d63439aff4e35f"
+  },
+  {
+   "at": "2026-10-18T10:37:46Z",
+   "event": "finish",
+   "exit_code": 0,
+   "id": "d4-final-rv2",
+   "log": ".pdca/T247/rv2/logs/final-driver.log",
+   "selected_count": 146,
+   "state": "finished"
+  },
+  {
+   "artifact_revision": "c9aa86906c900130f5ec21bb80d63439aff4e35f",
+   "at": "2026-10-18T10:39:00Z",
+   "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    ".pdca/scripts/perf/tests",
+    "-p",
+    "test_t247_json_gate.py"
+   ],
+   "event": "start",
+   "id": "d4-driver-tests-final-compare",
+   "kind": "other",
+   "phase": "inner",
+   "source_revision": "c9aa86906c900130f5ec21bb80d63439aff4e35f"
+  },
+  {
+   "at": "2026-10-18T10:39:02Z",
+   "event": "finish",
+   "exit_code": 0,
+   "id": "d4-driver-tests-final-compare",
+   "log": ".pdca/T247/rv2/logs/t247_driver_tests-final-compare.log",
+   "selected_count": 34,
+   "state": "finished"
+  }
+ ],
+ "scope": {
+  "projects": [
+   "tests/nextorm.core.tests"
+  ],
+  "selectors": [
+   "FullyQualifiedName~Json"
+  ],
+  "files": [
+   "src/nextorm.core/Query/Json/JsonRowWriterCache.cs",
+   "src/nextorm.core/Query/Json/JsonRowWriterFactory.cs",
+   "src/nextorm.core/DataContext/DataContext.cs",
+   "src/nextorm.core/DataContext/DataContextCache.cs",
+   "tests/nextorm.core.tests/Json/JsonRowWriterCacheTests.cs"
+  ],
+  "rebuild": "affected",
+  "boundary": "dotnet test tests/nextorm.core.tests -c Debug --filter \"FullyQualifiedName~Json\"",
+  "rationale": "D247-02 is the production cache unit: a new internal JsonRowWriterCache + semantic key, the internal ResolveMemberName sharing, the context-owned cache wiring in DataContext and the process-wide invalidation generation in DataContextCache, plus one focused unit test file. Compiled inputs change, so rebuild is \"affected\"; the inner loop is the affected nextorm.core.tests JSON subset (one project build, then --no-build filtered runs) and the full boundary sweep belongs to the DO->CHECK flow boundary, not this unit.",
+  "integration_projects": [
+   "tests/nextorm.integration.tests"
+  ],
+  "integration_boundary_runs": 1
+ },
+ "unit": "D247-02"
+}

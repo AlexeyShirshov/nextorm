@@ -34,6 +34,19 @@ namespace NextORM.Core;
     public class ClickHouseFunctions : CommonFunctions
     {
         /// <summary>
+        /// The host name of the server that answered the query (<c>hostName()</c>). Use <see cref="tcp_port"/>
+        /// for the listening port. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SessionInfoFunctions"/>; ClickHouse).
+        /// </summary>
+        public string host_name() => default!;
+
+        /// <summary>
+        /// The TCP port the server is listening on (<c>CAST(tcpPort() AS Int32)</c>). Requires a provider
+        /// that supports it (see <see cref="ISqlDialect.SessionInfoFunctions"/>; ClickHouse).
+        /// </summary>
+        public int tcp_port() => default!;
+
+        /// <summary>
         /// <c>argMin(value, by)</c>: the <paramref name="value"/> of the row where <paramref name="by"/>
         /// is the smallest. Requires a provider that supports it (see
         /// <see cref="ISqlDialect.SupportsArgMinMax"/>; ClickHouse).

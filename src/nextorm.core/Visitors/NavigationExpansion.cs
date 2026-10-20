@@ -130,14 +130,17 @@ internal static class NavigationExpansion
     }
 
     /// <summary>
-    /// Injects the dialect's query-local outer-join null settings for a reference-navigation query
-    /// (#148-B A4/D1-Q3). Only the joined command is touched (a fresh list, never the builder's or a
-    /// sibling's), the injection is idempotent and an explicit user setting that conflicts with a
+    /// Injects the dialect's query-local outer-join null settings for a query that needs real SQL nulls
+    /// on the unmatched side of an outer join (#148-B A4/D1-Q3). Required by a reference-navigation
+    /// query (a rewritten implicit navigation) and by a denormalized pair command (<c>JoinInto</c> or a
+    /// single-query <c>LoadWith</c>) whose joins are outer, where the stitcher detects an absent
+    /// link/child from a SQL null. Only the joined command is touched (a fresh list, never the builder's
+    /// or a sibling's), the injection is idempotent and an explicit user setting that conflicts with a
     /// required value is rejected before execution.
     /// </summary>
     internal static void ApplyProviderOuterJoinNullSettings(QueryCommand cmd)
     {
-        if (cmd.NavigationPaths is not { Count: > 0 })
+        if (cmd.NavigationPaths is not { Count: > 0 } && !cmd.NeedsOuterJoinNullSettings)
             return;
 
         var required = (cmd.DataContext as DataContext)?.Dialect.OuterJoinNullSettings;
@@ -155,7 +158,8 @@ internal static class NavigationExpansion
                 if (!string.Equals(existing.Value, requirement.Value, StringComparison.OrdinalIgnoreCase))
                     throw new QueryPreparationException(
                         $"The query sets the provider setting '{requirement.Key} = {existing.Value}', which conflicts with " +
-                        $"'{requirement.Key} = {requirement.Value}' required by an implicit reference navigation. Remove the " +
+                        $"'{requirement.Key} = {requirement.Value}' required by an outer-join query (an implicit reference " +
+                        $"navigation or a JoinInto/single-query denormalized pair). Remove the " +
                         $"explicit setting or set it to '{requirement.Value}'.");
 
                 continue;

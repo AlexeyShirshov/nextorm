@@ -1,0 +1,24 @@
+verification: EXCEPT rows=7, INTERSECT rows=3, db=/tmp/nextorm-bench/test.db
+variant                    operation   B/query min       median          max   total median
+V0_full                    EXCEPT          7056.00      7056.00      7056.00        7056.00
+V1_operands                EXCEPT          3184.00      3184.00      3184.00        3184.00
+V2_left_operand            EXCEPT          1544.00      1544.00      1544.00        1544.00
+V3_clone_setop_prebuilt    EXCEPT           816.00       816.00       816.00         816.00
+V4_setop_no_terminal       EXCEPT          4000.00      4000.00      4000.00        4000.00
+V5_definition              EXCEPT           728.00       728.00       728.00         728.00
+V6_shell                   EXCEPT          1544.00      1544.00      1544.00        1544.00
+V7_prepared_control        EXCEPT           808.00       808.00       808.00         808.00
+V0_full                    INTERSECT       7040.00      7040.00      7040.00        7040.00
+V1_operands                INTERSECT       3184.00      3184.00      3184.00        3184.00
+V2_left_operand            INTERSECT       1544.00      1544.00      1544.00        1544.00
+V3_clone_setop_prebuilt    INTERSECT        816.00       816.00       816.00         816.00
+V4_setop_no_terminal       INTERSECT       4000.00      4000.00      4000.00        4000.00
+V5_definition              INTERSECT        728.00       728.00       728.00         728.00
+V6_shell                   INTERSECT       1544.00      1544.00      1544.00        1544.00
+V7_prepared_control        INTERSECT        792.00       792.00       792.00         792.00
+
+EXCEPT: operands=3184.00 single=1544.00 definition+expr=728.00 shell=816.00 prebuilt-clone+setop=816.00 clone+setop=816.00 prepare+execute=3056.00 prepared-control=808.00
+INTERSECT: operands=3184.00 single=1544.00 definition+expr=728.00 shell=816.00 prebuilt-clone+setop=816.00 clone+setop=816.00 prepare+execute=3040.00 prepared-control=792.00
+probe evidence: .pdca/T245/rv1/attribution/probe-variants.json
+EXCEPT reconciliation: V0-BDNfull=527.90 V4-BDNconstruct=367.84 V7-BDNcontrol=48.00 prepare=2248.00 (BDN 2248.12, delta -0.12) closure-residual=0.00
+INTERSECT reconciliation: V0-BDNfull=527.90 V4-BDNconstruct=367.84 V7-BDNcontrol=48.00 prepare=2248.00 (BDN 2248.10, delta -0.10) closure-residual=0.00

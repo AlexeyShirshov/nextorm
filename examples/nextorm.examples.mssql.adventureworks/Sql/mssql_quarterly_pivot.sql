@@ -1,8 +1,9 @@
 -- 5. Кросс-таблица маржинальности категорий по кварталам (Нативный T-SQL PIVOT)
+-- Значения PIVOT объявлены в типизированной проекции (Q1..Q4) и выводятся в список IN один раз.
 WITH OrderMargins AS (
     SELECT 
         pc.[Name] AS CategoryName,
-        'Q' + CAST(DATEPART(quarter, soh.OrderDate) AS VARCHAR(1)) AS QuarterNum,
+        DATEPART(quarter, soh.OrderDate) AS QuarterNum,
         (sod.LineTotal - (p.StandardCost * sod.OrderQty)) AS Margin
     FROM Sales.SalesOrderDetail sod
     JOIN Sales.SalesOrderHeader soh ON sod.SalesOrderID = soh.SalesOrderID
@@ -13,13 +14,13 @@ WITH OrderMargins AS (
 )
 SELECT 
     CategoryName AS [Категория товара],
-    ROUND([Q1], 2) AS [Q1 2013 ($)],
-    ROUND([Q2], 2) AS [Q2 2013 ($)],
-    ROUND([Q3], 2) AS [Q3 2013 ($)],
-    ROUND([Q4], 2) AS [Q4 2013 ($)]
+    ROUND([1], 2) AS [Q1 2013 ($)],
+    ROUND([2], 2) AS [Q2 2013 ($)],
+    ROUND([3], 2) AS [Q3 2013 ($)],
+    ROUND([4], 2) AS [Q4 2013 ($)]
 FROM OrderMargins
 PIVOT (
     SUM(Margin) 
-    FOR QuarterNum IN ([Q1], [Q2], [Q3], [Q4])
+    FOR QuarterNum IN ([1], [2], [3], [4])
 ) AS PivotTable
 ORDER BY CategoryName;

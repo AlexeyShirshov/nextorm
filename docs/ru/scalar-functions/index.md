@@ -3,7 +3,7 @@
 > Преобразуйте члены `string`, `Math` и `DateTime`, объединение `??`, логические предикаты и числовые
 > преобразования в SQL, специфичный для провайдера.
 
-**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](../querying/index.md) · [Фильтрация (WHERE)](../guide/01-filtering-where.md)
+**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](../engine/index.md) · [Фильтрация (WHERE)](../guide/03-filtering-where.md)
 
 ## Обзор
 
@@ -20,7 +20,7 @@ nextorm распознаёт фиксированный набор членов 
   в константе экранируются и генерируется предложение `escape '\'`.
 
 Встроенные преобразования применяются **до** любого сопоставления
-[`[SqlFunction]`](../guide/10-user-defined-functions.md), поэтому пользовательский атрибут не может изменить
+[`[SqlFunction]`](../guide/12-user-defined-functions.md), поэтому пользовательский атрибут не может изменить
 поведение членов `string`/`Math`/`DateTime`.
 
 Кросс-провайдерные помощники находятся в [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql). Функции, которые поддерживает только один
@@ -35,10 +35,10 @@ JSONPath-скаляры `json_value`/`json_query`/`json_exists` и функци�
 
 ## См. также
 
-* [Фильтрация (WHERE)](../guide/01-filtering-where.md) — `Contains`/`in`, `??` и условные выражения в предикатах.
-* [Группировка и агрегаты](../guide/03-grouping-and-aggregates.md) — агрегатные функции (`count`, `sum`, ...).
-* [Пользовательские функции](../guide/10-user-defined-functions.md) — когда скалярная функция не встроена.
-* [Обзор провайдеров](../providers/overview.md) — флаги возможностей и кавычки.
+* [Фильтрация (WHERE)](../guide/03-filtering-where.md) — `Contains`/`in`, `??` и условные выражения в предикатах.
+* [Группировка и агрегаты](../guide/05-grouping-and-aggregates.md) — агрегатные функции (`count`, `sum`, ...).
+* [Пользовательские функции](../guide/12-user-defined-functions.md) — когда скалярная функция не встроена.
+* [Обзор провайдеров](../connecting-providers/overview.md) — флаги возможностей и кавычки.
 
 ---
 
@@ -46,7 +46,7 @@ Source: `src/nextorm.core/Visitors/BaseExpressionVisitor.cs:541`, `:1157`, `:120
 `src/nextorm.core/Visitors/BuiltinFunctionTranslator.cs`, `src/nextorm.core/Visitors/AggregateFilter.cs`;
 `src/nextorm.core/Query/SqlFunctions.cs`;
 `src/nextorm.core/DataContext/Dialect/SqlDialectBase.cs:57`;
-`tests/nextorm.integration.tests/CommonTestSuite.Functions.cs:8`, `:19`, `:43`, `:54`, `:65`, `:76`, `:87`, `:98`, `:117`;
-generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:695`, `:775`, `:801`, `:811`, `:832`, `:852`, `:861`, `:872`, `:882`, `:892`, `:912`, `:921`, `:931`, `:940`, `:950`, `:960`, `:974`, `:985`;
-`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:457`, `:512`, `:522`, `:533`, `:543`, `:552`, `:563`, `:573`, `:583`, `:593`, `:602`, `:613`, `:624`, `:633`, `:643`;
-`tests/nextorm.postgres.tests/SqlGenerationTests.cs:390`, `:445`, `:465`, `:475`, `:484`, `:495`, `:505`, `:515`, `:525`, `:534`, `:544`, `:554`, `:563`, `:573`.
+`tests/nextorm.integration.tests/CommonTestSuite/Functions/CommonTestSuite.Functions.cs:8`, `:19`, `:43`, `:54`, `:65`, `:76`, `:87`, `:98`, `:117`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGeneration/SqlGenerationTests.cs:695`, `:775`, `:801`, `:811`, `:832`, `:852`, `:861`, `:872`, `:882`, `:892`, `:912`, `:921`, `:931`, `:940`, `:950`, `:960`, `:974`, `:985`;
+`tests/nextorm.sqlserver.tests/SqlGeneration/SqlGenerationTests.cs:457`, `:512`, `:522`, `:533`, `:543`, `:552`, `:563`, `:573`, `:583`, `:593`, `:602`, `:613`, `:624`, `:633`, `:643`;
+`tests/nextorm.postgres.tests/SqlGeneration/SqlGenerationTests.cs:390`, `:445`, `:465`, `:475`, `:484`, `:495`, `:505`, `:515`, `:525`, `:534`, `:544`, `:554`, `:563`, `:573`.

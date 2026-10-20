@@ -336,7 +336,7 @@ public class PostgresDialect : SqlDialectBase
     public override string WrapTableFunction(string name, string call) =>
         name is "generate_series" or "unnest" or "regexp_matches" or "regexp_split_to_table"
             or "jsonb_object_keys" or "jsonb_path_query"
-            ? $"(select {name} from {call})"
+            ? $"(select {name}\n from {call})"
             : call;
 
     // PostgreSQL has native json/jsonb types and the associated functions/operators.
@@ -387,6 +387,33 @@ public class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL's <c>extract(epoch ...)</c> returns numeric, so it is cast to double precision.</summary>
     public override string MakeDatePart(string part, string value) =>
         part == "epoch" ? $"cast(extract(epoch from {value}) as double precision)" : base.MakeDatePart(part, value);
+
+    /// <summary>PostgreSQL stores a <see cref="System.DateTimeOffset"/> as <c>timestamptz</c>, so DTO operations are supported.</summary>
+    public override bool SupportsDateTimeOffsetTranslation => true;
+
+    /// <summary>
+    /// PostgreSQL's <c>now()</c> is a session-time-zone-independent instant; materialized as a
+    /// <c>timestamptz</c> it canonicalises to an offset-zero <see cref="System.DateTimeOffset"/>.
+    /// </summary>
+    public override string MakeDateTimeOffsetNow(bool utc) => "now()";
+
+    /// <summary>
+    /// DTO date parts are extracted from the UTC wall time (<c>at time zone 'UTC'</c>) so the result
+    /// does not depend on the session time zone or DST.
+    /// </summary>
+    public override string MakeDatePart(string part, string value, bool isDateTimeOffset) =>
+        isDateTimeOffset ? MakeDatePart(part, $"({value} at time zone 'UTC')") : MakeDatePart(part, value);
+
+    /// <summary>
+    /// DTO date addition runs on the UTC wall time and is re-typed to <c>timestamptz</c> (a naive
+    /// <c>timestamp without time zone</c> result cannot be read as a
+    /// <see cref="System.DateTimeOffset"/>), so the emitted value is the original instant plus the
+    /// interval, independent of the session time zone/DST.
+    /// </summary>
+    public override string MakeDateAdd(string field, string amount, string value, bool isDateTimeOffset) =>
+        isDateTimeOffset
+            ? $"(({value} at time zone 'UTC') + ({amount} * interval '1 {field}')) at time zone 'UTC'"
+            : MakeDateAdd(field, amount, value);
 
     /// <summary>
     /// The ANSI <c>date_diff</c> casts a sub-day span to <c>integer</c>; the 64-bit variant widens that
@@ -613,13 +640,20 @@ internal sealed class PostgresSessionInfoFunctions : ISessionInfoFunctions
     public static readonly PostgresSessionInfoFunctions Instance = new();
 
     public bool Supports(string name) =>
-        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version";
+        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version"
+            or "pg_backend_pid" or "inet_server_addr" or "inet_server_port" or "inet_client_addr"
+            or "inet_client_port";
 
     public string Render(string name) => name switch
     {
         "current_user" or "session_user" or "current_schema" => name,
         "current_database" => "current_database()",
         "version" => "version()",
+        "pg_backend_pid" => "pg_backend_pid()",
+        "inet_server_addr" => "CAST(inet_server_addr() AS text)",
+        "inet_server_port" => "inet_server_port()",
+        "inet_client_addr" => "CAST(inet_client_addr() AS text)",
+        "inet_client_port" => "inet_client_port()",
         _ => throw new NotSupportedException($"The {name} session information function is not supported by PostgreSQL.")
     };
 }
@@ -668,11 +702,28 @@ internal sealed class PostgresLockRenderer : ILockRenderer
 
     public bool UsesTableHints => false;
 
+    /// <summary>PostgreSQL supports the targeted <c>FOR UPDATE OF &lt;alias&gt;</c>/<c>FOR SHARE OF &lt;alias&gt;</c> form.</summary>
+    public bool SupportsSourceLocks => true;
+
     public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
         Render(mode, LockWaitMode.Wait, keywordCase);
 
     public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase = KeywordCase.Lower) =>
         SqlKeywords.Of(keywordCase, (mode == LockMode.Share ? " for share" : " for update") + LockWaitSuffix(wait));
+
+    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase, string? targetAlias)
+    {
+        if (targetAlias is null)
+            return Render(mode, wait, keywordCase);
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetAlias);
+
+        // Case-fold only the keyword prefix and wait suffix: the target is an already-resolved,
+        // already-quoted alias and must stay verbatim (a case-folded quoted alias is a different,
+        // non-existent identifier under KeywordCase.Upper).
+        var prefix = SqlKeywords.Of(keywordCase, mode == LockMode.Share ? " for share of " : " for update of ");
+        return prefix + targetAlias + SqlKeywords.Of(keywordCase, LockWaitSuffix(wait));
+    }
 
     private static string LockWaitSuffix(LockWaitMode wait) => wait switch
     {

@@ -148,7 +148,7 @@ D184, issue #184: заменить отдельный публичный `AsSing
 Планируемые записи при будущем DO:
 - `src/nextorm.core/EagerLoadMode.cs` — новый файл (публичный namespace согласовать с `EntityBuilder<TEntity>`)
 - `src/nextorm.core/Builders/EntityBuilder.cs`
-- `benchmarks/nextorm.benchmark/SqliteBenchmarkEagerLoading.cs`
+- `benchmarks/nextorm.benchmark/Sqlite/SqliteBenchmarkEagerLoading.cs`
 - `tests/nextorm.core.tests/{EagerLoadingTests,EagerLoadingSingleQueryTests,EagerLoadingSingleQueryP1Tests,JoinIntoManyToManySingleQueryTests}.cs`
 - `tests/nextorm.sqlite.tests/EagerLoadingSqlGenerationTests.cs`
 - `tests/nextorm.integration.tests/CommonTestSuite.EagerLoading.cs`

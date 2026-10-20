@@ -1,0 +1,849 @@
+{
+  "task": "T245",
+  "issue": 245,
+  "cycle": 1,
+  "plan_revision": 2,
+  "evidence_contract_rv": 1,
+  "status": "terminal_incomplete",
+  "decision": "insufficient",
+  "generated_utc": "2026-10-18T19:40:21Z",
+  "note": "Assembled mechanically from the recorded BDN summaries and the two probe JSONs; no new numbers were invented. Candidate bytes are the measured closure categories; blockers are the D245-1 lever decision citations.",
+  "cases": {
+    "EXCEPT": {
+      "entry": {
+        "entry-r1": {
+          "valid": false,
+          "validity_reasons": [
+            "HEAD_CHANGED_DURING_INTERVAL: e7813beb048c2918946c31260c6a27fe30d55ecb -> 080043669ee19ba9eff8f19602fe0af51dc7698f at 2026-10-18T16:23:32Z (inside the 16:18:52Z..16:25:48Z interval); foreign commit \"#297 plan: T297-cow rv2 contract, owner unfreeze override, COW acceptance\" touched only .pdca/status/T297-cow-1.md and docs/specs/status/D297-structural-cte-graph-1.md (0 files under src/ tests/ benchmarks/)",
+            "FOREIGN_LOCK_WAITER: pid 2001250 (ppid 1948512) polled flock -n every 15 s during the interval; not a build/test/coverage/BDN process (loop of \"ps|grep\" probes), observed 16:25:35..16:25:50Z",
+            "BDN_EMITTED_NO_VALIDATION_WARNINGS: no \"Warning\"/\"invalid measurement\"/outlier-disqualification block in the BDN log"
+          ],
+          "nextorm_alloc_bytes_per_op_raw": 65281,
+          "nextorm_alloc_displayed": "63.75 KB",
+          "nextorm_mean_ns": 210212.2,
+          "nextorm_error_ns": 1881.5,
+          "linq2db_alloc_bytes_per_op_raw": 51762,
+          "linq2db_alloc_displayed": "50.55 KB",
+          "linq2db_mean_ns": 567823.0,
+          "linq2db_error_ns": 40522.2,
+          "nextorm_bytes_per_query": 6528.1,
+          "linq2db_bytes_per_query": 5176.2,
+          "ratio_nextorm_over_linq2db": 1.2612,
+          "job": "ShortRun",
+          "toolchain": "InProcessEmitToolchain",
+          "iterations_per_invocation": 10,
+          "admitted_on_provenance": true,
+          "counted_as_valid_round": true,
+          "admission_note": "flagged HEAD_CHANGED_DURING_INTERVAL/FOREIGN_LOCK_WAITER, then admitted on provenance by .pdca/T245/rv1/bdn/entry-r1/admission.json (docs/status-only commit, zero measured-path diff)"
+        },
+        "entry-r2": {
+          "valid": true,
+          "validity_reasons": [],
+          "nextorm_alloc_bytes_per_op_raw": 65281,
+          "nextorm_alloc_displayed": "63.75 KB",
+          "nextorm_mean_ns": 187556.4,
+          "nextorm_error_ns": 673.7,
+          "linq2db_alloc_bytes_per_op_raw": 51762,
+          "linq2db_alloc_displayed": "50.55 KB",
+          "linq2db_mean_ns": 413540.1,
+          "linq2db_error_ns": 2726.1,
+          "nextorm_bytes_per_query": 6528.1,
+          "linq2db_bytes_per_query": 5176.2,
+          "ratio_nextorm_over_linq2db": 1.2612,
+          "job": "ShortRun",
+          "toolchain": "InProcessEmitToolchain",
+          "iterations_per_invocation": 10,
+          "admitted_on_provenance": false,
+          "counted_as_valid_round": true
+        },
+        "valid_rounds": 2,
+        "valid_rounds_note": "entry-r1 admitted on provenance, entry-r2 valid; the round count is 2/2",
+        "raw_allocation_identical_across_rounds": true,
+        "averaging_used": false
+      },
+      "controls": {
+        "artifact": ".pdca/T245/rv1/bdn/controls-entry/summary.json",
+        "valid": true,
+        "alloc_bytes_per_op_raw": 19000,
+        "alloc_displayed": "18.55 KB",
+        "bytes_per_query": 760.0,
+        "mean_ns": 297177.8,
+        "error_ns": 5968.5,
+        "iterations_per_invocation": 25,
+        "final_controls_measured": false
+      },
+      "decompose": {
+        "artifact": ".pdca/T245/rv1/bdn/decompose-entry/summary.json",
+        "valid": true,
+        "iteration_count": 100,
+        "arm_definitions": {
+          "Construct": "stand-alone: expression tree + clone",
+          "Prepare_NoHash": "cumulative: construct + PrepareCommand(dontCalculateHash: true) (visitors)",
+          "Prepare_Hash": "cumulative: construct + visitors + all *PlanHash",
+          "Warm_PlanOnly": "cumulative: construct + prepare + hash + plan-key lookup + ExtractParams (implicit-cache hit, no execution)",
+          "Warm_Reused": "stand-alone: plan-key + lookup on an already-prepared command (must be 0 B)"
+        },
+        "arms_bytes_per_op_raw": {
+          "Construct": 363216,
+          "Prepare_NoHash": 537624,
+          "Prepare_Hash": 616830,
+          "Warm_PlanOnly": 588028,
+          "Warm_Reused": 0
+        },
+        "arms_bytes_per_iteration": {
+          "Construct": 3632.16,
+          "Prepare_NoHash": 5376.24,
+          "Prepare_Hash": 6168.3,
+          "Warm_PlanOnly": 5880.28,
+          "Warm_Reused": 0.0
+        },
+        "phase_increments_bytes_per_iteration": {
+          "construct": 3632.16,
+          "prepare_visitors": 1744.08,
+          "plan_hash": 792.06,
+          "plan_key_lookup_extractparams": -288.02
+        },
+        "full_fair_alloc_per_query": {
+          "value": 6528.1,
+          "entry_r1": 6528.1,
+          "entry_r2": 6528.1,
+          "note": "entry-r1 and entry-r2 raw B/op are identical (65281 / 65121) so the per-query reference is the same in both rounds; r2 is the valid round"
+        },
+        "residual": 647.82,
+        "warm_reused_raw": 0,
+        "warm_reused_is_zero": true,
+        "allocation_stability": "phase increments agree to 0.01 B/query with the clean interval-1 run; allocation unaffected by the recorded timing-only isolation caveat"
+      },
+      "probe": {
+        "sources": [
+          ".pdca/T245/rv1/attribution/probe-variants.json",
+          ".pdca/T245/rv1/attribution/probe-variants2.json"
+        ],
+        "method": "GC.GetAllocatedBytesForCurrentThread delta (precision true) over a batch of 10 logical queries, divided by the batch size; a second identical window records the process-wide GC.GetTotalAllocatedBytes(precise: true); warm-up 3 calls per variant; 10 measured batches",
+        "warmup_iterations": 3,
+        "batch_iterations": 10,
+        "batch_count": 10,
+        "variants_v1_bytes_per_query": {
+          "V0_full": 7056,
+          "V1_operands": 3184,
+          "V2_left_operand": 1544,
+          "V3_clone_setop_prebuilt": 816,
+          "V4_setop_no_terminal": 4000,
+          "V5_definition": 728,
+          "V6_shell": 1544,
+          "V7_prepared_control": 808
+        },
+        "variants_v2_bytes_per_query": {
+          "V0_full": 7056,
+          "V1_operands": 3184,
+          "V2_left_operand": 1544,
+          "V3_clone_setop_prebuilt": 816,
+          "V4_setop_no_terminal": 4000,
+          "V4a_left_operand": 1544,
+          "V4b_two_operands": 3184,
+          "V4c_clone_only": 816,
+          "V4d_clone_reset": 816,
+          "V4e_full_repro": 4000,
+          "V4f_right_operand": 1640,
+          "V4g_right_operand_nocast": 1592,
+          "V4h_left_widening": 1592,
+          "V4j_right_string_member": 1592,
+          "V4k_left_binary_node": 1640,
+          "V4l_left_double_convert": 1592,
+          "V4m_large_operand": 1560,
+          "V4n_right_nullable_int": 1592,
+          "V8_definition_record_only": 240,
+          "V9_expressions_only": 1072,
+          "V10_comparer_init": 1872,
+          "V10b_plan_key": 1944,
+          "V10c_comparer_init_three": 5616,
+          "V5_definition": 728,
+          "V6_shell": 1544,
+          "V7_prepared_control": 808
+        },
+        "derived": {
+          "shell_count_per_query": 816,
+          "definition": 728,
+          "single_operand": 1544,
+          "operands": 3184,
+          "prebuilt_clone_set_operation": 816,
+          "clone_plus_set_operation": 816,
+          "execution_residual": 3056,
+          "prepared_control": 808,
+          "full_fair": 7056,
+          "left_operand": 1544,
+          "right_operand": 1640,
+          "clone_only": 816,
+          "clone_reset": 816,
+          "set_operation_assembly": 816,
+          "full_repro": 4000,
+          "cast_node_bytes": 48,
+          "widening_node_bytes": 48,
+          "definition_record_only": 240,
+          "expressions_only": 1072,
+          "comparer_init_per_command": 328,
+          "plan_key_path_extra": 72,
+          "comparer_init_per_command_from_three": 328
+        },
+        "closure": {
+          "v0": 7056,
+          "left_operand": 1544,
+          "left_definition_and_expression": 728,
+          "left_shell": 816,
+          "right_operand": 1640,
+          "right_definition_and_expression": 824,
+          "right_expression_minus_left_expression": 96,
+          "two_operands": 3184,
+          "clone_only": 816,
+          "clone_reset": 816,
+          "clone_only_plus_reset": 0,
+          "set_operation_assembly": 816,
+          "set_operation_call_only": 0,
+          "clone_reset_set_operation_measured": 816,
+          "full_setop_no_terminal": 4000,
+          "prepare_phase": 2248,
+          "execution": 808,
+          "three_shells": 2448,
+          "two_definitions_planner_model": 1456,
+          "planner_original_residual": 96,
+          "cast_node_bytes": 48,
+          "widening_node_bytes": 48,
+          "right_string_member_bytes": 1592,
+          "right_string_member_minus_left": 48,
+          "long_projection_minus_string_member": 0,
+          "binary_node_bytes": 96,
+          "convert_node_bytes": 48,
+          "large_operand_bytes": 1560,
+          "large_operand_minus_left": 16,
+          "right_nullable_int_bytes": 1592,
+          "right_nullable_int_minus_left": 48,
+          "right_entity_footprint_bytes": 48,
+          "definition_record_pool_per_query": 480,
+          "expressions_per_query": 1072,
+          "operand_shells_per_query": 1632,
+          "clone_shell": 816,
+          "construction_model_total": 4000,
+          "construction_model_residual": 0,
+          "attributed_total": 7056,
+          "residual": 0,
+          "definition_record_only": 240,
+          "expressions_only": 1072,
+          "left_expression_only": 488,
+          "right_expression_only": 584,
+          "comparer_init_per_command": 328,
+          "plan_key_path_extra": 72,
+          "comparer_init_per_command_from_three": 328,
+          "comparer_init_multiplicative": true,
+          "left_operand_matches_v2": true,
+          "two_operands_matches_v1": true,
+          "full_repro_matches_v4": true,
+          "residual_named_by_components": true
+        },
+        "reconciliation": {
+          "v0_minus_bdn_full_fair": 527.8999999999996,
+          "v4_minus_bdn_construct": 367.84000000000015,
+          "v7_minus_bdn_control": 48,
+          "prepare_phase": 2248,
+          "bdn_prepare_phase": 2248.12,
+          "prepare_phase_delta": -0.11999999999989086,
+          "closure_residual": 0
+        }
+      },
+      "closure": {
+        "unit": "B/query",
+        "source": "probe V0 closure (GC.GetAllocatedBytesForCurrentThread, deterministic)",
+        "categories": {
+          "operand_shells": 1632,
+          "clone_shell": 816,
+          "caller_lambdas": 1072,
+          "query_definition": 480,
+          "plan_comparers": 984,
+          "remaining_preparation_hash_lookup": 1264,
+          "execution": 808
+        },
+        "total": 7056,
+        "residual": 0.0,
+        "notes": {
+          "clone_shell": "mandatory (G4)",
+          "caller_lambdas": "workload; hoisting the call-site lambdas would change the measured workload",
+          "remaining_preparation_hash_lookup": "prepare phase 2248 - comparers 984"
+        }
+      },
+      "reconciliation": {
+        "prepare_phase_probe": 2248,
+        "prepare_phase_bdn": 2248.12,
+        "prepare_phase_delta": -0.11999999999989086,
+        "probe_v0_minus_bdn_full_fair": 527.8999999999996,
+        "v4_minus_bdn_construct": 367.84000000000015,
+        "v7_minus_bdn_control": 48,
+        "cross_domain_note": "probe process vs BDN InProcessEmit process; the 527.9 B/query delta is recorded as cross-domain, not interchangeable"
+      },
+      "candidates": [
+        {
+          "candidate": "plan comparers",
+          "bytes_per_query": 984,
+          "derivation": "3 x 328 B lazy comparer init per logical query (probe V10/V10c)",
+          "blocker": "comparers capture the owning QueryCommand: src/nextorm.core/Query/QueryCommand.Plan.cs:72-87; fields src/nextorm.core/Query/QueryPlanEqualityComparer.cs:15-19,28-36, src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs:49-50, src/nextorm.core/Expressions/FromExpressionPlanEqualityComparer.cs:12,16,32; registry resolution src/nextorm.core/DataContext/QueryPlanner.cs:813-815,889; identity assert src/nextorm.core/DataContext/Cache/QueryPlan.cs:150; clone propagation src/nextorm.core/Query/QueryCommand.Clone.cs:126-131; D240 protected list docs/specs/status/D240-construction-allocation-1.md:139,326",
+          "available": false
+        },
+        {
+          "candidate": "QueryDefinition -> struct",
+          "bytes_per_query": 480,
+          "derivation": "2 x 240 B QueryDefinition records per logical query (probe V8)",
+          "blocker": "public sealed record QueryDefinition src/nextorm.core/Query/QueryDefinition.cs:18; public members and public parameter positions src/nextorm.core/Query/QueryCommand.TResult.cs:21, src/nextorm.core/DataContext/DataContextExtensions.cs:20; a struct would violate R245-07 (no public API change)",
+          "available": false
+        },
+        {
+          "candidate": "operand shells",
+          "bytes_per_query": 1632,
+          "derivation": "2 x 816 B operand command shells (probe V2/V4a)",
+          "blocker": "clone-before-mutation is mandatory (G4): src/nextorm.core/Query/QueryCommand.TResult.cs:1076,1108 and src/nextorm.core/Query/QueryCommand.cs:1164-1182; the operands are the measured workload",
+          "available": false
+        },
+        {
+          "candidate": "clone shell",
+          "bytes_per_query": 816,
+          "derivation": "one QueryCommand.Clone + ResetPreparation shell (probe V3/V4c/V4d)",
+          "blocker": "G4: Clone() is required for the reusable-operand contract; no flag proves a command is non-reused, and NestedSetOperations_KeepOperandsUnchanged would fail without it",
+          "available": false
+        },
+        {
+          "candidate": "frozen preparation",
+          "bytes_per_query": 1264,
+          "derivation": "prepare phase 2248 - plan comparers 984",
+          "blocker": "R245-13 frozen recipe/cache-key/equality; src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:91 rejects the raw-shape shortcut",
+          "available": false
+        },
+        {
+          "candidate": "execution",
+          "bytes_per_query": null,
+          "derivation": "execution/materialization residual of the same fluent shape",
+          "blocker": "outside the lever; prepared controls 760/744 B/query prove the lean execution path",
+          "available": false
+        }
+      ],
+      "guards": {
+        "R245-07": {
+          "statement": "no public API change",
+          "violated": false,
+          "proof": [
+            "git status --porcelain src empty at every step (recorded in .pdca/T245/rv1/logs/git-status-entry.txt and progress log)",
+            ".pdca/T245/rv1/api/entry.json is the only public-surface export; no surface was edited"
+          ]
+        },
+        "R245-08": {
+          "statement": "clone/operand immutability preserved",
+          "violated": false,
+          "proof": [
+            "G4 facts recorded above (clone semantically mandatory)",
+            ".pdca/T245/rv1/tests/core-attribution2.log: T240CommandConstructionTests 11/11 passed, NestedSetOperations_KeepOperandsUnchanged 1/1 passed"
+          ]
+        },
+        "R245-12": {
+          "statement": "per-case attribution, no averaged set-operation number",
+          "violated": false,
+          "proof": [
+            "this file has separate EXCEPT and INTERSECT records",
+            ".pdca/T245/rv1/lever-decision.md reports the two cases in separate rows"
+          ]
+        },
+        "R245-13": {
+          "statement": "frozen recipe/cache-key/equality untouched",
+          "violated": false,
+          "proof": [
+            "no production file changed: git status --porcelain src empty",
+            "frozen regions listed in the decision were not edited; no diff exists to review"
+          ]
+        }
+      },
+      "provenance": {
+        "repo": "/home/alex/sources/nextorm",
+        "branch": "1.0.9-rc3",
+        "head_at_authoring": "a5a86a06cb012b3cbc1e740309d10fa375d065c1",
+        "contract": {
+          "base_ref": "01815f3a",
+          "entry_head": "8c94207f",
+          "contract_rv": 1,
+          "evidence_root": ".pdca/T245/rv1"
+        },
+        "blocks": {
+          "entry-r1": {
+            "argv": "env -u NEXTORM_BENCH_FULL NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkFeaturesFairCached.B_* --exporters json --artifacts .pdca/T245/rv1/bdn/entry-r1",
+            "lock_mode": "plain flock -x (fd inherited by nodeReuse MSBuild servers; orphan recovered in D245-P1)",
+            "head_before": "e7813beb048c2918946c31260c6a27fe30d55ecb",
+            "head_after": "080043669ee19ba9eff8f19602fe0af51dc7698f",
+            "admission": ".pdca/T245/rv1/bdn/entry-r1/admission.json",
+            "admission_state": "admitted on provenance",
+            "quiet_window": null
+          },
+          "entry-r2": {
+            "argv": "env -u NEXTORM_BENCH_FULL NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --filter '*SqliteBenchmarkFeaturesFairCached.B_*' --exporters json --artifacts .pdca/T245/rv1/bdn/entry-r2",
+            "lock_mode": "flock -x --close /tmp/opencode/nextorm-bdn-host.lock with MSBUILDDISABLENODEREUSE=1 DOTNET_CLI_USE_MSBUILD_SERVER=0",
+            "lock_wait_seconds": 2235,
+            "head_before": "4d83a8eb3d8733c762feabd1c72e259b43fb2f94",
+            "head_after": "4d83a8eb3d8733c762feabd1c72e259b43fb2f94",
+            "valid": true,
+            "quiet_window": "attempt 4/4 admitted, median 4.99 %, p95 7.72 % (logs/entry-r2-quiet-window.txt)"
+          },
+          "controls-entry + decompose-entry": {
+            "argv_controls": "env -u NEXTORM_BENCH_FULL NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --filter \\*SqliteBenchmarkFeatures.Nextorm_Prepared_Except\\* \\*SqliteBenchmarkFeatures.Nextorm_Prepared_Intersect\\* --exporters json --artifacts .pdca/T245/rv1/bdn/controls-entry",
+            "argv_decompose": "env -u NEXTORM_BENCH_FULL NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --filter \\*SqliteBenchmarkWarmDecompose\\* --exporters json --artifacts .pdca/T245/rv1/bdn/decompose-entry",
+            "lock_mode": "single flock -x --close ownership 2026-10-18T18:42:35Z..19:02:32Z, lock wait 0 s, both invocations serial",
+            "head_before": "d44c88c17e653890dd1781748b3f6e34dacb8aac",
+            "head_after": "d44c88c17e653890dd1781748b3f6e34dacb8aac",
+            "quiet_windows": {
+              "controls": "attempt 4/4 admitted, median 5.94 %, p95 10.70 %",
+              "decompose": "attempt 4/4 admitted, median 4.84 %, p95 6.80 %"
+            },
+            "decompose_isolation_caveat": "foreign Debug build/tests began 3m39s into the interval; allocation unaffected and reproduced to 0.01 B/query against the clean interval-1 run; timing-only"
+          }
+        },
+        "db_sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+        "db_pin": "2/2",
+        "binary_sha256": "19528c5e88675191ccaba150532a11e38270130cbd422e109c15c09ffc67be30",
+        "binary_path": "benchmarks/nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark.dll",
+        "bdn_version": "0.15.8",
+        "job": "ShortRun",
+        "toolchain": "InProcessEmitToolchain",
+        "default_job_present": false,
+        "logs": [
+          ".pdca/T245/rv1/logs/entry-r1.log",
+          ".pdca/T245/rv1/logs/entry-r2.log",
+          ".pdca/T245/rv1/logs/controls-entry.log",
+          ".pdca/T245/rv1/logs/decompose-entry.log",
+          ".pdca/T245/rv1/logs/t245-attribution-probe.log",
+          ".pdca/T245/rv1/logs/t245-attribution-probe2.log"
+        ]
+      },
+      "open_items": [
+        "final-r1 and final-r2 were never measured; no final acceptance claim exists",
+        "controls-final and decompose-final were never measured",
+        "native-final and the two 100-operation native gate rows were never produced",
+        "R245-01/R245-02 (caps and ratios) remain open",
+        "R245-03 (per-case final timing) remains open",
+        "R245-09 (final prepared controls) and R245-10 (native final rows) remain open",
+        "R245-14 final boundary sweep never run and is unclaimed because production was never modified",
+        "R245-15 EN/RU docs intentionally not updated (no claim to publish)",
+        "D245-3 remains blocked/unimplemented; next revision needs comparer-ownership redesign and owner authorization for D240-protected files and the public QueryDefinition"
+      ]
+    },
+    "INTERSECT": {
+      "entry": {
+        "entry-r1": {
+          "valid": false,
+          "validity_reasons": [
+            "HEAD_CHANGED_DURING_INTERVAL: e7813beb048c2918946c31260c6a27fe30d55ecb -> 080043669ee19ba9eff8f19602fe0af51dc7698f at 2026-10-18T16:23:32Z (inside the 16:18:52Z..16:25:48Z interval); foreign commit \"#297 plan: T297-cow rv2 contract, owner unfreeze override, COW acceptance\" touched only .pdca/status/T297-cow-1.md and docs/specs/status/D297-structural-cte-graph-1.md (0 files under src/ tests/ benchmarks/)",
+            "FOREIGN_LOCK_WAITER: pid 2001250 (ppid 1948512) polled flock -n every 15 s during the interval; not a build/test/coverage/BDN process (loop of \"ps|grep\" probes), observed 16:25:35..16:25:50Z",
+            "BDN_EMITTED_NO_VALIDATION_WARNINGS: no \"Warning\"/\"invalid measurement\"/outlier-disqualification block in the BDN log"
+          ],
+          "nextorm_alloc_bytes_per_op_raw": 65121,
+          "nextorm_alloc_displayed": "63.59 KB",
+          "nextorm_mean_ns": 248516.8,
+          "nextorm_error_ns": 14361.5,
+          "linq2db_alloc_bytes_per_op_raw": 51285,
+          "linq2db_alloc_displayed": "50.08 KB",
+          "linq2db_mean_ns": 568467.9,
+          "linq2db_error_ns": 37959.0,
+          "nextorm_bytes_per_query": 6512.1,
+          "linq2db_bytes_per_query": 5128.5,
+          "ratio_nextorm_over_linq2db": 1.2698,
+          "job": "ShortRun",
+          "toolchain": "InProcessEmitToolchain",
+          "iterations_per_invocation": 10,
+          "admitted_on_provenance": true,
+          "counted_as_valid_round": true,
+          "admission_note": "flagged HEAD_CHANGED_DURING_INTERVAL/FOREIGN_LOCK_WAITER, then admitted on provenance by .pdca/T245/rv1/bdn/entry-r1/admission.json (docs/status-only commit, zero measured-path diff)"
+        },
+        "entry-r2": {
+          "valid": true,
+          "validity_reasons": [],
+          "nextorm_alloc_bytes_per_op_raw": 65121,
+          "nextorm_alloc_displayed": "63.59 KB",
+          "nextorm_mean_ns": 183586.6,
+          "nextorm_error_ns": 5148.5,
+          "linq2db_alloc_bytes_per_op_raw": 51282,
+          "linq2db_alloc_displayed": "50.08 KB",
+          "linq2db_mean_ns": 390728.7,
+          "linq2db_error_ns": 2630.0,
+          "nextorm_bytes_per_query": 6512.1,
+          "linq2db_bytes_per_query": 5128.2,
+          "ratio_nextorm_over_linq2db": 1.2699,
+          "job": "ShortRun",
+          "toolchain": "InProcessEmitToolchain",
+          "iterations_per_invocation": 10,
+          "admitted_on_provenance": false,
+          "counted_as_valid_round": true
+        },
+        "valid_rounds": 2,
+        "valid_rounds_note": "entry-r1 admitted on provenance, entry-r2 valid; the round count is 2/2",
+        "raw_allocation_identical_across_rounds": true,
+        "averaging_used": false
+      },
+      "controls": {
+        "artifact": ".pdca/T245/rv1/bdn/controls-entry/summary.json",
+        "valid": true,
+        "alloc_bytes_per_op_raw": 18600,
+        "alloc_displayed": "18.16 KB",
+        "bytes_per_query": 744.0,
+        "mean_ns": 283132.0,
+        "error_ns": 1813.2,
+        "iterations_per_invocation": 25,
+        "final_controls_measured": false
+      },
+      "decompose": {
+        "artifact": ".pdca/T245/rv1/bdn/decompose-entry/summary.json",
+        "valid": true,
+        "iteration_count": 100,
+        "arm_definitions": {
+          "Construct": "stand-alone: expression tree + clone",
+          "Prepare_NoHash": "cumulative: construct + PrepareCommand(dontCalculateHash: true) (visitors)",
+          "Prepare_Hash": "cumulative: construct + visitors + all *PlanHash",
+          "Warm_PlanOnly": "cumulative: construct + prepare + hash + plan-key lookup + ExtractParams (implicit-cache hit, no execution)",
+          "Warm_Reused": "stand-alone: plan-key + lookup on an already-prepared command (must be 0 B)"
+        },
+        "arms_bytes_per_op_raw": {
+          "Construct": 363216,
+          "Prepare_NoHash": 537624,
+          "Prepare_Hash": 616830,
+          "Warm_PlanOnly": 588026,
+          "Warm_Reused": 0
+        },
+        "arms_bytes_per_iteration": {
+          "Construct": 3632.16,
+          "Prepare_NoHash": 5376.24,
+          "Prepare_Hash": 6168.3,
+          "Warm_PlanOnly": 5880.26,
+          "Warm_Reused": 0.0
+        },
+        "phase_increments_bytes_per_iteration": {
+          "construct": 3632.16,
+          "prepare_visitors": 1744.08,
+          "plan_hash": 792.06,
+          "plan_key_lookup_extractparams": -288.04
+        },
+        "full_fair_alloc_per_query": {
+          "value": 6512.1,
+          "entry_r1": 6512.1,
+          "entry_r2": 6512.1,
+          "note": "entry-r1 and entry-r2 raw B/op are identical (65281 / 65121) so the per-query reference is the same in both rounds; r2 is the valid round"
+        },
+        "residual": 631.84,
+        "warm_reused_raw": 0,
+        "warm_reused_is_zero": true,
+        "allocation_stability": "phase increments agree to 0.01 B/query with the clean interval-1 run; allocation unaffected by the recorded timing-only isolation caveat"
+      },
+      "probe": {
+        "sources": [
+          ".pdca/T245/rv1/attribution/probe-variants.json",
+          ".pdca/T245/rv1/attribution/probe-variants2.json"
+        ],
+        "method": "GC.GetAllocatedBytesForCurrentThread delta (precision true) over a batch of 10 logical queries, divided by the batch size; a second identical window records the process-wide GC.GetTotalAllocatedBytes(precise: true); warm-up 3 calls per variant; 10 measured batches",
+        "warmup_iterations": 3,
+        "batch_iterations": 10,
+        "batch_count": 10,
+        "variants_v1_bytes_per_query": {
+          "V0_full": 7040,
+          "V1_operands": 3184,
+          "V2_left_operand": 1544,
+          "V3_clone_setop_prebuilt": 816,
+          "V4_setop_no_terminal": 4000,
+          "V5_definition": 728,
+          "V6_shell": 1544,
+          "V7_prepared_control": 792
+        },
+        "variants_v2_bytes_per_query": {
+          "V0_full": 7040,
+          "V1_operands": 3184,
+          "V2_left_operand": 1544,
+          "V3_clone_setop_prebuilt": 816,
+          "V4_setop_no_terminal": 4000,
+          "V4a_left_operand": 1544,
+          "V4b_two_operands": 3184,
+          "V4c_clone_only": 816,
+          "V4d_clone_reset": 816,
+          "V4e_full_repro": 4000,
+          "V4f_right_operand": 1640,
+          "V4g_right_operand_nocast": 1592,
+          "V4h_left_widening": 1592,
+          "V4j_right_string_member": 1592,
+          "V4k_left_binary_node": 1640,
+          "V4l_left_double_convert": 1592,
+          "V4m_large_operand": 1560,
+          "V4n_right_nullable_int": 1592,
+          "V8_definition_record_only": 240,
+          "V9_expressions_only": 1072,
+          "V10_comparer_init": 1872,
+          "V10b_plan_key": 1944,
+          "V10c_comparer_init_three": 5616,
+          "V5_definition": 728,
+          "V6_shell": 1544,
+          "V7_prepared_control": 792
+        },
+        "derived": {
+          "shell_count_per_query": 816,
+          "definition": 728,
+          "single_operand": 1544,
+          "operands": 3184,
+          "prebuilt_clone_set_operation": 816,
+          "clone_plus_set_operation": 816,
+          "execution_residual": 3040,
+          "prepared_control": 792,
+          "full_fair": 7040,
+          "left_operand": 1544,
+          "right_operand": 1640,
+          "clone_only": 816,
+          "clone_reset": 816,
+          "set_operation_assembly": 816,
+          "full_repro": 4000,
+          "cast_node_bytes": 48,
+          "widening_node_bytes": 48,
+          "definition_record_only": 240,
+          "expressions_only": 1072,
+          "comparer_init_per_command": 328,
+          "plan_key_path_extra": 72,
+          "comparer_init_per_command_from_three": 328
+        },
+        "closure": {
+          "v0": 7040,
+          "left_operand": 1544,
+          "left_definition_and_expression": 728,
+          "left_shell": 816,
+          "right_operand": 1640,
+          "right_definition_and_expression": 824,
+          "right_expression_minus_left_expression": 96,
+          "two_operands": 3184,
+          "clone_only": 816,
+          "clone_reset": 816,
+          "clone_only_plus_reset": 0,
+          "set_operation_assembly": 816,
+          "set_operation_call_only": 0,
+          "clone_reset_set_operation_measured": 816,
+          "full_setop_no_terminal": 4000,
+          "prepare_phase": 2248,
+          "execution": 792,
+          "three_shells": 2448,
+          "two_definitions_planner_model": 1456,
+          "planner_original_residual": 96,
+          "cast_node_bytes": 48,
+          "widening_node_bytes": 48,
+          "right_string_member_bytes": 1592,
+          "right_string_member_minus_left": 48,
+          "long_projection_minus_string_member": 0,
+          "binary_node_bytes": 96,
+          "convert_node_bytes": 48,
+          "large_operand_bytes": 1560,
+          "large_operand_minus_left": 16,
+          "right_nullable_int_bytes": 1592,
+          "right_nullable_int_minus_left": 48,
+          "right_entity_footprint_bytes": 48,
+          "definition_record_pool_per_query": 480,
+          "expressions_per_query": 1072,
+          "operand_shells_per_query": 1632,
+          "clone_shell": 816,
+          "construction_model_total": 4000,
+          "construction_model_residual": 0,
+          "attributed_total": 7040,
+          "residual": 0,
+          "definition_record_only": 240,
+          "expressions_only": 1072,
+          "left_expression_only": 488,
+          "right_expression_only": 584,
+          "comparer_init_per_command": 328,
+          "plan_key_path_extra": 72,
+          "comparer_init_per_command_from_three": 328,
+          "comparer_init_multiplicative": true,
+          "left_operand_matches_v2": true,
+          "two_operands_matches_v1": true,
+          "full_repro_matches_v4": true,
+          "residual_named_by_components": true
+        },
+        "reconciliation": {
+          "v0_minus_bdn_full_fair": 527.8999999999996,
+          "v4_minus_bdn_construct": 367.84000000000015,
+          "v7_minus_bdn_control": 48,
+          "prepare_phase": 2248,
+          "bdn_prepare_phase": 2248.1000000000004,
+          "prepare_phase_delta": -0.1000000000003638,
+          "closure_residual": 0
+        }
+      },
+      "closure": {
+        "unit": "B/query",
+        "source": "probe V0 closure (GC.GetAllocatedBytesForCurrentThread, deterministic)",
+        "categories": {
+          "operand_shells": 1632,
+          "clone_shell": 816,
+          "caller_lambdas": 1072,
+          "query_definition": 480,
+          "plan_comparers": 984,
+          "remaining_preparation_hash_lookup": 1264,
+          "execution": 792
+        },
+        "total": 7040,
+        "residual": 0.0,
+        "notes": {
+          "clone_shell": "mandatory (G4)",
+          "caller_lambdas": "workload; hoisting the call-site lambdas would change the measured workload",
+          "remaining_preparation_hash_lookup": "prepare phase 2248 - comparers 984"
+        }
+      },
+      "reconciliation": {
+        "prepare_phase_probe": 2248,
+        "prepare_phase_bdn": 2248.1000000000004,
+        "prepare_phase_delta": -0.1000000000003638,
+        "probe_v0_minus_bdn_full_fair": 527.8999999999996,
+        "v4_minus_bdn_construct": 367.84000000000015,
+        "v7_minus_bdn_control": 48,
+        "cross_domain_note": "probe process vs BDN InProcessEmit process; the 527.9 B/query delta is recorded as cross-domain, not interchangeable"
+      },
+      "candidates": [
+        {
+          "candidate": "plan comparers",
+          "bytes_per_query": 984,
+          "derivation": "3 x 328 B lazy comparer init per logical query (probe V10/V10c)",
+          "blocker": "comparers capture the owning QueryCommand: src/nextorm.core/Query/QueryCommand.Plan.cs:72-87; fields src/nextorm.core/Query/QueryPlanEqualityComparer.cs:15-19,28-36, src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs:49-50, src/nextorm.core/Expressions/FromExpressionPlanEqualityComparer.cs:12,16,32; registry resolution src/nextorm.core/DataContext/QueryPlanner.cs:813-815,889; identity assert src/nextorm.core/DataContext/Cache/QueryPlan.cs:150; clone propagation src/nextorm.core/Query/QueryCommand.Clone.cs:126-131; D240 protected list docs/specs/status/D240-construction-allocation-1.md:139,326",
+          "available": false
+        },
+        {
+          "candidate": "QueryDefinition -> struct",
+          "bytes_per_query": 480,
+          "derivation": "2 x 240 B QueryDefinition records per logical query (probe V8)",
+          "blocker": "public sealed record QueryDefinition src/nextorm.core/Query/QueryDefinition.cs:18; public members and public parameter positions src/nextorm.core/Query/QueryCommand.TResult.cs:21, src/nextorm.core/DataContext/DataContextExtensions.cs:20; a struct would violate R245-07 (no public API change)",
+          "available": false
+        },
+        {
+          "candidate": "operand shells",
+          "bytes_per_query": 1632,
+          "derivation": "2 x 816 B operand command shells (probe V2/V4a)",
+          "blocker": "clone-before-mutation is mandatory (G4): src/nextorm.core/Query/QueryCommand.TResult.cs:1076,1108 and src/nextorm.core/Query/QueryCommand.cs:1164-1182; the operands are the measured workload",
+          "available": false
+        },
+        {
+          "candidate": "clone shell",
+          "bytes_per_query": 816,
+          "derivation": "one QueryCommand.Clone + ResetPreparation shell (probe V3/V4c/V4d)",
+          "blocker": "G4: Clone() is required for the reusable-operand contract; no flag proves a command is non-reused, and NestedSetOperations_KeepOperandsUnchanged would fail without it",
+          "available": false
+        },
+        {
+          "candidate": "frozen preparation",
+          "bytes_per_query": 1264,
+          "derivation": "prepare phase 2248 - plan comparers 984",
+          "blocker": "R245-13 frozen recipe/cache-key/equality; src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:91 rejects the raw-shape shortcut",
+          "available": false
+        },
+        {
+          "candidate": "execution",
+          "bytes_per_query": null,
+          "derivation": "execution/materialization residual of the same fluent shape",
+          "blocker": "outside the lever; prepared controls 760/744 B/query prove the lean execution path",
+          "available": false
+        }
+      ],
+      "guards": {
+        "R245-07": {
+          "statement": "no public API change",
+          "violated": false,
+          "proof": [
+            "git status --porcelain src empty at every step (recorded in .pdca/T245/rv1/logs/git-status-entry.txt and progress log)",
+            ".pdca/T245/rv1/api/entry.json is the only public-surface export; no surface was edited"
+          ]
+        },
+        "R245-08": {
+          "statement": "clone/operand immutability preserved",
+          "violated": false,
+          "proof": [
+            "G4 facts recorded above (clone semantically mandatory)",
+            ".pdca/T245/rv1/tests/core-attribution2.log: T240CommandConstructionTests 11/11 passed, NestedSetOperations_KeepOperandsUnchanged 1/1 passed"
+          ]
+        },
+        "R245-12": {
+          "statement": "per-case attribution, no averaged set-operation number",
+          "violated": false,
+          "proof": [
+            "this file has separate EXCEPT and INTERSECT records",
+            ".pdca/T245/rv1/lever-decision.md reports the two cases in separate rows"
+          ]
+        },
+        "R245-13": {
+          "statement": "frozen recipe/cache-key/equality untouched",
+          "violated": false,
+          "proof": [
+            "no production file changed: git status --porcelain src empty",
+            "frozen regions listed in the decision were not edited; no diff exists to review"
+          ]
+        }
+      },
+      "provenance": {
+        "repo": "/home/alex/sources/nextorm",
+        "branch": "1.0.9-rc3",
+        "head_at_authoring": "a5a86a06cb012b3cbc1e740309d10fa375d065c1",
+        "contract": {
+          "base_ref": "01815f3a",
+          "entry_head": "8c94207f",
+          "contract_rv": 1,
+          "evidence_root": ".pdca/T245/rv1"
+        },
+        "blocks": {
+          "entry-r1": {
+            "argv": "env -u NEXTORM_BENCH_FULL NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkFeaturesFairCached.B_* --exporters json --artifacts .pdca/T245/rv1/bdn/entry-r1",
+            "lock_mode": "plain flock -x (fd inherited by nodeReuse MSBuild servers; orphan recovered in D245-P1)",
+            "head_before": "e7813beb048c2918946c31260c6a27fe30d55ecb",
+            "head_after": "080043669ee19ba9eff8f19602fe0af51dc7698f",
+            "admission": ".pdca/T245/rv1/bdn/entry-r1/admission.json",
+            "admission_state": "admitted on provenance",
+            "quiet_window": null
+          },
+          "entry-r2": {
+            "argv": "env -u NEXTORM_BENCH_FULL NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --filter '*SqliteBenchmarkFeaturesFairCached.B_*' --exporters json --artifacts .pdca/T245/rv1/bdn/entry-r2",
+            "lock_mode": "flock -x --close /tmp/opencode/nextorm-bdn-host.lock with MSBUILDDISABLENODEREUSE=1 DOTNET_CLI_USE_MSBUILD_SERVER=0",
+            "lock_wait_seconds": 2235,
+            "head_before": "4d83a8eb3d8733c762feabd1c72e259b43fb2f94",
+            "head_after": "4d83a8eb3d8733c762feabd1c72e259b43fb2f94",
+            "valid": true,
+            "quiet_window": "attempt 4/4 admitted, median 4.99 %, p95 7.72 % (logs/entry-r2-quiet-window.txt)"
+          },
+          "controls-entry + decompose-entry": {
+            "argv_controls": "env -u NEXTORM_BENCH_FULL NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --filter \\*SqliteBenchmarkFeatures.Nextorm_Prepared_Except\\* \\*SqliteBenchmarkFeatures.Nextorm_Prepared_Intersect\\* --exporters json --artifacts .pdca/T245/rv1/bdn/controls-entry",
+            "argv_decompose": "env -u NEXTORM_BENCH_FULL NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db dotnet run --project benchmarks/nextorm.benchmark -c Release --no-build -- --filter \\*SqliteBenchmarkWarmDecompose\\* --exporters json --artifacts .pdca/T245/rv1/bdn/decompose-entry",
+            "lock_mode": "single flock -x --close ownership 2026-10-18T18:42:35Z..19:02:32Z, lock wait 0 s, both invocations serial",
+            "head_before": "d44c88c17e653890dd1781748b3f6e34dacb8aac",
+            "head_after": "d44c88c17e653890dd1781748b3f6e34dacb8aac",
+            "quiet_windows": {
+              "controls": "attempt 4/4 admitted, median 5.94 %, p95 10.70 %",
+              "decompose": "attempt 4/4 admitted, median 4.84 %, p95 6.80 %"
+            },
+            "decompose_isolation_caveat": "foreign Debug build/tests began 3m39s into the interval; allocation unaffected and reproduced to 0.01 B/query against the clean interval-1 run; timing-only"
+          }
+        },
+        "db_sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+        "db_pin": "2/2",
+        "binary_sha256": "19528c5e88675191ccaba150532a11e38270130cbd422e109c15c09ffc67be30",
+        "binary_path": "benchmarks/nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark.dll",
+        "bdn_version": "0.15.8",
+        "job": "ShortRun",
+        "toolchain": "InProcessEmitToolchain",
+        "default_job_present": false,
+        "logs": [
+          ".pdca/T245/rv1/logs/entry-r1.log",
+          ".pdca/T245/rv1/logs/entry-r2.log",
+          ".pdca/T245/rv1/logs/controls-entry.log",
+          ".pdca/T245/rv1/logs/decompose-entry.log",
+          ".pdca/T245/rv1/logs/t245-attribution-probe.log",
+          ".pdca/T245/rv1/logs/t245-attribution-probe2.log"
+        ]
+      },
+      "open_items": [
+        "final-r1 and final-r2 were never measured; no final acceptance claim exists",
+        "controls-final and decompose-final were never measured",
+        "native-final and the two 100-operation native gate rows were never produced",
+        "R245-01/R245-02 (caps and ratios) remain open",
+        "R245-03 (per-case final timing) remains open",
+        "R245-09 (final prepared controls) and R245-10 (native final rows) remain open",
+        "R245-14 final boundary sweep never run and is unclaimed because production was never modified",
+        "R245-15 EN/RU docs intentionally not updated (no claim to publish)",
+        "D245-3 remains blocked/unimplemented; next revision needs comparer-ownership redesign and owner authorization for D240-protected files and the public QueryDefinition"
+      ]
+    }
+  }
+}

@@ -148,7 +148,7 @@ public static class ClickHouseEntityBuilderExtensions
         options?.Invoke(opts);
         return AddSemiAntiJoin(builder, new JoinExpression(joinCondition, JoinType.Semi)
         {
-            From = new FromExpression(from.Table!),
+            From = JoinSourceLock.Apply(new FromExpression(from.Table!), opts),
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
             JoinHint = opts.JoinHint,
@@ -163,7 +163,7 @@ public static class ClickHouseEntityBuilderExtensions
         options?.Invoke(opts);
         return AddSemiAntiJoin(builder, new JoinExpression(joinCondition, JoinType.Anti)
         {
-            From = new FromExpression(from.Table!),
+            From = JoinSourceLock.Apply(new FromExpression(from.Table!), opts),
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
             JoinHint = opts.JoinHint,
@@ -182,7 +182,7 @@ public static class ClickHouseEntityBuilderExtensions
         options?.Invoke(opts);
         return AddSemiAntiJoin(builder, new JoinExpression(joinCondition, JoinType.Semi)
         {
-            From = builder.DataProvider.GetFrom(typeof(TJoinEntity), null)!,
+            From = JoinSourceLock.Apply(builder.DataProvider.GetFrom(typeof(TJoinEntity), null)!, opts),
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
             JoinHint = opts.JoinHint,
@@ -197,7 +197,7 @@ public static class ClickHouseEntityBuilderExtensions
         options?.Invoke(opts);
         return AddSemiAntiJoin(builder, new JoinExpression(joinCondition, JoinType.Anti)
         {
-            From = builder.DataProvider.GetFrom(typeof(TJoinEntity), null)!,
+            From = JoinSourceLock.Apply(builder.DataProvider.GetFrom(typeof(TJoinEntity), null)!, opts),
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
             JoinHint = opts.JoinHint,
@@ -286,7 +286,7 @@ public static class ClickHouseEntityBuilderExtensions
 
         joins.Add(new JoinExpression(joinCondition, joinType)
         {
-            From = rightSource,
+            From = JoinSourceLock.Apply(rightSource, opts),
             EntityType = null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,

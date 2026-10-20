@@ -11,4 +11,4 @@ LaunchCount=1  WarmupCount=3  Categories=acceptance,InMemoryNew
 ```
 | Method               | Mean     | Error    | StdDev   | Ratio | Gen0      | Gen1      | Allocated | Alloc Ratio |
 |--------------------- |---------:|---------:|---------:|------:|----------:|----------:|----------:|------------:|
-| Nextorm_GroupByCount | 58.92 ms | 4.518 ms | 0.248 ms |  1.00 | 6222.2222 | 2000.0000 |   50.1 MB |        1.00 |
+| Nextorm_GroupByCount | 58.69 ms | 3.126 ms | 0.171 ms |  1.00 | 6222.2222 | 2000.0000 |  50.12 MB |        1.00 |

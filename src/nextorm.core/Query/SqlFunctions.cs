@@ -86,7 +86,14 @@ public static partial class SqlFunctions
     /// </summary>
     /// <typeparam name="T">The CLR type of the column value.</typeparam>
     /// <param name="entity">The entity source the column belongs to (a query lambda parameter).</param>
-    /// <param name="columnName">The database column name.</param>
+    /// <param name="columnName">
+    /// The <b>raw</b> database column name. It is not SQL text: it is always safely quoted by the
+    /// provider, regardless of the command's <c>QuoteIdentifiers</c> option. A dot is a literal name
+    /// character (not a schema/alias qualifier), SQL-looking punctuation stays inside the one
+    /// identifier, and the name is never stripped of brackets. Manual pre-quoting is not supported, so
+    /// <c>Column(t, "[1]")</c> is the literal three-character name <c>[1]</c> (rendered <c>[[1]]]</c> on
+    /// SQL Server); to reference the column named <c>1</c> write <c>Column(t, "1")</c>.
+    /// </param>
     /// <remarks>
     /// Only valid inside a query expression. The in-memory provider has no column-name concept and
     /// rejects the query.
@@ -448,6 +455,58 @@ public static partial class SqlFunctions
         /// <see cref="ISessionInfoFunctions.Supports"/>).
         /// </summary>
         public string? version() => default!;
+
+        /// <summary>
+        /// The server-side backend process id (<c>pg_backend_pid()</c>). Requires a provider that supports
+        /// it (see <see cref="ISqlDialect.SessionInfoFunctions"/> and
+        /// <see cref="ISessionInfoFunctions.Supports"/>; PostgreSQL).
+        /// </summary>
+        public int pg_backend_pid() => default!;
+
+        /// <summary>
+        /// The IP address of the server the client is connected to, rendered as text
+        /// (<c>CAST(inet_server_addr() AS text)</c>). The value is SQL NULL on a unix-socket connection,
+        /// so the result is nullable. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SessionInfoFunctions"/>; PostgreSQL).
+        /// </summary>
+        public string? inet_server_addr() => default!;
+
+        /// <summary>
+        /// The TCP port of the server the client is connected to (<c>inet_server_port()</c>). The value is
+        /// SQL NULL on a unix-socket connection. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SessionInfoFunctions"/>; PostgreSQL).
+        /// </summary>
+        public int? inet_server_port() => default!;
+
+        /// <summary>
+        /// The IP address of the client, rendered as text (<c>CAST(inet_client_addr() AS text)</c>). The
+        /// value is SQL NULL on a unix-socket connection, so the result is nullable. Requires a provider
+        /// that supports it (see <see cref="ISqlDialect.SessionInfoFunctions"/>; PostgreSQL).
+        /// </summary>
+        public string? inet_client_addr() => default!;
+
+        /// <summary>
+        /// The TCP port the client is connected from (<c>inet_client_port()</c>). The value is SQL NULL on a
+        /// unix-socket connection. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SessionInfoFunctions"/>; PostgreSQL).
+        /// </summary>
+        public int? inet_client_port() => default!;
+
+        /// <summary>
+        /// The server-side connection id as an unsigned 64-bit value (MySQL/MariaDB
+        /// <c>CAST(CONNECTION_ID() AS UNSIGNED)</c>, ClickHouse <c>CAST(connectionId() AS UInt64)</c>).
+        /// It identifies the connection, not the user. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SessionInfoFunctions"/>).
+        /// </summary>
+        public ulong connection_id() => default!;
+
+        /// <summary>
+        /// The connecting account as the server reports it (<c>USER()</c>), surfaced by MySQL/MariaDB: the
+        /// <c>user@host</c> pair of the client, which is not the effective authenticated account
+        /// (<see cref="current_user"/>) and is client-influenced. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SessionInfoFunctions"/>; MySQL/MariaDB).
+        /// </summary>
+        public string user() => default!;
 
         /// <summary>
         /// Generates a random UUID v4 (<c>gen_random_uuid()</c>). Requires a provider that supports it

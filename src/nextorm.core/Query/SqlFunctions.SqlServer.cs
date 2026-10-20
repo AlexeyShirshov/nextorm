@@ -15,6 +15,51 @@ namespace NextORM.Core;
     public class SqlServerFunctions : CommonFunctions
     {
         /// <summary>
+        /// The name of the server instance the client is connected to (<c>@@SERVERNAME</c>); SQL NULL when
+        /// the instance has no configured name. Requires a provider that exposes the SQL Server identity
+        /// surface (see <see cref="ISqlServerFunctions.SupportsSessionIdentity"/>; SQL Server). This is a
+        /// server identity, not the client host (<see cref="host_name"/>).
+        /// </summary>
+        public string? server_name() => default!;
+
+        /// <summary>
+        /// The identifier of the client host (<c>HOST_ID()</c>) as the server recorded it; SQL NULL when the
+        /// client did not report one. Requires a provider that exposes the SQL Server identity surface (see
+        /// <see cref="ISqlServerFunctions.SupportsSessionIdentity"/>; SQL Server).
+        /// </summary>
+        public string? host_id() => default!;
+
+        /// <summary>
+        /// The name of the client host (<c>HOST_NAME()</c>) as the client reported it; SQL NULL when it did
+        /// not. The value is client-supplied and therefore not a trusted identity — it is the client, not the
+        /// server (<see cref="server_name"/>; on ClickHouse the server host is
+        /// <see cref="ClickHouseFunctions.host_name"/>). Requires a provider that exposes the SQL Server
+        /// identity surface (see <see cref="ISqlServerFunctions.SupportsSessionIdentity"/>; SQL Server).
+        /// </summary>
+        public string? host_name() => default!;
+
+        /// <summary>
+        /// The application name the client reported on connect (<c>APP_NAME()</c>); SQL NULL when it did not.
+        /// The value is client-supplied and untrusted. Requires a provider that exposes the SQL Server
+        /// identity surface (see <see cref="ISqlServerFunctions.SupportsSessionIdentity"/>; SQL Server).
+        /// </summary>
+        public string? app_name() => default!;
+
+        /// <summary>
+        /// The login name of the current security context (<c>SUSER_NAME()</c>), resolved from the security
+        /// token rather than from the session string. Requires a provider that exposes the SQL Server
+        /// identity surface (see <see cref="ISqlServerFunctions.SupportsSessionIdentity"/>; SQL Server).
+        /// </summary>
+        public string? suser_name() => default!;
+
+        /// <summary>
+        /// The login that originally connected the session (<c>ORIGINAL_LOGIN()</c>), which survives an
+        /// <c>EXECUTE AS</c> context switch. Requires a provider that exposes the SQL Server identity surface
+        /// (see <see cref="ISqlServerFunctions.SupportsSessionIdentity"/>; SQL Server).
+        /// </summary>
+        public string? original_login() => default!;
+
+        /// <summary>
         /// <c>json_value(json, path)</c>: the scalar value at <paramref name="path"/>. Here JSON is
         /// stored in a plain text column rather than a native JSON type. Requires a provider that
         /// supports it (see <see cref="ISqlDialect.SupportsTextJson"/>).
@@ -282,6 +327,23 @@ namespace NextORM.Core;
         /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
         /// </summary>
         public Guid? newsequentialid() => default!;
+
+        /// <summary>
+        /// <c>NEXT VALUE FOR [sequence]</c>: the next value of the named sequence object (SQL Server
+        /// 2012+). <paramref name="sequence"/> must be a constant string naming one object, written as
+        /// either one component (<c>[name]</c>) or two (<c>[schema].[name]</c>); each component is
+        /// bracket-quoted with an embedded <c>]</c> doubled, and the name is never bound as a SQL
+        /// parameter. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public long next_value_for(string sequence) => default!;
+
+        /// <summary>
+        /// <c>nextval(sequence)</c>: an alias of <see cref="next_value_for(string)"/> that renders the
+        /// same <c>NEXT VALUE FOR [sequence]</c> expression (SQL Server 2012+). Requires a provider
+        /// that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public long nextval(string sequence) => default!;
 
         /// <summary>
         /// <c>json_array(value, ...)</c>: constructs a JSON array text from the arguments. Requires a

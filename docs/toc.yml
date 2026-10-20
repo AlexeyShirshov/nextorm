@@ -2,16 +2,18 @@
   href: index.md
 - name: Getting started
   href: getting-started/
+- name: Engine
+  href: engine/
+- name: Relationships
+  href: relationships/
 - name: Guide
   href: guide/
 - name: Infrastructure
   href: infrastructure/
-- name: Querying
-  href: querying/
 - name: Scalar functions
   href: scalar-functions/
-- name: Providers
-  href: providers/
+- name: Connecting providers
+  href: connecting-providers/
 - name: Comparisons
   href: comparisons/
 - name: Advanced

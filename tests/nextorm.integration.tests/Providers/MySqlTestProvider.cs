@@ -113,6 +113,11 @@ internal sealed class MySqlTestProvider : ITestProvider
         "drop table if exists eager_note",
         "drop table if exists eager_child",
         "drop table if exists eager_parent",
+        "drop table if exists eager_composite_child",
+        "drop table if exists eager_composite_parent",
+        "drop table if exists eager_cj_link",
+        "drop table if exists eager_cj_child",
+        "drop table if exists eager_cj_parent",
         "drop table if exists query_filter_target",
         "drop table if exists query_filter_entity",
         "drop table if exists extrema_entity",
@@ -240,6 +245,25 @@ internal sealed class MySqlTestProvider : ITestProvider
         """,
 
         """
+        create table eager_composite_parent
+        (
+            row_id int not null primary key,
+            tenant int not null,
+            link_id int not null
+        )
+        """,
+
+        """
+        create table eager_composite_child
+        (
+            id int not null primary key,
+            tenant int not null,
+            parent_id int not null,
+            sort_key int not null
+        )
+        """,
+
+        """
         create table eager_tag
         (
             id int not null primary key,
@@ -252,6 +276,34 @@ internal sealed class MySqlTestProvider : ITestProvider
         (
             id int not null primary key,
             parent_id int not null,
+            child_id int not null
+        )
+        """,
+
+        // Composite-junction M:N fixtures (#223): two parent foreign-key components plus one child.
+        """
+        create table eager_cj_parent
+        (
+            row_id int not null primary key,
+            tenant int not null,
+            link_id int not null,
+            name varchar(100) null
+        )
+        """,
+
+        """
+        create table eager_cj_child
+        (
+            id int not null primary key,
+            name varchar(100) null
+        )
+        """,
+
+        """
+        create table eager_cj_link
+        (
+            parent_tenant int not null,
+            parent_link_id int not null,
             child_id int not null
         )
         """,

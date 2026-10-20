@@ -1,22 +1,28 @@
 # nextorm.examples.postgres.aviasales
 
-Runnable nextorm port of the PostgreSQL Pro demo database «Авиаперевозки» (schema `bookings`,
-dump `demo-20250901-3m`). Provider: `nextorm.postgres`.
+Comparison project for the PostgreSQL Pro demo database «Авиаперевозки» (schema `bookings`, dump
+`demo-20250901-3m`): every query is implemented **twice** — with nextorm and with
+[linq2db](https://github.com/linq2db/linq2db) — and both arms are executed against the same dataset,
+then benchmarked.
 
-The point of this project is to show **how a real SQL query becomes nextorm code**. Every method in
-[`AviasalesQueries.cs`](AviasalesQueries.cs) models exactly one query file in [`Sql/`](Sql) — the
-method comment names it, and the tables below map each SQL construct to the nextorm construct that
-replaces it. Read a `Sql/*.sql` file next to its method and you can translate your own queries.
+The project shows **how a real SQL query becomes nextorm code, and how it looks in another LINQ ORM**.
+Every method pair models exactly one query file in [`Sql/`](Sql): the method comment names it, and the
+tables below map each SQL construct to the nextorm construct that replaces it. Read a `Sql/*.sql` file
+next to its two implementations and you can translate your own queries in either direction.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| [`Sql/*.sql`](Sql) | Original model queries — the reference the C# is verified against |
+| [`Sql/*.sql`](Sql) | Original model queries — the reference both arms are verified against |
 | [`AviasalesQueries.cs`](AviasalesQueries.cs) | nextorm implementation of the 5 demo queries + 6 course-style exercises |
-| [`Entities.cs`](Entities.cs) | `[SqlTable]` / `[Column]` entity interfaces for the `bookings` schema |
+| [`Entities.cs`](Entities.cs) | nextorm `[SqlTable]` / `[Column]` entity interfaces for the `bookings` schema |
+| [`Linq2DbQueries.cs`](Linq2DbQueries.cs) | linq2db implementation of the same eleven queries |
+| [`Linq2DbEntities.cs`](Linq2DbEntities.cs) | linq2db `[Table]` / `[Column]` POCOs for the same tables |
+| [`Comparison.cs`](Comparison.cs) | Runs both arms, prints `[ OK ]`/`[FAIL]`/`[DIFF]`, compares row counts |
+| [`Benchmarks.cs`](Benchmarks.cs) | BenchmarkDotNet class: one `[Benchmark]` per arm and query |
 | [`DemoDatabase.cs`](DemoDatabase.cs) | Testcontainers provisioning and dataset download |
-| [`Program.cs`](Program.cs) | Entry point; runs every query, catching per-query failures, and prints a summary |
+| [`Program.cs`](Program.cs) | Entry point: comparison run, or `--benchmark` |
 
 ## Running
 
@@ -26,10 +32,39 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
 ```
 
 Pass `--connection "<cs>"` (or set `AVIASALES_CONNECTION`) to skip the container and dataset download.
-Add `--log-sql` to print the generated SQL. The program runs every query, prints `[ OK ]`/`[FAIL]` per
-query, and ends with an `n/m succeeded` summary — a `FAIL` is a documented engine gap
-(`NotSupportedException`/`QueryPreparationException`); any other error still aborts the run. See
-[`../README.md`](../README.md) for details.
+Add `--log-sql` to print the nextorm SQL, `--only Name1,Name2` to run a subset, and `--benchmark` to
+run the BenchmarkDotNet comparison instead of the plain run (see below).
+
+The plain run executes both arms per query, prints the first rows of each and a per-query verdict, then
+an `n/m queries matched in both arms` summary. `[ OK ]` means both arms returned the same number of
+rows; `[FAIL]` means one arm hit a documented engine gap (`NotSupportedException`,
+`QueryPreparationException` or `LinqToDBException`); `[DIFF]` means the row counts differ. Any other
+exception still aborts the run. See [`../README.md`](../README.md) for the shared run notes.
+
+### Benchmarks
+
+`--benchmark` provisions the database once (the same named volume as the plain run) and then runs
+BenchmarkDotNet in-process (`Job.ShortRun` + `InProcessEmitToolchain`, `[MemoryDiagnoser]`). Every
+query has a `Nextorm_*` baseline and a `Linq2Db_*` arm; the measured code is only "build + execute +
+materialise" (no printing, no JSON). A full filtered example:
+
+```bash
+DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+  dotnet run --project examples/nextorm.examples.postgres.aviasales -c Release -- \
+  --benchmark --filter '*AircraftDelayChains*'
+```
+
+Set `NEXTORM_EXAMPLES_BENCH_FULL=1` for the full out-of-process BenchmarkDotNet job. Reports land in
+`BenchmarkDotNet.Artifacts/` under the current directory.
+
+### The linq2db arm
+
+The linq2db queries mirror the SQL structurally as well: typed CTEs use `AsCte`/`From`, window
+functions use `Sql.Window.*`, `STDDEV` uses `AnalyticFunctions.StdDevSamp`, and `string_agg` uses
+`Sql.StringAggregate(...).ToValue()`. Two constructs have no linq2db LINQ surface and are issued
+through `FromSql` (still inside linq2db, not a separate driver): the ordered-set
+`percentile_disc(...) WITHIN GROUP (...)` in query 8, and nothing else — the `jsonb ->>` operator uses
+`Sql.Expr`. Both are annotated in [`Linq2DbQueries.cs`](Linq2DbQueries.cs).
 
 ## SQL → nextorm: general rules
 
@@ -39,9 +74,9 @@ SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Se
 | SQL | nextorm |
 |---|---|
 | `FROM t` | `ctx.From<IT>()`, where `IT` is an interface marked `[SqlTable("schema.t")]` |
-| `WITH x AS (SELECT …)` | declare it as a CTE: `ctx.With("x", query).From("x")`; a later CTE reads an earlier one by name (`ctx.From("x")`). CTE columns are read by name (`t.GetInt32("id")`) because the CTE source is untyped |
+| `WITH x AS (SELECT …)` | declare it as a CTE: the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference) or the string `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt32("id")`, because the name carries no type); a later CTE reads an earlier one the same way |
 | `SELECT a AS x` | `.Select(t => new { x = t.A })` (anonymous type = result row) |
-| `JOIN u ON a = b` / `LEFT JOIN` | `.Join(ctx.From<IU>(), (t, u) => …)` / `.LeftJoin(...)`; joined items are `p.Item1`, `p.Item2`, … |
+| `JOIN u ON a = b` / `LEFT JOIN` | `.Join<IU>((t, u) => …)` / `.LeftJoin<IU>((t, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
 | `WHERE c` | `.Where(t => c)` |
 | `GROUP BY a, b` | `.GroupBy(t => new { t.A, t.B })` |
 | `HAVING c` | `.Having(g => c)` (repeat the aggregate) or a derived query + `.Where(...)` |
@@ -74,8 +109,8 @@ Two nextorm-specific rules that trip people up:
 * **A derived query cannot yet be the primary `FROM` source while joined** — `ctx.From(derived).Join(...)`
   fails during preparation (known gap 10 in
   [`sql-capabilities-gap-analysis.md`](../../docs/specs/roadmap/sql-capabilities-gap-analysis.md)).
-  The reference queries declare their subqueries as CTEs, so the example uses `ctx.With(name, query)` /
-  `ctx.From(name)` (see rule 1); queries 1–5 are expressed this way and are all **WORKING**.
+  The reference queries declare their subqueries as CTEs, so the example uses the typed `query.AsCte(name)` /
+  `ctx.From(cte)` API (see rule 1); queries 1–5 are expressed this way and are all **WORKING**.
   Every method carries a `WORKING` / `NOT WORKING` comment saying which it is and, when it fails, why.
 
 ## Demo queries: SQL file → method
@@ -85,11 +120,11 @@ Markers: **OK** — expressed with the regular LINQ API; **≡** — same result
 
 | # | SQL | Method | Coverage | Notes |
 |---|---|---|---|---|
-| 1 | [`aircraft_delay_chains.sql`](Sql/aircraft_delay_chains.sql) | `AviasalesQueries.AircraftDelayChains` | OK | two CTEs (`flight_delays`, `delay_chains` reading the first); `LAG(...) OVER` → `lag(...).Over(...)`; `->> 'ru'` → `json_get_text`; `EXTRACT(EPOCH)/60` → `date_diff("second",…)/60.0`; final `JOIN airplanes_data` on the CTE |
+| 1 | [`aircraft_delay_chains.sql`](Sql/aircraft_delay_chains.sql) | `AviasalesQueries.AircraftDelayChains` | OK | two **typed** CTEs (`AsCte`: `flight_delays`, `delay_chains` reading the first); `LAG(...) OVER` → `lag(...).Over(...)`; `->> 'ru'` → `json_get_text`; `EXTRACT(EPOCH)/60` → `date_diff("second",…)/60.0`; final `JOIN airplanes_data` on the CTE |
 | 2 | [`business_occupancy_matrix.sql`](Sql/business_occupancy_matrix.sql) | `AviasalesQueries.BusinessOccupancyMatrix` | OK | two CTEs joined to each other and to `airplanes_data`; `EXTRACT(ISODOW…)` → `date_diff("day", date_trunc("week",…),…)+1`; `AVG(CASE WHEN day=n THEN ratio END)` → conditional `avg(day == n ? ratio : null)`; `NULLIF` → `nullif` |
-| 3 | [`passenger_noshow_analysis.sql`](Sql/passenger_noshow_analysis.sql) | `AviasalesQueries.PassengerNoShowAnalysis` | OK | `passenger_stats` CTE groups `passenger_flight_history` by name; `CASE WHEN bp.seat_no IS NULL THEN 1 ELSE 0 END` → `x == null ? 1 : 0`; `total_booked = total_noshows` in the outer `Where` |
+| 3 | [`passenger_noshow_analysis.sql`](Sql/passenger_noshow_analysis.sql) | `AviasalesQueries.PassengerNoShowAnalysis` | OK | `passenger_stats` typed CTE groups `passenger_flight_history` with member access; `CASE WHEN bp.seat_no IS NULL THEN 1 ELSE 0 END` → `x == null ? 1 : 0`; `total_booked = total_noshows` in the outer `Where` |
 | 4 | [`rolling_revenue_metrics.sql`](Sql/rolling_revenue_metrics.sql) | `AviasalesQueries.RollingRevenueMetrics` | OK | CTE `daily_revenue`; `DATE_TRUNC('day')` → `date_trunc("day",…)`; `SUM OVER (ROWS UNBOUNDED PRECEDING)` → `sum_over(...).Over(..., RowsUnboundedPrecedingToCurrentRow)`; `AVG OVER (6 PRECEDING)` → `avg_over(...).Over(..., Rows(Preceding(6), CurrentRow))` |
-| 5 | [`route_network_abc_xyz.sql`](Sql/route_network_abc_xyz.sql) | `AviasalesQueries.RouteNetworkAbcXyz` | OK | three chained CTEs (`route_monthly_revenue`, `route_aggregates`, `abc_analys`); `STDDEV` → `stdev`; `SUM(...) OVER() / SUM(...) OVER()` → `sum_over(...).Over()`; `city ->> 'ru' \|\| ' -> '` → `json_get_text(...) + " -> " + …`; ABC/XYZ `CASE` → ternary chain |
+| 5 | [`route_network_abc_xyz.sql`](Sql/route_network_abc_xyz.sql) | `AviasalesQueries.RouteNetworkAbcXyz` | OK | three chained **typed** CTEs (`AsCte`: `route_monthly_revenue`, `route_aggregates`, `abc_analys`); `STDDEV` → `stdev` (projected `(decimal?)`, so the one-month-per-route case stays distinct from zero); `SUM(...) OVER() / SUM(...) OVER()` → `sum_over(...).Over()`; `city ->> 'ru' \|\| ' -> '` → `json_get_text(...) + " -> " + …`; ABC/XYZ `CASE` → ternary chain |
 
 ## Course exercises (6–11)
 

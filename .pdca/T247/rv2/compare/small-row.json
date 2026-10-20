@@ -1,0 +1,19 @@
+{
+  "rounds": {
+    "round-1": {
+      "baseline_mean_ns": 2049558.3831163195,
+      "final_mean_ns": 171540.1306437703,
+      "value": 0.08369614257240449,
+      "threshold": 0.5,
+      "pass": true
+    },
+    "round-2": {
+      "baseline_mean_ns": 1858525.9176682692,
+      "final_mean_ns": 164845.40185546875,
+      "value": 0.08869685393587942,
+      "threshold": 0.5,
+      "pass": true
+    }
+  },
+  "threshold": 0.5
+}

@@ -3,6 +3,7 @@
   <ItemGroup>
     <!-- Pinned to the last open-source (Apache-2.0) release; 8.x switched to the commercial Xceed license. -->
     <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="System.Linq.Async" />
     <PackageReference Include="xunit.v3" />
@@ -24,6 +25,13 @@
     <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
     <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
     <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
+    <!-- The contract tests in Contracts/ are unit tests: they never connect anywhere, but they do assert
+         that every provider package exposes a working factory (CoreApiContractTests) and they reflect over
+         every dialect assembly present in the output to prove a reported capability renders
+         (DialectCapabilityContractTests), so all provider packages must be referenced here. -->
+    <ProjectReference Include="..\..\src\nextorm.sqlite\nextorm.sqlite.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.mysql\nextorm.mysql.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.mariadb\nextorm.mariadb.csproj" />
   </ItemGroup>
 
 </Project>

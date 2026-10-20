@@ -1,0 +1,160 @@
+{
+  "round": "round-1",
+  "subcommand": "baseline",
+  "valid": false,
+  "reasons": [
+    "source state moved during the block"
+  ],
+  "started_utc": "2026-10-18T03:18:39Z",
+  "finished_utc": "2026-10-18T04:34:38Z",
+  "duration_s": 4558.705,
+  "fingerprint_before": {
+    "head": "1b140d23cd12ecc19af4bfbad3563b6e8281aa63",
+    "porcelain_sha256": "f3a4297f6b4ce869eceb4a6d3c5e674b13d4ab1fd8688e51a334b6ea58151046",
+    "dirty_paths": 2,
+    "pathspec": [
+      "src",
+      "benchmarks/nextorm.benchmark",
+      "Directory.Build.props",
+      "Directory.Packages.props",
+      "global.json",
+      "nextorm.slnx",
+      ".editorconfig"
+    ]
+  },
+  "fingerprint_after": {
+    "head": "1b140d23cd12ecc19af4bfbad3563b6e8281aa63",
+    "porcelain_sha256": "42e41216e23232f6e7abfbd30899320471499b3ffd4f17ff6c323a000b9985ed",
+    "dirty_paths": 8,
+    "pathspec": [
+      "src",
+      "benchmarks/nextorm.benchmark",
+      "Directory.Build.props",
+      "Directory.Packages.props",
+      "global.json",
+      "nextorm.slnx",
+      ".editorconfig"
+    ]
+  },
+  "lock": {
+    "canonical_path": "/tmp/opencode/nextorm-bdn-host.lock",
+    "plan_text_name": "/tmp/opencode/nextorm-bdn.lock",
+    "canonical_exists": true,
+    "mode": "inherited flock -x",
+    "inherited_fd": 3,
+    "notice": "plan text names /tmp/opencode/nextorm-bdn.lock; docs/specs/status/collection-1.0.9-rc3-open-3.md:45 pins /tmp/opencode/nextorm-bdn-host.lock as canonical and states it supersedes every per-plan lock name; only the -host variant exists on disk (T244/D243/D246 lanes used it). The driver takes the OUTER lock as `flock -x /tmp/opencode/nextorm-bdn-host.lock` (strictly safer: it excludes a foreign host-lock holder) and MUST NOT nest a second lock. The driver does not flock itself - the caller wraps it - and invalidates a round on overlap or a HEAD/fingerprint move."
+  },
+  "children": [
+    {
+      "argv": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--filter",
+        "*SqliteBenchmarkWriteJson*",
+        "--exporters",
+        "json",
+        "csv",
+        "--artifacts",
+        ".pdca/T247/rv2/baseline/round-1/public-json"
+      ],
+      "exit_code": 0,
+      "log": ".pdca/T247/rv2/baseline/round-1/public-json.console.log",
+      "discovered_case_count": 33,
+      "executed_case_count": 33
+    },
+    {
+      "argv": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--filter",
+        "*SqliteBenchmarkJsonFixedCost*",
+        "--exporters",
+        "json",
+        "csv",
+        "--artifacts",
+        ".pdca/T247/rv2/baseline/round-1/fixed-cost"
+      ],
+      "exit_code": 0,
+      "log": ".pdca/T247/rv2/baseline/round-1/fixed-cost.console.log",
+      "discovered_case_count": 40,
+      "executed_case_count": 40
+    }
+  ],
+  "invocations": [
+    {
+      "tag": "public-json",
+      "filters": [
+        "*SqliteBenchmarkWriteJson*"
+      ],
+      "argv": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--filter",
+        "*SqliteBenchmarkWriteJson*",
+        "--exporters",
+        "json",
+        "csv",
+        "--artifacts",
+        ".pdca/T247/rv2/baseline/round-1/public-json"
+      ],
+      "exit_code": 0,
+      "artifacts_dir": ".pdca/T247/rv2/baseline/round-1/public-json",
+      "results_dir": ".pdca/T247/rv2/baseline/round-1/public-json/results",
+      "console_log": ".pdca/T247/rv2/baseline/round-1/public-json.console.log",
+      "reports": [
+        ".pdca/T247/rv2/baseline/round-1/public-json/results/NextORM.Benchmark.SqliteBenchmarkWriteJson-report-full-compressed.json"
+      ],
+      "discovered_case_count": 33,
+      "executed_case_count": 33
+    },
+    {
+      "tag": "fixed-cost",
+      "filters": [
+        "*SqliteBenchmarkJsonFixedCost*"
+      ],
+      "argv": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--filter",
+        "*SqliteBenchmarkJsonFixedCost*",
+        "--exporters",
+        "json",
+        "csv",
+        "--artifacts",
+        ".pdca/T247/rv2/baseline/round-1/fixed-cost"
+      ],
+      "exit_code": 0,
+      "artifacts_dir": ".pdca/T247/rv2/baseline/round-1/fixed-cost",
+      "results_dir": ".pdca/T247/rv2/baseline/round-1/fixed-cost/results",
+      "console_log": ".pdca/T247/rv2/baseline/round-1/fixed-cost.console.log",
+      "reports": [
+        ".pdca/T247/rv2/baseline/round-1/fixed-cost/results/NextORM.Benchmark.SqliteBenchmarkJsonFixedCost-report-full-compressed.json"
+      ],
+      "discovered_case_count": 40,
+      "executed_case_count": 40
+    }
+  ],
+  "cases": [],
+  "discovered_case_count": 0,
+  "executed_case_count": 0
+}

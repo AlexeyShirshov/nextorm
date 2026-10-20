@@ -1,0 +1,53 @@
+{
+  "block": "decompose-entry",
+  "valid": true,
+  "validity_basis": "brief admission procedure: DB pin 2/2, quiet probe admitted (attempt 4), HEAD + status + dll fingerprints stable, rc=0, 58/58 arms present. Allocation attribution is the measured quantity; the isolation caveat affects timing only and is recorded, not hidden",
+  "reason_codes": [],
+  "head_before": "d44c88c17e653890dd1781748b3f6e34dacb8aac",
+  "head_after": "d44c88c17e653890dd1781748b3f6e34dacb8aac",
+  "binary_sha_before": "19528c5e88675191ccaba150532a11e38270130cbd422e109c15c09ffc67be30",
+  "binary_sha_after": "19528c5e88675191ccaba150532a11e38270130cbd422e109c15c09ffc67be30",
+  "binary_stable": true,
+  "rc": 0,
+  "wall_seconds": 393,
+  "run_start_utc": "2026-10-18T18:55:52Z",
+  "run_end_utc": "2026-10-18T19:02:25Z",
+  "lock": {
+    "lock_file": "/tmp/opencode/nextorm-bdn-host.lock",
+    "lock_wait_seconds": 0,
+    "owner_interval": "2026-10-18T18:42:35Z..2026-10-18T19:02:32Z",
+    "single_interval_for_both_invocations": true
+  },
+  "db_pin": {
+    "path1": "/tmp/nextorm-bench/test.db",
+    "path2": "benchmarks/nextorm.benchmark/data/test.db",
+    "sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+    "match": "2/2"
+  },
+  "quiet": {
+    "attempts": 4,
+    "median_pct": 4.84,
+    "p95_pct": 6.8,
+    "thresholds": {
+      "median_max_pct": 8.4,
+      "p95_max_pct": 11.4
+    }
+  },
+  "arms_present": 58,
+  "arms_required": 58,
+  "iterations_per_invocation": 100,
+  "foreign_activity_during_interval": true,
+  "isolation": {
+    "concurrent_foreign_build_or_test": true,
+    "affected_metric": "mean_ns (timing) only",
+    "allocation_unaffected": true
+  },
+  "observations": [
+    "admitted on quiet probe attempt 4 (attempts 1-3 rejected: 20.77/26.68, 14.99/31.92, 5.92/19.07 median/p95 %); 90 s sleeps between attempts",
+    "head/status fingerprints identical before and after the invocation (full sha 51f50608..., scoped sha 5ef2feeb...)",
+    "Release benchmark dll sha256 19528c5e...67be30 identical before and after; 58/58 SqliteBenchmarkWarmDecompose arms present",
+    "ISOLATION CAVEAT: foreign activity began 3m39s into the 6m33s interval - `dotnet build nextorm.slnx -c Debug` at 18:59:31Z (215 % CPU), `dotnet test tests/nextorm.core.tests` guard filter at 18:59:34Z, focused `dotnet run --project tests/nextorm.integration.tests` runs 19:00:04Z..19:02:13Z (40-93 % CPU). Allocation is unaffected (allocation_stability_evidence); mean_ns of arms executed after 18:59:31Z is contention-inflated (interval-1 run: Except_Construct mean 125.5 us vs 169.1 us in this run)",
+    "allocation_stability_evidence: the same dll ran twice on this host (paired interval 18:55:52Z..19:02:25Z and the clean orphan interval-1 run 18:31:46Z..18:38:23Z). All five EXCEPT/INTERSECT phase increments agree to 0.01 B/query (visitors 1744.08 vs 1744.09, hash 792.06 vs 792.05, plan+lookup -288.02 vs -288.03); Warm_Reused is 0 B in both. The per-case base shift (+112.01 B/query on Except/Intersect construct, -80 B/query on the CTE family) tracks the different BDN arm execution order between processes (entry starts Gen_P0_From, InAtIn_Inline_Warm_Reused, Intersect_Warm_Reused; orphan starts Gen_P0_From, Except_Warm_Reused, Intersect_Warm_Reused), not the foreign load",
+    "cross-check against the C-CONTROLS block measured in the same lock interval: controls (prepared command reused, execution only) = 760.0 B/query EXCEPT / 744.0 B/query INTERSECT; decompose Warm_PlanOnly = 5880.28 / 5880.26 B/query and the fair full reference = 6528.1 / 6512.1 B/query, residual 647.8 / 631.8. The 112.2 B/query gap to the controls is exactly the cross-process construct-base shift, so the in-process residual is 760.0 / 744.0 and the accounting closes"
+  ]
+}

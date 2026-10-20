@@ -23,7 +23,7 @@ where the driver allows it); acceptance per issue = tests + EN/RU docs.
   no PRs/comments. Body: `ToStream`/`ToTextReader` work for PG/SQL Server/SQLite; MySQL/MariaDB and
   ClickHouse throw `NotSupportedException` (no sequential access); wants sequential access where the
   driver allows; AC tests + EN/RU. References `docs/guide/30-large-objects.md` (stale; actual
-  `docs/guide/26-large-objects.md`) and `ISqlDialect.SupportsSequentialAccess`.
+  `docs/guide/28-large-objects.md`) and `ISqlDialect.SupportsSequentialAccess`.
 - Surface: `QueryCommandExtensions.cs:96` `ToStream(QueryCommand<byte[]>)`, async `:124,:133`,
   named-column `:212`; `ToTextReader(QueryCommand<string>) :154`, async `:182,:191`.
   `ISqlDialect.cs:683` `SupportsSequentialAccess => false` (DIM); `SqlDialectBase.cs:223` virtual
@@ -53,9 +53,9 @@ where the driver allows it); acceptance per issue = tests + EN/RU docs.
   `SqliteLobGuardTests.cs:17`, `LobSqlGenerationTests.cs:20`, `SqliteRowIdLobProbeTests.cs:34`;
   probes `LobCapabilityProbeTests.cs:31` (skip unless `NEXTORM_LOB_PROBE=1`),
   `LobPerfHarnessTests.cs:16` (skip unless `NEXTORM_LOB_PERF=1`).
-- Docs EN/RU: `docs/guide/26-large-objects.md:114-116,118-129,131,191,193-205` +
-  `docs/ru/guide/26-large-objects.md:111-113,115-126,128-139`;
-  `docs/guide/28-streaming-data.md:77`. Specs
+- Docs EN/RU: `docs/guide/28-large-objects.md:114-116,118-129,131,191,193-205` +
+  `docs/ru/guide/28-large-objects.md:111-113,115-126,128-139`;
+  `docs/guide/30-streaming-data.md:77`. Specs
   `roadmap/design-review-todos-2026-09-24.md:71,106` (todo_streaming_lob removed, #27),
   `design/code-smells-review.md:5364,7972` (MySQL/MariaDB GetStream/GetTextReader capability open).
 - **Contradictions:** status pointer to this file existed but the file was absent; issue cites stale
@@ -93,7 +93,7 @@ where the driver allows it); acceptance per issue = tests + EN/RU docs.
   the real buffered behavior and the probe cannot be read as evidence to set `SupportsLobStreaming=true`.
 - **R133-03** Capability flags unchanged: MySQL/MariaDB/ClickHouse dialects inherit
   `SupportsSequentialAccess => false`; test providers keep `SupportsLobStreaming => false`.
-- **R133-04** EN + RU `guide/26-large-objects.md` state drivers buffer, why the flag is deliberately
+- **R133-04** EN + RU `guide/28-large-objects.md` state drivers buffer, why the flag is deliberately
   false, and the buffered alternative; PG/SQL Server/SQLite remain supported.
 - **R133-05** `CommonTestSuite.Lob.cs` header corrected (SQLite included); spec registry
   (`code-smells-review.md`) records the measurement-backed disposition.
@@ -103,8 +103,8 @@ where the driver allows it); acceptance per issue = tests + EN/RU docs.
 ### DO units
 
 - D133-01 probe-claim correction + buffered-guard (`tests/nextorm.integration.tests/LobCapabilityProbeTests.cs`).
-- D133-02 EN guide 26 (`docs/guide/26-large-objects.md`).
-- D133-03 RU guide 26 (`docs/ru/guide/26-large-objects.md`).
+- D133-02 EN guide 26 (`docs/guide/28-large-objects.md`).
+- D133-03 RU guide 26 (`docs/ru/guide/28-large-objects.md`).
 - D133-04 `CommonTestSuite.Lob.cs` header.
 - D133-05 spec registry (`docs/specs/design/code-smells-review.md`).
 - D133-06 status file + evidence rows.
@@ -116,7 +116,7 @@ where the driver allows it); acceptance per issue = tests + EN/RU docs.
 - **E133-02** `/tmp/nextorm-D133/lob-capability-probe.log:3-18,21-36` — in-repo ratio 7.99/8.00.
 - **E133-03** `/tmp/nextorm-D133/probe-clickhouse.log:11-12` + `run-clickhouse.log:23-24` — ClickHouse `GetStream` NotImplementedException, `GetTextReader` 3.99.
 - **E133-04** `tests/nextorm.integration.tests/LobCapabilityProbeTests.cs` diff (D133-01).
-- **E133-05** `docs/guide/26-large-objects.md`, `docs/ru/guide/26-large-objects.md`, `tests/nextorm.integration.tests/CommonTestSuite.Lob.cs` diffs.
+- **E133-05** `docs/guide/28-large-objects.md`, `docs/ru/guide/28-large-objects.md`, `tests/nextorm.integration.tests/CommonTestSuite.Lob.cs` diffs.
 - **E133-06** `docs/specs/design/code-smells-review.md` disposition (D133-05).
 - **E133-07** `/tmp/nextorm-D133/build.log` (0/0), `/tmp/nextorm-D133/run-lobprobe-r2.log` (exit + counts), `git diff --check`, CRLF check.
 
@@ -140,7 +140,7 @@ where the driver allows it); acceptance per issue = tests + EN/RU docs.
 - **Capability flags unchanged** (R133-03): no `src/**` file touched by this change
   (`git status` shows only docs/tests); MySQL/MariaDB/ClickHouse dialects still inherit
   `SupportsSequentialAccess => false`; providers keep `SupportsLobStreaming => false`.
-- **`guide/28-streaming-data.md:77`** checked: the sentence rejects streaming LOB columns in the JSON
+- **`guide/30-streaming-data.md:77`** checked: the sentence rejects streaming LOB columns in the JSON
   projection whitelist — orthogonal to provider capability, no contradiction; no edit needed.
 - **`code-smells-review.md:5364`** checked: it is finding 111 (SQL `MakeUpdate`/`MakeDelete` DRY),
   unrelated to LOB (the recon line number drifted). The disposition was recorded at `:7972` and in the
