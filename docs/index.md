@@ -119,7 +119,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.9-rc2) is a prof of concept.
+The current status (1.0.9-rc3) is a prof of concept.
 
 ## Installation
 
@@ -149,9 +149,43 @@ its limitations are covered in the [plan cache and reuse guide](engine/03-plan-c
 
 ## Releases
 
-### 1.0.9-todo
+### 1.0.9-rc3
 
-- [Eager loading: вложенные (level 2+) графы `LoadWith` — split и выразимый single-query, единый режим на весь граф, порядок/top-N на каждом уровне, ancestor-composite идентичность](https://github.com/AlexeyShirshov/nextorm/issues/212)
+- [SQL Server: `OPTION (MAXRECURSION n)` больше не теряется при хоистинге рекурсивного CTE в источник мутации](https://github.com/AlexeyShirshov/nextorm/issues/275)
+- [SQL Server: legacy `WithRecursive` с отличным `UNION` отклоняется fail-closed вместо невалидного T-SQL](https://github.com/AlexeyShirshov/nextorm/issues/265)
+- [Perf: аллокации warm-path `Count`/`Sum` снижены (Count 2979.84 → 408 B/op, Sum 3389.44 → 970 B/op)](https://github.com/AlexeyShirshov/nextorm/issues/243)
+- [Evidence pipeline: канонический global `pdca-dotnet` admission и свёртка `required_rows` в покрытие](https://github.com/AlexeyShirshov/nextorm/issues/242)
+- [Единообразная обработка отмены при построении сортировки/группировки](https://github.com/AlexeyShirshov/nextorm/issues/241)
+- [Perf: снижена стоимость конструирования fluent-команды (отдельный скоуп/дизайн)](https://github.com/AlexeyShirshov/nextorm/issues/240)
+- [D233/T233: обновлены устаревшие `file:line` в `API-NAMING-REVIEW.md`](https://github.com/AlexeyShirshov/nextorm/issues/239)
+- [PDCA skill: ложные `incomplete`/`STOP` из-за дополнительных audit-provenance gates больше не возникают](https://github.com/AlexeyShirshov/nextorm/issues/238)
+- [Identifier safety: экранирование скобок в SQL Server и raw-имена `UNPIVOT`/`Column<T>`](https://github.com/AlexeyShirshov/nextorm/issues/237)
+- [Build blocker: устранены NU1902/NU1903 для транзитивного `System.Security.Cryptography.Pkcs`](https://github.com/AlexeyShirshov/nextorm/issues/236)
+- [Evidence caveats из T218: сертификация E07, allocation-oracle E08, запись sweep-cap E10](https://github.com/AlexeyShirshov/nextorm/issues/235)
+- [Evidence pipeline hardening: атомарный генератор evidence и линт устаревших хэшей](https://github.com/AlexeyShirshov/nextorm/issues/234)
+- [Window functions: перегрузка `Over` с одним `partitionBy` и одним `WindowOrder`, без массивов](https://github.com/AlexeyShirshov/nextorm/issues/233)
+- [SQL Server `PIVOT`/`UNPIVOT`: типизированная проекция результата вместо `TableAlias` по имени](https://github.com/AlexeyShirshov/nextorm/issues/232)
+- [Join aliases: alias-цепочка, использованная в следующем запросе, больше не теряет нижестоящие цепочки](https://github.com/AlexeyShirshov/nextorm/issues/230)
+- [Join aliases: anonymous-projection цепочка выдаёт диагностику вместо невалидного C#](https://github.com/AlexeyShirshov/nextorm/issues/229)
+- [Flaky ClickHouse integration test `FloatNativeParity_GroupedSingleFloat64` стабилизирован](https://github.com/AlexeyShirshov/nextorm/issues/227)
+- [`ProcedureResult`/`BatchResult`: раскрыто число затронутых строк (`RecordsAffected`)](https://github.com/AlexeyShirshov/nextorm/issues/226)
+- [JoinInto: composite-junction M:N — документационный дельта-набор](https://github.com/AlexeyShirshov/nextorm/issues/225)
+- [SQL-форматирование: `from`/`join` с новой строки](https://github.com/AlexeyShirshov/nextorm/issues/224)
+- [JoinInto: composite-junction M:N — SQL link carrier](https://github.com/AlexeyShirshov/nextorm/issues/223)
+- [Джойны: перегрузки без явного источника (`Join`/`LeftJoin`/`RightJoin`/`FullJoin` по типу)](https://github.com/AlexeyShirshov/nextorm/issues/222)
+- [Интерцепторы: регистрация через DI (generic/factory-перегрузки)](https://github.com/AlexeyShirshov/nextorm/issues/221)
+- [Документация: выделен раздел «Движок» (Engine), Querying растворён в Guide](https://github.com/AlexeyShirshov/nextorm/issues/220)
+- [Session/server-identity функции: `SERVER_NAME`, `HOST_ID`/`HOST_NAME`, `APP_NAME`, `SUSER_NAME` и аналоги по провайдерам](https://github.com/AlexeyShirshov/nextorm/issues/219)
+- [SQL Server последовательности (`NEXT VALUE FOR`): недостающая кросс-провайдерная поддержка](https://github.com/AlexeyShirshov/nextorm/issues/218)
+- [Полноценная поддержка `DateTimeOffset`: трансляция `Now`/`UtcNow` и частей даты](https://github.com/AlexeyShirshov/nextorm/issues/217)
+- [Row locking: разведены лок всего запроса (`FOR UPDATE`) и `FOR UPDATE OF` на конкретный источник](https://github.com/AlexeyShirshov/nextorm/issues/216)
+- [Убрана зависимость OneOf](https://github.com/AlexeyShirshov/nextorm/issues/215)
+- [TODO: JoinInto — составные ключи, составные junction-селекторы и M:N под single-query](https://github.com/AlexeyShirshov/nextorm/issues/213)
+- [TODO: eager-load nested — level 2+ `LoadWith`](https://github.com/AlexeyShirshov/nextorm/issues/212)
+- [TODO: eager-load per-parent `Take`/`Skip` — коррелированная детская выборка](https://github.com/AlexeyShirshov/nextorm/issues/211)
+- [TODO: eager-load strategy — явный выбор стратегии загрузки и авто-диспетчер](https://github.com/AlexeyShirshov/nextorm/issues/209)
+- [Единообразная обработка отмены при построении проекции](https://github.com/AlexeyShirshov/nextorm/issues/207)
+- Принятые ограничения (закрыты как `not_planned`): [COW/shared-description для структурного CTE-графа](https://github.com/AlexeyShirshov/nextorm/issues/297) (аллокации снижены, но время не уложилось в ≤1.00× — откат), [остаточные аллокации warm CTE/RecursiveCte](https://github.com/AlexeyShirshov/nextorm/issues/244) (Cte 1.18–1.22×, RecursiveCte 1.59–1.61×, время 0.55–0.61×, `*_Warm_Reused` 0 B), [диаграмма пути команды](https://github.com/AlexeyShirshov/nextorm/issues/228) (правка применена вне трекинга), [гарантия порядка eager-load](https://github.com/AlexeyShirshov/nextorm/issues/210) (свёрнуто в #211), [паритет cached-пути M12 #3](https://github.com/AlexeyShirshov/nextorm/issues/201) (остаток вынесен в #240).
 
 ### 1.0.9-rc2
 

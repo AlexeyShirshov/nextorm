@@ -790,7 +790,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         var spec = new JoinIntoSpec<TEntity, TChild>(child, predicate, collection, relationship, joinType);
         return AddJoinInto(spec, new JoinExpression(predicate, joinType)
         {
-            From = GetJoinSource(child),
+            From = JoinSourceLock.Apply(GetJoinSource(child), opts),
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
             JoinHint = opts.JoinHint,
@@ -865,7 +865,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         var spec = new JoinIntoReferenceSpec<TEntity, TChild>(child, predicate, navigation, relationship, joinType);
         return AddJoinInto(spec, new JoinExpression(predicate, joinType)
         {
-            From = GetJoinSource(child),
+            From = JoinSourceLock.Apply(GetJoinSource(child), opts),
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
             JoinHint = opts.JoinHint,
@@ -912,7 +912,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         var spec = new JoinIntoSpec<TEntity, TChild, TKey>(child, predicate, collection, parentKey, childKey, JoinType.Left);
         return AddJoinInto(spec, new JoinExpression(predicate, JoinType.Left)
         {
-            From = GetJoinSource(child),
+            From = JoinSourceLock.Apply(GetJoinSource(child), opts),
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
             JoinHint = opts.JoinHint,
@@ -3129,7 +3129,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         var join = new JoinExpression(null, joinType)
         {
-            From = new FromExpression(typeof(TJoinEntity)),
+            From = JoinSourceLock.Apply(new FromExpression(typeof(TJoinEntity)), opts),
             EntityType = typeof(TJoinEntity),
             ApplySource = applySource,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
@@ -3631,7 +3631,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         var joined = CreateJoined<TJoinEntity>(new JoinExpression(null, joinType)
         {
-            From = new FromExpression(typeof(TJoinEntity)),
+            From = JoinSourceLock.Apply(new FromExpression(typeof(TJoinEntity)), opts),
             EntityType = typeof(TJoinEntity),
             ApplySource = applySource,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
@@ -3681,7 +3681,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         var joined = CreateJoined<TJoinEntity>(new JoinExpression(joinCondition, joinType)
         {
-            From = new FromExpression(query),
+            From = JoinSourceLock.Apply(new FromExpression(query), opts),
             EntityType = joinCondition is null ? typeof(TJoinEntity) : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
@@ -4469,7 +4469,7 @@ public class EntityBuilder : ICloneable
         options?.Invoke(opts);
         var cb = new JoinedEntityBuilder<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition, joinType)
         {
-            From = new FromExpression(from._table!),
+            From = JoinSourceLock.Apply(new FromExpression(from._table!), opts),
             EntityType = joinCondition is null ? typeof(TableAlias) : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
@@ -4697,7 +4697,7 @@ public class EntityBuilder : ICloneable
         options?.Invoke(opts);
         var cb = new JoinedEntityBuilder<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType)
         {
-            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            From = JoinSourceLock.Apply(JoinSourceResolver.Resolve(_dataProvider, _), opts),
             EntityType = joinCondition is null ? typeof(TJoinEntity) : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
