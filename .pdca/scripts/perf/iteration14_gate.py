@@ -83,11 +83,16 @@ BENCH_SRC_DIR = REPO_ROOT / "benchmarks" / "nextorm.benchmark"
 SEED_DB = REPO_ROOT / "benchmarks" / "nextorm.benchmark" / "data" / "test.db"
 
 BENCH_PROJECT = "benchmarks/nextorm.benchmark"
-FILTERS = [
-    "*SqliteBenchmarkWarmDecompose*",
-    "*SqliteBenchmarkCachedPlan*",
-    "*SqliteBenchmarkFeaturePlanBuild*",
-]
+
+
+def benchmark_filters(manifest):
+    """Return one BDN filter per budgeted row.
+
+    The gate must measure exactly the rows pinned in the manifest. The benchmark classes
+    also carry exploratory arms, and running every method that matches a class-level glob
+    pushed the step past its 20-minute timeout once the warm-decompose class grew.
+    """
+    return [f"*{row['type']}.{row['method']}" for row in manifest["rows"]]
 
 _TOOLCHAIN_RE = re.compile(r"Toolchain=([A-Za-z0-9_.]+)")
 _CLASS_RE = re.compile(r"\bclass\s+([A-Za-z_]\w*)")
@@ -460,8 +465,8 @@ def prepare_db(db_path):
     return str(path)
 
 
-def run_benchmarks(args, db_path):
-    """Run the three benchmark classes; returns (exit_code, wall_seconds)."""
+def run_benchmarks(args, db_path, manifest):
+    """Run the budgeted benchmark rows; returns (exit_code, wall_seconds)."""
     env = dict(os.environ)
     env["NEXTORM_BENCH_DB"] = db_path
     cmd = [
@@ -473,7 +478,7 @@ def run_benchmarks(args, db_path):
         "Release",
         "--",
         "--filter",
-        *FILTERS,
+        *benchmark_filters(manifest),
         "--job",
         "short",
         "--exporters",
@@ -541,7 +546,7 @@ def gate_main(argv=None, runner=None):
         reports_dir = Path(args.reports_dir)
         reports_dir.mkdir(parents=True, exist_ok=True)
         clean_target_reports(reports_dir, manifest)
-        exit_code, wall = runner(args, db_path)
+        exit_code, wall = runner(args, db_path, manifest)
         if exit_code is None:
             print(f"FAIL: benchmark run timed out after {wall:.1f}s")
             return 1

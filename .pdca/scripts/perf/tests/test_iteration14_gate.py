@@ -168,6 +168,15 @@ class Iteration14GateTests(unittest.TestCase):
             gate.REPO_ROOT / "BenchmarkDotNet.Artifacts" / "results",
         )
 
+    def test_benchmark_filters_select_only_the_budgeted_rows(self):
+        # Class-level globs also run the exploratory arms and overran the step timeout once the
+        # warm-decompose class grew; the run must be filtered to one pinned row at a time.
+        manifest = gate.parse_manifest(gate.MANIFEST_PATH)
+        self.assertEqual(
+            gate.benchmark_filters(manifest),
+            [f"*{row['type']}.{row['method']}" for row in manifest["rows"]],
+        )
+
     def test_deliberate_over_budget_returns_nonzero(self):
         build_reports(self.tmp, {("Cte_Prepare_NoHash", "Default"): 15153})
         code, output = run_gate(self.tmp)
@@ -309,7 +318,7 @@ class Iteration14GateTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()) as buffer:
             code = gate.gate_main(
                 ["--reports-dir", str(reports), "--db", str(db)],
-                runner=lambda args, path: (None, 1.5),
+                runner=lambda args, path, manifest: (None, 1.5),
             )
         self.assertEqual(code, 1)
         self.assertIn("timed out after 1.5s", buffer.getvalue())
@@ -329,7 +338,7 @@ class Iteration14GateTests(unittest.TestCase):
                     "--db",
                     str(db),
                 ],
-                runner=lambda args, path: (2, 0.5),
+                runner=lambda args, path, manifest: (2, 0.5),
             )
         self.assertEqual(code, 1)
         self.assertIn("exited non-zero (2)", buffer.getvalue())
