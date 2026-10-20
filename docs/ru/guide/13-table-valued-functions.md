@@ -150,7 +150,7 @@ TVF как левый источник — соединён с таблицей:
 ```csharp
 var rows = dataContext
     .FromTableFunction(() => Tvf.AllRows())
-    .Join(dataContext.From<IComplexEntity>(), (r, c) => r.Id == c.Id)
+    .Join<IComplexEntity>((r, c) => r.Id == c.Id)
     .Select(p => new { p.Item1.Value, p.Item2.String })
     .ToList();
 ```
@@ -406,7 +406,7 @@ var search = "stuffed bear";
 
 var ranked = dataContext
     .FromTableFunction(() => SqlFunctions.SqlServer.containstable<int>("documents", "title", search))
-    .Join(dataContext.From<IDocument>(), (k, d) => k.Key == d.Id)
+    .Join<IDocument>((k, d) => k.Key == d.Id)
     .OrderByDescending(p => p.Item1.Rank)
     .Select(p => new { p.Item2.Id, p.Item1.Rank })
     .ToList();

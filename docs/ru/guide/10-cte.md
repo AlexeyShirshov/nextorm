@@ -719,7 +719,7 @@ with upd as (update orders set total = @p0 where customer_id = 7 returning id, t
 // Тело multi-table DELETE: удаляем строки цели, совпавшие по соединению, возвращая колонки обеих сторон.
 var doomed = dataContext
     .From<IOrder>()
-    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Join<ICustomer>((o, c) => o.CustomerId == c.Id)
     .CreateDeleteJoinBuilder()
     .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
 
@@ -740,7 +740,7 @@ with del as (delete from orders as "t1" using customers as "t2" where t1.custome
 // Тело по всей проекции: .Returning() возвращает каждый слот, а читающая сторона адресует их по ItemN.
 var doomed = dataContext
     .From<IOrder>()
-    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Join<ICustomer>((o, c) => o.CustomerId == c.Id)
     .CreateDeleteJoinBuilder()
     .Returning();   // эквивалент .Returning(p => p)
 

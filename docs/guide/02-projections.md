@@ -139,7 +139,7 @@ The same accessor works in a predicate and on a joined projection:
 
 ```csharp
 var rows = await dataContext.From<SimpleEntity>()
-    .Join(dataContext.From<ComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Join<ComplexEntity>((s, c) => s.Id == c.Id)
     .Where(p => SqlFunctions.Column<long>(p.Item2, "region_id") > 0)
     .Select(p => new { p.Item1.Id, Region = SqlFunctions.Column<long>(p.Item2, "region_id") })
     .ToListAsync();

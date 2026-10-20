@@ -82,7 +82,7 @@ clause order: `From().Where().GroupBy().Having().OrderBy().Limit().Select()`.
 | `FROM datasets.hits_v1` | `ctx.From<IHit>()` with `[SqlTable("datasets.hits_v1")]` |
 | `WITH x AS (SELECT …)` | declare it as a CTE: the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference) or the string `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt64("UserID")`, because the name carries no type); a later CTE reads an earlier one the same way |
 | `SELECT a AS x` | `.Select(h => new { x = h.A })` |
-| `JOIN u ON a = b` | `.Join(ctx.From<IU>(), (h, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
+| `JOIN u ON a = b` | `.Join<IU>((h, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
 | `WHERE c` | `.Where(h => c)` |
 | `GROUP BY a` | `.GroupBy(h => new { h.A })` |
 | `HAVING c` | `.Having(g => c)` or a derived query + `.Where(...)` |

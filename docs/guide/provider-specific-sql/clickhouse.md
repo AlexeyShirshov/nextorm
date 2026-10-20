@@ -112,7 +112,7 @@ ClickHouse join modifiers are passed to the join through its trailing lambda:
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
-    .LeftJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id,
+    .LeftJoin<IComplexEntity>((s, c) => s.Id == c.Id,
         j => j.Global().WithStrictness(JoinStrictness.Any))
     .Select(p => new { p.Item1.Id, p.Item2.String })
     .ToList();

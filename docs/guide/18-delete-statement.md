@@ -131,7 +131,7 @@ A joined query can end in `Delete()`/`DeleteAsync()`: the first table of the cha
 
 ```csharp
 var removed = await ctx.From<ISimpleEntity>()
-    .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Join<IComplexEntity>((s, c) => s.Id == c.Id)
     .Where(p => p.Item2.String == "archived")
     .DeleteAsync(cancellationToken);
 ```
@@ -155,7 +155,7 @@ delete from simple_entity as "t1" using complex_entity as "t2" where cast(t1.id 
 
 ```csharp
 var all = await ctx.From<IOrder>()
-    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Join<ICustomer>((o, c) => o.CustomerId == c.Id)
     .Where(p => p.Item2.Tier == "gold")
     .CreateDeleteJoinBuilder()
     .Returning()          // equivalent to .Returning(p => p)
@@ -170,7 +170,7 @@ On PostgreSQL a row-returning joined `DELETE` can be the body of a data-modifyin
 ```csharp
 var doomed = dataContext
     .From<IOrder>()
-    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Join<ICustomer>((o, c) => o.CustomerId == c.Id)
     .CreateDeleteJoinBuilder()
     .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
 

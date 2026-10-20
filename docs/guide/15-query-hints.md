@@ -111,7 +111,7 @@ clause on that joined table only:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
-    .Join(dataContext.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinTableHint("nolock"))
+    .Join<ISimpleEntity>((a, b) => a.Id == b.Id, j => j.WithJoinTableHint("nolock"))
     .Select(p => new { p.Item1.Id })
     .ToList();
 ```
@@ -128,7 +128,7 @@ join-local hint is listed first, then the scope hints (which still cover every o
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .WithTablesInScopeHint("holdlock")
-    .Join(dataContext.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinTableHint("nolock"))
+    .Join<ISimpleEntity>((a, b) => a.Id == b.Id, j => j.WithJoinTableHint("nolock"))
     .Select(p => new { p.Item1.Id })
     .ToList();
 ```
@@ -227,7 +227,7 @@ each dialect renders the form it has, or rejects the command:
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>(o => o.WithTableHint("nolock"))
-    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("loop"))
+    .Join<IComplexEntity>((s, c) => s.Id == c.Id, j => j.WithJoinHint("loop"))
     .Select(p => new { p.Item1.Id })
     .ToList();
 ```
@@ -277,7 +277,7 @@ are rejected with `NotSupportedException`.
 ```csharp
 dataContext.From<IComplexEntity>()
     .WithTablesInScopeHint("SeqScan(t1)")        // SQL Server: .WithTablesInScopeHint("nolock")
-    .Join(dataContext.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+    .Join<ISimpleEntity>((c, s) => c.Id == s.Id)
     .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.String, "x")
     .ToSql();

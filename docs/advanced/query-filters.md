@@ -202,7 +202,7 @@ For example, the filter of a joined entity is injected into that join's `ON`, wh
 
 ```csharp
 var rows = ctx.From<Attachment>()
-    .Join(ctx.From<Document>(), (a, d) => a.DocumentId == d.Id)
+    .Join<Document>((a, d) => a.DocumentId == d.Id)
     .Select(p => p.Item1.Id)
     .ToList();
 ```

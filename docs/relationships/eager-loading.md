@@ -183,6 +183,35 @@ var roots = ctx.From<Root>()
     .ToList();
 ```
 
+In the default split mode the declaration produces one statement per level: the parent statement, then one level-1 child statement driven by the root keys, then one level-2 statement driven by the distinct `Mid` keys just materialized (each level is chunked at 1000 keys independently):
+
+```sql
+-- parent statement
+select id, name
+ from root
+
+-- level-1 child statement (one per chunk of at most 1000 root keys)
+select id, root_id, sort_key, name
+ from mid where root_id in (@k0, @k1)
+ order by sort_key
+
+-- level-2 child statement (one per chunk of at most 1000 level-1 keys)
+select id, mid_id, sort_key, name
+ from leaf where mid_id in (@k0, @k1, @k2)
+ order by sort_key desc
+```
+
+With `EagerLoadMode.SingleQuery` the whole graph collapses into one denormalized command with one `LEFT JOIN` per node:
+
+```sql
+select t1.id, t1.name, t2.id, t2.root_id, t2.sort_key, t2.name, t3.id, t3.mid_id, t3.sort_key, t3.name
+ from root as t1
+ left join mid as t2 on t1.id = t2.root_id
+ left join leaf as t3 on t2.id = t3.mid_id
+```
+
+The snippet above is split-only as written: single-query folds only each node's own `Where`, so the two `OrderBy` calls would make it fail closed with [`NotSupportedException`](xref:System.NotSupportedException) naming `OrderBy`. Drop the orderings (or keep the default split mode) to issue it as one command.
+
 The following contract holds for the whole graph:
 
 - **One mode for the whole graph.** The strategy resolved for the root (`SplitQuery`, `SingleQuery`, a context default or the conservative `Auto`) applies to every level. A nested declaration may not request a different explicit mode: `LoadWith(..., EagerLoadMode.X)` on a child whose resolved mode differs from the graph-wide mode throws [`NotSupportedException`](xref:System.NotSupportedException) (`... mixes modes ...`). `EagerLoadMode.Default` on a child simply inherits the graph-wide mode.

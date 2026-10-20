@@ -149,7 +149,7 @@ var one = ctx.CreateUpdateBuilder<ISimpleEntity>()
 
 ```csharp
 var updated = ctx.From<IOrder>()
-    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Join<ICustomer>((o, c) => o.CustomerId == c.Id)
     .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "priority")
     .Set(p => p.Item1.Total, p => p.Item1.Total + p.Item2.Credit)
@@ -181,7 +181,7 @@ item, чьё mapped-свойство — многоколоночный `Range<T
 
 ```csharp
 var updated = ctx.From<IOrder>()
-    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Join<ICustomer>((o, c) => o.CustomerId == c.Id)
     .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "priority")
     .Where(p => p.Item2.Tier == "gold")
@@ -199,7 +199,7 @@ update orders as "t1" set status = @p0 from customers as "t2" where t1.customer_
 
 ```csharp
 var whole = ctx.From<IOrder>()
-    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Join<ICustomer>((o, c) => o.CustomerId == c.Id)
     .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "priority")
     .Where(p => p.Item2.Tier == "gold")

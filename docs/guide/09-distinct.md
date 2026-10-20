@@ -59,7 +59,7 @@ A projected join can contain duplicate rows; [`Distinct`](xref:NextORM.Core.Enti
 ```csharp
 // complex_entity booleans are true, false, false, so the projected join has duplicate rows.
 var rows = dataContext.From<ISimpleEntity>()
-    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Join<IComplexEntity>((s, c) => s.Id == c.Id)
     .Select(p => new { p.Item2.Boolean })
     .Distinct()
     .ToList();

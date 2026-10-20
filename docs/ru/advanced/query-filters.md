@@ -202,7 +202,7 @@ select id
 
 ```csharp
 var rows = ctx.From<Attachment>()
-    .Join(ctx.From<Document>(), (a, d) => a.DocumentId == d.Id)
+    .Join<Document>((a, d) => a.DocumentId == d.Id)
     .Select(p => p.Item1.Id)
     .ToList();
 ```

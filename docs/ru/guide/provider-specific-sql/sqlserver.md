@@ -191,7 +191,7 @@ PostgreSQL и SQLite / `` `1` `` в MySQL и ClickHouse. Точка — лите
 
 ```csharp
 var orderMargins = ctx.From<OrderDetail>()
-    .Join(ctx.From<OrderHeader>(), (d, h) => d.OrderId == h.OrderId)
+    .Join<OrderHeader>((d, h) => d.OrderId == h.OrderId)
     .Where(p => SqlFunctions.Sql.extract("year", p.Item2.OrderDate) == 2013)
     .Select(p => new
     {

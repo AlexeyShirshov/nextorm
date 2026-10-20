@@ -712,7 +712,7 @@ with upd as (update orders set total = @p0 where customer_id = 7 returning id, t
 // Join/multi-table DELETE body: delete the target rows matched by the join, returning columns from both sides.
 var doomed = dataContext
     .From<IOrder>()
-    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Join<ICustomer>((o, c) => o.CustomerId == c.Id)
     .CreateDeleteJoinBuilder()
     .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
 
@@ -733,7 +733,7 @@ with del as (delete from orders as "t1" using customers as "t2" where t1.custome
 // Whole-projection body: .Returning() returns every slot, and the read side addresses them by ItemN.
 var doomed = dataContext
     .From<IOrder>()
-    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Join<ICustomer>((o, c) => o.CustomerId == c.Id)
     .CreateDeleteJoinBuilder()
     .Returning();   // equivalent to .Returning(p => p)
 

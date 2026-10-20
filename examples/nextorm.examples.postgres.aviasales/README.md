@@ -76,7 +76,7 @@ SQL clause order: `From().Join().Where().GroupBy().Having().OrderBy().Limit().Se
 | `FROM t` | `ctx.From<IT>()`, where `IT` is an interface marked `[SqlTable("schema.t")]` |
 | `WITH x AS (SELECT …)` | declare it as a CTE: the typed `query.AsCte("x")` + `ctx.From(cte)` (member access, type inference) or the string `ctx.With("x", query).From("x")` (columns read by name, `t.GetInt32("id")`, because the name carries no type); a later CTE reads an earlier one the same way |
 | `SELECT a AS x` | `.Select(t => new { x = t.A })` (anonymous type = result row) |
-| `JOIN u ON a = b` / `LEFT JOIN` | `.Join(ctx.From<IU>(), (t, u) => …)` / `.LeftJoin(...)`; joined items are `p.Item1`, `p.Item2`, … |
+| `JOIN u ON a = b` / `LEFT JOIN` | `.Join<IU>((t, u) => …)` / `.LeftJoin<IU>((t, u) => …)`; joined items are `p.Item1`, `p.Item2`, … |
 | `WHERE c` | `.Where(t => c)` |
 | `GROUP BY a, b` | `.GroupBy(t => new { t.A, t.B })` |
 | `HAVING c` | `.Having(g => c)` (repeat the aggregate) or a derived query + `.Where(...)` |

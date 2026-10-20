@@ -66,7 +66,7 @@ var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
-    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Join<IComplexEntity>((s, c) => s.Id == c.Id)
     .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
     .Where(d => d.OrderId > 100)
     .Select(d => new { d.OrderId, d.CustomerName })
@@ -187,7 +187,7 @@ select t1.id, (select t2.id
 
 ```csharp
 var rows = await dataContext.From<ISimpleEntity>()
-    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Join<IComplexEntity>((s, c) => s.Id == c.Id)
     .Select(p => new { p.Item1.Id, cid = dataContext.From<IComplexEntity>().Where(c => c.Id == p.Item1.Id).Select(c => c.Id).First() })
     .ToListAsync();
 ```

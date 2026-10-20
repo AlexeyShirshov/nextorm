@@ -8,7 +8,7 @@
 > dialect throws for them. Constructs that are merely *spelled* differently, or that several providers
 > share (for example `greatest`/`least`, full-text search, JSON, table functions, `any_agg`, UUID
 > generators or `PERCENTILE_CONT`), are documented with the matching concept page instead, and only
-> three providers have an exclusive surface at all: ClickHouse, PostgreSQL and SQL Server.
+> four providers have an exclusive surface at all: ClickHouse, PostgreSQL, SQL Server and MySQL/MariaDB.
 
 **Prerequisites:** [Querying and projections](../../engine/index.md) · [Provider overview](../../connecting-providers/overview.md) · [Limitations and out-of-scope features](../../advanced/limitations.md)
 
@@ -60,7 +60,9 @@ full, provider-neutral walkthrough:
 * [Scalar functions](../../scalar-functions/index.md) — arrays, JSON, UUID, session/info, provider surfaces;
 * [Table-valued functions](../13-table-valued-functions.md) — `generate_series`, `string_split`, `numbers`, `zeros`;
 * [Query hints](../15-query-hints.md) — table hints, `OPTION (RECOMPILE)`, ClickHouse query modifiers;
-* [JSON support across providers](../16-json.md) — every JSON surface side by side.
+* [JSON support across providers](../16-json.md) — every JSON surface side by side;
+* [Range columns](../27-range-columns.md) — native `Range<T>` types on PostgreSQL, a pair of scalar
+  columns on the other providers.
 
 Portable functions that are spelled differently on every database live on
 [`CommonFunctions`](xref:NextORM.Core.CommonFunctions) and are documented with the concept pages:

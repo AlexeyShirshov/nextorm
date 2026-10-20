@@ -1,5 +1,14 @@
 # Provider-specific features
 
+> This page covers behaviour that is **provider-dependent rather than portable**: the active dialect
+> has to advertise the matching `Supports*` capability, and the providers that do not opt in reject
+> the construct with `NotSupportedException` (`FOR JSON`/`FOR XML` on SQL Server, row locking on
+> PostgreSQL/MySQL/MariaDB/SQL Server). Features that **every** provider implements — even when the
+> storage or the spelling differs — are documented on concept pages instead, for example
+> [range columns](27-range-columns.md) (a native range type on PostgreSQL, a pair of scalar columns
+> elsewhere) or [JSON support across providers](16-json.md). The closing table lists spelling
+> differences that do not gate a feature at all.
+
 ## JSON output (SQL Server)
 
 [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) is a **terminal operator**: it executes the query and returns the
@@ -93,7 +102,7 @@ instance of the same CLR type or to another alias:
 
 ```csharp
 var rows = await dataContext.From<SimpleEntity>(o => o.ForUpdate())
-    .Join(dataContext.From<ComplexEntity>(), (s, c) => s.Id == c.Id, j => j.ForShare())
+    .Join<ComplexEntity>((s, c) => s.Id == c.Id, j => j.ForShare())
     .Select(p => new { p.Item1.Id })
     .ToListAsync();
 ```
@@ -172,4 +181,9 @@ not only a row locked by another writer, so it approximates rather than exactly 
 | MariaDB | Same as MySQL: backtick-quoted aliases, aliased derived tables and `concat(a, b)` concatenation. |
 | ClickHouse | Column aliases are backtick-quoted (`` as `Calc` ``); every derived table must be aliased (`` as `t1` ``). String concatenation uses `concat(a, b)`. |
 | In-memory | No SQL is generated; the projection delegates are compiled and run over in-memory objects. |
+
+## See also
+
+* [Provider-specific SQL](provider-specific-sql/overview.md) — constructs exclusive to a single provider
+* [Range columns](27-range-columns.md) — a portable range mapping for providers without a native range type
 

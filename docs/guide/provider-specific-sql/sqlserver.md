@@ -190,7 +190,7 @@ aggregate/`FOR` columns (the equivalent of pivoting a CTE):
 
 ```csharp
 var orderMargins = ctx.From<OrderDetail>()
-    .Join(ctx.From<OrderHeader>(), (d, h) => d.OrderId == h.OrderId)
+    .Join<OrderHeader>((d, h) => d.OrderId == h.OrderId)
     .Where(p => SqlFunctions.Sql.extract("year", p.Item2.OrderDate) == 2013)
     .Select(p => new
     {

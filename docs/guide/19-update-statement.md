@@ -147,7 +147,7 @@ on a joined query builds a multi-table `UPDATE` whose target is the **first** ta
 
 ```csharp
 var updated = ctx.From<IOrder>()
-    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Join<ICustomer>((o, c) => o.CustomerId == c.Id)
     .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "priority")
     .Set(p => p.Item1.Total, p => p.Item1.Total + p.Item2.Credit)
@@ -179,7 +179,7 @@ body through `With(name, update)`:
 
 ```csharp
 var updated = ctx.From<IOrder>()
-    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Join<ICustomer>((o, c) => o.CustomerId == c.Id)
     .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "priority")
     .Where(p => p.Item2.Tier == "gold")
@@ -197,7 +197,7 @@ The parameterless form returns every returnable column of both slots under deter
 
 ```csharp
 var whole = ctx.From<IOrder>()
-    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Join<ICustomer>((o, c) => o.CustomerId == c.Id)
     .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "priority")
     .Where(p => p.Item2.Tier == "gold")

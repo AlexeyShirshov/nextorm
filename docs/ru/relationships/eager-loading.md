@@ -183,6 +183,35 @@ var roots = ctx.From<Root>()
     .ToList();
 ```
 
+В режиме split (по умолчанию) объявление порождает по одному оператору на уровень: родительский оператор, затем дочерний оператор первого уровня по ключам корней и затем оператор второго уровня по только что материализованным distinct-ключам `Mid` (каждый уровень чанкуется по 1000 ключей независимо):
+
+```sql
+-- родительский оператор
+select id, name
+ from root
+
+-- дочерний оператор первого уровня (один на чанк не более чем из 1000 ключей корней)
+select id, root_id, sort_key, name
+ from mid where root_id in (@k0, @k1)
+ order by sort_key
+
+-- дочерний оператор второго уровня (один на чанк не более чем из 1000 ключей первого уровня)
+select id, mid_id, sort_key, name
+ from leaf where mid_id in (@k0, @k1, @k2)
+ order by sort_key desc
+```
+
+С `EagerLoadMode.SingleQuery` весь граф сводится в одну денормализованную команду с одним `LEFT JOIN` на узел:
+
+```sql
+select t1.id, t1.name, t2.id, t2.root_id, t2.sort_key, t2.name, t3.id, t3.mid_id, t3.sort_key, t3.name
+ from root as t1
+ left join mid as t2 on t1.id = t2.root_id
+ left join leaf as t3 on t2.id = t3.mid_id
+```
+
+В показанном виде фрагмент работает только в split-режиме: single-query сворачивает лишь собственный `Where` каждого узла, поэтому два вызова `OrderBy` заставили бы его отвергнуть запрос с [`NotSupportedException`](xref:System.NotSupportedException), назвав `OrderBy`. Уберите упорядочивание (или оставьте режим split по умолчанию), чтобы выполнить граф одной командой.
+
 Для всего графа действует следующий контракт:
 
 - **Один режим на весь граф.** Стратегия, разрешённая для корня (`SplitQuery`, `SingleQuery`, context default или консервативный `Auto`), применяется к каждому уровню. Вложенное объявление не может запросить другой явный режим: `LoadWith(..., EagerLoadMode.X)` у ребёнка, чей разрешённый режим отличается от режима графа, бросает [`NotSupportedException`](xref:System.NotSupportedException) (`... mixes modes ...`). `EagerLoadMode.Default` у ребёнка просто наследует режим графа.
