@@ -619,7 +619,7 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     [MySQL and MariaDB-specific SQL](../../guide/provider-specific-sql/mysql.md#mariadb).
 41. **SQLite built-in function gaps — <span style="color:green">shipped</span>.** `SqlFunctions.Sqlite` (`SqliteFunctions`) plus
     `ISqlDialect.SqliteFunctions` cover the core scalars (`printf`/`format`, `hex`/`unhex`,
-    `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`,
+    `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `octet_length`,
     `if`/`ifnull`), the JSON1 family (`json_extract`, `->`/`->>`, `json_set`, `json_group_array`,
     `json_each`, `json_tree` and the rest), the date helpers (`timediff`, `unixepoch`, `julianday`), the
     math-extension functions and — as the shipped subset of
@@ -627,6 +627,10 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     sum, empty/all-null → `0.0`); other providers reject with `NotSupportedException`. The residual #285
     SQLite aggregates `median`, `percentile`, `percentile_cont` and `percentile_disc` stay open until the
     percentile extension is proven on a supported runtime and the `median` name collision is settled.
+    `soundex` is **not** part of the emitted surface: the shipped engine is built without
+    `SQLITE_SOUNDEX`, so `SqlFunctions.Sqlite.soundex` is kept for source/binary compatibility only and
+    preparation throws `NotSupportedException` before any SQL
+    ([#278](https://github.com/AlexeyShirshov/nextorm/issues/278)).
     Docs: [SQLite-specific SQL](../../guide/provider-specific-sql/sqlite.md) (EN+RU).
 42. **ClickHouse built-in function gaps — <span style="color:green">done</span>.** `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`,
     `match`/`extract`, `splitByString`, `formatDateTime`/`parseDateTime`, `now`/`today`/`yesterday`, the

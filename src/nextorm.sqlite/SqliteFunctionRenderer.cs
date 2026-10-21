@@ -14,7 +14,7 @@ internal sealed class SqliteFunctionRenderer : ISqliteFunctions
     private static readonly HashSet<string> SupportedNames = new(StringComparer.Ordinal)
     {
         "printf", "format", "hex", "unhex", "random", "randomblob", "quote", "typeof", "glob",
-        "unicode", "char", "soundex", "octet_length", "ifnull", "if",
+        "unicode", "char", "octet_length", "ifnull", "if",
         "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cosh",
         "log10", "log2", "mod", "sinh", "tanh",
         "timediff", "unixepoch", "julianday",

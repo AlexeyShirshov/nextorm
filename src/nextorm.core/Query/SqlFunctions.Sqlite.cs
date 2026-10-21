@@ -77,8 +77,10 @@ public static partial class SqlFunctions
 /// The math functions require SQLite to be compiled with <c>SQLITE_ENABLE_MATH_FUNCTIONS</c>, the
 /// JSON functions are built in since SQLite 3.38 (opt-in <c>SQLITE_ENABLE_JSON1</c> before that),
 /// <c>jsonb</c>/<c>json_pretty</c> need 3.45/3.46, <c>unhex</c> needs 3.41 and <c>timediff</c> needs
-/// 3.43. <c>soundex</c> requires the <c>SQLITE_SOUNDEX</c> compile-time option and is not present in
-/// every build; the call is still rendered, and the server reports the missing function at run time.
+/// 3.43. <c>soundex</c> is <b>not emitted</b> on SQLite: the shipped engine has no such function
+/// (the <c>SQLITE_SOUNDEX</c> compile-time option is not enabled), so preparing a call fails with
+/// <see cref="NotSupportedException"/> before anything reaches the server — including on a custom
+/// build that does enable the option. The member is kept for source/binary compatibility only.
 /// </remarks>
 public class SqliteFunctions : CommonFunctions
 {
@@ -121,8 +123,14 @@ public class SqliteFunctions : CommonFunctions
     public string? @char(params int[] codes) => default!;
 
     /// <summary>
-    /// <c>soundex(X)</c>: the soundex encoding of <paramref name="value"/>. Requires SQLite to be
-    /// compiled with <c>SQLITE_SOUNDEX</c>.
+    /// <c>soundex(X)</c>: <b>not supported</b> on SQLite. The shipped engine does not have the function
+    /// (it is built without <c>SQLITE_SOUNDEX</c>), so preparing a call throws
+    /// <see cref="NotSupportedException"/> with the message
+    /// <c>The SQLite function 'soundex' is not supported by this provider.</c> before execution, and no
+    /// SQL is emitted; the refusal is unconditional, also on a custom engine built with
+    /// <c>SQLITE_SOUNDEX</c>. The member is retained for source/binary compatibility only — keep using
+    /// <see cref="SqlServerFunctions.soundex(string)"/> (or a raw SQL fragment) when a soundex code is
+    /// required.
     /// </summary>
     public string? soundex(string? value) => default!;
 

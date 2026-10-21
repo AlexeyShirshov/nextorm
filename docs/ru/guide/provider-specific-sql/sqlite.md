@@ -1,7 +1,7 @@
 # Специфичный для SQLite SQL
 
 > SQLite даёт функции ядра (`printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`,
-> `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`, `if`/`ifnull`), функции/операторы/
+> `typeof`, `glob`, `unicode`/`char`, `octet_length`, `if`/`ifnull`), функции/операторы/
 > агрегаты JSON1 и табличные функции `json_each`/`json_tree`, функции дат (`timediff`, `unixepoch`,
 > `julianday`), функции математического расширения (`acos`/`asin`/`atan`/`atan2`, гиперболические,
 > `log2`/`log10`, `mod`) и поверхность полнотекстового поиска FTS3/FTS4/FTS5.
@@ -28,9 +28,18 @@
 | `unicode(value)` | `unicode(...)` | код первой кодовой точки |
 | `@char(c1, ...)` | `char(...)` | строка из кодовых точек Unicode |
 | `octet_length(value)` | `octet_length(...)` | длина значения в байтах |
-| `soundex(value)` | `soundex(...)` | требует опции сборки `SQLITE_SOUNDEX` |
+| `soundex(value)` | не генерируется — **не поддерживается** | в поставляемом движке нет `soundex` (нет `SQLITE_SOUNDEX`); подготовка бросает `NotSupportedException` |
 | `ifnull(value, other)` | `ifnull(...)` | двухаргументный `coalesce` |
 | `@if(condition, whenTrue, whenFalse)` | `if(...)` | псевдоним `if()` — 3.48+ |
+
+> **`soundex` не поддерживается и не генерируется.** `SqlFunctions.Sqlite.soundex` сохранён только для
+> совместимости исходников и бинарников: поставляемый движок SQLite собран без `SQLITE_SOUNDEX` и не
+> содержит такой функции, поэтому подготовка вызова бросает `NotSupportedException` —
+> `The SQLite function 'soundex' is not supported by this provider.` — до генерации и выполнения любого
+> SQL. Отказ безусловен и распространяется также на кастомную сборку SQLite с `SQLITE_SOUNDEX`; для
+> soundex-кода используйте провайдера с нативной поддержкой
+> ([`SqlFunctions.SqlServer.soundex`](xref:NextORM.Core.SqlServerFunctions.soundex(System.String)))
+> или сырой SQL-фрагмент.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

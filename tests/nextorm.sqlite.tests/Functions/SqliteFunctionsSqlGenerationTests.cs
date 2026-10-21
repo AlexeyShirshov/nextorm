@@ -56,14 +56,12 @@ public class SqliteFunctionsSqlGenerationTests
         {
             R = SqlFunctions.Sqlite.random(),
             Rb = SqlFunctions.Sqlite.randomblob(4),
-            I = SqlFunctions.Sqlite.@if(x.Int > 0, "yes", "no"),
-            S = SqlFunctions.Sqlite.soundex(x.String)
+            I = SqlFunctions.Sqlite.@if(x.Int > 0, "yes", "no")
         }));
 
         sql.Should().Contain("random()");
         sql.Should().Contain("randomblob(4)");
         sql.Should().Contain("if((nullableint > 0), 'yes', 'no')");
-        sql.Should().Contain("soundex(somestring)");
     }
 
     [Fact]

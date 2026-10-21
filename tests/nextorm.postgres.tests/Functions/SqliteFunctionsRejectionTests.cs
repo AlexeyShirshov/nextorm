@@ -229,4 +229,42 @@ public class SqliteFunctionsRejectionTests
         await act.Should().ThrowAsync<NotSupportedException>()
             .WithMessage("PostgresDialect does not support SQLite FTS5 maintenance commands.");
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // #278: the SQLite facade's soundex is refused by every provider that does not opt in, for the
+    // same three argument shapes the SQLite provider itself refuses (column, literal, typed null),
+    // and the second preparation of the same query instance refuses like the first.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    [Trait("Issue", "278")]
+    public void Soundex_ShouldRemainRejected()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        string? typedNull = null;
+
+        var column = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sqlite.soundex(x.String) }));
+        var literal = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sqlite.soundex("Robert") }));
+        var nullArgument = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sqlite.soundex(typedNull) }));
+
+        column.Should().Throw<NotSupportedException>().WithMessage("*soundex*not supported*");
+        literal.Should().Throw<NotSupportedException>().WithMessage("*soundex*not supported*");
+        nullArgument.Should().Throw<NotSupportedException>().WithMessage("*soundex*not supported*");
+    }
+
+    [Fact]
+    [Trait("Issue", "278")]
+    public void Soundex_SecondPreparationShouldRemainRejected()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var command = e.Select(x => new { V = SqlFunctions.Sqlite.soundex(x.String) });
+
+        var first = () => SqlOf(ctx, command);
+        var second = () => SqlOf(ctx, command);
+
+        first.Should().Throw<NotSupportedException>().WithMessage("*soundex*not supported*");
+        second.Should().Throw<NotSupportedException>().WithMessage("*soundex*not supported*");
+    }
 }
