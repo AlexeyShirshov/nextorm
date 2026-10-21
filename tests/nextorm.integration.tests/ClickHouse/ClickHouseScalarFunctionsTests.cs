@@ -117,8 +117,8 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
         ("murmur_hash3_64", ["s"], "toInt64(murmurHash3_64(s))"),
         ("murmur_hash3_128", ["s"], "murmurHash3_128(s)"),
         ("generate_ulid", [], "generateULID()"),
-        ("bit_length", ["s"], "length(s) * 8"),
-        ("octet_length", ["s"], "length(s)"),
+        ("bit_length", ["s"], "toInt32(length(s) * 8)"),
+        ("octet_length", ["s"], "toInt32(length(s))"),
         ("degrees", ["x"], "degrees(x)"),
         ("radians", ["x"], "radians(x)"),
         ("pi", [], "pi()")
@@ -331,6 +331,130 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
         r.Tr.Should().Be("xyc");
         r.Asc.Should().Be(65);
         r.Ch.Should().Be("A");
+    }
+
+    [Fact]
+    public void LengthFunctions_LinqProjection_MaterializesDeclaredInt32()
+    {
+        // #253: both functions are declared int?, but the dialect let the server return UInt64. The raw
+        // scalar path converts on read, so the mismatch only surfaced through the typed reader that a
+        // LINQ projection uses: the issue examples must materialise without InvalidCastException.
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Bl = SqlFunctions.Sql.bit_length("abc"),
+                Ol = SqlFunctions.Sql.octet_length("Привет")
+            })
+            .First();
+
+        r.Bl.Should().Be(24, "bit_length('abc') is eight bits for each of its three UTF-8 bytes");
+        r.Ol.Should().Be(12, "octet_length('Привет') counts UTF-8 bytes, not characters");
+    }
+
+    [Fact]
+    public void LengthFunctions_NullArgumentsRemainNull()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Bl = SqlFunctions.Sql.bit_length(null),
+                Ol = SqlFunctions.Sql.octet_length(null)
+            })
+            .First();
+
+        r.Bl.Should().BeNull("bit_length(NULL) is NULL, never zero");
+        r.Ol.Should().BeNull("octet_length(NULL) is NULL, never zero");
+    }
+
+    [Fact]
+    public void LengthFunctions_EmptyStringsReturnZero()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Bl = SqlFunctions.Sql.bit_length(""),
+                Ol = SqlFunctions.Sql.octet_length("")
+            })
+            .First();
+
+        r.Bl.Should().Be(0, "an empty string has no bits");
+        r.Ol.Should().Be(0, "an empty string has no bytes");
+    }
+
+    [Fact]
+    public void LengthFunctions_UseUtf8ByteCounts()
+    {
+        // "Привет" is 6 characters / 12 UTF-8 bytes; "é" is 1 character / 2 bytes; U+1F600 is a
+        // supplementary code point outside the BMP and occupies 4 UTF-8 bytes.
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Cyrillic = SqlFunctions.Sql.octet_length("Привет"),
+                Accent = SqlFunctions.Sql.octet_length("é"),
+                Emoji = SqlFunctions.Sql.octet_length("😀"),
+                EmojiBits = SqlFunctions.Sql.bit_length("😀")
+            })
+            .First();
+
+        r.Cyrillic.Should().Be(12, "six Cyrillic characters are two UTF-8 bytes each");
+        r.Accent.Should().Be(2, "é is a two-byte UTF-8 sequence");
+        r.Emoji.Should().Be(4, "the supplementary U+1F600 is a four-byte UTF-8 sequence");
+        r.EmojiBits.Should().Be(32, "four UTF-8 bytes are 32 bits");
+    }
+
+    [Fact]
+    public void LengthFunctions_ScalarAndProjectionAgree()
+    {
+        using var context = Provider.CreateContext();
+
+        T Scalar<T>(string expression)
+        {
+            using var result = context.ExecuteRaw($"select {expression} as v");
+            return result.Read<T>().Single();
+        }
+
+        var projection = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Bl = SqlFunctions.Sql.bit_length("Привет"),
+                Ol = SqlFunctions.Sql.octet_length("Привет")
+            })
+            .First();
+
+        projection.Bl.Should().Be(96, "six Cyrillic characters are 12 bytes = 96 bits");
+        projection.Ol.Should().Be(12);
+        Scalar<int>(Sql("bit_length", "'Привет'"))
+            .Should().Be(projection.Bl, "the raw scalar terminal agrees with the typed projection");
+        Scalar<int>(Sql("octet_length", "'Привет'"))
+            .Should().Be(projection.Ol, "the raw scalar terminal agrees with the typed projection");
+    }
+
+    [Fact]
+    public void LengthFunctions_ToInt32OverflowMatchesUncheckedConversion()
+    {
+        using var context = Provider.CreateContext();
+
+        int Convert(string expression)
+        {
+            using var result = context.ExecuteRaw($"select {expression} as v");
+            return result.Read<int>().Single();
+        }
+
+        // The rendered conversion is ClickHouse's unchecked toInt32, not a checked narrowing cast:
+        // int.MaxValue + 1 wraps to int.MinValue and a UInt64 product beyond Int32 wraps modulo 2^32.
+        Convert("toInt32(toUInt64(2147483648))").Should().Be(int.MinValue);
+        Convert("toInt32(toUInt64(2147483648))").Should().Be(unchecked((int)2_147_483_648UL));
+        Convert("toInt32(toUInt64(4294967295))").Should().Be(-1);
+        Convert("toInt32(toUInt64(4294967295))").Should().Be(unchecked((int)4_294_967_295UL));
+        Convert("toInt32(toUInt64(536870912) * 8)").Should().Be(0,
+            "536870912 * 8 = 2^32 bytes is zero after the Int32 wrap");
+        Convert("toInt32(toUInt64(536870912) * 8)")
+            .Should().Be(unchecked((int)(536_870_912UL * 8)));
     }
 
     [Fact]

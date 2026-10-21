@@ -259,8 +259,8 @@ lookaround, обратные ссылки, именованные группы �
 | `SqlFunctions.Sql.translate(s, from, to)` | `translate` | `TRANSLATE` | — | `translate` | — |
 | `SqlFunctions.Sql.ascii(s)` | `ascii` | `ASCII` | `ASCII` | `ascii` | `unicode` |
 | `SqlFunctions.Sql.@char(n)` | `chr` | `CHAR` | `CAST(CHAR(..) AS CHAR)` | `char` | `char` |
-| `SqlFunctions.Sql.octet_length(s)` | `octet_length` | `DATALENGTH` | `OCTET_LENGTH` | `length` | `octet_length` |
-| `SqlFunctions.Sql.bit_length(s)` | `bit_length` | `DATALENGTH(s) * 8` | `BIT_LENGTH` | `length(s) * 8` | `octet_length(s) * 8` |
+| `SqlFunctions.Sql.octet_length(s)` | `octet_length` | `DATALENGTH` | `OCTET_LENGTH` | `toInt32(length(s))` | `octet_length` |
+| `SqlFunctions.Sql.bit_length(s)` | `bit_length` | `DATALENGTH(s) * 8` | `BIT_LENGTH` | `toInt32(length(s) * 8)` | `octet_length(s) * 8` |
 
 - `left`/`right`/`lpad`/`rpad` считают **символы**, а не байты (ClickHouse использует варианты `*UTF8`).
   Отрицательный `n` зависит от провайдера: PostgreSQL читает его как «всё, кроме последних |n|», остальные — нет.
@@ -275,6 +275,10 @@ lookaround, обратные ссылки, именованные группы �
   `SqlFunctions.Sql` для них нет.
 - `octet_length`/`bit_length` считают октеты значения, поэтому многобайтовый `nvarchar` в SQL Server
   даёт два байта на символ (через `DATALENGTH`); SQLite требует 3.43+ для нативного `octet_length()`.
+- ClickHouse-ветки приводят серверный `UInt64` к `Int32` через `toInt32` (для `bit_length` обёрнуто
+  всё произведение `length(s) * 8`). Это преобразование **не проверяется**: результаты вне диапазона
+  `Int32` переполняются по модулю 2^32, а не бросают исключение, и не являются точными, поэтому
+  объявленный `int?` для очень больших строк следует семантике преобразования ClickHouse.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

@@ -255,8 +255,8 @@ form rejects the call with a clear `NotSupportedException` instead of emitting S
 | `SqlFunctions.Sql.translate(s, from, to)` | `translate` | `TRANSLATE` | — | `translate` | — |
 | `SqlFunctions.Sql.ascii(s)` | `ascii` | `ASCII` | `ASCII` | `ascii` | `unicode` |
 | `SqlFunctions.Sql.@char(n)` | `chr` | `CHAR` | `CAST(CHAR(..) AS CHAR)` | `char` | `char` |
-| `SqlFunctions.Sql.octet_length(s)` | `octet_length` | `DATALENGTH` | `OCTET_LENGTH` | `length` | `octet_length` |
-| `SqlFunctions.Sql.bit_length(s)` | `bit_length` | `DATALENGTH(s) * 8` | `BIT_LENGTH` | `length(s) * 8` | `octet_length(s) * 8` |
+| `SqlFunctions.Sql.octet_length(s)` | `octet_length` | `DATALENGTH` | `OCTET_LENGTH` | `toInt32(length(s))` | `octet_length` |
+| `SqlFunctions.Sql.bit_length(s)` | `bit_length` | `DATALENGTH(s) * 8` | `BIT_LENGTH` | `toInt32(length(s) * 8)` | `octet_length(s) * 8` |
 
 - `left`/`right`/`lpad`/`rpad` count **characters**, not bytes (ClickHouse uses its `*UTF8` variants).
   A negative `n` is provider-specific: PostgreSQL reads it as "all but the last |n|", the others do not.
@@ -270,6 +270,10 @@ form rejects the call with a clear `NotSupportedException` instead of emitting S
   `Math.Pow`), which already translate per provider — there is no `SqlFunctions.Sql` spelling for them.
 - `octet_length`/`bit_length` count the value's octets, so a multi-byte SQL Server `nvarchar` value
   reports two bytes per character (via `DATALENGTH`); SQLite needs 3.43+ for its native `octet_length()`.
+- The ClickHouse arms convert the server's `UInt64` byte count to `Int32` with `toInt32` (wrapping the
+  complete `length(s) * 8` product for `bit_length`). That conversion is **not checked**: results beyond
+  the `Int32` range wrap instead of throwing and are not lossless, so the declared `int?` follows
+  ClickHouse conversion semantics for very large strings.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

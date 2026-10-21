@@ -1194,8 +1194,8 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
         "generate_ulid" => "generateULID()",
 
         // ClickHouse length(String) is the byte count; bit_length is eight times it. There is no cot.
-        "bit_length" => $"length({args[0]}) * 8",
-        "octet_length" => $"length({args[0]})",
+        "bit_length" => $"toInt32(length({args[0]}) * 8)",
+        "octet_length" => $"toInt32(length({args[0]}))",
         "degrees" => $"degrees({args[0]})",
         "radians" => $"radians({args[0]})",
         "pi" => "pi()",
