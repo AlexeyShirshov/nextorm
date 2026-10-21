@@ -43,7 +43,7 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
     /// <summary>
     /// The complete SQL Server-only function inventory of <c>SqlServerSpecificFunctions.Supports</c>
     /// (<c>src/nextorm.sqlserver/SqlServerDialect.cs:1046-1067</c>), read through the live context's
-    /// public <see cref="ISqlServerFunctions"/> surface: 72 T-SQL function names.
+    /// public <see cref="ISqlServerFunctions"/> surface: 79 T-SQL function names.
     /// </summary>
     private static readonly string[] SqlServerFunctionNames =
     [
@@ -57,17 +57,19 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
         "ident_incr", "ident_seed", "index_col", "object_definition", "object_id", "object_name",
         "object_schema_name", "stats_date", "db_id", "db_name", "original_db_name", "schema_id",
         "schema_name", "type_id", "type_name", "filegroup_id", "filegroup_name", "file_id", "file_idex",
-        "file_name", "current_timezone", "current_timezone_id", "formatmessage", "getansinull",
-        "isdate", "isnumeric", "parsename", "publishingservername", "str", "next_value_for", "nextval"
+        "file_name", "current_request_id", "current_timezone", "current_timezone_id",
+        "current_transaction_id", "formatmessage", "getansinull", "ident_current",
+        "isdate", "isnumeric", "min_active_rowversion", "parsename", "publishingservername",
+        "rowcount_big", "scope_identity", "str", "xact_state", "next_value_for", "nextval"
     ];
 
     /// <summary>
     /// Every <c>SqlServerSpecificFunctions.Render</c> arm, written out literally and independently of
-    /// the renderer: the 68 switch arms, the 12 arms that also carry an optional-arity form
+    /// the renderer: the 75 switch arms, the 12 arms that also carry an optional-arity form
     /// (<c>quotename</c>, <c>format</c>, <c>date_bucket</c>, <c>rand</c>, <c>object_id</c>,
     /// <c>object_name</c>, <c>object_schema_name</c>, <c>db_id</c>, <c>db_name</c>, <c>schema_id</c>,
     /// <c>schema_name</c>, <c>getansinull</c>) and a second <c>datename</c> argument variant for the
-    /// quote-stripping helper. 85 assertion rows over 72 names / 68 source switch arms.
+    /// quote-stripping helper. 92 assertion rows over 79 names / 75 source switch arms.
     /// </summary>
     private static readonly (string Name, string[] Args, string Expected)[] RenderArms =
     [
@@ -148,16 +150,23 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
         ("file_id", ["'db'"], "file_id('db')"),
         ("file_idex", ["'db'"], "file_idex('db')"),
         ("file_name", ["1"], "file_name(1)"),
+        ("current_request_id", [], "current_request_id()"),
         ("current_timezone", [], "current_timezone()"),
         ("current_timezone_id", [], "current_timezone_id()"),
+        ("current_transaction_id", [], "current_transaction_id()"),
         ("formatmessage", ["'x'", "1"], "formatmessage('x', 1)"),
         ("getansinull", [], "getansinull()"),
         ("getansinull", ["'db'"], "getansinull('db')"),
+        ("ident_current", ["'t'"], "ident_current('t')"),
         ("isdate", ["x"], "isdate(x)"),
         ("isnumeric", ["x"], "isnumeric(x)"),
+        ("min_active_rowversion", [], "min_active_rowversion()"),
         ("parsename", ["'a.b'", "1"], "parsename('a.b', 1)"),
         ("publishingservername", [], "publishingservername()"),
+        ("rowcount_big", [], "rowcount_big()"),
+        ("scope_identity", [], "scope_identity()"),
         ("str", ["123.456"], "str(123.456)"),
+        ("xact_state", [], "xact_state()"),
         ("next_value_for", ["[seq]"], "next value for [seq]"),
         ("nextval", ["[seq]"], "next value for [seq]")
     ];
@@ -452,13 +461,13 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
     }
 
     /// <summary>
-    /// The dialect's public function table accepts exactly the 72 T-SQL names of the inventory and
+    /// The dialect's public function table accepts exactly the 79 T-SQL names of the inventory and
     /// nothing else; every accepted name has a renderer arm, and the session-identity surface is on.
     /// </summary>
     [Fact]
     public void SqlServerFunctions_ShouldAcceptTheCompleteInventoryAndNothingElse()
     {
-        SqlServerFunctionNames.Should().HaveCount(72, "the SQL Server table accepts 72 T-SQL function names");
+        SqlServerFunctionNames.Should().HaveCount(79, "the SQL Server table accepts 79 T-SQL function names");
         SqlServerFunctionNames.Should().OnlyHaveUniqueItems();
 
         using (new AssertionScope())

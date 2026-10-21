@@ -584,9 +584,11 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     `NEWSEQUENTIALID`, `UNICODE`/`NCHAR`, `SQUARE`, the trigonometric functions and the SQL Server JSON
     constructors/aggregates `JSON_ARRAY`/`JSON_OBJECT`/`JSON_ARRAYAGG`/`JSON_OBJECTAGG`/`JSON_CONTAINS`/
     `JSON_PATH_EXISTS`) is joined by the linq2db-v6.5.0 reconciliation ([#182](https://github.com/AlexeyShirshov/nextorm/issues/182)):
-    61 pinned T-SQL scalars = **51 covered + 10 excluded** (live mutable connection/session/statement-scope
-    state; #219 later opened three, leaving the seven tracked in
-    [#248](https://github.com/AlexeyShirshov/nextorm/issues/248)). The 47
+    61 pinned T-SQL scalars = **61 covered + 0 excluded** (live mutable connection/session/statement-scope
+    state is not an exclusion criterion: the #182 manifest pinned 51 covered + 10 excluded,
+    [#219](https://github.com/AlexeyShirshov/nextorm/issues/219) opened three of them and
+    [#248](https://github.com/AlexeyShirshov/nextorm/issues/248) the remaining seven, as-is with their
+    native semantics and caveats). The 47
     additions are the clock/offset/`*FROMPARTS` date family (`SYSDATETIME`/`SYSDATETIMEOFFSET`/
     `SYSUTCDATETIME`/`SWITCHOFFSET`/`TODATETIMEOFFSET`/`TIMEFROMPARTS`/`SMALLDATETIMEFROMPARTS`/
     `DATETIMEFROMPARTS`/`DATETIME2FROMPARTS`/`DATETIMEOFFSETFROMPARTS`; FROMPARTS 6 total/5 new, date 13

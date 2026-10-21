@@ -179,11 +179,15 @@ XQuery — строковым литералом).
   (1/0), а не `bit`; `formatmessage` принимает строку формата или id из `sys.messages` и не более 20
   аргументов.
 
-Семь имён, сообщающих живое изменяемое состояние соединения, сессии или инструкции, намеренно не
-открыты: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
-`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` и `SCOPE_IDENTITY`. Стабильные конфигурационные константы и
-константы идентичности той же области (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`,
-`HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) открыты. См.
+Семь имён, сообщающих живое изменяемое состояние соединения, сессии или инструкции, открыты как есть:
+`CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`, `MIN_ACTIVE_ROWVERSION`,
+`ROWCOUNT_BIG` и `SCOPE_IDENTITY`. Живое изменяемое состояние **не** является критерием исключения:
+нативная семантика SQL Server поставляется вместе с оговорками, и nextorm не гарантирует построчную
+стабильность, непрерывность соединения между запросами и получение identity — отдельный вызов
+`SCOPE_IDENTITY`/`IDENT_CURRENT` не является API последней вставки, используйте
+`ReturningIdentity<TKey>()`. Стабильные конфигурационные константы и константы идентичности той же
+области (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`,
+`SUSER_NAME`, `ORIGINAL_LOGIN`) остаются на той же поверхности. См.
 [гайд по скалярам T-SQL](../guide/provider-specific-sql/sqlserver.md#скаляры-t-sql).
 
 ## Рекурсивные CTE и `maxRecursion`

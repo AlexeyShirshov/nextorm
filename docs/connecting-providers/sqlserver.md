@@ -171,11 +171,15 @@ by every other provider:
 - **String/conversion:** `stuff` and `str`; `isdate`/`isnumeric` return the native T-SQL `int` (1/0),
   not `bit`; `formatmessage` accepts a format string or a `sys.messages` id and at most 20 arguments.
 
-Seven names that report live, mutable connection-, session- or statement-scope state are intentionally
-not exposed: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
-`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`. Stable configuration and identity constants
-of the same scope (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`,
-`APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) are shipped. See the
+The seven names that report live, mutable connection-, session- or statement-scope state are exposed
+as-is: `CURRENT_REQUEST_ID`, `CURRENT_TRANSACTION_ID`, `XACT_STATE`, `IDENT_CURRENT`,
+`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`. Live mutable state is **not** an exclusion
+criterion: the native SQL Server semantics are shipped with their caveats, and nextorm promises no
+per-row stability, no connection continuity between queries and no identity-retrieval guarantee — a
+separate `SCOPE_IDENTITY`/`IDENT_CURRENT` call is not a last-insert API, use `ReturningIdentity<TKey>()`
+instead. Stable configuration and identity constants of the same scope (`CURRENT_TIMEZONE`/
+`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`)
+stay on the same surface. See the
 [T-SQL scalar functions guide](../guide/provider-specific-sql/sqlserver.md#t-sql-scalar-functions).
 
 ## Recursive CTEs and `maxRecursion`

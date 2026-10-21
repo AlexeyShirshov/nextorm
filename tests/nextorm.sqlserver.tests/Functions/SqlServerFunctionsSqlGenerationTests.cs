@@ -588,6 +588,56 @@ public class SqlServerFunctionsSqlGenerationTests
     }
 
     [Fact]
+    [Trait("Issue", "248")]
+    public void LiveScopeScalars_ShouldEmitNativeSpellings()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            Request = SqlFunctions.SqlServer.current_request_id(),
+            Transaction = SqlFunctions.SqlServer.current_transaction_id(),
+            State = SqlFunctions.SqlServer.xact_state(),
+            Current = SqlFunctions.SqlServer.ident_current("t"),
+            RowVersion = SqlFunctions.SqlServer.min_active_rowversion(),
+            Rows = SqlFunctions.SqlServer.rowcount_big(),
+            Identity = SqlFunctions.SqlServer.scope_identity()
+        }));
+
+        sql.Should().Contain("current_request_id()");
+        sql.Should().Contain("current_transaction_id()");
+        sql.Should().Contain("xact_state()");
+        sql.Should().Contain("ident_current('t')");
+        sql.Should().Contain("min_active_rowversion()");
+        sql.Should().Contain("rowcount_big()");
+        sql.Should().Contain("scope_identity()");
+    }
+
+    [Fact]
+    [Trait("Issue", "248")]
+    public void LiveScopeScalars_ShouldReturnNativeTypes()
+    {
+        // CURRENT_REQUEST_ID is smallint, CURRENT_TRANSACTION_ID is bigint, XACT_STATE and
+        // ROWCOUNT_BIG are int/bigint, IDENT_CURRENT and SCOPE_IDENTITY are numeric(38,0) (decimal
+        // in ADO.NET, never int), MIN_ACTIVE_ROWVERSION is binary(8).
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.current_request_id))!.ReturnType
+            .Should().Be(typeof(short?));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.current_transaction_id))!.ReturnType
+            .Should().Be(typeof(long?));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.xact_state))!.ReturnType
+            .Should().Be(typeof(short));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.ident_current))!.ReturnType
+            .Should().Be(typeof(decimal?));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.min_active_rowversion))!.ReturnType
+            .Should().Be(typeof(byte[]));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.rowcount_big))!.ReturnType
+            .Should().Be(typeof(long));
+        typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.scope_identity))!.ReturnType
+            .Should().Be(typeof(decimal?));
+    }
+
+    [Fact]
     public void Functions_ShouldBeGated()
     {
         // The SQL Server renderer reports exactly the SQL Server-only names.
@@ -610,6 +660,13 @@ public class SqlServerFunctionsSqlGenerationTests
         functions.Supports("str").Should().BeTrue();
         functions.Supports("next_value_for").Should().BeTrue();
         functions.Supports("nextval").Should().BeTrue();
+        functions.Supports("current_request_id").Should().BeTrue();
+        functions.Supports("current_transaction_id").Should().BeTrue();
+        functions.Supports("xact_state").Should().BeTrue();
+        functions.Supports("ident_current").Should().BeTrue();
+        functions.Supports("min_active_rowversion").Should().BeTrue();
+        functions.Supports("rowcount_big").Should().BeTrue();
+        functions.Supports("scope_identity").Should().BeTrue();
         functions.Supports("log10").Should().BeFalse();
 
         functions.Render("next_value_for", ["[s]"]).Should().Be("next value for [s]");

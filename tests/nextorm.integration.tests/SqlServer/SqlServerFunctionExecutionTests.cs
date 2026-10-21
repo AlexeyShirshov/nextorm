@@ -493,4 +493,107 @@ public sealed class SqlServerFunctionExecutionTests : ProviderTestSuite
         Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.Postgres.percentile_cont(0.5, () => (double)x.Id)).First(),
             "The ordered-set aggregates (percentile_cont/percentile_disc/mode) are not supported by this provider.");
     }
+
+    /// <summary>
+    /// The connection/statement-scope names (#248) report native state without a per-row guarantee:
+    /// <c>IDENT_CURRENT</c> is read after a two-row seed, <c>SCOPE_IDENTITY</c> only inside the batch
+    /// that performed the <c>INSERT</c>, and <c>ROWCOUNT_BIG</c> after the previous command of the
+    /// same batch. The identity column starts at 1, so the values are deterministic.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "248")]
+    public void LiveConnectionStateFunctions_ShouldReadNativeValues()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists ss_fn_state");
+        Execute(ctx, "create table ss_fn_state (id int identity(1,1) primary key, note nvarchar(20) null)");
+        try
+        {
+            Execute(ctx, "insert into ss_fn_state (note) values (N'a'), (N'b')");
+            Scalar(ctx, "select ident_current('ss_fn_state')")
+                .Should().Be(2m, "IDENT_CURRENT reports the last identity the table generated, in any session");
+
+            Scalar(ctx, "set nocount on; insert into ss_fn_state (note) values (N'c'); select scope_identity();")
+                .Should().Be(3m, "SCOPE_IDENTITY is visible only in the same batch as the INSERT");
+
+            Scalar(ctx, "set nocount on; insert into ss_fn_state (note) values (N'd'), (N'e'), (N'f'); select rowcount_big();")
+                .Should().Be(3L, "ROWCOUNT_BIG reports the rows affected by the previous command of the batch");
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists ss_fn_state");
+        }
+    }
+
+    /// <summary>
+    /// Inside an explicit, committable transaction the native state is <c>CURRENT_TRANSACTION_ID</c>
+    /// non-null and <c>XACT_STATE()</c> = 1; the transaction is rolled back so nothing is left behind.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "248")]
+    public void LiveTransactionStateFunctions_ShouldReadNativeValues()
+    {
+        var ctx = _sut.DataProvider;
+
+        using var transaction = ((ITransactionManager)ctx).BeginTransaction();
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                TransactionId = SqlFunctions.SqlServer.current_transaction_id(),
+                State = SqlFunctions.SqlServer.xact_state()
+            })
+            .First();
+
+        r.TransactionId.Should().NotBeNull("the query runs inside an explicit transaction");
+        r.TransactionId.Value.Should().BeGreaterThan(0);
+        r.State.Should().Be(1, "an active and committable transaction is xact_state 1");
+
+        transaction.Rollback();
+    }
+
+    /// <summary>
+    /// <c>CURRENT_REQUEST_ID</c> returns the smallint request id of the current session, or SQL NULL
+    /// outside a request; only the type/range is deterministic, so both native outcomes are accepted.
+    /// <c>MIN_ACTIVE_ROWVERSION</c> is the native <c>binary(8)</c> value, not a numeric counter.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "248")]
+    public void LiveRequestAndRowVersionFunctions_ShouldReadNativeValues()
+    {
+        var request = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new { RequestId = SqlFunctions.SqlServer.current_request_id() })
+            .First();
+
+        if (request.RequestId is { } requestId)
+            requestId.Should().BeGreaterThanOrEqualTo((short)0);
+        else
+            request.RequestId.Should().BeNull("outside a request scope the server returns NULL");
+
+        var rowVersion = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new { Version = SqlFunctions.SqlServer.min_active_rowversion() })
+            .First()
+            .Version;
+
+        rowVersion.Should().NotBeNull("MIN_ACTIVE_ROWVERSION returns the native binary(8) value");
+        rowVersion.Should().HaveCount(8, "the native return type is binary(8)");
+    }
+
+    private static void Execute(IDataContext ctx, string sql)
+    {
+        var context = (DataContext)ctx;
+        context.EnsureConnectionOpen();
+        using var command = context.CreateCommand(sql);
+        command.ExecuteNonQuery();
+    }
+
+    private static object? Scalar(IDataContext ctx, string sql)
+    {
+        var context = (DataContext)ctx;
+        context.EnsureConnectionOpen();
+        using var command = context.CreateCommand(sql);
+        return command.ExecuteScalar();
+    }
 }

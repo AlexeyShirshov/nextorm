@@ -1059,8 +1059,12 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "db_id" or "db_name" or "original_db_name" or "schema_id" or "schema_name" or
         "type_id" or "type_name" or
         "filegroup_id" or "filegroup_name" or "file_id" or "file_idex" or "file_name" or
-        "current_timezone" or "current_timezone_id" or "formatmessage" or "getansinull" or
-        "isdate" or "isnumeric" or "parsename" or "publishingservername" or "str" or
+        "current_request_id" or "current_timezone" or "current_timezone_id" or
+        "current_transaction_id" or
+        "formatmessage" or "getansinull" or "ident_current" or
+        "isdate" or "isnumeric" or "min_active_rowversion" or
+        "parsename" or "publishingservername" or
+        "rowcount_big" or "scope_identity" or "str" or "xact_state" or
         "next_value_for" or "nextval";
 
     /// <inheritdoc/>
@@ -1135,15 +1139,22 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "file_id" => $"file_id({args[0]})",
         "file_idex" => $"file_idex({args[0]})",
         "file_name" => $"file_name({args[0]})",
+        "current_request_id" => "current_request_id()",
         "current_timezone" => "current_timezone()",
         "current_timezone_id" => "current_timezone_id()",
+        "current_transaction_id" => "current_transaction_id()",
         "formatmessage" => $"formatmessage({string.Join(", ", args)})",
         "getansinull" => args.Count == 0 ? "getansinull()" : $"getansinull({args[0]})",
+        "ident_current" => $"ident_current({args[0]})",
         "isdate" => $"isdate({args[0]})",
         "isnumeric" => $"isnumeric({args[0]})",
+        "min_active_rowversion" => "min_active_rowversion()",
         "parsename" => $"parsename({args[0]}, {args[1]})",
         "publishingservername" => "publishingservername()",
+        "rowcount_big" => "rowcount_big()",
+        "scope_identity" => "scope_identity()",
         "str" => $"str({string.Join(", ", args)})",
+        "xact_state" => "xact_state()",
         // The sequence name arrives already bracket-quoted by the translator; both aliases render the
         // same T-SQL sequence expression.
         "next_value_for" or "nextval" => $"next value for {args[0]}",
