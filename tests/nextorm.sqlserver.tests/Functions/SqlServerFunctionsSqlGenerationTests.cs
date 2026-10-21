@@ -1,3 +1,5 @@
+using System.Data.Common;
+using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -764,6 +766,205 @@ public class SqlServerFunctionsSqlGenerationTests
             .Should().Be(typeof(long));
         typeof(SqlServerFunctions).GetMethod(nameof(SqlServerFunctions.nextval))!.ReturnType
             .Should().Be(typeof(long));
+    }
+
+    // --- #258: QUOTENAME(value, quote) must escape inline string literals. The second argument is a
+    // --- string VALUE, so its apostrophe is doubled exactly like any other inline literal — it is not
+    // --- a hand-rolled delimiter concatenation. These assertions name the exact function expression so
+    // --- the malformed three-apostrophe argument can never satisfy them.
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_ApostropheLiteral_ShouldBeEscaped()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            Q = SqlFunctions.SqlServer.quotename("abc", "'")
+        }));
+
+        sql.Should().Contain("quotename('abc', '''')",
+            "the apostrophe delimiter is an inline string value whose apostrophe is doubled, not the malformed three-apostrophe argument");
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_ApostropheValue_ShouldBeEscaped()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Q = SqlFunctions.SqlServer.quotename("O'Brien", "'")
+        }));
+
+        sql.Should().Contain("quotename('O''Brien', '''')",
+            "the apostrophe inside the value is doubled, and the delimiter argument is doubled as well");
+        sql.Should().NotContain("quotename('O'Brien'",
+            "the raw value with a single embedded apostrophe terminates the literal early and must never be emitted");
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_QuoteCharacterVariants_ShouldRenderCorrectArguments()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // Each delimiter is a one-character string VALUE: only its apostrophe (when it is one) is
+        // doubled; every other character is emitted verbatim and leaves the delimiter choice to the server.
+        var cases = new (string Expected, string Sql)[]
+        {
+            ("quotename('abc', '''')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "'") }))),
+            ("quotename('abc', '\"')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "\"") }))),
+            ("quotename('abc', '[')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "[") }))),
+            ("quotename('abc', ']')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "]") }))),
+            ("quotename('abc', '(')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "(") }))),
+            ("quotename('abc', ')')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", ")") }))),
+            ("quotename('abc', '<')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "<") }))),
+            ("quotename('abc', '>')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", ">") }))),
+            ("quotename('abc', '`')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "`") }))),
+            ("quotename('abc', '{')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "{") }))),
+            ("quotename('abc', '}')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "}") }))),
+            ("quotename('abc')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc") })))
+        };
+
+        foreach (var (expected, sql) in cases)
+            sql.Should().Contain(expected);
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_NullAndInvalidArguments_ShouldPreserveNativeSemantics()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // Rendering/binding only: the server semantics of the non-delimiter forms are deferred (the
+        // capability gate forwards them unchanged), so no client-side validation is invented here.
+        var sql = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            NullValue = SqlFunctions.SqlServer.quotename(null, "'"),
+            NullQuote = SqlFunctions.SqlServer.quotename("abc", null),
+            EmptyValue = SqlFunctions.SqlServer.quotename("", "'"),
+            SingleChar = SqlFunctions.SqlServer.quotename("abc", "x"),
+            MultiChar = SqlFunctions.SqlServer.quotename("abc", "aa"),
+            EmptyQuote = SqlFunctions.SqlServer.quotename("abc", "")
+        }));
+
+        sql.Should().Contain("quotename(null, '''')", "a null value stays SQL null");
+        sql.Should().Contain("quotename('abc', null)", "a null delimiter stays SQL null, not the default bracket");
+        sql.Should().Contain("quotename('', '''')", "an empty value is a paired-delimiter case, not null");
+        sql.Should().Contain("quotename('abc', 'x')");
+        sql.Should().Contain("quotename('abc', 'aa')");
+        sql.Should().Contain("quotename('abc', '')");
+        sql.Should().NotContain("'null'", "a null argument must never become the text 'null'");
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_ParameterizedArguments_ShouldPreserveBindings()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var id = 1L;
+        var value = "O'Brien";
+        var quote = "'";
+
+        QueryCommand<string?> Command() => ctx.From<IComplexEntity>()
+            .Where(x => x.Id == id)
+            .OrderBy(x => x.Id)
+            .Select(x => SqlFunctions.SqlServer.quotename(value, quote));
+
+        var first = (DbPreparedQueryCommand<string?>)ctx.GetPreparedQueryCommand(Command(), false, true, CancellationToken.None);
+        var firstSql = Normalize(first.DbCommand.CommandText);
+        var firstParams = first.DbCommand.Parameters.Cast<DbParameter>().ToDictionary(p => p.ParameterName);
+
+        firstSql.Should().Contain("quotename(@value, @quote)");
+        firstSql.Should().NotContain("O''Brien", "the value is bound, never spliced into the statement");
+        firstParams["value"].Value.Should().Be("O'Brien");
+        firstParams["quote"].Value.Should().Be("'");
+
+        // The ORDER BY keeps this shape off the positional refresh recipe, so the cache hit re-renders the
+        // parameter-extraction pass with ParamMode = true: a literal emitted on that pass would either
+        // corrupt the command or null-reference the absent builder.
+        value = "O'Brien's";
+        quote = "[";
+        var second = (DbPreparedQueryCommand<string?>)ctx.GetPreparedQueryCommand(Command(), false, true, CancellationToken.None);
+        second.Should().BeSameAs(first, "the second execution must hit the cached plan");
+        Normalize(second.DbCommand.CommandText).Should().Be(firstSql, "parameter mode must not splice or re-render values");
+        var secondParams = second.DbCommand.Parameters.Cast<DbParameter>().ToDictionary(p => p.ParameterName);
+        secondParams["value"].Value.Should().Be("O'Brien's", "the bound value stays raw; escaping is a SQL-literal concern only");
+        secondParams["quote"].Value.Should().Be("[");
+
+        // A null capture binds as a null parameter, never as the text 'null'.
+        string? nullValue = null;
+        var nullQuote = "'";
+        var nullPrepared = (DbPreparedQueryCommand<string?>)ctx.GetPreparedQueryCommand(
+            ctx.From<IComplexEntity>().Where(x => x.Id == id).Select(x => SqlFunctions.SqlServer.quotename(nullValue, nullQuote)),
+            false, false, CancellationToken.None);
+        Normalize(nullPrepared.DbCommand.CommandText).Should().Contain("quotename(@nullValue, @nullQuote)");
+        var nullParams = nullPrepared.DbCommand.Parameters.Cast<DbParameter>().ToDictionary(p => p.ParameterName);
+        (nullParams["nullValue"].Value is null || nullParams["nullValue"].Value is DBNull)
+            .Should().BeTrue("a null capture binds as a null/DBNull parameter");
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_NonConstantQuoteCharacter_ShouldRemainAnExpression()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            Q = SqlFunctions.SqlServer.quotename("abc", x.String)
+        }));
+
+        sql.Should().Contain("quotename('abc', somestring)",
+            "a column delimiter is forwarded as a SQL expression, never quoted as an identifier or evaluated client-side");
+        sql.Should().NotContain("quotename('abc', 'somestring')");
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_InputLengthBoundaries_ShouldPreserveArguments()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        const string Value128 =
+            "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" +
+            "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa" + "aaaaaaaaaaaaaaaa";
+        const string Value129 = Value128 + "a";
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            At128 = SqlFunctions.SqlServer.quotename(Value128, "'"),
+            At129 = SqlFunctions.SqlServer.quotename(Value129, "'")
+        }));
+
+        sql.Should().Contain("quotename('" + Value128 + "', '''')", "no client-side truncation at the 128-character boundary");
+        sql.Should().Contain("quotename('" + Value129 + "', '''')", "the 129-character input is forwarded unchanged; the server decides");
+    }
+
+    [Fact]
+    [Trait("Issue", "258")]
+    public void InlineGuidLiteral_ShouldRemainQuoted()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // The string/Guid branch of the shared emitter is one arm: a Guid constant must keep the canonical
+        // 'D' formatting and stay enclosed in single quotes after the escaping substitution.
+        var guid = Guid.Parse("00112233-4455-6677-8899-aabbccddeeff");
+        var body = Expression.Constant(guid, typeof(Guid));
+        var projection = Expression.Lambda<Func<IComplexEntity, Guid>>(
+            body, Expression.Parameter(typeof(IComplexEntity), "x"));
+
+        var sql = SqlOf(ctx, ctx.From<IComplexEntity>().Select(projection));
+
+        sql.Should().Contain("'00112233-4455-6677-8899-aabbccddeeff'");
     }
 
     private static void AssertUnsupported(Action act, string pattern)

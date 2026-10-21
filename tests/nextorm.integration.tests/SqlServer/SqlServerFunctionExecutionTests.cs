@@ -493,4 +493,71 @@ public sealed class SqlServerFunctionExecutionTests : ProviderTestSuite
         Reject(() => _sut.SimpleEntity.Select(x => SqlFunctions.Postgres.percentile_cont(0.5, () => (double)x.Id)).First(),
             "The ordered-set aggregates (percentile_cont/percentile_disc/mode) are not supported by this provider.");
     }
+
+    /// <summary>
+    /// #258: QUOTENAME(value, quote) over the real server. The expected matrix is written out
+    /// independently of the production escaping helper: every delimiter is a one-character string whose
+    /// apostrophe (when it is the delimiter) is doubled, and the server decides the native result —
+    /// including the null results for a null argument and for a value longer than sysname.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "258")]
+    public void Quotename_LiteralParameterAndNullVariants_ShouldExecute()
+    {
+        var value128 = new string('a', 128);
+        var value129 = new string('a', 129);
+        var paramValue = "O'Brien";
+        var paramQuote = "'";
+        string? nullParam = null;
+
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Apostrophe = SqlFunctions.SqlServer.quotename("abc", "'"),
+                ApostropheInValue = SqlFunctions.SqlServer.quotename("O'Brien", "'"),
+                DoubleQuote = SqlFunctions.SqlServer.quotename("abc", "\""),
+                Bracket = SqlFunctions.SqlServer.quotename("abc", "["),
+                RightBracket = SqlFunctions.SqlServer.quotename("abc", "]"),
+                Parenthesis = SqlFunctions.SqlServer.quotename("abc", "("),
+                RightParenthesis = SqlFunctions.SqlServer.quotename("abc", ")"),
+                Angle = SqlFunctions.SqlServer.quotename("abc", "<"),
+                RightAngle = SqlFunctions.SqlServer.quotename("abc", ">"),
+                Brace = SqlFunctions.SqlServer.quotename("abc", "{"),
+                RightBrace = SqlFunctions.SqlServer.quotename("abc", "}"),
+                Backtick = SqlFunctions.SqlServer.quotename("abc", "`"),
+                EscapedBracketValue = SqlFunctions.SqlServer.quotename("abc[]def"),
+                OneArgument = SqlFunctions.SqlServer.quotename("abc"),
+                EmptyValue = SqlFunctions.SqlServer.quotename("", "["),
+                NullValue = SqlFunctions.SqlServer.quotename(null, "'"),
+                NullQuote = SqlFunctions.SqlServer.quotename("abc", null),
+                At128 = SqlFunctions.SqlServer.quotename(value128, "["),
+                At129 = SqlFunctions.SqlServer.quotename(value129, "["),
+                Param = SqlFunctions.SqlServer.quotename(paramValue, paramQuote),
+                NullParam = SqlFunctions.SqlServer.quotename(nullParam, "'")
+            })
+            .First();
+
+        r.Apostrophe.Should().Be("'abc'");
+        r.ApostropheInValue.Should().Be("'O''Brien'");
+        r.DoubleQuote.Should().Be("\"abc\"");
+        r.Bracket.Should().Be("[abc]");
+        r.RightBracket.Should().Be("[abc]");
+        r.Parenthesis.Should().Be("(abc)");
+        r.RightParenthesis.Should().Be("(abc)");
+        r.Angle.Should().Be("<abc>");
+        r.RightAngle.Should().Be("<abc>");
+        r.Brace.Should().Be("{abc}");
+        r.RightBrace.Should().Be("{abc}");
+        r.Backtick.Should().Be("`abc`");
+        r.EscapedBracketValue.Should().Be("[abc[]]def]");
+        r.OneArgument.Should().Be("[abc]");
+        r.EmptyValue.Should().Be("[]");
+        r.NullValue.Should().BeNull();
+        r.NullQuote.Should().BeNull();
+        r.At128.Should().Be("[" + value128 + "]");
+        r.At129.Should().BeNull("an input longer than sysname returns NULL natively, with no client truncation");
+        r.Param.Should().Be("'O''Brien'");
+        r.NullParam.Should().BeNull();
+    }
 }

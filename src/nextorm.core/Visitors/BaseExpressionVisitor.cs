@@ -780,7 +780,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             _builder!.Append(Kw("null"));
         else if (t == typeof(string) || t == typeof(Guid))
         {
-            _builder!.Append('\'').Append(v.ToString()).Append('\'');
+            // An inline string/Guid value is emitted as a string literal through the single shared
+            // escaping helper: embedded apostrophes are doubled, so `'` as a value cannot terminate the
+            // literal early (the old raw append produced three apostrophes instead of four).
+            _builder!.Append(SqlLiteral.ToSqlStringLiteral(v.ToString()!));
         }
         else if (t.IsPrimitive || t == typeof(decimal))
         {
