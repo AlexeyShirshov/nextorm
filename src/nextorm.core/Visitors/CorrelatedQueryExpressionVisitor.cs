@@ -414,6 +414,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     private static bool IsAggregateTerminal(string methodName) => methodName switch
     {
         nameof(EntityBuilderExtensions.Count) => true,
+        nameof(EntityBuilderExtensions.LongCount) => true,
         nameof(EntityBuilderExtensions.Min) => true,
         nameof(EntityBuilderExtensions.Max) => true,
         nameof(EntityBuilderExtensions.Avg) => true,

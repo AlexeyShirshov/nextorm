@@ -216,9 +216,12 @@ var rows = await dataContext.From<IComplexEntity>()
 `e.String.ToUpper()`); функция отображается вокруг квалифицированного внешнего псевдонима так же,
 как и любое другое выражение.
 
-Агрегатный терминал ([`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `Sum(...)`, `Min`/`Max`/`Avg`, ...)
-транслируется в соответствующий SQL-агрегат над подзапросом, поэтому его можно использовать прямо с
-внешней ссылкой:
+В коррелированных **проекциях** поддерживаемые агрегатные терминалы builder'а
+([`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `LongCount`,
+`Sum`, `Min`, `Max`, `Avg`, `Stdev`, `Stdevp`, `Var` и `Varp`) транслируются в агрегатные скалярные
+подзапросы, поэтому их можно использовать прямо с внешней ссылкой. `LongCount()` возвращает количество
+`long` на каждую внешнюю строку, включая `0`, если ни одна строка не подошла. Эта поддержка в проекциях
+сама по себе не расширяет поддержку агрегатных терминалов в предикатах `WHERE`:
 
 ```csharp
 var rows = await dataContext.From<IComplexEntity>()
@@ -232,6 +235,24 @@ select t1.id, (select count(*)
  where cast(t2.id as bigint) = t1.id
 limit 1) as 'cnt'
  from complex_entity as 't1'
+```
+
+Упорядоченный результат делает широкий счётчик наглядным: `LongCount()` возвращает ту же
+последовательность, что и `Count()`, приведённую к `long`, и `0L` для внешней строки, чей внутренний
+предикат не нашёл ни одной строки.
+
+```csharp
+var rows = await dataContext.From<IComplexEntity>()
+    .OrderBy(it => it.Id)
+    .Select(it => new
+    {
+        it.Id,
+        cnt = dataContext.From<IComplexEntity>().Where(c => c.Id == it.Id).Count(),
+        longCnt = dataContext.From<IComplexEntity>().Where(c => c.Id == it.Id).LongCount()
+    })
+    .ToListAsync();
+// cnt:     [1, 2, 3]
+// longCnt: [1L, 2L, 3L]
 ```
 
 Корреляция вкладывается произвольно: коррелированный подзапрос может сам содержать коррелированный

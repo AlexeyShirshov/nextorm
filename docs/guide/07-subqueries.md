@@ -213,9 +213,12 @@ The outer reference may be wrapped in a scalar function over the outer column (f
 `e.String.ToUpper()`); the function is rendered around the qualified outer alias just like any other
 expression.
 
-An aggregate terminal ([`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `Sum(...)`, `Min`/`Max`/`Avg`, ...)
-is translated to the matching SQL aggregate over the subquery, so it can be used directly with an outer
-reference:
+In correlated **projections**, the supported builder aggregate terminals
+([`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `LongCount`,
+`Sum`, `Min`, `Max`, `Avg`, `Stdev`, `Stdevp`, `Var` and `Varp`) are translated to aggregate scalar
+subqueries, so they can be used directly with an outer reference. `LongCount()` returns the per-outer-row
+`long` count, including `0` when no rows match. This projection support does not by itself extend
+aggregate-terminal support in `WHERE` predicates:
 
 ```csharp
 var rows = await dataContext.From<IComplexEntity>()
@@ -229,6 +232,23 @@ select t1.id, (select count(*)
  where cast(t2.id as bigint) = t1.id
 limit 1) as 'cnt'
  from complex_entity as 't1'
+```
+
+The ordered result makes the wide count explicit: `LongCount()` returns the same sequence as `Count()`
+converted to `long`, and `0L` for an outer row whose inner predicate matches nothing.
+
+```csharp
+var rows = await dataContext.From<IComplexEntity>()
+    .OrderBy(it => it.Id)
+    .Select(it => new
+    {
+        it.Id,
+        cnt = dataContext.From<IComplexEntity>().Where(c => c.Id == it.Id).Count(),
+        longCnt = dataContext.From<IComplexEntity>().Where(c => c.Id == it.Id).LongCount()
+    })
+    .ToListAsync();
+// cnt:     [1, 2, 3]
+// longCnt: [1L, 2L, 3L]
 ```
 
 Correlation nests arbitrarily: a correlated subquery may itself contain a correlated subquery, and

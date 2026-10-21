@@ -7,12 +7,13 @@ namespace NextORM.Core;
 /// (<c>inner.Where(...).Count()</c>) into the equivalent scalar-subquery projection: the receiver is
 /// projected through <see cref="EntityBuilder{TEntity}.Select{TResult}"/> with the matching
 /// <see cref="CommonFunctions"/> aggregate body, so the query renders as
-/// <c>(select count(*)/sum(...) from ...)</c> instead of being executed as a separate query.
+/// <c>(select count(*)/count_big(*)/sum(...) from ...)</c> instead of being executed as a separate query.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "Static readonly reflection-metadata fields (CountMI) are intentionally PascalCase as immutable lookup tables; IDE1006 is a suggestion and is not enforced by the build.")]
 internal static class AggregateTerminalRewriter
 {
     private static readonly MethodInfo CountMI = typeof(CommonFunctions).GetMethod(nameof(CommonFunctions.count), [typeof(object[])])!;
+    private static readonly MethodInfo CountBigMI = typeof(CommonFunctions).GetMethod(nameof(CommonFunctions.count_big), [typeof(object[])])!;
 
     /// <summary>
     /// Builds <c>builderReceiver.Select(aggregate)</c> for the aggregate terminal
@@ -27,11 +28,15 @@ internal static class AggregateTerminalRewriter
         LambdaExpression selectLambda;
         Type resultType;
 
-        if (node.Method.Name == nameof(EntityBuilderExtensions.Count))
+        if (node.Method.Name is nameof(EntityBuilderExtensions.Count) or nameof(EntityBuilderExtensions.LongCount))
         {
-            resultType = typeof(int);
+            // Both selector-free row counts travel the same projection route; LongCount() selects the
+            // 64-bit count_big(*) form, which the dialects render as count_big / toInt64(count(...)).
+            var isWide = node.Method.Name == nameof(EntityBuilderExtensions.LongCount);
+            var countMethod = isWide ? CountBigMI : CountMI;
+            resultType = isWide ? typeof(long) : typeof(int);
             var parameter = Expression.Parameter(entityType, "e");
-            var body = Expression.Call(CommonFunctions.SQLExpression, CountMI, Expression.NewArrayInit(typeof(object)));
+            var body = Expression.Call(CommonFunctions.SQLExpression, countMethod, Expression.NewArrayInit(typeof(object)));
             selectLambda = Expression.Lambda(body, parameter);
         }
         else
