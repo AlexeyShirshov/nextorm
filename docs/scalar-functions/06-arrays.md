@@ -138,6 +138,10 @@ result can be projected like a scalar column.
 > `array_string_concat(...)`). The same reader materialises a native `Tuple(...)` column (or a
 > `Tuple(...)`-returning expression) as a `System.Tuple<...>` of arity 1–7.
 
+> `SqlFunctions.ClickHouse.array_except` is retained for API compatibility but is **not supported**
+> on the pinned 25.8 baseline: the native `arrayExcept` exists only from ClickHouse 25.9, so the call
+> is refused with `NotSupportedException` at translation time instead of being emitted as SQL.
+
 > The array relation predicates return `bool`: `starts_with(array, prefix)`/`ends_with(array, suffix)`
 > test a prefix/suffix and `has_substr(array, other)` tests that `other` occurs in `array` contiguously
 > and in order (an empty `other` is always contained). They require a provider that supports the array

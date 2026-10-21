@@ -197,7 +197,7 @@ ClickHouse, у которых нет переносимого написания
   `parse_date_time`/`parse_date_time_best_effort` (`parseDateTime`/`parseDateTimeBestEffort`) и
   текущая дата `now`/`today`/`yesterday`;
 * операции над множествами массивов: `array_concat`, `array_flatten`, `array_uniq` (`arrayUniq`, в
-  обёртке `toInt64`), `array_intersect`, `array_union`, `array_except`, `array_symmetric_difference`;
+  обёртке `toInt64`), `array_intersect`, `array_union`, `array_symmetric_difference`;
 * семейство `Map`: конструктор `map` (inline-пары `Tuple.Create`), `map_keys`/`map_values`,
   `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, двухпараметрические лямбды
   `map_filter`/`map_apply`/`map_all`/`map_exists` и `map_sort`;
@@ -205,6 +205,11 @@ ClickHouse, у которых нет переносимого написания
   `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64`/`sip_hash128` и
   `murmur_hash2_32`/`murmur_hash2_64`/`murmur_hash3_32`/`murmur_hash3_64`/`murmur_hash3_128`;
 * `generate_ulid` (`generateULID`).
+
+`array_except` остаётся в `SqlFunctions.ClickHouse` для совместимости API, но **не
+поддерживается** на закреплённой базовой версии 25.8: нативная `arrayExcept` появилась в
+ClickHouse 25.9, поэтому вызов отклоняется с `NotSupportedException` на этапе трансляции и не
+доходит до сервера. Остальные операции над множествами массивов не затронуты.
 
 Результат `Map` представлен как `IDictionary<TKey, TValue>`; при проецировании комбинируйте его с
 `map_keys`/`map_values` или одним из предикатов `map_contains_*`, потому что построитель строк не

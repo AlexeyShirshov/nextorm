@@ -240,6 +240,9 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
 
 ## Notes and limitations
 
+- The native `arrayExcept` exists only from ClickHouse 25.9. `SqlFunctions.ClickHouse.array_except`
+  stays in the public API but is refused with `NotSupportedException` at translation time on the
+  pinned 25.8 baseline; the other array set operations are unaffected.
 - `GROUP BY ... WITH TOTALS` renders correctly, but the official `ClickHouse.Driver` returns the totals
   row in a separate response block it does not expose through `IDataReader`, so only the group rows are
   materialised. Use it if your driver surfaces totals; nextorm itself only emits the modifier.

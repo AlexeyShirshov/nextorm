@@ -139,6 +139,10 @@ select cardinality(@norm_p1) as "N"
 > `array_string_concat(...)`). Тот же reader материализует нативную колонку `Tuple(...)` (или
 > выражение типа `Tuple(...)`) как `System.Tuple<...>` арности 1–7.
 
+> `SqlFunctions.ClickHouse.array_except` остаётся для совместимости API, но **не поддерживается**
+> на закреплённой базовой версии 25.8: нативная `arrayExcept` существует только с ClickHouse 25.9,
+> поэтому вызов отклоняется с `NotSupportedException` на этапе трансляции и SQL не генерируется.
+
 > Предикаты отношения массивов возвращают `bool`: `starts_with(array, prefix)`/`ends_with(array, suffix)`
 > проверяют префикс/суффикс, а `has_substr(array, other)` — что `other` входит в `array` непрерывно и
 > по порядку (пустой `other` содержится всегда). Требуется провайдер, поддерживающий array-функции.

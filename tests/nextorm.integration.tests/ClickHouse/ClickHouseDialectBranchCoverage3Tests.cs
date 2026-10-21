@@ -20,9 +20,10 @@ namespace NextORM.Integration.Tests;
 /// </para>
 ///
 /// <para>
-/// The <c>array_except</c> case was removed from the scalar theory: ClickHouse 25.8 rejects the
-/// rendered <c>arrayExcept(...)</c> with Code 46 (UNKNOWN_FUNCTION). Recorded as a product defect
-/// candidate in <c>.pdca/integration-branch-coverage-3/rv1/inputs/defect-c3-clickhouse-arrayexcept.md</c>.
+/// The <c>array_except</c> case stays out of the scalar theory by design (#252): the native
+/// <c>arrayExcept</c> exists only from ClickHouse 25.9, and the pinned 25.8 server rejects it with
+/// Code 46 (UNKNOWN_FUNCTION). The dialect no longer advertises the name, so a call is refused with
+/// <see cref="NotSupportedException"/> at translation time instead of being sent to the server.
 /// </para>
 ///
 /// <para>
@@ -50,8 +51,9 @@ public sealed class ClickHouseDialectBranchCoverage3Tests : ProviderTestSuite
 
     /// <summary>
     /// One case per ClickHouse scalar/date branch: the four variance aggregates (each mapping to a
-    /// distinct <c>MakeAggregate</c> arm), the array <c>arrayExcept</c> renderer, the <c>dateTrunc</c>
-    /// arm, the <c>toXxx</c> date-part arm and the UTF-8 string arm.
+    /// distinct <c>MakeAggregate</c> arm), the <c>dateTrunc</c> arm, the <c>toXxx</c> date-part arm
+    /// and the UTF-8 string arm. The <c>arrayExcept</c> renderer is a refusal arm since #252, not a
+    /// live branch.
     /// </summary>
     [Theory]
     [InlineData("stdev_samp")]

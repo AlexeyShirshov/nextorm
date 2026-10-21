@@ -116,7 +116,6 @@ public class ClickHouseFunctionGapSqlGenerationTests
             C = SqlFunctions.ClickHouse.array_concat(x.Nums, x.Nums),
             I = SqlFunctions.ClickHouse.array_intersect(x.Nums, x.Nums),
             U = SqlFunctions.ClickHouse.array_union(x.Nums, x.Nums),
-            E = SqlFunctions.ClickHouse.array_except(x.Nums, x.Nums),
             S = SqlFunctions.ClickHouse.array_symmetric_difference(x.Nums, x.Nums),
             Q = SqlFunctions.ClickHouse.array_uniq(x.Nums),
             F = SqlFunctions.ClickHouse.array_flatten(nested)
@@ -125,10 +124,51 @@ public class ClickHouseFunctionGapSqlGenerationTests
         sql.Should().Contain("arrayConcat(nums, nums)");
         sql.Should().Contain("arrayIntersect(nums, nums)");
         sql.Should().Contain("arrayUnion(nums, nums)");
-        sql.Should().Contain("arrayExcept(nums, nums)");
         sql.Should().Contain("arraySymmetricDifference(nums, nums)");
         sql.Should().Contain("toInt64(arrayUniq(nums))");
         sql.Should().Contain("arrayFlatten(@");
+    }
+
+    // #252: arrayExcept exists only from ClickHouse 25.9; the pinned 25.8 baseline must refuse the
+    // call at translation/preparation time for every form the public signature can express, and the
+    // refusal must come from the existing native-function gate, not from a new mechanism.
+    [Fact]
+    public void ArrayExcept_ShouldBeRefusedAtPreparationForEveryArity()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+        var absent = (long[])null!;
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new
+        {
+            Two = SqlFunctions.ClickHouse.array_except(x.Nums, x.Nums)
+        }))).Should().Throw<NotSupportedException>()
+            .WithMessage("The array_except function is not supported by this provider.");
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new
+        {
+            Three = SqlFunctions.ClickHouse.array_except(x.Nums, x.Nums, x.Nums)
+        }))).Should().Throw<NotSupportedException>()
+            .WithMessage("The array_except function is not supported by this provider.");
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new
+        {
+            Single = SqlFunctions.ClickHouse.array_except(x.Nums)
+        }))).Should().Throw<NotSupportedException>()
+            .WithMessage("The array_except function is not supported by this provider.");
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new
+        {
+            Empty = SqlFunctions.ClickHouse.array_except<long>()
+        }))).Should().Throw<NotSupportedException>()
+            .WithMessage("The array_except function is not supported by this provider.");
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new
+        {
+            Absent = SqlFunctions.ClickHouse.array_except(x.Nums, absent)
+        }))).Should().Throw<NotSupportedException>(
+                "a null captured array must not surface as a NullReferenceException")
+            .WithMessage("The array_except function is not supported by this provider.");
     }
 
     [Fact]

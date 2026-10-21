@@ -25,7 +25,7 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
         "format_date_time", "parse_date_time", "parse_date_time_best_effort",
         "now", "today", "yesterday",
         "array_concat", "array_flatten", "array_uniq", "array_intersect",
-        "array_union", "array_except", "array_symmetric_difference",
+        "array_union", "array_symmetric_difference",
         "map", "map_keys", "map_values", "map_contains_key", "map_contains_value",
         "map_add", "map_concat", "map_filter", "map_apply", "map_all", "map_exists",
         "map_sort",
@@ -41,7 +41,8 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
 
     // Every Render arm of ClickHouseScalarFunctions, written out literally from the dialect contract
     // (src/nextorm.clickhouse/ClickHouseDialect.cs): one row per name, plus a second row for the
-    // optional pad form of lpad/rpad. 76 names -> 78 arms.
+    // optional pad form of lpad/rpad. 75 names -> 77 arms; array_except is refused by #252
+    // (native arrayExcept needs server 25.9) and therefore has no accepted arm.
     private static readonly (string Name, string[] Args, string Expected)[] RenderArms =
     [
         ("left", ["s", "2"], "leftUTF8(s, 2)"),
@@ -81,7 +82,6 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
         ("array_uniq", ["a"], "toInt64(arrayUniq(a))"),
         ("array_intersect", ["a", "b"], "arrayIntersect(a, b)"),
         ("array_union", ["a", "b"], "arrayUnion(a, b)"),
-        ("array_except", ["a", "b"], "arrayExcept(a, b)"),
         ("array_symmetric_difference", ["a", "b"], "arraySymmetricDifference(a, b)"),
         ("map", ["k", "v"], "map(k, v)"),
         ("map_keys", ["m"], "mapKeys(m)"),
@@ -133,7 +133,7 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
     [Fact]
     public void Supports_ShouldAcceptTheCompleteInventoryAndNothingElse()
     {
-        SupportedNames.Should().HaveCount(76, "the ClickHouse table accepts 76 scalar-function names");
+        SupportedNames.Should().HaveCount(75, "the ClickHouse table accepts 75 scalar-function names");
         SupportedNames.Should().OnlyHaveUniqueItems();
 
         using (new AssertionScope())
@@ -145,7 +145,7 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
         // The render table and the predicate must agree name-for-name: no accepted name without an
         // arm, no arm for a name the dialect does not accept.
         RenderArms.Select(arm => arm.Name).Distinct().Should().BeEquivalentTo(SupportedNames);
-        RenderArms.Should().HaveCount(78, "76 names plus the two optional pad forms of lpad/rpad");
+        RenderArms.Should().HaveCount(77, "75 names plus the two optional pad forms of lpad/rpad");
     }
 
     [Fact]

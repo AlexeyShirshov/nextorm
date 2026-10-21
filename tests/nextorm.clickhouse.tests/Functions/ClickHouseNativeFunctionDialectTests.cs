@@ -1,4 +1,5 @@
 using FluentAssertions;
+using FluentAssertions.Execution;
 using NextORM.Core;
 using NextORM.ClickHouse;
 
@@ -44,7 +45,6 @@ public class ClickHouseNativeFunctionDialectTests
             ("array_uniq", ["a"], "toInt64(arrayUniq(a))"),
             ("array_intersect", ["a", "b"], "arrayIntersect(a, b)"),
             ("array_union", ["a", "b"], "arrayUnion(a, b)"),
-            ("array_except", ["a", "b"], "arrayExcept(a, b)"),
             ("array_symmetric_difference", ["a", "b"], "arraySymmetricDifference(a, b)"),
             ("map", ["'a'", "1"], "map('a', 1)"),
             ("map_keys", ["m"], "mapKeys(m)"),
@@ -87,5 +87,52 @@ public class ClickHouseNativeFunctionDialectTests
             Scalars.Supports(name).Should().BeTrue($"ClickHouse supports {name}");
             Scalars.Render(name, args).Should().Be(expected);
         }
+    }
+
+    // #252: the native arrayExcept was introduced in ClickHouse 25.9, so on the pinned 25.8
+    // baseline the capability table must reject the name and a direct render must refuse every
+    // arity instead of emitting an UNKNOWN_FUNCTION call.
+    [Fact]
+    public void ArrayExcept_ShouldBeRefusedByTheCapabilityTable()
+    {
+        Scalars.Supports("array_except").Should().BeFalse(
+            "the native arrayExcept exists only from ClickHouse 25.9 and the pinned baseline is 25.8");
+
+        var arities = new[]
+        {
+            new[] { "a", "b" },
+            new[] { "a", "b", "c" },
+            new[] { "a" },
+            Array.Empty<string>()
+        };
+
+        using (new AssertionScope())
+        {
+            foreach (var args in arities)
+            {
+                FluentActions.Invoking(() => Scalars.Render("array_except", args))
+                    .Should().Throw<NotSupportedException>(
+                        "a direct render must refuse every arity instead of emitting arrayExcept(...)")
+                    .WithMessage("The array_except function is not supported by ClickHouse.");
+            }
+        }
+    }
+
+    [Fact]
+    public void ArrayExceptRefusal_ShouldNotDisturbSiblingArrayFunctions()
+    {
+        ClickHouseDialect.Instance.SupportsArrayFunctions.Should().BeTrue(
+            "the refusal is per function, not a change of the array capability");
+
+        Scalars.Supports("array_intersect").Should().BeTrue();
+        Scalars.Supports("array_union").Should().BeTrue();
+        Scalars.Supports("array_symmetric_difference").Should().BeTrue();
+        Scalars.Supports("array_distinct").Should().BeFalse(
+            "array_distinct keeps its own translator path, not the native scalar table");
+
+        Scalars.Render("array_intersect", ["a", "b"]).Should().Be("arrayIntersect(a, b)");
+        Scalars.Render("array_union", ["a", "b", "c"]).Should().Be("arrayUnion(a, b, c)");
+        Scalars.Render("array_symmetric_difference", ["a", "b"])
+            .Should().Be("arraySymmetricDifference(a, b)");
     }
 }

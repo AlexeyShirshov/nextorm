@@ -196,7 +196,7 @@ every other dialect:
   `parse_date_time`/`parse_date_time_best_effort` (`parseDateTime`/`parseDateTimeBestEffort`) and the
   current-date helpers `now`/`today`/`yesterday`;
 * array set operations: `array_concat`, `array_flatten`, `array_uniq` (`arrayUniq`, wrapped in
-  `toInt64`), `array_intersect`, `array_union`, `array_except`, `array_symmetric_difference`;
+  `toInt64`), `array_intersect`, `array_union`, `array_symmetric_difference`;
 * the `Map` family: the `map` constructor (inline `Tuple.Create` pairs), `map_keys`/`map_values`,
   `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, the two-parameter lambdas
   `map_filter`/`map_apply`/`map_all`/`map_exists` and `map_sort`;
@@ -204,6 +204,11 @@ every other dialect:
   `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64`/`sip_hash128` and
   `murmur_hash2_32`/`murmur_hash2_64`/`murmur_hash3_32`/`murmur_hash3_64`/`murmur_hash3_128`;
 * `generate_ulid` (`generateULID`).
+
+`array_except` keeps its place in `SqlFunctions.ClickHouse` for API compatibility but is **not
+supported** on the pinned 25.8 baseline: the native `arrayExcept` was introduced in ClickHouse 25.9,
+so the call is refused with `NotSupportedException` at translation time and never reaches the server.
+The other array set operations are unaffected.
 
 A `Map` result is surfaced as `IDictionary<TKey, TValue>`; combine it with `map_keys`/`map_values` or
 one of the contains predicates when it is projected, because the row mapper does not materialise a

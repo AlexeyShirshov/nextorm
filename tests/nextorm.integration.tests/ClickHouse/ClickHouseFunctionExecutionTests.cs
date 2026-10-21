@@ -1,3 +1,6 @@
+using System.Globalization;
+using ClickHouse.Driver;
+using ClickHouse.Driver.ADO;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -279,6 +282,62 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
         r.Degrees.Should().BeApproximately(180.0, 1e-9);
         r.Radians.Should().BeApproximately(Math.PI, 1e-9);
         r.Pi.Should().BeApproximately(Math.PI, 1e-9);
+    }
+
+    /// <summary>
+    /// #252: <c>array_except</c> is declared for API compatibility, but the native <c>arrayExcept</c>
+    /// exists only from ClickHouse 25.9. On the pinned 25.8 baseline the call must be refused at
+    /// translation/preparation time instead of reaching the server as an <c>UNKNOWN_FUNCTION</c>.
+    /// </summary>
+    [Fact]
+    public void ArrayExcept_ShouldRefuseBeforeTouchingTheServer()
+    {
+        var act = () => _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                E = SqlFunctions.ClickHouse.array_except(x.Nums, x.Nums)
+            })
+            .First();
+
+        act.Should().Throw<NotSupportedException>(
+                "the pinned 25.8 server has no arrayExcept, so the capability gate must refuse early")
+            .WithMessage("The array_except function is not supported by this provider.");
+    }
+
+    /// <summary>
+    /// D0 live server characterization for #252: the pinned image
+    /// <c>clickhouse/clickhouse-server:25.8-alpine</c> reports 25.8.33.6, keeps no
+    /// <c>arrayExcept</c> entry in <c>system.functions</c>, and rejects the raw call with Code 46
+    /// (UNKNOWN_FUNCTION). Raw ADO.NET keeps this oracle independent of the nextorm translator.
+    /// </summary>
+    [Fact]
+    public async Task ServerCharacterization_ArrayExceptIsAbsentOnThePinnedServer()
+    {
+        await using var connection = new ClickHouseConnection(ClickHouseContainer.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        static async Task<object?> ScalarAsync(ClickHouseConnection connection, string sql)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            return await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+        }
+
+        var version = await ScalarAsync(connection, "SELECT version()");
+        version.Should().Be("25.8.33.6", "the collection pins clickhouse/clickhouse-server:25.8-alpine");
+
+        var functions = await ScalarAsync(
+            connection,
+            "SELECT count() FROM system.functions WHERE name = 'arrayExcept'");
+        Convert.ToInt64(functions, CultureInfo.InvariantCulture)
+            .Should().Be(0, "arrayExcept was introduced in server 25.9 and the pinned server is 25.8");
+
+        Func<Task> act = async () => await ScalarAsync(connection, "SELECT arrayExcept([1], [1])");
+        var thrown = await act.Should().ThrowAsync<ClickHouseServerException>(
+            "the pinned 25.8 server has no arrayExcept function");
+        thrown.Which.Message.Should().Contain("Code: 46")
+            .And.Contain("arrayExcept", "the server reports the unknown function by name");
     }
 
 }

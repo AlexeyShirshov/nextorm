@@ -1099,7 +1099,7 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
         "format_date_time" or "parse_date_time" or "parse_date_time_best_effort" or
         "now" or "today" or "yesterday" or
         "array_concat" or "array_flatten" or "array_uniq" or "array_intersect" or
-        "array_union" or "array_except" or "array_symmetric_difference" or
+        "array_union" or "array_symmetric_difference" or
         "map" or "map_keys" or "map_values" or "map_contains_key" or "map_contains_value" or
         "map_add" or "map_concat" or "map_filter" or "map_apply" or "map_all" or "map_exists" or
         "map_sort" or
@@ -1152,7 +1152,11 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
         "array_uniq" => $"toInt64(arrayUniq({args[0]}))",
         "array_intersect" => $"arrayIntersect({string.Join(", ", args)})",
         "array_union" => $"arrayUnion({string.Join(", ", args)})",
-        "array_except" => $"arrayExcept({string.Join(", ", args)})",
+        // arrayExcept exists only from ClickHouse 25.9. The capability table no longer advertises
+        // array_except on the pinned 25.8 baseline, so this arm is a defensive refusal for a direct
+        // Render call; the translator gate raises the same NotSupportedException earlier (#252).
+        "array_except" => throw new NotSupportedException(
+            "The array_except function is not supported by ClickHouse."),
         "array_symmetric_difference" => $"arraySymmetricDifference({string.Join(", ", args)})",
         "map" => $"map({string.Join(", ", args)})",
         "map_keys" => $"mapKeys({args[0]})",

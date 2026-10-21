@@ -921,7 +921,13 @@ namespace NextORM.Core;
         /// <summary><c>arrayUnion(arrays...)</c>: the union of the arrays. Returns an array, so it can be projected directly or nested.</summary>
         public T[] array_union<T>(params T[][] arrays) => default!;
 
-        /// <summary><c>arrayExcept(arrays...)</c>: the elements of the first array that are not in the others. Returns an array, so it can be projected directly or nested.</summary>
+        /// <summary>
+        /// <c>arrayExcept(arrays...)</c>: the elements of the first array that are not in the others.
+        /// The native name exists only from ClickHouse 25.9; the current provider has no server-version
+        /// awareness, so on the pinned 25.8 baseline the call is refused with
+        /// <see cref="NotSupportedException"/> at translation/preparation time and no SQL is emitted.
+        /// The signature is retained for API compatibility; it is not executable here.
+        /// </summary>
         public T[] array_except<T>(params T[][] arrays) => default!;
 
         /// <summary><c>arraySymmetricDifference(arrays...)</c>: the elements that occur in an odd number of the arrays. Returns an array, so it can be projected directly or nested.</summary>
