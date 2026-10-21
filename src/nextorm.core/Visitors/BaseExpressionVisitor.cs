@@ -858,6 +858,16 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
         return PredicateTranslator.VisitBinary(this, node);
     }
+    /// <inheritdoc />
+    /// <remarks>
+    /// A type test has no representable SQL form: the engine has no discriminator and no runtime type
+    /// switch, so the default <see cref="ExpressionVisitor"/> walk would silently render the bare
+    /// operand as the condition and return wrong rows (#295). The rejection is unconditional and
+    /// precedes any traversal of <c>node.Expression</c>, for both <c>TypeIs</c> and <c>TypeEqual</c>.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Always: a type-test expression cannot be translated to SQL.</exception>
+    protected override Expression VisitTypeBinary(TypeBinaryExpression node)
+        => throw new NotSupportedException("SQL translation of type-test expressions (TypeIs/TypeEqual) is not supported. Use explicit mapped-column predicates instead.");
     /// <summary>Returns the SQL emitted into this visitor's builder.</summary>
     /// <returns>The rendered SQL text.</returns>
     public override string ToString()
