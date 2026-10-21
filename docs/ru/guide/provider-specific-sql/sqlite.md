@@ -121,6 +121,24 @@ select value
  from json_each('["a","b","c"]')
 ```
 
+## Агрегатные функции
+
+`total(value)` — агрегат SQLite, суммирующий в плавающей точке. Он возвращает `double` и никогда не
+возвращает null: пустая группа или группа из одних null даёт `0.0`, null внутри смешанной группы
+игнорируются, а большие целые суммируются в плавающей точке вместо переполнения, на которое способен
+`sum`.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(c => new { Total = SqlFunctions.Sqlite.total(c.NullableInt) })
+    .ToList();
+```
+
+```sql
+select total(nullableint)
+ from complex_entity
+```
+
 ## Функции дат
 
 `timediff(a, b)` возвращает знаковую строку интервала SQLite (3.43+), `unixepoch(value)` — секунды с

@@ -251,6 +251,13 @@ public class SqliteFunctions : CommonFunctions
     public string? json_group_object<TKey, TValue>(TKey? key, TValue? value) => default!;
 
     /// <summary>
+    /// <c>total(value)</c> aggregate: the sum of the group's non-null values as a floating-point number.
+    /// Unlike <c>sum</c> it never returns null — an empty or all-null group yields <c>0.0</c> — and it
+    /// always computes in floating point, so large integers do not overflow.
+    /// </summary>
+    public double total<T>(T? value) => default!;
+
+    /// <summary>
     /// <c>json_each(json)</c> as a FROM source: one row per immediate child (see
     /// <see cref="SqlFunctions.IJsonEachRow"/>).
     /// </summary>

@@ -123,6 +123,23 @@ select value
  from json_each('["a","b","c"]')
 ```
 
+## Aggregate functions
+
+`total(value)` is SQLite's floating-point sum aggregate. It returns `double` and never null: an empty or
+all-null group yields `0.0`, nulls inside a mixed group are ignored, and large integer values are summed
+in floating point instead of overflowing the way `sum` can.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(c => new { Total = SqlFunctions.Sqlite.total(c.NullableInt) })
+    .ToList();
+```
+
+```sql
+select total(nullableint)
+ from complex_entity
+```
+
 ## Date helpers
 
 `timediff(a, b)` returns a signed SQLite interval string (3.43+), `unixepoch(value)` the seconds since

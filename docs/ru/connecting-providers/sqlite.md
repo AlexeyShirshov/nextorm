@@ -115,10 +115,10 @@ select id
 
 ## Функции, специфичные для SQLite
 
-`SqlFunctions.Sqlite` даёт поверхность, специфичную для SQLite: функции ядра, JSON1, функции дат,
-функции математического расширения и поверхность полнотекстового поиска FTS3/FTS4/FTS5.
-`json_each`/`json_tree` и табличный поиск FTS5 доступны как табличные функции. Прочие провайдеры
-отклоняют любой член поверхности с `NotSupportedException`.
+`SqlFunctions.Sqlite` даёт поверхность, специфичную для SQLite: функции ядра, JSON1, агрегатные
+функции, функции дат, функции математического расширения и поверхность полнотекстового поиска
+FTS3/FTS4/FTS5. `json_each`/`json_tree` и табличный поиск FTS5 доступны как табличные функции. Прочие
+провайдеры отклоняют любой член поверхности с `NotSupportedException`.
 
 ```csharp
 ctx.From<IComplexEntity>()
@@ -126,9 +126,13 @@ ctx.From<IComplexEntity>()
     {
         Json = SqlFunctions.Sqlite.json_extract<string>(x.String, "$.name"),
         Kind = SqlFunctions.Sqlite.@typeof(x.String),
+        Total = SqlFunctions.Sqlite.total(x.NullableInt),
         Pi = SqlFunctions.Sql.pi()
     });
 ```
+
+Поставляемый агрегат — `total(value)`: он возвращает `double` и никогда не возвращает null, поэтому
+пустая группа или группа из одних null даёт `0.0`.
 
 ### Полнотекстовый поиск (FTS3/FTS4/FTS5)
 

@@ -184,6 +184,12 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
 
             if (SqliteHelpers.TryGetValue(node.Method.Name, out var sqliteHelper))
                 return Call(sqliteHelper, node);
+
+            // Every remaining SQLite member (aggregates such as total/json_group_array, printf, soundex, ...)
+            // is SQL-only: fail closed with the shared provider message instead of compiling the call
+            // against the null SqlFunctions.Sqlite surface, which would fault with a NullReferenceException.
+            throw new NotSupportedException(
+                $"The SQLite function '{node.Method.Name}' is not supported by this provider.");
         }
         else if (node.Method.DeclaringType == typeof(PostgresFunctions))
         {
