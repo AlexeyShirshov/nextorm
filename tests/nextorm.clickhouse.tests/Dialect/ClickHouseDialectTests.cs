@@ -337,7 +337,7 @@ public class ClickHouseDialectTests
         Dialect.MakeDateTrunc("milliseconds", "dt").Should().Be("dateTrunc('millisecond', dt)");
         Dialect.MakeDateAdd("day", "2", "dt").Should().Be("addDays(dt, 2)");
         Dialect.MakeDateAdd("decade", "2", "dt").Should().Be("addYears(dt, (2) * 10)");
-        Dialect.MakeDateDiff("milliseconds", "a", "b").Should().Be("dateDiff('millisecond', a, b)");
+        Dialect.MakeDateDiff("milliseconds", "a", "b").Should().Be("toInt32(dateDiff('millisecond', a, b))");
         Dialect.MakeDateDiffBig("milliseconds", "a", "b").Should().Be("dateDiff('millisecond', a, b)");
         Dialect.PromoteDateOperand("day", "dt").Should().Be("dt");
         Dialect.PromoteDateOperand("second", "dt").Should().Be("toDateTime(dt)");
@@ -353,6 +353,50 @@ public class ClickHouseDialectTests
         Dialect.MakeDatePart("doy", "dt").Should().Be("toInt32(toDayOfYear(dt))");
         Dialect.MakeStringAgg("somestring", "','").Should().Be("arrayStringConcat(groupArray(somestring), ',')");
         Dialect.MakeFilteredStringAgg("somestring", "','", "(id > 0)").Should().Be("arrayStringConcat(groupArrayIf(somestring, (id > 0)), ',')");
+    }
+
+    /// <summary>
+    /// The narrow <c>date_diff</c> renderer casts ClickHouse's native <c>Int64</c> down to the declared
+    /// <c>int?</c> result, while <c>date_diff_big</c> keeps the native width and must never inherit the
+    /// narrowing (issue #255).
+    /// </summary>
+    [Theory]
+    [InlineData("microseconds", "microsecond")]
+    [InlineData("milliseconds", "millisecond")]
+    [InlineData("second", "second")]
+    [InlineData("minute", "minute")]
+    [InlineData("hour", "hour")]
+    [InlineData("day", "day")]
+    [InlineData("week", "week")]
+    [InlineData("month", "month")]
+    [InlineData("quarter", "quarter")]
+    [InlineData("year", "year")]
+    public void MakeDateDiff_ShouldNarrowOnlyTheThirtyTwoBitForm(string field, string unit)
+    {
+        Dialect.MakeDateDiff(field, "a", "b").Should().Be($"toInt32(dateDiff('{unit}', a, b))");
+        Dialect.MakeDateDiffBig(field, "a", "b").Should().Be($"dateDiff('{unit}', a, b)");
+        Dialect.MakeDateDiffBig(field, "a", "b").Should().NotContain("toInt32");
+    }
+
+    [Fact]
+    public void MakeDateDiff_ShouldPreserveArgumentRendering()
+    {
+        // Zero span, a positive span and a negative span share the same renderer: both operands are
+        // spliced verbatim, so nulls, composed expressions and signed spans are untouched by the cast.
+        Dialect.MakeDateDiff("second", "dt", "dt").Should().Be("toInt32(dateDiff('second', dt, dt))");
+        Dialect.MakeDateDiff("second", "null", "dt").Should().Be("toInt32(dateDiff('second', null, dt))");
+        Dialect.MakeDateDiffBig("second", "null", "dt").Should().Be("dateDiff('second', null, dt)");
+        Dialect.MakeDateDiffBig("second", "dt", "null").Should().Be("dateDiff('second', dt, null)");
+    }
+
+    [Theory]
+    [InlineData("decade")]
+    [InlineData("century")]
+    [InlineData("millennium")]
+    public void DateDiff_WithUnsupportedField_ShouldBeRejectedByTheCapabilityGuard(string field)
+    {
+        Dialect.SupportsDateDiffField(field).Should().BeFalse();
+        Dialect.SupportsDateDiffField("day").Should().BeTrue();
     }
 
     [Fact]

@@ -757,17 +757,23 @@ public class ClickHouseDialect : SqlDialectBase
     }
 
     /// <summary>ClickHouse computes date differences through <c>dateDiff(unit, start, end)</c>.</summary>
-    public override string MakeDateDiff(string field, string start, string end)
-    {
-        var unit = field switch
-        {
-            "milliseconds" => "millisecond",
-            "microseconds" => "microsecond",
-            _ => field
-        };
+    public override string MakeDateDiff(string field, string start, string end) =>
+        $"toInt32(dateDiff('{DateDiffUnit(field)}', {start}, {end}))";
 
-        return $"dateDiff('{unit}', {start}, {end})";
-    }
+    /// <summary>
+    /// Renders the native 64-bit <c>dateDiff(unit, start, end)</c>: ClickHouse already answers with
+    /// <c>Int64</c>, so <c>date_diff_big</c> must not inherit the narrow <c>toInt32</c> renderer.
+    /// </summary>
+    public override string MakeDateDiffBig(string field, string start, string end) =>
+        $"dateDiff('{DateDiffUnit(field)}', {start}, {end})";
+
+    // ClickHouse dateDiff uses the singular part names; plural ANSI parts map onto them.
+    private static string DateDiffUnit(string field) => field switch
+    {
+        "milliseconds" => "millisecond",
+        "microseconds" => "microsecond",
+        _ => field
+    };
 
     /// <summary>
     /// ClickHouse <c>add*</c> on a <c>Date</c> operand truncates the time of day, so a sub-day operand is

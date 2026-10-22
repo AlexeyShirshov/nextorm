@@ -232,10 +232,13 @@ ClickHouse renders the dedicated `addDays`/`addMonths`/…/`addSeconds` function
 large parts onto a scaled `addYears`) and `toLastDayOfMonth(value)`; MySQL/MariaDB render
 `date_add(value, interval n unit)` and `last_day(value)`; SQLite adjusts through a `datetime`/`strftime`
 modifier string. `SqlFunctions.Sql.date_diff(field, start, end)` returns the number of `<field>` boundaries
-between two timestamps (SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB `timestampdiff`);
-the PostgreSQL and SQLite fallbacks count date parts as boundaries and time parts as whole units.
-`SqlFunctions.Sql.date_diff_big(field, start, end)` is the 64-bit variant (SQL Server `datediff_big`; the
-others widen the result) for a `millisecond`/`microsecond` span that would overflow the 32-bit `date_diff`.
+between two timestamps as a 32-bit count (`int?`; SQL Server `datediff`, ClickHouse `dateDiff`,
+MySQL/MariaDB `timestampdiff`); the PostgreSQL and SQLite fallbacks count date parts as boundaries and time
+parts as whole units. The 32-bit width limits the usable range: a span whose boundary count does not fit
+Int32 is outside the contract of the narrow function — use `date_diff_big` for it.
+`SqlFunctions.Sql.date_diff_big(field, start, end)` is the 64-bit variant (`long?`; SQL Server
+`datediff_big`, the others widen the result) and preserves signed spans whose count exceeds Int32, such as
+a long `millisecond`/`microsecond` span.
 A sub-day `date_add`/`DateTime.Add*` promotes a `date`-only operand to a fractional timestamp (SQL Server
 `datetime2`, ClickHouse `DateTime`/`DateTime64`) so the time of day is not lost.
 `SqlFunctions.Sql.date_from_parts(year, month, day)` builds a date. `DateTime.AddDays`/`AddMonths`/… inside a

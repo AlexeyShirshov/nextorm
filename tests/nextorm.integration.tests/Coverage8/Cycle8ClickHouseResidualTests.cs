@@ -19,9 +19,9 @@ namespace NextORM.Integration.Tests;
 /// <c>MakeBool</c> (:546-555), <c>MakeDateTrunc</c> (:673-685, including the unsupported
 /// <c>decade</c>/<c>century</c>/<c>millennium</c> rejection), the full <c>MakeDateAdd</c> field table
 /// (:691-713), the <c>DateTimeOffset</c> scaled <c>MakeDateAdd</c> overload (:738-757),
-/// <c>MakeDateDiff</c> (:760-770), <c>MakeEndOfMonth</c> (:785), <c>MakeDateFromParts</c>
-/// (:788-789), <c>MakeStringAgg</c>/<c>MakeFilteredStringAgg</c> (:792-797) and
-/// <c>MakeNullableDurationType</c>/<c>MakeDurationType</c> (:816-820).
+/// <c>MakeDateDiff</c>/<c>MakeDateDiffBig</c> (:759-767), <c>MakeEndOfMonth</c> (:791), <c>MakeDateFromParts</c>
+/// (:794-795), <c>MakeStringAgg</c>/<c>MakeFilteredStringAgg</c> (:798-803) and
+/// <c>MakeNullableDurationType</c>/<c>MakeDurationType</c> (:822-826).
 /// </para>
 ///
 /// <para>
@@ -347,11 +347,10 @@ public sealed class Cycle8ClickHouseResidualTests : ProviderTestSuite
     // ---- date_diff (:760-770) ----------------------------------------------------------------
 
     /// <summary>
-    /// Whole-day/year differences and the plural millisecond/microsecond folds both run as
-    /// <c>dateDiff(unit, start, end)</c> and return the expected 64-bit numbers. The 32-bit
-    /// <c>date_diff</c> form is not asserted here: ClickHouse answers <c>dateDiff</c> with
-    /// <c>Int64</c>, so the declaring <c>int?</c> projection fails to materialize (recorded as
-    /// D5-CH-DATE-DIFF-INT32, not a test-side skip).
+    /// Whole-day/year differences and the plural millisecond/microsecond folds all run as
+    /// <c>dateDiff(unit, start, end)</c> and return the expected 64-bit numbers through
+    /// <c>date_diff_big</c>. The 32-bit <c>date_diff</c> form is covered by
+    /// <see cref="DateDiff_ShouldMaterializeNarrowResult"/> (D5-CH-DATE-DIFF-INT32).
     /// </summary>
     [Fact]
     public void DateDiff_ShouldCountUnits()
@@ -371,6 +370,41 @@ public sealed class Cycle8ClickHouseResidualTests : ProviderTestSuite
         row.Years.Should().Be(2);
         row.Millis.Should().Be(500);
         row.Micros.Should().Be(500_000);
+    }
+
+    /// <summary>
+    /// The narrow <c>date_diff</c> projects <c>int?</c>, but ClickHouse answers <c>dateDiff</c> with
+    /// <c>Int64</c>, so before #255 the projection failed to materialize (D5-CH-DATE-DIFF-INT32). The
+    /// renderer now wraps the narrow form in <c>toInt32</c>: zero, positive and negative in-range spans
+    /// come back as non-null 32-bit numbers, null operands stay null, and the 64-bit
+    /// <c>date_diff_big</c> still returns a span beyond <see cref="int"/> unchanged.
+    /// </summary>
+    [Fact]
+    public void DateDiff_ShouldMaterializeNarrowResult()
+    {
+        var row = Context.From<Ch8Row>()
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Zero = SqlFunctions.Sql.date_diff("day", x.Created, x.Created),
+                Days = SqlFunctions.Sql.date_diff("day", x.Created, SqlFunctions.Sql.date_add("day", 3, x.Created)),
+                Backwards = SqlFunctions.Sql.date_diff("day", x.Created, SqlFunctions.Sql.date_add("day", -3, x.Created)),
+                Hours = SqlFunctions.Sql.date_diff("hour", x.Created, SqlFunctions.Sql.date_add("hour", 5, x.Created)),
+                NullStart = SqlFunctions.Sql.date_diff("day", null, x.Created),
+                WideMicros = SqlFunctions.Sql.date_diff_big(
+                    "microseconds",
+                    x.Created,
+                    SqlFunctions.Sql.date_add("second", 3600, x.Created)),
+            })
+            .Single();
+
+        row.Zero.Should().NotBeNull().And.Be(0);
+        row.Days.Should().NotBeNull().And.Be(3);
+        row.Backwards.Should().NotBeNull().And.Be(-3);
+        row.Hours.Should().NotBeNull().And.Be(5);
+        row.NullStart.Should().BeNull("a null operand keeps the existing null semantics");
+        // 3600 s in microseconds exceeds Int32: only the native 64-bit form may return it.
+        row.WideMicros.Should().Be(3_600_000_000L);
     }
 
     // ---- end_of_month (:785) and date_from_parts (:788-789) ---------------------------------

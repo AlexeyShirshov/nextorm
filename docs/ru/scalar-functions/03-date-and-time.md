@@ -234,11 +234,14 @@ SQL Server отрисовывает `dateadd(field, amount, value)` и `eomonth(
 `toLastDayOfMonth(value)`; MySQL/MariaDB отрисовывают `date_add(value, interval n unit)` и
 `last_day(value)`; SQLite настраивает дату через строку-модификатор `datetime`/`strftime`.
 `SqlFunctions.Sql.date_diff(field, start, end)` возвращает число границ `<field>` между двумя отметками
-времени (SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB `timestampdiff`); резервные
-реализации PostgreSQL и SQLite считают части даты границами, а части времени — целыми единицами.
-`SqlFunctions.Sql.date_diff_big(field, start, end)` — 64-битный вариант (SQL Server `datediff_big`;
-остальные расширяют результат) для промежутка в `millisecond`/`microsecond`, который переполнил бы
-32-битный `date_diff`. Sub-day `date_add`/`DateTime.Add*` продвигает `date`-операнд к дробному
+времени 32-битным счётчиком (`int?`; SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB
+`timestampdiff`); резервные реализации PostgreSQL и SQLite считают части даты границами, а части
+времени — целыми единицами. Ширина 32 бита ограничивает диапазон: промежуток, число границ в котором не
+укладывается в Int32, выходит за контракт узкой функции — для него используйте `date_diff_big`.
+`SqlFunctions.Sql.date_diff_big(field, start, end)` — 64-битный вариант (`long?`; SQL Server
+`datediff_big`, остальные расширяют результат), он сохраняет знаковые промежутки, счётчик которых
+превышает Int32, например длинный промежуток в `millisecond`/`microsecond`.
+Sub-day `date_add`/`DateTime.Add*` продвигает `date`-операнд к дробному
 timestamp (SQL Server `datetime2`, ClickHouse `DateTime`/`DateTime64`), чтобы время суток не терялось.
 `SqlFunctions.Sql.date_from_parts(year, month, day)` строит дату. `DateTime.AddDays`/`AddMonths`/… внутри
 проекции или предиката идут через тот же хук:
