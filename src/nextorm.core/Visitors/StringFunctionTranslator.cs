@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace NextORM.Core;
 
@@ -141,12 +142,16 @@ internal static class StringFunctionTranslator
 
     /// <summary>
     /// Translates <c>string.ToUpper(CultureInfo)</c>/<c>string.ToLower(CultureInfo)</c>. Only
-    /// <see cref="CultureInfo.InvariantCulture"/> has a portable SQL form; any other culture is
+    /// <see cref="CultureInfo.InvariantCulture"/> has a portable SQL form, whether it is bound as the
+    /// natural C# static property or as an explicit constant expression; any other culture is
     /// rejected instead of silently using the database locale.
     /// </summary>
     private static bool TryTranslateCultureCase(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
-        if (node.Arguments is [ConstantExpression { Value: CultureInfo culture }] && ReferenceEquals(culture, CultureInfo.InvariantCulture))
+        if (node.Arguments is [var argument]
+            && (argument is ConstantExpression { Value: CultureInfo culture } && ReferenceEquals(culture, CultureInfo.InvariantCulture)
+                || argument is MemberExpression { Expression: null, Member: PropertyInfo { Name: nameof(CultureInfo.InvariantCulture) } property }
+                    && property.DeclaringType == typeof(CultureInfo)))
         {
             var upper = node.Method.Name == nameof(string.ToUpper);
             return EmitStringFunction(visitor, node.Object!, v => upper ? visitor.Dialect.MakeUpper(v) : visitor.Dialect.MakeLower(v));
