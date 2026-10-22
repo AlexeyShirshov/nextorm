@@ -57,7 +57,7 @@ using NextORM.Sqlite;
 var connection = new SqliteConnection("Data Source=:memory:");
 connection.Open();
 
-using var builder = new DataContextBuilder().UseSqlite(connection);
+var builder = new DataContextBuilder().UseSqlite(connection);
 using var dataContext = builder.CreateDataContext();
 
 await foreach (var row in dataContext.From<ISimpleEntity>()
