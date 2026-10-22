@@ -8,7 +8,7 @@
 
 Каждый терминал, такой как [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), делает несколько вещей: превращает построенный во fluent-стиле [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) в SQL и построчный маппер, подготавливает [`DbCommand`](xref:NextORM.Core.DbPreparedQueryCommand`1.DbCommand) и читает результат. Два независимых механизма позволяют оплатить первую часть лишь один раз:
 
-* **неявный кэш планов** — автоматический, с ключом по структурной форме запроса;
+* **неявный кэш планов** — автоматический, с ключом по структурной форме запроса; для APPLY-соединения эта форма включает выражение источника APPLY, поэтому два запроса с одним типом проекции, но разными источниками APPLY — это разные планы;
 * **[`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken))** — явный, возвращает [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1), который вы храните и выполняете сами.
 
 Их легко спутать, потому что внешне они похожи. Они различаются ключом, временем жизни, потокобезопасностью и тем, заполняют ли они кэш:
@@ -16,7 +16,7 @@
 | | Неявный кэш планов | Явный [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) |
 |---|---|---|
 | Точка входа | любой терминал на [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) / [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) ([`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) | [`Prepare`](xref:NextORM.Core.QueryCommand`1.Prepare(System.Boolean,System.Threading.CancellationToken)) / `EntityBuilder<T>.Prepare()` |
-| Ключ поиска | структурный хеш формы запроса | отсутствует — вы храните возвращённую команду |
+| Ключ поиска | структурный хеш формы запроса (для APPLY-соединения — включая выражение источника APPLY); никогда не отрендеренный SQL | отсутствует — вы храните возвращённую команду |
 | Время жизни | до `PurgeQueryCache()` или завершения процесса | пока вы храните ссылку |
 | Область действия | **на поток**, разделяется всеми [`IDataContext`](xref:NextORM.Core.IDataContext) в этом потоке | экземпляр, который вы храните |
 | Заполняет кэш | да | **нет** |
@@ -67,7 +67,7 @@ select id
  from simple_entity
 ```
 
-Поскольку ключ кэша структурный, два вызова с *разным экземпляром лямбды*, но одной и той же формой — это попадание в кэш. Именно это делает кэш полезным для запросов, написанных прямо внутри цикла:
+Поскольку ключ кэша структурный, два вызова с *разным экземпляром лямбды*, но одной и той же формой — это попадание в кэш; лямбда с другими именами параметров — та же форма. Именно это делает кэш полезным для запросов, написанных прямо внутри цикла. Для APPLY-соединения выражение источника APPLY входит в эту форму, поэтому один тип проекции с разным источником — это разные планы, и каждый получает свой SQL. Ключом никогда не является отрендеренный SQL:
 
 ```csharp
 for (var i = 0; i < 2; i++)
@@ -164,7 +164,7 @@ var implicitRows = ctx.From<ISimpleEntity>().Select(x => x.Id).ToList();
 
 ## Область действия кэша планов и его очистка
 
-Неявный кэш (`DataContext._queryPlanCache`) — это словарь `[ThreadStatic]` с ключом `(ContextType, QueryPlan)`:
+Неявный кэш (`DataContext._queryPlanCache`) — это словарь `[ThreadStatic]` с ключом `(ContextType, QueryPlan)`, где `QueryPlan` — структурная форма; для APPLY-соединения она включает выражение источника APPLY и никогда не является отрендеренным SQL:
 
 * **На поток.** Запись, созданная в потоке A, невидима потоку B; при каждом переходе между потоками пула коэффициент попаданий падает до нуля, пока форма не встретится снова в этом потоке.
 * **На тип контекста.** SQLite, PostgreSQL и SQL Server порождают разный SQL и разные реализации [`DbCommand`](xref:NextORM.Core.DbPreparedQueryCommand`1.DbCommand) для одной и той же формы, поэтому получают отдельные записи.

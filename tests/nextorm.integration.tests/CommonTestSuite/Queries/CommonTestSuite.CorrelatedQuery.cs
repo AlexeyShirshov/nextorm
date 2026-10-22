@@ -1,5 +1,8 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Generated.nextorm_integration_tests;
 
 namespace NextORM.Integration.Tests;
 
@@ -526,6 +529,139 @@ public abstract partial class CommonTestSuite
             .ToList();
 
         r.Should().BeEquivalentTo(new[] { 1 });
+    }
+
+    /// <summary>
+    /// T316 (#316) order A then B: the uncorrelated generated alias APPLY (a cross product over the
+    /// plain right table) runs first, then the correlated alias APPLY over the same projection type.
+    /// The correlated query must not adopt the first command's SQL.
+    /// </summary>
+    [Fact]
+    public void T316_Apply_UncorrelatedThenCorrelated()
+    {
+        Assert.SkipUnless(Provider.SupportsApply, ApplySkipReason);
+
+        T316CreateFixture();
+        try
+        {
+            T316Context.PurgeQueryCache();
+
+            var uncorrelated = T316Context
+                .From<T316Marker>()
+                .CrossApply(T316Context.From<T316Line>(), Alias.Buyer)
+                .Select(p => p.Buyer.Id)
+                .ToList();
+
+            uncorrelated.Should().HaveCount(15, "five marker rows cross-join three line rows");
+
+            var correlated = T316Context
+                .From<T316Marker>()
+                .JoinAlias<AliasJoin_P1_A2_Buyer<T316Marker, T316Line>, AliasProjection_P1_A2_Buyer<T316Marker, T316Line>, T316Line>(
+                    static dc => new AliasJoin_P1_A2_Buyer<T316Marker, T316Line>(dc),
+                    m => T316Context.From<T316Line>().Where(l => l.MarkerId == m.Id),
+                    JoinType.CrossApply)
+                .Select(p => p.Buyer.Id)
+                .ToList();
+
+            correlated.Should().HaveCount(3, "markers 1 and 2 own lines 11, 12 and 13");
+            correlated.Should().BeEquivalentTo(new[] { 11, 12, 13 });
+        }
+        finally
+        {
+            T316DropFixture();
+        }
+    }
+
+    /// <summary>
+    /// T316 (#316) order B then A: the correlated alias APPLY runs first and the uncorrelated
+    /// generated alias APPLY second; the second query must return the full cross product, not the
+    /// first command's three rows.
+    /// </summary>
+    [Fact]
+    public void T316_Apply_CorrelatedThenUncorrelated()
+    {
+        Assert.SkipUnless(Provider.SupportsApply, ApplySkipReason);
+
+        T316CreateFixture();
+        try
+        {
+            T316Context.PurgeQueryCache();
+
+            var correlated = T316Context
+                .From<T316Marker>()
+                .JoinAlias<AliasJoin_P1_A2_Buyer<T316Marker, T316Line>, AliasProjection_P1_A2_Buyer<T316Marker, T316Line>, T316Line>(
+                    static dc => new AliasJoin_P1_A2_Buyer<T316Marker, T316Line>(dc),
+                    m => T316Context.From<T316Line>().Where(l => l.MarkerId == m.Id),
+                    JoinType.CrossApply)
+                .Select(p => p.Buyer.Id)
+                .ToList();
+
+            correlated.Should().HaveCount(3, "markers 1 and 2 own lines 11, 12 and 13");
+            correlated.Should().BeEquivalentTo(new[] { 11, 12, 13 });
+
+            var uncorrelated = T316Context
+                .From<T316Marker>()
+                .CrossApply(T316Context.From<T316Line>(), Alias.Buyer)
+                .Select(p => p.Buyer.Id)
+                .ToList();
+
+            uncorrelated.Should().HaveCount(15, "the second query must not inherit the correlated three-row command");
+        }
+        finally
+        {
+            T316DropFixture();
+        }
+    }
+
+    private IDataContext T316Context => _sut.DataProvider;
+
+    private void T316Execute(string sql)
+    {
+        using var result = T316Context.ExecuteRaw(sql);
+    }
+
+    private void T316CreateFixture()
+    {
+        T316Execute("drop table if exists t316_line");
+        T316Execute("drop table if exists t316_marker");
+        T316Execute("create table t316_marker (id int not null primary key, num int null, grp int not null)");
+        T316Execute("create table t316_line (id int not null primary key, marker_id int not null, amount int null)");
+        T316Execute("insert into t316_marker (id, num, grp) values (1, 10, 1), (2, 10, 1), (3, 20, 2), (4, 20, 2), (5, null, 3)");
+        T316Execute("insert into t316_line (id, marker_id, amount) values (11, 1, 5), (12, 1, 7), (13, 2, 9)");
+    }
+
+    private void T316DropFixture()
+    {
+        T316Execute("drop table if exists t316_line");
+        T316Execute("drop table if exists t316_marker");
+    }
+
+    [SqlTable("t316_marker")]
+    public sealed class T316Marker
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("num")]
+        public int? Num { get; set; }
+
+        [Column("grp")]
+        public int Grp { get; set; }
+    }
+
+    [SqlTable("t316_line")]
+    public sealed class T316Line
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("marker_id")]
+        public int MarkerId { get; set; }
+
+        [Column("amount")]
+        public int? Amount { get; set; }
     }
 
     private static string ApplySkipReason =>

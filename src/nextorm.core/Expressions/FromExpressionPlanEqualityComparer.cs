@@ -79,7 +79,20 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         // short-circuit below would treat two differently-locked sources as equal.
         if (x.SourceLock != y.SourceLock) return false;
 
+        // A named table and a table-less source (type-only, subquery, function, ...) are different
+        // source kinds. Without this guard the null-subquery fallthrough below treated a named table
+        // and a type-only APPLY source as equal, so the two joins shared one cached plan.
+        if (string.IsNullOrEmpty(x.Table) != string.IsNullOrEmpty(y.Table)) return false;
+
         if (!string.IsNullOrEmpty(x.Table) && x.Table == y.Table) return true;
+
+        // A type-only source is identified by its CLR source type: the applied join renders from it,
+        // so two different types must not fall through to the equal-null-subquery comparison. Equal
+        // type-only sources keep comparing equal (and keep equal hashes).
+        if (string.IsNullOrEmpty(x.Table) && string.IsNullOrEmpty(y.Table)
+            && (x.SourceType is not null || y.SourceType is not null)
+            && x.SourceType != y.SourceType)
+            return false;
 
         // A SelectMany/GroupJoin source is a computed node whose selectors are delegates over the
         // outer row; compare by identity so an unrelated node never shares a cached plan. (The
@@ -300,6 +313,18 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         else
         {
             var subQueryHash = _equalityComparer.Value.GetHashCode(obj.SubQuery!);
+
+            // A type-only source (the APPLY right-hand shape) must hash its CLR source type: two
+            // different types never compare equal, so they must not share the type-only hash bucket.
+            if (obj.SourceType is not null)
+            {
+                var typeOnlyHash = new System.HashCode();
+                typeOnlyHash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.SourceType));
+                typeOnlyHash.Add(subQueryHash);
+                if (obj.SubQueryHint is not null)
+                    typeOnlyHash.Add(obj.SubQueryHint);
+                return typeOnlyHash.ToHashCode();
+            }
 
             if (obj.SubQueryHint is null)
                 return subQueryHash;
