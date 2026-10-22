@@ -48,7 +48,8 @@ select id
 
 ## Null handling
 
-Comparing a column with `null` renders `is null` / `is not null` instead of `=` / `!=`:
+Comparing a nullable column with the `null` literal — a bare `null` or a nullable cast such as
+`(int?)null` — renders `is null` / `is not null` instead of `=` / `!=`:
 
 ```csharp
 var rows = await dataContext.From<ComplexEntity>()
@@ -63,8 +64,11 @@ select id
 ```
 
 `!= null` emits `is not null`. The rewrite is driven by the comparison operand being the `null`
-literal; a nullable column should be tested with a literal `null`, not with a captured value that is
-merely expected to hold `null`.
+literal itself, including a nullable cast such as `(int?)null` (and the compiler-produced nullable
+`default`): both operators render `is null` / `is not null` in `WHERE`, in aggregate predicates such
+as `Count`, and in a projected comparison. A captured value stays a command parameter even when it
+happens to hold `null`, so a nullable column should be tested with a literal `null`, not with a
+captured variable that is merely expected to hold `null`.
 
 ## Combining predicates
 
@@ -473,7 +477,7 @@ array is bound as one parameter; see [Arrays](../scalar-functions/06-arrays.md#a
 
 | C# construct | SQL |
 |---|---|
-| `==` / `!=` | `=` / `!=`; `is` / `is not` against `null` |
+| `==` / `!=` | `=` / `!=`; `is` / `is not` against a `null` literal (including `(int?)null`) |
 | `>`, `>=`, `<`, `<=` | `>`, `>=`, `<`, `<=` (parenthesised) |
 | `&&` / `\|\|` | `and` / `or` |
 | `!` | `not (...)`; a projected boolean is cast to `bit` on SQL Server |

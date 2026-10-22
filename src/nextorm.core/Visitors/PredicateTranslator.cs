@@ -354,7 +354,7 @@ internal static class PredicateTranslator
         if (!visitor.IsParamMode
             && node.Type == typeof(bool)
             && node.NodeType is ExpressionType.Equal or ExpressionType.NotEqual
-            && (node.Left is ConstantExpression { Value: null } || node.Right is ConstantExpression { Value: null }))
+            && (TypeFacts.IsNullLiteral(node.Left) || TypeFacts.IsNullLiteral(node.Right)))
         {
             using var nullLeftVisitor = visitor.Clone();
             nullLeftVisitor.Visit(node.Left);
@@ -371,7 +371,12 @@ internal static class PredicateTranslator
                 // A dialect without a boolean type (SQL Server) cannot use a bare predicate in a select
                 // list, so the value context is materialised as a bit scalar; a condition context keeps
                 // the predicate as-is (asPredicate = true is a no-op for such a dialect).
-                var presence = $"{nullLeft}{(node.NodeType == ExpressionType.Equal ? visitor.Kw(" is ") : visitor.Kw(" is not "))}{nullRight}";
+                // `is` accepts only `<operand> is null`, so a null literal on the left is emitted last;
+                // the operand rendering itself is unchanged, only its position in the predicate.
+                var presenceOp = node.NodeType == ExpressionType.Equal ? visitor.Kw(" is ") : visitor.Kw(" is not ");
+                var presence = nullLeft == visitor.Kw("null") && nullRight != visitor.Kw("null")
+                    ? $"{nullRight}{presenceOp}{nullLeft}"
+                    : $"{nullLeft}{presenceOp}{nullRight}";
                 visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(presence, visitor.IsPredicateContext));
                 return node;
             }
