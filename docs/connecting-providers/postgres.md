@@ -237,7 +237,13 @@ ctx.From<IComplexEntity>()
     .Select(e => SqlFunctions.Postgres.jsonb_agg(e.String));   // jsonb_agg(somestring)
 ```
 
-A plain JSON string is bound as `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`. A
+Provider parameter binding is unchanged: a plain JSON string parameter is still bound as `text`. The six
+`json_get`/`json_get_text`/`json_get_path`/`json_get_path_text` accessors (string-key and integer-index
+overloads) are translator-local — they apply **contextual SQL typing** to a raw client document value
+(literal, captured value or explicit parameter) and parse it as `jsonb` in the generated SQL, and they type
+the key/index/path operand as `text`/`integer`/`text[]`. A native `json`/`jsonb` column or a server-side JSON
+expression is emitted uncast, so its operand and result types are unchanged. Use
+`SqlFunctions.Postgres.json_cast(value)` to parse a plain string for any other JSON function. A
 bare `JsonNode`/`JsonNode?` property (declared exactly `JsonNode`, not `JsonObject`/`JsonArray`) reads a
 native `json`/`jsonb` column: the column text is read and parsed for object, array and scalar roots, in both
 scalar (`Select(x => x.Data)`) and composite projections. A SQL `NULL` and a JSON literal `null` both
