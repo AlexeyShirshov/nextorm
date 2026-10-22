@@ -3,7 +3,8 @@
   <PropertyGroup>
     <PackageId>nextorm.sqlite</PackageId>
     <Title>Nextorm SQLite provider</Title>
-    <Description>SQLite provider for Nextorm</Description>
+    <Description>SQLite provider for Nextorm, a zero-SQL ORM for .NET: adds the SQLite dialect ($name parameters, limit/offset paging, custom aggregates) and UseSqlite() over Microsoft.Data.Sqlite.</Description>
+    <PackageTags>$(PackageTags);sqlite;sqlite3;microsoft.data.sqlite</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

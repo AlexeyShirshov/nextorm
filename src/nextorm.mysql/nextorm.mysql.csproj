@@ -3,7 +3,8 @@
   <PropertyGroup>
     <PackageId>nextorm.mysql</PackageId>
     <Title>Nextorm MySQL provider</Title>
-    <Description>MySQL provider for Nextorm</Description>
+    <Description>MySQL provider for Nextorm, a zero-SQL ORM for .NET: adds the MySQL dialect (ON DUPLICATE KEY upserts, native index hints, MySqlBatch batching) and UseMySql() over MySqlConnector.</Description>
+    <PackageTags>$(PackageTags);mysql;mysqlconnector</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

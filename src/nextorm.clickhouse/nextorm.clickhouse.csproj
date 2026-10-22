@@ -3,7 +3,8 @@
   <PropertyGroup>
     <PackageId>nextorm.clickhouse</PackageId>
     <Title>Nextorm ClickHouse provider</Title>
-    <Description>ClickHouse provider for Nextorm</Description>
+    <Description>ClickHouse provider for Nextorm, a zero-SQL ORM for .NET: adds the ClickHouse dialect (argMin/argMax fast paths) plus ClickHouse-only fluent members (Final, PreWhere, Sample, LimitBy) and UseClickHouse() over ClickHouse.Driver.</Description>
+    <PackageTags>$(PackageTags);clickhouse;olap;analytics</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

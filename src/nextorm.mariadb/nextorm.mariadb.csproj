@@ -3,7 +3,8 @@
   <PropertyGroup>
     <PackageId>nextorm.mariadb</PackageId>
     <Title>Nextorm MariaDB provider</Title>
-    <Description>MariaDB provider for Nextorm</Description>
+    <Description>MariaDB provider for Nextorm, a zero-SQL ORM for .NET: adds MariaDB's dialect differences (no source-level row locks, version-gated UPDATE ... RETURNING) and UseMariaDb() over MySqlConnector.</Description>
+    <PackageTags>$(PackageTags);mariadb;mysql</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

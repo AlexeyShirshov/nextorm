@@ -9,10 +9,14 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <PackageTags>orm;sql;micro-orm</PackageTags>
+    <!--
+      Search keywords for nuget.org. Providers append their own below with
+      <PackageTags>$(PackageTags);...</PackageTags>, so keep the shared set here.
+    -->
+    <PackageTags>orm;sql;linq;micro-orm;data-access;query-builder;performance</PackageTags>
     <Authors>Alexey Shirshov</Authors>
     <Copyright>Alexey Shirshov</Copyright>
-    <PackageReleaseNotes>https://alexeyshirshov.github.io/nextorm/</PackageReleaseNotes>
+    <PackageReleaseNotes>https://github.com/AlexeyShirshov/nextorm/releases</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/AlexeyShirshov/nextorm</PackageProjectUrl>
     <PackageReadmeFile>readme.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

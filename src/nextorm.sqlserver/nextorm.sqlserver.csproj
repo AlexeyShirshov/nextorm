@@ -15,8 +15,9 @@
 
   <PropertyGroup>
     <PackageId>nextorm.sqlserver</PackageId>
-    <Title>Nextorm MS SqlServer provider</Title>
-    <Description>Microsoft SQL Server provider for Nextorm</Description>
+    <Title>Nextorm SQL Server provider</Title>
+    <Description>Microsoft SQL Server and Azure SQL provider for Nextorm, a zero-SQL ORM for .NET: adds the T-SQL dialect (bracket-quoted identifiers, top/offset-fetch paging), MERGE and native SqlBulkCopy, and UseSqlServer() over Microsoft.Data.SqlClient.</Description>
+    <PackageTags>$(PackageTags);sqlserver;mssql;t-sql;azure-sql</PackageTags>
   </PropertyGroup>
   
   <ItemGroup>

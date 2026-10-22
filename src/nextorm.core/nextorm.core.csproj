@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <PackageId>nextorm</PackageId>
-    <Title>Nextorm</Title>
-    <Description>A high performance ORM (object-relational mapping) library supporting PostgreSQL, SQL Server, MySQL, Sqlite</Description>
+    <Title>Nextorm - zero-SQL ORM for .NET</Title>
+    <Description>High-performance zero-SQL object-relational mapper for .NET: write typed C# LINQ-like queries and get compiled, parameterized SQL for SQLite, SQL Server, PostgreSQL, MySQL, MariaDB and ClickHouse, with no change tracking and no mandatory entity classes.</Description>
   </PropertyGroup>
 
   <ItemGroup>

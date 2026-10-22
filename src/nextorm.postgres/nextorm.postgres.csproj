@@ -3,7 +3,8 @@
   <PropertyGroup>
     <PackageId>nextorm.postgres</PackageId>
     <Title>Nextorm PostgreSQL provider</Title>
-    <Description>PostgreSQL provider for Nextorm</Description>
+    <Description>PostgreSQL provider for Nextorm, a zero-SQL ORM for .NET: adds the PostgreSQL dialect (native DISTINCT ON fast paths, COPY bulk insert, version-gated syntax) and UsePostgres() over Npgsql.</Description>
+    <PackageTags>$(PackageTags);postgresql;postgres;npgsql</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
