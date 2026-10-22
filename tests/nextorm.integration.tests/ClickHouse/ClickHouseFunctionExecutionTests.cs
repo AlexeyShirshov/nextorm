@@ -1,7 +1,10 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using ClickHouse.Driver;
 using ClickHouse.Driver.ADO;
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
 
 namespace NextORM.Integration.Tests;
@@ -246,22 +249,23 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
             })
             .First();
 
-        // ClickHouse returns the digest as FixedString: the raw bytes, not a hex rendering.
-        r.Md5.Should().NotBeNullOrEmpty();
-        r.Sha1.Should().NotBeNullOrEmpty();
-        r.Sha256.Should().NotBeNullOrEmpty();
-        r.Sha512.Should().NotBeNullOrEmpty();
+        // T254: the six string-returning digests are lowercase hexadecimal, never the raw FixedString
+        // bytes: the exact length per function and the lowercase alphabet are the contract.
+        r.Md5.Should().HaveLength(32).And.MatchRegex("^[0-9a-f]+$");
+        r.Sha1.Should().HaveLength(40).And.MatchRegex("^[0-9a-f]+$");
+        r.Sha256.Should().HaveLength(64).And.MatchRegex("^[0-9a-f]+$");
+        r.Sha512.Should().HaveLength(128).And.MatchRegex("^[0-9a-f]+$");
         r.Xx32.Should().NotBe(0);
         r.Xx64.Should().NotBe(0);
         r.Xxh3.Should().NotBe(0);
         r.City.Should().NotBe(0);
         r.Sip64.Should().NotBe(0);
-        r.Sip128.Should().NotBeNullOrEmpty();
+        r.Sip128.Should().HaveLength(32).And.MatchRegex("^[0-9a-f]+$");
         r.Murmur232.Should().NotBe(0);
         r.Murmur264.Should().NotBe(0);
         r.Murmur332.Should().NotBe(0);
         r.Murmur364.Should().NotBe(0);
-        r.Murmur3128.Should().NotBeNullOrEmpty();
+        r.Murmur3128.Should().HaveLength(32).And.MatchRegex("^[0-9a-f]+$");
     }
 
     [Fact]
@@ -283,6 +287,246 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
         r.Radians.Should().BeApproximately(Math.PI, 1e-9);
         r.Pi.Should().BeApproximately(Math.PI, 1e-9);
     }
+
+    /// <summary>
+    /// T254 matrix metadata: the six string-returning binary digests, their hexadecimal length and
+    /// the expected value source. The crypto rows are compared with independent .NET hashes over the
+    /// UTF-8 bytes; the two 128-bit non-crypto rows with a raw server <c>hex(...)</c> oracle.
+    /// </summary>
+    private static readonly (string Name, int Length)[] StringDigests =
+    [
+        ("md5", 32),
+        ("sha1", 40),
+        ("sha256", 64),
+        ("sha512", 128),
+        ("sip_hash128", 32),
+        ("murmur_hash3_128", 32)
+    ];
+
+    /// <summary>The familiar <c>"abc"</c> vectors pinned by the plan, per function.</summary>
+    private static readonly Dictionary<string, string> PinnedAbcDigests = new(StringComparer.Ordinal)
+    {
+        ["md5"] = "900150983cd24fb0d6963f7d28e17f72",
+        ["sha1"] = "a9993e364706816aba3e25717850c26c9cd0d89d",
+        ["sha256"] = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        ["sha512"] =
+            "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a"
+            + "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+    };
+
+    /// <summary>
+    /// T254 regression: all six digests materialise as lowercase hexadecimal through an anonymous
+    /// LINQ projection. Against the original bare-function renderer the four crypto cases fail the
+    /// value/length contract (raw <c>FixedString</c> decoded as UTF-8), which is the red state; the
+    /// null case comes from the live <c>Nullable(String)</c> column of <c>complex_entity</c> row 3,
+    /// because the optional-argument translator drops a trailing literal <c>null</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("Привет")]
+    public void T254_Digests_ShouldMaterializeLowercaseHex_Anonymous(string? input)
+    {
+        if (input is null)
+        {
+            var nullRow = _sut.ComplexEntity
+                .Where(x => x.Id == 3)
+                .Select(x => new
+                {
+                    Md5 = SqlFunctions.ClickHouse.md5(x.String),
+                    Sha1 = SqlFunctions.ClickHouse.sha1(x.String),
+                    Sha256 = SqlFunctions.ClickHouse.sha256(x.String),
+                    Sha512 = SqlFunctions.ClickHouse.sha512(x.String),
+                    Sip128 = SqlFunctions.ClickHouse.sip_hash128(x.String),
+                    Murmur3128 = SqlFunctions.ClickHouse.murmur_hash3_128(x.String)
+                })
+                .First();
+
+            AssertDigests(input, nullRow.Md5, nullRow.Sha1, nullRow.Sha256, nullRow.Sha512,
+                nullRow.Sip128, nullRow.Murmur3128);
+            return;
+        }
+
+        var row = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Md5 = SqlFunctions.ClickHouse.md5(input),
+                Sha1 = SqlFunctions.ClickHouse.sha1(input),
+                Sha256 = SqlFunctions.ClickHouse.sha256(input),
+                Sha512 = SqlFunctions.ClickHouse.sha512(input),
+                Sip128 = SqlFunctions.ClickHouse.sip_hash128(input),
+                Murmur3128 = SqlFunctions.ClickHouse.murmur_hash3_128(input)
+            })
+            .First();
+
+        AssertDigests(input, row.Md5, row.Sha1, row.Sha256, row.Sha512, row.Sip128, row.Murmur3128);
+    }
+
+    /// <summary>T254: the same matrix through a typed (member-init) projection with nullable members.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("Привет")]
+    public void T254_Digests_ShouldMaterializeLowercaseHex_Typed(string? input)
+    {
+        if (input is null)
+        {
+            var nullRow = _sut.ComplexEntity
+                .Where(x => x.Id == 3)
+                .Select(x => new DigestProjection
+                {
+                    Md5 = SqlFunctions.ClickHouse.md5(x.String),
+                    Sha1 = SqlFunctions.ClickHouse.sha1(x.String),
+                    Sha256 = SqlFunctions.ClickHouse.sha256(x.String),
+                    Sha512 = SqlFunctions.ClickHouse.sha512(x.String),
+                    Sip128 = SqlFunctions.ClickHouse.sip_hash128(x.String),
+                    Murmur3128 = SqlFunctions.ClickHouse.murmur_hash3_128(x.String)
+                })
+                .First();
+
+            AssertDigests(input, nullRow.Md5, nullRow.Sha1, nullRow.Sha256, nullRow.Sha512,
+                nullRow.Sip128, nullRow.Murmur3128);
+            return;
+        }
+
+        var row = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new DigestProjection
+            {
+                Md5 = SqlFunctions.ClickHouse.md5(input),
+                Sha1 = SqlFunctions.ClickHouse.sha1(input),
+                Sha256 = SqlFunctions.ClickHouse.sha256(input),
+                Sha512 = SqlFunctions.ClickHouse.sha512(input),
+                Sip128 = SqlFunctions.ClickHouse.sip_hash128(input),
+                Murmur3128 = SqlFunctions.ClickHouse.murmur_hash3_128(input)
+            })
+            .First();
+
+        AssertDigests(input, row.Md5, row.Sha1, row.Sha256, row.Sha512, row.Sip128, row.Murmur3128);
+    }
+
+    /// <summary>
+    /// T254: the same matrix through the repository's test-local <c>Scalar&lt;string&gt;</c> terminal
+    /// (<c>ExecuteRaw(select {renderer sql} as v).Read&lt;string&gt;()</c>). The null case uses a
+    /// typed <c>Nullable(String)</c> cast rather than a literal <c>null</c>, so the argument reaches
+    /// the renderer-generated wrapper unchanged.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("abc")]
+    [InlineData("Привет")]
+    public void T254_Digests_ShouldMaterializeLowercaseHex_Scalar(string? input)
+    {
+        using var context = Provider.CreateContext();
+
+        T Scalar<T>(string expression)
+        {
+            using var result = context.ExecuteRaw($"select {expression} as v");
+            return result.Read<T>().Single();
+        }
+
+        var argument = input is null ? "cast(null as Nullable(String))" : SqlStringLiteral(input);
+
+        foreach (var (name, _) in StringDigests)
+            AssertDigest(name, Scalar<string>(Render(name, argument)), input);
+    }
+
+    /// <summary>Typed projection mirror of the six digest members (T254, E06).</summary>
+    public sealed class DigestProjection
+    {
+        public string? Md5 { get; set; }
+
+        public string? Sha1 { get; set; }
+
+        public string? Sha256 { get; set; }
+
+        public string? Sha512 { get; set; }
+
+        public string? Sip128 { get; set; }
+
+        public string? Murmur3128 { get; set; }
+    }
+
+    private void AssertDigests(
+        string? input, string? md5, string? sha1, string? sha256, string? sha512, string? sip128, string? murmur3128)
+    {
+        AssertDigest("md5", md5, input);
+        AssertDigest("sha1", sha1, input);
+        AssertDigest("sha256", sha256, input);
+        AssertDigest("sha512", sha512, input);
+        AssertDigest("sip_hash128", sip128, input);
+        AssertDigest("murmur_hash3_128", murmur3128, input);
+    }
+
+    private void AssertDigest(string name, string? actual, string? input)
+    {
+        if (input is null)
+        {
+            actual.Should().BeNull("a NULL input propagates as NULL, never as an empty string");
+            actual.Should().NotBe(string.Empty, "NULL and the empty string are distinct inputs");
+            return;
+        }
+
+        var expected = name is "sip_hash128" or "murmur_hash3_128"
+            ? RawHexOracle(name, input)
+            : CryptoDigest(name, input);
+        var length = StringDigests.Single(d => d.Name == name).Length;
+
+        actual.Should().Be(expected,
+            "'{0}' of the UTF-8 bytes of \"{1}\" must be the lowercase digest", name, input);
+        actual.Should().NotBeNull();
+        actual!.Should().HaveLength(length, "'{0}' is {1} hexadecimal characters", name, length);
+        actual.Should().MatchRegex("^[0-9a-f]+$", "'{0}' must stay lowercase hexadecimal", name);
+
+        if (input == "abc" && PinnedAbcDigests.TryGetValue(name, out var pinned))
+        {
+            expected.Should().Be(pinned, "the pinned .NET vector for '{0}'('abc') is stable", name);
+            actual.Should().Be(pinned, "the pinned '{0}' vector of 'abc'", name);
+        }
+    }
+
+    /// <summary>An independent .NET digest over the UTF-8 bytes, rendered as lowercase hex.</summary>
+    private static string CryptoDigest(string name, string input)
+    {
+        var bytes = Encoding.UTF8.GetBytes(input);
+        return name switch
+        {
+            "md5" => Convert.ToHexStringLower(MD5.HashData(bytes)),
+            "sha1" => Convert.ToHexStringLower(SHA1.HashData(bytes)),
+            "sha256" => Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            "sha512" => Convert.ToHexStringLower(SHA512.HashData(bytes)),
+            _ => throw new ArgumentOutOfRangeException(nameof(name), name, "not a .NET crypto digest")
+        };
+    }
+
+    /// <summary>
+    /// Independent raw-SQL oracle for the two 128-bit non-crypto digests: the server-side
+    /// <c>hex(...)</c> result is safe ASCII and is lowercased here. It never routes through the
+    /// renderer under test.
+    /// </summary>
+    private string? RawHexOracle(string name, string input)
+    {
+        var native = name switch
+        {
+            "sip_hash128" => "sipHash128",
+            "murmur_hash3_128" => "murmurHash3_128",
+            _ => throw new ArgumentOutOfRangeException(nameof(name), name, "not a raw-hex oracle candidate")
+        };
+
+        using var context = Provider.CreateContext();
+        using var result = context.ExecuteRaw($"select hex({native}({SqlStringLiteral(input)})) as v");
+        return result.Read<string>().Single()?.ToLowerInvariant();
+    }
+
+    private static string SqlStringLiteral(string value)
+        => "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+
+    private static string Render(string name, string argument)
+        => ClickHouseDialect.Instance.ScalarFunctions!.Render(name, [argument]);
 
     /// <summary>
     /// #252: <c>array_except</c> is declared for API compatibility, but the native <c>arrayExcept</c>

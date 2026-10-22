@@ -1,4 +1,6 @@
 using FluentAssertions;
+using FluentAssertions.Execution;
+using NextORM.ClickHouse;
 using NextORM.Core;
 
 namespace NextORM.ClickHouse.Tests;
@@ -268,21 +270,21 @@ public class ClickHouseFunctionGapSqlGenerationTests
             M3128 = SqlFunctions.ClickHouse.murmur_hash3_128(x.String)
         }));
 
-        sql.Should().Contain("MD5(somestring)");
-        sql.Should().Contain("SHA1(somestring)");
-        sql.Should().Contain("SHA256(somestring)");
-        sql.Should().Contain("SHA512(somestring)");
+        sql.Should().Contain("lower(hex(MD5(somestring)))");
+        sql.Should().Contain("lower(hex(SHA1(somestring)))");
+        sql.Should().Contain("lower(hex(SHA256(somestring)))");
+        sql.Should().Contain("lower(hex(SHA512(somestring)))");
         sql.Should().Contain("toInt32(xxHash32(somestring))");
         sql.Should().Contain("toInt64(xxHash64(somestring))");
         sql.Should().Contain("toInt64(xxh3(somestring))");
         sql.Should().Contain("toInt64(cityHash64(somestring))");
         sql.Should().Contain("toInt64(sipHash64(somestring))");
-        sql.Should().Contain("sipHash128(somestring)");
+        sql.Should().Contain("lower(hex(sipHash128(somestring)))");
         sql.Should().Contain("toInt32(murmurHash2_32(somestring))");
         sql.Should().Contain("toInt64(murmurHash2_64(somestring))");
         sql.Should().Contain("toInt32(murmurHash3_32(somestring))");
         sql.Should().Contain("toInt64(murmurHash3_64(somestring))");
-        sql.Should().Contain("murmurHash3_128(somestring)");
+        sql.Should().Contain("lower(hex(murmurHash3_128(somestring)))");
     }
 
     [Fact]
@@ -293,5 +295,80 @@ public class ClickHouseFunctionGapSqlGenerationTests
 
         SqlOf(ctx, e.Select(x => new { U = SqlFunctions.ClickHouse.generate_ulid() }))
             .Should().Contain("generateULID()");
+    }
+
+    /// <summary>
+    /// T254: the six string-returning binary digests render as lowercase hexadecimal so the value
+    /// survives the driver's string decoder instead of being read as raw <c>FixedString</c> bytes.
+    /// The already-rendered argument is preserved verbatim — no pre-encoding, no wrapper.
+    /// </summary>
+    [Fact]
+    public void T254_DigestRenderers_ShouldUseLowercaseHex()
+    {
+        var scalars = ClickHouseDialect.Instance.ScalarFunctions!;
+        var cases = new (string Name, string Expected)[]
+        {
+            ("md5", "lower(hex(MD5(digest)))"),
+            ("sha1", "lower(hex(SHA1(digest)))"),
+            ("sha256", "lower(hex(SHA256(digest)))"),
+            ("sha512", "lower(hex(SHA512(digest)))"),
+            ("sip_hash128", "lower(hex(sipHash128(digest)))"),
+            ("murmur_hash3_128", "lower(hex(murmurHash3_128(digest)))")
+        };
+
+        using (new AssertionScope())
+        {
+            foreach (var (name, expected) in cases)
+            {
+                scalars.Supports(name).Should().BeTrue(
+                    "'{0}' stays in the ClickHouse inventory", name);
+                scalars.Render(name, ["digest"]).Should().Be(
+                    expected, "'{0}' must materialise as lowercase hexadecimal", name);
+                scalars.Render(name, ["other"]).Should().Be(
+                    expected.Replace("digest", "other", StringComparison.Ordinal),
+                    "'{0}' must preserve the already-rendered argument", name);
+            }
+        }
+    }
+
+    /// <summary>
+    /// T254: a nullable string column reaches the digest unwrapped. The null travels through the
+    /// server expression and is never replaced by a default, an empty string or a coalesce, and the
+    /// empty string stays a distinct input with its own digest.
+    /// </summary>
+    [Fact]
+    public void T254_Digests_ShouldTranslateNullableInputsWithoutCoalescing()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            M5 = SqlFunctions.ClickHouse.md5(x.String),
+            S1 = SqlFunctions.ClickHouse.sha1(x.String),
+            S256 = SqlFunctions.ClickHouse.sha256(x.String),
+            S512 = SqlFunctions.ClickHouse.sha512(x.String),
+            P128 = SqlFunctions.ClickHouse.sip_hash128(x.String),
+            M3128 = SqlFunctions.ClickHouse.murmur_hash3_128(x.String)
+        }));
+
+        using (new AssertionScope())
+        {
+            sql.Should().Contain("lower(hex(MD5(somestring)))");
+            sql.Should().Contain("lower(hex(SHA1(somestring)))");
+            sql.Should().Contain("lower(hex(SHA256(somestring)))");
+            sql.Should().Contain("lower(hex(SHA512(somestring)))");
+            sql.Should().Contain("lower(hex(sipHash128(somestring)))");
+            sql.Should().Contain("lower(hex(murmurHash3_128(somestring)))");
+
+            sql.Should().NotContain("coalesce", "a null digest input must stay null");
+            sql.Should().NotContain("ifNull", "a null digest input must stay null");
+            sql.Should().NotContain("assumeNotNull", "the nullable argument must not be unwrapped");
+            sql.Should().NotContain("toNotNullable", "the nullable argument must not be re-typed");
+        }
+
+        // The empty string is a distinct input and keeps its own digest: it is not folded into NULL.
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.md5("") }))
+            .Should().Contain("lower(hex(MD5('')))");
     }
 }

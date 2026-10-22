@@ -200,10 +200,29 @@ every other dialect:
 * the `Map` family: the `map` constructor (inline `Tuple.Create` pairs), `map_keys`/`map_values`,
   `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, the two-parameter lambdas
   `map_filter`/`map_apply`/`map_all`/`map_exists` and `map_sort`;
-* hashes: `md5`/`sha1`/`sha256`/`sha512` (`MD5`/`SHA1`/`SHA256`/`SHA512`, fixed binary strings),
-  `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64`/`sip_hash128` and
-  `murmur_hash2_32`/`murmur_hash2_64`/`murmur_hash3_32`/`murmur_hash3_64`/`murmur_hash3_128`;
+* hashes: the six string-returning digests `md5`/`sha1`/`sha256`/`sha512`/`sip_hash128`/
+  `murmur_hash3_128` (`MD5`/`SHA1`/`SHA256`/`SHA512`/`sipHash128`/`murmurHash3_128`, lowercase
+  hexadecimal) plus the numeric `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64` and
+  `murmur_hash2_32`/`murmur_hash2_64`/`murmur_hash3_32`/`murmur_hash3_64`;
 * `generate_ulid` (`generateULID`).
+
+The six string-returning digests are encoded server-side as lowercase hexadecimal, so a `string?`
+projection receives the digest text rather than the raw `FixedString` bytes (which the driver would
+decode lossily as UTF-8):
+
+| Function | Rendered SQL | Characters |
+|---|---|---:|
+| `md5` | `lower(hex(MD5(value)))` | 32 |
+| `sha1` | `lower(hex(SHA1(value)))` | 40 |
+| `sha256` | `lower(hex(SHA256(value)))` | 64 |
+| `sha512` | `lower(hex(SHA512(value)))` | 128 |
+| `sip_hash128` | `lower(hex(sipHash128(value)))` | 32 |
+| `murmur_hash3_128` | `lower(hex(murmurHash3_128(value)))` | 32 |
+
+Every character is in `[0-9a-f]`. A `NULL` argument propagates as `NULL` — it is never replaced by an
+empty string or a default digest — and the value survives ordinary string materialisation unchanged
+through an anonymous projection, a typed projection and `Scalar<string>` (a plain `string`, not a byte
+array).
 
 `array_except` keeps its place in `SqlFunctions.ClickHouse` for API compatibility but is **not
 supported** on the pinned 25.8 baseline: the native `arrayExcept` was introduced in ClickHouse 25.9,

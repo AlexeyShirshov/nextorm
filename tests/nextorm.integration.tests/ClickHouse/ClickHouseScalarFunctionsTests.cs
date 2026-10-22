@@ -101,21 +101,21 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
         ("group_bitmap_xor", ["a"], "groupBitmapXor(a)"),
         ("sum_map", ["k", "v"], "sumMap(k, v)"),
         ("sum_map_filtered", ["f", "k", "v"], "sumMapFiltered(f)(k, v)"),
-        ("md5", ["s"], "MD5(s)"),
-        ("sha1", ["s"], "SHA1(s)"),
-        ("sha256", ["s"], "SHA256(s)"),
-        ("sha512", ["s"], "SHA512(s)"),
+        ("md5", ["s"], "lower(hex(MD5(s)))"),
+        ("sha1", ["s"], "lower(hex(SHA1(s)))"),
+        ("sha256", ["s"], "lower(hex(SHA256(s)))"),
+        ("sha512", ["s"], "lower(hex(SHA512(s)))"),
         ("xx_hash32", ["s"], "toInt32(xxHash32(s))"),
         ("xx_hash64", ["s"], "toInt64(xxHash64(s))"),
         ("xxh3", ["s"], "toInt64(xxh3(s))"),
         ("city_hash64", ["s"], "toInt64(cityHash64(s))"),
         ("sip_hash64", ["s"], "toInt64(sipHash64(s))"),
-        ("sip_hash128", ["s"], "sipHash128(s)"),
+        ("sip_hash128", ["s"], "lower(hex(sipHash128(s)))"),
         ("murmur_hash2_32", ["s"], "toInt32(murmurHash2_32(s))"),
         ("murmur_hash2_64", ["s"], "toInt64(murmurHash2_64(s))"),
         ("murmur_hash3_32", ["s"], "toInt32(murmurHash3_32(s))"),
         ("murmur_hash3_64", ["s"], "toInt64(murmurHash3_64(s))"),
-        ("murmur_hash3_128", ["s"], "murmurHash3_128(s)"),
+        ("murmur_hash3_128", ["s"], "lower(hex(murmurHash3_128(s)))"),
         ("generate_ulid", [], "generateULID()"),
         ("bit_length", ["s"], "toInt32(length(s) * 8)"),
         ("octet_length", ["s"], "toInt32(length(s))"),
@@ -281,12 +281,13 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
         Scalar<int>(Sql("ascii", "'A'")).Should().Be(65, "ascii returns the code point");
         Scalar<string>(Sql("char", "65")).Should().Be("A", "char returns the character");
 
-        // Hash/uuid family: the digests are the documented fixed binary strings, so the test reads them
-        // back as hex; generateULID is a 26-character Crockford ULID.
-        Scalar<string>($"hex({Sql("md5", "'abc'")})").Should().Be(
-            "900150983CD24FB0D6963F7D28E17F72", "MD5('abc') is the 16-byte digest 900150983cd24fb0d6963f7d28e17f72");
-        Scalar<string>($"hex({Sql("sha256", "'abc'")})").Should().Be(
-            "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD",
+        // Hash/uuid family: the six string-returning digests are materialised as lowercase hexadecimal,
+        // so the scalar terminal reads the digest text directly; generateULID is a 26-character
+        // Crockford ULID.
+        Scalar<string>(Sql("md5", "'abc'")).Should().Be(
+            "900150983cd24fb0d6963f7d28e17f72", "MD5('abc') is the 16-byte digest 900150983cd24fb0d6963f7d28e17f72");
+        Scalar<string>(Sql("sha256", "'abc'")).Should().Be(
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
             "SHA256('abc') is the 32-byte digest ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
         Scalar<string>(Sql("generate_ulid", []))
             .Should().MatchRegex("^[0-9A-HJKMNP-TV-Z]{26}$", "generateULID produces a 26-character ULID");

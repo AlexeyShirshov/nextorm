@@ -1002,16 +1002,29 @@ namespace NextORM.Core;
         /// </summary>
         public IDictionary<TKey, TValue>? sum_map_filtered<TKey, TValue>(TKey[] keysToKeep, TKey? key, TValue? value) => default!;
 
-        /// <summary><c>MD5(value)</c>: the 16-byte MD5 digest as a fixed binary string. Requires a provider that supports it (ClickHouse).</summary>
+        /// <summary>
+        /// <c>MD5(value)</c>: the 16-byte MD5 digest rendered as 32 lowercase hexadecimal characters
+        /// (<c>lower(hex(MD5(value)))</c>); a <see langword="null"/> input yields <see langword="null"/>.
+        /// Requires a provider that supports it (ClickHouse).
+        /// </summary>
         public string? md5(string? value) => default!;
 
-        /// <summary><c>SHA1(value)</c>: the 20-byte SHA-1 digest as a fixed binary string.</summary>
+        /// <summary>
+        /// <c>SHA1(value)</c>: the 20-byte SHA-1 digest rendered as 40 lowercase hexadecimal characters.
+        /// A <see langword="null"/> input yields <see langword="null"/>.
+        /// </summary>
         public string? sha1(string? value) => default!;
 
-        /// <summary><c>SHA256(value)</c>: the 32-byte SHA-256 digest as a fixed binary string.</summary>
+        /// <summary>
+        /// <c>SHA256(value)</c>: the 32-byte SHA-256 digest rendered as 64 lowercase hexadecimal
+        /// characters. A <see langword="null"/> input yields <see langword="null"/>.
+        /// </summary>
         public string? sha256(string? value) => default!;
 
-        /// <summary><c>SHA512(value)</c>: the 64-byte SHA-512 digest as a fixed binary string.</summary>
+        /// <summary>
+        /// <c>SHA512(value)</c>: the 64-byte SHA-512 digest rendered as 128 lowercase hexadecimal
+        /// characters. A <see langword="null"/> input yields <see langword="null"/>.
+        /// </summary>
         public string? sha512(string? value) => default!;
 
         /// <summary><c>xxHash32(value)</c>: the 32-bit xxHash as a signed integer. Requires a provider that supports it (ClickHouse).</summary>
@@ -1029,7 +1042,11 @@ namespace NextORM.Core;
         /// <summary><c>sipHash64(value)</c>: the 64-bit SipHash as a signed integer.</summary>
         public long sip_hash64(string? value) => default!;
 
-        /// <summary><c>sipHash128(value)</c>: the 128-bit SipHash as a fixed binary string.</summary>
+        /// <summary>
+        /// <c>sipHash128(value)</c>: the 128-bit SipHash rendered as 32 lowercase hexadecimal characters
+        /// (<c>lower(hex(sipHash128(value)))</c>). A <see langword="null"/> input yields
+        /// <see langword="null"/>.
+        /// </summary>
         public string? sip_hash128(string? value) => default!;
 
         /// <summary><c>murmurHash2_32(value)</c>: the 32-bit MurmurHash2 as a signed integer.</summary>
@@ -1044,7 +1061,11 @@ namespace NextORM.Core;
         /// <summary><c>murmurHash3_64(value)</c>: the 64-bit MurmurHash3 as a signed integer.</summary>
         public long murmur_hash3_64(string? value) => default!;
 
-        /// <summary><c>murmurHash3_128(value)</c>: the 128-bit MurmurHash3 as a fixed binary string.</summary>
+        /// <summary>
+        /// <c>murmurHash3_128(value)</c>: the 128-bit MurmurHash3 rendered as 32 lowercase hexadecimal
+        /// characters (<c>lower(hex(murmurHash3_128(value)))</c>). A <see langword="null"/> input yields
+        /// <see langword="null"/>.
+        /// </summary>
         public string? murmur_hash3_128(string? value) => default!;
 
         /// <summary>

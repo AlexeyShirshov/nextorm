@@ -201,10 +201,28 @@ ClickHouse, у которых нет переносимого написания
 * семейство `Map`: конструктор `map` (inline-пары `Tuple.Create`), `map_keys`/`map_values`,
   `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, двухпараметрические лямбды
   `map_filter`/`map_apply`/`map_all`/`map_exists` и `map_sort`;
-* хэши: `md5`/`sha1`/`sha256`/`sha512` (`MD5`/`SHA1`/`SHA256`/`SHA512`, fixed binary strings),
-  `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64`/`sip_hash128` и
-  `murmur_hash2_32`/`murmur_hash2_64`/`murmur_hash3_32`/`murmur_hash3_64`/`murmur_hash3_128`;
+* хэши: шесть строковых хэшей `md5`/`sha1`/`sha256`/`sha512`/`sip_hash128`/`murmur_hash3_128`
+  (`MD5`/`SHA1`/`SHA256`/`SHA512`/`sipHash128`/`murmurHash3_128`, нижний шестнадцатеричный регистр) и
+  числовые `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64` и
+  `murmur_hash2_32`/`murmur_hash2_64`/`murmur_hash3_32`/`murmur_hash3_64`;
 * `generate_ulid` (`generateULID`).
+
+Шесть строковых хэшей кодируются на сервере в нижний шестнадцатеричный регистр, поэтому проекция
+`string?` получает текст хэша, а не сырые байты `FixedString` (которые драйвер декодировал бы как
+UTF-8 с потерями):
+
+| Функция | Рендеринг SQL | Символов |
+|---|---|---:|
+| `md5` | `lower(hex(MD5(value)))` | 32 |
+| `sha1` | `lower(hex(SHA1(value)))` | 40 |
+| `sha256` | `lower(hex(SHA256(value)))` | 64 |
+| `sha512` | `lower(hex(SHA512(value)))` | 128 |
+| `sip_hash128` | `lower(hex(sipHash128(value)))` | 32 |
+| `murmur_hash3_128` | `lower(hex(murmurHash3_128(value)))` | 32 |
+
+Все символы входят в `[0-9a-f]`. Аргумент `NULL` даёт `NULL`: он не заменяется пустой строкой или
+хэшем по умолчанию. Значение без изменений проходит обычную материализацию строки — через анонимную
+проекцию, типизированную проекцию и `Scalar<string>` (это `string`, а не массив байтов).
 
 `array_except` остаётся в `SqlFunctions.ClickHouse` для совместимости API, но **не
 поддерживается** на закреплённой базовой версии 25.8: нативная `arrayExcept` появилась в
