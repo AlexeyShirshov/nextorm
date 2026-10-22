@@ -19,9 +19,18 @@
     <PackageReleaseNotes>https://github.com/AlexeyShirshov/nextorm/releases</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/AlexeyShirshov/nextorm</PackageProjectUrl>
     <PackageReadmeFile>readme.md</PackageReadmeFile>
+    <!-- Shared package icon; the file lives in assets/promo and is packed under its own name. -->
+    <PackageIcon>nextorm-icon.png</PackageIcon>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/AlexeyShirshov/nextorm</RepositoryUrl>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../assets/promo/nextorm-icon.png"
+          Pack="true"
+          PackagePath="\"
+          Visible="false" />
+  </ItemGroup>
 
 </Project>
