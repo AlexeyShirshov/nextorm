@@ -2,8 +2,13 @@
 
 PostgreSQL is the only supported provider with `json`/`jsonb` types. A JSON operand is expected to be a
 `json`/`jsonb` expression: a mapped column, another JSON function, or a parameter whose runtime value is
-a `JsonDocument`, `JsonElement` or `JsonNode` (Npgsql binds those as `jsonb`). A plain JSON string is
+a `JsonDocument`, `JsonElement` or `JsonNode` (Npgsql binds those as `jsonb`). A plain JSON string parameter is
 bound as `text` and can be parsed explicitly with `SqlFunctions.Postgres.json_cast(value)` (`cast(value as jsonb)`).
+The six accessors `json_get`, `json_get_text`, `json_get_path` and `json_get_path_text` (string-key and
+integer-index overloads) are the exception: they apply **contextual SQL typing** to a raw client document
+value — a literal, a captured value or an explicit parameter — and parse it as `jsonb` in the generated SQL.
+Native `json`/`jsonb` columns and server-side JSON expressions are not cast and keep their operand and result
+types.
 
 ```csharp
 using System.Text.Json;
@@ -73,10 +78,19 @@ select jsonb_build_object('id', id, 'name', somestring)
 | `SqlFunctions.Postgres.json_value(json, path)` / `json_query(json, path)` | `json_value(json, cast(path as jsonpath))` / `json_query(json, cast(path as jsonpath))` |
 | `SqlFunctions.Postgres.json_exists(json, path, fromJsonPath)` | `json_exists(json, cast(path as jsonpath))` |
 
+The four access operators type both operands. A raw client document value (literal, captured value or
+explicit parameter) is parsed as `jsonb` — `json_get("{\"a\":1}", "a")` renders
+`cast('{"a":1}' as jsonb) -> cast('a' as text)` — while a native `json`/`jsonb` column or a server-side JSON
+expression is emitted unchanged (`doc -> cast('a' as text)`), so its operand and result types do not change.
+The key/index/path operand is typed per overload: `cast(<key> as text)`, `cast(<index> as integer)`,
+`cast(<path> as text[])`. Provider parameter binding is unchanged; an ordinary `string` parameter still binds
+as `text`.
+
 A `path`/`keys` operand is a `string[]` and is bound as a **single array parameter** (see
 [Arrays](06-arrays.md#arrays-postgresql)), so `SqlFunctions.Postgres.json_get_path(json, new[] { "a", "b" })` renders
-`json #> @p0`. The JSONPath functions take the path as a plain string and render it as
-`cast(<path> as jsonpath)`.
+`json #> cast(@p0 as text[])`. The JSONPath functions take the path as a plain string and render it as
+`cast(<path> as jsonpath)`; `JSON_EXISTS`, `jsonpath` and the sibling JSON functions are unchanged by this
+typing rule.
 
 ## JSON as text (SQL Server, MySQL/MariaDB)
 

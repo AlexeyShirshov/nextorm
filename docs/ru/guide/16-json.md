@@ -207,8 +207,14 @@ select id
  from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 ```
 
-Обычная JSON-строка привязывается как `text`; разберите её явно через
-`SqlFunctions.Postgres.json_cast(value)` (`cast(value as jsonb)`).
+Привязка параметров провайдером не меняется: обычная строка с JSON по-прежнему привязывается как `text`.
+Исключение — шесть аксессоров `json_get`, `json_get_text`, `json_get_path` и `json_get_path_text` (обе
+перегрузки: по строковому ключу и по целочисленному индексу): они применяют **контекстную SQL-типизацию** —
+сырое клиентское значение документа (литерал, захваченное значение или явный параметр) разбирается как
+`jsonb` в сгенерированном SQL, а правый операнд типизируется по перегрузке (`text` для строкового ключа,
+`integer` для индекса, `text[]` для пути). Нативные колонки `json`/`jsonb` и серверные JSON-выражения
+**не** приводятся и сохраняют типы операнда и результата. Для всех остальных JSON-функций разбирайте
+строку явно через `SqlFunctions.Postgres.json_cast(value)` (`cast(value as jsonb)`).
 
 ### Отобразить CLR-объект на нативную JSON-колонку
 
@@ -244,8 +250,13 @@ public sealed class Customer
   *скалярная* проекция `JsonDocument`/`JsonElement` в эту поддержку не входят — отображайте их через
   `[JsonColumn]` или проецируйте в именованной форме. Параметр `JsonNode` по-прежнему привязывается как
   `jsonb`.
-* Обычная `string` отображается на `text`; используйте `SqlFunctions.Postgres.json_cast(value)`, чтобы
-  разобрать её как `jsonb`.
+* Обычная `string` отображается на `text`. Шесть аксессоров выше (`json_get`, `json_get_text`,
+  `json_get_path`, `json_get_path_text`, перегрузки по строковому ключу и по индексу) по-прежнему
+  принимают сырую строку документа — литерал, захваченное значение или явный параметр, — потому что
+  применяют контекстную SQL-типизацию и разбирают её как `jsonb` в сгенерированном SQL, типизируя
+  ключ/индекс/путь как `text`/`integer`/`text[]`. Нативная колонка `json`/`jsonb` или серверное
+  JSON-выражение остаются без приведения, поэтому их типы операнда и результата не меняются. Для любой
+  другой JSON-функции разбирайте строку через `SqlFunctions.Postgres.json_cast(value)`.
 
 На ClickHouse тот же раздел описывает нативную колонку `JSON`, чей физический тип — `JSON` и чей
 корень — **объект**: она принимает JSON-объекты в корне и отклоняет массивы и скалярные корни.
@@ -342,9 +353,19 @@ var groups = dataContext.From<IComplexEntity>()
 | `SqlFunctions.Postgres.jsonb_path_exists(json, path)` / `jsonb_path_match(json, path)` | `jsonb_path_exists(json, cast(path as jsonpath))` / `jsonb_path_match(...)` |
 | `SqlFunctions.Postgres.jsonb_path_query_first(json, path)` / `jsonb_path_query_array(json, path)` | `jsonb_path_query_first(...)` / `jsonb_path_query_array(...)` |
 
+Четыре аксессора выше применяют **контекстную SQL-типизацию**: сырое клиентское значение документа
+(литерал, захваченное значение или явный параметр) разбирается как `jsonb`, поэтому
+`json_get("{\"a\":1}", "a")` отрисует `cast('{"a":1}' as jsonb) -> cast('a' as text)`, а нативная колонка
+`json`/`jsonb` или серверное JSON-выражение выводятся без приведения (`doc -> cast('a' as text)`), сохраняя
+типы операнда и результата. Ключ/индекс/путь всегда типизируется по перегрузке: `cast(<key> as text)`,
+`cast(<index> as integer)`, `cast(<path> as text[])` — литеральный ключ встраивается как
+`cast('a' as text)`. Сама привязка параметров не меняется: обычный параметр-`string` по-прежнему
+привязывается как `text`.
+
 Операнд `path`/`keys` — это `string[]`, привязываемый одним параметром-массивом, поэтому
-`json_get_path(json, new[] { "a", "b" })` отрисует `json #> @p0`. Функции JSONPath принимают путь
-обычной строкой и приводят его к `jsonpath`.
+`json_get_path(json, new[] { "a", "b" })` отрисует `json #> cast(@p0 as text[])`. Функции JSONPath
+принимают путь обычной строкой и приводят его к `jsonpath`; `JSON_EXISTS`, `jsonpath` и соседние
+JSON-функции сохраняют собственное независимое поведение.
 
 ```csharp
 var path = new[] { "a", "b" };

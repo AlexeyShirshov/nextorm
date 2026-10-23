@@ -119,6 +119,15 @@ properties and a bare `JsonDocument`/`JsonElement` *scalar* projection remain ou
 `jsonb_*` family covers construction, extraction, containment and
 aggregation, for example `jsonb_build_object`, `jsonb_agg`, `json_get_text`, `json_cast`, `->`, `->>`.
 
+The four accessors `json_get`, `json_get_text`, `json_get_path` and `json_get_path_text` (string-key and
+integer-index overloads) apply **contextual SQL typing**: a raw client document value (literal, captured
+value or explicit parameter) is parsed as `jsonb` in the generated SQL — `json_get("{\"a\":1}", "a")`
+renders `cast('{"a":1}' as jsonb) -> cast('a' as text)` — while a native `json`/`jsonb` column or a
+server-side JSON expression is emitted unchanged (`doc -> cast('a' as text)`), so its operand and result
+types are preserved. The key/index/path operand is typed per overload as `text`/`integer`/`text[]`.
+Provider parameter binding is not changed: an ordinary `string` parameter still binds as `text`, and
+`JSON_EXISTS`/`jsonpath` and the sibling JSON functions keep their own behavior.
+
 ```csharp
 var json = dataContext.From<IComplexEntity>()
     .Select(e => SqlFunctions.Postgres.jsonb_agg(e.String))
