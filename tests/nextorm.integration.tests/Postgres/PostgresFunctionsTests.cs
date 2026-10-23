@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using FluentAssertions;
 using NextORM.Core;
@@ -1023,5 +1025,88 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
                 .First())
             .Should().Throw<NotSupportedException>()
             .WithMessage("The GLOBAL IN predicate is not supported by this provider.");
+    }
+
+    [SqlTable("inline_literal_probe")]
+    internal interface IInlineLiteralProbe
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+
+        [Column("value")]
+        string? Value { get; set; }
+    }
+
+    /// <summary>
+    /// #299: an inline string literal containing an apostrophe must reach PostgreSQL as one valid
+    /// string literal. The probe table is owned by this test (created and dropped here); rows are
+    /// inserted through bound parameters, while the WHERE values are genuine inline constants, so the
+    /// literal renderer is what the server sees. The decoy proves the match is exact and the hostile
+    /// value proves the corrected literal cannot terminate the statement or broaden the result.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "299")]
+    public void InlineStringLiteralRoundTrip()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists inline_literal_probe");
+        Execute(ctx, "create table inline_literal_probe (id integer primary key, value varchar(100))");
+
+        try
+        {
+            ctx.CreateInsertBuilder<IInlineLiteralProbe>()
+                .Value(x => x.Id, 1)
+                .Value(x => x.Value, "it's (a) test")
+                .Insert();
+            ctx.CreateInsertBuilder<IInlineLiteralProbe>()
+                .Value(x => x.Id, 2)
+                .Value(x => x.Value, "it's (a) test!")
+                .Insert();
+            ctx.CreateInsertBuilder<IInlineLiteralProbe>()
+                .Value(x => x.Id, 3)
+                .Value(x => x.Value, "it's; --")
+                .Insert();
+            ctx.CreateInsertBuilder<IInlineLiteralProbe>()
+                .Value(x => x.Id, 4)
+                .Value(x => x.Value, "plain")
+                .Insert();
+
+            ctx.From<IInlineLiteralProbe>()
+                .Where(x => x.Value == "it's (a) test")
+                .Select(x => x.Id)
+                .ToList()
+                .Should().Equal(new[] { 1 }, "the apostrophe literal must match its row exactly, not the longer decoy");
+
+            ctx.From<IInlineLiteralProbe>()
+                .Where(x => x.Value == "it's; --")
+                .Select(x => x.Id)
+                .ToList()
+                .Should().Equal(new[] { 3 }, "the semicolon and comment marker stay inside the literal and never broaden the result");
+
+            // The hostile value left the table usable: rows are still there and a bound parameter still selects.
+            ctx.From<IInlineLiteralProbe>()
+                .Select(x => x.Id)
+                .ToList()
+                .Should().HaveCount(4);
+
+            var decoy = "it's (a) test!";
+            ctx.From<IInlineLiteralProbe>()
+                .Where(x => x.Value == decoy)
+                .Select(x => x.Id)
+                .ToList()
+                .Should().Equal(2);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists inline_literal_probe");
+        }
+    }
+
+    private static void Execute(IDataContext ctx, string sql)
+    {
+        ((DataContext)ctx).EnsureConnectionOpen();
+        using var cmd = ((DataContext)ctx).CreateCommand(sql);
+        cmd.ExecuteNonQuery();
     }
 }
