@@ -165,10 +165,13 @@ internal static class NormSqlTranslator
             // Reuse the cached norm_pN table instead of string.Format (same names, no boxing
             // and no composite-formatting pass on the SQL-build path).
             var paramName = NormParam.GetName(paramIdx);
-            visitor.Params.Add(new Parameter(paramName, null));
+            var parameter = new Parameter(paramName, null);
+            visitor.Params.Add(parameter);
             if (!visitor.IsParamMode)
             {
-                visitor.Builder!.Append(visitor.Dialect.MakeParam(paramName));
+                // The single emission funnel: identical placeholder text and position, plus the
+                // recorded occurrence. The alias flag stays a render-mode concern.
+                visitor.EmitParameter(parameter);
                 // A projected parameter is addressed by its projected member name (an outer query
                 // re-resolves it, and the native FOR JSON fast-path takes the JSON property name from
                 // the SQL alias), so the select item must carry its exact alias like the scalar and
