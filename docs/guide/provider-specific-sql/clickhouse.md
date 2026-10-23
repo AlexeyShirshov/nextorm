@@ -180,7 +180,10 @@ with exactly one outer `cast(... as Array(...))`: `top_k`, `top_k_weighted`, `gr
 `Array(Nullable(Int32))`), `retention` (`int[]` → `Array(Int32)`, never `byte[]`), `array_map` and all
 three `range` overloads (`long[]` → `Array(Int64)`). This is a type correction of the rendered call only:
 it changes neither the lambda translation nor the operand rendering, so the higher-order lambda
-limitations described below still apply.
+limitations described below still apply. Binding is symmetric for input: a **bound** rank-1 array whose
+declared element type is nullable is sent as `Array(Nullable(T))` derived from the declared CLR type, so
+`null` elements and their positions are preserved (see
+[Arrays (ClickHouse)](../../scalar-functions/06-arrays.md#arrays-clickhouse)).
 
 Portable aggregates — including `count`, the arbitrary-value `any_agg` (rendered `ANY_VALUE` on MySQL and
 MariaDB) and `corr`/`covar*` — are documented with the concept page, not here. A plain `UInt64` column

@@ -222,13 +222,19 @@ result can be projected like a scalar column.
 > written and no `(long)v`-style cast inside the lambda is needed (`arrayFilter` already returns its
 > input element type).
 
-> **Limitation (tracked as [#335](https://github.com/AlexeyShirshov/nextorm/issues/335)):** a bound
-> nullable-array **parameter** that carries an actual `null` element loses it before the server evaluates
-> the call — projecting `array_map(v => v, new int?[] { 1, null, 3 })` yields `{ 1, 0, 3 }`. The declared
-> element type remains `int?[]`; the defect is in input parameter binding, not in the result type or the
-> row reader, and it is separate from the server-side output normalisation above. `null` elements that
-> come from a native `Array(Nullable(T))` **column**, or from a native
-> `CAST([1, NULL, 3] AS Array(Nullable(Int32)))`, are preserved.
+> **Nullable elements in a bound array parameter:** a rank-1 CLR array whose **declared** element type is
+> nullable (`Nullable<T>` or `string`) is bound as `Array(Nullable(T))` derived from that declared CLR type
+> (`int?[]` → `Array(Nullable(Int32))`, `double?[]` → `Array(Nullable(Float64))`, `DateTime?[]` →
+> `Array(Nullable(DateTime))`, `decimal?[]` → `Array(Nullable(Decimal(38,10)))`, `string?[]` →
+> `Array(Nullable(String))`), so `null` elements and their positions reach the server —
+> `array_map(v => v, new int?[] { 1, null, 3 })` yields `{ 1, null, 3 }`. Empty and all-`null` arrays carry
+> the same typed element, and the caller's array is not mutated. Non-nullable element arrays (`int[]`,
+> `double[]`, `DateTime[]`, `decimal[]`, `byte[]`) are unchanged; nested/jagged and multidimensional arrays
+> and a `null` array object are **not supported** and keep the previous (driver-inferred) behaviour.
+> Materialising a nullable **String** or **Decimal** array **result** back to `string?[]`/`decimal?[]` is
+> also not supported: the string facades still cast to `Array(String)`, and decimal arrays are not
+> materialised. This page documents the input side only — see
+> [Limitations](../advanced/limitations.md#limitations) for the remaining array restrictions.
 
 The CLR `string.Split` is rendered as `splitByChar(separator, value)` (gated by
 [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); only a single-character
