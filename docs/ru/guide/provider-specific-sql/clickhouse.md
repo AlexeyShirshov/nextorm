@@ -167,13 +167,21 @@ select id
 * агрегаты наиболее частых значений `topK(k)(value)`/`topKWeighted(k)(value, weight)` (возвращают `Array(T)`, материализуются как CLR `T[]`);
 * агрегат последнего произвольного значения `any_last` (`anyLast`);
 * возвращающие массивы агрегаты `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`, материализуются как CLR `T[]`; `groupArray` над array-колонкой даёт вложенный `T[][]`);
-* агрегаты последовательностей/воронки `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` с `toInt32(...)`; `retention` возвращает массив, проецируется напрямую);
+* агрегаты последовательностей/воронки `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` с `toInt32(...)`; `retention` нормализуется к объявленному `int[]`);
 * общий API фильтрации агрегатов, рендерящий комбинаторы `-If`: `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`;
 * `arg_min`/`arg_max`;
 * битмап-агрегаты `group_bitmap`/`group_bitmap_and`/`group_bitmap_or`/`group_bitmap_xor`
   (`groupBitmap`/`groupBitmapAnd`/`groupBitmapOr`/`groupBitmapXor`; непрозрачное состояние `UInt64`) и
   агрегаты по ключам `sum_map`/`sum_map_filtered` (`sumMap`/`sumMapFiltered(keys)(key, value)`,
   проецируется как `Map`).
+
+Функции, возвращающие массив, объявляют закрытый CLR-тип массива, и диалект нормализует результат
+сервера к нему ровно одним внешним `cast(... as Array(...))`: `top_k`, `top_k_weighted`, `group_array`,
+`group_uniq_array` (nullable-вход объявляет nullable-тип элемента, `int?[]` →
+`Array(Nullable(Int32))`), `retention` (`int[]` → `Array(Int32)`, никогда не `byte[]`), `array_map` и
+все три перегрузки `range` (`long[]` → `Array(Int64)`). Это только коррекция типа отрендеренного
+вызова: она не меняет ни трансляцию лямбды, ни рендеринг операндов, поэтому описанные ниже ограничения
+higher-order лямбд продолжают действовать.
 
 Переносимые агрегаты — в том числе `count`, произвольное значение `any_agg` (рендерится `ANY_VALUE` в
 MySQL и MariaDB) и `corr`/`covar*` — документированы на тематической странице. Обычная колонка `UInt64`

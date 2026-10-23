@@ -135,7 +135,13 @@ result can be projected like a scalar column.
 > `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`, `group_array`,
 > `group_uniq_array`) can be projected directly — the row reader materialises an `Array(T)` result as a
 > CLR `T[]` — or used as the operand of another array function (for example `length(...)` or
-> `array_string_concat(...)`). The same reader materialises a native `Tuple(...)` column (or a
+> `array_string_concat(...)`). The facades whose declared CLR array type can differ from the element type
+> ClickHouse infers (`top_k`, `top_k_weighted`, `group_array`, `group_uniq_array`, `retention`,
+> `array_map`, and the three `range` overloads) are normalised **server-side**: the dialect wraps the
+> completed call in exactly one `cast(... as Array(...))` built from the closed declared CLR type
+> (`int[]` → `Array(Int32)`, `int?[]` → `Array(Nullable(Int32))`, `long[]` → `Array(Int64)`,
+> `string[]` → `Array(String)`), so no caller-side cast is required and `retention` materialises as
+> `int[]`, not `byte[]`. The same reader materialises a native `Tuple(...)` column (or a
 > `Tuple(...)`-returning expression) as a `System.Tuple<...>` of arity 1–7.
 
 > `SqlFunctions.ClickHouse.array_except` is retained for API compatibility but is **not supported**
@@ -211,8 +217,18 @@ result can be projected like a scalar column.
 > value when nothing matches. They require a provider that supports the higher-order array functions
 > (see [`SupportsHigherOrderArrayFunctions`](xref:NextORM.Core.ISqlDialect.SupportsHigherOrderArrayFunctions);
 > ClickHouse). ClickHouse promotes the arithmetic result type independently of C# (an `Int32` element
-> multiplied by an integer literal becomes `Array(Int64)`), so cast inside the lambda
-> (`v => (long)v * 2`) when the element type must match the projected `T[]`.
+> multiplied by an integer literal becomes `Array(Int64)`); the dialect normalises the completed
+> `arrayMap` result to the closed declared CLR element type, so the lambda operand stays exactly as
+> written and no `(long)v`-style cast inside the lambda is needed (`arrayFilter` already returns its
+> input element type).
+
+> **Limitation (tracked as [#335](https://github.com/AlexeyShirshov/nextorm/issues/335)):** a bound
+> nullable-array **parameter** that carries an actual `null` element loses it before the server evaluates
+> the call — projecting `array_map(v => v, new int?[] { 1, null, 3 })` yields `{ 1, 0, 3 }`. The declared
+> element type remains `int?[]`; the defect is in input parameter binding, not in the result type or the
+> row reader, and it is separate from the server-side output normalisation above. `null` elements that
+> come from a native `Array(Nullable(T))` **column**, or from a native
+> `CAST([1, NULL, 3] AS Array(Nullable(Int32)))`, are preserved.
 
 The CLR `string.Split` is rendered as `splitByChar(separator, value)` (gated by
 [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); only a single-character

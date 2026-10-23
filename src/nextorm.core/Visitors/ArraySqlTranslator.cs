@@ -263,7 +263,7 @@ internal static class ArraySqlTranslator
         else
             RequireArrayFunctions(visitor);
 
-        EmitArrayFunction(visitor, sqlName, args);
+        EmitArrayFunction(visitor, sqlName, node.Method.Name, node.Method.ReturnType, args);
         return true;
     }
 
@@ -295,11 +295,16 @@ internal static class ArraySqlTranslator
             throw new NotSupportedException(
                 "The higher-order array functions (arrayMap/arrayFilter/arrayExists/arrayAll/arrayCount/arrayFirst*/arrayLast*) require a provider that supports them (ClickHouse).");
 
-        EmitHigherOrderArray(visitor, sqlName, args);
+        EmitHigherOrderArray(visitor, sqlName, node.Method.Name, node.Method.ReturnType, args);
         return true;
     }
 
-    private static void EmitHigherOrderArray(BaseExpressionVisitor visitor, string sqlName, IReadOnlyList<Expression> args)
+    private static void EmitHigherOrderArray(
+        BaseExpressionVisitor visitor,
+        string sqlName,
+        string facadeName,
+        Type resultType,
+        IReadOnlyList<Expression> args)
     {
         var lambda = ExtractLambda(args[0]);
 
@@ -345,7 +350,8 @@ internal static class ArraySqlTranslator
 
         var call = builder.ToString(start, builder.Length - start);
         builder.Length = start;
-        builder.Append(visitor.Dialect.MakeArrayFunction(sqlName, call));
+        var processed = visitor.Dialect.MakeArrayFunction(sqlName, call);
+        builder.Append(visitor.Dialect.MakeArrayResult(facadeName, processed, resultType));
     }
 
     private static LambdaExpression ExtractLambda(Expression expression)
@@ -356,7 +362,12 @@ internal static class ArraySqlTranslator
         throw new NotSupportedException("The higher-order array functions require an inline lambda argument.");
     }
 
-    private static void EmitArrayFunction(BaseExpressionVisitor visitor, string sqlName, IReadOnlyList<Expression> args)
+    private static void EmitArrayFunction(
+        BaseExpressionVisitor visitor,
+        string sqlName,
+        string facadeName,
+        Type resultType,
+        IReadOnlyList<Expression> args)
     {
         if (visitor.IsParamMode)
         {
@@ -384,7 +395,8 @@ internal static class ArraySqlTranslator
 
         var call = builder.ToString(start, builder.Length - start);
         builder.Length = start;
-        builder.Append(visitor.Dialect.MakeArrayFunction(sqlName, call));
+        var processed = visitor.Dialect.MakeArrayFunction(sqlName, call);
+        builder.Append(visitor.Dialect.MakeArrayResult(facadeName, processed, resultType));
     }
 
     private static void RequireArrayFunctions(BaseExpressionVisitor visitor)

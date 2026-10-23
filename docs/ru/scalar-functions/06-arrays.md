@@ -136,7 +136,13 @@ select cardinality(@norm_p1) as "N"
 > `range`, `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`, `group_array`,
 > `group_uniq_array`), можно проецировать напрямую — row reader материализует результат `Array(T)`
 > как CLR `T[]` — либо использовать как операнд другой array-функции (например, `length(...)` или
-> `array_string_concat(...)`). Тот же reader материализует нативную колонку `Tuple(...)` (или
+> `array_string_concat(...)`). Функции, у которых объявленный CLR-тип массива может отличаться от типа
+> элемента, выводимого ClickHouse (`top_k`, `top_k_weighted`, `group_array`, `group_uniq_array`,
+> `retention`, `array_map` и три перегрузки `range`), нормализуются **на сервере**: диалект оборачивает
+> готовый вызов ровно в один `cast(... as Array(...))`, построенный из закрытого объявленного CLR-типа
+> (`int[]` → `Array(Int32)`, `int?[]` → `Array(Nullable(Int32))`, `long[]` → `Array(Int64)`,
+> `string[]` → `Array(String)`), поэтому приведение на стороне вызывающего кода не требуется, а
+> `retention` материализуется как `int[]`, а не `byte[]`. Тот же reader материализует нативную колонку `Tuple(...)` (или
 > выражение типа `Tuple(...)`) как `System.Tuple<...>` арности 1–7.
 
 > `SqlFunctions.ClickHouse.array_except` остаётся для совместимости API, но **не поддерживается**
@@ -214,8 +220,18 @@ select cardinality(@norm_p1) as "N"
 > поддерживающий higher-order array-функции (см.
 > [`SupportsHigherOrderArrayFunctions`](xref:NextORM.Core.ISqlDialect.SupportsHigherOrderArrayFunctions);
 > ClickHouse). ClickHouse повышает тип арифметического результата независимо от C# (элемент `Int32`,
-> умноженный на целочисленный литерал, даёт `Array(Int64)`), поэтому приводите тип внутри лямбды
-> (`v => (long)v * 2`), если тип элемента должен совпадать с проецируемым `T[]`.
+> умноженный на целочисленный литерал, даёт `Array(Int64)`); диалект нормализует готовый результат
+> `arrayMap` к закрытому объявленному CLR-типу элемента, поэтому операнд лямбды остаётся ровно таким,
+> как написан, и приведение вида `(long)v` внутри лямбды не требуется (`arrayFilter` и так возвращает
+> тип элемента входного массива).
+
+> **Ограничение (отслеживается как [#335](https://github.com/AlexeyShirshov/nextorm/issues/335)):**
+> связанный параметр nullable-массива, содержащий реальный `null`-элемент, теряет его до того, как
+> сервер вычислит вызов — проекция `array_map(v => v, new int?[] { 1, null, 3 })` даёт `{ 1, 0, 3 }`.
+> Объявленный тип элемента остаётся `int?[]`; дефект находится в привязке входного параметра, а не в
+> типе результата или row reader, и он отделён от серверной нормализации результата выше. `null`-элементы
+> из нативной колонки `Array(Nullable(T))` или из нативного
+> `CAST([1, NULL, 3] AS Array(Nullable(Int32)))` сохраняются.
 
 CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` (гейт
 [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); поддерживается только

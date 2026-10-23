@@ -209,6 +209,38 @@ public class ClickHouseDialectTests
     }
 
     [Fact]
+    public void MakeArrayResult_ShouldCastOnlyTheTargetedFacades()
+    {
+        // The seven targeted facades normalise their result to the closed declared CLR array type.
+        Dialect.MakeArrayResult("top_k", "topK(3)(x)", typeof(int[]))
+            .Should().Be("cast(topK(3)(x) as Array(Int32))");
+        Dialect.MakeArrayResult("top_k_weighted", "topKWeighted(2)(x, w)", typeof(int[]))
+            .Should().Be("cast(topKWeighted(2)(x, w) as Array(Int32))");
+        Dialect.MakeArrayResult("group_array", "groupArray(nullableint)", typeof(int?[]))
+            .Should().Be("cast(groupArray(nullableint) as Array(Nullable(Int32)))");
+        Dialect.MakeArrayResult("group_uniq_array", "groupUniqArray(id)", typeof(long[]))
+            .Should().Be("cast(groupUniqArray(id) as Array(Int64))");
+        Dialect.MakeArrayResult("retention", "retention((id <= 2), (id <= 5))", typeof(int[]))
+            .Should().Be("cast(retention((id <= 2), (id <= 5)) as Array(Int32))");
+        Dialect.MakeArrayResult("array_map", "arrayMap(v -> (v * 2), nums)", typeof(int[]))
+            .Should().Be("cast(arrayMap(v -> (v * 2), nums) as Array(Int32))");
+        Dialect.MakeArrayResult("range", "range(3)", typeof(long[]))
+            .Should().Be("cast(range(3) as Array(Int64))");
+
+        // A reference element is never auto-nullable; a nested one-dimensional array recurses.
+        Dialect.MakeArrayResult("group_array", "groupArray(s)", typeof(string[]))
+            .Should().Be("cast(groupArray(s) as Array(String))");
+        Dialect.MakeArrayResult("group_array", "groupArray(tags)", typeof(string[][]))
+            .Should().Be("cast(groupArray(tags) as Array(Array(String)))");
+
+        // Every other facade result is the identity, without inspecting the result type.
+        Dialect.MakeArrayResult("array_sort", "arraySort(nums)", typeof(long[]))
+            .Should().Be("arraySort(nums)");
+        Dialect.MakeArrayResult("array_filter", "arrayFilter(v -> (v > 1), nums)", typeof(long[]))
+            .Should().Be("arrayFilter(v -> (v > 1), nums)");
+    }
+
+    [Fact]
     public void MakeJsonExtract_ShouldMapNamesAndCastLength()
     {
         Dialect.MakeJsonExtract("json_extract_string", ["json", "'s'"]).Should().Be("JSONExtractString(json, 's')");

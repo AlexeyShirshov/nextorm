@@ -534,8 +534,8 @@ parameter; the key becomes `order by <key>`. Calling one on a provider without t
 The ClickHouse sequence/funnel aggregates take the conditions as inline boolean expressions (the
 `timestamp` column first). `window_funnel` returns the longest consecutive chain in a sliding window,
 `sequence_match` returns `1`/`0` for the pattern; both materialise as a CLR `int` (the dialect casts
-the native unsigned result with `toInt32(...)`). `retention` returns a `UInt8` mask as an array,
-materialised as `byte[]` (project it directly or use it inside another array function):
+the native unsigned result with `toInt32(...)`). `retention` returns a `UInt8` mask that the dialect
+normalises to the declared `int[]` (project it directly or use it inside another array function):
 
 ```csharp
 var funnel = dataContext.From<IEventEntity>()
@@ -553,9 +553,17 @@ var funnel = dataContext.From<IEventEntity>()
 -- ClickHouse
 select toInt32(windowFunnel(600)(ts, (event = 1), (event = 2))) as `Level`,
        toInt32(sequenceMatch('(?1).*(?2)')(ts, (event = 1), (event = 2))) as `Matched`,
-       arrayStringConcat(retention((event = 1), (event = 2)), ',') as `Mask`
+       arrayStringConcat(cast(retention((event = 1), (event = 2)) as Array(Int32)), ',') as `Mask`
  from event_entity
 ```
+
+Array-returning aggregates follow the **declared CLR element type**, not the server-inferred one:
+`top_k`/`top_k_weighted`/`group_array`/`group_uniq_array` declare a nullable element type when the input is
+nullable (`int?[]` → `Array(Nullable(Int32))`), while `retention` stays `int[]` and `array_map`/`range`
+follow their own declared types (`int[]`, `long[]`). Nullability describes the **result type** only:
+ClickHouse still elides `NULL` aggregate **inputs**, so `group_array`/`group_uniq_array` over a nullable
+column omit the nulls instead of retaining them — the declared element type is nullable, the aggregate does
+not keep nulls.
 
 ## Filtered aggregates
 

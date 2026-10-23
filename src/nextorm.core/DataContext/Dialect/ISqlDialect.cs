@@ -1181,6 +1181,18 @@ public interface ISqlDialect
     string MakeArrayFunction(string name, string call) => call;
 
     /// <summary>
+    /// Renders the result of an array-producing facade call over the already-rendered
+    /// <paramref name="call"/>, normalising it to the closed declared CLR <paramref name="resultType"/>.
+    /// <paramref name="name"/> is the facade method name (for example <c>group_array</c> or <c>range</c>),
+    /// never the provider's SQL spelling. The default is the identity: a dialect overrides this only when
+    /// its native element type or nullability differs from the declared CLR array type (ClickHouse returns
+    /// <c>Array(UInt8)</c> for <c>retention</c> and <c>Array(Int64)</c> for an <c>arrayMap</c> over
+    /// <c>int[]</c>). The implementation must return exactly one expression and must not rewrite the
+    /// <paramref name="call"/> itself.
+    /// </summary>
+    string MakeArrayResult(string name, string call, Type resultType) => call;
+
+    /// <summary>
     /// Renders an ordered-set aggregate as <c>&lt;aggregate&gt; within group (order by &lt;orderBy&gt;)</c>.
     /// <paramref name="aggregate"/> is the already-rendered call (for example <c>percentile_cont(0.5)</c>)
     /// and <paramref name="orderBy"/> the already-rendered key list.

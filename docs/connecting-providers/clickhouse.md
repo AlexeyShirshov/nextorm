@@ -66,7 +66,9 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   last-row aggregate `any_last` as `anyLast`; the array-returning aggregates `group_array`/`group_uniq_array`
   as `groupArray`/`groupUniqArray` (materialised as a CLR `T[]`); the sequence/funnel aggregates
   `window_funnel`/`sequence_match`/`retention` as `windowFunnel`/`sequenceMatch`/`retention`
-  (`windowFunnel`/`sequenceMatch` are wrapped in `toInt32(...)`; `retention` returns `Array(UInt8)` as `byte[]`);
+  (`windowFunnel`/`sequenceMatch` are wrapped in `toInt32(...)`; `retention` is normalised server-side to the
+  declared `int[]`, and `top_k`, `top_k_weighted`, `group_array`, `group_uniq_array`, `array_map` and all
+  three `range` overloads likewise return their declared CLR array type);
 - the string-JSON extractors `json_extract_string`/`json_extract_int`/`json_extract_float`/
   `json_extract_bool`/`json_extract_raw`/`json_has`/`json_type` as `JSONExtractString`/`JSONExtractInt`/
   `JSONExtractFloat`/`JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` as

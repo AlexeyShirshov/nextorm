@@ -764,6 +764,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeArrayAgg(string value) => $"array_agg({value})";
     /// <inheritdoc/>
     public virtual string MakeArrayFunction(string name, string call) => call;
+    /// <inheritdoc/>
+    public virtual string MakeArrayResult(string name, string call, Type resultType) => call;
 
     /// <inheritdoc/>
     public virtual string MakeWithinGroup(string aggregate, string orderBy, KeywordCase keywordCase = KeywordCase.Lower) => aggregate + Kw(keywordCase, " within group (order by ") + orderBy + ")";

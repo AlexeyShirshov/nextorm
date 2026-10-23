@@ -86,9 +86,9 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 Sorted = SqlFunctions.ClickHouse.array_sort(new[] { 3, 1, 2 }),
                 Reversed = SqlFunctions.ClickHouse.array_reverse(new[] { 3, 1, 2 }),
                 Distinct = SqlFunctions.ClickHouse.array_distinct(new[] { "a", "b", "c" }),
-                //Range1 = SqlFunctions.ClickHouse.range(3),
-                //Range2 = SqlFunctions.ClickHouse.range(1, 4),
-                //Range3 = SqlFunctions.ClickHouse.range(1, 7, 2),
+                Range1 = SqlFunctions.ClickHouse.range(3),
+                Range2 = SqlFunctions.ClickHouse.range(1, 4),
+                Range3 = SqlFunctions.ClickHouse.range(1, 7, 2),
                 Slice1 = SqlFunctions.ClickHouse.array_slice(new[] { 3, 1, 2 }, 1),
                 Slice2 = SqlFunctions.ClickHouse.array_slice(new[] { 3, 1, 2 }, 1, 2),
                 Pushed = SqlFunctions.ClickHouse.array_push_back(new[] { 3, 1, 2 }, 9),
@@ -121,6 +121,12 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
         r.Sorted.Should().Equal(1, 2, 3);
         r.Reversed.Should().Equal(2, 1, 3);
         r.Distinct.Should().HaveCount(3);
+        r.Range1.Should().BeOfType<long[]>();
+        r.Range1.Should().Equal(0L, 1L, 2L);
+        r.Range2.Should().BeOfType<long[]>();
+        r.Range2.Should().Equal(1L, 2L, 3L);
+        r.Range3.Should().BeOfType<long[]>();
+        r.Range3.Should().Equal(1L, 3L, 5L);
         r.Slice1.Should().Equal(3, 1, 2);
         r.Slice2.Should().Equal(3, 1);
         r.Pushed.Should().Equal(3, 1, 2, 9);
@@ -368,19 +374,15 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     [Fact]
     public void RetentionAggregate_ShouldExecute()
     {
-        // ClickHouse returns retention(...) as Array(UInt8), while the public signature declares int[]:
-        // projecting the mask itself throws InvalidCastException (Byte[] -> Int32[]) during
-        // materialization. The aggregate is executed through length() so the renderer and the server
-        // path stay covered; the declared-array materialization mismatch is recorded as a product defect.
-        var r = _sut.ComplexEntity
-            .Select(x => new
-            {
-                MaskLength = SqlFunctions.ClickHouse.length(
-                    SqlFunctions.ClickHouse.retention(x.Id > 0, x.Id > 1, x.Id > 2))
-            })
+        // retention declares int[] while ClickHouse returns Array(UInt8); the renderer normalises the
+        // result to the declared array type, so the mask materialises directly instead of through
+        // length(). complex_entity ids are 1..3, so every cumulative condition is satisfied by some row.
+        var mask = _sut.ComplexEntity
+            .Select(x => SqlFunctions.ClickHouse.retention(x.Id > 0, x.Id > 1, x.Id > 2))
             .First();
 
-        r.MaskLength.Should().Be(3);
+        mask.Should().BeOfType<int[]>();
+        mask.Should().Equal(1, 1, 1);
     }
 
     [Fact]

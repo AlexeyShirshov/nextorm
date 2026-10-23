@@ -170,6 +170,38 @@ public class ClickHouseDialect : SqlDialectBase
         name is "length" or "indexOf" or "arrayCount" or "arrayFirstIndex" or "arrayLastIndex" ? $"toInt64({call})" : call;
 
     /// <summary>
+    /// Normalises the result of the array-producing facades to the closed declared CLR array type.
+    /// ClickHouse infers the element type from the arguments and the server defaults
+    /// (<c>retention</c> → <c>Array(UInt8)</c>, <c>range(3)</c> → <c>Array(UInt8)</c>, an <c>arrayMap</c>
+    /// or <c>top_k</c> whose native element type is wider than the declared one → <c>Array(Int64)</c>), so
+    /// a targeted result is wrapped in exactly one <c>cast(&lt;call&gt; as Array(...))</c>. Every other
+    /// facade result is returned unchanged.
+    /// </summary>
+    public override string MakeArrayResult(string name, string call, Type resultType)
+    {
+        if (name is not ("top_k" or "top_k_weighted" or "group_array" or "group_uniq_array" or "retention" or "array_map" or "range"))
+            return call;
+
+        if (!resultType.IsArray || resultType.GetArrayRank() != 1)
+            throw new NotSupportedException(
+                $"The {name} result type '{resultType}' must be a one-dimensional CLR array.");
+
+        return $"cast({call} as Array({MakeArrayElementType(resultType.GetElementType()!)}))";
+    }
+
+    // Nullable value elements keep their CLR nullability; a reference element has no CLR nullable
+    // annotation, so it is never mapped to Nullable(...).
+    private string MakeArrayElementType(Type type)
+    {
+        if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
+            return $"Nullable({MakeTypeName(underlying)})";
+
+        return type.IsArray
+            ? $"Array({MakeArrayElementType(type.GetElementType()!)})"
+            : MakeTypeName(type);
+    }
+
+    /// <summary>
     /// Renders <c>[global] [inner|left|right|full|cross] [any|all|asof] join</c>. ClickHouse places the
     /// <c>GLOBAL</c> modifier first and the strictness after the join type, before <c>join</c>. The
     /// <c>LEFT SEMI</c>/<c>LEFT ANTI</c>/<c>PASTE</c> kinds render their own keyword.

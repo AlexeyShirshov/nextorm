@@ -67,7 +67,9 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   `group_array`/`group_uniq_array` — как `groupArray`/`groupUniqArray` (материализуются как CLR `T[]`);
   агрегаты последовательностей/воронки
   `window_funnel`/`sequence_match`/`retention` — как `windowFunnel`/`sequenceMatch`/`retention`
-  (`windowFunnel`/`sequenceMatch` обёрнуты в `toInt32(...)`; `retention` возвращает `Array(UInt8)` как `byte[]`); извлекающие функции
+  (`windowFunnel`/`sequenceMatch` обёрнуты в `toInt32(...)`; `retention` нормализуется на сервере к
+  объявленному `int[]`, а `top_k`, `top_k_weighted`, `group_array`, `group_uniq_array`, `array_map` и все
+  три перегрузки `range` так же возвращают объявленный CLR-тип массива); извлекающие функции
   строкового JSON `json_extract_string`/`json_extract_int`/`json_extract_float`/`json_extract_bool`/
   `json_extract_raw`/`json_has`/`json_type` — как `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/
   `JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` — как

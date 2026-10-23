@@ -536,8 +536,9 @@ select groupBitAnd(id), covarPop(id, nullableint), argMax(somestring, id)
 Агрегаты ClickHouse для последовательностей/воронки принимают условия как встроенные булевы выражения
 (столбец `timestamp` — первым). `window_funnel` возвращает длину наибольшей последовательной цепочки в
 скользящем окне, `sequence_match` — `1`/`0` для паттерна; оба материализуются как CLR `int` (диалект
-приводит нативный беззнаковый результат через `toInt32(...)`). `retention` возвращает маску `UInt8`
-как массив, материализуемый как `byte[]` (проецируется напрямую или внутри другой array-функции):
+приводит нативный беззнаковый результат через `toInt32(...)`). `retention` возвращает маску `UInt8`,
+которую диалект нормализует к объявленному `int[]` (проецируется напрямую или внутри другой
+array-функции):
 
 ```csharp
 var funnel = dataContext.From<IEventEntity>()
@@ -555,9 +556,17 @@ var funnel = dataContext.From<IEventEntity>()
 -- ClickHouse
 select toInt32(windowFunnel(600)(ts, (event = 1), (event = 2))) as `Level`,
        toInt32(sequenceMatch('(?1).*(?2)')(ts, (event = 1), (event = 2))) as `Matched`,
-       arrayStringConcat(retention((event = 1), (event = 2)), ',') as `Mask`
+       arrayStringConcat(cast(retention((event = 1), (event = 2)) as Array(Int32)), ',') as `Mask`
  from event_entity
 ```
+
+Возвращающие массив агрегаты следуют **объявленному CLR-типу элемента**, а не выведенному сервером:
+`top_k`/`top_k_weighted`/`group_array`/`group_uniq_array` объявляют nullable-тип элемента, если вход
+nullable (`int?[]` → `Array(Nullable(Int32))`), а `retention` остаётся `int[]`, `array_map`/`range`
+следуют своим объявленным типам (`int[]`, `long[]`). Nullable описывает только **тип результата**:
+ClickHouse по-прежнему отбрасывает `NULL`-**входы** агрегата, поэтому `group_array`/`group_uniq_array`
+по nullable-колонке не сохраняют null-элементы — объявленный тип элемента nullable, но сам агрегат
+nulls не хранит.
 
 ## Агрегаты с FILTER
 

@@ -995,7 +995,7 @@ public class SqlGenerationTests
         var e = ctx.From<IArrayEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.group_array(x.Id) }))
-            .Should().Contain("groupArray(id)");
+            .Should().Contain("cast(groupArray(id) as Array(Int32))");
     }
 
     [Fact]
@@ -1005,7 +1005,7 @@ public class SqlGenerationTests
         var e = ctx.From<IArrayEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.group_uniq_array(x.Id) }))
-            .Should().Contain("groupUniqArray(id)");
+            .Should().Contain("cast(groupUniqArray(id) as Array(Int32))");
     }
 
     [Fact]
@@ -1344,8 +1344,8 @@ public class SqlGenerationTests
             W = SqlFunctions.ClickHouse.top_k_weighted(2, x.Id, x.Int)
         }));
 
-        sql.Should().Contain("topK(3)(id)");
-        sql.Should().Contain("topKWeighted(2)(id, nullableint)");
+        sql.Should().Contain("cast(topK(3)(id) as Array(Int64))");
+        sql.Should().Contain("cast(topKWeighted(2)(id, nullableint) as Array(Int64))");
     }
 
     [Fact]
@@ -1389,7 +1389,7 @@ public class SqlGenerationTests
             T = SqlFunctions.ClickHouse.top_k(k, x.Id)
         }));
 
-        sql.Should().Contain("topK(@k)(id)");
+        sql.Should().Contain("cast(topK(@k)(id) as Array(Int64))");
     }
 
     [Fact]
@@ -1404,7 +1404,7 @@ public class SqlGenerationTests
         _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
         var second = (DbPreparedQueryCommand<long[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
 
-        Normalize(second.DbCommand.CommandText).Should().Contain("topK(@k)(id)");
+        Normalize(second.DbCommand.CommandText).Should().Contain("cast(topK(@k)(id) as Array(Int64))");
     }
 
     [Fact]
@@ -1479,7 +1479,7 @@ public class SqlGenerationTests
             N = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.retention(x.Id <= 2, x.Id <= 5))
         }));
 
-        sql.Should().Contain("toInt64(length(retention((id <= 2), (id <= 5))))");
+        sql.Should().Contain("toInt64(length(cast(retention((id <= 2), (id <= 5)) as Array(Int32))))");
     }
 
     [Fact]
@@ -2734,9 +2734,9 @@ public class SqlGenerationTests
             C = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.range(1, 5, 2))
         }));
 
-        sql.Should().Contain("toInt64(length(range(5)))");
-        sql.Should().Contain("toInt64(length(range(1, 5)))");
-        sql.Should().Contain("toInt64(length(range(1, 5, 2)))");
+        sql.Should().Contain("toInt64(length(cast(range(5) as Array(Int64))))");
+        sql.Should().Contain("toInt64(length(cast(range(1, 5) as Array(Int64))))");
+        sql.Should().Contain("toInt64(length(cast(range(1, 5, 2) as Array(Int64))))");
     }
 
     [Fact]

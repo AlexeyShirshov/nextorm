@@ -166,13 +166,21 @@ declares:
 * the most-frequent `topK(k)(value)`/`topKWeighted(k)(value, weight)` aggregates (return `Array(T)`, materialised as a CLR `T[]`);
 * the last-row arbitrary-value aggregate `any_last` (`anyLast`);
 * the array-returning aggregates `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`, materialised as a CLR `T[]`; `groupArray` of an array column yields a nested `T[][]`);
-* the sequence/funnel aggregates `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` with `toInt32(...)`; `retention` returns an array, projected directly);
+* the sequence/funnel aggregates `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` with `toInt32(...)`; `retention` is normalised to the declared `int[]`);
 * the shared filtered-aggregate API rendered as the `-If` combinators `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`;
 * `arg_min`/`arg_max`;
 * the bitmap aggregates `group_bitmap`/`group_bitmap_and`/`group_bitmap_or`/`group_bitmap_xor`
   (`groupBitmap`/`groupBitmapAnd`/`groupBitmapOr`/`groupBitmapXor`; the opaque `UInt64` state) and the
   per-key `sum_map`/`sum_map_filtered` (`sumMap`/`sumMapFiltered(keys)(key, value)`, surfaced as a
   `Map`).
+
+Array-returning facades declare a closed CLR array type and the dialect normalises the server result to it
+with exactly one outer `cast(... as Array(...))`: `top_k`, `top_k_weighted`, `group_array`,
+`group_uniq_array` (a nullable input declares a nullable element type, `int?[]` →
+`Array(Nullable(Int32))`), `retention` (`int[]` → `Array(Int32)`, never `byte[]`), `array_map` and all
+three `range` overloads (`long[]` → `Array(Int64)`). This is a type correction of the rendered call only:
+it changes neither the lambda translation nor the operand rendering, so the higher-order lambda
+limitations described below still apply.
 
 Portable aggregates — including `count`, the arbitrary-value `any_agg` (rendered `ANY_VALUE` on MySQL and
 MariaDB) and `corr`/`covar*` — are documented with the concept page, not here. A plain `UInt64` column

@@ -123,13 +123,13 @@ internal static class AdvancedAggregateTranslator
                 return true;
 
             case nameof(ClickHouseFunctions.window_funnel) when node.Arguments.Count == 3:
-                EmitSequenceAggregate(visitor, "window_funnel", [node.Arguments[0]], node.Arguments[1], node.Arguments[2]);
+                EmitSequenceAggregate(visitor, "window_funnel", node.Method.ReturnType, [node.Arguments[0]], node.Arguments[1], node.Arguments[2]);
                 return true;
             case nameof(ClickHouseFunctions.sequence_match) when node.Arguments.Count == 3:
-                EmitSequenceAggregate(visitor, "sequence_match", [node.Arguments[0]], node.Arguments[1], node.Arguments[2]);
+                EmitSequenceAggregate(visitor, "sequence_match", node.Method.ReturnType, [node.Arguments[0]], node.Arguments[1], node.Arguments[2]);
                 return true;
             case nameof(ClickHouseFunctions.retention) when node.Arguments.Count == 1:
-                EmitSequenceAggregate(visitor, "retention", [], timestamp: null, node.Arguments[0]);
+                EmitSequenceAggregate(visitor, "retention", node.Method.ReturnType, [], timestamp: null, node.Arguments[0]);
                 return true;
 
             case nameof(ClickHouseFunctions.group_array) when node.Arguments.Count == 1:
@@ -184,7 +184,8 @@ internal static class AdvancedAggregateTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append(visitor.Dialect.MakeAggregate(name)).Append('(').Append(visitor.VisitToString(node.Arguments[0])).Append(')');
+        var call = $"{visitor.Dialect.MakeAggregate(name)}({visitor.VisitToString(node.Arguments[0])})";
+        visitor.Builder!.Append(visitor.Dialect.MakeArrayResult(node.Method.Name, call, node.Method.ReturnType));
     }
 
     /// <summary>
@@ -308,9 +309,11 @@ internal static class AdvancedAggregateTranslator
         var k = visitor.VisitToString(node.Arguments[0]);
         var value = visitor.VisitToString(node.Arguments[1]);
 
-        visitor.Builder!.Append(weighted
+        var rendered = weighted
             ? topKAggregates.RenderWeighted(name, k, value, visitor.VisitToString(node.Arguments[2]))
-            : topKAggregates.Render(name, k, value));
+            : topKAggregates.Render(name, k, value);
+
+        visitor.Builder!.Append(visitor.Dialect.MakeArrayResult(node.Method.Name, rendered, node.Method.ReturnType));
     }
 
     /// <summary>Renders a two-argument aggregate (for example <c>corr(y, x)</c>) gated by a capability flag.</summary>
@@ -347,6 +350,7 @@ internal static class AdvancedAggregateTranslator
     private static void EmitSequenceAggregate(
         BaseExpressionVisitor visitor,
         string name,
+        Type resultType,
         IReadOnlyList<Expression> parameters,
         Expression? timestamp,
         Expression conditions)
@@ -390,7 +394,8 @@ internal static class AdvancedAggregateTranslator
         for (var (i, cnt) = (0, conditionArray.Expressions.Count); i < cnt; i++)
             arguments.Add(visitor.VisitToString(conditionArray.Expressions[i]));
 
-        visitor.Builder!.Append(sequenceAggregates.Render(name, renderedParameters, string.Join(", ", arguments)));
+        var call = sequenceAggregates.Render(name, renderedParameters, string.Join(", ", arguments));
+        visitor.Builder!.Append(visitor.Dialect.MakeArrayResult(name, call, resultType));
     }
 
     /// <summary>
