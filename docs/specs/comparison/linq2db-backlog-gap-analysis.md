@@ -93,6 +93,6 @@
 ## See also
 
 - [Limitations и out-of-scope](../../advanced/limitations.md) — границы продукта и их причины.
-- [`linq2db-comparison.md`](linq2db-comparison.md) — паритет по готовому функционалу.
+- [`comparisons/capabilities.md`](../../comparisons/capabilities.md) — паритет по готовому функционалу.
 - [`capability-matrix.md`](capability-matrix.md) — построчная матрица nextorm/EF/linq2db.
 - [`sql-capabilities-gap-analysis.md`](../roadmap/sql-capabilities-gap-analysis.md) — пробелы по SQL-конструкциям.

@@ -31,7 +31,7 @@ result schemas for table functions, SQL Server `OUTPUT ... INTO` and the in-memo
 The list is curated, not exhaustive: a row names a construct at comparison level and may aggregate a
 whole family (one provider-function row stands for dozens of scalars — the per-function inventory is
 [`sql-function-coverage-gap.md`](../roadmap/sql-function-coverage-gap.md), and per-provider API breadth is
-`provider-feature-comparison.md`). Rows where none of the three libraries has first-class support are
+[`comparisons/provider-features.md`](../../comparisons/provider-features.md)). Rows where none of the three libraries has first-class support are
 omitted deliberately (for example the ClickHouse-only `QUALIFY`, `GROUP BY ALL`, `WITH FILL` and `FORMAT`
 clauses and `JSON_TABLE`, which all three reach only through raw SQL).
 

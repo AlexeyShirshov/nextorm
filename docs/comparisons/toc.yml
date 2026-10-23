@@ -2,6 +2,8 @@
   href: index.md
 - name: Capabilities
   href: capabilities.md
+- name: Provider features
+  href: provider-features.md
 - name: Benchmarks
   href: benchmarks.md
 - name: Feature benchmarks (2026-10-17)

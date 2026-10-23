@@ -841,5 +841,5 @@ providers. External servers can be used instead via `NEXTORM_POSTGRES_CONNECTION
 
 ## See also
 
-- [nextorm vs linq2db: functionality comparison](../comparison/linq2db-comparison.md) — a focused side-by-side of the
+- [nextorm vs linq2db: functionality comparison](../../comparisons/capabilities.md) — a focused side-by-side of the
   two libraries across the current query surface, including the provider-only function families.
