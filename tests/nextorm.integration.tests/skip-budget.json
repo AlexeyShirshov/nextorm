@@ -1,5 +1,5 @@
 {
-  "totalSkipped": 195,
+  "totalSkipped": 197,
   "reasons": {
     "Data-modifying CTE bodies are only supported by PostgreSQL.": 6,
     "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.": 4,
@@ -25,7 +25,7 @@
     "This provider does not support source-level row locking.": 1,
     "This provider evaluates AVG over an integer column as an integer.": 2,
     "This provider has no TRUNCATE.": 1,
-    "This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.": 6,
+    "This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.": 8,
     "This provider has no native multi-table DELETE.": 2,
     "This provider has no row-value constructor.": 5,
     "This provider implements streaming LOB reads.": 33,
