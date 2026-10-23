@@ -1140,7 +1140,7 @@ internal static class SqlSourceRenderer
         return visitor.ToString();
     }
 
-    internal static (bool NeedAliasForColumn, string Column) MakeColumn(in SqlBuildContext ctx, SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false)
+    internal static (bool NeedAliasForColumn, string Column) MakeColumn(in SqlBuildContext ctx, SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false, bool selectList = false)
     {
         // A consumer-side reference to a projection source's output identifier (an unaliased computed
         // scalar has no member name to re-resolve): render the source's output column directly instead
@@ -1150,9 +1150,21 @@ internal static class SqlSourceRenderer
 
         using var visitor = ctx.CreateColumnVisitor(entityType, 0, dontNeedAlias);
         visitor.RangeColumnRole = selExp.RangeColumnRole;
+        // #296: a boolean SELECT projection whose expression needs the approved null-safe translation
+        // is assembled in predicate context (no per-node legalisation) and legalised once at this
+        // scalar boundary below; every other projection (and every ORDER BY/GROUP BY/window/LIMIT BY
+        // entry, which is not a select list) keeps its previous translation.
+        visitor.BooleanSelectProjection = selectList
+            && selExp.Expression is { } selection
+            && TypeFacts.IsBoolean(selection.Type)
+            && TypeFacts.IsNullSafePredicateRoot(selection);
         visitor.Visit(selExp.Expression);
 
         if (ctx.ParamMode) return (false, string.Empty);
+
+        var column = visitor.ToString();
+        if (visitor.BooleanSelectProjection)
+            column = ctx.Dialect.MakeBooleanPredicate(column, asPredicate: false);
 
         // A projected column must be aliased when its property name differs from the column it is
         // read from (MyId = t.Id, or two sources exposing the same physical name). Without it an
@@ -1185,7 +1197,7 @@ internal static class SqlSourceRenderer
                 && selExp.PropertyName is null
                 && selExp.OutputName is not null);
 
-        return (needAliasForColumn, visitor.ToString());
+        return (needAliasForColumn, column);
     }
 
     /// <summary>

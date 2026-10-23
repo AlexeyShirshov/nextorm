@@ -145,11 +145,18 @@ public class DeleteSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var text = "x";
 
-        ctx.From<IComplexEntity>()
+        // Design r4: a captured (non-literal) nullable string operand takes the approved total
+        // comparison in a WHERE position, so the DELETE ... USING join predicate keeps two null arms
+        // plus the ordinary comparison. The captured value is still bound, never inlined.
+        var sql = ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
             .Where(p => p.Item1.String == text)
-            .ToSql()
-            .Should().Be("delete from complex_entity as \"t1\" using simple_entity as \"t2\" where t1.id = cast(t2.id as bigint) and t1.somestring = @text");
+            .ToSql();
+
+        sql.Should().Be("delete from complex_entity as \"t1\" using simple_entity as \"t2\" where t1.id = cast(t2.id as bigint) and ((t1.somestring is null and @text is null) or (t1.somestring is not null and @text is not null and t1.somestring = @text))");
+        sql.Should().NotContain("'x'", "the captured value must never be inlined");
+        System.Text.RegularExpressions.Regex.Matches(sql, "@text").Count
+            .Should().Be(3, "one logical parameter, reused by every occurrence of the two-arm equality");
     }
 
     [Fact]

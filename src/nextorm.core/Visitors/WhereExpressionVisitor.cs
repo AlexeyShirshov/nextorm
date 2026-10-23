@@ -29,6 +29,11 @@ public class WhereExpressionVisitor(VisitorOptions options)
             else if (node.Right is ConstantExpression { Value: null })
                 TupleSqlTranslator.RejectNullComparisonOfFlatTupleConstructor(this, node.Left);
 
+            // #296: a captured nullable/string comparison is a total predicate (WHERE is an approved
+            // position), so it must not fall into the plain `= @p` arm below.
+            if (PredicateTranslator.TryRenderCapturedNullableComparison(this, node))
+                return node;
+
             // Fast path: when neither operand is a null literal the null-aware "is"/"is not"
             // rewriting cannot apply, so both sides can be rendered straight into this builder.
             // That avoids two cloned visitors (and their intermediate strings) per comparison,

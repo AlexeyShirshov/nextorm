@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
@@ -25,6 +26,9 @@ public class T296NullableNullSqlGenerationTests
         => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None))
             .DbCommand.CommandText);
 
+    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
+
     /// <summary>
     /// C# folds a nested/checked conversion of a null literal away, so the shape is built with the
     /// expression tree API while the left operand stays row-dependent. Every <c>Convert</c> node is
@@ -40,17 +44,6 @@ public class T296NullableNullSqlGenerationTests
         var nested = Expression.Convert(boxed, typeof(int?));
         var body = negated ? Expression.NotEqual(member, nested) : Expression.Equal(member, nested);
         return Expression.Lambda<Func<IT296ShapeEntity, bool>>(body, parameter);
-    }
-
-    private static void ShouldRejectHasValue(Expression<Func<IT296ShapeEntity, bool>> predicate)
-    {
-        using var ctx = ClickHouseTestContext.Create();
-        var e = ctx.From<IT296ShapeEntity>();
-
-        var act = () => SqlOf(ctx, e.Where(predicate).Select(x => x.Id));
-
-        act.Should().ThrowExactly<BuildSqlCommandException>()
-            .WithMessage("Cannot resolve column for member HasValue");
     }
 
     [Fact]
@@ -93,37 +86,86 @@ public class T296NullableNullSqlGenerationTests
     }
 
     /// <summary>
-    /// A captured null and a captured non-null value are not syntactic literals: they stay bound as
-    /// parameters and must not be rewritten to <c>IS [NOT] NULL</c> (semantic expansion is deferred).
+    /// A captured nullable value is not a syntactic literal: it stays bound as a parameter, and since
+    /// design r4 it takes the approved total comparison (explicit null arms) in both operand orders.
+    /// This intentionally replaces the previous <c>CapturedValuesRemainParameters</c> pin while keeping
+    /// the parameterisation guarantee: one logical parameter, repeated placeholders, no inlined value.
     /// </summary>
     [Fact]
-    public void CapturedValuesRemainParameters()
+    public void CapturedValuesUseTotalComparison()
     {
+        static string Collapsed(string sql)
+            => string.Join(' ', Normalize(sql).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IT296ShapeEntity>();
         int? capturedNull = null;
-        int? capturedValue = 1;
+        int? capturedValue = 4242;
 
-        SqlOf(ctx, e.Where(x => x.Int == capturedNull).Select(x => x.Id))
-            .Should().Contain($"nullableint = {P}capturedNull").And.NotContain("is null");
+        var equalNull = Collapsed(SqlOf(ctx, e.Where(x => x.Int == capturedNull).Select(x => x.Id)));
+        equalNull.Should().Contain($"nullableint is null and {P}capturedNull is null");
+        equalNull.Should().Contain(
+            $"nullableint is not null and {P}capturedNull is not null and nullableint = {P}capturedNull");
 
-        SqlOf(ctx, e.Where(x => x.Int != capturedNull).Select(x => x.Id))
-            .Should().Contain($"nullableint != {P}capturedNull").And.NotContain("is not null");
+        var notEqualNull = Collapsed(SqlOf(ctx, e.Where(x => x.Int != capturedNull).Select(x => x.Id)));
+        notEqualNull.Should().Contain($"nullableint is null and {P}capturedNull is not null");
+        notEqualNull.Should().Contain($"nullableint is not null and {P}capturedNull is null");
+        notEqualNull.Should().Contain(
+            $"nullableint is not null and {P}capturedNull is not null and nullableint != {P}capturedNull");
 
-        SqlOf(ctx, e.Where(x => x.Int == capturedValue).Select(x => x.Id))
-            .Should().Contain($"nullableint = {P}capturedValue").And.NotContain("is null");
+        var equalValue = Collapsed(SqlOf(ctx, e.Where(x => x.Int == capturedValue).Select(x => x.Id)));
+        equalValue.Should().Contain($"nullableint is null and {P}capturedValue is null");
+        equalValue.Should().Contain(
+            $"nullableint is not null and {P}capturedValue is not null and nullableint = {P}capturedValue");
 
-        SqlOf(ctx, e.Where(x => x.Int != capturedValue).Select(x => x.Id))
-            .Should().Contain($"nullableint != {P}capturedValue").And.NotContain("is not null");
+        var notEqualValue = Collapsed(SqlOf(ctx, e.Where(x => x.Int != capturedValue).Select(x => x.Id)));
+        notEqualValue.Should().Contain($"nullableint is null and {P}capturedValue is not null");
+        notEqualValue.Should().Contain($"nullableint is not null and {P}capturedValue is null");
+        notEqualValue.Should().Contain(
+            $"nullableint is not null and {P}capturedValue is not null and nullableint != {P}capturedValue");
+
+        // Both operand orders render the same statement: the captured value never becomes the left
+        // operand of the rendered comparison.
+        Collapsed(SqlOf(ctx, e.Where(x => capturedNull == x.Int).Select(x => x.Id))).Should().Be(equalNull);
+        Collapsed(SqlOf(ctx, e.Where(x => capturedNull != x.Int).Select(x => x.Id))).Should().Be(notEqualNull);
+        Collapsed(SqlOf(ctx, e.Where(x => capturedValue == x.Int).Select(x => x.Id))).Should().Be(equalValue);
+        Collapsed(SqlOf(ctx, e.Where(x => capturedValue != x.Int).Select(x => x.Id))).Should().Be(notEqualValue);
+
+        // Still parameterised: one logical parameter, the placeholder reused for every occurrence,
+        // and the captured value never inlined.
+        var prepared = Prepare(ctx, e.Where(x => x.Int != capturedValue).Select(x => x.Id));
+        var parameters = prepared.DbCommand.Parameters.Cast<DbParameter>().ToArray();
+        parameters.Should().ContainSingle();
+        parameters[0].ParameterName.Should().Be("capturedValue");
+        parameters[0].Value.Should().Be(4242);
+
+        var commandText = Normalize(prepared.DbCommand.CommandText);
+        commandText.Should().NotContain("4242");
+        System.Text.RegularExpressions.Regex
+            .Matches(commandText, System.Text.RegularExpressions.Regex.Escape($"{P}capturedValue"))
+            .Count.Should().Be(4, "the three inequality arms reuse the one logical parameter");
     }
 
     [Fact]
-    public void HasValueRemainsTypedUnsupported()
-        => ShouldRejectHasValue(x => x.Int.HasValue);
+    public void HasValueTranslatesToIsNotNull()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IT296ShapeEntity>();
+
+        SqlOf(ctx, e.Where(x => x.Int.HasValue).Select(x => x.Id))
+            .Should().Contain("where nullableint is not null");
+    }
 
     [Fact]
-    public void NegatedHasValueRemainsTypedUnsupported()
-        => ShouldRejectHasValue(x => !x.Int.HasValue);
+    public void NegatedHasValueTranslatesToIsNull()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IT296ShapeEntity>();
+
+        SqlOf(ctx, e.Where(x => !x.Int.HasValue).Select(x => x.Id))
+            .Should().Contain("where nullableint is null")
+            .And.NotContain("not (nullableint is not null)");
+    }
 
     [Fact]
     public void DerivedOperandNullComparison()

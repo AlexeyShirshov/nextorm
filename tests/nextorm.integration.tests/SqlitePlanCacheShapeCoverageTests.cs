@@ -250,7 +250,8 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         ResetPlanCache();
 
         var first = Prepare(ComplexByString(_sut.ComplexEntity, null));
-        Rows(first).Should().BeEmpty();
+        Rows(first).Should().Equal(new[] { 3L },
+            "a captured null uses the approved total comparison, so it matches the row whose string is NULL");
 
         var matched = Prepare(ComplexByString(_sut.ComplexEntity, "xxx"));
         matched.Should().BeSameAs(first, "a null-to-value closure change keeps the same plan shape");
@@ -258,7 +259,7 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
 
         var backToNull = Prepare(ComplexByString(_sut.ComplexEntity, null));
         backToNull.Should().BeSameAs(first);
-        Rows(backToNull).Should().BeEmpty();
+        Rows(backToNull).Should().Equal(3L);
     }
 
     [Fact]
@@ -267,7 +268,8 @@ public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
         ResetPlanCache();
 
         var first = Prepare(ComplexByNullableInt(_sut.ComplexEntity, null));
-        Rows(first).Should().BeEmpty();
+        Rows(first).Should().Equal(new[] { 1L },
+            "a captured null uses the approved total comparison, so it matches the row whose int is NULL");
 
         var matched = Prepare(ComplexByNullableInt(_sut.ComplexEntity, 1));
         matched.Should().BeSameAs(first, "a null-to-value closure change keeps the same plan shape");

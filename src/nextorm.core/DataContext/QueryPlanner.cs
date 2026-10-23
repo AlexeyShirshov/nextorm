@@ -107,6 +107,23 @@ internal sealed class QueryPlanner : IQueryPlanner
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsRuntimeParam(string name) => NormParam.IsName(name);
 
+    /// <summary>
+    /// Applies the expression-derived provider type recorded on a captured parameter (see
+    /// <see cref="ParameterTypeInfo"/>), so a cold captured <c>NULL</c> and every later value bind
+    /// with the compared column's type instead of the provider's <see cref="DBNull"/> inference. A
+    /// parameter without the metadata keeps the provider's value-based inference (previous behaviour).
+    /// </summary>
+    private static void ApplyParameterType(DbParameter dbParameter, Parameter parameter)
+    {
+        if (parameter.DbType is { } dbType)
+            dbParameter.DbType = dbType;
+
+        if (parameter.Precision is { } precision)
+            dbParameter.Precision = precision;
+
+        if (parameter.Scale is { } scale)
+            dbParameter.Scale = scale;
+    }
     // Renders a standalone SELECT (the source of an INSERT ... SELECT) to SQL plus its parameters, and
     // hoists any CTE the source declares out of the SELECT. A data-modifying CTE must sit at the top
     // level of the statement, so the caller places WithSql before "insert into"; a plain read CTE is
@@ -785,7 +802,9 @@ internal sealed class QueryPlanner : IQueryPlanner
                 for (var i = 0; i < parameterList.Count; i++)
                 {
                     var p = parameterList[i];
-                    dbCommand.Parameters.Add(_createParam(dbCommand, p.Name, p.Value));
+                    var dbParameter = _createParam(dbCommand, p.Name, p.Value);
+                    ApplyParameterType(dbParameter, p);
+                    dbCommand.Parameters.Add(dbParameter);
                 }
             }
 

@@ -48,6 +48,8 @@ select id
 
 ## Null handling
 
+### Null literals
+
 Comparing a nullable column with the `null` literal — a bare `null` or a nullable cast such as
 `(int?)null` — renders `is null` / `is not null` instead of `=` / `!=`:
 
@@ -66,9 +68,92 @@ select id
 `!= null` emits `is not null`. The rewrite is driven by the comparison operand being the `null`
 literal itself, including a nullable cast such as `(int?)null` (and the compiler-produced nullable
 `default`): both operators render `is null` / `is not null` in `WHERE`, in aggregate predicates such
-as `Count`, and in a projected comparison. A captured value stays a command parameter even when it
-happens to hold `null`, so a nullable column should be tested with a literal `null`, not with a
-captured variable that is merely expected to hold `null`.
+as `Count`, and in a projected comparison.
+
+### Captured nullable values
+
+`==` and `!=` between a nullable value-type or string column and a **captured** nullable/string
+variable follow C# null-equality in both operand orders: null equals null, a null never equals a
+non-null value, and two non-null values use the provider's ordinary comparison. The relational
+operators `<`, `>`, `<=` and `>=` keep plain SQL comparison and are **not** rewritten.
+
+```csharp
+int? captured = 42;
+
+var rows = await dataContext.From<ComplexEntity>()
+    .Where(x => x.Int == captured)
+    .Select(x => new { x.Id })
+    .ToListAsync();
+```
+
+```sql
+select id
+ from complex_entity
+ where ((nullableint is null and $captured is null)
+     or (nullableint is not null and $captured is not null and nullableint = $captured))
+```
+
+`null == null` is true and `null != null` is false; when exactly one side is null, `==` is false and
+`!=` is true. A non-null comparison keeps the provider's own `=`/`!=` semantics — for strings that is
+the column's collation, and nextorm makes no CLR `string` collation promise. The rewrite is driven by
+the expression shape, not by the runtime value: the same expression renders the same SQL whether the
+captured variable currently holds `null` or a value.
+
+### Presence (`HasValue`)
+
+`HasValue` / `!HasValue` on a mapped `Nullable<T>` column translates to `is not null` / `is null`,
+standalone or as a child of `&&`/`||`:
+
+```csharp
+var rows = await dataContext.From<ComplexEntity>()
+    .Where(x => x.Int.HasValue)
+    .Select(x => new { x.Id })
+    .ToListAsync();
+```
+
+```sql
+select id
+ from complex_entity where nullableint is not null
+```
+
+`!HasValue` renders `is null`. `Nullable<T>.Value` is not translated this way and stays outside the
+rewrite.
+
+### Where the null-safe rewrite applies
+
+The total forms are supported in three positions:
+
+* predicates in `WHERE`, including the body of a correlated `Exists`;
+* boolean `SELECT` projections;
+* the `ON` expression of a `JOIN`.
+
+The rest of the statement is unchanged. A boolean projection materialises as a non-nullable `bool`;
+SQL Server renders `cast(case when ... then 1 else 0 end as bit)` through its usual projection
+legalisation, while the other providers emit the predicate directly. In `JOIN ON` only the `ON`
+expression changes: the join kind, cardinality and outer-row preservation are not affected.
+
+### Parameters and plan reuse
+
+The captured variable stays one command parameter and is never inlined. For the same query and the
+same captured variable, `null → value → null` keeps byte-identical SQL and the same cached plan, and
+every execution sees the current value and returns fresh results. The parameter type comes from the
+mapped column (or its converter), not from the runtime null, so a SQL Server parameter stays
+`Int`/`String` instead of an untyped `DBNull`.
+
+### Not covered
+
+The rewrite is deliberately limited to a DB column compared with a captured nullable/string variable.
+The following keep their previous behaviour and are **not** null-safe:
+
+* a nullable column compared with another nullable column — in `WHERE`, a `SELECT` projection or
+  `JOIN ON`;
+* `ORDER BY`, `GROUP BY`, window `PARTITION BY`/`ORDER BY` and ClickHouse `LIMIT BY`;
+* `Nullable<T>.Value`;
+* a hand-built `DefaultExpression`;
+* the `IS [NOT] DISTINCT FROM` operator (issue #288).
+
+Column↔column null-safe comparison and the native distinctness operator remain separate,
+not-yet-implemented work.
 
 ## Combining predicates
 
@@ -477,10 +562,10 @@ array is bound as one parameter; see [Arrays](../scalar-functions/06-arrays.md#a
 
 | C# construct | SQL |
 |---|---|
-| `==` / `!=` | `=` / `!=`; `is` / `is not` against a `null` literal (including `(int?)null`) |
-| `>`, `>=`, `<`, `<=` | `>`, `>=`, `<`, `<=` (parenthesised) |
+| `==` / `!=` | `=` / `!=`; `is` / `is not` against a `null` literal (including `(int?)null`); captured nullable/string values follow C# null-equality (see [Null handling](#null-handling)) |
+| `>`, `>=`, `<`, `<=` | `>`, `>=`, `<`, `<=` (parenthesised); not null-safe |
 | `&&` / `\|\|` | `and` / `or` |
-| `!` | `not (...)`; a projected boolean is cast to `bit` on SQL Server |
+| `!` | `not (...)`; in a boolean `SELECT` projection SQL Server casts the predicate to `bit` |
 | `+ - * / %` | `+ - * / %`; string `+` is `\|\|` on SQLite/PostgreSQL and `+` on SQL Server |
 | `&` / `\|` | `&` / `\|` |
 | `<<` / `>>` | `<<` / `>>` |
