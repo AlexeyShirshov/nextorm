@@ -356,7 +356,7 @@ public class SqlGenerationTests
             .Should().Contain("addDays(dt, 1)");
 
         SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_add("decade", 2, x.Datetime) }))
-            .Should().Contain("addYears(dt, (2) * 10)");
+            .Should().Contain("addYears(toDateTime64(dt, 6), (2) * 10)");
 
         // A sub-day part promotes the operand to DateTime64 so a Date-only value keeps its time.
         SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_add("milliseconds", 5, x.Datetime) }))

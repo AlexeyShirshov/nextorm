@@ -228,8 +228,8 @@ PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB and SQLite opt in). The field 
 string; the provider validates which parts it accepts ([`SupportsDateAddField`](xref:NextORM.Core.ISqlDialect.SupportsDateAddField(System.String)) and friends).
 SQL Server renders `dateadd(field, amount, value)` and `eomonth(value)`, folding
 `decade`/`century`/`millennium` onto a scaled `year` add; PostgreSQL renders interval arithmetic;
-ClickHouse renders the dedicated `addDays`/`addMonths`/…/`addSeconds` functions (folding the three
-large parts onto a scaled `addYears`) and `toLastDayOfMonth(value)`; MySQL/MariaDB render
+ClickHouse renders the dedicated `addDays`/`addMonths`/…/`addSeconds` functions (folding `decade` and
+`century` onto a scaled `addYears`) and `toLastDayOfMonth(value)`; MySQL/MariaDB render
 `date_add(value, interval n unit)` and `last_day(value)`; SQLite adjusts through a `datetime`/`strftime`
 modifier string. `SqlFunctions.Sql.date_diff(field, start, end)` returns the number of `<field>` boundaries
 between two timestamps as a 32-bit count (`int?`; SQL Server `datediff`, ClickHouse `dateDiff`,
@@ -272,10 +272,16 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
  from complex_entity
 ```
 
+ClickHouse `year`, `decade` and `century` addition uses `DateTime64(6)`: the operand is promoted
+with `toDateTime64(x, 6)` before the scaled `addYears`. The SQL result type for those three units is
+`DateTime64(6)`, while the CLR API is unchanged. `millennium` is unsupported and throws before
+execution. On pinned ClickHouse 25.8, supported results are within 1900–2299; arithmetic outside that
+range is unsupported. Inputs are normalized to microseconds, discarding finer precision.
+
 | C# | SQL Server | PostgreSQL | ClickHouse | MySQL/MariaDB | SQLite |
 |---|---|---|---|---|---|
 | `SqlFunctions.Sql.date_add("day", n, x)` | `dateadd(day, n, x)` | `x + (n * interval '1 day')` | `addDays(x, n)` | `date_add(x, interval n day)` | `datetime(x, (n) \|\| ' days')` |
-| `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(x, (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
+| `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(toDateTime64(x, 6), (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
 | `SqlFunctions.Sql.end_of_month(x)` | `eomonth(x)` | `date_trunc('month', x) + interval '1 month - 1 day'` | `toLastDayOfMonth(x)` | `last_day(x)` | `date(x, 'start of month', '+1 month', '-1 day')` |
 | `SqlFunctions.Sql.date_diff("day", a, b)` | `datediff(day, a, b)` | `cast(b as date) - cast(a as date)` | `dateDiff('day', a, b)` | `timestampdiff(day, a, b)` | `(strftime('%s', b) - strftime('%s', a)) / 86400` |
 | `SqlFunctions.Sql.date_diff_big("milliseconds", a, b)` | `datediff_big(millisecond, a, b)` | `cast(trunc(extract(epoch from (b - a)) * 1000) as bigint)` | `dateDiff('millisecond', a, b)` | `cast((timestampdiff(microsecond, a, b) / 1000) as signed)` | `((strftime('%s', b) - strftime('%s', a)) * 1000)` |

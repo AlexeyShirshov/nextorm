@@ -336,7 +336,7 @@ public class ClickHouseDialectTests
         Dialect.MakeDateTrunc("month", "dt").Should().Be("dateTrunc('month', dt)");
         Dialect.MakeDateTrunc("milliseconds", "dt").Should().Be("dateTrunc('millisecond', dt)");
         Dialect.MakeDateAdd("day", "2", "dt").Should().Be("addDays(dt, 2)");
-        Dialect.MakeDateAdd("decade", "2", "dt").Should().Be("addYears(dt, (2) * 10)");
+        Dialect.MakeDateAdd("decade", "2", "dt").Should().Be("addYears(toDateTime64(dt, 6), (2) * 10)");
         Dialect.MakeDateDiff("milliseconds", "a", "b").Should().Be("toInt32(dateDiff('millisecond', a, b))");
         Dialect.MakeDateDiffBig("milliseconds", "a", "b").Should().Be("dateDiff('millisecond', a, b)");
         Dialect.PromoteDateOperand("day", "dt").Should().Be("dt");

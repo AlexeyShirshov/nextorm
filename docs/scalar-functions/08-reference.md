@@ -45,7 +45,8 @@ rows, so the .NET method itself runs. The SQL matrix above applies to the SQLite
 PostgreSQL providers.
 
 ClickHouse renders `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds` (and a scaled
-`addYears` for `decade`/`century`/`millennium`), `toLastDayOfMonth(x)`,
+`addYears` over a `DateTime64(6)` operand for `year`/`decade`/`century`, whose SQL result type is
+`DateTime64(6)` while the CLR API is unchanged; `millennium` throws), `toLastDayOfMonth(x)`,
 `arrayStringConcat(groupArray(x), delimiter)`, `groupBitAnd`/`groupBitOr`/`groupBitXor`,
 `covarPop`/`covarSamp`, `argMin`/`argMax`, the `-If` combinators and `multiIf`. It rejects the ANSI
 `filter (where ...)` clause and the `regr_*`/boolean aggregates with `NotSupportedException`; see the

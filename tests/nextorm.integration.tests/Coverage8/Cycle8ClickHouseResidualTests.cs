@@ -287,7 +287,6 @@ public sealed class Cycle8ClickHouseResidualTests : ProviderTestSuite
                 Micro = SqlFunctions.Sql.date_add("microseconds", 500_000, x.Created),
                 Decade = SqlFunctions.Sql.date_add("decade", 1, x.Created),
                 Century = SqlFunctions.Sql.date_add("century", 1, new DateTime(2000, 1, 1)),
-                Millennium = SqlFunctions.Sql.date_add("millennium", 0, x.Created),
             })
             .Single();
 
@@ -303,7 +302,6 @@ public sealed class Cycle8ClickHouseResidualTests : ProviderTestSuite
         row.Micro.Should().Be(new DateTime(2023, 1, 31, 10, 30, 15, 500));
         row.Decade.Should().Be(new DateTime(2033, 1, 31, 10, 30, 15));
         row.Century.Should().Be(new DateTime(2100, 1, 1));
-        row.Millennium.Should().Be(new DateTime(2023, 1, 31, 10, 30, 15));
 
         var act = () => Context.From<Ch8Row>()
             .Select(x => SqlFunctions.Sql.date_add("fortnight", 1, x.Created))

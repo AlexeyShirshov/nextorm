@@ -45,7 +45,8 @@
 PostgreSQL.
 
 ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds` (и масштабированный
-`addYears` для `decade`/`century`/`millennium`), `toLastDayOfMonth(x)`,
+`addYears` над операндом `DateTime64(6)` для `year`/`decade`/`century`, тип SQL-результата которых —
+`DateTime64(6)`, а CLR-API не меняется; `millennium` бросает исключение), `toLastDayOfMonth(x)`,
 `arrayStringConcat(groupArray(x), delimiter)`, `groupBitAnd`/`groupBitOr`/`groupBitXor`,
 `covarPop`/`covarSamp`, `argMin`/`argMax`, комбинаторы `-If` и `multiIf`. Он отклоняет ANSI-предложение
 `filter (where ...)`, агрегаты `regr_*` и логические агрегаты через `NotSupportedException`; см.

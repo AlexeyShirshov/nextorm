@@ -34,8 +34,12 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
 - `stdev`/`stdevp`/`var`/`varp` как `stddevSamp`/`stddevPop`/`varSamp`/`varPop`;
 - `date_trunc(field, x)` как `dateTrunc('field', x)` (множественные ANSI-части субсекунд сворачиваются
   в единственные; `decade`/`century`/`millennium` бросают исключение), а `date_add`/`DateTime.Add*` —
-  как выделенные функции `addYears`/`addQuarters`/…/`addSeconds` (`decade`/`century`/`millennium`
-  сворачиваются в масштабированный `addYears`), `end_of_month` — как `toLastDayOfMonth(x)`;
+  как выделенные функции `addYears`/`addQuarters`/…/`addSeconds` (`year`/`decade`/`century` продвигают
+  операнд к `DateTime64(6)` и масштабируют `addYears`, поэтому тип SQL-результата этих единиц —
+  `DateTime64(6)`, а CLR-API не меняется; `millennium` бросает исключение до выполнения — на
+  закреплённом ClickHouse 25.8 поддерживаемые результаты годового семейства остаются в диапазоне
+  1900–2299, арифметика за его пределами не поддерживается, входные значения нормализуются до
+  микросекунд с отбрасыванием более тонкой точности), `end_of_month` — как `toLastDayOfMonth(x)`;
 - поверхность приведения/частей даты `SqlFunctions.ClickHouse.to_*` (гейт
   [`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion)):
   `to_date`/`to_date_time`/`to_date32` — как `toDate`/`toDateTime`/`toDate32`; аксессоры `to_year`/

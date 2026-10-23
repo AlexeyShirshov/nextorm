@@ -33,8 +33,12 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
 - `stdev`/`stdevp`/`var`/`varp` as `stddevSamp`/`stddevPop`/`varSamp`/`varPop`;
 - `date_trunc(field, x)` as `dateTrunc('field', x)` (the plural ANSI sub-second parts are singularised;
   `decade`/`century`/`millennium` throw), and `date_add`/`DateTime.Add*` as the dedicated
-  `addYears`/`addQuarters`/…/`addSeconds` functions (`decade`/`century`/`millennium` fold onto a scaled
-  `addYears`), `end_of_month` as `toLastDayOfMonth(x)`;
+  `addYears`/`addQuarters`/…/`addSeconds` functions (`year`/`decade`/`century` promote the operand to
+  `DateTime64(6)` and scale `addYears`, so the SQL result type of those units is `DateTime64(6)` while
+  the CLR API is unchanged; `millennium` throws before execution — on pinned ClickHouse 25.8 the
+  supported year-family results stay within 1900–2299, arithmetic outside that range is unsupported,
+  and inputs are normalized to microseconds, discarding finer precision),
+  `end_of_month` as `toLastDayOfMonth(x)`;
 - the date conversion/part surface `SqlFunctions.ClickHouse.to_*` (gated by
   [`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion)):
   `to_date`/`to_date_time`/`to_date32` as `toDate`/`toDateTime`/`toDate32`, the `to_year`/`to_quarter`/

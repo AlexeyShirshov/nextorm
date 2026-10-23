@@ -686,7 +686,10 @@ public class ClickHouseDialect : SqlDialectBase
 
     /// <summary>
     /// ClickHouse adds intervals through the dedicated <c>addYears</c>/<c>addQuarters</c>/.../<c>addSeconds</c>
-    /// functions. <c>decade</c>/<c>century</c>/<c>millennium</c> are folded onto a scaled <c>addYears</c>.
+    /// functions. <c>decade</c>/<c>century</c> are folded onto a scaled <c>addYears</c>; the year family
+    /// (<c>year</c>/<c>decade</c>/<c>century</c>) promotes its operand to <c>DateTime64(6)</c>, because
+    /// <c>addYears</c> on a 4-byte <c>DateTime</c> wraps past 2106 while <c>DateTime64</c> reaches 2299.
+    /// <c>millennium</c> is rejected: the pinned 25.8 server cannot represent such results.
     /// </summary>
     public override string MakeDateAdd(string field, string amount, string value)
     {
@@ -704,13 +707,23 @@ public class ClickHouseDialect : SqlDialectBase
             "microseconds" => ("addMicroseconds", 1),
             "decade" => ("addYears", 10),
             "century" => ("addYears", 100),
-            "millennium" => ("addYears", 1000),
+            "millennium" => throw new NotSupportedException(
+                "ClickHouse date_add does not support the 'millennium' field: on the pinned ClickHouse 25.8 " +
+                "server the supported DateTime64 result range is 1900-2299, so a millennium offset cannot be represented."),
             _ => throw new NotSupportedException($"ClickHouse date_add does not support the '{field}' field.")
         };
 
+        var operand = field is "year" or "decade" or "century" ? $"toDateTime64({value}, 6)" : value;
         var scaled = factor == 1 ? amount : $"({amount}) * {factor}";
-        return $"{function}({value}, {scaled})";
+        return $"{function}({operand}, {scaled})";
     }
+
+    /// <summary>
+    /// ClickHouse 25.8 <c>DateTime64</c> spans 1900-2299, so a <c>millennium</c> offset cannot be
+    /// represented; it is rejected up front instead of being silently clamped. Every other
+    /// <c>date_add</c> part defers to the base capability set.
+    /// </summary>
+    public override bool SupportsDateAddField(string field) => field != "millennium" && base.SupportsDateAddField(field);
 
     /// <summary>ClickHouse stores a <see cref="System.DateTimeOffset"/> as a UTC-normalized <c>DateTime64</c>, so DTO operations are supported.</summary>
     public override bool SupportsDateTimeOffsetTranslation => true;
