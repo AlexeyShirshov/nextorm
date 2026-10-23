@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace NextORM.Core;
 
@@ -191,6 +192,12 @@ internal static class StringFormatTranslator
             return;
 
         if (provider is ConstantExpression { Value: CultureInfo culture } && ReferenceEquals(culture, CultureInfo.InvariantCulture))
+            return;
+
+        // The natural C# spelling, CultureInfo.InvariantCulture, binds a static property access. It is
+        // recognised structurally by declaring type and member identity only — the getter is never executed.
+        if (provider is MemberExpression { Expression: null, Member: PropertyInfo { Name: nameof(CultureInfo.InvariantCulture) } property }
+            && property.DeclaringType == typeof(CultureInfo))
             return;
 
         throw new NotSupportedException("string.Format is only supported with CultureInfo.InvariantCulture; the current/other cultures have no portable SQL form.");
