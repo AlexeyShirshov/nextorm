@@ -18,7 +18,7 @@ public class BulkInsertSqlGenerationTests
 
         var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>().Values([Row("a", 1), Row("b", 2)]).ToSql();
 
-        sql.Should().Be("insert into insert_entity (name, age) values (@p0, @p1), (@p2, @p3)");
+        sql.Should().Be("insert into insert_entity (name, age) values (_utf8mb4 X'61', @p1), (_utf8mb4 X'62', @p3)");
     }
 
     [Fact]
@@ -28,7 +28,7 @@ public class BulkInsertSqlGenerationTests
 
         var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.KeepIdentity()).Values([Row("a", 1)]).ToSql();
 
-        sql.Should().Be("insert into insert_entity (id, name, age) values (@p0, @p1, @p2)");
+        sql.Should().Be("insert into insert_entity (id, name, age) values (@p0, _utf8mb4 X'61', @p2)");
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public class BulkInsertSqlGenerationTests
 
         var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.IgnoreDuplicates()).Values([Row("a", 1)]).ToSql();
 
-        sql.Should().Be("insert ignore into insert_entity (name, age) values (@p0, @p1)");
+        sql.Should().Be("insert ignore into insert_entity (name, age) values (_utf8mb4 X'61', @p1)");
     }
 
     [Fact]
@@ -58,6 +58,6 @@ public class BulkInsertSqlGenerationTests
 
         var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Table("staging", "bulk_target")).Values([Row("a", 1)]).ToSql();
 
-        sql.Should().Be("insert into staging.bulk_target (name, age) values (@p0, @p1)");
+        sql.Should().Be("insert into staging.bulk_target (name, age) values (_utf8mb4 X'61', @p1)");
     }
 }

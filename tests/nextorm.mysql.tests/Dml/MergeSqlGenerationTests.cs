@@ -57,7 +57,7 @@ public class MergeSqlGenerationTests
             .WhenMatchedUpdate()
             .WhenNotMatchedInsert()
             .ToSql()
-            .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2) on duplicate key update name = values(name), age = values(age)");
+            .Should().Be("insert into merge_entity (id, name, age) values (@p0, _utf8mb4 X'61', @p2) on duplicate key update name = values(name), age = values(age)");
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public class MergeSqlGenerationTests
             .WhenMatchedUpdate()
             .WhenNotMatchedInsert()
             .ToSql()
-            .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2), (@p3, @p4, @p5) on duplicate key update name = values(name), age = values(age)");
+            .Should().Be("insert into merge_entity (id, name, age) values (@p0, _utf8mb4 X'61', @p2), (@p3, _utf8mb4 X'62', @p5) on duplicate key update name = values(name), age = values(age)");
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class MergeSqlGenerationTests
             .WhenMatchedUpdate()
             .WhenNotMatchedInsert()
             .ToSql()
-            .Should().Be("INSERT INTO merge_entity (id, name, age) VALUES (@p0, @p1, @p2) ON DUPLICATE KEY UPDATE name = VALUES(name), age = VALUES(age)");
+            .Should().Be("INSERT INTO merge_entity (id, name, age) VALUES (@p0, _utf8mb4 X'61', @p2) ON DUPLICATE KEY UPDATE name = VALUES(name), age = VALUES(age)");
     }
 
     [Fact]

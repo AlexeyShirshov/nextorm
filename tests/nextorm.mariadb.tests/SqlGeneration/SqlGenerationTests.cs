@@ -68,7 +68,7 @@ public class SqlGenerationTests
         Normalize(ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicWriteEntity())
             .ToSql())
-            .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
+            .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, _utf8mb4 X'61', @p2, @p3)");
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class SqlGenerationTests
             .WhenNotMatchedInsert()
             .ToSql());
 
-        sql.Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
+        sql.Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, _utf8mb4 X'61', @p2, @p3)");
         // MariaDB's upsert match is implicit (ON DUPLICATE KEY), so the dynamic keys must appear only in
         // the insert list and the update assignments, never as a match key.
         sql.Should().Contain("on duplicate key update `alpha` = values(`alpha`), `mid` = values(`mid`), `zeta` = values(`zeta`)");
@@ -111,7 +111,7 @@ public class SqlGenerationTests
         ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .ToSql()
-            .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
+            .Should().Be("insert into merge_entity (id, name, age) values (@p0, _utf8mb4 X'61', @p2)");
     }
 
     [Fact]

@@ -24,6 +24,7 @@ internal static class SqlMutationBuilder
     /// <param name="sourceSql">The rendered <c>SELECT</c> of an <c>INSERT ... SELECT</c> command, or <see langword="null"/> for a <c>VALUES</c> insert.</param>
     /// <param name="sourceParameters">The parameters referenced by <paramref name="sourceSql"/>, or <see langword="null"/> for a <c>VALUES</c> insert.</param>
     /// <param name="parameterProvider">The provider that names the literal parameters, or <see langword="null"/> to start a fresh sequence. A data-modifying CTE passes the enclosing command's provider so its parameters keep the whole statement's numbering.</param>
+    /// <param name="renderKind">How the statement is rendered. Only an ad-hoc or batch render lowers a text value into a literal (D4g); the default keeps the prepared path byte-identical.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
     internal static (string Sql, List<Parameter> Parameters) MakeInsert(
         ISqlDialect dialect,
@@ -33,9 +34,11 @@ internal static class SqlMutationBuilder
         KeywordCase keywordCase = KeywordCase.Lower,
         string? sourceSql = null,
         IReadOnlyList<Parameter>? sourceParameters = null,
-        IParameterProvider? parameterProvider = null)
+        IParameterProvider? parameterProvider = null,
+        MutationRenderKind renderKind = MutationRenderKind.Prepared)
     {
         var parameters = new List<Parameter>();
+        var lowering = MutationParameterLowering.For(dialect, renderKind);
         var writer = StringBuilderPool.Shared.Get();
 
         try
@@ -60,7 +63,7 @@ internal static class SqlMutationBuilder
             else if (command.Columns.Count == 0 && command.DynamicColumns is null)
                 RenderDefaultValuesInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, keywordCase);
             else
-                RenderValuesInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, parameters, keywordCase, parameterProvider, overrideIdentity, emitConflictDoNothing);
+                RenderValuesInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, parameters, keywordCase, parameterProvider, overrideIdentity, emitConflictDoNothing, lowering);
 
             var sql = writer.ToString();
 
@@ -69,7 +72,7 @@ internal static class SqlMutationBuilder
 
             sql = WrapTableVariableReadBack(sql, dialect, quoteIdentifiers, namingConvention, command.OutputInto, keywordCase);
 
-            return (sql, parameters);
+            return (sql, lowering.Project(parameters));
         }
         finally
         {
@@ -149,7 +152,8 @@ internal static class SqlMutationBuilder
         KeywordCase keywordCase,
         IParameterProvider? parameterProvider,
         string overrideIdentity,
-        bool emitConflictDoNothing)
+        bool emitConflictDoNothing,
+        MutationParameterLowering lowering)
     {
         parameterProvider ??= new DefaultParameterProvider();
 
@@ -167,7 +171,7 @@ internal static class SqlMutationBuilder
 
         writer.Append(SqlKeywords.Of(keywordCase, " values "));
 
-        AppendValuesRows(writer, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, command.DynamicColumns);
+        AppendValuesRows(writer, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, lowering, command.DynamicColumns);
 
         if (emitConflictDoNothing)
             writer.Append(dialect.MakeOnConflictDoNothing(keywordCase));
@@ -195,6 +199,7 @@ internal static class SqlMutationBuilder
     /// <param name="branchConditions">The rendered <c>AND &lt;condition&gt;</c> of each branch in order, or <see langword="null"/>.</param>
     /// <param name="targetFilterSql">The rendered <c>target</c>-qualified global-filter predicate to AND into the <c>ON</c> and every <c>WHEN NOT MATCHED BY SOURCE</c> arm, or <see langword="null"/> when no filter is active.</param>
     /// <param name="dataContext">The executing context, used to enforce the bridge fail-closed expectation before any upsert SQL is produced. <see langword="null"/> (no context known) keeps the existing behavior.</param>
+    /// <param name="renderKind">How the statement is rendered. Only an ad-hoc or batch render lowers a text value into a literal (D4g); the default keeps the prepared path byte-identical.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
     /// <exception cref="NotSupportedException">The dialect has no <c>ON CONFLICT</c>, <c>ON DUPLICATE KEY</c> or <c>MERGE</c> form.</exception>
     /// <exception cref="InvalidOperationException">The context expects imported filters that the resolved metadata no longer carries.</exception>
@@ -211,7 +216,8 @@ internal static class SqlMutationBuilder
         string? matchConditionSql = null,
         IReadOnlyList<string?>? branchConditions = null,
         string? targetFilterSql = null,
-        IDataContext? dataContext = null)
+        IDataContext? dataContext = null,
+        MutationRenderKind renderKind = MutationRenderKind.Prepared)
     {
         // Merge/upsert is the one DML path that reads the target's global filters at render time
         // (RenderMerge's native-upsert fallback). A command built before DataContextCache.Clear and
@@ -221,21 +227,22 @@ internal static class SqlMutationBuilder
 
         parameterProvider ??= new DefaultParameterProvider();
         parameters ??= new List<Parameter>();
+        var lowering = MutationParameterLowering.For(dialect, renderKind);
         var writer = StringBuilderPool.Shared.Get();
 
         try
         {
             if (command.Branches is not null)
-                RenderFullMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters, matchConditionSql, branchConditions, targetFilterSql);
+                RenderFullMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters, matchConditionSql, branchConditions, targetFilterSql, lowering);
             else if (dialect.SupportsMerge)
-                RenderMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, targetFilterSql);
+                RenderMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, targetFilterSql, lowering);
             else if (dialect.SupportsOnConflict || dialect.SupportsOnDuplicateKey)
-                RenderOnConflictUpsert(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider);
+                RenderOnConflictUpsert(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, lowering);
             else
                 throw new NotSupportedException(
                     $"{dialect.GetType().Name} does not support key upsert: it has no ON CONFLICT, ON DUPLICATE KEY or MERGE form.");
 
-            return (writer.ToString(), parameters);
+            return (writer.ToString(), lowering.Project(parameters));
         }
         finally
         {
@@ -256,6 +263,7 @@ internal static class SqlMutationBuilder
     /// <param name="parameters">The parameters of <paramref name="whereSql"/>; key values are appended to it.</param>
     /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
     /// <param name="parameterProvider">The provider that names the key parameters, or <see langword="null"/> to start a fresh sequence. A batch passes the shared provider so its parameters do not collide with the other statements'.</param>
+    /// <param name="renderKind">How the statement is rendered. Only an ad-hoc or batch render lowers a text value into a literal (D4g); the default keeps the prepared path byte-identical.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
     internal static (string Sql, List<Parameter> Parameters) MakeDelete(
         ISqlDialect dialect,
@@ -265,8 +273,10 @@ internal static class SqlMutationBuilder
         string? whereSql,
         List<Parameter> parameters,
         KeywordCase keywordCase = KeywordCase.Lower,
-        IParameterProvider? parameterProvider = null)
+        IParameterProvider? parameterProvider = null,
+        MutationRenderKind renderKind = MutationRenderKind.Prepared)
     {
+        var lowering = MutationParameterLowering.For(dialect, renderKind);
         var writer = StringBuilderPool.Shared.Get();
 
         try
@@ -296,9 +306,14 @@ internal static class SqlMutationBuilder
                         writer.Append(SqlKeywords.Of(keywordCase, " and "));
 
                     var column = RenderColumnReference(dialect, quoteIdentifiers, keys[i].Property, namingConvention);
-                    var name = provider.GetParamName();
-                    parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(keys[i].Value, keys[i].Property, dialect)));
-                    writer.Append(column).Append(" = ").Append(dialect.MakeParam(name));
+                    writer.Append(column).Append(" = ");
+                    AppendValue(
+                        writer,
+                        dialect,
+                        parameters,
+                        provider,
+                        DurationStorage.ToParameterValue(keys[i].Value, keys[i].Property, dialect),
+                        lowering);
                 }
 
                 wroteWhere = true;
@@ -324,7 +339,7 @@ internal static class SqlMutationBuilder
                 writer.Append(suffix);
 
             var deleteSql = WrapTableVariableReadBack(writer.ToString(), dialect, quoteIdentifiers, namingConvention, command.OutputInto, keywordCase);
-            return (deleteSql, parameters);
+            return (deleteSql, lowering.Project(parameters));
         }
         finally
         {
@@ -348,6 +363,7 @@ internal static class SqlMutationBuilder
     /// <param name="whereSql">The rendered condition of the predicate form, or <see langword="null"/>.</param>
     /// <param name="parameterProvider">The provider that names the key parameters; shared with the <c>SET</c>/<c>WHERE</c> renderers so parameter names do not collide.</param>
     /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <param name="renderKind">How the statement is rendered. Only an ad-hoc or batch render lowers a text value into a literal (D4g); the default keeps the prepared path byte-identical.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
     internal static (string Sql, List<Parameter> Parameters) MakeUpdate(
         ISqlDialect dialect,
@@ -358,8 +374,10 @@ internal static class SqlMutationBuilder
         List<Parameter> parameters,
         string? whereSql,
         IParameterProvider parameterProvider,
-        KeywordCase keywordCase = KeywordCase.Lower)
+        KeywordCase keywordCase = KeywordCase.Lower,
+        MutationRenderKind renderKind = MutationRenderKind.Prepared)
     {
+        var lowering = MutationParameterLowering.For(dialect, renderKind);
         var writer = StringBuilderPool.Shared.Get();
 
         try
@@ -388,9 +406,14 @@ internal static class SqlMutationBuilder
                         writer.Append(SqlKeywords.Of(keywordCase, " and "));
 
                     var column = RenderColumnReference(dialect, quoteIdentifiers, keys[i].Property, namingConvention);
-                    var name = parameterProvider.GetParamName();
-                    parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(keys[i].Value, keys[i].Property, dialect)));
-                    writer.Append(column).Append(" = ").Append(dialect.MakeParam(name));
+                    writer.Append(column).Append(" = ");
+                    AppendValue(
+                        writer,
+                        dialect,
+                        parameters,
+                        parameterProvider,
+                        DurationStorage.ToParameterValue(keys[i].Value, keys[i].Property, dialect),
+                        lowering);
                 }
 
                 wroteWhere = true;
@@ -416,7 +439,7 @@ internal static class SqlMutationBuilder
                 writer.Append(suffix);
 
             var updateSql = WrapTableVariableReadBack(writer.ToString(), dialect, quoteIdentifiers, namingConvention, command.OutputInto, keywordCase);
-            return (updateSql, parameters);
+            return (updateSql, lowering.Project(parameters));
         }
         finally
         {
@@ -670,13 +693,14 @@ internal static class SqlMutationBuilder
         MergeCommand command,
         List<Parameter> parameters,
         KeywordCase keywordCase,
-        IParameterProvider parameterProvider)
+        IParameterProvider parameterProvider,
+        MutationParameterLowering lowering)
     {
         writer.Append(SqlKeywords.Of(keywordCase, "insert into "));
         AppendIdentifier(writer, dialect, quoteIdentifiers, ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention));
         AppendColumnList(writer, dialect, quoteIdentifiers, namingConvention, ColumnProperties(command.Columns), command.DynamicColumns);
         writer.Append(SqlKeywords.Of(keywordCase, " values "));
-        AppendValuesRows(writer, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, command.DynamicColumns);
+        AppendValuesRows(writer, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, lowering, command.DynamicColumns);
 
         if (dialect.SupportsOnConflict)
             writer.Append(dialect.MakeOnConflict(RenderColumns(dialect, quoteIdentifiers, namingConvention, command.Keys), keywordCase));
@@ -732,7 +756,8 @@ internal static class SqlMutationBuilder
         List<Parameter> parameters,
         KeywordCase keywordCase,
         IParameterProvider parameterProvider,
-        string? targetFilterSql)
+        string? targetFilterSql,
+        MutationParameterLowering lowering)
     {
         var table = ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention);
         if (quoteIdentifiers)
@@ -770,7 +795,7 @@ internal static class SqlMutationBuilder
                     throw new NotSupportedException(
                         $"An active global query filter on entity type '{command.EntityType.Name}' cannot be represented in the {dialect.GetType().Name} key-upsert form, so the filter would be silently bypassed. Call IgnoreFilters() to disable the filter, or use the full-MERGE branch form on a provider that supports it.");
 
-                AppendValuesRows(rows, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, command.DynamicColumns);
+                AppendValuesRows(rows, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, lowering, command.DynamicColumns);
                 writer.Append(dialect.MakeMerge(table, columns, keys, updates, rows.ToString(), keywordCase, returningColumns));
                 return;
             }
@@ -780,7 +805,7 @@ internal static class SqlMutationBuilder
             // general MERGE uses. The only delta from MakeMerge is the extra predicate in the ON.
             var qualifyTarget = dialect.SupportsMergeTargetQualification;
             writer.Append(SqlKeywords.Of(keywordCase, "merge into ")).Append(table);
-            AppendMergeUsingSource(writer, rows, dialect, quoteIdentifiers, namingConvention, command, columns, parameters, keywordCase, parameterProvider, null, null, command.DynamicColumns);
+            AppendMergeUsingSource(writer, rows, dialect, quoteIdentifiers, namingConvention, command, columns, parameters, keywordCase, parameterProvider, null, null, lowering, command.DynamicColumns);
             AppendMergeOnKeys(writer, keys, null, keywordCase, targetFilterSql);
             AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, new MergeBranch(MergeMatchKind.Matched, MergeActionKind.Update, command.UpdateColumns), null, keywordCase, qualifyTarget, command.DynamicColumns, null);
             AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, new MergeBranch(MergeMatchKind.NotMatchedByTarget, MergeActionKind.Insert, ColumnProperties(command.Columns)), null, keywordCase, qualifyTarget, command.DynamicColumns, null);
@@ -808,7 +833,8 @@ internal static class SqlMutationBuilder
         IReadOnlyList<Parameter>? sourceParameters,
         string? matchConditionSql,
         IReadOnlyList<string?>? branchConditions,
-        string? targetFilterSql)
+        string? targetFilterSql,
+        MutationParameterLowering lowering)
     {
         ValidateMergeBranches(dialect, command);
 
@@ -829,7 +855,7 @@ internal static class SqlMutationBuilder
         try
         {
             writer.Append(SqlKeywords.Of(keywordCase, "merge into ")).Append(table);
-            AppendMergeUsingSource(writer, rows, dialect, quoteIdentifiers, namingConvention, command, columns, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters, command.DynamicColumns);
+            AppendMergeUsingSource(writer, rows, dialect, quoteIdentifiers, namingConvention, command, columns, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters, lowering, command.DynamicColumns);
             AppendMergeOnKeys(writer, keys, matchConditionSql, keywordCase, targetFilterSql);
 
             for (var i = 0; i < command.Branches!.Count; i++)
@@ -893,6 +919,7 @@ internal static class SqlMutationBuilder
         IParameterProvider parameterProvider,
         string? sourceSql,
         IReadOnlyList<Parameter>? sourceParameters,
+        MutationParameterLowering lowering,
         DynamicColumnSet? dynamicColumns)
     {
         if (command.Source is not null)
@@ -908,7 +935,7 @@ internal static class SqlMutationBuilder
         }
         else
         {
-            AppendValuesRows(rows, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, dynamicColumns);
+            AppendValuesRows(rows, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, lowering, dynamicColumns);
 
             writer.Append(SqlKeywords.Of(keywordCase, " as target using (values ")).Append(rows)
                 .Append(SqlKeywords.Of(keywordCase, ") as source (")).Append(string.Join(", ", columns)).Append(')');
@@ -1182,6 +1209,7 @@ internal static class SqlMutationBuilder
         List<Parameter> parameters,
         KeywordCase keywordCase,
         IParameterProvider parameterProvider,
+        MutationParameterLowering lowering,
         DynamicColumnSet? dynamicColumns = null)
     {
         for (var r = 0; r < rowCount; r++)
@@ -1209,26 +1237,66 @@ internal static class SqlMutationBuilder
                 }
                 else
                 {
-                    var name = parameterProvider.GetParamName();
-                    parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(value.Constant, columns[c].Property, dialect)));
-                    writer.Append(dialect.MakeParam(name));
+                    // The value is resolved exactly once, after the column converter; the lowering then
+                    // decides from that final provider-bound value whether it may become a literal.
+                    AppendValue(
+                        writer,
+                        dialect,
+                        parameters,
+                        parameterProvider,
+                        DurationStorage.ToParameterValue(value.Constant, columns[c].Property, dialect),
+                        lowering);
                 }
             }
 
             if (dynamicColumns is not null)
             {
+                // The dynamic store's values are already converted by AddValueParameters, so the already
+                // bound value is inspected here rather than converted a second time.
+                var dynamicStart = parameters.Count;
                 var dynamicNames = dynamicColumns.AddValueParameters(r, parameters, parameterProvider, dialect);
                 for (var d = 0; d < dynamicNames.Length; d++)
                 {
                     if (columns.Count > 0 || d > 0)
                         writer.Append(", ");
 
-                    writer.Append(dialect.MakeParam(dynamicNames[d]));
+                    var dynamicValue = parameters[dynamicStart + d].Value;
+                    if (lowering.TryRender(dynamicNames[d], dynamicValue, out var dynamicLiteral))
+                    {
+                        writer.Append(dynamicLiteral);
+                    }
+                    else
+                    {
+                        writer.Append(dialect.MakeParam(dynamicNames[d]));
+                    }
                 }
             }
 
             writer.Append(')');
         }
+    }
+
+    // One planner-owned value of a mutation statement: the placeholder with its bound value, or — on an
+    // ad-hoc/batch render whose dialect resolves to the MySQL-family policy — the lowered literal, whose
+    // binding is left out of the driver projection. The name is allocated either way, so the statement's
+    // parameter numbering does not shift and the remaining bindings keep their names.
+    private static void AppendValue(
+        StringBuilder writer,
+        ISqlDialect dialect,
+        List<Parameter> parameters,
+        IParameterProvider parameterProvider,
+        object? finalValue,
+        MutationParameterLowering lowering)
+    {
+        var name = parameterProvider.GetParamName();
+        if (lowering.TryRender(name, finalValue, out var literal))
+        {
+            writer.Append(literal);
+            return;
+        }
+
+        parameters.Add(new Parameter(name, finalValue));
+        writer.Append(dialect.MakeParam(name));
     }
 
     internal static string ResolveTableName(string tableName, bool isTableNameAuto, Type entityType, INamingConvention? namingConvention)
