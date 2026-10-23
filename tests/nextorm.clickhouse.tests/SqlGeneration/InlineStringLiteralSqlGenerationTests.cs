@@ -1,14 +1,18 @@
 using System.Data.Common;
+using System.Globalization;
 using System.Linq.Expressions;
+using System.Text;
 using FluentAssertions;
 using NextORM.Core;
 
 namespace NextORM.ClickHouse.Tests;
 
 /// <summary>
-/// #299: inline string/Guid constants are rendered as SQL literals by the shared emitter, so an
-/// embedded apostrophe must be doubled while every other character is preserved verbatim. Captured
-/// values take the parameter path and must never be spliced into the statement. No database is touched.
+/// #299/#327: inline string/Guid constants are rendered through the provider's string-literal policy.
+/// ClickHouse keeps single-quoted literals with backslash escapes: an apostrophe is <c>\'</c>, a
+/// backslash is <c>\\</c> and every C0 character is a fixed-width <c>\xNN</c> escape. Each case pins the
+/// dialect token and the decoded payload. Captured values take the parameter path; those assertions are
+/// plan-time only and cannot observe execution-time lowering. No database is touched.
 /// </summary>
 public class InlineStringLiteralSqlGenerationTests
 {
@@ -20,9 +24,63 @@ public class InlineStringLiteralSqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
         => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
+    /// <summary>Builds the predicate the literal lambdas use, for values a lambda cannot spell readably.</summary>
+    private static string SqlForConstant(IDataContext ctx, string value)
+    {
+        var parameter = Expression.Parameter(typeof(IComplexEntity), "x");
+        var predicate = Expression.Lambda<Func<IComplexEntity, bool>>(
+            Expression.Equal(Expression.Property(parameter, nameof(IComplexEntity.String)), Expression.Constant(value)),
+            parameter);
+
+        return SqlOf(ctx, ctx.From<IComplexEntity>().Where(predicate).Select(x => new { x.Id }));
+    }
+
+    /// <summary>Decodes the <c>\'</c>, <c>\\</c> and <c>\xNN</c> escapes of a ClickHouse literal.</summary>
+    private static string DecodeClickHouseLiteral(string sql)
+    {
+        const string prefix = "somestring = '";
+        var start = sql.IndexOf(prefix, StringComparison.Ordinal);
+        start.Should().BeGreaterThanOrEqualTo(0, "a ClickHouse value is rendered as a single-quoted literal");
+        start += prefix.Length;
+
+        var builder = new StringBuilder();
+        for (var i = start; i < sql.Length; i++)
+        {
+            var c = sql[i];
+            if (c == '\'')
+                break;
+
+            if (c != '\\')
+            {
+                builder.Append(c);
+                continue;
+            }
+
+            i++;
+            var escape = sql[i];
+            switch (escape)
+            {
+                case '\\':
+                    builder.Append('\\');
+                    break;
+                case '\'':
+                    builder.Append('\'');
+                    break;
+                case 'x':
+                    builder.Append((char)Convert.ToInt32(sql.Substring(i + 1, 2), 16));
+                    i += 2;
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unexpected ClickHouse escape '\\{escape}'.");
+            }
+        }
+
+        return builder.ToString();
+    }
+
     [Fact]
     [Trait("Issue", "299")]
-    public void InlineApostrophe_ShouldDoubleTheEmbeddedQuote()
+    public void InlineApostrophe_ShouldBackslashEscapeTheEmbeddedQuote()
     {
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IComplexEntity>();
@@ -34,23 +92,17 @@ public class InlineStringLiteralSqlGenerationTests
             "a literal apostrophe is backslash-escaped inside the ClickHouse string literal");
         sql.Should().NotContain("'it's (a) test'",
             "the malformed three-apostrophe form terminates the literal early");
+        DecodeClickHouseLiteral(sql).Should().Be("it's (a) test", "the escape decodes to the original value");
     }
-
-    // `a\b` and backslash-adjacent apostrophes are DELIBERATELY NOT asserted here: ClickHouse
-    // backslash escapes are unresolved and tracked by #327 ("SQL literals: resolve
-    // MySQL/MariaDB/ClickHouse backslash modes and cross-provider NUL handling").
 
     [Fact]
     [Trait("Issue", "299")]
     public void InlineUnicode_ShouldRemainVerbatim()
     {
         using var ctx = ClickHouseTestContext.Create();
-        var e = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, e.Where(x => x.String == "привет").Select(x => new { x.Id }))
-            .Should().Contain("'привет'");
-        SqlOf(ctx, e.Where(x => x.String == "😀").Select(x => new { x.Id }))
-            .Should().Contain("'😀'");
+        SqlForConstant(ctx, "привет").Should().Contain("somestring = 'привет'");
+        SqlForConstant(ctx, "😀").Should().Contain("somestring = '😀'");
     }
 
     [Fact]
@@ -106,6 +158,7 @@ public class InlineStringLiteralSqlGenerationTests
         // Every C0 character is carried as a fixed-width hex escape, so CR, LF and TAB are data and are
         // neither escaped away nor stripped.
         sql.Should().Contain("'a\\x0d\\x0ab\\x09c'", "CR, LF and TAB are data and are neither escaped nor stripped");
+        DecodeClickHouseLiteral(sql).Should().Be("a\r\nb\tc", "the escapes decode to the original value");
     }
 
     [Fact]
@@ -119,6 +172,9 @@ public class InlineStringLiteralSqlGenerationTests
         var prepared = Prepare(ctx, e.Where(x => x.String == captured).Select(x => new { x.Id }));
         var sql = Normalize(prepared.DbCommand.CommandText);
 
+        // Plan-time assertion only: this inspects the prepared command text and proves the value is
+        // bound through a parameter slot rather than spliced. Execution-time lowering is not observable
+        // here and is covered by the execution/live stream.
         sql.Should().Contain("@captured", "a captured value is bound, not spliced into the statement");
         sql.Should().NotContain("it''s", "the bound value stays raw; escaping is a literal-only concern");
         sql.Should().NotContain("it's");
@@ -183,8 +239,12 @@ public class InlineStringLiteralSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, e.Where(x => x.String == "a\u0000b").Select(x => new { x.Id }))
-            .Should().Contain("where somestring = 'a\\x00b'");
+        // U+0000 is a C0 character like any other and travels as the fixed-width hex escape.
+        var sql = SqlOf(ctx, e.Where(x => x.String == "a\u0000b").Select(x => new { x.Id }));
+
+        sql.Should().Contain("where somestring = 'a\\x00b'");
+        sql.Should().NotContain("\u0000", "the statement text never carries a raw NUL");
+        DecodeClickHouseLiteral(sql).Should().Be("a\u0000b", "the escape decodes to the original value");
     }
 
     [Fact]
@@ -196,5 +256,59 @@ public class InlineStringLiteralSqlGenerationTests
 
         SqlOf(ctx, e.Where(x => x.String == "abc").Select(x => new { x.Id }))
             .Should().Contain("where somestring = 'abc'");
+
+        var plain = SqlForConstant(ctx, "abc");
+        DecodeClickHouseLiteral(plain).Should().Be("abc");
+        plain.Should().NotContainEquivalentOf("escape", "ClickHouse never emits an ESCAPE clause");
+    }
+
+    [Theory]
+    [Trait("Issue", "327")]
+    [InlineData("a\\b", @"'a\\b'")]
+    [InlineData("\\'", @"'\\\''")]
+    [InlineData("\\\\'", @"'\\\\\''")]
+    [InlineData("a\\", @"'a\\'")]
+    [InlineData("a''b", @"'a\'\'b'")]
+    public void InlineHostileCorpus_ShouldRenderTheIntendedLiteral(string value, string expectedLiteral)
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var sql = SqlForConstant(ctx, value);
+
+        sql.Should().Contain("somestring = " + expectedLiteral,
+            "a ClickHouse literal doubles a backslash and backslash-escapes an apostrophe");
+        DecodeClickHouseLiteral(sql).Should().Be(value, "the escapes decode to the original value");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineStatementBoundaryPayload_ShouldStayInsideTheLiteral()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var sql = SqlForConstant(ctx, "x'); SELECT 1; --");
+
+        sql.Should().Contain(@"somestring = 'x\'); SELECT 1; --'",
+            "the escaped apostrophe keeps the injected terminator inside the literal");
+        sql.Should().NotContain("'x');", "an early-closing literal would expose the injected statement");
+        DecodeClickHouseLiteral(sql).Should().Be("x'); SELECT 1; --");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineEveryC0CharacterExceptNul_ShouldUseTheFixedWidthHexEscape()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        for (var code = 1; code <= 0x1f; code++)
+        {
+            var value = ((char)code).ToString();
+            var hex = code.ToString("x2", CultureInfo.InvariantCulture);
+            var sql = SqlForConstant(ctx, value);
+
+            sql.Should().Contain("somestring = '\\x" + hex + "'",
+                $"U+{code:X4} is transported as the lowercase fixed-width hex escape");
+            DecodeClickHouseLiteral(sql).Should().Be(value);
+        }
     }
 }
