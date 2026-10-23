@@ -41,7 +41,7 @@
 | T289 | #289 | cycle | pending | pdca-dotnet | ready | — | — | pending | — | N=1 | `.pdca/status/T289-1.md` | r=1 | `15a4d0bc` | PLAN ready r=1: six DIMs on `ITransactionManager` (ADO.NET delegation) + `ISqlDialect.SupportsSavepoints`; deviation from the issue DoD needs **owner acknowledgement** before DO |
 | T288 | #288 | cycle | pending | pdca-dotnet | ready | — | — | pending | — | N=1 | `.pdca/status/T288-1.md` | r=1 | `15a4d0bc` | PLAN ready r=1: `SqlFunctions.Sql.is[_not]_distinct_from<T>` + per-dialect native/emulated renderer; boundary vs T296 stated; `SqlServerDialect.cs` after T298 |
 | T287 | #287 | cycle | pending | pdca-dotnet | ready | — | — | pending | — | N=1 | `.pdca/status/T287-1.md` | r=1 | `15a4d0bc` | PLAN ready r=1: `NullsPosition` + additive ordering overloads, native SQLite/PG/CH and CASE emulation for MSSQL/MySQL/MariaDB; red arm 24 cells; `SqlBuilder.cs` lock order T298→T306→T308→T287 |
-| T286 | #286 | cycle | pending | pdca-dotnet | ready | — | — | pending | — | N=1 | `.pdca/status/T286-1.md` | r=1 | `15a4d0bc` | PLAN ready r=1: bounded slice `log2/cbrt/exp2/exp10` on `ClickHouseFunctions`; residual catalog stays in #286; serialized after T252–T257 |
+| T286 | #286 | cycle | G1 | pdca-dotnet | ready | — | — | done | `collection/rc4/task-1-9` @ `7407272a` | N=1 | `.pdca/status/T286-1.md` | r=2 | `15a4d0bc` | **DONE** — bounded ClickHouse slice `log2/cbrt/exp2/exp10` on `ClickHouseFunctions` (additive only, no public break); 18 files +776/−17; unit 789/789, core 2673/2673, focused live 5/5, full integration 5162/4963/0 failed/199 skipped, 0 warnings; inventory 75/77 → 79/81; r=2 after anchor drift against the post-T252..T257 tree (no InMemory ClickHouse arm, validator journal contract, inventory pins); #286 **left open by plan** — residual umbrella (T286b cross-provider exposure) stays in 1.0.9-rc4, progress comment posted |
 | T285 | #285 | cycle | G3 | pdca-dotnet | ready | — | — | done | `collection/rc4/task-3-285` @ `4b352444` | N=1 | `.pdca/status/T285-1.md` | r=2 | `15a4d0bc` | **DONE** — SQLite `total` accepted; 90.1 %/83.8 % unit, 81.5 %/75.4 % integration; 2/2 mutants killed; #285 stays open (4 percentile names residual) |
 | T284 | #284 | cycle | pending | pdca-dotnet | ready | — | — | pending | — | N=1 | `.pdca/status/T284-1.md` | r=1 | `15a4d0bc` | PLAN ready r=1: `json_equals`/`json_normalize` on `MariaDbDialect` only (MySQL dialect untouched); order T280 → T283 → T284; residual stays in #284 |
 | T283 | #283 | cycle | pending | pdca-dotnet | ready | — | — | pending | — | N=1 | `.pdca/status/T283-1.md` | r=1 | `15a4d0bc` | PLAN ready r=1: bounded slice = `json_storage_free` only; MySQL 8.4 native, MariaDB + 4 providers reject; residual (incl. JSON_OVERLAPS/SCHEMA_VALID/FORMAT_*) stays in #283 |
@@ -90,7 +90,7 @@ Built by `pdca-planner` after the ALL-barrier (56/56 `ready`), then extended by 
 | G8 | T316 | two plan comparers | single owner | short |
 | G9 | T277 | test-only surface | no product writes; scratch mutation | short |
 
-**Group status:** G1 `in-progress` (T279, T248, T252, T253, T254, T255, T256, T257 done; 40 left incl. T324/T330/T331/T333) · **G2–G9 merged into `1.0.9-rc4`** @ `c99cce5c` (barrier merge from `collection/rc4/integration` @ `668599f9`, order G4→G5→G6→G7→G8→G9→G3→G2; G2's limitation pages resolved semantically) · G2 `done` (T258, T299, T295, T296) · G3 `done` (T285, T278) · G4 `done` (T261) · G5 `done` (T263) · G6 `done` (T290) · G7 `done` (T293) · G8 `done` (T316) · G9 `done` (T277).
+**Group status:** G1 `in-progress` (T279, T248, T252, T253, T254, T255, T256, T257, T286 done; 39 left incl. T324/T330/T331/T333) · **G2–G9 merged into `1.0.9-rc4`** @ `c99cce5c` (barrier merge from `collection/rc4/integration` @ `668599f9`, order G4→G5→G6→G7→G8→G9→G3→G2; G2's limitation pages resolved semantically) · G2 `done` (T258, T299, T295, T296) · G3 `done` (T285, T278) · G4 `done` (T261) · G5 `done` (T263) · G6 `done` (T290) · G7 `done` (T293) · G8 `done` (T316) · G9 `done` (T277).
 
 **Contradiction resolutions (planner decisions, authoritative for scheduling only — no unit acceptance changes):**
 1. Aggregates: **T292 → T291**; T291 rebases onto T292's integrated state and re-runs both units' affected checks.
@@ -119,6 +119,8 @@ The eight terminal groups were integrated through a dedicated branch, not the ma
 | Not merged | G1 — still open, merges at the terminal barrier onto the new tip |
 
 ## Decisions log
+
+- 2026-10-23: **T286 accepted** (G1 lane) — commit `7407272a`, r=2/rv2, CHECK `pass-with-recorded-exceptions` 13/13 rows; unit 789/789, core 2673/2673, focused live 5/5, full integration 5162/4963/0 failed/199 skipped, 0 warnings. The r=2 replan was forced by anchor drift against the post-T252..T257 tree, not by a design change. **#286 stays open by plan** — the unit ships a bounded slice and leaves the residual umbrella (T286b) in the milestone; a progress comment is posted. `collection/rc4/group-1` fast-forwarded to `7407272a`.
 
 - 2026-10-23: **eight groups landed on `1.0.9-rc4`** (owner: «вливай в апстрим») — `collection/rc4/integration` @ `668599f9` merged with `--no-ff` as `c99cce5c`: 105 paths, zero overlap with the owner's 23 uncommitted paths, so `.opencode/**`, `.pdca/scripts/**`, `examples/**` and `opencode.json` are untouched. The merged content is exactly the tree that built **0 warnings / 0 errors** on the integration branch. **Not pushed** — the branch is 22 commits ahead of `origin/1.0.9-rc4`; the owner pushes manually. G1 stays open and merges at the terminal barrier onto the new tip.
 
@@ -177,6 +179,6 @@ The eight terminal groups were integrated through a dedicated branch, not the ma
 
 ## Done / Verified / Incomplete
 
-- Done: **20/60** units, 8 groups `done` (G2, G3, G4, G5, G6, G7, G8, G9) awaiting the barrier merge; only **G1** is still open (40 units). Done: T248, T252, T253, T254, T255, T256, T257, T258, T261, T263, T277, T278, T279, T285, T290, T293, T295, T296, T299, T316. In flight: T286 (G1). Next in G1 order: T276.
+- Done: **21/60** units; the eight terminal groups G2–G9 are merged into `1.0.9-rc4` @ `c99cce5c`, and only **G1** is still open (39 units). Done: T248, T252, T253, T254, T255, T256, T257, T258, T261, T263, T277, T278, T279, T285, T286, T290, T293, T295, T296, T299, T316. In flight: T286 (G1). Next in G1 order: T276.
 - Verified: —
 - Incomplete: —
