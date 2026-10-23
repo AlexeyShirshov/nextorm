@@ -8,7 +8,7 @@
 
 Every terminal such as [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) does several things: it turns the fluently built [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) into SQL and a row mapper, prepares a [`DbCommand`](xref:NextORM.Core.DbPreparedQueryCommand`1.DbCommand), and reads the result. Two independent mechanisms let the first part be paid once:
 
-* the **implicit plan cache** - automatic, keyed by the structural shape of the query;
+* the **implicit plan cache** - automatic, keyed by the structural shape of the query; for an APPLY join that shape includes the APPLY source expression, so two queries with the same projection type but different APPLY sources are different plans;
 * **[`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken))** - explicit, returns an [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1) that you keep and execute yourself.
 
 The two are easy to confuse because they look alike from the outside. They differ in key, lifetime, thread-safety and whether they populate the cache:
@@ -16,7 +16,7 @@ The two are easy to confuse because they look alike from the outside. They diffe
 | | Implicit plan cache | Explicit [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) |
 |---|---|---|
 | Entry point | any terminal on [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) / [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) ([`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) | [`Prepare`](xref:NextORM.Core.QueryCommand`1.Prepare(System.Boolean,System.Threading.CancellationToken)) / `EntityBuilder<T>.Prepare()` |
-| Lookup key | structural hash of the query shape | none - you hold the returned command |
+| Lookup key | structural hash of the query shape (for an APPLY join, including the APPLY source expression); never the rendered SQL | none - you hold the returned command |
 | Lifetime | until `PurgeQueryCache()` or process exit | as long as you keep the reference |
 | Scope | **per thread**, shared by every [`IDataContext`](xref:NextORM.Core.IDataContext) on that thread | the instance you keep |
 | Populates the cache | yes | **no** |
@@ -67,7 +67,7 @@ select id
  from simple_entity
 ```
 
-Because the cache key is structural, two calls with a *different lambda instance* but the same shape are a cache hit. That is what makes the cache useful for queries written inline in a loop:
+Because the cache key is structural, two calls with a *different lambda instance* but the same shape are a cache hit; a lambda whose parameter names differ is still the same shape. That is what makes the cache useful for queries written inline in a loop. For an APPLY join the APPLY source expression is part of that shape, so the same projection type with a different source is a different plan and gets its own SQL. The key is never the rendered SQL:
 
 ```csharp
 for (var i = 0; i < 2; i++)
@@ -164,7 +164,7 @@ var implicitRows = ctx.From<ISimpleEntity>().Select(x => x.Id).ToList();
 
 ## Plan-cache scope and purging
 
-The implicit cache (`DataContext._queryPlanCache`) is a `[ThreadStatic]` dictionary keyed by `(ContextType, QueryPlan)`:
+The implicit cache (`DataContext._queryPlanCache`) is a `[ThreadStatic]` dictionary keyed by `(ContextType, QueryPlan)`, where `QueryPlan` is the structural shape — for an APPLY join that includes the APPLY source expression, never the rendered SQL:
 
 * **Per thread.** An entry created on thread A is invisible to thread B; per thread-pool hop the hit rate drops to zero until the shape is seen again on that thread.
 * **Per context type.** SQLite, PostgreSQL and SQL Server produce different SQL and different [`DbCommand`](xref:NextORM.Core.DbPreparedQueryCommand`1.DbCommand) implementations for the same shape, so they get separate entries.

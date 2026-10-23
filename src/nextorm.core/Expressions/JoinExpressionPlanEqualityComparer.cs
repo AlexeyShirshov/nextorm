@@ -58,6 +58,10 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
         //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
         if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.JoinCondition, y.JoinCondition)) return false;
 
+        // A correlated APPLY source is part of the join shape: the applied query is built from it
+        // during preparation, so joins with structurally different sources must not share a plan.
+        if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.ApplySource, y.ApplySource)) return false;
+
         //_cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
         if (!_queryProvider.GetFromExpressionPlanEqualityComparer().Equals(x.From, y.From)) return false;
 
@@ -111,6 +115,8 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
                 hash.Add(identity.GetHashCode());
 
             hash.Add(obj.JoinCondition, _queryProvider.GetExpressionPlanEqualityComparer());
+
+            hash.Add(obj.ApplySource, _queryProvider.GetExpressionPlanEqualityComparer());
 
             hash.Add(obj.From, _queryProvider.GetFromExpressionPlanEqualityComparer());
 
