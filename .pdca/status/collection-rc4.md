@@ -54,6 +54,7 @@
 | T278 | #278 | cycle | G3 | pdca-dotnet | ready | — | — | done | `collection/rc4/task-3-285` @ `0594ddd5` | N=1 | `.pdca/status/T278-1.md` | r=1 | `15a4d0bc` | **DONE** — `soundex` no longer advertised; red→green with zero command executions; #278 closed; P2 note: `DialectCapabilities.cs:774` XML summary still names soundex (out of footprint) |
 | T277 | #277 | cycle | G9 | pdca-dotnet | ready | — | — | done | `collection/rc4/task-9-1` @ `23e7c993` | N=1 | `.pdca/status/T277-1.md` | r=2 | `15a4d0bc` | **DONE** (test-only, no product change) — `ClickHouseExtendedFunctionTests.cs` +234/−0: 48 runner-visible cases (exact issue query, correlated body, 2 negative controls, 45-cell higher-order matrix); live G 198/198 with 48/48 T277 and 0 skips; CHECK `pass` 11/11 P1; r=2 re-pinned the inert mutation site to `SqlOperandTranslator.cs:201` + two oracle amendments; #277 closed |
 | T276 | #276 | cycle | pending | pdca-dotnet | ready | — | — | pending | — | N=1 | `.pdca/status/T276-1.md` | r=1 | `15a4d0bc` | PLAN ready r=1: renderer-side outer CAST to the declared CLR array type (declarations preserved); needs the `ClickHouseDialect.cs` slot after T252–T256/T286; boundary vs T277 stated |
+| T335 | #335 | cycle | G1 | pdca-dotnet | pending | — | — | pending | — | N=1 | `.pdca/status/T335-1.md` | r=0 | `15a4d0bc` | **filed by the T276 lane (2026-10-23), milestone 1.0.9-rc4** — bound nullable array parameter (`int?[]`) loses its `null` elements in the pinned ClickHouse driver: `{1,null,3}` arrives as `{1,0,3}`. Output normalisation of #276 is **not** the cause (`ISqlDialect.MakeArrayResult` fixed output; the result type is already `int?[]`); this is pre-existing **input binding**. Acceptance: real nulls survive end to end, non-null values/declared types/column-CAST nulls unchanged, live regression test on 25.8. Placement: **immediately after T276**, before T286b. PLAN pending |
 | T266 | #266 | cycle | pending | pdca-dotnet | ready | — | — | pending | — | N=1 | `.pdca/status/T266-1.md` | r=1 | `15a4d0bc` | PLAN ready r=1: typed table-variable OUTPUT capture (`OutputIntoTableVariable` + `FromOutput`) for INSERT/UPDATE/DELETE/MERGE, additive API; serialized after T301 |
 | T264 | #264 | cycle | pending | pdca-dotnet | ready | — | — | pending | — | N=1 | `.pdca/status/T264-1.md` | r=1 | `15a4d0bc` | PLAN ready r=1: reject nonzero-month intervals with an actionable `InvalidCastException` (no 30-day approximation), zero-month converts exactly; needs `SqlFunctions.Postgres.cs` after T281 |
 | T263 | #263 | cycle | G5 | pdca-dotnet | ready | — | — | done | `collection/rc4/task-5-1` @ `bb50802b` | N=1 | `.pdca/status/T263-1.md` | r=1 | `15a4d0bc` | **DONE** — contextual `cast(... as jsonb)` at the six `json_get*` sites; live PG 17.11 `42725` red→green, PG unit 862/862, C-LIVE 43/43, DocFX 504 pages; 38/38 rows, CHECK pass-with-recorded-exceptions; #263 closed |
@@ -80,7 +81,7 @@
 
 ## Groups
 
-Built by `pdca-planner` after the ALL-barrier (56/56 `ready`), then extended by the **scope additions T324, T330, T331, T333** (2026-10-22) → **64 units**. Schedule revision vector: `{T249:2, all others:1}`.
+Built by `pdca-planner` after the ALL-barrier (56/56 `ready`), then extended by the **scope additions T324, T330, T331, T333** (2026-10-22) → **64 units**; + T335 filed by the T276 lane (2026-10-23) → **65 units**. Schedule revision vector: `{T249:2, all others:1}`.
 
 | group | ordered units | shared surface | why one group | size |
 |---|---|---|---|---|
@@ -187,6 +188,6 @@ The eight terminal groups were integrated through a dedicated branch, not the ma
 
 ## Done / Verified / Incomplete
 
-- Done: **21/64** units; the eight terminal groups G2–G9 are merged into `1.0.9-rc4` @ `c99cce5c`, and only **G1** is still open (39 units). Done: T248, T252, T253, T254, T255, T256, T257, T258, T261, T263, T277, T278, T279, T285, T286, T290, T293, T295, T296, T299, T316. In flight: T286 (G1). Next in G1 order: T276.
+- Done: **21/65** units; the eight terminal groups G2–G9 are merged into `1.0.9-rc4` @ `c99cce5c`, and only **G1** is still open (39 units). Done: T248, T252, T253, T254, T255, T256, T257, T258, T261, T263, T277, T278, T279, T285, T286, T290, T293, T295, T296, T299, T316. In flight: T286 (G1). Next in G1 order: T276.
 - Verified: —
 - Incomplete: —
