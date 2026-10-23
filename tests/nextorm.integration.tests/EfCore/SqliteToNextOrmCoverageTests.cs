@@ -371,18 +371,8 @@ public sealed class SqliteToNextOrmCoverageTests
         FluentActions.Invoking(() => db.Tracks.Where(x => EF.Property<int>(x, "Plays") > 10).ToNextOrm(db))
             .Should().Throw<NotSupportedException>().WithMessage("*EF.Property*");
 
-        // see tracking: cycle integration-branch-coverage-1, D2 candidate "ef-functions-extension-guard-gap".
-        // The bridge's EF.Functions guard only matches a call whose declaring type is DbFunctions (or a
-        // type derived from it) or whose receiver node is a member declared on EF. DbFunctionsExtensions
-        // is a plain static class and an extension call carries no receiver node, so EF.Functions.Like
-        // slips through and is handed to nextorm's translator. The observed outcome is not the bridge's
-        // NotSupportedException but a raw provider error: SQLite Error 1: 'near "a%": syntax error'. The
-        // product is not touched in DO, so the fact pins the observed behaviour for the candidate.
-        var likeBuilder = db.Tracks.Where(x => EF.Functions.Like(x.Name, "a%")).ToNextOrm(db);
-
-        FluentActions.Invoking(() => likeBuilder.OrderBy(x => x.Id).Select(x => x.Id).ToList())
-            .Should().Throw<SqliteException>()
-            .WithMessage("*syntax error*");
+        FluentActions.Invoking(() => db.Tracks.Where(x => EF.Functions.Like(x.Name, "a%")).ToNextOrm(db))
+            .Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
     }
 
     [Fact]
