@@ -54,18 +54,28 @@ internal sealed class MutationParameterLowering
 
     private readonly SqlStringLiteralPolicy? _policy;
 
+    // PostgreSQL never lowers a value, but the same render seam is its final-value boundary (D5): an
+    // ad-hoc or batch mutation whose value became NUL-bearing after conversion is rejected here, before
+    // the statement's SQL is returned to the caller.
+    private readonly bool _guardPostgres;
+
     // Per-occurrence bookkeeping, in emission order. A name may be recorded more than once: a caller
     // that shares its accumulator (for example a batch, or a captured value referenced twice) can bind
     // one name at several occurrences. Both lists stay null for a render that never lowers a value.
     private List<string>? _lowered;
     private List<string>? _emitted;
 
-    private MutationParameterLowering(SqlStringLiteralPolicy? policy) => _policy = policy;
+    private MutationParameterLowering(SqlStringLiteralPolicy? policy, bool guardPostgres = false)
+    {
+        _policy = policy;
+        _guardPostgres = guardPostgres;
+    }
 
     /// <summary>
-    /// Resolves the lowering for one render: active only when the render is ad-hoc or batch <em>and</em> the
-    /// dialect resolves to the MySQL-family literal policy. Every other combination gets the shared no-op,
-    /// which leaves SQL text and bindings exactly as they were.
+    /// Resolves the render's value seam: the MySQL-family policy lowers text into a literal, the PostgreSQL
+    /// policy only guards the final values, and every other combination gets the shared no-op, which leaves
+    /// SQL text and bindings exactly as they were. A prepared render gets the no-op on every dialect: its
+    /// statement is specialized (or guarded) by the prepared command at execution time.
     /// </summary>
     /// <param name="dialect">The dialect of the statement being rendered.</param>
     /// <param name="renderKind">How the statement is rendered.</param>
@@ -78,7 +88,11 @@ internal sealed class MutationParameterLowering
         // MariaDB resolves to the same policy instance as MySQL, so the MySQL-family test is an identity
         // check against that one seam rather than a second provider table in Core.
         var policy = SqlStringLiteralPolicies.For(dialect);
-        return ReferenceEquals(policy, SqlStringLiteralPolicy.MySql) ? new MutationParameterLowering(policy) : None;
+        if (ReferenceEquals(policy, SqlStringLiteralPolicy.MySql))
+            return new MutationParameterLowering(policy);
+        if (ReferenceEquals(policy, SqlStringLiteralPolicy.Postgres))
+            return new MutationParameterLowering(policy: null, guardPostgres: true);
+        return None;
     }
 
     /// <summary>Whether this render lowers any value at all.</summary>
@@ -142,6 +156,11 @@ internal sealed class MutationParameterLowering
     /// <returns>The parameters to bind, in emission order.</returns>
     internal List<Parameter> Project(List<Parameter> parameters)
     {
+        // The statement's final values are known here: every renderer that consults this seam ends with
+        // this call, so the PostgreSQL guard rejects a NUL-bearing value before the SQL is returned.
+        if (_guardPostgres)
+            PostgresParameterGuard.Validate(SqlStringLiteralPolicy.Postgres, parameters);
+
         if (_lowered is not { Count: > 0 })
             return parameters;
 

@@ -22,12 +22,19 @@ internal static class SqlLiteral
         ArgumentNullException.ThrowIfNull(value);
 
         if (value.Contains('\u0000'))
-            throw new NotSupportedException(
-                "PostgreSQL text values cannot contain U+0000 (NUL); the value was rejected before it could reach the server.");
+            throw PostgresNul();
 
         if (!IsWellFormedUtf16(value))
             throw UnsupportedSurrogate("PostgreSQL");
     }
+
+    /// <summary>
+    /// Creates the deterministic rejection of a PostgreSQL text value that contains <c>U+0000</c>. The
+    /// message names the provider and the code point and never echoes the value; translation-time and
+    /// execution-time guards share it, so both report the same failure identity.
+    /// </summary>
+    internal static NotSupportedException PostgresNul() => new(
+        "PostgreSQL text values cannot contain U+0000 (NUL); the value was rejected before it could reach the server.");
 
     /// <summary>
     /// Creates the deterministic failure for a value that cannot be encoded as UTF-8 because of an

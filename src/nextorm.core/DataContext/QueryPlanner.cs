@@ -860,12 +860,15 @@ internal sealed class QueryPlanner : IQueryPlanner
                 SequentialAccess = sequentialAccess,
             });
 
-            // Attach the immutable occurrence template of the planner-rendered statement and the policy
-            // its dialect resolved. The template is produced once here, on the miss, and shared by every
-            // execution of the cached command; caller-owned text (`RawSqlOverride`) never gets one
-            // because it carries no planner-owned emission.
-            if (ext is null && capture is not null && sql is not null && @params is not null)
-                compiledQuery.SetParameterTemplate(capture.Finalize(sql, @params), SqlStringLiteralPolicies.For(_dialect()));
+            // Attach the policy the planning dialect resolved and, when the statement is planner-rendered,
+            // the immutable occurrence template. The policy is attached even without a template because it
+            // also selects the PostgreSQL final-value guard on every checkout (D5); caller-owned text
+            // (`RawSqlOverride`) keeps no template because it carries no planner-owned emission.
+            compiledQuery.SetParameterTemplate(
+                ext is null && capture is not null && sql is not null && @params is not null
+                    ? capture.Finalize(sql, @params)
+                    : null,
+                SqlStringLiteralPolicies.For(_dialect()));
 
             // Build the immutable guarded refresh recipe once, on the miss. Unsupported shapes leave it
             // null and keep the original ExtractParams refresh on every hit.

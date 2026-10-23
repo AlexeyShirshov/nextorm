@@ -29,6 +29,11 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     private readonly InterceptorHooks _interceptors;
     private readonly BatchRunner _batchRunner;
 
+    // Resolved on first use, never in the context constructor: Dialect is provider-supplied and must not
+    // run before the derived constructor completes.
+    private readonly Func<ISqlDialect> _dialect;
+    private SqlStringLiteralPolicy? _stringLiteralPolicy;
+
     internal QueryExecutor(
         IDataContext context,
         IConnectionManager connectionManager,
@@ -38,7 +43,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         LoggingOptions logging,
         Func<bool> isDisposed,
         Func<DbTransaction?> currentTransaction,
-        InterceptorHooks interceptors)
+        InterceptorHooks interceptors,
+        Func<ISqlDialect> dialect)
     {
         _context = context;
         _connectionManager = connectionManager;
@@ -51,8 +57,16 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         _isDisposed = isDisposed;
         _currentTransaction = currentTransaction;
         _interceptors = interceptors;
-        _batchRunner = new BatchRunner(connectionManager, createParam, createParamSimple, currentTransaction, isDisposed, logging, context.CommandTimeout);
+        _dialect = dialect;
+        _batchRunner = new BatchRunner(connectionManager, createParam, createParamSimple, currentTransaction, isDisposed, logging, context.CommandTimeout, dialect);
     }
+
+    /// <summary>
+    /// The planning dialect's string-literal policy, resolved once. Only its PostgreSQL identity matters
+    /// to execution: it enables the final-value NUL guard (D5).
+    /// </summary>
+    private SqlStringLiteralPolicy StringLiteralPolicy =>
+        _stringLiteralPolicy ??= SqlStringLiteralPolicies.For(_dialect());
 
     // The interception helpers below are the single place the command lifecycle events are raised.
     // Each wrapper checks the interceptor count first, so with none registered the call is a branch
@@ -290,7 +304,14 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// executions, so the parameters are added each time.
     /// </summary>
     private DbCommand CreateMutationCommand(string sql, IReadOnlyList<Parameter> parameters)
-        => CreateCommand(sql, new MutationParameterState(parameters, _createParam), BindMutationParameters);
+    {
+        // Execution-time PostgreSQL guard: every ad-hoc mutation renderer ends here before the command
+        // exists, including the ones that do not consult the MySQL-family lowering seam (the multi-table
+        // UPDATE/DELETE renders). The final values are already converted, so this is the last seam that
+        // sees them before the driver.
+        PostgresParameterGuard.Validate(StringLiteralPolicy, parameters);
+        return CreateCommand(sql, new MutationParameterState(parameters, _createParam), BindMutationParameters);
+    }
 
     /// <summary>
     /// Creates a fresh <see cref="DbCommand"/> for a raw/procedure command, binding each descriptor
@@ -327,6 +348,13 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
                 cmd.CommandTimeout = commandTimeout;
 
             bindParameters(cmd, state);
+
+            // Raw/procedure commands bind caller descriptors straight onto the command, so this is their
+            // final-value seam: ExecuteRaw/ExecuteProcedure (sync and async) fail deterministically here
+            // instead of letting the Npgsql driver reject U+0000. Mutations have their own seam in
+            // CreateMutationCommand and prepared commands in DbPreparedQueryCommand.GetDbCommandCore.
+            if (state is ProcedureParameterState)
+                PostgresParameterGuard.Validate(StringLiteralPolicy, cmd.Parameters);
 
             RaiseCommandInitialized(cmd);
 

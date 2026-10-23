@@ -81,9 +81,10 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     internal SqlParameterTemplate? ParameterTemplate { get; private set; }
 
     /// <summary>
-    /// The string-literal policy the statement was planned with, or <see langword="null"/> when the
-    /// statement has no template. Execution-time specialization is enabled only for the MySQL-family
-    /// policy; every other policy keeps the prepared statement byte-identical.
+    /// The string-literal policy the statement was planned with, or <see langword="null"/> only for a
+    /// command constructed outside the planner. Execution-time specialization is enabled only for the
+    /// MySQL-family policy; every other policy keeps the prepared statement byte-identical. The
+    /// PostgreSQL policy enables the final-value NUL guard on every checkout.
     /// </summary>
     private SqlStringLiteralPolicy? _stringLiteralPolicy;
 
@@ -324,6 +325,12 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
             DbCommandTransaction = transaction;
             cmd.Transaction = transaction;
         }
+
+        // The final values are now in the driver collection (cold bind or cache refresh), so PostgreSQL's
+        // NUL rejection runs here, before the command can be executed. It runs on every checkout: a second
+        // execution that receives a NUL-bearing value throws instead of reaching the server. PostgreSQL
+        // never specializes, so this guard is independent of the MySQL branch below.
+        PostgresParameterGuard.Validate(_stringLiteralPolicy, parameters);
 
         if (ParameterTemplate is { } template && ReferenceEquals(_stringLiteralPolicy, SqlStringLiteralPolicy.MySql))
             SpecializeMySql(template);

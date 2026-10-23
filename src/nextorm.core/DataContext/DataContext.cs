@@ -107,7 +107,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData, LogParams: _environment.LogParams),
             () => _disposed,
             () => _connectionManager.CurrentTransaction,
-            _interceptors);
+            _interceptors,
+            GetDialect);
 
         // The planning axis gets the provider hooks as delegates and invokes them lazily: calling the
         // abstract/virtual members here would run derived code before the derived constructor.

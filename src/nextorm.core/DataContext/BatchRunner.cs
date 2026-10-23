@@ -27,6 +27,8 @@ internal sealed class BatchRunner
     private readonly bool _logParams;
     private readonly bool _logSensitiveData;
     private readonly int? _commandTimeout;
+    private readonly Func<ISqlDialect> _dialect;
+    private SqlStringLiteralPolicy? _stringLiteralPolicy;
 
     internal BatchRunner(
         IConnectionManager connectionManager,
@@ -35,7 +37,8 @@ internal sealed class BatchRunner
         Func<DbTransaction?> currentTransaction,
         Func<bool> isDisposed,
         LoggingOptions logging,
-        int? commandTimeout)
+        int? commandTimeout,
+        Func<ISqlDialect> dialect)
     {
         _connectionManager = connectionManager;
         _createParamAware = createParamAware;
@@ -46,6 +49,22 @@ internal sealed class BatchRunner
         _logParams = logging.LogParams;
         _logSensitiveData = logging.LogSensitiveData;
         _commandTimeout = commandTimeout;
+        _dialect = dialect;
+    }
+
+    /// <summary>
+    /// PostgreSQL final-value guard for every statement of the batch, run before the batch command is
+    /// handed to the driver. Mutation steps are already guarded while they render, but query steps and
+    /// caller-supplied steps only meet their final values here (D5).
+    /// </summary>
+    private void GuardPostgresParameters(BatchPlan plan)
+    {
+        var policy = _stringLiteralPolicy ??= SqlStringLiteralPolicies.For(_dialect());
+        if (!PostgresParameterGuard.IsPostgres(policy))
+            return;
+
+        for (var i = 0; i < plan.Statements.Count; i++)
+            PostgresParameterGuard.Validate(policy, plan.Statements[i].Parameters);
     }
 
     /// <summary>Executes a rendered batch in one round trip and materialises its result rows.</summary>
@@ -203,6 +222,8 @@ internal sealed class BatchRunner
 
     private DbBatch CreateBatch(DbConnection conn, BatchPlan plan)
     {
+        GuardPostgresParameters(plan);
+
         var batch = conn.CreateBatch();
         if (_currentTransaction() is { } transaction)
             batch.Transaction = transaction;
@@ -232,6 +253,8 @@ internal sealed class BatchRunner
 
     private DbCommand CreateJoinedCommand(DbConnection conn, BatchPlan plan)
     {
+        GuardPostgresParameters(plan);
+
         var cmd = conn.CreateCommand();
         cmd.CommandText = plan.ToSql();
 
