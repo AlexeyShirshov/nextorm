@@ -115,10 +115,10 @@ SQLite has no `OFFSET` without `LIMIT`, so an offset-only query emits the sentin
 
 ## SQLite-only functions
 
-`SqlFunctions.Sqlite` exposes the SQLite-only surface: the core scalars, JSON1, the date helpers, the
-math-extension functions and the FTS3/FTS4/FTS5 full-text query surface. `json_each`/`json_tree` and
-the FTS5 table-valued search are available as table functions. Other providers reject every member of
-the surface with a `NotSupportedException`.
+`SqlFunctions.Sqlite` exposes the SQLite-only surface: the core scalars, JSON1, the aggregate functions,
+the date helpers, the math-extension functions and the FTS3/FTS4/FTS5 full-text query surface.
+`json_each`/`json_tree` and the FTS5 table-valued search are available as table functions. Other
+providers reject every member of the surface with a `NotSupportedException`.
 
 ```csharp
 ctx.From<IComplexEntity>()
@@ -126,9 +126,13 @@ ctx.From<IComplexEntity>()
     {
         Json = SqlFunctions.Sqlite.json_extract<string>(x.String, "$.name"),
         Kind = SqlFunctions.Sqlite.@typeof(x.String),
+        Total = SqlFunctions.Sqlite.total(x.NullableInt),
         Pi = SqlFunctions.Sql.pi()
     });
 ```
+
+The shipped aggregate is `total(value)`: it returns `double` and never null, so an empty or all-null
+group yields `0.0`.
 
 ### Full-text search (FTS3/FTS4/FTS5)
 

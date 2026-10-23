@@ -1,10 +1,12 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
+using System.Data.Common;
 using System.Text;
 using FluentAssertions;
 using NextORM.Core;
 using Npgsql;
+using NpgsqlTypes;
 using System.Text.Json;
 
 namespace NextORM.Integration.Tests;
@@ -146,6 +148,441 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         hashes.A.Should().Equal(expected);
         hashes.B.Should().Equal(expected);
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // T261 (#261): an inline byte[] must reach a PostgreSQL crypto function as one whole bytea
+    // operand, not as concatenated integer literals. The three inline shapes (non-empty
+    // initializer, empty initializer, empty bounds) are separate cases: they are distinct
+    // expression shapes and must never be collapsed. Every expected digest below is an
+    // independent oracle (Python hashlib over the same bytes, recorded in the cycle's
+    // scenarios.json), never a value produced by the translator under test.
+    // -----------------------------------------------------------------------------------------
+
+    public static TheoryData<string> T261ByteArrayFunctions => new()
+    {
+        "sha256", "sha224", "sha384", "sha512", "digest"
+    };
+
+    public static TheoryData<string> T261ReassignmentFunctions => new() { "sha256", "digest" };
+
+    private static byte[] T261AbcOracle(string function) => Convert.FromHexString(function switch
+    {
+        "sha256" or "digest" => "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "sha224" => "23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7",
+        "sha384" => "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7",
+        "sha512" => "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f",
+        _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+    });
+
+    private static byte[] T261EmptyOracle(string function) => Convert.FromHexString(function switch
+    {
+        "sha256" or "digest" => "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sha224" => "d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f",
+        "sha384" => "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b",
+        "sha512" => "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+        _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+    });
+
+    private static byte[] T261XyzOracle(string function) => Convert.FromHexString(function switch
+    {
+        "sha256" or "digest" => "3608bca1e44ea6c4d268eb6db02260269892c0b42b86bbf1e77a6fa16c3c9282",
+        "sha224" => "30e90f1cd0ceff8eb3dd6a540a605c0666f841d35de63c57e4dd2877",
+        "sha384" => "edcb0f4721e6578d900e4c24ad4b19e194ab6c87f8243bfc6b11754dd8b0bbde4f30b1d18197932b6376da004dcd97c4",
+        "sha512" => "4a3ed8147e37876adc8f76328e5abcc1b470e6acfc18efea0135f983604953a58e183c1a6086e91ba3e821d926f5fdeb37761c7ca0328a963f5e92870675b728",
+        _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+    });
+
+    private QueryCommand<byte[]?> T261InlineNonEmptyQuery(string function)
+    {
+        var e = _sut.SimpleEntity.Where(x => x.Id == 1);
+
+        return function switch
+        {
+            "sha256" => e.Select(x => SqlFunctions.Postgres.sha256(new byte[] { 0x61, 0x62, 0x63 })),
+            "sha224" => e.Select(x => SqlFunctions.Postgres.sha224(new byte[] { 0x61, 0x62, 0x63 })),
+            "sha384" => e.Select(x => SqlFunctions.Postgres.sha384(new byte[] { 0x61, 0x62, 0x63 })),
+            "sha512" => e.Select(x => SqlFunctions.Postgres.sha512(new byte[] { 0x61, 0x62, 0x63 })),
+            "digest" => e.Select(x => SqlFunctions.Postgres.digest(new byte[] { 0x61, 0x62, 0x63 }, "sha256")),
+            _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+        };
+    }
+
+    private QueryCommand<byte[]?> T261InlineEmptyInitializerQuery(string function)
+    {
+        var e = _sut.SimpleEntity.Where(x => x.Id == 1);
+
+        return function switch
+        {
+            "sha256" => e.Select(x => SqlFunctions.Postgres.sha256(new byte[] { })),
+            "sha224" => e.Select(x => SqlFunctions.Postgres.sha224(new byte[] { })),
+            "sha384" => e.Select(x => SqlFunctions.Postgres.sha384(new byte[] { })),
+            "sha512" => e.Select(x => SqlFunctions.Postgres.sha512(new byte[] { })),
+            "digest" => e.Select(x => SqlFunctions.Postgres.digest(new byte[] { }, "sha256")),
+            _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+        };
+    }
+
+    private QueryCommand<byte[]?> T261InlineEmptyBoundsQuery(string function)
+    {
+        var e = _sut.SimpleEntity.Where(x => x.Id == 1);
+
+        return function switch
+        {
+            "sha256" => e.Select(x => SqlFunctions.Postgres.sha256(new byte[0])),
+            "sha224" => e.Select(x => SqlFunctions.Postgres.sha224(new byte[0])),
+            "sha384" => e.Select(x => SqlFunctions.Postgres.sha384(new byte[0])),
+            "sha512" => e.Select(x => SqlFunctions.Postgres.sha512(new byte[0])),
+            "digest" => e.Select(x => SqlFunctions.Postgres.digest(new byte[0], "sha256")),
+            _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(T261ByteArrayFunctions))]
+    public void T261_InlineNonEmpty_ShouldMatchAbcOracle(string function)
+        => T261InlineNonEmptyQuery(function).First().Should().Equal(T261AbcOracle(function));
+
+    [Theory]
+    [MemberData(nameof(T261ByteArrayFunctions))]
+    public void T261_InlineEmptyInitializer_ShouldMatchEmptyOracle(string function)
+        => T261InlineEmptyInitializerQuery(function).First().Should().Equal(T261EmptyOracle(function));
+
+    [Theory]
+    [MemberData(nameof(T261ByteArrayFunctions))]
+    public void T261_InlineEmptyBounds_ShouldMatchEmptyOracle(string function)
+        => T261InlineEmptyBoundsQuery(function).First().Should().Equal(T261EmptyOracle(function));
+
+    [Fact]
+    public void T261_NullByteArray_ShouldProduceSqlNullForAllFunctions()
+    {
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Sha256 = SqlFunctions.Postgres.sha256((byte[]?)null),
+                Sha224 = SqlFunctions.Postgres.sha224((byte[]?)null),
+                Sha384 = SqlFunctions.Postgres.sha384((byte[]?)null),
+                Sha512 = SqlFunctions.Postgres.sha512((byte[]?)null),
+                Digest = SqlFunctions.Postgres.digest((byte[]?)null, "sha256")
+            })
+            .First();
+
+        // Null must stay distinct from the empty input: every hash is SQL NULL, not the empty digest.
+        r.Sha256.Should().BeNull();
+        r.Sha224.Should().BeNull();
+        r.Sha384.Should().BeNull();
+        r.Sha512.Should().BeNull();
+        r.Digest.Should().BeNull();
+    }
+
+    [Fact]
+    public void T261_CapturedByteArray_ShouldMatchAbcOracleForAllFunctions()
+    {
+        var data = new byte[] { 0x61, 0x62, 0x63 };
+
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Sha256 = SqlFunctions.Postgres.sha256(data),
+                Sha224 = SqlFunctions.Postgres.sha224(data),
+                Sha384 = SqlFunctions.Postgres.sha384(data),
+                Sha512 = SqlFunctions.Postgres.sha512(data),
+                Digest = SqlFunctions.Postgres.digest(data, "sha256")
+            })
+            .First();
+
+        r.Sha256.Should().Equal(T261AbcOracle("sha256"));
+        r.Sha224.Should().Equal(T261AbcOracle("sha224"));
+        r.Sha384.Should().Equal(T261AbcOracle("sha384"));
+        r.Sha512.Should().Equal(T261AbcOracle("sha512"));
+        r.Digest.Should().Equal(T261AbcOracle("digest"));
+    }
+
+    [Fact]
+    public void T261_ExplicitParameterByteArray_ShouldMatchAbcOracleForAllFunctions()
+    {
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Sha256 = SqlFunctions.Postgres.sha256(SqlFunctions.Parameter<byte[]>(0)),
+                Sha224 = SqlFunctions.Postgres.sha224(SqlFunctions.Parameter<byte[]>(0)),
+                Sha384 = SqlFunctions.Postgres.sha384(SqlFunctions.Parameter<byte[]>(0)),
+                Sha512 = SqlFunctions.Postgres.sha512(SqlFunctions.Parameter<byte[]>(0)),
+                Digest = SqlFunctions.Postgres.digest(SqlFunctions.Parameter<byte[]>(0), "sha256")
+            })
+            .First(new byte[] { 0x61, 0x62, 0x63 });
+
+        r.Sha256.Should().Equal(T261AbcOracle("sha256"));
+        r.Sha224.Should().Equal(T261AbcOracle("sha224"));
+        r.Sha384.Should().Equal(T261AbcOracle("sha384"));
+        r.Sha512.Should().Equal(T261AbcOracle("sha512"));
+        r.Digest.Should().Equal(T261AbcOracle("digest"));
+    }
+
+    [Fact]
+    public void T261_ByteaColumn_ShouldHashStoredBytes()
+    {
+        // The seeded binary_entity row 1 stores 0x01020304; the oracle is hashlib over those bytes.
+        var r = _sut.BinaryEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Sha256 = SqlFunctions.Postgres.sha256(x.Data),
+                Sha224 = SqlFunctions.Postgres.sha224(x.Data),
+                Sha384 = SqlFunctions.Postgres.sha384(x.Data),
+                Sha512 = SqlFunctions.Postgres.sha512(x.Data),
+                Digest = SqlFunctions.Postgres.digest(x.Data, "sha256")
+            })
+            .First();
+
+        r.Sha256.Should().Equal(Convert.FromHexString("9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a"));
+        r.Sha224.Should().Equal(Convert.FromHexString("fe19672fa20acdc6a794f7ed68dd7563c27f647920164b991f1ad037"));
+        r.Sha384.Should().Equal(Convert.FromHexString("5a667d62430a8c253ebae433333904dc6e1d41dcdc479704773159b905a3ad82d2bad7762d81a366cc46fbb2e2327f5c"));
+        r.Sha512.Should().Equal(Convert.FromHexString("a7c976db1723adb41274178dc82e9b777941ab201c69de61d0f2bc6d27a3598f594fa748e50d88d3c2bf1e2c2e72c3cfef78c3c6d4afa90391f7e33ababca48e"));
+        r.Digest.Should().Equal(Convert.FromHexString("9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a"));
+    }
+
+    [Fact]
+    public void T261_NullByteaColumn_ShouldProduceSqlNullForAllFunctions()
+    {
+        // The seeded binary_entity row 2 stores SQL NULL; a column must never be materialised
+        // client-side into an empty array, so every function returns NULL.
+        var r = _sut.BinaryEntity.Where(x => x.Id == 2)
+            .Select(x => new
+            {
+                Sha256 = SqlFunctions.Postgres.sha256(x.Data),
+                Sha224 = SqlFunctions.Postgres.sha224(x.Data),
+                Sha384 = SqlFunctions.Postgres.sha384(x.Data),
+                Sha512 = SqlFunctions.Postgres.sha512(x.Data),
+                Digest = SqlFunctions.Postgres.digest(x.Data, "sha256")
+            })
+            .First();
+
+        r.Sha256.Should().BeNull();
+        r.Sha224.Should().BeNull();
+        r.Sha384.Should().BeNull();
+        r.Sha512.Should().BeNull();
+        r.Digest.Should().BeNull();
+    }
+
+    [Fact]
+    public void T261_DigestStringForms_ShouldKeepTextRoute()
+    {
+        var data = "abc";
+        var algorithm = "sha256";
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Inline = SqlFunctions.Postgres.digest("abc", "sha256"),
+                EmptyString = SqlFunctions.Postgres.digest("", "sha256"),
+                Captured = SqlFunctions.Postgres.digest(data, "sha256"),
+                CapturedAlgorithm = SqlFunctions.Postgres.digest("abc", algorithm),
+                Parameter = SqlFunctions.Postgres.digest(SqlFunctions.Parameter<string>(0), "sha256"),
+                Column = SqlFunctions.Postgres.digest(x.String, "sha256")
+            })
+            .First("abc");
+
+        r.Inline.Should().Equal(T261AbcOracle("digest"));
+        r.EmptyString.Should().Equal(T261EmptyOracle("digest"));
+        r.Captured.Should().Equal(T261AbcOracle("digest"));
+        r.CapturedAlgorithm.Should().Equal(T261AbcOracle("digest"));
+        r.Parameter.Should().Equal(T261AbcOracle("digest"));
+
+        // complex_entity row 1 stores 'dadfasd'.
+        r.Column.Should().Equal(Convert.FromHexString("6110e528398f5c4137446fbdcb506e0a2f0b7d426c501f47c01657a2d3d3a9ce"));
+    }
+
+    [Theory]
+    [MemberData(nameof(T261ByteArrayFunctions))]
+    public void T261_RefreshInlineCapturedElements_ShouldUseCurrentValues(string function)
+    {
+        byte a = 0x61, b = 0x62, c = 0x63;
+        var ctx = (DataContext)_sut.DataProvider;
+        var ct = TestContext.Current.CancellationToken;
+
+        var command = function switch
+        {
+            "sha256" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.sha256(new byte[] { a, b, c })),
+            "sha224" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.sha224(new byte[] { a, b, c })),
+            "sha384" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.sha384(new byte[] { a, b, c })),
+            "sha512" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.sha512(new byte[] { a, b, c })),
+            "digest" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.digest(new byte[] { a, b, c }, "sha256")),
+            _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 byte-array function"),
+        };
+
+        var prepared = (DbPreparedQueryCommand<byte[]?>)ctx.GetPreparedQueryCommand(command, false, true, ct);
+
+        ctx.ToList(prepared).Single().Should().Equal(T261AbcOracle(function));
+
+        a = 0x78; b = 0x79; c = 0x7a;
+
+        // Re-preparing the same command on the same context is a plan-cache hit: the refreshed array
+        // must carry the current captured elements, not the values bound on the first execution.
+        var refreshed = (DbPreparedQueryCommand<byte[]?>)ctx.GetPreparedQueryCommand(command, false, true, ct);
+
+        ctx.ToList(refreshed).Single().Should().Equal(T261XyzOracle(function));
+    }
+
+    [Theory]
+    [MemberData(nameof(T261ReassignmentFunctions))]
+    public void T261_RefreshCapturedArrayReassignment_ShouldUseCurrentArray(string function)
+    {
+        var data = new byte[] { 0x61, 0x62, 0x63 };
+        var ctx = (DataContext)_sut.DataProvider;
+        var ct = TestContext.Current.CancellationToken;
+
+        var command = function switch
+        {
+            "sha256" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.sha256(data)),
+            "digest" => _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.Postgres.digest(data, "sha256")),
+            _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 refresh function"),
+        };
+
+        var prepared = (DbPreparedQueryCommand<byte[]?>)ctx.GetPreparedQueryCommand(command, false, true, ct);
+
+        ctx.ToList(prepared).Single().Should().Equal(T261AbcOracle(function));
+
+        data = new byte[] { 0x01, 0x02, 0x03 };
+
+        // Same command, same context: the cache hit must re-read the reassigned captured array.
+        var refreshed = (DbPreparedQueryCommand<byte[]?>)ctx.GetPreparedQueryCommand(command, false, true, ct);
+
+        ctx.ToList(refreshed).Single().Should().Equal(
+            Convert.FromHexString(function switch
+            {
+                "sha256" => "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+                "digest" => "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+                _ => throw new ArgumentOutOfRangeException(nameof(function), function, "unknown T261 refresh function"),
+            }));
+    }
+
+    [Fact]
+    public void T261_SqlControls_ShouldBindWholeByteArray()
+    {
+        var data = new byte[] { 0x61, 0x62, 0x63 };
+        var text = "abc";
+
+        var capturedBytesSql = T261SqlOf(
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => new { H = SqlFunctions.Postgres.sha256(data) }),
+            out var capturedBytesCommand);
+
+        var capturedDigestSql = T261SqlOf(
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => new { H = SqlFunctions.Postgres.digest(data, "sha256") }),
+            out var capturedDigestCommand);
+
+        var explicitBytesSql = T261SqlOf(
+            _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => new { H = SqlFunctions.Postgres.sha256(SqlFunctions.Parameter<byte[]>(0)) }),
+            out var explicitBytesCommand);
+
+        var capturedTextSql = T261SqlOf(
+            _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => new { H = SqlFunctions.Postgres.digest(text, "sha256") }),
+            out var capturedTextCommand);
+
+        var parameterTextSql = T261SqlOf(
+            _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => new { H = SqlFunctions.Postgres.digest(SqlFunctions.Parameter<string>(0), "sha256") }),
+            out var parameterTextCommand);
+
+        // Pre-change SQL/parameter baseline for the later exact comparison (AC04/AC05). Captured
+        // first, so a failing assertion can never hide the recorded baseline.
+        T261DumpSql("captured-byte-array.sha256", capturedBytesSql, capturedBytesCommand);
+        T261DumpSql("captured-byte-array.digest", capturedDigestSql, capturedDigestCommand);
+        T261DumpSql("explicit-parameter-byte-array.sha256", explicitBytesSql, explicitBytesCommand);
+        T261DumpSql("captured-string.digest", capturedTextSql, capturedTextCommand);
+        T261DumpSql("explicit-parameter-string.digest", parameterTextSql, parameterTextCommand);
+
+        // A captured array stays one whole bytea parameter; the algorithm of digest stays a literal.
+        capturedBytesSql.Should().Contain("sha256(@");
+        T261AssertCapturedByteaParameter(capturedBytesCommand);
+
+        capturedDigestSql.Should().Contain("digest(@");
+        capturedDigestSql.Should().Contain("'sha256'");
+        T261AssertCapturedByteaParameter(capturedDigestCommand);
+
+        explicitBytesSql.Should().Contain("sha256(@norm_p0)");
+        T261AssertExplicitPlaceholder(explicitBytesCommand, "norm_p0");
+
+        // The text route is unchanged: a binary-array parameter must never appear here.
+        capturedTextSql.Should().Contain("digest(@");
+        capturedTextSql.Should().Contain("'sha256'");
+        T261AssertCapturedTextParameter(capturedTextCommand, "abc");
+
+        parameterTextSql.Should().Contain("digest(@norm_p0, 'sha256')");
+        T261AssertExplicitPlaceholder(parameterTextCommand, "norm_p0");
+    }
+
+    private string T261SqlOf<TResult>(QueryCommand<TResult> command, out DbCommand dbCommand)
+    {
+        var prepared = (DbPreparedQueryCommand<TResult>)((DataContext)_sut.DataProvider)
+            .GetPreparedQueryCommand(command, false, false, TestContext.Current.CancellationToken);
+        dbCommand = prepared.DbCommand;
+
+        return prepared.DbCommand.CommandText.Replace("\r\n", "\n");
+    }
+
+    private static void T261AssertCapturedByteaParameter(DbCommand command)
+    {
+        var parameters = command.Parameters.Cast<DbParameter>().ToList();
+
+        parameters.Should().ContainSingle();
+        parameters[0].Should().BeOfType<NpgsqlParameter>();
+        parameters[0].ParameterName.Should().Be("data");
+        parameters[0].DbType.Should().Be(DbType.Binary);
+        ((NpgsqlParameter)parameters[0]).NpgsqlDbType.Should().Be(NpgsqlDbType.Bytea);
+        (parameters[0].Value as byte[]).Should().Equal(0x61, 0x62, 0x63);
+    }
+
+    private static void T261AssertExplicitPlaceholder(DbCommand command, string expectedName)
+    {
+        var parameters = command.Parameters.Cast<DbParameter>().ToList();
+
+        parameters.Should().ContainSingle();
+        parameters[0].Should().BeOfType<NpgsqlParameter>();
+        parameters[0].ParameterName.Should().Be(expectedName);
+        // SqlFunctions.Parameter<T> is a runtime placeholder: the executing terminal binds the value,
+        // so the prepared command still holds DBNull (T261_ExplicitParameterByteArray covers the
+        // bound bytea result).
+        parameters[0].Value.Should().Be(DBNull.Value);
+    }
+
+    private static void T261AssertCapturedTextParameter(DbCommand command, string expected)
+    {
+        var parameters = command.Parameters.Cast<DbParameter>().ToList();
+
+        parameters.Should().ContainSingle();
+        parameters[0].Should().BeOfType<NpgsqlParameter>();
+        parameters[0].ParameterName.Should().Be("text");
+        parameters[0].DbType.Should().Be(DbType.String);
+        ((NpgsqlParameter)parameters[0]).NpgsqlDbType.Should().Be(NpgsqlDbType.Text);
+        parameters[0].Value.Should().Be(expected);
+    }
+
+    private static void T261DumpSql(string scenario, string sql, DbCommand command)
+    {
+        var parameters = command.Parameters.Cast<DbParameter>().Select(p => new
+        {
+            name = p.ParameterName,
+            db_type = p.DbType.ToString(),
+            npgsql_type = p is NpgsqlParameter np ? np.NpgsqlDbType.ToString() : null,
+            value = p.Value switch
+            {
+                byte[] bytes => "0x" + Convert.ToHexString(bytes).ToLowerInvariant(),
+                DBNull => null,
+                null => null,
+                var other => other.ToString()
+            }
+        }).ToList();
+
+        TestContext.Current.TestOutputHelper?.WriteLine(
+            "T261SQL " + JsonSerializer.Serialize(new { scenario, sql, parameters }));
     }
 
     [Fact]

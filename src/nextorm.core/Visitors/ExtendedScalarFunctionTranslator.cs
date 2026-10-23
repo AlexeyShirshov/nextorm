@@ -231,16 +231,23 @@ internal static class ExtendedScalarFunctionTranslator
     }
 
     /// <summary>
-    /// Renders <c>digest(data, type)</c>/<c>sha256(data)</c>. The arguments are rendered directly
-    /// rather than through <see cref="SqlOperandTranslator.EmitFunction"/> because a <c>byte[]</c>
-    /// argument would otherwise be taken for an array operand and materialised as a single parameter.
+    /// Renders <c>digest(data, type)</c>/<c>sha256(data)</c>. An inline <c>byte[]</c> construction is
+    /// bound as one whole-array parameter through <see cref="SqlOperandTranslator.AppendArrayOperand"/>
+    /// (ordinary traversal would emit its bytes as concatenated integer literals); every other argument
+    /// — a captured array, a runtime parameter, a column, a text value or the digest algorithm — is
+    /// rendered directly, so its existing emission is preserved.
     /// </summary>
     private static void EmitCrypto(BaseExpressionVisitor visitor, string name, IReadOnlyList<Expression> args)
     {
         if (visitor.IsParamMode)
         {
             for (var (i, cnt) = (0, args.Count); i < cnt; i++)
-                visitor.Visit(args[i]);
+            {
+                if (IsInlineByteArrayArgument(args, i))
+                    SqlOperandTranslator.AppendArrayOperand(visitor, args[i]);
+                else
+                    visitor.Visit(args[i]);
+            }
 
             return;
         }
@@ -252,10 +259,30 @@ internal static class ExtendedScalarFunctionTranslator
         for (var (i, cnt) = (0, args.Count); i < cnt; i++)
         {
             if (i > 0) builder.Append(", ");
-            builder.Append(visitor.VisitToString(args[i]));
+
+            if (IsInlineByteArrayArgument(args, i))
+                SqlOperandTranslator.AppendArrayOperand(visitor, args[i]);
+            else
+                builder.Append(visitor.VisitToString(args[i]));
         }
 
         builder.Append(')');
+    }
+
+    /// <summary>
+    /// True for an inline <c>byte[]</c> construction — an array initializer or an array-bounds
+    /// <c>new byte[n]</c>, possibly wrapped in a conversion — in a binary crypto position. Only the
+    /// first argument qualifies, which is the sole argument of the SHA functions and the data argument
+    /// of <c>digest(data, type)</c>; the algorithm argument and <c>digest(string, string)</c> keep
+    /// their current emission.
+    /// </summary>
+    private static bool IsInlineByteArrayArgument(IReadOnlyList<Expression> args, int index)
+    {
+        if (index != 0)
+            return false;
+
+        var argument = TypeFacts.UnwrapConvert(args[index]);
+        return argument is NewArrayExpression && argument.Type == typeof(byte[]);
     }
 
     /// <summary>

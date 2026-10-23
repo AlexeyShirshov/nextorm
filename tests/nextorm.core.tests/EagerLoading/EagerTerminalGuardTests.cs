@@ -13,8 +13,18 @@ namespace NextORM.Core.Tests;
 /// side-effect-free <c>EntityBuilderEagerLoading.ValidateLoadWithForJoinInto</c>; it only rejects an
 /// explicit mode (never a context default) and never materializes a collection.
 /// </summary>
-public class EagerTerminalGuardTests
+public class EagerTerminalGuardTests : IDisposable
 {
+    /// <summary>
+    /// D5b (T258, r=1 n=1): <see cref="QueryPlanStore"/> is process-wide <c>[ThreadStatic]</c> state, so a
+    /// plan cached by another test class on this thread (for example a cached prepare) is still visible
+    /// here. The empty-store assertions below describe only the rejected terminal's own effect, so each
+    /// test instance starts from an empty thread-local store and drops whatever it left behind.
+    /// </summary>
+    public EagerTerminalGuardTests() => QueryPlanStore.Clear();
+
+    public void Dispose() => QueryPlanStore.Clear();
+
     public sealed class TgParent
     {
         public int Id { get; set; }

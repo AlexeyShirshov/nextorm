@@ -25,6 +25,27 @@ internal static class TypeFacts
             : expression;
 
     /// <summary>
+    /// True when the expression is a null literal, possibly behind method-free conversions that
+    /// preserve null. The compiler lowers <c>(int?)null</c> to
+    /// <c>Convert(Constant(null, object), int?)</c>, so a plain <see cref="ConstantExpression"/>
+    /// test misses the shape the nullable-comparison paths have to recognise. Only
+    /// <see cref="ExpressionType.Convert"/>/<see cref="ExpressionType.ConvertChecked"/> nodes
+    /// without a user-defined method and whose target is nullable or a reference type are
+    /// unwrapped; a conversion to a non-nullable value type is not null-preserving. Members,
+    /// calls, closures and every other node are not evaluated and classify as <see langword="false"/>.
+    /// </summary>
+    internal static bool IsNullLiteral(Expression expression) => expression switch
+    {
+        ConstantExpression { Value: null } => true,
+        UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked, Method: null } unary
+            when IsNullPreservingConversion(unary.Type) => IsNullLiteral(unary.Operand),
+        _ => false
+    };
+
+    private static bool IsNullPreservingConversion(Type type)
+        => !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
+
+    /// <summary>
     /// True when the expression already renders as a predicate. Comparison/logical operators,
     /// boolean CASE/COALESCE and the recognised predicate methods produce a condition directly;
     /// anything else (a column, a constant, an arithmetic result) is a boolean value that the

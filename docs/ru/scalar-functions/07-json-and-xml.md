@@ -2,9 +2,13 @@
 
 PostgreSQL — единственный поддерживаемый провайдер с типами `json`/`jsonb`. Операнд JSON должен быть
 выражением `json`/`jsonb`: колонка, другая JSON-функция или параметр, runtime-значение которого —
-`JsonDocument`, `JsonElement` или `JsonNode` (Npgsql привязывает их как `jsonb`). Обычная строка с JSON
+`JsonDocument`, `JsonElement` или `JsonNode` (Npgsql привязывает их как `jsonb`). Обычный параметр-строка с JSON
 привязывается как `text`; её можно разобрать явно через `SqlFunctions.Postgres.json_cast(value)`
-(`cast(value as jsonb)`).
+(`cast(value as jsonb)`). Исключение — шесть аксессоров `json_get`, `json_get_text`, `json_get_path` и
+`json_get_path_text` (перегрузки по строковому ключу и по индексу): они применяют **контекстную
+SQL-типизацию** к сырому клиентскому значению документа — литералу, захваченному значению или явному
+параметру — и разбирают его как `jsonb` в сгенерированном SQL. Нативные колонки `json`/`jsonb` и серверные
+JSON-выражения не приводятся и сохраняют типы операнда и результата.
 
 ```csharp
 using System.Text.Json;
@@ -74,10 +78,19 @@ select jsonb_build_object('id', id, 'name', somestring)
 | `SqlFunctions.Postgres.json_value(json, path)` / `json_query(json, path)` | `json_value(json, cast(path as jsonpath))` / `json_query(json, cast(path as jsonpath))` |
 | `SqlFunctions.Postgres.json_exists(json, path, fromJsonPath)` | `json_exists(json, cast(path as jsonpath))` |
 
+Четыре оператора доступа типизируют оба операнда. Сырое клиентское значение документа (литерал,
+захваченное значение или явный параметр) разбирается как `jsonb` — `json_get("{\"a\":1}", "a")` отрисует
+`cast('{"a":1}' as jsonb) -> cast('a' as text)`, — а нативная колонка `json`/`jsonb` или серверное
+JSON-выражение выводятся без приведения (`doc -> cast('a' as text)`), поэтому типы операнда и результата не
+меняются. Ключ/индекс/путь типизируется по перегрузке: `cast(<key> as text)`, `cast(<index> as integer)`,
+`cast(<path> as text[])`. Привязка параметров провайдером не меняется; обычный параметр-`string`
+по-прежнему привязывается как `text`.
+
 Операнд `path`/`keys` — это `string[]`, привязываемый как **один параметр-массив** (см.
 [Массивы](06-arrays.md#массивы-postgresql)), поэтому `SqlFunctions.Postgres.json_get_path(json, new[] { "a", "b" })` отрисует
-`json #> @p0`. Функции JSONPath принимают путь как обычную строку и отрисовывают его как
-`cast(<path> as jsonpath)`.
+`json #> cast(@p0 as text[])`. Функции JSONPath принимают путь как обычную строку и отрисовывают его как
+`cast(<path> as jsonpath)`; `JSON_EXISTS`, `jsonpath` и соседние JSON-функции это правило типизации не
+меняет.
 
 ## JSON как текст (SQL Server, MySQL/MariaDB)
 

@@ -440,7 +440,11 @@ select patindex('%a%', somestring) as [Pos],
   `nchar(code)`, `format(value, format)` / `format(value, format, culture)` и
   `stuff(value, start, length, newValue)` (только строка — T-SQL `STUFF` неявно преобразует бинарные аргументы в символьные, поэтому перегрузка `byte[]` не открыта). `format` — нативный
   T-SQL `FORMAT`, не путать с трансляцией CLR `string.Format`; `str(value[, length[, decimals]])` —
-  преобразование числа с плавающей точкой в строку фиксированной ширины.
+  преобразование числа с плавающей точкой в строку фиксированной ширины. Апостроф как разделитель —
+  обычный строковый аргумент: `quotename("abc", "'")` рендерится в `quotename('abc', '''')`, а сервер
+  возвращает `'abc'`. Апострофы внутри значения удваиваются в сгенерированном литерале (`O'Brien`
+  превращается в `'O''Brien'`), поэтому значение передаётся как есть и никогда не экранируется
+  вызывающим кодом заранее.
 * **Числовые:** `acos`, `asin`, `atan`, `atn2(y, x)`, `square` (`cot`/`degrees`/`radians`/`pi` переносимы — см. [`SqlFunctions.Sql`](../../scalar-functions/02-math-functions.md)) и `rand()` / `rand(seed)` (без seed — недетерминирован).
 * **Дата/время:** `datename(datepart, date)` (часть — константа), `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+), серверные часы `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`, функции смещения `switchoffset(value, offset)`/`todatetimeoffset(value, offset)` (строка вида `"+02:00"` или минуты со знаком) и семейство конструкторов `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/`datetimeoffsetfromparts`. Завершающая точность `*FROMPARTS` должна быть константой `0..7` (неконстантное, `null` или выходящее за диапазон значение бросает исключение до генерации SQL).
 * **Бинарные/системные:** `hashbytes(algorithm, data)` (алгоритм — константа, например `SHA2_256`), `newsequentialid()` (допустим только как `DEFAULT` столбца, но не в обычном `SELECT`), `checksum(values...)`/`binary_checksum(values...)` (минимум одно значение; форма `checksum(*)` не открыта) и `compress(value)`/`decompress(value)` (GZIP над `varbinary(max)`).

@@ -1363,7 +1363,7 @@ public class SqlGenerationTests
             .Where(x => SqlFunctions.Postgres.json_get(SqlFunctions.Parameter<JsonDocument>(0), "name") == "x")
             .Select(x => new { x.Id }));
 
-        Normalize(command.DbCommand.CommandText).Should().Contain("@norm_p0 -> 'name'");
+        Normalize(command.DbCommand.CommandText).Should().Contain("cast(@norm_p0 as jsonb) -> cast('name' as text)");
         command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
             .Which.ParameterName.Should().Be("norm_p0");
     }
@@ -1378,7 +1378,7 @@ public class SqlGenerationTests
             .Where(x => SqlFunctions.Postgres.json_get_text(SqlFunctions.Parameter<JsonDocument>(0), 0) == "x")
             .Select(x => new { x.Id }));
 
-        Normalize(command.DbCommand.CommandText).Should().Contain("@norm_p0 ->> 0");
+        Normalize(command.DbCommand.CommandText).Should().Contain("cast(@norm_p0 as jsonb) ->> cast(0 as integer)");
     }
 
     [Fact]
@@ -1392,7 +1392,7 @@ public class SqlGenerationTests
             .Where(x => SqlFunctions.Postgres.json_get_path(SqlFunctions.Parameter<JsonDocument>(0), path) == "x")
             .Select(x => new { x.Id }));
 
-        Normalize(command.DbCommand.CommandText).Should().Contain("@norm_p0 #> @p0");
+        Normalize(command.DbCommand.CommandText).Should().Contain("cast(@norm_p0 as jsonb) #> cast(@p0 as text[])");
         command.DbCommandParams.Cast<DbParameter>().Should().Contain(p => p.ParameterName == "p0");
     }
 

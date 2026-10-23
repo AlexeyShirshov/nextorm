@@ -205,8 +205,14 @@ select id
  from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 ```
 
-A plain JSON string is bound as `text`; parse it explicitly with `SqlFunctions.Postgres.json_cast(value)`
-(`cast(value as jsonb)`).
+Provider parameter binding is unchanged: a plain JSON string parameter is still bound as `text`. The six
+accessors `json_get`, `json_get_text`, `json_get_path` and `json_get_path_text` (both the string-key and
+the integer-index overloads) are the exception — they apply **contextual SQL typing**: a raw client
+document value (a literal, a captured value or an explicit parameter) is parsed as `jsonb` in the generated
+SQL, and the right operand is typed per overload (`text` for a string key, `integer` for an index, `text[]`
+for a path). Native `json`/`jsonb` columns and server-side JSON expressions are **not** cast and keep their
+operand and result types. For every other JSON function, parse a plain string explicitly with
+`SqlFunctions.Postgres.json_cast(value)` (`cast(value as jsonb)`).
 
 ### Map a CLR object to a native JSON column
 
@@ -242,7 +248,12 @@ Bare CLR JSON values are handled at the boundary, differently from a mapped colu
   CLR `null`. Declared `JsonObject`/`JsonArray` properties, and a bare `JsonDocument`/`JsonElement` *scalar*
   projection, are outside this support — map those with `[JsonColumn]` or project them in a named shape. A
   `JsonNode` parameter still binds as `jsonb`.
-* A plain `string` maps to `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`.
+* A plain `string` maps to `text`. The six accessors above (`json_get`, `json_get_text`, `json_get_path`,
+  `json_get_path_text`, string-key and integer-index overloads) still accept a raw client document string —
+  a literal, a captured value or an explicit parameter — because they apply contextual SQL typing and
+  parse it as `jsonb` in the generated SQL, typing the key/index/path as `text`/`integer`/`text[]`. A native
+  `json`/`jsonb` column or a server-side JSON expression is left uncast, so its operand and result types do
+  not change. For any other JSON function, use `SqlFunctions.Postgres.json_cast(value)` to parse a string.
 
 On ClickHouse the same section header applies to the native `JSON` column, whose physical type is
 `JSON` and which is **object-rooted**: it accepts JSON objects at the root and rejects arrays and
@@ -339,9 +350,18 @@ The access operators and predicates are exposed as `SqlFunctions.Postgres` metho
 | `SqlFunctions.Postgres.jsonb_path_exists(json, path)` / `jsonb_path_match(json, path)` | `jsonb_path_exists(json, cast(path as jsonpath))` / `jsonb_path_match(...)` |
 | `SqlFunctions.Postgres.jsonb_path_query_first(json, path)` / `jsonb_path_query_array(json, path)` | `jsonb_path_query_first(...)` / `jsonb_path_query_array(...)` |
 
+The four accessors above apply **contextual SQL typing**: a raw client document value (a literal, a
+captured value or an explicit parameter) is parsed as `jsonb`, so `json_get("{\"a\":1}", "a")` renders
+`cast('{"a":1}' as jsonb) -> cast('a' as text)`, while a native `json`/`jsonb` column or a server-side JSON
+expression is emitted unchanged (`doc -> cast('a' as text)`), preserving its operand and result types. The
+key/index/path is always typed for its overload: `cast(<key> as text)`, `cast(<index> as integer)`,
+`cast(<path> as text[])` — a literal key is inlined as `cast('a' as text)`. Parameter binding itself is
+unchanged; an ordinary `string` parameter is still bound as `text`.
+
 A `path`/`keys` operand is a `string[]` bound as a single array parameter, so
-`json_get_path(json, new[] { "a", "b" })` renders `json #> @p0`. JSONPath functions take the path as a
-plain string and cast it to `jsonpath`.
+`json_get_path(json, new[] { "a", "b" })` renders `json #> cast(@p0 as text[])`. JSONPath functions take
+the path as a plain string and cast it to `jsonpath`; `JSON_EXISTS`, `jsonpath` and the sibling JSON
+functions keep their own independent behavior.
 
 ```csharp
 var path = new[] { "a", "b" };
