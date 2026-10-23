@@ -1210,15 +1210,18 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                 $"{GetType().Name} does not support UPDATE: the provider has no synchronous single-statement UPDATE form.");
 
         // One parameter provider for the whole statement: the SET list, the predicate and the key
-        // values must not restart parameter numbering, or their names would collide.
-        var (setSql, _) = _planner.RenderAssignments(command, provider, parameters, parameterNamePrefix);
+        // values must not restart parameter numbering, or their names would collide. One lowering too:
+        // the fragments and the statement must accumulate their lowered occurrences on the same instance,
+        // so the statement-level projection sees the whole statement (D4g).
+        var lowering = MutationParameterLowering.For(Dialect, renderKind);
+        var (setSql, _) = _planner.RenderAssignments(command, provider, parameters, parameterNamePrefix, lowering);
 
         // The source's prepared condition carries the target entity's global filter (injected during
         // preparation) and, for the predicate form, the user's WHERE. It is rendered in both forms: the
         // key form ANDs it to the key equalities so the row must match the key and the filter.
-        var (whereSql, _) = _planner.RenderPredicate(command.Source, provider, parameters, parameterNamePrefix);
+        var (whereSql, _) = _planner.RenderPredicate(command.Source, provider, parameters, parameterNamePrefix, lowering);
 
-        return SqlMutationBuilder.MakeUpdate(Dialect, QuoteIdentifiers, NamingConvention, command, setSql, parameters, whereSql, provider, KeywordCase, renderKind);
+        return SqlMutationBuilder.MakeUpdate(Dialect, QuoteIdentifiers, NamingConvention, command, setSql, parameters, whereSql, provider, KeywordCase, renderKind, lowering);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildMutationSql(MutationCommand command)
@@ -1506,12 +1509,16 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             throw new NotSupportedException(
                 $"{GetType().Name} does not support DELETE: the provider has no synchronous single-statement DELETE form (use its ALTER TABLE ... DELETE mutation directly).");
 
+        // One lowering for the WHERE fragment and the key values, so the statement-level projection sees
+        // every lowered occurrence of the statement (D4g).
+        var lowering = MutationParameterLowering.For(Dialect, renderKind);
+
         if (command.Condition is null)
-            return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null, [], KeywordCase, provider, renderKind);
+            return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null, [], KeywordCase, provider, renderKind, lowering);
 
         var parameters = new List<Parameter>();
-        var (whereSql, _) = _planner.RenderPredicate(command.Condition, provider, parameters, parameterNamePrefix);
-        return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, whereSql, parameters, KeywordCase, provider, renderKind);
+        var (whereSql, _) = _planner.RenderPredicate(command.Condition, provider, parameters, parameterNamePrefix, lowering);
+        return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, whereSql, parameters, KeywordCase, provider, renderKind, lowering);
     }
 
     // Renders a side-effecting DML step of a batch with the batch's shared parameter provider, so its

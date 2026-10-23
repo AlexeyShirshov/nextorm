@@ -80,7 +80,7 @@ public class SqlGenerationTests
             .Set(DynamicWriteEntity())
             .Where(x => x.Id == 1)
             .ToSql())
-            .Should().Contain("set `alpha` = @p0, `mid` = @p1, `zeta` = @p2 where id = 1");
+            .Should().Contain("set `alpha` = _utf8mb4 X'61', `mid` = @p1, `zeta` = @p2 where id = 1");
     }
 
     [Fact]

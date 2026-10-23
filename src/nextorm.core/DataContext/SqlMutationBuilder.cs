@@ -264,6 +264,7 @@ internal static class SqlMutationBuilder
     /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
     /// <param name="parameterProvider">The provider that names the key parameters, or <see langword="null"/> to start a fresh sequence. A batch passes the shared provider so its parameters do not collide with the other statements'.</param>
     /// <param name="renderKind">How the statement is rendered. Only an ad-hoc or batch render lowers a text value into a literal (D4g); the default keeps the prepared path byte-identical.</param>
+    /// <param name="lowering">The lowering the statement's <c>WHERE</c> fragment was rendered with, or <see langword="null"/> to resolve one from <paramref name="renderKind"/>. A caller that renders the fragment itself passes its instance so the fragment's occurrences and the key values accumulate on one projection.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
     internal static (string Sql, List<Parameter> Parameters) MakeDelete(
         ISqlDialect dialect,
@@ -274,9 +275,10 @@ internal static class SqlMutationBuilder
         List<Parameter> parameters,
         KeywordCase keywordCase = KeywordCase.Lower,
         IParameterProvider? parameterProvider = null,
-        MutationRenderKind renderKind = MutationRenderKind.Prepared)
+        MutationRenderKind renderKind = MutationRenderKind.Prepared,
+        MutationParameterLowering? lowering = null)
     {
-        var lowering = MutationParameterLowering.For(dialect, renderKind);
+        lowering ??= MutationParameterLowering.For(dialect, renderKind);
         var writer = StringBuilderPool.Shared.Get();
 
         try
@@ -364,6 +366,7 @@ internal static class SqlMutationBuilder
     /// <param name="parameterProvider">The provider that names the key parameters; shared with the <c>SET</c>/<c>WHERE</c> renderers so parameter names do not collide.</param>
     /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
     /// <param name="renderKind">How the statement is rendered. Only an ad-hoc or batch render lowers a text value into a literal (D4g); the default keeps the prepared path byte-identical.</param>
+    /// <param name="lowering">The lowering the statement's <c>SET</c>/<c>WHERE</c> fragments were rendered with, or <see langword="null"/> to resolve one from <paramref name="renderKind"/>. A caller that renders the fragments itself passes its instance so their occurrences and the key values accumulate on one projection.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
     internal static (string Sql, List<Parameter> Parameters) MakeUpdate(
         ISqlDialect dialect,
@@ -375,9 +378,10 @@ internal static class SqlMutationBuilder
         string? whereSql,
         IParameterProvider parameterProvider,
         KeywordCase keywordCase = KeywordCase.Lower,
-        MutationRenderKind renderKind = MutationRenderKind.Prepared)
+        MutationRenderKind renderKind = MutationRenderKind.Prepared,
+        MutationParameterLowering? lowering = null)
     {
-        var lowering = MutationParameterLowering.For(dialect, renderKind);
+        lowering ??= MutationParameterLowering.For(dialect, renderKind);
         var writer = StringBuilderPool.Shared.Get();
 
         try

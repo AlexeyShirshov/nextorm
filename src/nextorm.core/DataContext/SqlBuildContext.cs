@@ -37,6 +37,7 @@ internal readonly record struct SqlBuildContext
         this.KeywordCase = options.KeywordCase;
         ParameterNamePrefix = options.ParameterNamePrefix;
         Capture = options.Capture;
+        MutationLowering = options.MutationLowering;
     }
 
     internal ISqlDialect Dialect { get; init; }
@@ -96,6 +97,14 @@ internal readonly record struct SqlBuildContext
     internal SqlParameterTemplateCapture? Capture { get; init; }
 
     /// <summary>
+    /// The lowering of the mutation statement whose <c>SET</c>/<c>WHERE</c> fragment this context renders,
+    /// or <see langword="null"/> when the context does not render a mutation fragment. It is the same
+    /// instance the mutation builder projects the statement's parameters with, so a lowered occurrence in a
+    /// fragment is accounted for exactly like one the builder emits itself (D4g).
+    /// </summary>
+    internal MutationParameterLowering? MutationLowering { get; init; }
+
+    /// <summary>
     /// Collects the already-resolved aliases of the physical sources carrying a source-level row lock
     /// while a statement is rendered, so the trailing <c>FOR UPDATE OF &lt;alias&gt;</c> clauses can be
     /// emitted after the <c>FROM</c>/<c>JOIN</c> section. Created per rendered statement and used only by
@@ -105,8 +114,8 @@ internal readonly record struct SqlBuildContext
     internal List<SourceLockTarget>? SourceLocks { get; init; }
 
     internal WhereExpressionVisitor CreateWhereVisitor(Type entityType, int dim, bool dontNeedAlias = false)
-        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase, ParameterNamePrefix = ParameterNamePrefix, Capture = Capture });
+        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase, ParameterNamePrefix = ParameterNamePrefix, Capture = Capture, MutationLowering = MutationLowering });
 
     internal BaseExpressionVisitor CreateColumnVisitor(Type entityType, int dim, bool dontNeedAlias)
-        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase, ParameterNamePrefix = ParameterNamePrefix, Capture = Capture });
+        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase, ParameterNamePrefix = ParameterNamePrefix, Capture = Capture, MutationLowering = MutationLowering });
 }

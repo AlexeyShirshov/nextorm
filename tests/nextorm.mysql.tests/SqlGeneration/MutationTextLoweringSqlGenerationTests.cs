@@ -272,18 +272,48 @@ public class MutationTextLoweringSqlGenerationTests
     }
 
     [Fact]
-    public void Update_EntityForm_ShouldLowerTheTextKeyAndKeepTheAssignmentPlaceholder()
+    public void Update_EntityForm_ShouldLowerTheTextKeyAndTheAssignment()
     {
         var command = Capture(ctx => ctx.Update(new StringKeyEntity { Code = "k1", Name = "n" }));
 
         Normalize(command.CommandText).Should()
-            .Contain("where code = _utf8mb4 X'6b31'", "the key value is emitted by the mutation builder");
-        Names(command).Should().NotContain("p1");
-        Values(command).Should().Equal("n");
+            .Contain("set name = _utf8mb4 X'6e'", "the SET fragment is lowered like the statement itself")
+            .And.Contain("where code = _utf8mb4 X'6b31'", "the key value is emitted by the mutation builder");
+        command.Parameters.Count.Should().Be(0, "both bindings were replaced by literals");
     }
 
     [Fact]
-    public void Update_AssignmentAndPredicate_ShouldKeepTheirPlaceholders()
+    public void Update_SetStringValue_ShouldLowerTheAssignment()
+    {
+        var command = Capture(ctx => ctx.CreateUpdateBuilder<LoweringEntity>()
+            .Set(x => x.Text, "it's")
+            .Where(x => x.Id == 7)
+            .Update());
+
+        Normalize(command.CommandText).Should().Be(
+            "update lowering_entity set text = _utf8mb4 X'69742773' where id = 7",
+            "the planner-rendered SET value is lowered through the statement's lowering");
+        command.Parameters.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public void Update_WhereStringPredicate_ShouldLowerThePredicate()
+    {
+        var value = "it's";
+        var command = Capture(ctx => ctx.CreateUpdateBuilder<LoweringEntity>()
+            .Set(x => x.Id, 1)
+            .Where(x => x.Text == value)
+            .Update());
+
+        Normalize(command.CommandText).Should()
+            .Contain("text = _utf8mb4 X'69742773'")
+            .And.NotContain("@value", "the planner-rendered WHERE value no longer reaches the driver as text");
+        Names(command).Should().Equal("p0");
+        Values(command).Should().Equal(1);
+    }
+
+    [Fact]
+    public void Update_AssignmentAndPredicate_ShouldLowerBoth()
     {
         var code = "k1";
         var command = Capture(ctx => ctx.CreateUpdateBuilder<StringKeyEntity>()
@@ -292,12 +322,42 @@ public class MutationTextLoweringSqlGenerationTests
             .Update());
 
         Normalize(command.CommandText).Should()
-            .Contain("set name = @p0")
-            .And.Contain("code = @code")
-            .And.NotContain("_utf8mb4",
-                "the SET list and the WHERE predicate are rendered by the planner, outside SqlMutationBuilder.Make*");
-        Names(command).Should().Equal("p0", "code");
-        Values(command).Should().Equal("n", "k1");
+            .Contain("set name = _utf8mb4 X'6e'")
+            .And.Contain("code = _utf8mb4 X'6b31'");
+        command.Parameters.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public void Update_SetAndWhereSameValue_ShouldLowerEachOccurrenceAndDropTheBindingOnce()
+    {
+        var suffix = "S";
+        var command = Capture(ctx => ctx.CreateUpdateBuilder<StringKeyEntity>()
+            .Set(x => x.Name, x => x.Name + suffix)
+            .Where(x => x.Code == suffix)
+            .Update());
+
+        Normalize(command.CommandText).Should()
+            .Contain("concat(name, _utf8mb4 X'53')", "the SET fragment lowers the captured value")
+            .And.Contain("code = _utf8mb4 X'53'", "the WHERE fragment lowers the same captured value")
+            .And.NotContain("@suffix", "no placeholder of the lowered binding is left dangling");
+        command.Parameters.Count.Should().Be(0,
+            "one binding spans both fragments and its projection is decided once at the statement level");
+    }
+
+    [Fact]
+    public void Update_NonTextValueSharingTheStatement_ShouldKeepItsBinding()
+    {
+        var command = Capture(ctx => ctx.CreateUpdateBuilder<LoweringEntity>()
+            .Set(x => x.Text, "a")
+            .Set(x => x.Id, 5)
+            .Where(x => x.Token == SampleGuid)
+            .Update());
+
+        Normalize(command.CommandText).Should()
+            .Contain("text = _utf8mb4 X'61'")
+            .And.Contain("id = @p1");
+        Names(command).Should().Equal("p1", "SampleGuid");
+        Values(command).Should().Equal(5, SampleGuid);
     }
 
     [Fact]
@@ -310,7 +370,7 @@ public class MutationTextLoweringSqlGenerationTests
     }
 
     [Fact]
-    public void Delete_Predicate_ShouldKeepThePlaceholder()
+    public void Delete_Predicate_ShouldLowerThePredicate()
     {
         var code = "k1";
         var command = Capture(ctx => ctx.CreateDeleteBuilder<StringKeyEntity>()
@@ -319,11 +379,9 @@ public class MutationTextLoweringSqlGenerationTests
 
         Normalize(command.CommandText).Should()
             .StartWith("delete from lowering_string_key_entity where ")
-            .And.Contain("code = @code")
-            .And.NotContain("_utf8mb4",
-                "the predicate placeholder is emitted by the planner, not by MakeDelete");
-        Names(command).Should().Equal("code");
-        Values(command).Should().Equal("k1");
+            .And.Contain("code = _utf8mb4 X'6b31'")
+            .And.NotContain("@code", "the predicate value is lowered by the statement's lowering");
+        command.Parameters.Count.Should().Be(0);
     }
 
     [Fact]
@@ -485,7 +543,7 @@ public class MutationTextLoweringSqlGenerationTests
 
         lowering.TryRender("p0", "a", out _).Should().BeTrue();
 
-        // p1 was emitted by the planner, which never goes through the lowering: it must survive.
+        // p1 was never presented to the lowering (no fragment recorded it), so it must survive.
         var parameters = new List<Parameter> { new("p0", "a"), new("p1", "kept") };
         lowering.Project(parameters).Select(p => p.Name).Should().Equal("p1");
     }

@@ -48,7 +48,7 @@ public class VersionGateTests
             .Where(x => x.Id == 1)
             .Returning()
             .ToSql()
-            .Should().Be("update merge_entity set name = @p0 where id = 1 returning id, name, age, total");
+            .Should().Be("update merge_entity set name = _utf8mb4 X'61' where id = 1 returning id, name, age, total");
     }
 
     [Fact]

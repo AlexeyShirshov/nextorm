@@ -330,6 +330,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// <summary>The render-local capture of planner-owned parameter occurrences, or <see langword="null"/>.</summary>
     internal SqlParameterTemplateCapture? Capture => _capture;
     /// <summary>
+    /// The lowering of the mutation statement this visitor renders a fragment of, or <see langword="null"/>
+    /// when the visitor is not part of a mutation render (D4g).
+    /// </summary>
+    internal MutationParameterLowering? MutationLowering => _options.MutationLowering;
+    /// <summary>
     /// The recorder of this visitor's own builder, created on first use. Occurrences are recorded
     /// fragment-relative and relocated into the enclosing fragment when this visitor's text is written.
     /// </summary>
@@ -345,7 +350,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         if (_paramMode)
             return;
 
-        SqlParameterEmission.Append(_builder!, Recorder, _dialect, _paramMode, _params, parameter, role);
+        SqlParameterEmission.Append(_builder!, Recorder, _dialect, _paramMode, _params, parameter, role, MutationLowering);
     }
 
     /// <summary>
@@ -357,7 +362,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         SqlParameterTemplateRecorder? recorder,
         Parameter parameter,
         SqlStringLiteralRole role = SqlStringLiteralRole.Value)
-        => SqlParameterEmission.Append(builder, recorder, _dialect, _paramMode, _params, parameter, role);
+        => SqlParameterEmission.Append(builder, recorder, _dialect, _paramMode, _params, parameter, role, MutationLowering);
 
     /// <summary>
     /// Registers a placeholder whose text is embedded in a larger composed expression and records it as a

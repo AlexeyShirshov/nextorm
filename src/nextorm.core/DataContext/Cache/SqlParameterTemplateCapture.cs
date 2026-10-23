@@ -144,6 +144,19 @@ internal sealed class SqlParameterTemplateCapture
 internal static class SqlParameterEmission
 {
     /// <summary>Appends the placeholder of <paramref name="parameter"/> and records its occurrence.</summary>
+    /// <param name="builder">The builder that receives the placeholder or the lowered literal.</param>
+    /// <param name="recorder">The fragment recorder, or <see langword="null"/> when the emission is not captured.</param>
+    /// <param name="dialect">The dialect of the statement being rendered.</param>
+    /// <param name="paramMode">Whether the render only collects parameters.</param>
+    /// <param name="parameters">The statement's parameter accumulator.</param>
+    /// <param name="parameter">The parameter whose occurrence is emitted.</param>
+    /// <param name="role">The syntactic role of the string literal.</param>
+    /// <param name="lowering">
+    /// The lowering of the mutation statement this emission belongs to, or <see langword="null"/> when the
+    /// emission does not take part in a mutation render. A lowering that renders the binding as a literal
+    /// replaces the placeholder with that literal, so the planner-rendered <c>SET</c>/<c>WHERE</c>
+    /// fragments of a mutation are lowered exactly like the statement the builder emits itself (D4g).
+    /// </param>
     internal static void Append(
         StringBuilder builder,
         SqlParameterTemplateRecorder? recorder,
@@ -151,7 +164,8 @@ internal static class SqlParameterEmission
         bool paramMode,
         List<Parameter> parameters,
         Parameter parameter,
-        SqlStringLiteralRole role)
+        SqlStringLiteralRole role,
+        MutationParameterLowering? lowering = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(dialect);
@@ -160,6 +174,14 @@ internal static class SqlParameterEmission
 
         if (paramMode)
             return;
+
+        // The lowering inspects the final provider-bound value, so an occurrence it lowers is replaced by
+        // the literal at the same position and the binding is left to the statement-level projection.
+        if (lowering is not null && lowering.TryRender(parameter.Name, parameter.Value, out var literal))
+        {
+            builder.Append(literal);
+            return;
+        }
 
         var placeholder = dialect.MakeParam(parameter.Name);
 

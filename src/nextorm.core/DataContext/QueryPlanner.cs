@@ -198,7 +198,9 @@ internal sealed class QueryPlanner : IQueryPlanner
 
     // Overload used by UPDATE so the WHERE parameters continue the sequence started by the SET list
     // (a fresh provider/list would restart parameter numbering and collide with the SET parameters).
-    internal (string Sql, List<Parameter> Parameters) RenderPredicate(QueryCommand command, IParameterProvider? parameterProvider, List<Parameter>? parameters, string parameterNamePrefix = "")
+    // A mutation fragment carries the statement's lowering, so a text value the visitor emits becomes the
+    // same literal the mutation builder would emit for it (D4g).
+    internal (string Sql, List<Parameter> Parameters) RenderPredicate(QueryCommand command, IParameterProvider? parameterProvider, List<Parameter>? parameters, string parameterNamePrefix = "", MutationParameterLowering? lowering = null)
     {
         if (!command.IsPrepared)
             command.PrepareCommand(false, CancellationToken.None);
@@ -221,6 +223,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             NamingConvention = command.ResolvedNamingConvention,
             KeywordCase = command.ResolvedKeywordCase,
             ParameterNamePrefix = parameterNamePrefix,
+            MutationLowering = lowering,
         };
         ctx.ColumnsProvider.Add(command.EntityType!, false);
 
@@ -389,7 +392,8 @@ internal sealed class QueryPlanner : IQueryPlanner
         UpdateCommand command,
         IParameterProvider parameterProvider,
         List<Parameter> parameters,
-        string parameterNamePrefix = "")
+        string parameterNamePrefix = "",
+        MutationParameterLowering? lowering = null)
     {
         var source = command.Source;
         if (!source.IsPrepared)
@@ -412,6 +416,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             NamingConvention = namingConvention,
             KeywordCase = source.ResolvedKeywordCase,
             ParameterNamePrefix = parameterNamePrefix,
+            MutationLowering = lowering,
         };
         ctx.ColumnsProvider.Add(command.EntityType!, false);
 
@@ -429,7 +434,16 @@ internal sealed class QueryPlanner : IQueryPlanner
             {
                 case UpdateValueKind.Constant:
                     var name = parameterProvider.GetParamName();
-                    parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(assignment.Constant, assignment.Property, ctx.Dialect)));
+                    var finalValue = DurationStorage.ToParameterValue(assignment.Constant, assignment.Property, ctx.Dialect);
+                    if (lowering is not null && lowering.TryRender(name, finalValue, out var literal))
+                    {
+                        // The lowered literal occupies the assignment's position; the name was still
+                        // allocated, so the remaining parameters keep their numbering.
+                        builder.Append(literal);
+                        break;
+                    }
+
+                    parameters.Add(new Parameter(name, finalValue));
                     builder.Append(ctx.Dialect.MakeParam(name));
                     break;
                 case UpdateValueKind.Column:
@@ -454,13 +468,23 @@ internal sealed class QueryPlanner : IQueryPlanner
         if (command.DynamicColumns is not null)
         {
             var dynamicKeys = command.DynamicColumns.RenderKeys(ctx.Dialect);
+            var dynamicStart = parameters.Count;
             var dynamicNames = command.DynamicColumns.AddValueParameters(0, parameters, parameterProvider, ctx.Dialect);
             for (var d = 0; d < dynamicKeys.Length; d++)
             {
                 if (builder.Length > 0)
                     builder.Append(", ");
 
-                builder.Append(dynamicKeys[d]).Append(" = ").Append(ctx.Dialect.MakeParam(dynamicNames[d]));
+                builder.Append(dynamicKeys[d]).Append(" = ");
+
+                // The stored value is already converted by AddValueParameters, so the lowering inspects
+                // the bound value rather than converting it a second time (the same rule as the VALUES rows
+                // of an insert or a key upsert).
+                var dynamicValue = parameters[dynamicStart + d].Value;
+                if (lowering is not null && lowering.TryRender(dynamicNames[d], dynamicValue, out var dynamicLiteral))
+                    builder.Append(dynamicLiteral);
+                else
+                    builder.Append(ctx.Dialect.MakeParam(dynamicNames[d]));
             }
         }
 
