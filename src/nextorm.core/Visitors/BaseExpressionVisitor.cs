@@ -278,9 +278,13 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         }
 
         var normalized = NormalizeParameterValue(value);
+        var typeInfo = ParameterTypeContext;
         _params.Add(new Parameter(name, normalized)
         {
             CapturedKey = key,
+            DbType = typeInfo?.DbType,
+            Precision = typeInfo?.Precision,
+            Scale = typeInfo?.Scale,
             // The guarded refresh recipe must not re-read the raw captured value when normalizing it
             // would not reproduce the bound value. A converter always counts (it may be value
             // dependent), a duration scope only when the value is a TimeSpan, and any remaining
@@ -315,7 +319,34 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     internal bool IncludeNestedSources => _options.IncludeNestedSources;
     internal bool IsParamMode => _paramMode;
     internal StringBuilder? Builder => _builder;
-    internal bool IsPredicateContext => AsPredicate;
+    /// <summary>
+    /// True when the builder currently renders a condition. A boolean SELECT projection assembles its
+    /// expression in predicate context too: only the scalar boundary
+    /// (<see cref="NextORM.Core.SqlSourceRenderer"/>'s <c>MakeBooleanPredicate(..., asPredicate: false)</c>)
+    /// may legalise it, otherwise an inner AND/OR operand would become a bit scalar and T-SQL rejects
+    /// <c>predicate and cast(case ... as bit)</c>.
+    /// </summary>
+    internal bool IsPredicateContext => AsPredicate || BooleanSelectProjection;
+    /// <summary>
+    /// True while a boolean expression is rendered as a <c>SELECT</c> list entry (the approved
+    /// boolean projection position). The null-safe comparison/presence translation is enabled here
+    /// just as it is in a predicate context, but the dialect scalar legalisation is applied once at
+    /// the projection boundary instead of to the inner predicate nodes.
+    /// </summary>
+    internal bool BooleanSelectProjection { get; set; }
+    /// <summary>
+    /// True in the two approved positions of the #296 null-safe translation: a real predicate context
+    /// (WHERE/HAVING, JOIN ON, an <c>Exists</c> body) and the approved boolean <c>SELECT</c>
+    /// projection. Value positions (ORDER BY, GROUP BY, window clauses, LIMIT BY, SET) keep their
+    /// previous translation.
+    /// </summary>
+    internal bool NullSafePredicateEnabled => AsPredicate || BooleanSelectProjection;
+    /// <summary>
+    /// The expression-derived provider type to record on the next captured parameter registered
+    /// within this scope, or <see langword="null"/>. Scoped to one comparison operand, mirroring
+    /// <see cref="ConverterContext"/>.
+    /// </summary>
+    internal ParameterTypeInfo? ParameterTypeContext { get; set; }
     internal VisitorOptions Options => _options;
     /// <summary>The letter case in which this visitor emits SQL keywords, inherited from its options.</summary>
     internal KeywordCase KeywordCase => _options.KeywordCase;
@@ -901,6 +932,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         {
             SuppressColumnCollation = SuppressColumnCollation,
             ConverterContext = ConverterContext,
+            BooleanSelectProjection = BooleanSelectProjection,
         };
     }
 

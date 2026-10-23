@@ -70,6 +70,12 @@ internal static class PredicateTranslator
     /// </summary>
     private static Expression VisitNot(BaseExpressionVisitor visitor, UnaryExpression node)
     {
+        // #296: !HasValue on a mapped nullable column renders the approved direct IS NULL form, not
+        // `not (<receiver> is not null)`. Outside the approved positions it falls through unchanged.
+        if (TypeFacts.UnwrapConvert(node.Operand) is MemberExpression presenceReceiver
+            && MemberTranslator.TryRenderPresence(visitor, presenceReceiver, negated: true))
+            return node;
+
         if (visitor.IsParamMode)
         {
             // Nothing is emitted, but the operand is still walked so captured constants are collected.
@@ -382,6 +388,14 @@ internal static class PredicateTranslator
             }
         }
 
+        // #296: a comparison against a captured nullable/string value is a total Boolean predicate in
+        // the approved positions (WHERE/Exists/ON and a boolean SELECT projection): a runtime NULL
+        // then follows the C# truth table instead of SQL UNKNOWN. Literal comparisons keep their
+        // existing null-aware form above; column-to-column comparisons and the ordering operators are
+        // never rewritten.
+        if (TryRenderCapturedNullableComparison(visitor, node))
+            return node;
+
         visitor.NeedAliasForColumn = true;
 
         switch (node.NodeType)
@@ -520,6 +534,105 @@ internal static class PredicateTranslator
         visitor.DurationUnitContext = previousDurationUnit;
 
         return node;
+    }
+
+    /// <summary>
+    /// Renders a comparison of a row-dependent expression with a captured nullable/string value as a
+    /// total Boolean predicate: equality has the approved two-arm form and inequality the three-arm
+    /// complement, so the result follows the C# null-equality truth table instead of SQL
+    /// <c>UNKNOWN</c> (which drops null rows from an inequality). Only in the approved positions, only
+    /// for <c>==</c>/<c>!=</c>, only when exactly one side is a captured nullable/string operand and
+    /// the other side references the query. The captured value is registered through the existing
+    /// comparison-operand machinery and reused for every occurrence (one logical parameter, never an
+    /// inlined value, never a branch on the runtime value).
+    /// </summary>
+    /// <returns><see langword="true"/> when the comparison was rendered here.</returns>
+    internal static bool TryRenderCapturedNullableComparison(BaseExpressionVisitor visitor, BinaryExpression node)
+    {
+        if (node.Type != typeof(bool)
+            || node.NodeType is not (ExpressionType.Equal or ExpressionType.NotEqual)
+            || !visitor.NullSafePredicateEnabled
+            || TypeFacts.IsNullLiteral(node.Left)
+            || TypeFacts.IsNullLiteral(node.Right))
+            return false;
+
+        var leftCaptured = TypeFacts.IsCapturedNullableOrStringOperand(node.Left);
+        var rightCaptured = TypeFacts.IsCapturedNullableOrStringOperand(node.Right);
+
+        // Neither side is captured (an ordinary column comparison) or both are (no row-dependent side).
+        if (leftCaptured == rightCaptured)
+            return false;
+
+        var dbOperand = leftCaptured ? node.Right : node.Left;
+        var capturedOperand = leftCaptured ? node.Left : node.Right;
+
+        // The other side must actually read the query, so a captured value is never compared with a
+        // constant/another captured value under the null-safe shape.
+        if (!dbOperand.Has<ParameterExpression>())
+            return false;
+
+        var dbConverter = MemberTranslator.ResolveConverter(visitor, dbOperand);
+        var capturedConverter = MemberTranslator.ResolveConverter(visitor, capturedOperand);
+
+        visitor.NeedAliasForColumn = true;
+
+        var previousParameterType = visitor.ParameterTypeContext;
+        if (MemberTranslator.ResolveParameterType(visitor, dbOperand, capturedOperand) is { } parameterType)
+            visitor.ParameterTypeContext = parameterType;
+
+        try
+        {
+            if (visitor.IsParamMode)
+            {
+                // Mirror the SQL pass: the same operands are visited in the same canonical order
+                // (row-dependent side first), so the extracted parameter list is identical. Repeats
+                // are deduplicated by the captured-parameter registration.
+                visitor.VisitComparisonOperand(dbOperand, capturedConverter);
+                visitor.VisitComparisonOperand(capturedOperand, dbConverter);
+                return true;
+            }
+
+            var isEqual = node.NodeType == ExpressionType.Equal;
+            var builder = visitor.Builder!;
+
+            // The whole total predicate is parenthesised so it composes safely inside &&/||.
+            builder.Append('(');
+
+            builder.Append('(');
+            visitor.VisitComparisonOperand(dbOperand, capturedConverter);
+            builder.Append(visitor.Kw(" is null")).Append(visitor.Kw(" and "));
+            visitor.VisitComparisonOperand(capturedOperand, dbConverter);
+            builder.Append(visitor.Kw(isEqual ? " is null" : " is not null"));
+            builder.Append(')').Append(visitor.Kw(" or "));
+
+            if (!isEqual)
+            {
+                // (a is not null and p is null) — only the inequality complement has this arm.
+                builder.Append('(');
+                visitor.VisitComparisonOperand(dbOperand, capturedConverter);
+                builder.Append(visitor.Kw(" is not null")).Append(visitor.Kw(" and "));
+                visitor.VisitComparisonOperand(capturedOperand, dbConverter);
+                builder.Append(visitor.Kw(" is null"));
+                builder.Append(')').Append(visitor.Kw(" or "));
+            }
+
+            builder.Append('(');
+            visitor.VisitComparisonOperand(dbOperand, capturedConverter);
+            builder.Append(visitor.Kw(" is not null")).Append(visitor.Kw(" and "));
+            visitor.VisitComparisonOperand(capturedOperand, dbConverter);
+            builder.Append(visitor.Kw(" is not null")).Append(visitor.Kw(" and "));
+            visitor.VisitComparisonOperand(dbOperand, capturedConverter);
+            builder.Append(isEqual ? " = " : " != ");
+            visitor.VisitComparisonOperand(capturedOperand, dbConverter);
+            builder.Append(')');
+
+            builder.Append(')');
+            return true;
+        }
+        finally
+        {
+            visitor.ParameterTypeContext = previousParameterType;
+        }
     }
 
 }

@@ -60,6 +60,7 @@ internal static class MemberTranslator
             return false;
 
         // Nullable<T>.Value is a CLR-only wrapper: the underlying expression is rendered as is.
+        // Nullable<T>.Value is a CLR-only wrapper: the underlying expression is rendered as is.
         if (declaringType is not null
             && node.Member.Name == nameof(Nullable<int>.Value)
             && Nullable.GetUnderlyingType(declaringType) is not null)
@@ -67,6 +68,15 @@ internal static class MemberTranslator
             visitor.Visit(node.Expression);
             return true;
         }
+
+        // Nullable<T>.HasValue on a mapped column is the IS [NOT] NULL presence predicate, in the
+        // approved predicate/boolean-SELECT positions only. A captured value's own HasValue has no
+        // query parameter in its receiver chain and keeps its ordinary evaluation; .Value and every
+        // unrelated member are untouched.
+        if (declaringType is not null
+            && node.Member.Name == nameof(Nullable<int>.HasValue)
+            && Nullable.GetUnderlyingType(declaringType) is not null)
+            return TryRenderPresence(visitor, node, negated: false);
 
         if (declaringType == typeof(string) && node.Member.Name == nameof(string.Length))
         {
@@ -283,6 +293,81 @@ internal static class MemberTranslator
 
         var resolved = converter is IJsonColumnConverter json ? json.Resolve(visitor.Dialect) : converter;
         return new ResolvedConverter(resolved, Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType);
+    }
+
+    /// <summary>
+    /// Renders a mapped <c>Nullable&lt;T&gt;.HasValue</c> access as the <c>IS [NOT] NULL</c> presence
+    /// predicate (the negated form renders <c>IS NULL</c> directly), in an approved context only. The
+    /// receiver has to be row-dependent (a query column); a captured value's presence is left to its
+    /// ordinary evaluation, and the member is rejected outside the approved positions so ORDER BY /
+    /// GROUP BY / window / LIMIT BY keep their previous translation.
+    /// </summary>
+    internal static bool TryRenderPresence(BaseExpressionVisitor visitor, MemberExpression node, bool negated)
+    {
+        if (!visitor.NullSafePredicateEnabled)
+            return false;
+
+        if (!TypeFacts.IsPresenceMember(node))
+            return false;
+
+        if (node.Expression is not { } receiver || !receiver.Has<ParameterExpression>())
+            return false;
+
+        visitor.NeedAliasForColumn = true;
+
+        if (visitor.IsParamMode)
+        {
+            // Nothing is emitted, but the receiver is still walked so its captured values (if any)
+            // are collected exactly as in the SQL pass.
+            visitor.Visit(receiver);
+            return true;
+        }
+
+        visitor.Visit(receiver);
+        visitor.Builder!.Append(visitor.Kw(negated ? " is null" : " is not null"));
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves the expression-derived provider type of the captured parameter of a null-safe
+    /// comparison: the compared column's converter provider type (or nullable-unwrapped mapped type)
+    /// plus its declared decimal precision/scale, falling back to the captured operand's own declared
+    /// type when the column side is not a mapped member. No value is read and no closure is evaluated,
+    /// so the type never depends on a runtime <c>null</c>.
+    /// </summary>
+    internal static ParameterTypeInfo? ResolveParameterType(BaseExpressionVisitor visitor, Expression dbOperand, Expression capturedOperand)
+    {
+        dbOperand = TypeFacts.UnwrapConvert(dbOperand);
+        capturedOperand = TypeFacts.UnwrapConvert(capturedOperand);
+
+        Type? providerType = null;
+        int? precision = null;
+        int? scale = null;
+
+        if (dbOperand is MemberExpression { Member: PropertyInfo pi })
+        {
+            IPropertyMetadata? property = null;
+            if (pi.DeclaringType is not null && DataContextCache.Metadata.TryGetValue(pi.DeclaringType, out var byDeclaring))
+                property = FindProperty(byDeclaring, pi);
+
+            property ??= FindProperty(visitor.EntityType, pi);
+
+            if (property is not null)
+            {
+                IPropertyValueConverter? converter = property.Converter;
+                if (converter is IJsonColumnConverter json)
+                    converter = json.Resolve(visitor.Dialect);
+
+                providerType = converter?.ProviderType
+                    ?? Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
+                precision = property.DecimalPrecision;
+                scale = property.DecimalScale;
+            }
+        }
+
+        providerType ??= Nullable.GetUnderlyingType(capturedOperand.Type) ?? capturedOperand.Type;
+
+        return ParameterTypeInfo.FromProviderType(providerType, precision, scale);
     }
 
     internal static string? ResolveCollation(BaseExpressionVisitor visitor, Type entityType, MemberInfo member)
