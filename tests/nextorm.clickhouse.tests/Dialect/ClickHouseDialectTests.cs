@@ -29,6 +29,20 @@ public class ClickHouseDialectTests
     }
 
     [Fact]
+    public void MakeLikeEscape_ShouldOmitTheClauseAndRejectCustomCharacters()
+    {
+        // ClickHouse rejects the ESCAPE clause in every spelling (measured live); the default LIKE
+        // backslash escaping already covers the escaped wildcards of the pattern literal.
+        Dialect.MakeLikeEscape("\\").Should().BeEmpty();
+
+        var act = () => Dialect.MakeLikeEscape("!");
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*ClickHouse*")
+            .WithMessage("*ESCAPE*");
+    }
+
+    [Fact]
     public void IdentifierAndScalarFunctionHooks_ShouldUseClickHouseForms()
     {
         Dialect.Escape("t1").Should().Be("`t1`");

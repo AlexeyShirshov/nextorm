@@ -594,6 +594,15 @@ public class ClickHouseDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string MakeOrdinal(string value, bool ignoreCase) => ignoreCase ? $"lower({value})" : value;
 
+    // ClickHouse's LIKE always treats the backslash as the escape character and its parser accepts no
+    // ESCAPE clause in any spelling (measured live), so the clause is omitted rather than spelled: the
+    // pattern literal already carries the escaped wildcards as doubled backslashes.
+    /// <summary>Omits the <c>ESCAPE</c> clause entirely; a custom escape character is rejected.</summary>
+    public override string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) =>
+        escapeChar == "\\"
+            ? string.Empty
+            : throw new NotSupportedException("A custom LIKE escape character is not supported by ClickHouse, which rejects the ESCAPE clause.");
+
     /// <summary>ClickHouse matches with the RE2-based <c>match</c> and replaces with <c>replaceRegexpAll</c>.</summary>
     public override bool SupportsRegex => true;
 

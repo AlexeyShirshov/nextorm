@@ -110,8 +110,9 @@ internal sealed class SqlStringLiteralPolicy
         return grammar switch
         {
             // PostgreSQL 17 was measured live to accept an E'…' operand (D1b `like-escape-E-string-hit`
-            // returns true); every other provider keeps the historic plain quoted token, because
-            // SQL Server's N'…' spelling in ESCAPE is unproven and ClickHouse LIKE lowering is D6.
+            // returns true); the MySQL family uses the mode-independent hex token and the remaining
+            // providers keep the historic plain quoted token, because SQL Server's N'…' spelling in
+            // ESCAPE is unproven and ClickHouse never emits the clause at all.
             SqlStringGrammar.LikeEscape => RenderLikeEscapeToken(value),
             // The column-definition list is a quoted token of the ClickHouse `values` table function,
             // not a value expression; its mode-aware lowering is D6.
@@ -168,9 +169,19 @@ internal sealed class SqlStringLiteralPolicy
         };
     }
 
-    /// <summary>The <c>LIKE … ESCAPE</c> operand: measured legal as <c>E'…'</c> on PostgreSQL only.</summary>
+    /// <summary>
+    /// The <c>LIKE … ESCAPE</c> operand: measured legal as <c>E'…'</c> on PostgreSQL only. The MySQL
+    /// family reuses the value spelling, because the charset-introduced hex literal does not depend on
+    /// <c>NO_BACKSLASH_ESCAPES</c> or on driver string escaping; everything else keeps the historic
+    /// plain quoted token.
+    /// </summary>
     private string RenderLikeEscapeToken(string value) =>
-        _family == Family.Postgres ? RenderPostgresValidated(value) : RenderPlainToken(value);
+        _family switch
+        {
+            Family.Postgres => RenderPostgresValidated(value),
+            Family.MySql => RenderMySql(value),
+            _ => RenderPlainToken(value),
+        };
 
     /// <summary>A JSON document/key/path element: an expression position, PostgreSQL-only translator.</summary>
     private string RenderJsonToken(string value) =>
@@ -280,8 +291,9 @@ internal sealed class SqlStringLiteralPolicy
 
     private static string RenderMySql(string value)
     {
-        // A value expression: the charset-introduced hex literal is independent of NO_BACKSLASH_ESCAPES
-        // and of driver escaping. Regex arguments take the quoted spelling in RenderRegex.
+        // A value expression, and the same spelling is legal as the LIKE escape operand: the
+        // charset-introduced hex literal is independent of NO_BACKSLASH_ESCAPES and of driver
+        // escaping. Regex arguments take the quoted spelling in RenderRegex.
         return "_utf8mb4 X'" + ToUtf8Hex(value, "MySQL") + "'";
     }
 

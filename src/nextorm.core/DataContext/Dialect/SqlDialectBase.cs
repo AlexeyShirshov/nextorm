@@ -610,7 +610,8 @@ public abstract class SqlDialectBase : ISqlDialect
         throw new NotSupportedException("Ordinal string comparison is not supported by this provider.");
     /// <inheritdoc/>
     public virtual bool SupportsOrdinalLike => SupportsOrdinalComparison;
-    // grammar token: mode-aware lowering added in D6
+    // Grammar token: the LIKE escape operand goes through the provider policy, which picks a spelling
+    // that stays valid in every session mode (PostgreSQL E'…', the MySQL family _utf8mb4 X'…').
     /// <inheritdoc/>
     public virtual string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) =>
         Kw(keywordCase, " escape ") + SqlStringLiteralPolicies.For(this).Render(escapeChar, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.LikeEscape);
