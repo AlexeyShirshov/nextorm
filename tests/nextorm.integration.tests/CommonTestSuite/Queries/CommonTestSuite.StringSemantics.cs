@@ -88,10 +88,12 @@ public abstract partial class CommonTestSuite
 
     /// <summary>
     /// Builds <c>e =&gt; e.RequiredString.ToUpper/ToLower(Expression.Constant(CultureInfo.InvariantCulture))</c>.
-    /// The explicitly constant culture is the contract <c>StringFunctionTranslator.TryTranslateCultureCase</c>
-    /// accepts; the natural C# spelling <c>e.RequiredString.ToUpper(CultureInfo.InvariantCulture)</c> binds a
-    /// static property expression that the query pipeline turns into a query parameter, so it is rejected
-    /// there (recorded as the defect <c>C9-STRING-CULTURE-INVARIANT-MEMBER</c>, not pinned as behaviour).
+    /// Both spellings of the invariant culture are supported: the natural static property
+    /// <c>CultureInfo.InvariantCulture</c> and this programmatic <see cref="Expression.Constant"/> holding
+    /// the same instance. The property is recognised syntactically (static getter, <see cref="CultureInfo"/>
+    /// declaring type, name <c>InvariantCulture</c>), so its argument is never evaluated; other cultures,
+    /// factory calls and captured values stay rejected. The constant shape remains the reference-identity
+    /// arm: only the invariant instance itself is accepted.
     /// </summary>
     private static Expression<Func<IComplexEntity, string>> CultureCaseProjection(string methodName)
     {
@@ -99,6 +101,21 @@ public abstract partial class CommonTestSuite
         var text = Expression.Property(parameter, nameof(IComplexEntity.RequiredString));
         var method = typeof(string).GetMethod(methodName, [typeof(CultureInfo)])!;
         var body = Expression.Call(text, method, Expression.Constant(CultureInfo.InvariantCulture));
+        return Expression.Lambda<Func<IComplexEntity, string>>(body, parameter);
+    }
+
+    /// <summary>
+    /// Builds the accepted constant culture call over a typed null string receiver, so the query reaches
+    /// native SQL with a null operand instead of a CLR receiver.
+    /// </summary>
+    private static Expression<Func<IComplexEntity, string>> NullReceiverCultureCaseProjection(string methodName)
+    {
+        var parameter = Expression.Parameter(typeof(IComplexEntity), "e");
+        var method = typeof(string).GetMethod(methodName, [typeof(CultureInfo)])!;
+        var body = Expression.Call(
+            Expression.Constant(null, typeof(string)),
+            method,
+            Expression.Constant(CultureInfo.InvariantCulture));
         return Expression.Lambda<Func<IComplexEntity, string>>(body, parameter);
     }
 
@@ -118,6 +135,43 @@ public abstract partial class CommonTestSuite
             .Select(CultureCaseProjection(nameof(string.ToLower)))
             .First()
             .Should().Be("sdf");
+    }
+
+    [Fact]
+    public void CultureInvariantCase_NaturalSyntax_ShouldExecuteUpperAndLower()
+    {
+        // The documented spelling binds the static CultureInfo.InvariantCulture property rather than an
+        // Expression.Constant; it must render the same native functions and execute on every provider.
+        _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => e.RequiredString.ToUpper(CultureInfo.InvariantCulture))
+            .First()
+            .Should().Be("SDF");
+
+        _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => e.RequiredString.ToLower(CultureInfo.InvariantCulture))
+            .First()
+            .Should().Be("sdf");
+    }
+
+    [Fact]
+    public void CultureInvariantCase_NullReceiver_ShouldPreserveSqlNull()
+    {
+        // A typed null receiver must reach the database as a SQL NULL operand: upper(null)/lower(null)
+        // return NULL, never a CLR NullReferenceException or a substituted empty string. Scalar First()
+        // treats a NULL value as an absent row (throwIfNull), so the scalar accessor is used here.
+        _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(NullReceiverCultureCaseProjection(nameof(string.ToUpper)))
+            .ExecuteScalar()
+            .Should().BeNull();
+
+        _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(NullReceiverCultureCaseProjection(nameof(string.ToLower)))
+            .ExecuteScalar()
+            .Should().BeNull();
     }
 
     [Fact]
