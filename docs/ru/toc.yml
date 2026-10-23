@@ -146,6 +146,8 @@
       href: scalar-functions/09-system-functions.md
     - name: Последовательности и генераторы UUID
       href: scalar-functions/10-sequences.md
+- name: Культуронезависимое форматирование строк
+  href: string-format-invariant-provider.md
 - name: Подключение провайдеров
   items:
     - name: Обзор провайдеров
