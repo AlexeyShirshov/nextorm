@@ -90,7 +90,7 @@ Built by `pdca-planner` after the ALL-barrier (56/56 `ready`), then extended by 
 | G8 | T316 | two plan comparers | single owner | short |
 | G9 | T277 | test-only surface | no product writes; scratch mutation | short |
 
-**Group status:** G1 `in-progress` (T279, T248, T252, T253, T254, T255, T256, T257 done; 40 left incl. T324/T330/T331/T333) · G2 **`done`** (T258, T299, T295, T296; tip `collection/rc4/group-2` = task-2-3 `d32c2a9f`, awaiting barrier merge) · G3 `done` (T285, T278; tip `collection/rc4/group-3` ← task-3-285 `0594ddd5`, awaiting barrier merge) · G4 `done` (T261; task-4-1 `c49b5344`, awaiting barrier merge) · G5 **`done`** (T263; tip `collection/rc4/group-5` = task-5-1 `bb50802b`, awaiting barrier merge) · G6 **`done`** (T290; tip `collection/rc4/group-6` = task-6-1 `c00d9028`, awaiting barrier merge) · G8 **`done`** (T316; tip `collection/rc4/group-8` = task-8-1 `b9a18872`, awaiting barrier merge) · G7 **`done`** (T293; tip `collection/rc4/group-7` = task-7-1 `b0d60b91`, awaiting barrier merge) · G9 **`done`** (T277; tip `collection/rc4/group-9` = task-9-1 `23e7c993`, awaiting barrier merge).
+**Group status:** G1 `in-progress` (T279, T248, T252, T253, T254, T255, T256, T257 done; 40 left incl. T324/T330/T331/T333) · **G2–G9 merged into `1.0.9-rc4`** @ `c99cce5c` (barrier merge from `collection/rc4/integration` @ `668599f9`, order G4→G5→G6→G7→G8→G9→G3→G2; G2's limitation pages resolved semantically) · G2 `done` (T258, T299, T295, T296) · G3 `done` (T285, T278) · G4 `done` (T261) · G5 `done` (T263) · G6 `done` (T290) · G7 `done` (T293) · G8 `done` (T316) · G9 `done` (T277).
 
 **Contradiction resolutions (planner decisions, authoritative for scheduling only — no unit acceptance changes):**
 1. Aggregates: **T292 → T291**; T291 rebases onto T292's integrated state and re-runs both units' affected checks.
@@ -104,7 +104,23 @@ Built by `pdca-planner` after the ALL-barrier (56/56 `ready`), then extended by 
 
 **Lane plan:** 4 isolated group worktrees, at most 4 active lanes; start G1, G2, G3, G4 first, then G5 → G6 → G7 → G8 → G9 from the ready queue. Container-backed integration has an effective concurrency of **one** (collection-wide lease); the BDN host lock is exclusive. Merge/integration order: **G4 → G5 → G6 → G7 → G8 → G9 → G3 → G2 → G1**, `git merge --no-ff` only for `done` groups.
 
+## Integration branch
+
+The eight terminal groups were integrated through a dedicated branch, not the main tree, because the main tree carries uncommitted foreign work (`.opencode/**`, `.pdca/scripts/**`, `examples/**`, `opencode.json`).
+
+| Item | Value |
+|---|---|
+| Worktree | `/home/alex/sources/nextorm-worktrees/rc4/integration` |
+| Branch | `collection/rc4/integration`, from `1.0.9-rc4` @ `673e8011` |
+| Merged groups | G4 → G5 → G6 → G7 → G8 → G9 → G3 → G2 (contract order) |
+| Conflicts | one: `docs/advanced/limitations.md` + RU (G2) — main's rewritten *Inheritance / TPH* row kept, G2's *Type tests (`is` in LINQ)* row and its `#inheritance-limitations` anchor re-applied |
+| Integration tip | `668599f9` — full solution build **0 warnings / 0 errors** |
+| Landed on | `1.0.9-rc4` @ `c99cce5c` (`--no-ff`), **not pushed** |
+| Not merged | G1 — still open, merges at the terminal barrier onto the new tip |
+
 ## Decisions log
+
+- 2026-10-23: **eight groups landed on `1.0.9-rc4`** (owner: «вливай в апстрим») — `collection/rc4/integration` @ `668599f9` merged with `--no-ff` as `c99cce5c`: 105 paths, zero overlap with the owner's 23 uncommitted paths, so `.opencode/**`, `.pdca/scripts/**`, `examples/**` and `opencode.json` are untouched. The merged content is exactly the tree that built **0 warnings / 0 errors** on the integration branch. **Not pushed** — the branch is 22 commits ahead of `origin/1.0.9-rc4`; the owner pushes manually. G1 stays open and merges at the terminal barrier onto the new tip.
 
 - 2026-10-23: **barrier merge started on a dedicated branch** (owner: «давай замерджим текущее состояние в ворктри») — the eight terminal groups were merged into `collection/rc4/integration` (clean worktree `/home/alex/sources/nextorm-worktrees/rc4/integration`, branch from `1.0.9-rc4` @ `673e8011`) in the contract order G4→G5→G6→G7→G8→G9→G3→G2; seven merged textually clean, G2 collided on `docs/advanced/limitations.md` + RU and was resolved semantically (main's rewritten *Inheritance / TPH* row from `6a77abd4` wins, G2's *Type tests (`is` in LINQ)* row and its `#inheritance-limitations` anchor are preserved). Tip `668599f9`; the merged tree builds with **0 warnings / 0 errors**. G1 stays out until it is terminal. The main tree was not used because of the owner's uncommitted `.opencode/**`, `.pdca/scripts/**`, `examples/**` and `opencode.json` edits; nothing was pushed and `1.0.9-rc4` itself is untouched.
 - 2026-10-23: **T257 accepted** (G1 lane, ClickHouse map helpers) — commit `24947081`, r=2/n=2, CHECK `pass-with-recorded-exceptions` 19/19 rows; unit 783/783, live 54/54, boundary 71/71 with 0 skips. The two round-trips were a typed-cast gap (Int16/Int64/`DBNull` materialisation) and a param-mode `Clone()` crash on captured lambda variables, each closed with a red-proof and a regression test. Public break disclosed in the closed issue: `map_filter` returns `Tuple<TKey,TValue>[]` instead of `IDictionary<TKey,TValue>`; `map_apply`/`map_sort` return types unchanged; `map_all`/`map_exists` stay native.
