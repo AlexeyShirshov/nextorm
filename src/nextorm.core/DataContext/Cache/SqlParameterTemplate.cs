@@ -97,17 +97,40 @@ internal readonly record struct SqlParameterOccurrence
 {
     /// <summary>Creates an occurrence. The span must be non-empty; the owning template validates it.</summary>
     internal SqlParameterOccurrence(int occurrenceId, int bindingId, SqlStringLiteralRole role, int start, int length)
+        : this(occurrenceId, bindingId, role, start, length, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates an occurrence that also retains the exact placeholder text emitted at the span, so the
+    /// template can verify the span against the original statement instead of trusting the recorder's
+    /// length accounting.
+    /// </summary>
+    internal SqlParameterOccurrence(
+        int occurrenceId,
+        int bindingId,
+        SqlStringLiteralRole role,
+        int start,
+        int length,
+        string? placeholder)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(occurrenceId);
         ArgumentOutOfRangeException.ThrowIfNegative(bindingId);
         ArgumentOutOfRangeException.ThrowIfNegative(start);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(length);
+        if (placeholder is not null && placeholder.Length != length)
+        {
+            throw new ArgumentException(
+                $"The recorded placeholder '{placeholder}' is not {length} characters long.",
+                nameof(placeholder));
+        }
 
         OccurrenceId = occurrenceId;
         BindingId = bindingId;
         Role = role;
         Start = start;
         Length = length;
+        Placeholder = placeholder;
     }
 
     /// <summary>Statement-local occurrence identifier, unique within the template.</summary>
@@ -124,6 +147,12 @@ internal readonly record struct SqlParameterOccurrence
 
     /// <summary>Length of the placeholder span in the original statement text.</summary>
     internal int Length { get; init; }
+
+    /// <summary>
+    /// The exact placeholder text emitted at <see cref="Start"/>, or <see langword="null"/> when the
+    /// occurrence was recorded without it. Used by the template to validate the recorded span.
+    /// </summary>
+    internal string? Placeholder { get; init; }
 
     /// <summary>End (exclusive) of the placeholder span.</summary>
     internal int End => checked(Start + Length);
@@ -436,6 +465,14 @@ internal sealed class SqlParameterTemplate
             {
                 throw new ArgumentException(
                     $"Occurrence {occurrence.OccurrenceId} extends past the end of the statement text.",
+                    nameof(occurrences));
+            }
+
+            if (occurrence.Placeholder is { } placeholder
+                && !statementText.AsSpan(occurrence.Start, occurrence.Length).SequenceEqual(placeholder.AsSpan()))
+            {
+                throw new ArgumentException(
+                    $"Occurrence {occurrence.OccurrenceId} at {occurrence.Start} does not carry the recorded placeholder '{placeholder}'.",
                     nameof(occurrences));
             }
 

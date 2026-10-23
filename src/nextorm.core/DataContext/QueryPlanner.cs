@@ -439,7 +439,10 @@ internal sealed class QueryPlanner : IQueryPlanner
                     using (var visitor = ctx.CreateColumnVisitor(command.EntityType!, 0, dontNeedAlias: true))
                     {
                         visitor.Visit(assignment.Expression!);
-                        visitor.WriteTo(builder);
+
+                        // The UPDATE statement's template capture is not part of D4b-1 (only the SELECT
+                        // planner path attaches one), so the assignment fragment stays untracked here.
+                        visitor.WriteTo(builder, null);
                     }
                     break;
             }
@@ -562,7 +565,15 @@ internal sealed class QueryPlanner : IQueryPlanner
         return (sql, renderedParams);
     }
 
-    private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider, bool sequentialAccess, bool suppressLobLocator)
+    private string? MakeSelect(
+        QueryCommand queryCommand,
+        bool paramMode,
+        List<Parameter> @params,
+        IQueryRegistry queryProvider,
+        IAliasProvider? aliasProvider,
+        bool sequentialAccess,
+        bool suppressLobLocator,
+        SqlParameterTemplateCapture? capture = null)
     {
         // The single render funnel for cold, warm-miss and prepared-miss renders (including the cached-hit
         // parameter refresh through ExtractParams). A previously prepared command skips re-preparation, so
@@ -591,6 +602,9 @@ internal sealed class QueryPlanner : IQueryPlanner
             // JSON-shape preparation (ForJsonClause null) and the scalar ForJson terminal are untouched.
             ExactProjectionAliases = queryCommand.JsonShapeMode && queryCommand.ForJsonClause is not null,
             RenderMutationBody = _renderMutationBody,
+            // The statement-level occurrence capture, created by the planning render only. The parameter
+            // extraction pass (paramMode) never creates one, so it records nothing.
+            Capture = capture,
         };
         var sqlBuilder = new SqlBuilder(in ctx);
         return sqlBuilder.MakeSelect(queryCommand);
@@ -760,9 +774,11 @@ internal sealed class QueryPlanner : IQueryPlanner
                 }
             }
 
-            var (sql, @params) = ext is null
+            // A planner-rendered statement captures its own parameter occurrences; caller-owned text
+            // (RawSqlOverride) has no planner-owned emission and therefore never gets a template.
+            var (sql, @params, capture) = ext is null
                 ? MakeSelectInternal()
-                : (ext.ManualSql, ext.MakeParams?.Invoke());
+                : (ext.ManualSql, ext.MakeParams?.Invoke(), null);
 
             // A streaming row projection needs a compiled mapper (it materializes the row, including
             // the streaming column); the single-column LOB terminals keep the map-less path below.
@@ -819,6 +835,12 @@ internal sealed class QueryPlanner : IQueryPlanner
             {
                 SequentialAccess = sequentialAccess,
             });
+
+            // Attach the immutable occurrence template of the planner-rendered statement. It is produced
+            // once here, on the miss, and shared by every execution of the cached command; caller-owned
+            // text (`RawSqlOverride`) never gets one because it carries no planner-owned emission.
+            if (ext is null && capture is not null && sql is not null && @params is not null)
+                compiledQuery.SetParameterTemplate(capture.Finalize(sql, @params));
 
             // Build the immutable guarded refresh recipe once, on the miss. Unsupported shapes leave it
             // null and keep the original ExtractParams refresh on every hit.
@@ -891,11 +913,13 @@ internal sealed class QueryPlanner : IQueryPlanner
 
             return compiledQuery;
         }
-        (string?, List<Parameter>) MakeSelectInternal()
+        (string?, List<Parameter>, SqlParameterTemplateCapture?) MakeSelectInternal()
         {
             var @params = new List<Parameter>();
             var aliasProvider = new DefaultAliasProvider();
-            return (MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider, sequentialAccess, suppressLobLocator), @params);
+            var capture = new SqlParameterTemplateCapture();
+            var sql = MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider, sequentialAccess, suppressLobLocator, capture);
+            return (sql, @params, capture);
         }
     }
 

@@ -65,6 +65,13 @@ internal readonly struct SqlBuilder
         string? withClause = null;
         string? maxRecursionStmt = null;
 
+        // The statement-level recorder of planner-owned parameter occurrences (D4b-1). It is created only
+        // when the render is producing a template (the planner attached a capture); it is fed by the
+        // clause renderers that append parameter-bearing fragments to `sqlBuilder` at the current end,
+        // and the two leading inserts below relocate those spans to their final statement offsets.
+        var capture = _ctx.Capture;
+        var root = capture is null ? null : new SqlParameterTemplateRecorder();
+
         // Only the source entries this command adds may satisfy its own alias lookups. Without the
         // boundary a nested command over the same entity type as a sibling (or as the outer query)
         // resolves to that earlier alias (e.g. "from x as 't3' where t2.id = ...").
@@ -229,12 +236,12 @@ internal readonly struct SqlBuilder
                         throw new NotSupportedException("The PREWHERE clause is not supported by this SQL dialect");
 
                     if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" prewhere "));
-                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedPreWhere, 0, dontNeedAlias);
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedPreWhere, 0, dontNeedAlias, root);
                 }
                 if (cmd.PreparedCondition is not null)
                 {
                     if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" where "));
-                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0, dontNeedAlias);
+                    SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0, dontNeedAlias, root);
                 }
 
                 var grouping = cmd.GroupingList;
@@ -317,7 +324,7 @@ internal readonly struct SqlBuilder
                     if (having is not null)
                     {
                         if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" having "));
-                        SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0, dontNeedAlias);
+                        SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0, dontNeedAlias, root);
                     }
                 }
 
@@ -581,10 +588,16 @@ internal readonly struct SqlBuilder
                 if (selectInto is not null)
                     selectBuilder.Append(selectInto);
 
-                sqlBuilder!.Insert(0, selectBuilder!.ToString());
+                var selectLength = selectBuilder.Length;
+                var selectText = selectBuilder.ToString();
+                sqlBuilder!.Insert(0, selectText);
+                root?.RelocateInsertion(0, selectLength);
 
                 if (withClause is not null)
+                {
                     sqlBuilder!.Insert(0, withClause);
+                    root?.RelocateInsertion(0, withClause.Length);
+                }
 
                 // FOR JSON / FOR XML come after ORDER BY but before the trailing OPTION clause.
                 if (cmd.ForJsonClause is not null && cmd.ForXmlClause is not null)
@@ -615,7 +628,14 @@ internal readonly struct SqlBuilder
                     // The dialect owns the final placement. It also receives the CTE maxrecursion
                     // option so a dialect that must coalesce it into one trailing OPTION clause
                     // (SQL Server) can do so instead of the caller appending a second clause.
-                    r = _ctx.Dialect.RenderQueryHints(sqlBuilder!.ToString(), hints, maxRecursionStmt, _ctx.KeywordCase);
+                    var composed = sqlBuilder!.ToString();
+                    r = _ctx.Dialect.RenderQueryHints(composed, hints, maxRecursionStmt, _ctx.KeywordCase);
+
+                    // A dialect that rewrites the statement (rather than only appending) can move the
+                    // recorded spans anywhere, so the capture is dropped instead of producing a wrong
+                    // template; the emitted SQL and the parameter list are unaffected.
+                    if (capture is not null && !string.Equals(r, composed, StringComparison.Ordinal))
+                        capture.NotifyUnresolved();
                 }
                 else
                 {
@@ -624,6 +644,9 @@ internal readonly struct SqlBuilder
 
                     r = sqlBuilder!.ToString();
                 }
+
+                if (capture is not null && root is not null && r is not null)
+                    capture.RegisterFragment(r, root);
             }
 
             if (!_ctx.ParamMode && cmd.From?.RawSqlSource is not null)

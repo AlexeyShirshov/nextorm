@@ -1037,7 +1037,25 @@ internal static class SqlSourceRenderer
     /// is not aliased (<c>DELETE FROM &lt;table&gt; WHERE ...</c>): a single-source condition resolves
     /// its columns unqualified instead of failing to find an alias.
     /// </summary>
-    internal static void MakeWhere(in SqlBuildContext ctx, StringBuilder? target, Type entityType, Expression condition, int dim, bool dontNeedAlias)
+    /// <param name="ctx">The build context of the statement being rendered.</param>
+    /// <param name="target">The builder that receives the clause, or <see langword="null"/> in parameter mode.</param>
+    /// <param name="entityType">The entity type the condition resolves columns against.</param>
+    /// <param name="condition">The condition expression.</param>
+    /// <param name="dim">The projection dimension the condition resolves member names against.</param>
+    /// <param name="dontNeedAlias">When <see langword="true"/>, columns are rendered unqualified.</param>
+    /// <param name="recorder">
+    /// The statement's parameter recorder, or <see langword="null"/> when the clause's placeholder
+    /// occurrences do not take part in template capture. When it is supplied, the clause's emissions are
+    /// relocated onto it at the caller's current builder offset.
+    /// </param>
+    internal static void MakeWhere(
+        in SqlBuildContext ctx,
+        StringBuilder? target,
+        Type entityType,
+        Expression condition,
+        int dim,
+        bool dontNeedAlias,
+        SqlParameterTemplateRecorder? recorder = null)
     {
         using var visitor = ctx.CreateWhereVisitor(entityType, dim, dontNeedAlias);
         visitor.VisitCondition(condition);
@@ -1046,7 +1064,7 @@ internal static class SqlSourceRenderer
         // rendered clause is appended straight into the caller's builder, avoiding a temp string.
         if (ctx.ParamMode || target is null) return;
 
-        visitor.WriteTo(target);
+        visitor.WriteTo(target, recorder);
     }
 
     /// <summary>

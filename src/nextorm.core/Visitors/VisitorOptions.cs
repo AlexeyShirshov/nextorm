@@ -65,4 +65,12 @@ public sealed record VisitorOptions(
     /// init-only property so the record's primary constructor stays source-compatible.
     /// </summary>
     public string ParameterNamePrefix { get; init; } = string.Empty;
+
+    /// <summary>
+    /// The render-local capture of planner-owned parameter occurrences, or <see langword="null"/> when
+    /// this render is not producing a parameter template. Internal: it threads the engine's occurrence
+    /// metadata through the visitors without widening the public surface. Declared as an init-only
+    /// property for the same source-compatibility reason as the other derived members.
+    /// </summary>
+    internal SqlParameterTemplateCapture? Capture { get; init; }
 }

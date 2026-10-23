@@ -538,10 +538,8 @@ internal static class MemberTranslator
             }
 
             var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
-            visitor.TryAddCapturedParameter(parameterName, ((Func<object>)del)(), node);
-
-            if (!visitor.IsParamMode)
-                visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
+            var captured = visitor.TryAddCapturedParameter(parameterName, ((Func<object>)del)(), node);
+            visitor.EmitParameter(captured);
 
             return node;
         }
@@ -656,10 +654,8 @@ internal static class MemberTranslator
                     }
                     // var value = 1;
                     var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
-                    visitor.TryAddCapturedParameter(parameterName, ((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value), node);
-
-                    if (!visitor.IsParamMode)
-                        visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
+                    var captured = visitor.TryAddCapturedParameter(parameterName, ((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value), node);
+                    visitor.EmitParameter(captured);
 
                     return node;
                 }
@@ -1105,7 +1101,8 @@ internal static class MemberTranslator
                     "use First/FirstOrDefault or move the check to the application.");
 
             var sqlBuilder = new SqlBuilder(visitor.Options);
-            var sql = sqlBuilder.MakeSelect(innerQuery);
+            var innerSql = sqlBuilder.MakeSelect(innerQuery);
+            var sql = innerSql;
 
             // #148-B r3: ClickHouse decorrelates a correlated scalar subquery by a join, so an empty
             // match yields SQL NULL instead of the aggregate's identity (an empty count would be 0).
@@ -1116,7 +1113,10 @@ internal static class MemberTranslator
 
                 if (!visitor.IsParamMode)
                 {
-                    visitor.Builder!.Append(sql).Append(')');
+                    // Every wrapper embeds the subquery unchanged, so its occurrences are relocated
+                    // through the inner text rather than through the wrapped statement.
+                    visitor.AppendTransformed(sql!, innerSql!);
+                    visitor.Builder!.Append(')');
                 }
 
             return node;

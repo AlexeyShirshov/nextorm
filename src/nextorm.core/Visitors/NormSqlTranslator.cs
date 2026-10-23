@@ -297,7 +297,11 @@ internal static class NormSqlTranslator
 
             if (!visitor.IsParamMode)
             {
-                visitor.Builder!.Append(visitor.Dialect.MakeSubqueryPredicate(predicateKeyword, sql!, visitor.IsPredicateContext));
+                // The dialect wraps the subquery unchanged, so its occurrences keep their offsets inside
+                // the wrapper; they are tracked as a transformed fragment of this visitor.
+                visitor.AppendTransformed(
+                    visitor.Dialect.MakeSubqueryPredicate(predicateKeyword, sql!, visitor.IsPredicateContext),
+                    sql!);
             }
 
             return;

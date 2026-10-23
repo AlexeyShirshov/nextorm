@@ -70,12 +70,27 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     internal ParamRefreshRecipe? ParamRecipe { get; private set; }
 
     /// <summary>
+    /// The immutable parameter-occurrence template of the statement the command was prepared with, or
+    /// <see langword="null"/> when the command carries no planner-owned emission (caller-owned raw SQL)
+    /// or when its render could not be recorded reliably. Created once by the planner at plan
+    /// construction; it is never mutated, so every execution of the cached command composes from the
+    /// same original statement.
+    /// </summary>
+    internal SqlParameterTemplate? ParameterTemplate { get; private set; }
+
+    /// <summary>
     /// Sets the immutable parameter-refresh recipe. Called exactly once, by the planner at plan
     /// construction; the characterization tests use the same seam to install an intentionally
     /// incompatible recipe and prove the mismatch-safe fallback. The recipe itself is never mutated.
     /// </summary>
     /// <param name="recipe">The recipe, or <see langword="null"/> to keep the original extraction path.</param>
     internal void SetParamRecipe(ParamRefreshRecipe? recipe) => ParamRecipe = recipe;
+    /// <summary>
+    /// Sets the immutable parameter-occurrence template. Called exactly once, by the planner at plan
+    /// construction, for a statement the ORM rendered itself. The template is never mutated.
+    /// </summary>
+    /// <param name="template">The statement template, or <see langword="null"/> when none could be recorded.</param>
+    internal void SetParameterTemplate(SqlParameterTemplate? template) => ParameterTemplate = template;
     /// <summary>
     /// Wraps an already prepared <see cref="DbCommand"/> and its execution options.
     /// </summary>

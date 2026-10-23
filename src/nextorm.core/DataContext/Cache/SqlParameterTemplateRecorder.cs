@@ -22,7 +22,7 @@ namespace NextORM.Core;
 /// <remarks>
 /// Length arithmetic is checked, so a recording that cannot be represented fails with
 /// <see cref="OverflowException"/> instead of wrapping. Finalization owns the immutable template; the
-/// recorder is single-use and further recording after <see cref="Finalize"/> throws
+/// recorder is single-use and further recording after <see cref="Finalize(string)"/> throws
 /// <see cref="InvalidOperationException"/>.
 /// </remarks>
 internal sealed class SqlParameterTemplateRecorder
@@ -73,21 +73,80 @@ internal sealed class SqlParameterTemplateRecorder
         ArgumentOutOfRangeException.ThrowIfNegative(bindingId);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(placeholderLength);
 
-        var occurrenceId = _occurrences.Count;
         var start = _length;
-        _occurrences.Add(new SqlParameterOccurrence(occurrenceId, bindingId, role, start, placeholderLength));
         _length = checked(_length + placeholderLength);
-        return occurrenceId;
+        return AddOccurrence(bindingId, role, start, placeholderLength, null);
     }
 
     /// <summary>
     /// Records a placeholder whose text was just emitted at the current end of the fragment and returns
-    /// its occurrence id.
+    /// its occurrence id. The text is retained so the finished template can validate the span.
     /// </summary>
     internal int RecordPlaceholder(int bindingId, SqlStringLiteralRole role, string placeholder)
     {
         ArgumentNullException.ThrowIfNull(placeholder);
-        return RecordOccurrence(bindingId, role, placeholder.Length);
+        ThrowIfFinalized();
+        ArgumentOutOfRangeException.ThrowIfNegative(bindingId);
+
+        var start = _length;
+        _length = checked(_length + placeholder.Length);
+        return AddOccurrence(bindingId, role, start, placeholder.Length, placeholder);
+    }
+
+    /// <summary>
+    /// Adds the occurrences of a child fragment whose binding ids are already statement-canonical (the
+    /// renderer derives them from the statement's shared parameter list) at <paramref name="offset"/> in
+    /// this fragment. The recorded length is left untouched, so fragments may be merged in any order and
+    /// the caller advances the cursor to the final text length with <see cref="AdvanceTo"/>.
+    /// </summary>
+    internal void AppendOccurrences(SqlParameterTemplateRecorder fragment, int offset)
+    {
+        ArgumentNullException.ThrowIfNull(fragment);
+        ThrowIfFinalized();
+        ArgumentOutOfRangeException.ThrowIfNegative(offset);
+
+        foreach (var occurrence in fragment._occurrences)
+        {
+            _occurrences.Add(new SqlParameterOccurrence(
+                _occurrences.Count,
+                occurrence.BindingId,
+                occurrence.Role,
+                checked(offset + occurrence.Start),
+                occurrence.Length,
+                occurrence.Placeholder));
+        }
+    }
+
+    /// <summary>
+    /// Shifts every occurrence that starts at or after <paramref name="position"/> by
+    /// <paramref name="delta"/> characters and grows the recorded length accordingly. Used when the
+    /// dialect rewrites the finished statement text by inserting a fragment (a hint comment or a folded
+    /// option clause) after the renderer accounted for the original text.
+    /// </summary>
+    internal void RelocateInsertion(int position, int delta)
+    {
+        ThrowIfFinalized();
+        if (delta <= 0)
+            throw new ArgumentOutOfRangeException(nameof(delta), delta, "An insertion must grow the text.");
+        if ((uint)position > (uint)_length)
+            throw new ArgumentOutOfRangeException(nameof(position), position, "The insertion position is outside the recorded fragment.");
+
+        for (var i = 0; i < _occurrences.Count; i++)
+        {
+            var occurrence = _occurrences[i];
+            if (occurrence.Start < position)
+                continue;
+
+            _occurrences[i] = new SqlParameterOccurrence(
+                occurrence.OccurrenceId,
+                occurrence.BindingId,
+                occurrence.Role,
+                checked(occurrence.Start + delta),
+                occurrence.Length,
+                occurrence.Placeholder);
+        }
+
+        _length = checked(_length + delta);
     }
 
     /// <summary>Accounts for <paramref name="charCount"/> text characters appended without a slot.</summary>
@@ -190,7 +249,8 @@ internal sealed class SqlParameterTemplateRecorder
                 bindingId,
                 occurrence.Role,
                 checked(offset + occurrence.Start),
-                occurrence.Length));
+                occurrence.Length,
+                occurrence.Placeholder));
         }
 
         _length = checked(_length + fragment._length);
@@ -214,6 +274,39 @@ internal sealed class SqlParameterTemplateRecorder
 
         _finalized = true;
         return new SqlParameterTemplate(statementText, _occurrences, _bindings);
+    }
+
+    /// <summary>
+    /// Freezes the recorder against a canonical binding table that the caller derived from the statement's
+    /// ordered parameter list. Used by the renderer, whose occurrences already carry canonical binding ids,
+    /// so the recorder does not own the binding descriptors.
+    /// </summary>
+    internal SqlParameterTemplate Finalize(string statementText, IReadOnlyList<SqlParameterBinding> bindings)
+    {
+        ArgumentNullException.ThrowIfNull(statementText);
+        ArgumentNullException.ThrowIfNull(bindings);
+        ThrowIfFinalized();
+        if (_length != statementText.Length)
+        {
+            throw new InvalidOperationException(
+                $"The recorder accounted for {_length} characters but the statement has {statementText.Length}; " +
+                "the occurrence spans would not be contiguous with the original text.");
+        }
+
+        _finalized = true;
+        return new SqlParameterTemplate(statementText, _occurrences, bindings);
+    }
+
+    private int AddOccurrence(
+        int bindingId,
+        SqlStringLiteralRole role,
+        int start,
+        int length,
+        string? placeholder)
+    {
+        var occurrenceId = _occurrences.Count;
+        _occurrences.Add(new SqlParameterOccurrence(occurrenceId, bindingId, role, start, length, placeholder));
+        return occurrenceId;
     }
 
     private int AddBinding(

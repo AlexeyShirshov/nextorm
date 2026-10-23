@@ -333,7 +333,7 @@ internal static class ArraySqlTranslator
         var builder = visitor.Builder!;
         var start = builder.Length;
         builder.Append(sqlName).Append('(').Append(name).Append(" -> ");
-        bodyVisitor.WriteTo(builder);
+        bodyVisitor.WriteTo(builder, visitor.Recorder);
 
         for (var (i, cnt) = (1, args.Count); i < cnt; i++)
         {
@@ -437,13 +437,18 @@ internal sealed class HigherOrderLambdaVisitor : BaseExpressionVisitor
     internal override IReadOnlyDictionary<ParameterExpression, string>? LambdaParameters => _parameters;
 
     public override BaseExpressionVisitor Clone()
-        => IsParamMode
-            ? throw new NotSupportedException("Cannot clone in param mode")
-            : new HigherOrderLambdaVisitor(Options, _parameters)
-            {
-                SuppressColumnCollation = SuppressColumnCollation,
-                ConverterContext = ConverterContext,
-            };
+    {
+        if (IsParamMode)
+            throw new NotSupportedException("Cannot clone in param mode");
+
+        var clone = new HigherOrderLambdaVisitor(Options, _parameters)
+        {
+            SuppressColumnCollation = SuppressColumnCollation,
+            ConverterContext = ConverterContext,
+        };
+        Adopt(clone);
+        return clone;
+    }
 
     protected override Expression VisitParameter(ParameterExpression node)
     {
