@@ -59,6 +59,39 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+## Математика только для ClickHouse
+
+Помимо переносимой поверхности [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql),
+[`SqlFunctions.ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) предоставляет четыре
+математические функции, существующие только в ClickHouse. Они **не** входят в кросс-провайдерную
+трансляцию `Math.*`/BCL и не добавлялись в [`CommonFunctions`](xref:NextORM.Core.CommonFunctions);
+остальные провайдеры (PostgreSQL, SQL Server, MySQL, MariaDB, SQLite) и in-memory провайдер отклоняют
+вызов `NotSupportedException`, а не эмулируют его.
+
+| C# | SQL | Результат |
+|---|---|---|
+| `SqlFunctions.ClickHouse.log2(x)` / `log2(x)` | `log2(x)` | Логарифм по основанию 2. |
+| `SqlFunctions.ClickHouse.cbrt(x)` / `cbrt(x)` | `cbrt(x)` | Кубический корень. |
+| `SqlFunctions.ClickHouse.exp2(x)` / `exp2(x)` | `exp2(x)` | Два в степени `x`. |
+| `SqlFunctions.ClickHouse.exp10(x)` / `exp10(x)` | `exp10(x)` | Десять в степени `x`. |
+
+У каждой функции две перегрузки: `double f(double x)` и `double? f(double? x)`. ClickHouse возвращает
+`Float64` для ненулевой формы и `Nullable(Float64)` для nullable-формы; аргумент `NULL` даёт `NULL`, а
+не ноль. На закреплённой версии 25.8 `log2(8) = 3`, `cbrt(8) = 2`, `exp2(3) = 8` и `exp10(2) = 100`.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        L2 = SqlFunctions.ClickHouse.log2((double)e.Id),
+        Cbrt = SqlFunctions.ClickHouse.cbrt((double)e.Id),
+        Exp2 = SqlFunctions.ClickHouse.exp2((double)e.Id),
+        E10 = SqlFunctions.ClickHouse.exp10((double)e.Id),
+        NullableL2 = SqlFunctions.ClickHouse.log2(e.Double)
+    })
+    .ToList();
+```
+
 ## Расширенная математика PostgreSQL
 
 Остальные математические функции входят в расширенную библиотеку скалярных функций

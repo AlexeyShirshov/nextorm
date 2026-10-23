@@ -205,6 +205,9 @@ every other dialect:
   `murmur_hash3_128` (`MD5`/`SHA1`/`SHA256`/`SHA512`/`sipHash128`/`murmurHash3_128`, lowercase
   hexadecimal) plus the numeric `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64` and
   `murmur_hash2_32`/`murmur_hash2_64`/`murmur_hash3_32`/`murmur_hash3_64`;
+* math: `log2`, `cbrt`, `exp2` and `exp10` (rendered `log2(x)`/`cbrt(x)`/`exp2(x)`/`exp10(x)`), each
+  with a `double` and a `double?` overload returning `Float64`/`Nullable(Float64)` (a `NULL` argument
+  stays `NULL`); the other providers and the in-memory provider reject them;
 * `generate_ulid` (`generateULID`).
 
 The six string-returning digests are encoded server-side as lowercase hexadecimal, so a `string?`

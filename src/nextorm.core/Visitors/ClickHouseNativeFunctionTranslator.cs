@@ -52,7 +52,9 @@ internal static class ClickHouseNativeFunctionTranslator
         nameof(ClickHouseFunctions.murmur_hash2_32), nameof(ClickHouseFunctions.murmur_hash2_64),
         nameof(ClickHouseFunctions.murmur_hash3_32), nameof(ClickHouseFunctions.murmur_hash3_64),
         nameof(ClickHouseFunctions.murmur_hash3_128),
-        nameof(ClickHouseFunctions.generate_ulid)
+        nameof(ClickHouseFunctions.generate_ulid),
+        nameof(ClickHouseFunctions.log2), nameof(ClickHouseFunctions.cbrt),
+        nameof(ClickHouseFunctions.exp2), nameof(ClickHouseFunctions.exp10)
     };
 
     private static readonly HashSet<string> ParamsArrayFunctions = new(StringComparer.Ordinal)

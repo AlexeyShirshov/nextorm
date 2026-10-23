@@ -27,7 +27,8 @@ namespace NextORM.Core;
 /// <c>arrayEnumerate</c>, <c>arrayCumSum</c>, <c>arraySlice</c>, <c>arrayPushBack</c>), the
 /// higher-order (lambda) array functions (<c>arrayMap</c>, <c>arrayFilter</c>, <c>arrayExists</c>,
 /// <c>arrayAll</c>, <c>arrayCount</c>, <c>arrayFirst*</c>, <c>arrayLast*</c>) plus the
-/// array-returning aggregates <c>groupArray</c>/<c>groupUniqArray</c>.
+/// array-returning aggregates <c>groupArray</c>/<c>groupUniqArray</c>, and the numeric
+/// <c>log2</c>/<c>cbrt</c>/<c>exp2</c>/<c>exp10</c> functions.
 /// Exposed through <see cref="SqlFunctions.ClickHouse"/>; every member is gated by a capability flag
 /// and rejected by providers that do not opt in.
 /// </summary>
@@ -1107,4 +1108,61 @@ namespace NextORM.Core;
         /// Requires a provider that supports it (ClickHouse).
         /// </summary>
         public string? generate_ulid() => default!;
+
+        /// <summary>
+        /// <c>log2(x)</c>: the base-2 logarithm of <paramref name="x"/> (<c>Float64</c>). Requires a
+        /// provider that supports it (ClickHouse); every other provider and the in-memory provider reject
+        /// the call.
+        /// </summary>
+        public double log2(double x) => throw new NotSupportedException("The log2 function is not supported by this provider.");
+
+        /// <summary>
+        /// <c>log2(x)</c> over a nullable argument: the base-2 logarithm, or <see langword="null"/> when
+        /// <paramref name="x"/> is <see langword="null"/> (<c>Nullable(Float64)</c>). Requires a provider
+        /// that supports it (ClickHouse); every other provider and the in-memory provider reject the call.
+        /// </summary>
+        public double? log2(double? x) => throw new NotSupportedException("The log2 function is not supported by this provider.");
+
+        /// <summary>
+        /// <c>cbrt(x)</c>: the cube root of <paramref name="x"/> (<c>Float64</c>). Requires a provider that
+        /// supports it (ClickHouse); every other provider and the in-memory provider reject the call.
+        /// </summary>
+        public double cbrt(double x) => throw new NotSupportedException("The cbrt function is not supported by this provider.");
+
+        /// <summary>
+        /// <c>cbrt(x)</c> over a nullable argument: the cube root, or <see langword="null"/> when
+        /// <paramref name="x"/> is <see langword="null"/> (<c>Nullable(Float64)</c>). Requires a provider
+        /// that supports it (ClickHouse); every other provider and the in-memory provider reject the call.
+        /// </summary>
+        public double? cbrt(double? x) => throw new NotSupportedException("The cbrt function is not supported by this provider.");
+
+        /// <summary>
+        /// <c>exp2(x)</c>: two raised to the power <paramref name="x"/> (<c>Float64</c>). Requires a
+        /// provider that supports it (ClickHouse); every other provider and the in-memory provider reject
+        /// the call.
+        /// </summary>
+        public double exp2(double x) => throw new NotSupportedException("The exp2 function is not supported by this provider.");
+
+        /// <summary>
+        /// <c>exp2(x)</c> over a nullable argument: two raised to the power <paramref name="x"/>, or
+        /// <see langword="null"/> when <paramref name="x"/> is <see langword="null"/>
+        /// (<c>Nullable(Float64)</c>). Requires a provider that supports it (ClickHouse); every other
+        /// provider and the in-memory provider reject the call.
+        /// </summary>
+        public double? exp2(double? x) => throw new NotSupportedException("The exp2 function is not supported by this provider.");
+
+        /// <summary>
+        /// <c>exp10(x)</c>: ten raised to the power <paramref name="x"/> (<c>Float64</c>). Requires a
+        /// provider that supports it (ClickHouse); every other provider and the in-memory provider reject
+        /// the call.
+        /// </summary>
+        public double exp10(double x) => throw new NotSupportedException("The exp10 function is not supported by this provider.");
+
+        /// <summary>
+        /// <c>exp10(x)</c> over a nullable argument: ten raised to the power <paramref name="x"/>, or
+        /// <see langword="null"/> when <paramref name="x"/> is <see langword="null"/>
+        /// (<c>Nullable(Float64)</c>). Requires a provider that supports it (ClickHouse); every other
+        /// provider and the in-memory provider reject the call.
+        /// </summary>
+        public double? exp10(double? x) => throw new NotSupportedException("The exp10 function is not supported by this provider.");
     }

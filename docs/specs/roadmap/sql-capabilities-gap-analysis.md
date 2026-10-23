@@ -628,12 +628,15 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     `json_each`, `json_tree` and the rest), the date helpers (`timediff`, `unixepoch`, `julianday`) and
     the math-extension functions; other providers reject with `NotSupportedException`.
     Docs: [SQLite-specific SQL](../../guide/provider-specific-sql/sqlite.md) (EN+RU).
-42. **ClickHouse built-in function gaps — <span style="color:green">done</span>.** `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`,
+42. **ClickHouse built-in function gaps — <span style="color:orange">in progress</span>.** The shipped slices cover `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`,
     `match`/`extract`, `splitByString`, `formatDateTime`/`parseDateTime`, `now`/`today`/`yesterday`, the
-    `map*` family, `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`, the `groupBitmap`/`sumMap`
-    aggregates, the hash family and `generateULID` are now on `SqlFunctions.ClickHouse` (gated by the
-    ClickHouse-only capability flags). Docs:
-    [ClickHouse-specific SQL](../../guide/provider-specific-sql/clickhouse.md) (EN+RU, #78).
+    `map*` family (including the higher-order `map_filter`/`map_apply`/`map_sort`), `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`,
+    the `groupBitmap`/`sumMap` aggregates, the hash family, `generateULID`, and — added by #286 — the math
+    functions `log2`/`cbrt`/`exp2`/`exp10` (typed `double`/`double?`, ClickHouse-only). This does **not**
+    close the catalog: the residual numeric/string/rounding/date/array/tuple/map/JSON/hash/encoding/URL/bit
+    names stay open in #286 and remain tracked in
+    [the function-coverage gap](sql-function-coverage-gap.md) §3 umbrella row. Docs:
+    [ClickHouse-specific SQL](../../guide/provider-specific-sql/clickhouse.md) (EN+RU, #78, #286).
 43. **Captured-local parameter binding (repeated references) — <span style="color:green">Done</span> (`1.0-b.1`).** A captured local
     reachable from the final SQL is now registered exactly once — repeated occurrences reuse the same
     `@pN`, and a local living only inside a joined derived subquery binds too. Previously the command

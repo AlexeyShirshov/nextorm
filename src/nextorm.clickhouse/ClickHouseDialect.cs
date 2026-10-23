@@ -1129,7 +1129,8 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
         "sip_hash64" or "sip_hash128" or
         "murmur_hash2_32" or "murmur_hash2_64" or "murmur_hash3_32" or "murmur_hash3_64" or
         "murmur_hash3_128" or "generate_ulid" or
-        "bit_length" or "octet_length" or "degrees" or "radians" or "pi";
+        "bit_length" or "octet_length" or "degrees" or "radians" or "pi" or
+        "log2" or "cbrt" or "exp2" or "exp10";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1218,6 +1219,10 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
         "degrees" => $"degrees({args[0]})",
         "radians" => $"radians({args[0]})",
         "pi" => "pi()",
+        "log2" => $"log2({args[0]})",
+        "cbrt" => $"cbrt({args[0]})",
+        "exp2" => $"exp2({args[0]})",
+        "exp10" => $"exp10({args[0]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by ClickHouse.")
     };
 

@@ -59,6 +59,40 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+## ClickHouse-only math
+
+Beyond the portable [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) surface,
+[`SqlFunctions.ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) exposes four ClickHouse-only math
+functions. They are **not** part of the cross-provider `Math.*`/BCL translation and were not added to
+[`CommonFunctions`](xref:NextORM.Core.CommonFunctions); every other provider (PostgreSQL, SQL Server,
+MySQL, MariaDB, SQLite) and the in-memory provider rejects a call with `NotSupportedException` instead of
+emulating it.
+
+| C# | SQL | Result |
+|---|---|---|
+| `SqlFunctions.ClickHouse.log2(x)` / `log2(x)` | `log2(x)` | Base-2 logarithm. |
+| `SqlFunctions.ClickHouse.cbrt(x)` / `cbrt(x)` | `cbrt(x)` | Cube root. |
+| `SqlFunctions.ClickHouse.exp2(x)` / `exp2(x)` | `exp2(x)` | Two raised to the power `x`. |
+| `SqlFunctions.ClickHouse.exp10(x)` / `exp10(x)` | `exp10(x)` | Ten raised to the power `x`. |
+
+Each function has two overloads, `double f(double x)` and `double? f(double? x)`. ClickHouse returns
+`Float64` for the non-nullable form and `Nullable(Float64)` for the nullable one; a `NULL` argument
+yields `NULL`, never zero. On the pinned 25.8 baseline `log2(8) = 3`, `cbrt(8) = 2`, `exp2(3) = 8` and
+`exp10(2) = 100`.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        L2 = SqlFunctions.ClickHouse.log2((double)e.Id),
+        Cbrt = SqlFunctions.ClickHouse.cbrt((double)e.Id),
+        Exp2 = SqlFunctions.ClickHouse.exp2((double)e.Id),
+        E10 = SqlFunctions.ClickHouse.exp10((double)e.Id),
+        NullableL2 = SqlFunctions.ClickHouse.log2(e.Double)
+    })
+    .ToList();
+```
+
 ## PostgreSQL extended math
 
 The remaining math functions are part of the extended scalar library

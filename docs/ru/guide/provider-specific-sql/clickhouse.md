@@ -206,6 +206,9 @@ ClickHouse, у которых нет переносимого написания
   (`MD5`/`SHA1`/`SHA256`/`SHA512`/`sipHash128`/`murmurHash3_128`, нижний шестнадцатеричный регистр) и
   числовые `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64` и
   `murmur_hash2_32`/`murmur_hash2_64`/`murmur_hash3_32`/`murmur_hash3_64`;
+* математика: `log2`, `cbrt`, `exp2` и `exp10` (рендерятся `log2(x)`/`cbrt(x)`/`exp2(x)`/`exp10(x)`), у
+  каждой перегрузки `double` и `double?`, результат `Float64`/`Nullable(Float64)` (аргумент `NULL`
+  остаётся `NULL`); остальные провайдеры и in-memory провайдер их отклоняют;
 * `generate_ulid` (`generateULID`).
 
 Шесть строковых хэшей кодируются на сервере в нижний шестнадцатеричный регистр, поэтому проекция

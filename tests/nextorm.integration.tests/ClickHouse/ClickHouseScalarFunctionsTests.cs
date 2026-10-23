@@ -36,12 +36,13 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
         "sip_hash64", "sip_hash128",
         "murmur_hash2_32", "murmur_hash2_64", "murmur_hash3_32", "murmur_hash3_64",
         "murmur_hash3_128", "generate_ulid",
-        "bit_length", "octet_length", "degrees", "radians", "pi"
+        "bit_length", "octet_length", "degrees", "radians", "pi",
+        "log2", "cbrt", "exp2", "exp10"
     ];
 
     // Every Render arm of ClickHouseScalarFunctions, written out literally from the dialect contract
     // (src/nextorm.clickhouse/ClickHouseDialect.cs): one row per name, plus a second row for the
-    // optional pad form of lpad/rpad. 75 names -> 77 arms; array_except is refused by #252
+    // optional pad form of lpad/rpad. 79 names -> 81 arms; array_except is refused by #252
     // (native arrayExcept needs server 25.9) and therefore has no accepted arm.
     private static readonly (string Name, string[] Args, string Expected)[] RenderArms =
     [
@@ -121,7 +122,11 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
         ("octet_length", ["s"], "toInt32(length(s))"),
         ("degrees", ["x"], "degrees(x)"),
         ("radians", ["x"], "radians(x)"),
-        ("pi", [], "pi()")
+        ("pi", [], "pi()"),
+        ("log2", ["x"], "log2(x)"),
+        ("cbrt", ["x"], "cbrt(x)"),
+        ("exp2", ["x"], "exp2(x)"),
+        ("exp10", ["x"], "exp10(x)")
     ];
 
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
@@ -133,7 +138,7 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
     [Fact]
     public void Supports_ShouldAcceptTheCompleteInventoryAndNothingElse()
     {
-        SupportedNames.Should().HaveCount(75, "the ClickHouse table accepts 75 scalar-function names");
+        SupportedNames.Should().HaveCount(79, "the ClickHouse table accepts 79 scalar-function names");
         SupportedNames.Should().OnlyHaveUniqueItems();
 
         using (new AssertionScope())
@@ -145,7 +150,7 @@ public sealed class ClickHouseScalarFunctionsTests : ProviderTestSuite
         // The render table and the predicate must agree name-for-name: no accepted name without an
         // arm, no arm for a name the dialect does not accept.
         RenderArms.Select(arm => arm.Name).Distinct().Should().BeEquivalentTo(SupportedNames);
-        RenderArms.Should().HaveCount(77, "75 names plus the two optional pad forms of lpad/rpad");
+        RenderArms.Should().HaveCount(81, "79 names plus the two optional pad forms of lpad/rpad");
     }
 
     [Fact]
