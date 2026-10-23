@@ -1,7 +1,7 @@
 # SQLite-specific SQL
 
 > SQLite contributes the core scalar functions (`printf`/`format`, `hex`/`unhex`, `random`/`randomblob`,
-> `quote`, `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`, `if`/`ifnull`), the JSON1
+> `quote`, `typeof`, `glob`, `unicode`/`char`, `octet_length`, `if`/`ifnull`), the JSON1
 > functions/operators/aggregates and the `json_each`/`json_tree` table-valued functions, the date
 > helpers (`timediff`, `unixepoch`, `julianday`), the math-extension functions
 > (`acos`/`asin`/`atan`/`atan2`, the hyperbolics, `log2`/`log10`, `mod`) and the FTS3/FTS4/FTS5
@@ -29,9 +29,18 @@ opt in throws `NotSupportedException` instead of emitting SQL it cannot execute.
 | `unicode(value)` | `unicode(...)` | code point of the first character |
 | `@char(c1, ...)` | `char(...)` | string from Unicode code points |
 | `octet_length(value)` | `octet_length(...)` | byte length of the encoded value |
-| `soundex(value)` | `soundex(...)` | requires the `SQLITE_SOUNDEX` build option |
+| `soundex(value)` | not emitted — **not supported** | the shipped engine has no `soundex` (no `SQLITE_SOUNDEX`); preparation throws `NotSupportedException` |
 | `ifnull(value, other)` | `ifnull(...)` | two-argument `coalesce` |
 | `@if(condition, whenTrue, whenFalse)` | `if(...)` | `if()` alias needs 3.48+ |
+
+> **`soundex` is not supported and is never emitted.** `SqlFunctions.Sqlite.soundex` is retained for
+> source and binary compatibility only: the shipped SQLite engine is built without `SQLITE_SOUNDEX` and
+> has no such function, so preparing a call throws `NotSupportedException` —
+> `The SQLite function 'soundex' is not supported by this provider.` — before any SQL is produced or
+> executed. The refusal is unconditional and also covers a custom SQLite build compiled with
+> `SQLITE_SOUNDEX`; for a soundex code use a provider that has it natively
+> ([`SqlFunctions.SqlServer.soundex`](xref:NextORM.Core.SqlServerFunctions.soundex(System.String)))
+> or a raw SQL fragment.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -121,6 +130,23 @@ var values = dataContext
 ```sql
 select value
  from json_each('["a","b","c"]')
+```
+
+## Aggregate functions
+
+`total(value)` is SQLite's floating-point sum aggregate. It returns `double` and never null: an empty or
+all-null group yields `0.0`, nulls inside a mixed group are ignored, and large integer values are summed
+in floating point instead of overflowing the way `sum` can.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(c => new { Total = SqlFunctions.Sqlite.total(c.NullableInt) })
+    .ToList();
+```
+
+```sql
+select total(nullableint)
+ from complex_entity
 ```
 
 ## Date helpers
