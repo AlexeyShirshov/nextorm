@@ -199,8 +199,9 @@ ClickHouse, у которых нет переносимого написания
 * операции над множествами массивов: `array_concat`, `array_flatten`, `array_uniq` (`arrayUniq`, в
   обёртке `toInt64`), `array_intersect`, `array_union`, `array_symmetric_difference`;
 * семейство `Map`: конструктор `map` (inline-пары `Tuple.Create`), `map_keys`/`map_values`,
-  `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, двухпараметрические лямбды
-  `map_filter`/`map_apply`/`map_all`/`map_exists` и `map_sort`;
+  `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, а также публичные
+  высокопорядковые помощники `map_filter`/`map_apply`/`map_sort` (результат — кортежи и массивы,
+  понижаются до массивных форм) и `map_all`/`map_exists` (булевы результаты, нативные предикаты);
 * хэши: шесть строковых хэшей `md5`/`sha1`/`sha256`/`sha512`/`sip_hash128`/`murmur_hash3_128`
   (`MD5`/`SHA1`/`SHA256`/`SHA512`/`sipHash128`/`murmurHash3_128`, нижний шестнадцатеричный регистр) и
   числовые `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64` и
@@ -229,9 +230,10 @@ UTF-8 с потерями):
 ClickHouse 25.9, поэтому вызов отклоняется с `NotSupportedException` на этапе трансляции и не
 доходит до сервера. Остальные операции над множествами массивов не затронуты.
 
-Результат `Map` представлен как `IDictionary<TKey, TValue>`; при проецировании комбинируйте его с
-`map_keys`/`map_values` или одним из предикатов `map_contains_*`, потому что построитель строк не
-материализует «голую» колонку `IDictionary`.
+Нативный результат `Map` (конструктор `map`, `map_add`, `map_concat`) представляется как
+`IDictionary<TKey, TValue>`; при проецировании комбинируйте его с `map_keys`/`map_values` или одним
+из предикатов `map_contains_*`, потому что построитель строк не материализует «голую» колонку
+`IDictionary`.
 
 ```csharp
 var rows = dataContext.From<Event>()
@@ -243,6 +245,73 @@ var rows = dataContext.From<Event>()
     })
     .ToList();
 ```
+
+Пять высокопорядковых помощников — публичные LINQ-методы, и объявленный CLR-тип результата входит в
+контракт; нативную серверную функцию сохраняют только `map_all` и `map_exists`:
+
+* `map_filter` — записи, удовлетворяющие предикату, как `Tuple<TKey, TValue>[]`. Понижается до
+  `arrayFilter(_t -> predicate, arrayZip(mapKeys(map), mapValues(map)))`, где ключ и значение лямбды
+  перепривязаны к полям пары `_t.1`/`_t.2`;
+* `map_apply` — по одному результату лямбды на запись, в порядке карты, как `TResult[]`. Понижается
+  до `arrayMap((k, v) -> expression, mapKeys(map), mapValues(map))`;
+* `map_sort` — записи, упорядоченные по ключу, как `Tuple<TKey, TValue>[]`. Понижается до
+  `arraySort(_t -> _t.1, arrayZip(mapKeys(map), mapValues(map)))`;
+* `map_all`/`map_exists` — `bool`. Остаются нативными и рендерятся как
+  `mapAll((k, v) -> predicate, map)` / `mapExists((k, v) -> predicate, map)`, лямбда первой.
+
+Пониженное выражение filter, apply и sort оборачивается приведением **объявленного** типа результата,
+а не того типа, который сервер вывел бы из операнда: `Tuple<string, int>[]` даёт
+`cast(... as Array(Tuple(String, Int32)))`, результат `long` в apply — `cast(... as Array(Int64))`, —
+поэтому сервер сообщает ровно тот тип элемента, который обещает объявление, а не более узкий. Тип
+элемента выбирают два правила:
+
+* результат apply **значимого типа** остаётся «голым» — `int` → `Array(Int32)`;
+* результат apply **ссылочного типа** записывается как `Nullable(...)` — `string` →
+  `Array(Nullable(String))` — потому что объявленный элемент допускает `null` (ветка `default(string)`
+  в проекции — это реальный `NULL`), а ClickHouse `String` его не допускает; материализуемый
+  CLR-тип при этом остаётся `string[]`.
+
+Компоненты пары ключ/значение у `map_filter`/`map_sort` остаются «голыми», если только сам
+CLR-компонент не `Nullable<T>`: ключи и значения карты необнуляемы.
+
+```sql
+-- map_filter: arrayFilter по парам из arrayZip, затем приведение объявленного типа
+cast(arrayFilter(_t -> (_t.2 > 0),
+                arrayZip(mapKeys(map('a', 1, 'b', -1)), mapValues(map('a', 1, 'b', -1))))
+    as Array(Tuple(String, Int64)))
+
+-- map_sort: arraySort по ключу тех же пар, затем приведение объявленного типа
+cast(arraySort(_t -> _t.1,
+              arrayZip(mapKeys(map('b', 2, 'a', 1)), mapValues(map('b', 2, 'a', 1))))
+    as Array(Tuple(String, Int64)))
+
+-- map_apply: по одному результату на запись, приведение к объявленному TResult — «голое»
+-- для значимого типа, Nullable(...) для ссылочного, допускающего null
+cast(arrayMap((k, v) -> (v * 2),
+              mapKeys(map('a', 1, 'b', -1)), mapValues(map('a', 1, 'b', -1)))
+    as Array(Int64))
+
+cast(arrayMap((k, v) -> k,
+              mapKeys(map('a', 1, 'b', -1)), mapValues(map('a', 1, 'b', -1)))
+    as Array(Nullable(String)))
+```
+
+**Ломающее изменение в 1.0.9-rc4.** Раньше `map_filter` объявлял `IDictionary<TKey, TValue>`, теперь
+возвращает `Tuple<TKey, TValue>[]`, потому что карту нельзя материализовать из проецируемого
+выражения. `map_sort` (уже массив кортежей) и `map_apply` (уже `TResult[]`) сохраняют свои формы.
+
+Публичного пути, превращающего отфильтрованную карту обратно в серверную `Map`, нет: `mapFilter`
+достижима только через понижение `map_*`, `map_keys`/`map_values` требуют `IDictionary` и потому
+отклоняют массив кортежей на этапе компиляции, а лямбды высокопорядковых функций массивов запрещают
+доступ к полям параметра, поэтому `arrayMap(t => t.Item2, ...)` выразить нельзя. Переходите на
+чтение возвращённых кортежей — обычный LINQ по массиву после материализации:
+`filtered.Select(t => t.Item2)` для значений или
+`filtered.ToDictionary(t => t.Item1, t => t.Item2)` для словаря на клиенте.
+
+Нативная поверхность `Map` — `map_keys`/`map_values`, `map_contains_key`/`map_contains_value`,
+`map_add`/`map_concat` и конструктор `map` — по-прежнему строится на `IDictionary<TKey, TValue>` и
+отделена от этих пяти помощников, которые принимают операнд-карту, а возвращают массивы или
+булевы значения.
 
 См. [Скалярные функции](../../scalar-functions/index.md).
 

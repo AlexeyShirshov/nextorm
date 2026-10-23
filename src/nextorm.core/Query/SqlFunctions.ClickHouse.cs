@@ -958,19 +958,53 @@ namespace NextORM.Core;
         /// <summary><c>mapConcat(maps...)</c>: the union of the maps; on a repeated key the value of the last map wins.</summary>
         public IDictionary<TKey, TValue>? map_concat<TKey, TValue>(params IDictionary<TKey, TValue>[] maps) => default!;
 
-        /// <summary><c>mapFilter((k, v) -&gt; predicate, map)</c>: the entries for which the lambda returns true.</summary>
-        public IDictionary<TKey, TValue>? map_filter<TKey, TValue>(Expression<Func<TKey, TValue, bool>> predicate, IDictionary<TKey, TValue>? map) => default!;
+        /// <summary>
+        /// The entries of the map for which the lambda returns true, surfaced as exactly
+        /// <see cref="Tuple{TKey,TValue}"/>[]. ClickHouse has no native function with this result
+        /// shape, so the call is lowered to
+        /// <c>arrayFilter(_t -&gt; predicate, arrayZip(mapKeys(map), mapValues(map)))</c>; the lambda's
+        /// key and value are rebound to the tuple fields (<c>_t.1</c>/<c>_t.2</c>) of one generated
+        /// identifier, and the completed lowering is wrapped in
+        /// <c>cast(... as Array(Tuple(TKey, TValue)))</c>, the declared-type normalisation.
+        /// <para>
+        /// This is a documented result-shape break: earlier releases surfaced
+        /// <see cref="IDictionary{TKey,TValue}"/>, which no provider can materialize from a projected
+        /// expression. Read the returned tuples with LINQ once the array is materialized:
+        /// <c>filtered.Select(t =&gt; t.Item2)</c> for the values, or
+        /// <c>filtered.ToDictionary(t =&gt; t.Item1, t =&gt; t.Item2)</c> for a client-side dictionary.
+        /// There is no public path back to a server-side map; use
+        /// <see cref="map_apply{TKey,TValue,TResult}"/> to project a different value.
+        /// </para>
+        /// </summary>
+        /// <returns>The matching entries as a one-dimensional <see cref="Tuple{TKey,TValue}"/> array, in map order.</returns>
+        public Tuple<TKey, TValue>[] map_filter<TKey, TValue>(Expression<Func<TKey, TValue, bool>> predicate, IDictionary<TKey, TValue>? map) => default!;
 
-        /// <summary><c>mapApply((k, v) -&gt; expression, map)</c>: the array of the lambda results, one per entry. The native result is <c>Array(T)</c>, surfaced as <c>TResult[]</c>.</summary>
+        /// <summary>
+        /// The lambda results of the map entries, one per entry in map order, surfaced as exactly
+        /// <c>TResult[]</c>. Lowered to
+        /// <c>arrayMap((k, v) -&gt; expression, mapKeys(map), mapValues(map))</c> and wrapped in
+        /// <c>cast(... as Array(TResult))</c>, so the lambda may return any scalar value the declared
+        /// result admits, including a conditional with a <see langword="null"/> branch. A reference-type
+        /// <c>TResult</c> is cast as <c>Array(Nullable(TResult))</c> (for example
+        /// <c>Array(Nullable(String))</c>), because the bare ClickHouse leaf type does not admit null;
+        /// a value-type <c>TResult</c> stays a bare leaf unless it is itself <c>Nullable&lt;T&gt;</c>.
+        /// </summary>
+        /// <returns>One element per map entry, in map order.</returns>
         public TResult[] map_apply<TKey, TValue, TResult>(Expression<Func<TKey, TValue, TResult>> function, IDictionary<TKey, TValue>? map) => default!;
 
-        /// <summary><c>mapAll((k, v) -&gt; predicate, map)</c>: true when the lambda returns true for every entry.</summary>
+        /// <summary><c>mapAll((k, v) -&gt; predicate, map)</c>: true when the lambda returns true for every entry. Kept native (lambda first, then the map) and surfaced as <c>bool</c>, not lowered.</summary>
         public bool map_all<TKey, TValue>(Expression<Func<TKey, TValue, bool>> predicate, IDictionary<TKey, TValue>? map) => default!;
 
-        /// <summary><c>mapExists((k, v) -&gt; predicate, map)</c>: true when the lambda returns true for at least one entry.</summary>
+        /// <summary><c>mapExists((k, v) -&gt; predicate, map)</c>: true when the lambda returns true for at least one entry. Kept native (lambda first, then the map) and surfaced as <c>bool</c>, not lowered.</summary>
         public bool map_exists<TKey, TValue>(Expression<Func<TKey, TValue, bool>> predicate, IDictionary<TKey, TValue>? map) => default!;
 
-        /// <summary><c>mapSort(map)</c>: the entries sorted by key, surfaced as <c>Tuple&lt;K, V&gt;[]</c>.</summary>
+        /// <summary>
+        /// The map entries sorted by key, surfaced as exactly <see cref="Tuple{TKey,TValue}"/>[].
+        /// Lowered to <c>arraySort(_t -&gt; _t.1, arrayZip(mapKeys(map), mapValues(map)))</c> and wrapped
+        /// in <c>cast(... as Array(Tuple(TKey, TValue)))</c>: the native <c>mapSort</c> returns a map,
+        /// which cannot be projected as the tuple array the declaration promises.
+        /// </summary>
+        /// <returns>The entries ordered by key as a one-dimensional <see cref="Tuple{TKey,TValue}"/> array.</returns>
         public Tuple<TKey, TValue>[] map_sort<TKey, TValue>(IDictionary<TKey, TValue>? map) => default!;
 
         /// <summary>

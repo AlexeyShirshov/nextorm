@@ -16,6 +16,15 @@ public class ClickHouseFunctionGapSqlGenerationTests
         => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None))
             .DbCommand.CommandText.Replace("\r\n", "\n");
 
+    /// <summary>
+    /// Renders through the plan cache (<c>storeInCache: true</c>), so the second render of the same
+    /// shape is a cache hit whose parameters are collected by the parameter-only pass — the pass that
+    /// walks the query tree without emitting SQL.
+    /// </summary>
+    private static string SqlOfCached<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None))
+            .DbCommand.CommandText.Replace("\r\n", "\n");
+
     [Fact]
     public void Utf8StringFunctions_ShouldUseClickHouseNames()
     {
@@ -198,7 +207,7 @@ public class ClickHouseFunctionGapSqlGenerationTests
         sql.Should().Contain("mapContainsValue(map('a', 1), 1)");
         sql.Should().Contain("mapAdd(map('a', 1), map('b', 2))");
         sql.Should().Contain("mapConcat(map('a', 1), map('b', 2))");
-        sql.Should().Contain("mapSort(map('a', 1))");
+        sql.Should().Contain("length(cast(arraySort(_t -> _t.1, arrayZip(mapKeys(map('a', 1)), mapValues(map('a', 1)))) as Array(Tuple(String, Int64))))");
     }
 
     [Fact]
@@ -209,16 +218,222 @@ public class ClickHouseFunctionGapSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            F = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.map_keys(SqlFunctions.ClickHouse.map_filter((k, v) => v > 0, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L))))),
+            F = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.map_filter((k, v) => v > 0, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L)))),
             A = SqlFunctions.ClickHouse.map_apply((k, v) => k, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L))),
             L = SqlFunctions.ClickHouse.map_all((k, v) => v > 0, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L))),
             X = SqlFunctions.ClickHouse.map_exists((k, v) => v > 0, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L)))
         }));
 
-        sql.Should().Contain("mapFilter((k, v) -> (v > 0), map('a', 1))");
-        sql.Should().Contain("mapApply((k, v) -> k, map('a', 1))");
+        sql.Should().Contain("length(cast(arrayFilter(_t -> (_t.2 > 0), arrayZip(mapKeys(map('a', 1)), mapValues(map('a', 1)))) as Array(Tuple(String, Int64))))");
+        sql.Should().Contain("cast(arrayMap((k, v) -> k, mapKeys(map('a', 1)), mapValues(map('a', 1))) as Array(Nullable(String)))");
         sql.Should().Contain("mapAll((k, v) -> (v > 0), map('a', 1))");
         sql.Should().Contain("mapExists((k, v) -> (v > 0), map('a', 1))");
+    }
+
+    // T257: the result type of the map_* lowering is composed from the declared CLR element type; the
+    // scalar leaves come from the dialect mapping, so a Dictionary<string, int> operand casts to
+    // Array(Tuple(String, Int32)) rather than to the operand's provider-inferred width.
+    [Fact]
+    public void MapFilterAndSort_ShouldCastTheDictionaryElementTypes()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var map = new Dictionary<string, int> { ["a"] = 1 };
+
+        var filterSql = SqlOf(ctx, e.Select(x => new
+        {
+            F = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.map_filter((k, v) => v > 0, map))
+        }));
+
+        filterSql.Should().Contain("length(cast(arrayFilter(_t -> (_t.2 > 0), arrayZip(mapKeys(@p0), mapValues(@p0))) as Array(Tuple(String, Int32))))");
+
+        var sortSql = SqlOf(ctx, e.Select(x => new
+        {
+            S = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.map_sort(map))
+        }));
+
+        sortSql.Should().Contain("length(cast(arraySort(_t -> _t.1, arrayZip(mapKeys(@p0), mapValues(@p0))) as Array(Tuple(String, Int32))))");
+    }
+
+    // T257: the apply result element is the declared TResult leaf, not the map value type.
+    [Fact]
+    public void MapApply_ShouldCastTheLambdaResultType()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            L = SqlFunctions.ClickHouse.map_apply((k, v) => v, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L))),
+            N = SqlFunctions.ClickHouse.map_apply<string, int, int?>((k, v) => v, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1)))
+        }));
+
+        sql.Should().Contain("cast(arrayMap((k, v) -> v, mapKeys(map('a', 1)), mapValues(map('a', 1))) as Array(Int64))");
+        sql.Should().Contain("cast(arrayMap((k, v) -> v, mapKeys(map('a', 1)), mapValues(map('a', 1))) as Array(Nullable(Int32)))");
+    }
+
+    // T257: a reference-type apply result is a nullable leaf — the declared CLR element admits null and
+    // ClickHouse String does not, so the cast keeps the nulls of a default(...) branch instead of letting
+    // the server reject them (Code: 349).
+    [Fact]
+    public void MapApply_ShouldCastAReferenceResultAsNullable()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            R = SqlFunctions.ClickHouse.map_apply((k, v) => k, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L)))
+        }));
+
+        sql.Should().Contain("cast(arrayMap((k, v) -> k, mapKeys(map('a', 1)), mapValues(map('a', 1))) as Array(Nullable(String)))");
+    }
+
+    // T257: a value-type apply result over a captured dictionary stays a bare leaf; only the key/value
+    // tuple components of the filter/sort arms follow the same bare spelling.
+    [Fact]
+    public void MapApply_ShouldCastADictionaryValueResultWithoutNullable()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var map = new Dictionary<string, int> { ["a"] = 1 };
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.ClickHouse.map_apply((k, v) => v, map)
+        }));
+
+        sql.Should().Contain("cast(arrayMap((k, v) -> v, mapKeys(@p0), mapValues(@p0)) as Array(Int32))");
+    }
+
+    // T257: the empty inline constructor still declares the generic arguments the projection carries.
+    // Each arm is rendered on its own so the assertion pins that arm's exact lowering and typed wrapper
+    // instead of a fragment three arms could all satisfy.
+    [Fact]
+    public void MapFunctions_ShouldCastTheEmptyInlineMapElementTypes()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new
+        {
+            F = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.map_filter((k, v) => v > 0, SqlFunctions.ClickHouse.map<string, int>()))
+        })).Should().Contain(
+            "toInt64(length(cast(arrayFilter(_t -> (_t.2 > 0), arrayZip(mapKeys(map()), mapValues(map()))) " +
+            "as Array(Tuple(String, Int32))))) as `F`");
+
+        SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.ClickHouse.map_apply((k, v) => v, SqlFunctions.ClickHouse.map<string, int>())
+        })).Should().Contain(
+            "cast(arrayMap((k, v) -> v, mapKeys(map()), mapValues(map())) as Array(Int32)) as `A`");
+
+        SqlOf(ctx, e.Select(x => new
+        {
+            S = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.map_sort(SqlFunctions.ClickHouse.map<string, int>()))
+        })).Should().Contain(
+            "toInt64(length(cast(arraySort(_t -> _t.1, arrayZip(mapKeys(map()), mapValues(map()))) " +
+            "as Array(Tuple(String, Int32))))) as `S`");
+    }
+
+    // T257 (#7): the result leaf is admitted by the provider mapping. DateTime is an identity mapping in
+    // ClickHouse, and float is named Float32 by the dialect, so neither reaches the generic Type.Name
+    // fallback that would emit an invalid element type.
+    [Fact]
+    public void MapApply_ShouldAdmitTheDateTimeAndFloatResultLeaves()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var map = new Dictionary<string, int> { ["a"] = 1 };
+        var when = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        using (new AssertionScope())
+        {
+            SqlOf(ctx, e.Select(x => new
+            {
+                D = SqlFunctions.ClickHouse.map_apply<string, int, DateTime>((k, v) => when, map)
+            })).Should().Contain("as Array(DateTime))");
+
+            SqlOf(ctx, e.Select(x => new
+            {
+                F = SqlFunctions.ClickHouse.map_apply<string, int, float>((k, v) => v, map)
+            })).Should().Contain("as Array(Float32))");
+        }
+    }
+
+    // T257 (#14): the fail-closed paths that the public typed API can reach. A leaf the provider only
+    // reaches through its generic Type.Name fallback would emit invalid ClickHouse SQL, so the call is
+    // refused while the cast is composed, i.e. before any statement is rendered.
+    [Fact]
+    public void MapApply_UnsupportedResultLeaf_ShouldBeRefusedBeforeSql()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.ClickHouse.map_apply<string, int, UnsupportedMapLeaf>((k, v) => default!, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1)))
+        }))).Should().Throw<NotSupportedException>()
+            .WithMessage("*UnsupportedMapLeaf*is not mapped to a ClickHouse type name*");
+    }
+
+    // T257 (#14): a conditional is composed only as the whole lambda body or a branch value; one nested
+    // inside another expression (here the operand of the comparison) cannot be composed with the
+    // lambda-parameter mapping, so it is refused instead of being rendered into invalid SQL.
+    [Fact]
+    public void MapFilter_NestedConditionalBody_ShouldBeRefused()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var map = new Dictionary<string, int> { ["a"] = 1 };
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new
+        {
+            F = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.map_filter((k, v) => (v > 0 ? true : v < 0) == false, map))
+        }))).Should().Throw<NotSupportedException>()
+            .WithMessage("A conditional inside a higher-order map lambda is supported only as the lambda body or a branch value.");
+    }
+
+    // T257 (#5): a captured map operand whose runtime value is not a dictionary is refused by
+    // RenderMapOperand instead of being emitted as mapKeys(<scalar>). That guard is not reachable from
+    // the public typed API — every map helper takes IDictionary<TKey,TValue>? — so it is stated here
+    // rather than faked with a test that could only bypass the signature.
+
+    // T257 (P1): a captured variable inside the lambda body must not throw on the parameter-only pass
+    // of a plan-cache hit. Before the fix that pass cloned the lambda visitor and threw
+    // NotSupportedException("Cannot clone in param mode"); now it visits the body in the same order as
+    // the SQL pass, so the cached render returns the same SQL and binds the captured value.
+    [Fact]
+    public void MapLambdaFunctions_ShouldRenderOnAPlanCacheHitWithACapturedVariable()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var threshold = 0L;
+
+        var cold = SqlOfCached(ctx, e.Select(x => new
+        {
+            F = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.map_filter((k, v) => v > threshold, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L)))),
+            A = SqlFunctions.ClickHouse.map_apply((k, v) => v + threshold, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L))),
+            L = SqlFunctions.ClickHouse.map_all((k, v) => v > threshold, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L))),
+            X = SqlFunctions.ClickHouse.map_exists((k, v) => v > threshold, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L)))
+        }));
+
+        var warm = SqlOfCached(ctx, e.Select(x => new
+        {
+            F = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.map_filter((k, v) => v > threshold, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L)))),
+            A = SqlFunctions.ClickHouse.map_apply((k, v) => v + threshold, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L))),
+            L = SqlFunctions.ClickHouse.map_all((k, v) => v > threshold, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L))),
+            X = SqlFunctions.ClickHouse.map_exists((k, v) => v > threshold, SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L)))
+        }));
+
+        using (new AssertionScope())
+        {
+            warm.Should().Be(cold, "the cached parameter pass must not change the rendered statement");
+            warm.Should().Contain("arrayFilter(_t -> (_t.2 > @threshold)");
+            warm.Should().Contain("arrayMap((k, v) -> (v + @threshold)");
+            warm.Should().Contain("mapAll((k, v) -> (v > @threshold)");
+            warm.Should().Contain("mapExists((k, v) -> (v > @threshold)");
+        }
     }
 
     [Fact]
@@ -370,5 +585,14 @@ public class ClickHouseFunctionGapSqlGenerationTests
         // The empty string is a distinct input and keeps its own digest: it is not folded into NULL.
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.md5("") }))
             .Should().Contain("lower(hex(MD5('')))");
+    }
+
+    /// <summary>
+    /// A result leaf with no ClickHouse mapping: the dialect only reaches its generic <c>Type.Name</c>
+    /// fallback for it, so the typed cast of a <c>map_apply</c> result must refuse the call.
+    /// </summary>
+    private sealed class UnsupportedMapLeaf
+    {
+        public int Value { get; set; }
     }
 }

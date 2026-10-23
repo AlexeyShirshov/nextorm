@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 
 namespace NextORM.Core;
@@ -67,6 +68,28 @@ internal static class ClickHouseNativeFunctionTranslator
         nameof(ClickHouseFunctions.map_all), nameof(ClickHouseFunctions.map_exists)
     };
 
+    /// <summary>
+    /// The CLR scalars the ClickHouse dialect maps to a name identical to the CLR name (<c>Int16</c>,
+    /// <c>Int32</c>, <c>UInt32</c>, <c>Int64</c> and <c>DateTime</c>): the mapping is real, not the
+    /// dialect's generic <c>Type.Name</c> fallback for an unmapped type, so the resulting string alone
+    /// cannot tell them apart and they are admitted by type. <c>float</c> is deliberately absent: the
+    /// dialect maps it to <c>Float32</c>, which differs from the CLR name <c>Single</c> and is therefore
+    /// already distinguishable from the fallback.
+    /// </summary>
+    private static readonly HashSet<Type> IdentityMappedTypes =
+    [
+        typeof(short), typeof(int), typeof(uint), typeof(long), typeof(DateTime)
+    ];
+
+    /// <summary>The inline <c>map(key, value, ...)</c> constructor, the only inline map operand source.</summary>
+    private const string MapConstructorName = nameof(ClickHouseFunctions.map);
+
+    /// <summary>The map-only sort arm, lowered onto the tuple-array representation.</summary>
+    private const string MapSortName = nameof(ClickHouseFunctions.map_sort);
+
+    /// <summary>Base name of the generated tuple lambda identifier of the <c>arrayZip</c> arms.</summary>
+    private const string TupleIdentifierBase = "_t";
+
     /// <summary>Translates a ClickHouse-native call; returns <c>false</c> when it is not one of them.</summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
@@ -90,9 +113,9 @@ internal static class ClickHouseNativeFunctionTranslator
             return true;
         }
 
-        if (MapLambdaFunctions.Contains(name))
+        if (MapLambdaFunctions.Contains(name) || name == MapSortName)
         {
-            EmitMapLambda(visitor, node, scalars, name);
+            EmitMapFunction(visitor, node, scalars, name);
             return true;
         }
 
@@ -202,9 +225,40 @@ internal static class ClickHouseNativeFunctionTranslator
         visitor.Builder!.Append(scalars.Render(name, rendered));
     }
 
-    /// <summary>Renders a two-parameter map lambda (<c>mapFilter</c>, <c>mapApply</c>, <c>mapAll</c>, <c>mapExists</c>).</summary>
-    private static void EmitMapLambda(BaseExpressionVisitor visitor, MethodCallExpression node, IScalarFunctions scalars, string name)
+    /// <summary>
+    /// Renders the map helpers, which have no native server form with the CLR-shaped result the public
+    /// surface declares:
+    /// <c>map_filter</c> and <c>map_sort</c> iterate a zipped <c>(key, value)</c> array,
+    /// <c>map_apply</c> maps the key and value arrays, and the native <c>mapAll</c>/<c>mapExists</c>
+    /// predicates keep their own spelling. The map operand is exactly one operand: an inline
+    /// <c>map(...)</c> constructor rendered through the pair path, or one captured dictionary bound as a
+    /// single map parameter. A null operand is refused before any SQL reaches the server.
+    /// </summary>
+    private static void EmitMapFunction(
+        BaseExpressionVisitor visitor, MethodCallExpression node, IScalarFunctions scalars, string name)
     {
+        // map_sort has no lambda; its ordering lambda is generated over the zipped pair tuple.
+        if (name == MapSortName)
+        {
+            var sortMap = RenderMapOperand(visitor, node.Arguments[0]);
+
+            if (visitor.IsParamMode)
+                return;
+
+            // The generated identifier must not shadow one the operand already renders (an outer lambda
+            // parameter called `_t`, for example), so the operand is scanned along with the (absent) body.
+            var tuple = FreshIdentifier(null, node.Arguments[0]);
+            var sortLowered = $"arraySort({tuple} -> {tuple}.1, {ZipMapOperand(sortMap)})";
+
+            // The cast composes the declared result type and can refuse the call; the alias flag is set
+            // only after that succeeded, so a refusal leaves no sticky flag behind.
+            var sortSql = CastMapResult(visitor.Dialect, node, name, sortLowered);
+
+            visitor.NeedAliasForColumn = true;
+            visitor.Builder!.Append(sortSql);
+            return;
+        }
+
         var lambda = ExtractLambda(node.Arguments[0]);
 
         if (lambda.Parameters.Count != 2)
@@ -212,28 +266,315 @@ internal static class ClickHouseNativeFunctionTranslator
 
         var first = lambda.Parameters[0];
         var second = lambda.Parameters[1];
-        var parameters = new Dictionary<ParameterExpression, string>
+
+        // map_filter iterates a zipped (key, value) tuple, so its two parameters are rendered as the
+        // tuple fields of one fresh lambda identifier. The rebinding is carried by the parameter
+        // identity: the body's ParameterExpression nodes are mapped, never its identifier text, so
+        // nested scopes and every other identifier stay untouched.
+        var isFilter = name == nameof(ClickHouseFunctions.map_filter);
+        var filterTuple = isFilter ? FreshIdentifier(lambda.Body, node.Arguments[1]) : null;
+
+        // The body may reference an enclosing higher-order lambda's parameter (a nested
+        // array_map(x => ... map_filter((k, v) => v > x, m))); the outer bindings are carried into the
+        // body visitor so that reference still renders. An inner parameter of the same name keeps
+        // winning through SQL scoping, because both are emitted as their bare identifier.
+        var parameters = new Dictionary<ParameterExpression, string>();
+        if (visitor.LambdaParameters is { } outer)
         {
-            [first] = string.IsNullOrEmpty(first.Name) ? "k" : first.Name!,
-            [second] = string.IsNullOrEmpty(second.Name) ? "v" : second.Name!
-        };
+            foreach (var entry in outer)
+                parameters[entry.Key] = entry.Value;
+        }
+
+        parameters[first] = filterTuple is null ? IdentifierOr(first, "k") : filterTuple + ".1";
+        parameters[second] = filterTuple is null ? IdentifierOr(second, "v") : filterTuple + ".2";
 
         using var bodyVisitor = new HigherOrderLambdaVisitor(visitor.Options with { DontNeedAlias = false }, parameters);
-        bodyVisitor.Visit(lambda.Body);
+        var body = RenderLambdaBody(bodyVisitor, lambda.Body);
 
-        var body = bodyVisitor.ToString();
-        var lambdaSql = $"({parameters[first]}, {parameters[second]}) -> {body}";
+        var lambdaSql = filterTuple is null
+            ? $"({parameters[first]}, {parameters[second]}) -> {body}"
+            : $"{filterTuple} -> {body}";
+
+        // The lambda precedes the map in the SQL, so it is rendered first and the captured-value
+        // parameter order of the statement stays aligned. The parameter-only pass relies on the same
+        // order to mint identical parameter names (see RenderLambdaBody).
+        var map = RenderMapOperand(visitor, node.Arguments[1]);
 
         if (visitor.IsParamMode)
+            return;
+
+        // The two predicates accept the map itself and keep their native spelling.
+        if (name is nameof(ClickHouseFunctions.map_all) or nameof(ClickHouseFunctions.map_exists))
         {
-            visitor.Visit(node.Arguments[1]);
+            visitor.NeedAliasForColumn = true;
+            visitor.Builder!.Append(scalars.Render(name, [lambdaSql, map]));
             return;
         }
 
+        var lowered = name == nameof(ClickHouseFunctions.map_apply)
+            ? $"arrayMap({lambdaSql}, mapKeys({map}), mapValues({map}))"
+            : $"arrayFilter({lambdaSql}, {ZipMapOperand(map)})";
+
+        // Compose the cast before touching the alias flag, for the same no-sticky-flag reason as map_sort.
+        var mapSql = CastMapResult(visitor.Dialect, node, name, lowered);
+
         visitor.NeedAliasForColumn = true;
-        var map = visitor.VisitToString(node.Arguments[1]);
-        visitor.Builder!.Append(scalars.Render(name, [lambdaSql, map]));
+        visitor.Builder!.Append(mapSql);
     }
+
+    /// <summary>
+    /// Wraps a completed <c>map_filter</c>/<c>map_sort</c>/<c>map_apply</c> lowering in the typed cast of
+    /// its declared result, so the server returns exactly the CLR collection element type the
+    /// declaration promises. The lowering expression itself is emitted unchanged.
+    /// </summary>
+    private static string CastMapResult(ISqlDialect dialect, MethodCallExpression node, string name, string lowered)
+    {
+        var element = node.Method.ReturnType.GetElementType()
+            ?? throw new NotSupportedException($"The {name} result must be a one-dimensional array (T257).");
+
+        if (name != nameof(ClickHouseFunctions.map_apply)
+            && (!TypeFacts.IsTupleLike(element) || TypeFacts.TupleArity(element) != 2))
+        {
+            throw new NotSupportedException(
+                $"The {name} result element {element} must be a key/value tuple (T257).");
+        }
+
+        return $"cast({lowered} as {MakeMapResultTypeName(dialect, node.Method.ReturnType, resultPosition: true)})";
+    }
+
+    /// <summary>
+    /// Composes the type name of a <c>map_*</c> result from its declared CLR type: the structural
+    /// wrappers (array, <see cref="Nullable{T}"/>, key/value tuple) are spelled here, while every scalar
+    /// leaf is named by the provider's own <see cref="ISqlDialect.MakeTypeName"/>, so no second
+    /// CLR-to-provider type table exists. A leaf the provider does not map is refused before any SQL is
+    /// emitted.
+    /// <para>
+    /// <paramref name="resultPosition"/> distinguishes the two halves of a map result. An
+    /// <c>arrayMap</c> element is the declared CLR <c>TResult</c>, where a reference type admits null,
+    /// while the provider's bare name (ClickHouse <c>String</c>) does not carry it, so the leaf is
+    /// spelled <c>Nullable(...)</c>; this is the declared-type mapping only and does not change the
+    /// materialized CLR type (<c>string?[]</c> is <c>string[]</c> at runtime). A filter/sort key or
+    /// value tuple component keeps the bare name unless the CLR component is
+    /// <see cref="Nullable{T}"/>, because the map keys and values themselves are non-nullable.
+    /// </para>
+    /// </summary>
+    private static string MakeMapResultTypeName(ISqlDialect dialect, Type type, bool resultPosition)
+    {
+        if (Nullable.GetUnderlyingType(type) is { } underlying)
+            return $"Nullable({MakeMapResultTypeName(dialect, underlying, resultPosition: false)})";
+
+        if (type.IsArray && type.GetElementType() is { } element)
+            return $"Array({MakeMapResultTypeName(dialect, element, resultPosition)})";
+
+        if (TypeFacts.IsTupleLike(type))
+        {
+            if (TypeFacts.TupleArity(type) != 2)
+                throw new NotSupportedException($"The map result tuple {type} must have exactly two components (T257).");
+
+            var components = type.GetGenericArguments();
+            return $"Tuple({MakeMapResultTypeName(dialect, components[0], resultPosition: false)}, {MakeMapResultTypeName(dialect, components[1], resultPosition: false)})";
+        }
+
+        var leaf = MakeMapLeafTypeName(dialect, type);
+
+        return resultPosition && !type.IsValueType ? $"Nullable({leaf})" : leaf;
+    }
+
+    /// <summary>
+    /// Names a scalar result element through the provider mapping. <c>string</c> is the one admitted
+    /// reference-type leaf, and the CLR scalars whose own name already is the provider spelling are
+    /// identity mappings, indistinguishable from the dialect's generic <c>Type.Name</c> fallback by the
+    /// resulting string, so they are admitted by type. A type the provider maps to a name other than its
+    /// CLR name (for example <c>float</c> to <c>Float32</c>) is admitted by that differing mapping. Any
+    /// other leaf that only reaches the generic fallback is refused.
+    /// </summary>
+    private static string MakeMapLeafTypeName(ISqlDialect dialect, Type type)
+    {
+        var name = dialect.MakeTypeName(type);
+
+        if (type == typeof(string) || name != type.Name || IdentityMappedTypes.Contains(type))
+            return name;
+
+        throw new NotSupportedException(
+            $"The map result element type {type} is not mapped to a ClickHouse type name (T257); the cast would emit an invalid element type.");
+    }
+
+    /// <summary>
+    /// Renders the map operand of a map helper. An inline <c>map(...)</c> constructor keeps the existing
+    /// pair path (a captured or null pair collection is refused there); a captured dictionary is
+    /// evaluated once and bound as a single map-valued parameter; anything else is rendered as an
+    /// operand, so a map column keeps its column reference. A captured value that is not a dictionary is
+    /// refused instead of being emitted as <c>mapKeys(&lt;scalar&gt;)</c>.
+    /// </summary>
+    private static string RenderMapOperand(BaseExpressionVisitor visitor, Expression expression)
+    {
+        var operand = TypeFacts.UnwrapConvert(expression);
+
+        if (operand is MethodCallExpression call
+            && call.Method.DeclaringType == typeof(ClickHouseFunctions)
+            && call.Method.Name == MapConstructorName)
+        {
+            if (visitor.IsParamMode)
+            {
+                visitor.Visit(operand);
+                return string.Empty;
+            }
+
+            return visitor.VisitToString(operand);
+        }
+
+        if (!SqlOperandTranslator.IsCapturedArray(operand))
+        {
+            if (visitor.IsParamMode)
+            {
+                visitor.Visit(operand);
+                return string.Empty;
+            }
+
+            return visitor.VisitToString(operand);
+        }
+
+        // A captured dictionary is a map value, not a pair collection: it is evaluated exactly once and
+        // bound as one parameter (the driver maps Dictionary<K, V> to Map(K, V)).
+        var value = InValuesEvaluator.Evaluate(operand, visitor.QueryProvider);
+
+        if (value is null)
+            throw new NotSupportedException(
+                $"The {TypeFacts.UnwrapConvert(expression).Type.Name} map operand must not be null; the map helpers require a map value or an inline map(...) constructor.");
+
+        if (!IsMapValue(value))
+            throw new NotSupportedException(
+                $"The {value.GetType().Name} map operand must be a dictionary; the map helpers require a map value or an inline map(...) constructor.");
+
+        var name = visitor.ParameterProvider.GetParamName();
+        visitor.TryAddCapturedParameter(name, value, operand);
+
+        return visitor.IsParamMode ? string.Empty : visitor.Dialect.MakeParam(name);
+    }
+
+    /// <summary>
+    /// True when a captured value is a map: its type implements the generic
+    /// <see cref="IDictionary{TKey,TValue}"/> or <see cref="IReadOnlyDictionary{TKey,TValue}"/> contract
+    /// (which every <see cref="Dictionary{TKey,TValue}"/> does). A captured value of any other type is
+    /// not a map and must not be rendered as one.
+    /// </summary>
+    private static bool IsMapValue(object value)
+    {
+        foreach (var contract in value.GetType().GetInterfaces())
+        {
+            if (!contract.IsGenericType)
+                continue;
+
+            var definition = contract.GetGenericTypeDefinition();
+            if (definition == typeof(IDictionary<,>) || definition == typeof(IReadOnlyDictionary<,>))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Renders a higher-order lambda body. A conditional is composed here with the mapping-aware body
+    /// visitor: the shared conditional renderer builds its test through a fresh predicate visitor that
+    /// does not carry the lambda parameters, which would emit <c>case when ( &gt; 0) ...</c> and fail on
+    /// the server. Any conditional in a position this arm cannot compose is refused instead of being
+    /// rendered into invalid SQL.
+    /// <para>
+    /// Invariant: the parameter-collection pass visits exactly what the SQL pass visits, in the same
+    /// order (map body first, then the map operand), so both passes mint identical parameter names. It
+    /// therefore walks the body on the mapping-aware visitor itself and returns no SQL: cloning is
+    /// refused in parameter mode, and this pass has no SQL to produce.
+    /// </para>
+    /// </summary>
+    private static string RenderLambdaBody(BaseExpressionVisitor visitor, Expression body)
+    {
+        if (visitor.IsParamMode)
+        {
+            // The fail-closed guard stays in force on this pass: a genuinely unsupported shape must be
+            // refused here too, never silently accepted because the pass emits no SQL.
+            if (TypeFacts.UnwrapConvert(body) is not ConditionalExpression && body.Has<ConditionalExpression>())
+            {
+                throw new NotSupportedException(
+                    "A conditional inside a higher-order map lambda is supported only as the lambda body or a branch value.");
+            }
+
+            visitor.Visit(body);
+            return string.Empty;
+        }
+
+        if (TypeFacts.UnwrapConvert(body) is ConditionalExpression conditional)
+        {
+            var test = visitor.VisitToString(conditional.Test);
+            var whenTrue = RenderLambdaBody(visitor, conditional.IfTrue);
+            var whenFalse = RenderLambdaBody(visitor, conditional.IfFalse);
+            var caseSql = $"{visitor.Kw("case when ")}{test}{visitor.Kw(" then ")}{whenTrue}" +
+                          $"{visitor.Kw(" else ")}{whenFalse}{visitor.Kw(" end")}";
+
+            return visitor.Dialect.MakeCase(
+                caseSql, TypeFacts.IsBoolean(body.Type), visitor.IsPredicateContext, visitor.KeywordCase);
+        }
+
+        if (body.Has<ConditionalExpression>())
+            throw new NotSupportedException(
+                "A conditional inside a higher-order map lambda is supported only as the lambda body or a branch value.");
+
+        return visitor.VisitToString(body);
+    }
+
+    /// <summary>Renders the zipped <c>(key, value)</c> array of the map operand.</summary>
+    private static string ZipMapOperand(string map) => $"arrayZip(mapKeys({map}), mapValues({map}))";
+
+    /// <summary>
+    /// Returns a tuple lambda identifier that does not occur as an identifier in the rendered body or in
+    /// the map operand, so the generated <c>.1</c>/<c>.2</c> accesses can never shadow a column, a
+    /// parameter or an enclosing lambda parameter.
+    /// </summary>
+    private static string FreshIdentifier(Expression? body, Expression? operand = null)
+    {
+        var candidate = TupleIdentifierBase;
+        var suffix = 1;
+
+        while (UsesIdentifier(body, candidate) || UsesIdentifier(operand, candidate))
+            candidate = TupleIdentifierBase + (++suffix).ToString(CultureInfo.InvariantCulture);
+
+        return candidate;
+    }
+
+    private static bool UsesIdentifier(Expression? body, string name)
+    {
+        if (body is null)
+            return false;
+
+        var collector = new IdentifierCollector(name);
+        collector.Visit(body);
+        return collector.Found;
+    }
+
+    /// <summary>Records whether an identifier (a parameter or a member name) occurs in an expression.</summary>
+    private sealed class IdentifierCollector(string name) : ExpressionVisitor
+    {
+        internal bool Found { get; private set; }
+
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            if (node.Name == name)
+                Found = true;
+
+            return node;
+        }
+
+        protected override Expression VisitMember(MemberExpression node)
+        {
+            if (node.Member.Name == name)
+                Found = true;
+
+            return base.VisitMember(node);
+        }
+    }
+
+    private static string IdentifierOr(ParameterExpression parameter, string fallback)
+        => string.IsNullOrEmpty(parameter.Name) ? fallback : parameter.Name!;
+
 
     /// <summary>Renders <c>sumMapFiltered(keys)(key, value)</c> with double parentheses.</summary>
     private static void EmitSumMapFiltered(BaseExpressionVisitor visitor, MethodCallExpression node, IScalarFunctions scalars, string name)
@@ -278,7 +619,9 @@ internal static class ClickHouseNativeFunctionTranslator
 
     /// <summary>
     /// Flattens the compiler-generated <c>params</c> tuple array of <c>map</c> into its key/value
-    /// elements. Every pair is an inline <see cref="ValueTuple"/> construction.
+    /// elements. Every pair is an inline <see cref="Tuple{T1,T2}"/> construction (<c>Tuple.Create</c>);
+    /// the declaring type is matched structurally, so an unrelated <c>Create</c> overload cannot be
+    /// mistaken for a pair.
     /// </summary>
     private static IReadOnlyList<IReadOnlyList<Expression>> FlattenTuplePairs(IReadOnlyList<Expression> args)
     {
@@ -290,9 +633,8 @@ internal static class ClickHouseNativeFunctionTranslator
         {
             result.Add(pairs[i] switch
             {
-                NewExpression { Arguments: { Count: 2 } ctor } => ctor,
-                MethodCallExpression { Method.Name: "Create", Method.DeclaringType: var declaring, Arguments: { Count: 2 } create }
-                    when declaring == typeof(Tuple) => create,
+                MethodCallExpression pair
+                    when pair.Method.DeclaringType == typeof(Tuple) && pair.Arguments.Count == 2 => pair.Arguments,
                 _ => throw new NotSupportedException("The map key/value pairs must be inline tuples, not a captured array.")
             });
         }

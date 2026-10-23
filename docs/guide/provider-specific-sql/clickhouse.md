@@ -198,8 +198,9 @@ every other dialect:
 * array set operations: `array_concat`, `array_flatten`, `array_uniq` (`arrayUniq`, wrapped in
   `toInt64`), `array_intersect`, `array_union`, `array_symmetric_difference`;
 * the `Map` family: the `map` constructor (inline `Tuple.Create` pairs), `map_keys`/`map_values`,
-  `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, the two-parameter lambdas
-  `map_filter`/`map_apply`/`map_all`/`map_exists` and `map_sort`;
+  `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, and the public higher-order
+  helpers `map_filter`/`map_apply`/`map_sort` (tuple and array results, lowered to array forms) plus
+  `map_all`/`map_exists` (booleans, native predicates);
 * hashes: the six string-returning digests `md5`/`sha1`/`sha256`/`sha512`/`sip_hash128`/
   `murmur_hash3_128` (`MD5`/`SHA1`/`SHA256`/`SHA512`/`sipHash128`/`murmurHash3_128`, lowercase
   hexadecimal) plus the numeric `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64` and
@@ -229,9 +230,10 @@ supported** on the pinned 25.8 baseline: the native `arrayExcept` was introduced
 so the call is refused with `NotSupportedException` at translation time and never reaches the server.
 The other array set operations are unaffected.
 
-A `Map` result is surfaced as `IDictionary<TKey, TValue>`; combine it with `map_keys`/`map_values` or
-one of the contains predicates when it is projected, because the row mapper does not materialise a
-bare `IDictionary` column.
+A native `Map` result (the `map` constructor, `map_add`, `map_concat`) is surfaced as
+`IDictionary<TKey, TValue>`; combine it with `map_keys`/`map_values` or one of the contains
+predicates when it is projected, because the row mapper does not materialise a bare `IDictionary`
+column.
 
 ```csharp
 var rows = dataContext.From<Event>()
@@ -243,6 +245,70 @@ var rows = dataContext.From<Event>()
     })
     .ToList();
 ```
+
+The five higher-order helpers are public LINQ helpers whose declared CLR result type is part of the
+contract; only `map_all` and `map_exists` keep a native server function:
+
+* `map_filter` — the entries matching the predicate, as `Tuple<TKey, TValue>[]`. Lowered to
+  `arrayFilter(_t -> predicate, arrayZip(mapKeys(map), mapValues(map)))`, with the lambda's key and
+  value rebound to the pair fields `_t.1`/`_t.2`;
+* `map_apply` — one lambda result per entry, in map order, as `TResult[]`. Lowered to
+  `arrayMap((k, v) -> expression, mapKeys(map), mapValues(map))`;
+* `map_sort` — the entries ordered by key, as `Tuple<TKey, TValue>[]`. Lowered to
+  `arraySort(_t -> _t.1, arrayZip(mapKeys(map), mapValues(map)))`;
+* `map_all`/`map_exists` — `bool`. Kept native and rendered as
+  `mapAll((k, v) -> predicate, map)` / `mapExists((k, v) -> predicate, map)`, lambda first.
+
+The lowered filter, apply and sort expression is wrapped in a cast of the **declared** result type, not
+of the type the server would infer from the operand — `Tuple<string, int>[]` becomes
+`cast(... as Array(Tuple(String, Int32)))`, a `long` apply result becomes
+`cast(... as Array(Int64))` — so the server reports exactly the element type the declaration promises
+instead of a narrower one. Two rules decide that element:
+
+* a **value-type** apply result stays bare — `int` → `Array(Int32)`;
+* a **reference-type** apply result is spelled `Nullable(...)` — `string` → `Array(Nullable(String))` —
+  because the declared element admits `null` (the `default(string)` branch of a projection is a real
+  `NULL`) while ClickHouse `String` does not; the materialised CLR type stays `string[]`.
+
+The key/value tuple components of `map_filter`/`map_sort` stay bare unless the CLR component itself is
+`Nullable<T>`, because the map keys and values are non-nullable.
+
+```sql
+-- map_filter: arrayFilter over the zipped pairs, then the declared-type cast
+cast(arrayFilter(_t -> (_t.2 > 0),
+                arrayZip(mapKeys(map('a', 1, 'b', -1)), mapValues(map('a', 1, 'b', -1))))
+    as Array(Tuple(String, Int64)))
+
+-- map_sort: arraySort by key over the same pairs, then the declared-type cast
+cast(arraySort(_t -> _t.1,
+              arrayZip(mapKeys(map('b', 2, 'a', 1)), mapValues(map('b', 2, 'a', 1))))
+    as Array(Tuple(String, Int64)))
+
+-- map_apply: one result per entry, cast as the declared TResult — bare for a value type,
+-- Nullable(...) for a reference type that admits null
+cast(arrayMap((k, v) -> (v * 2),
+              mapKeys(map('a', 1, 'b', -1)), mapValues(map('a', 1, 'b', -1)))
+    as Array(Int64))
+
+cast(arrayMap((k, v) -> k,
+              mapKeys(map('a', 1, 'b', -1)), mapValues(map('a', 1, 'b', -1)))
+    as Array(Nullable(String)))
+```
+
+**Breaking change in 1.0.9-rc4.** `map_filter` used to declare `IDictionary<TKey, TValue>`; it now
+returns `Tuple<TKey, TValue>[]`, because a map cannot be materialised from a projected expression.
+`map_sort` (already a tuple array) and `map_apply` (already `TResult[]`) keep their shapes.
+
+No public path turns a filtered map back into a server-side `Map`: `mapFilter` is only reached through
+the `map_*` lowering, `map_keys`/`map_values` require an `IDictionary` and therefore reject the tuple
+array at compile time, and the higher-order array lambdas refuse member access on their parameter, so
+`arrayMap(t => t.Item2, ...)` cannot be expressed. Migrate by reading the returned tuples — plain LINQ
+over the array once it is materialised: `filtered.Select(t => t.Item2)` for the values, or
+`filtered.ToDictionary(t => t.Item1, t => t.Item2)` for a dictionary on the client.
+
+The native `Map` surface — `map_keys`/`map_values`, `map_contains_key`/`map_contains_value`,
+`map_add`/`map_concat` and the `map` constructor — stays `IDictionary<TKey, TValue>`-based and is
+separate from these five helpers, which take a map operand and return arrays or booleans.
 
 See [Scalar functions](../../scalar-functions/index.md).
 
