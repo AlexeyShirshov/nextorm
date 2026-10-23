@@ -286,6 +286,234 @@ public sealed class ToNextOrmTests : EfCoreMetadataCleanup
     }
 
     [Fact]
+    public void EfFunctionsLike_InLambda_ShouldThrowNotSupportedAtConversion()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var act = () => db.Tracks.Where(x => EF.Functions.Like(x.Name, "a%")).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void EfFunctionsLikeWithEscape_InLambda_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var act = () => db.Tracks.Where(x => EF.Functions.Like(x.Name, "a!%", "!")).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void EfFunctionsRandom_InLambda_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var act = () => db.Tracks.Where(x => EF.Functions.Random() > 0.5).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void RelationalDbFunctionsCollate_InLambda_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var act = () => db.Tracks.Where(x => EF.Functions.Collate(x.Name, "NOCASE") == "alpha").ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void SqliteGlob_InLambda_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var act = () => db.Tracks.Where(x => EF.Functions.Glob(x.Name, "a*")).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void SqliteHex_InLambda_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var bytes = new byte[] { 1, 2 };
+
+        var act = () => db.Tracks.Where(x => EF.Functions.Hex(bytes) == "0102").ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void SqliteSubstrTwoArg_InLambda_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var bytes = new byte[] { 1, 2 };
+
+        var act = () => db.Tracks.Where(x => EF.Functions.Substr(bytes, 1).Length > 0).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void SqliteSubstrThreeArg_InLambda_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var bytes = new byte[] { 1, 2 };
+
+        var act = () => db.Tracks.Where(x => EF.Functions.Substr(bytes, 1, 1).Length > 0).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void SqliteUnhexOneArg_InLambda_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var act = () => db.Tracks.Where(x => EF.Functions.Unhex("0102")!.Length > 0).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void SqliteUnhexTwoArg_InLambda_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var act = () => db.Tracks.Where(x => EF.Functions.Unhex("0102", " ")!.Length > 0).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void EfFunctionsNestedInPredicate_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var act = () => db.Tracks.Where(x => x.Plays > 10 && EF.Functions.Like(x.Name, "a%")).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void EfFunctionsInOrderBy_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var act = () => db.Tracks.OrderBy(x => EF.Functions.Random()).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void EfFunctionsInOrderByDescending_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var act = () => db.Tracks.OrderByDescending(x => EF.Functions.Random()).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void EfFunctionsInThenBy_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var act = () => db.Tracks.OrderBy(x => x.Id).ThenBy(x => EF.Functions.Random()).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void EfFunctionsInThenByDescending_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var act = () => db.Tracks.OrderBy(x => x.Id).ThenByDescending(x => EF.Functions.Random()).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void NullDbFunctionsReceiver_InLambda_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        DbFunctions? functions = null;
+
+        var act = () => db.Tracks.Where(x => functions!.Like(x.Name, "a%")).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void DefaultDbFunctionsReceiver_InLambda_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        DbFunctions functions = default!;
+
+        var act = () => db.Tracks.Where(x => functions.Like(x.Name, "a%")).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
+    public void CapturedDbFunctionsReceiver_InLambda_ShouldThrowNotSupported()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = CreateContext(connection);
+
+        var functions = EF.Functions;
+
+        var act = () => db.Tracks.Where(x => functions.Like(x.Name, "a%")).ToNextOrm(db);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EF.Functions*");
+    }
+
+    [Fact]
     public void NestedSubquery_InLambda_ShouldThrowNotSupported()
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
