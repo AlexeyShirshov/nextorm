@@ -64,7 +64,8 @@ public class JsonAccessSqlGenerationTests
         => Prepare(ctx, cmd).DbCommand.CommandText.Replace("\r\n", "\n");
 
     /// <summary>The frozen document-cast fragment of a raw literal JSON value.</summary>
-    private static string LiteralDocument(string json) => $"cast('{json}' as jsonb)";
+    private static string LiteralDocument(string json)
+        => $"cast(E'{json.Replace("\\", "\\\\").Replace("'", "\\'")}' as jsonb)";
 
     // - R03-R06: literal document, four right-operand kinds -
 
@@ -75,11 +76,11 @@ public class JsonAccessSqlGenerationTests
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get(Flat, "a") }))
-            .Should().Contain($"{LiteralDocument(Flat)} -> cast('a' as text)");
+            .Should().Contain($"{LiteralDocument(Flat)} -> cast(E'a' as text)");
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get_text(Flat, "a") }))
-            .Should().Contain($"{LiteralDocument(Flat)} ->> cast('a' as text)");
+            .Should().Contain($"{LiteralDocument(Flat)} ->> cast(E'a' as text)");
     }
 
     [Fact]
@@ -134,7 +135,7 @@ public class JsonAccessSqlGenerationTests
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get_path_text(Flat, new[] { "a", "b" }) }))
-            .Should().Contain($"{LiteralDocument(Flat)} #>> cast(array['a', 'b'] as text[])");
+            .Should().Contain($"{LiteralDocument(Flat)} #>> cast(array[E'a', E'b'] as text[])");
     }
 
     // - R07-R10: parameter raw document, four right-operand kinds -
@@ -148,11 +149,11 @@ public class JsonAccessSqlGenerationTests
         // A captured string and an explicit positional parameter both bind as a client value.
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get(document, "a") }))
-            .Should().Contain("cast(@document as jsonb) -> cast('a' as text)");
+            .Should().Contain("cast(@document as jsonb) -> cast(E'a' as text)");
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get_text(SqlFunctions.Parameter<string>(0), "a") }))
-            .Should().Contain("cast(@norm_p0 as jsonb) ->> cast('a' as text)");
+            .Should().Contain("cast(@norm_p0 as jsonb) ->> cast(E'a' as text)");
     }
 
     [Fact]
@@ -209,12 +210,12 @@ public class JsonAccessSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => x.Id > 0)
             .Select(x => new { V = SqlFunctions.Postgres.json_get(x.DocJson, "a") }));
-        sql.Should().Contain("doc_json -> cast('a' as text)");
+        sql.Should().Contain("doc_json -> cast(E'a' as text)");
         sql.Should().NotContain("cast(doc_json");
 
         SqlOf(ctx, ctx.From<IJsonAccessProbe>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get_text(x.DocJson, "a") }))
-            .Should().Contain("doc_json ->> cast('a' as text)");
+            .Should().Contain("doc_json ->> cast(E'a' as text)");
     }
 
     [Fact]
@@ -254,7 +255,7 @@ public class JsonAccessSqlGenerationTests
 
         var sql = SqlOf(ctx, ctx.From<IJsonAccessProbe>().Where(x => x.Id > 0)
             .Select(x => new { V = SqlFunctions.Postgres.json_get_path_text(x.DocJson, new[] { "a", "b" }) }));
-        sql.Should().Contain("doc_json #>> cast(array['a', 'b'] as text[])");
+        sql.Should().Contain("doc_json #>> cast(array[E'a', E'b'] as text[])");
         sql.Should().NotContain("cast(doc_json");
     }
 
@@ -267,11 +268,11 @@ public class JsonAccessSqlGenerationTests
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get(Nested, "a") }))
-            .Should().Contain($"{LiteralDocument(Nested)} -> cast('a' as text)");
+            .Should().Contain($"{LiteralDocument(Nested)} -> cast(E'a' as text)");
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get_text(Nested, "b") }))
-            .Should().Contain($"{LiteralDocument(Nested)} ->> cast('b' as text)");
+            .Should().Contain($"{LiteralDocument(Nested)} ->> cast(E'b' as text)");
     }
 
     [Fact]
@@ -284,7 +285,7 @@ public class JsonAccessSqlGenerationTests
             .Select(x => new { V = SqlFunctions.Postgres.json_get(Nested, key) }));
 
         sql.Should().Contain($"{LiteralDocument(Nested)} -> cast(@key as text)");
-        sql.Should().Contain("cast('{\"a\":{\"b\":[1,2]}}' as jsonb)");
+        sql.Should().Contain("cast(E'{\"a\":{\"b\":[1,2]}}' as jsonb)");
     }
 
     [Fact]
@@ -326,11 +327,11 @@ public class JsonAccessSqlGenerationTests
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get(SqlFunctions.Parameter<JsonDocument>(0), "a") }))
-            .Should().Contain("cast(@norm_p0 as jsonb) -> cast('a' as text)");
+            .Should().Contain("cast(@norm_p0 as jsonb) -> cast(E'a' as text)");
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get_text(SqlFunctions.Parameter<JsonDocument>(0), "a") }))
-            .Should().Contain("cast(@norm_p0 as jsonb) ->> cast('a' as text)");
+            .Should().Contain("cast(@norm_p0 as jsonb) ->> cast(E'a' as text)");
     }
 
     [Fact]
@@ -366,7 +367,7 @@ public class JsonAccessSqlGenerationTests
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get_path_text(SqlFunctions.Parameter<JsonDocument>(0), new[] { "a" }) }))
-            .Should().Contain("cast(@norm_p0 as jsonb) #>> cast(array['a'] as text[])");
+            .Should().Contain("cast(@norm_p0 as jsonb) #>> cast(array[E'a'] as text[])");
     }
 
     // - R23-R26: native jsonb column, no document cast -
@@ -378,12 +379,12 @@ public class JsonAccessSqlGenerationTests
 
         var sql = SqlOf(ctx, ctx.From<IJsonAccessProbe>().Where(x => x.Id > 0)
             .Select(x => new { V = SqlFunctions.Postgres.json_get(x.DocJsonb, "a") }));
-        sql.Should().Contain("doc_jsonb -> cast('a' as text)");
+        sql.Should().Contain("doc_jsonb -> cast(E'a' as text)");
         sql.Should().NotContain("cast(doc_jsonb");
 
         SqlOf(ctx, ctx.From<IJsonAccessProbe>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get_text(x.DocJsonb, "a") }))
-            .Should().Contain("doc_jsonb ->> cast('a' as text)");
+            .Should().Contain("doc_jsonb ->> cast(E'a' as text)");
     }
 
     [Fact]
@@ -422,7 +423,7 @@ public class JsonAccessSqlGenerationTests
 
         SqlOf(ctx, ctx.From<IJsonAccessProbe>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get_path(x.DocJsonb, new[] { "a" }) }))
-            .Should().Contain("doc_jsonb #> cast(array['a'] as text[])");
+            .Should().Contain("doc_jsonb #> cast(array[E'a'] as text[])");
     }
 
     // - R27: null documents stay typed -
@@ -435,16 +436,16 @@ public class JsonAccessSqlGenerationTests
 
         var literal = SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
             .Select(x => new { V = SqlFunctions.Postgres.json_get((string?)null, "a") }));
-        literal.Should().Contain("cast(null as jsonb) -> cast('a' as text)");
+        literal.Should().Contain("cast(null as jsonb) -> cast(E'a' as text)");
         literal.Should().NotContain("(null ->");
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get(captured, "a") }))
-            .Should().Contain("cast(@captured as jsonb) -> cast('a' as text)");
+            .Should().Contain("cast(@captured as jsonb) -> cast(E'a' as text)");
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get_text(SqlFunctions.Parameter<string>(0), "a") }))
-            .Should().Contain("cast(@norm_p0 as jsonb) ->> cast('a' as text)");
+            .Should().Contain("cast(@norm_p0 as jsonb) ->> cast(E'a' as text)");
     }
 
     // - R28: null key/path/element and both operands null -
@@ -469,7 +470,7 @@ public class JsonAccessSqlGenerationTests
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get_path(Flat, new string?[] { "a", null }) }))
-            .Should().Contain($"{LiteralDocument(Flat)} #> cast(array['a', null] as text[])");
+            .Should().Contain($"{LiteralDocument(Flat)} #> cast(array[E'a', null] as text[])");
 
         SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
                 .Select(x => new { V = SqlFunctions.Postgres.json_get((string?)null, (string?)null) }))
@@ -490,7 +491,7 @@ public class JsonAccessSqlGenerationTests
         var negativeSql = SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
             .Select(x => new { V = SqlFunctions.Postgres.json_get(Flat, -7) }));
 
-        keySql.Should().Contain($"{LiteralDocument(Flat)} -> cast('0' as text)");
+        keySql.Should().Contain($"{LiteralDocument(Flat)} -> cast(E'0' as text)");
         indexSql.Should().Contain($"{LiteralDocument(Flat)} -> cast(0 as integer)");
         negativeSql.Should().Contain($"{LiteralDocument(Flat)} -> cast(-7 as integer)");
         keySql.Should().NotBe(indexSql);
@@ -506,7 +507,7 @@ public class JsonAccessSqlGenerationTests
         var sql = SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
             .Select(x => new { V = SqlFunctions.Postgres.json_get("{\"a\":\"it's\"}", "it's") }));
 
-        sql.Should().Contain("cast('{\"a\":\"it''s\"}' as jsonb) -> cast('it''s' as text)");
+        sql.Should().Contain("cast(E'{\"a\":\"it\\'s\"}' as jsonb) -> cast(E'it\\'s' as text)");
         sql.Should().NotContain("it's");
     }
 
@@ -522,15 +523,15 @@ public class JsonAccessSqlGenerationTests
 
         var documentCommand = Prepare(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
             .Select(x => new { V = SqlFunctions.Postgres.json_get(document, "a") }));
-        documentCommand.DbCommand.CommandText.Should().Contain("cast(@document as jsonb) -> cast('a' as text)");
+        documentCommand.DbCommand.CommandText.Should().Contain("cast(@document as jsonb) -> cast(E'a' as text)");
 
         var nodeCommand = Prepare(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
             .Select(x => new { V = SqlFunctions.Postgres.json_get(node, "a") }));
-        nodeCommand.DbCommand.CommandText.Should().Contain("cast(@node as jsonb) -> cast('a' as text)");
+        nodeCommand.DbCommand.CommandText.Should().Contain("cast(@node as jsonb) -> cast(E'a' as text)");
 
         var elementCommand = Prepare(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
             .Select(x => new { V = SqlFunctions.Postgres.json_get(element, "a") }));
-        elementCommand.DbCommand.CommandText.Should().Contain("cast(@element as jsonb) -> cast('a' as text)");
+        elementCommand.DbCommand.CommandText.Should().Contain("cast(@element as jsonb) -> cast(E'a' as text)");
 
         // CreateParam binds every structured JSON CLR input as jsonb, so the cast above matches the
         // bound provider type; no typed-json parameter API is invented.
@@ -548,12 +549,12 @@ public class JsonAccessSqlGenerationTests
 
         var json = SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
             .Select(x => new { V = SqlFunctions.Postgres.json_get(SqlFunctions.Postgres.json_build_object("a", x.Id), "a") }));
-        json.Should().Contain("json_build_object('a', id) -> cast('a' as text)");
+        json.Should().Contain("json_build_object(E'a', id) -> cast(E'a' as text)");
         json.Should().NotContain("cast(json_build_object");
 
         var jsonb = SqlOf(ctx, ctx.From<JsonEntity>().Where(x => x.Id > 0)
             .Select(x => new { V = SqlFunctions.Postgres.json_get_text(SqlFunctions.Postgres.jsonb_build_object("a", x.Id), 0) }));
-        jsonb.Should().Contain("jsonb_build_object('a', id) ->> cast(0 as integer)");
+        jsonb.Should().Contain("jsonb_build_object(E'a', id) ->> cast(0 as integer)");
         jsonb.Should().NotContain("cast(jsonb_build_object");
     }
 

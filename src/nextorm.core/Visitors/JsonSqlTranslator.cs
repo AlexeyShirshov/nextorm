@@ -324,7 +324,10 @@ internal static class JsonSqlTranslator
 
         if (constant.Type == typeof(string) && constant.Value is string text)
         {
-            visitor.Builder!.Append(SqlLiteral.ToSqlStringLiteral(text));
+            // grammar token: the raw JSON document sits in a cast(… as jsonb) expression position, so
+            // the provider's ordinary literal spelling is legal here (no D6 fallback needed).
+            visitor.Builder!.Append(visitor.RenderStringLiteral(
+                text, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.JsonDocument));
             return;
         }
 
@@ -455,7 +458,10 @@ internal static class JsonSqlTranslator
                 return;
 
             case ConstantExpression { Value: string text }:
-                visitor.Builder!.Append(SqlLiteral.ToSqlStringLiteral(text));
+                // grammar token: the key sits in a cast(… as text) expression position, so the
+                // provider's ordinary literal spelling is legal here (no D6 fallback needed).
+                visitor.Builder!.Append(visitor.RenderStringLiteral(
+                    text, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.JsonKey));
                 return;
 
             case ConstantExpression { Value: int index }:
@@ -484,7 +490,10 @@ internal static class JsonSqlTranslator
             if (i > 0) builder.Append(", ");
 
             builder.Append(TypeFacts.UnwrapConvert(items[i]) is ConstantExpression { Value: string text }
-                ? SqlLiteral.ToSqlStringLiteral(text)
+                // grammar token: a path element sits in an array[…] expression position, so the
+                // provider's ordinary literal spelling is legal here (no D6 fallback needed).
+                ? visitor.RenderStringLiteral(
+                    text, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.JsonPathElement)
                 : visitor.Kw("null"));
         }
 

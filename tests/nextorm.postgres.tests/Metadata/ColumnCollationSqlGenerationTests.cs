@@ -34,7 +34,7 @@ public class ColumnCollationSqlGenerationTests
         var e = ctx.From<ICollatedEntity>();
 
         SqlOf(ctx, e.Where(x => x.Name == "a").Select(x => new { x.Id }))
-            .Should().Contain("name collate \"C\" = 'a'");
+            .Should().Contain("name collate \"C\" = E'a'");
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class ColumnCollationSqlGenerationTests
         var e = ctx.From<ICollatedEntity>();
 
         SqlOf(ctx, e.Where(x => x.Name!.Contains("a")).Select(x => new { x.Id }))
-            .Should().Contain("name collate \"C\" like '%a%'");
+            .Should().Contain("name collate \"C\" like E'%a%'");
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class ColumnCollationSqlGenerationTests
         var e = ctx.From<ICollatedEntity>();
 
         SqlOf(ctx, e.Where(x => string.Equals(x.Name!.ToUpper(), "A")).Select(x => new { x.Id }))
-            .Should().Contain("upper(name) collate \"C\" = 'A' collate \"C\"");
+            .Should().Contain("upper(name) collate \"C\" = E'A' collate \"C\"");
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class ColumnCollationSqlGenerationTests
         });
 
         SqlOf(ctx, e.Where(x => x.Name == "a").Select(x => new { x.Id }))
-            .Should().Contain("name collate \"C\" = 'a'");
+            .Should().Contain("name collate \"C\" = E'a'");
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public class ColumnCollationSqlGenerationTests
         var e = ctx.From<ICollatedEntity>();
 
         SqlOf(ctx, e.Where(x => string.Equals(x.Name, "a")).Select(x => new { x.Id }))
-            .Should().Contain("name collate \"C\" = 'a' collate \"C\"");
+            .Should().Contain("name collate \"C\" = E'a' collate \"C\"");
     }
 
     [SqlTable("fluent_collated_entity")]

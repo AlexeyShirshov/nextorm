@@ -504,6 +504,7 @@ public class MySqlDialect : SqlDialectBase
 
     // MySQL treats the backslash as a string-literal escape too, so the escape character of a LIKE
     // predicate has to be written as a doubled backslash ('\\' rather than '\').
+    // grammar token: mode-aware lowering added in D6
     /// <inheritdoc/>
     public override string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) =>
         Kw(keywordCase, " escape '") + escapeChar.Replace("\\", "\\\\").Replace("'", "''") + "'";

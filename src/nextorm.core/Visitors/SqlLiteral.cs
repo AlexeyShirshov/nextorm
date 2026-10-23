@@ -11,6 +11,52 @@ internal static class SqlLiteral
     /// <summary>Quotes a value as a SQL string literal, doubling embedded single quotes.</summary>
     internal static string ToSqlStringLiteral(string value) => "'" + value.Replace("'", "''") + "'";
 
+    /// <summary>
+    /// Validates a text value the PostgreSQL provider cannot represent: <c>U+0000</c> is rejected (the
+    /// server terminates text at NUL) and so is an unpaired UTF-16 surrogate, which is outside the
+    /// supported-content range. Shared by inline literal rendering and by the pre-execution parameter
+    /// check; the message never echoes the supplied value.
+    /// </summary>
+    internal static void ValidatePostgresText(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (value.Contains('\u0000'))
+            throw new NotSupportedException(
+                "PostgreSQL text values cannot contain U+0000 (NUL); the value was rejected before it could reach the server.");
+
+        if (!IsWellFormedUtf16(value))
+            throw UnsupportedSurrogate("PostgreSQL");
+    }
+
+    /// <summary>
+    /// Creates the deterministic failure for a value that cannot be encoded as UTF-8 because of an
+    /// unpaired UTF-16 surrogate. The message names the provider and never echoes the value.
+    /// </summary>
+    internal static NotSupportedException UnsupportedSurrogate(string provider) => new(
+        $"{provider} cannot represent a string that contains an unpaired UTF-16 surrogate outside the supported range.");
+
+    private static bool IsWellFormedUtf16(string value)
+    {
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (char.IsHighSurrogate(c))
+            {
+                if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                    return false;
+
+                i++;
+            }
+            else if (char.IsLowSurrogate(c))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>Escapes the LIKE metacharacters (<c>%</c>, <c>_</c>, <c>\</c>) with a backslash.</summary>
     internal static string EscapeLikeWildcards(string value)
     {

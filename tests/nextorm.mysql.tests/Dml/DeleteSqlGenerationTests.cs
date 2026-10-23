@@ -66,7 +66,7 @@ public class DeleteSqlGenerationTests
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
             .Where(p => p.Item1.String == "x")
             .ToSql()
-            .Should().Be("delete `t1` from complex_entity as `t1` join simple_entity as `t2` on t1.id = cast(t2.id as signed) where t1.somestring = 'x'");
+            .Should().Be("delete `t1` from complex_entity as `t1` join simple_entity as `t2` on t1.id = cast(t2.id as signed) where t1.somestring = _utf8mb4 X'78'");
     }
 
     [Fact]

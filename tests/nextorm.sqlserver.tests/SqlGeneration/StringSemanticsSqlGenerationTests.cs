@@ -49,7 +49,7 @@ public class StringSemanticsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => string.CompareOrdinal(x.String, "a") > 0).Select(x => new { x.Id }))
-            .Should().Contain("somestring collate Latin1_General_100_BIN2 < 'a'");
+            .Should().Contain("somestring collate Latin1_General_100_BIN2 < N'a'");
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class StringSemanticsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.String!.Contains("a", StringComparison.Ordinal)).Select(x => new { x.Id }))
-            .Should().Contain("somestring collate Latin1_General_100_BIN2 like '%a%'");
+            .Should().Contain("somestring collate Latin1_General_100_BIN2 like N'%a%'");
     }
 
     [Fact]

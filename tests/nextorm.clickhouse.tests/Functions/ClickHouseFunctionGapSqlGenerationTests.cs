@@ -74,7 +74,7 @@ public class ClickHouseFunctionGapSqlGenerationTests
         }));
 
         sql.Should().Contain("splitByString(',', somestring)");
-        sql.Should().Contain("splitByRegexp('['']', somestring)");
+        sql.Should().Contain("splitByRegexp('[\\']', somestring)");
         sql.Should().Contain("splitByWhitespace(somestring)");
     }
 

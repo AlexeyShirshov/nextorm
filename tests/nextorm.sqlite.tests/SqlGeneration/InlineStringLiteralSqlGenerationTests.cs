@@ -185,4 +185,27 @@ public class InlineStringLiteralSqlGenerationTests
         prepared.DbCommand.Parameters.Cast<DbParameter>().Single(p => p.ParameterName == "guid")
             .Value.Should().Be(guid);
     }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineNul_ShouldRenderUtf8BlobCastToText()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // SQLite truncates a text literal at an embedded NUL, so the value travels as a UTF-8 blob.
+        SqlOf(ctx, e.Where(x => x.String == "a\u0000b").Select(x => new { x.Id }))
+            .Should().Contain("where somestring = CAST(X'610062' AS TEXT)");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlinePlainValue_ShouldKeepTheQuotedForm()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => x.String == "abc").Select(x => new { x.Id }))
+            .Should().Contain("where somestring = 'abc'");
+    }
 }

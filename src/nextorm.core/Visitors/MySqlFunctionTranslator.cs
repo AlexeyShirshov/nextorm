@@ -16,6 +16,17 @@ internal static class MySqlFunctionTranslator
         nameof(MySqlFunctions.field), nameof(MySqlFunctions.elt)
     };
 
+    /// <summary>
+    /// The MariaDB sequence functions whose first argument is an object identifier: the dialect's
+    /// <c>SequenceName</c> unquotes the plain token into the sequence name, so the value policy's
+    /// charset-introduced hex spelling must never reach it.
+    /// </summary>
+    private static readonly HashSet<string> SequenceNameFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(MySqlFunctions.next_value_for), nameof(MySqlFunctions.nextval),
+        nameof(MySqlFunctions.setval), nameof(MySqlFunctions.lastval)
+    };
+
     /// <summary>Translates a MySQL/MariaDB-only call; returns <c>false</c> when it is not one of them.</summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
@@ -46,7 +57,15 @@ internal static class MySqlFunctionTranslator
         visitor.NeedAliasForColumn = true;
         var rendered = new string[args.Count];
         for (var (i, cnt) = (0, args.Count); i < cnt; i++)
-            rendered[i] = visitor.VisitToString(args[i]);
+        {
+            // grammar token: the sequence name is an identifier the dialect unquotes, not a data
+            // value, so it keeps the historic plain quoted token (the value policy emitted
+            // `_utf8mb4 X'…'` for it and `next value for` received the hex literal).
+            rendered[i] = i == 0 && SequenceNameFunctions.Contains(name)
+                && TypeFacts.UnwrapConvert(args[i]) is ConstantExpression { Value: string sequence }
+                    ? visitor.RenderStringLiteral(sequence, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.Keyword)
+                    : visitor.VisitToString(args[i]);
+        }
 
         visitor.Builder!.Append(mySql.Render(name, rendered));
         return true;

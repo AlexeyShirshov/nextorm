@@ -39,7 +39,7 @@ public class StringSemanticsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => string.CompareOrdinal(x.String, "a") > 0).Select(x => new { x.Id }))
-            .Should().Contain("somestring collate utf8mb4_bin < 'a'");
+            .Should().Contain("somestring collate utf8mb4_bin < _utf8mb4 X'61'");
     }
 
     [Fact]

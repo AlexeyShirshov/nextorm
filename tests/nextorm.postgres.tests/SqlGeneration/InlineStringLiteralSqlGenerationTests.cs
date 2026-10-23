@@ -30,7 +30,7 @@ public class InlineStringLiteralSqlGenerationTests
         // A C# literal inside the lambda is an Expression.Constant, so it takes the inline literal path.
         var sql = SqlOf(ctx, e.Where(x => x.String == "it's (a) test").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'it''s (a) test'",
+        sql.Should().Contain("somestring = E'it\\'s (a) test'",
             "a literal apostrophe is doubled inside the SQL string literal");
         sql.Should().NotContain("'it's (a) test'",
             "the malformed three-apostrophe form terminates the literal early and is a parser error in PostgreSQL");
@@ -45,9 +45,10 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => x.String == @"a\b").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'a\\b'",
-            "a backslash is ordinary data in a PostgreSQL literal and is neither removed nor duplicated here");
-        sql.Should().NotContain("'a\\\\b'", "the literal renderer must not invent escape sequences");
+        sql.Should().Contain("somestring = E'a\\\\b'",
+            "a backslash is ordinary data in a PostgreSQL literal: the E-string doubles it and the server reads one backslash");
+        sql.Should().NotContain("E'a\\b'",
+            "an unescaped backslash would be the backspace escape, not a literal backslash");
     }
 
     [Fact]
@@ -71,7 +72,7 @@ public class InlineStringLiteralSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.String == "").Select(x => new { x.Id }))
-            .Should().Contain("somestring = ''");
+            .Should().Contain("somestring = E''");
     }
 
     [Fact]
@@ -84,8 +85,8 @@ public class InlineStringLiteralSqlGenerationTests
         var percent = SqlOf(ctx, e.Where(x => x.String == "%").Select(x => new { x.Id }));
         var underscore = SqlOf(ctx, e.Where(x => x.String == "_").Select(x => new { x.Id }));
 
-        percent.Should().Contain("somestring = '%'");
-        underscore.Should().Contain("somestring = '_'");
+        percent.Should().Contain("somestring = E'%'");
+        underscore.Should().Contain("somestring = E'_'");
         percent.Should().NotContain("'\\%'", "equality literals are not LIKE patterns and must not be wildcard-escaped");
         underscore.Should().NotContain("'\\_'");
     }
@@ -99,7 +100,7 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => x.String == "it's; --").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'it''s; --'",
+        sql.Should().Contain("somestring = E'it\\'s; --'",
             "the whole text is data: the quote is doubled, the semicolon and comment marker stay inside the literal");
         sql.Should().NotContain("'it's; --'");
     }
@@ -113,8 +114,9 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => x.String == "a\r\nb\tc").Select(x => new { x.Id }));
 
-        // Normalize collapses CRLF to LF for the assertion, so the LF and TAB must survive verbatim.
-        sql.Should().Contain("'a\nb\tc'", "CR, LF and TAB are data and are neither escaped nor stripped");
+        // The E-string carries the control characters as fixed-width hex escapes; CR, LF and TAB are data
+        // and are neither escaped away, replaced nor stripped.
+        sql.Should().Contain("E'a\\x0d\\x0ab\\x09c'", "CR, LF and TAB are data and are neither escaped nor stripped");
     }
 
     [Fact]
@@ -183,5 +185,22 @@ public class InlineStringLiteralSqlGenerationTests
             "a captured Guid is bound, never rendered as a literal");
         prepared.DbCommand.Parameters.Cast<DbParameter>().Single(p => p.ParameterName == "guid")
             .Value.Should().Be(guid);
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineNul_ShouldBeRejectedBeforeRendering()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Where(x => x.String == "nul\u0000marker").Select(x => new { x.Id }));
+
+        var exception = act.Should().Throw<NotSupportedException>(
+            "PostgreSQL text cannot represent U+0000 and the value must never reach the server").Which;
+
+        exception.Message.Should().Contain("PostgreSQL");
+        exception.Message.Should().Contain("U+0000");
+        exception.Message.Should().NotContain("marker", "the exception must not echo the supplied value");
     }
 }

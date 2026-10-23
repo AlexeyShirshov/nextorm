@@ -144,7 +144,7 @@ internal static class SqlOperandTranslator
             if (!SqlLiteral.TryGetConstantString(separatorArg, out var separatorChar))
                 throw new NotSupportedException("The string.Split separator character must be a constant.");
 
-            separator = SqlLiteral.ToSqlStringLiteral(separatorChar);
+            separator = visitor.RenderStringLiteral(separatorChar);
         }
         else
         {

@@ -599,11 +599,11 @@ public class ClickHouseDialect : SqlDialectBase
 
     /// <inheritdoc/>
     public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
-        $"match({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : string.Empty) + pattern, escapeBackslash: true)})";
+        $"match({value}, {SqlStringLiteralPolicy.ClickHouse.Render((ignoreCase ? "(?i)" : string.Empty) + pattern, SqlStringLiteralRole.RegexPattern)})";
 
     /// <inheritdoc/>
     public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
-        $"replaceRegexpAll({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : string.Empty) + pattern, escapeBackslash: true)}, {QuoteStringLiteral(replacement, escapeBackslash: true)})";
+        $"replaceRegexpAll({value}, {SqlStringLiteralPolicy.ClickHouse.Render((ignoreCase ? "(?i)" : string.Empty) + pattern, SqlStringLiteralRole.RegexPattern)}, {SqlStringLiteralPolicy.ClickHouse.Render(replacement, SqlStringLiteralRole.RegexReplacement)})";
 
     // now() uses the server time zone; the optional argument selects a zone.
     /// <summary>Renders <c>now('UTC')</c> for UTC or the server-timezone <c>now()</c> for local time.</summary>

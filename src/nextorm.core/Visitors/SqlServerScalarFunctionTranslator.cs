@@ -84,6 +84,17 @@ internal static class SqlServerScalarFunctionTranslator
     };
 
     /// <summary>
+    /// The functions whose first argument is a date-part keyword. T-SQL's parser consumes it as
+    /// grammar, not as a value, so it is emitted as a plain quoted token; the dialect then strips the
+    /// surrounding quotes (<see cref="SqlServerFunctions.datename(string?, DateTime?)"/>,
+    /// <see cref="SqlServerFunctions.date_bucket(string?, int, DateTime?)"/>).
+    /// </summary>
+    private static readonly HashSet<string> DatePartFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(SqlServerFunctions.datename), nameof(SqlServerFunctions.date_bucket)
+    };
+
+    /// <summary>
     /// The sequence-expression functions whose single argument is a constant name: it selects the
     /// quoted identifier <c>NEXT VALUE FOR</c> consumes and must never be bound as a SQL parameter.
     /// </summary>
@@ -143,7 +154,15 @@ internal static class SqlServerScalarFunctionTranslator
         visitor.NeedAliasForColumn = true;
         var rendered = new string[args.Count];
         for (var (i, cnt) = (0, args.Count); i < cnt; i++)
-            rendered[i] = visitor.VisitToString(args[i]);
+        {
+            // grammar token: a datepart/unit operand is a keyword the T-SQL parser consumes, not a
+            // data value, so it keeps the historic plain quoted token the dialect unquotes (a value
+            // spelling such as N'…' was left embedded and produced `datename(N'month', …)`).
+            rendered[i] = i == 0 && DatePartFunctions.Contains(name)
+                && TypeFacts.UnwrapConvert(args[i]) is ConstantExpression { Value: string datePart }
+                    ? visitor.RenderStringLiteral(datePart, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.Keyword)
+                    : visitor.VisitToString(args[i]);
+        }
 
         // A non-int integral precision (byte/short/…) would otherwise render with a boxing cast
         // (`cast(5 as int)`); T-SQL's `*FROMPARTS` wants a plain integer literal, so normalise it.

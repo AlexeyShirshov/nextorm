@@ -30,8 +30,8 @@ public class InlineStringLiteralSqlGenerationTests
         // A C# literal inside the lambda is an Expression.Constant, so it takes the inline literal path.
         var sql = SqlOf(ctx, e.Where(x => x.String == "it's (a) test").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'it''s (a) test'",
-            "a literal apostrophe is doubled inside the SQL string literal");
+        sql.Should().Contain("somestring = _utf8mb4 X'69742773202861292074657374'",
+            "an ordinary value is transported as a charset-introduced UTF-8 hex literal");
         sql.Should().NotContain("'it's (a) test'",
             "the malformed three-apostrophe form terminates the literal early");
     }
@@ -48,9 +48,9 @@ public class InlineStringLiteralSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.String == "привет").Select(x => new { x.Id }))
-            .Should().Contain("'привет'");
+            .Should().Contain("_utf8mb4 X'd0bfd180d0b8d0b2d0b5d182'");
         SqlOf(ctx, e.Where(x => x.String == "😀").Select(x => new { x.Id }))
-            .Should().Contain("'😀'");
+            .Should().Contain("_utf8mb4 X'f09f9880'");
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class InlineStringLiteralSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.String == "").Select(x => new { x.Id }))
-            .Should().Contain("somestring = ''");
+            .Should().Contain("somestring = _utf8mb4 X''");
     }
 
     [Fact]
@@ -74,8 +74,8 @@ public class InlineStringLiteralSqlGenerationTests
         var percent = SqlOf(ctx, e.Where(x => x.String == "%").Select(x => new { x.Id }));
         var underscore = SqlOf(ctx, e.Where(x => x.String == "_").Select(x => new { x.Id }));
 
-        percent.Should().Contain("somestring = '%'");
-        underscore.Should().Contain("somestring = '_'");
+        percent.Should().Contain("somestring = _utf8mb4 X'25'");
+        underscore.Should().Contain("somestring = _utf8mb4 X'5f'");
         percent.Should().NotContain("'\\%'", "equality literals are not LIKE patterns and must not be wildcard-escaped");
         underscore.Should().NotContain("'\\_'");
     }
@@ -89,8 +89,8 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => x.String == "it's; --").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'it''s; --'",
-            "the whole text is data: the quote is doubled, the semicolon and comment marker stay inside the literal");
+        sql.Should().Contain("somestring = _utf8mb4 X'697427733b202d2d'",
+            "the whole text is data: the hex payload carries the quote, the semicolon and the comment marker");
         sql.Should().NotContain("'it's; --'");
     }
 
@@ -103,8 +103,8 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => x.String == "a\r\nb\tc").Select(x => new { x.Id }));
 
-        // Normalize collapses CRLF to LF for the assertion, so the LF and TAB must survive verbatim.
-        sql.Should().Contain("'a\nb\tc'", "CR, LF and TAB are data and are neither escaped nor stripped");
+        // The hex payload carries CR, LF and TAB as bytes, so none of them is escaped away or stripped.
+        sql.Should().Contain("_utf8mb4 X'610d0a620963'", "CR, LF and TAB are data and are neither escaped nor stripped");
     }
 
     [Fact]
@@ -155,7 +155,8 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, ctx.From<IComplexEntity>().Select(projection));
 
-        sql.Should().Contain("'00112233-4455-6677-8899-aabbccddeeff'", "the Guid literal remains a quoted string");
+        sql.Should().Contain("_utf8mb4 X'30303131323233332d343435352d363637372d383839392d616162626363646465656666'",
+            "the Guid literal is transported through the same charset-introduced hex form");
     }
 
     [Fact]
@@ -173,5 +174,28 @@ public class InlineStringLiteralSqlGenerationTests
             "a captured Guid is bound, never rendered as a literal");
         prepared.DbCommand.Parameters.Cast<DbParameter>().Single(p => p.ParameterName == "guid")
             .Value.Should().Be(guid);
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineNul_ShouldRenderUtf8HexLiteral()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // U+0000 is an ordinary byte in the UTF-8 payload, so the value is transported whole.
+        SqlOf(ctx, e.Where(x => x.String == "a\u0000b").Select(x => new { x.Id }))
+            .Should().Contain("where somestring = _utf8mb4 X'610062'");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlinePlainValue_ShouldKeepTheMeasuredHexForm()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => x.String == "abc").Select(x => new { x.Id }))
+            .Should().Contain("where somestring = _utf8mb4 X'616263'");
     }
 }

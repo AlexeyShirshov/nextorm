@@ -445,11 +445,11 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     /// <inheritdoc/>
     public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
-        $"regexp_like({value}, {QuoteStringLiteral(pattern)}, {(ignoreCase ? "'i'" : "'c'")})";
+        $"regexp_like({value}, {SqlStringLiteralPolicy.SqlServer.Render(pattern, SqlStringLiteralRole.RegexPattern)}, {(ignoreCase ? "'i'" : "'c'")})";
 
     /// <inheritdoc/>
     public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
-        $"regexp_replace({value}, {QuoteStringLiteral(pattern)}, {QuoteStringLiteral(replacement)}, 1, 0, {(ignoreCase ? "'i'" : "'c'")})";
+        $"regexp_replace({value}, {SqlStringLiteralPolicy.SqlServer.Render(pattern, SqlStringLiteralRole.RegexPattern)}, {SqlStringLiteralPolicy.SqlServer.Render(replacement, SqlStringLiteralRole.RegexReplacement)}, 1, 0, {(ignoreCase ? "'i'" : "'c'")})";
 
     /// <summary>Renders <c>stuff(value, start + 1, count, newValue)</c>, or the truncated prefix when the count is <c>null</c>.</summary>
     public override string MakeStuff(string value, string start, string? count, string newValue) =>

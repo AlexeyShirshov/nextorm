@@ -30,7 +30,7 @@ public class InlineStringLiteralSqlGenerationTests
         // A C# literal inside the lambda is an Expression.Constant, so it takes the inline literal path.
         var sql = SqlOf(ctx, e.Where(x => x.String == "it's (a) test").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'it''s (a) test'",
+        sql.Should().Contain("somestring = N'it''s (a) test'",
             "a literal apostrophe is doubled inside the SQL string literal");
         sql.Should().NotContain("'it's (a) test'",
             "the malformed three-apostrophe form terminates the literal early");
@@ -45,7 +45,7 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => x.String == @"a\b").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'a\\b'",
+        sql.Should().Contain("somestring = N'a\\b'",
             "a backslash is ordinary data in a SQLite literal and is neither removed nor duplicated here");
         sql.Should().NotContain("'a\\\\b'", "the literal renderer must not invent escape sequences");
     }
@@ -71,7 +71,7 @@ public class InlineStringLiteralSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.String == "").Select(x => new { x.Id }))
-            .Should().Contain("somestring = ''");
+            .Should().Contain("somestring = N''");
     }
 
     [Fact]
@@ -84,8 +84,8 @@ public class InlineStringLiteralSqlGenerationTests
         var percent = SqlOf(ctx, e.Where(x => x.String == "%").Select(x => new { x.Id }));
         var underscore = SqlOf(ctx, e.Where(x => x.String == "_").Select(x => new { x.Id }));
 
-        percent.Should().Contain("somestring = '%'");
-        underscore.Should().Contain("somestring = '_'");
+        percent.Should().Contain("somestring = N'%'");
+        underscore.Should().Contain("somestring = N'_'");
         percent.Should().NotContain("'\\%'", "equality literals are not LIKE patterns and must not be wildcard-escaped");
         underscore.Should().NotContain("'\\_'");
     }
@@ -99,7 +99,7 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => x.String == "it's; --").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'it''s; --'",
+        sql.Should().Contain("somestring = N'it''s; --'",
             "the whole text is data: the quote is doubled, the semicolon and comment marker stay inside the literal");
         sql.Should().NotContain("'it's; --'");
     }
@@ -183,5 +183,16 @@ public class InlineStringLiteralSqlGenerationTests
             "a captured Guid is bound, never rendered as a literal");
         prepared.DbCommand.Parameters.Cast<DbParameter>().Single(p => p.ParameterName == "guid")
             .Value.Should().Be(guid);
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineNul_ShouldSpliceNcharZero()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => x.String == "a\u0000b").Select(x => new { x.Id }))
+            .Should().Contain("where somestring = N'a' + NCHAR(0) + N'b'");
     }
 }

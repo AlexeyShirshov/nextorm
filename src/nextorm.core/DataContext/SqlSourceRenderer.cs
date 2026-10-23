@@ -785,6 +785,8 @@ internal static class SqlSourceRenderer
         {
             sqlBuilder.Append(ctx.Dialect.MakeFunction(function.Name, function.Schema)).Append('(');
 
+            // grammar token: mode-aware lowering added in D6 — the leading column-definition list is a
+            // quoted token of the ClickHouse `values` table function, not a value expression.
             if (leadsWithSchema)
                 sqlBuilder.Append(SqlLiteral.ToSqlStringLiteral(columnDefinitions!));
 
@@ -806,14 +808,14 @@ internal static class SqlSourceRenderer
                 }
 
                 // A built-in table function's constant string value (for example the FTS5 match query) is
-                // an SQL literal owned by the library; render it with the quote-doubling literal helper.
-                // The generic constant path inlines without escaping, so a value such as "O'Brien" would
-                // otherwise break out of the literal; a captured value still goes through the visitor
-                // (and is bound as a parameter).
+                // an SQL literal owned by the library; render it through the dialect's string-literal
+                // policy. The generic constant path inlines without escaping, so a value such as "O'Brien"
+                // would otherwise break out of the literal; a captured value still goes through the
+                // visitor (and is bound as a parameter).
                 string renderedArgument;
                 if (isBuiltIn && arguments[i] is ConstantExpression { Value: string constantArgument })
                 {
-                    renderedArgument = SqlLiteral.ToSqlStringLiteral(constantArgument);
+                    renderedArgument = SqlStringLiteralPolicies.For(ctx.Dialect).Render(constantArgument);
                 }
                 else
                 {
@@ -926,7 +928,7 @@ internal static class SqlSourceRenderer
         visitor.Visit(nodes.Operand);
         var operand = visitor.ToString();
 
-        var rendered = xmlFunctions.Render("nodes", operand, new[] { SqlLiteral.ToSqlStringLiteral(nodes.XPath) });
+        var rendered = xmlFunctions.Render("nodes", operand, new[] { visitor.RenderStringLiteral(nodes.XPath) });
 
         ctx.ColumnsProvider.Add(entityType!, false);
         var alias = ctx.AliasProvider!.GetNextAlias(from);

@@ -34,13 +34,13 @@ public class CrossProviderScalarSqlGenerationTests
 
         sql.Should().Contain("left(somestring, 3)");
         sql.Should().Contain("right(somestring, 3)");
-        sql.Should().Contain("lpad(somestring, 5, '0')");
-        sql.Should().Contain("rpad(somestring, 5, '0')");
+        sql.Should().Contain("lpad(somestring, 5, E'0')");
+        sql.Should().Contain("rpad(somestring, 5, E'0')");
         sql.Should().Contain("repeat(somestring, 2)");
         sql.Should().Contain("reverse(somestring)");
         sql.Should().Contain("repeat(' ', 3)");
-        sql.Should().Contain("concat_ws(',', somestring, somestring)");
-        sql.Should().Contain("translate(somestring, 'ab', 'xy')");
+        sql.Should().Contain("concat_ws(E',', somestring, somestring)");
+        sql.Should().Contain("translate(somestring, E'ab', E'xy')");
         sql.Should().Contain("ascii(somestring)");
         sql.Should().Contain("chr(65)");
     }

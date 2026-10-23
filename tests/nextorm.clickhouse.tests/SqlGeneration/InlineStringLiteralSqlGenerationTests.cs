@@ -30,8 +30,8 @@ public class InlineStringLiteralSqlGenerationTests
         // A C# literal inside the lambda is an Expression.Constant, so it takes the inline literal path.
         var sql = SqlOf(ctx, e.Where(x => x.String == "it's (a) test").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'it''s (a) test'",
-            "a literal apostrophe is doubled inside the SQL string literal");
+        sql.Should().Contain("somestring = 'it\\'s (a) test'",
+            "a literal apostrophe is backslash-escaped inside the ClickHouse string literal");
         sql.Should().NotContain("'it's (a) test'",
             "the malformed three-apostrophe form terminates the literal early");
     }
@@ -89,8 +89,8 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => x.String == "it's; --").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'it''s; --'",
-            "the whole text is data: the quote is doubled, the semicolon and comment marker stay inside the literal");
+        sql.Should().Contain("somestring = 'it\\'s; --'",
+            "the whole text is data: the quote is backslash-escaped, the semicolon and comment marker stay inside the literal");
         sql.Should().NotContain("'it's; --'");
     }
 
@@ -103,8 +103,9 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => x.String == "a\r\nb\tc").Select(x => new { x.Id }));
 
-        // Normalize collapses CRLF to LF for the assertion, so the LF and TAB must survive verbatim.
-        sql.Should().Contain("'a\nb\tc'", "CR, LF and TAB are data and are neither escaped nor stripped");
+        // Every C0 character is carried as a fixed-width hex escape, so CR, LF and TAB are data and are
+        // neither escaped away nor stripped.
+        sql.Should().Contain("'a\\x0d\\x0ab\\x09c'", "CR, LF and TAB are data and are neither escaped nor stripped");
     }
 
     [Fact]
@@ -173,5 +174,27 @@ public class InlineStringLiteralSqlGenerationTests
             "a captured Guid is bound, never rendered as a literal");
         prepared.DbCommand.Parameters.Cast<DbParameter>().Single(p => p.ParameterName == "guid")
             .Value.Should().Be(guid);
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineNul_ShouldRenderHexEscape()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => x.String == "a\u0000b").Select(x => new { x.Id }))
+            .Should().Contain("where somestring = 'a\\x00b'");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlinePlainValue_ShouldKeepTheQuotedForm()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => x.String == "abc").Select(x => new { x.Id }))
+            .Should().Contain("where somestring = 'abc'");
     }
 }

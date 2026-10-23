@@ -304,7 +304,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
     // Internal collaboration surface for the visitor's translator classes (Visitors/*.cs).
     // Deliberately internal (and not protected) so the public/protected API of this type is
-    // unchanged; there is no InternalsVisibleTo, so it stays inside NextORM.Core.
+    // unchanged; it is not part of any provider-facing contract.
     internal ISqlDialect Dialect => _dialect;
     internal IColumnsProvider ColumnsProvider => _columnsProvider;
     internal IAliasProvider? AliasProvider => _aliasProvider;
@@ -749,7 +749,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
             _needAliasForColumn = true;
             _builder!.Append(_dialect.MakeRepeat(
-                SqlLiteral.ToSqlStringLiteral(character),
+                RenderStringLiteral(character),
                 VisitToString(countArg)));
             return node;
         }
@@ -802,6 +802,18 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     }
 
     /// <summary>
+    /// Renders <paramref name="value"/> as a SQL string literal through the dialect's resolved policy
+    /// (see <see cref="SqlStringLiteralPolicies"/>). Used by emitters that distinguish a value from a
+    /// grammar-required token or a pattern; for a dialect without a built-in policy the result is the
+    /// historic apostrophe-doubling helper.
+    /// </summary>
+    internal string RenderStringLiteral(
+        string value,
+        SqlStringLiteralRole role = SqlStringLiteralRole.Value,
+        SqlStringGrammar grammar = SqlStringGrammar.None) =>
+        SqlStringLiteralPolicies.For(Dialect).Render(value, role, grammar);
+
+    /// <summary>
     /// Appends a constant literal (null, string/GUID, or primitive) to the builder. Returns
     /// <see langword="false"/> for values the caller must handle itself (anything non-primitive).
     /// </summary>
@@ -811,10 +823,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             _builder!.Append(Kw("null"));
         else if (t == typeof(string) || t == typeof(Guid))
         {
-            // An inline string/Guid value is emitted as a string literal through the single shared
-            // escaping helper: embedded apostrophes are doubled, so `'` as a value cannot terminate the
-            // literal early (the old raw append produced three apostrophes instead of four).
-            _builder!.Append(SqlLiteral.ToSqlStringLiteral(v.ToString()!));
+            // An inline string/Guid value is emitted as a string literal through the dialect's resolved
+            // string-literal policy: the value is quoted so `'` in it cannot terminate the literal early
+            // (the old raw append produced three apostrophes instead of four), while grammar and pattern
+            // sites keep their own spelling.
+            _builder!.Append(RenderStringLiteral(v.ToString()!));
         }
         else if (t.IsPrimitive || t == typeof(decimal))
         {
