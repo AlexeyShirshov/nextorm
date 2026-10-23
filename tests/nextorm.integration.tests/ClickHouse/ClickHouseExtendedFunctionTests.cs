@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -445,4 +446,237 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
             .Should().Throw<NotSupportedException>()
             .WithMessage("The full-text predicates (contains/freetext) are not supported by this provider.");
     }
+
+    // --- T277 / issue #277: higher-order array functions over a column array -----------------------------------
+    // The reported failure was a missing outer-entity binding when a higher-order array lambda carries an
+    // inner parameter (arrayFilter(v -> ..., nums)). The projection here is deliberately the bare call from
+    // the issue: no wrapper, no scalar normalization, so the value has to materialize as a real array.
+
+    [Fact]
+    public void T277_ArrayFilter_Column_BareProjection()
+    {
+        var nums = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > 1, x.Nums))
+            .First();
+
+        nums.Should().Equal(3, 2);
+    }
+
+    [Fact]
+    public void T277_ArrayFilter_Column_CorrelatedBody()
+    {
+        // The lambda body also reads the outer entity column, so the inner parameter and the outer binding
+        // have to coexist in one expression tree.
+        var nums = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > x.Id, x.Nums))
+            .First();
+
+        nums.Should().Equal(3, 2);
+    }
+
+    [Fact]
+    public void T277_ArrayFilter_NegativeControls()
+    {
+        var rejected = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > 100, x.Nums))
+            .First();
+
+        rejected.Should().BeEmpty("no element of [3, 1, 2] is greater than 100");
+
+        var emptySource = _sut.ArrayEntity
+            .Where(x => x.Id == 3)
+            .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > 1, x.Nums))
+            .First();
+
+        emptySource.Should().BeEmpty("entity 3 carries an empty nums array");
+    }
+
+    /// <summary>
+    /// T277 source-form matrix: for each higher-order array function, the same expectation is produced from
+    /// an entity column, a captured array, an inline array, a body referencing the outer entity column and a
+    /// body referencing a captured scalar. Matrix input is <c>[3, 1, 2]</c> on entity <c>Id == 1</c>, the
+    /// predicate is <c>v &gt; 1</c> and the map is <c>v + 1</c>; the correlated variants substitute
+    /// <c>x.Id</c> (1) and the captured-scalar variants substitute <c>t</c> (1), so every form expects the
+    /// same value. Array-returning projections are normalized with <c>length()</c> on purpose: a bare
+    /// promoted <c>array_map</c> result hits a separate materialization defect, which T277 does not own.
+    /// </summary>
+    [Theory]
+    [InlineData("array_map", "column", 3L)]
+    [InlineData("array_map", "captured-array", 3L)]
+    [InlineData("array_map", "inline-array", 3L)]
+    [InlineData("array_map", "outer-column", 3L)]
+    [InlineData("array_map", "captured-scalar", 3L)]
+    [InlineData("array_filter", "column", 2L)]
+    [InlineData("array_filter", "captured-array", 2L)]
+    [InlineData("array_filter", "inline-array", 2L)]
+    [InlineData("array_filter", "outer-column", 2L)]
+    [InlineData("array_filter", "captured-scalar", 2L)]
+    [InlineData("array_exists", "column", true)]
+    [InlineData("array_exists", "captured-array", true)]
+    [InlineData("array_exists", "inline-array", true)]
+    [InlineData("array_exists", "outer-column", true)]
+    [InlineData("array_exists", "captured-scalar", true)]
+    [InlineData("array_all", "column", false)]
+    [InlineData("array_all", "captured-array", false)]
+    [InlineData("array_all", "inline-array", false)]
+    [InlineData("array_all", "outer-column", false)]
+    [InlineData("array_all", "captured-scalar", false)]
+    [InlineData("array_count", "column", 2L)]
+    [InlineData("array_count", "captured-array", 2L)]
+    [InlineData("array_count", "inline-array", 2L)]
+    [InlineData("array_count", "outer-column", 2L)]
+    [InlineData("array_count", "captured-scalar", 2L)]
+    [InlineData("array_first", "column", 3L)]
+    [InlineData("array_first", "captured-array", 3L)]
+    [InlineData("array_first", "inline-array", 3L)]
+    [InlineData("array_first", "outer-column", 3L)]
+    [InlineData("array_first", "captured-scalar", 3L)]
+    [InlineData("array_first_index", "column", 1L)]
+    [InlineData("array_first_index", "captured-array", 1L)]
+    [InlineData("array_first_index", "inline-array", 1L)]
+    [InlineData("array_first_index", "outer-column", 1L)]
+    [InlineData("array_first_index", "captured-scalar", 1L)]
+    [InlineData("array_last", "column", 2L)]
+    [InlineData("array_last", "captured-array", 2L)]
+    [InlineData("array_last", "inline-array", 2L)]
+    [InlineData("array_last", "outer-column", 2L)]
+    [InlineData("array_last", "captured-scalar", 2L)]
+    [InlineData("array_last_index", "column", 3L)]
+    [InlineData("array_last_index", "captured-array", 3L)]
+    [InlineData("array_last_index", "inline-array", 3L)]
+    [InlineData("array_last_index", "outer-column", 3L)]
+    [InlineData("array_last_index", "captured-scalar", 3L)]
+    public void T277_HigherOrder_SourceMatrix(string function, string variant, object expected)
+    {
+        var actual = ExecuteHigherOrderCell(function, variant);
+
+        if (expected is bool expectedBool)
+        {
+            actual.Should().Be(expectedBool);
+            return;
+        }
+
+        actual.Should().BeOfType<long>().Which.Should().Be((long)expected);
+    }
+
+    /// <summary>
+    /// Builds one matrix cell. Every numeric terminal is widened to <c>long</c> so the theory compares a
+    /// single numeric type; array-returning functions are measured through <c>length()</c>.
+    /// </summary>
+    private object ExecuteHigherOrderCell(string function, string variant)
+    {
+        int[] captured = { 3, 1, 2 };
+        int t = 1;
+
+        return function switch
+        {
+            "array_map" => variant switch
+            {
+                "column" => LongCell(x => SqlFunctions.ClickHouse.length(
+                    SqlFunctions.ClickHouse.array_map(v => v + 1, x.Nums))),
+                "captured-array" => LongCell(x => SqlFunctions.ClickHouse.length(
+                    SqlFunctions.ClickHouse.array_map(v => v + 1, captured))),
+                "inline-array" => LongCell(x => SqlFunctions.ClickHouse.length(
+                    SqlFunctions.ClickHouse.array_map(v => v + 1, new[] { 3, 1, 2 }))),
+                "outer-column" => LongCell(x => SqlFunctions.ClickHouse.length(
+                    SqlFunctions.ClickHouse.array_map(v => v + x.Id, x.Nums))),
+                "captured-scalar" => LongCell(x => SqlFunctions.ClickHouse.length(
+                    SqlFunctions.ClickHouse.array_map(v => v + t, x.Nums))),
+                _ => throw UnknownVariant(function, variant)
+            },
+            "array_filter" => variant switch
+            {
+                "column" => LongCell(x => SqlFunctions.ClickHouse.length(
+                    SqlFunctions.ClickHouse.array_filter(v => v > 1, x.Nums))),
+                "captured-array" => LongCell(x => SqlFunctions.ClickHouse.length(
+                    SqlFunctions.ClickHouse.array_filter(v => v > 1, captured))),
+                "inline-array" => LongCell(x => SqlFunctions.ClickHouse.length(
+                    SqlFunctions.ClickHouse.array_filter(v => v > 1, new[] { 3, 1, 2 }))),
+                "outer-column" => LongCell(x => SqlFunctions.ClickHouse.length(
+                    SqlFunctions.ClickHouse.array_filter(v => v > x.Id, x.Nums))),
+                "captured-scalar" => LongCell(x => SqlFunctions.ClickHouse.length(
+                    SqlFunctions.ClickHouse.array_filter(v => v > t, x.Nums))),
+                _ => throw UnknownVariant(function, variant)
+            },
+            "array_exists" => variant switch
+            {
+                "column" => BoolCell(x => SqlFunctions.ClickHouse.array_exists(v => v > 1, x.Nums)),
+                "captured-array" => BoolCell(x => SqlFunctions.ClickHouse.array_exists(v => v > 1, captured)),
+                "inline-array" => BoolCell(x => SqlFunctions.ClickHouse.array_exists(v => v > 1, new[] { 3, 1, 2 })),
+                "outer-column" => BoolCell(x => SqlFunctions.ClickHouse.array_exists(v => v > x.Id, x.Nums)),
+                "captured-scalar" => BoolCell(x => SqlFunctions.ClickHouse.array_exists(v => v > t, x.Nums)),
+                _ => throw UnknownVariant(function, variant)
+            },
+            "array_all" => variant switch
+            {
+                "column" => BoolCell(x => SqlFunctions.ClickHouse.array_all(v => v > 1, x.Nums)),
+                "captured-array" => BoolCell(x => SqlFunctions.ClickHouse.array_all(v => v > 1, captured)),
+                "inline-array" => BoolCell(x => SqlFunctions.ClickHouse.array_all(v => v > 1, new[] { 3, 1, 2 })),
+                "outer-column" => BoolCell(x => SqlFunctions.ClickHouse.array_all(v => v > x.Id, x.Nums)),
+                "captured-scalar" => BoolCell(x => SqlFunctions.ClickHouse.array_all(v => v > t, x.Nums)),
+                _ => throw UnknownVariant(function, variant)
+            },
+            "array_count" => variant switch
+            {
+                "column" => LongCell(x => SqlFunctions.ClickHouse.array_count(v => v > 1, x.Nums)),
+                "captured-array" => LongCell(x => SqlFunctions.ClickHouse.array_count(v => v > 1, captured)),
+                "inline-array" => LongCell(x => SqlFunctions.ClickHouse.array_count(v => v > 1, new[] { 3, 1, 2 })),
+                "outer-column" => LongCell(x => SqlFunctions.ClickHouse.array_count(v => v > x.Id, x.Nums)),
+                "captured-scalar" => LongCell(x => SqlFunctions.ClickHouse.array_count(v => v > t, x.Nums)),
+                _ => throw UnknownVariant(function, variant)
+            },
+            "array_first" => variant switch
+            {
+                "column" => IntCell(x => SqlFunctions.ClickHouse.array_first(v => v > 1, x.Nums)),
+                "captured-array" => IntCell(x => SqlFunctions.ClickHouse.array_first(v => v > 1, captured)),
+                "inline-array" => IntCell(x => SqlFunctions.ClickHouse.array_first(v => v > 1, new[] { 3, 1, 2 })),
+                "outer-column" => IntCell(x => SqlFunctions.ClickHouse.array_first(v => v > x.Id, x.Nums)),
+                "captured-scalar" => IntCell(x => SqlFunctions.ClickHouse.array_first(v => v > t, x.Nums)),
+                _ => throw UnknownVariant(function, variant)
+            },
+            "array_first_index" => variant switch
+            {
+                "column" => LongCell(x => SqlFunctions.ClickHouse.array_first_index(v => v > 1, x.Nums)),
+                "captured-array" => LongCell(x => SqlFunctions.ClickHouse.array_first_index(v => v > 1, captured)),
+                "inline-array" => LongCell(x => SqlFunctions.ClickHouse.array_first_index(v => v > 1, new[] { 3, 1, 2 })),
+                "outer-column" => LongCell(x => SqlFunctions.ClickHouse.array_first_index(v => v > x.Id, x.Nums)),
+                "captured-scalar" => LongCell(x => SqlFunctions.ClickHouse.array_first_index(v => v > t, x.Nums)),
+                _ => throw UnknownVariant(function, variant)
+            },
+            "array_last" => variant switch
+            {
+                "column" => IntCell(x => SqlFunctions.ClickHouse.array_last(v => v > 1, x.Nums)),
+                "captured-array" => IntCell(x => SqlFunctions.ClickHouse.array_last(v => v > 1, captured)),
+                "inline-array" => IntCell(x => SqlFunctions.ClickHouse.array_last(v => v > 1, new[] { 3, 1, 2 })),
+                "outer-column" => IntCell(x => SqlFunctions.ClickHouse.array_last(v => v > x.Id, x.Nums)),
+                "captured-scalar" => IntCell(x => SqlFunctions.ClickHouse.array_last(v => v > t, x.Nums)),
+                _ => throw UnknownVariant(function, variant)
+            },
+            "array_last_index" => variant switch
+            {
+                "column" => LongCell(x => SqlFunctions.ClickHouse.array_last_index(v => v > 1, x.Nums)),
+                "captured-array" => LongCell(x => SqlFunctions.ClickHouse.array_last_index(v => v > 1, captured)),
+                "inline-array" => LongCell(x => SqlFunctions.ClickHouse.array_last_index(v => v > 1, new[] { 3, 1, 2 })),
+                "outer-column" => LongCell(x => SqlFunctions.ClickHouse.array_last_index(v => v > x.Id, x.Nums)),
+                "captured-scalar" => LongCell(x => SqlFunctions.ClickHouse.array_last_index(v => v > t, x.Nums)),
+                _ => throw UnknownVariant(function, variant)
+            },
+            _ => throw UnknownVariant(function, variant)
+        };
+    }
+
+    private long LongCell(Expression<Func<IArrayEntity, long>> projection) =>
+        _sut.ArrayEntity.Where(x => x.Id == 1).Select(projection).First();
+
+    private long IntCell(Expression<Func<IArrayEntity, int>> projection) =>
+        _sut.ArrayEntity.Where(x => x.Id == 1).Select(projection).First();
+
+    private bool BoolCell(Expression<Func<IArrayEntity, bool>> projection) =>
+        _sut.ArrayEntity.Where(x => x.Id == 1).Select(projection).First();
+
+    private static InvalidOperationException UnknownVariant(string function, string variant) =>
+        new($"T277 matrix row '{function}'/'{variant}' is not part of the planned provider x form matrix.");
 }
