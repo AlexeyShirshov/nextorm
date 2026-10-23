@@ -860,11 +860,12 @@ internal sealed class QueryPlanner : IQueryPlanner
                 SequentialAccess = sequentialAccess,
             });
 
-            // Attach the immutable occurrence template of the planner-rendered statement. It is produced
-            // once here, on the miss, and shared by every execution of the cached command; caller-owned
-            // text (`RawSqlOverride`) never gets one because it carries no planner-owned emission.
+            // Attach the immutable occurrence template of the planner-rendered statement and the policy
+            // its dialect resolved. The template is produced once here, on the miss, and shared by every
+            // execution of the cached command; caller-owned text (`RawSqlOverride`) never gets one
+            // because it carries no planner-owned emission.
             if (ext is null && capture is not null && sql is not null && @params is not null)
-                compiledQuery.SetParameterTemplate(capture.Finalize(sql, @params));
+                compiledQuery.SetParameterTemplate(capture.Finalize(sql, @params), SqlStringLiteralPolicies.For(_dialect()));
 
             // Build the immutable guarded refresh recipe once, on the miss. Unsupported shapes leave it
             // null and keep the original ExtractParams refresh on every hit.
