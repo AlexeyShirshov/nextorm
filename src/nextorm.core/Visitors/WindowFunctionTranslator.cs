@@ -100,6 +100,7 @@ internal static class WindowFunctionTranslator
 
         visitor.NeedAliasForColumn = true;
         var windowStart = visitor.Builder!.Length;
+        var windowMark = visitor.Recorder?.MarkAt(windowStart);
 
         // The aggregate functions keep their dialect mapping (e.g. stdev -> stddev) and count() keeps
         // its dialect spelling (the opening parenthesis is part of MakeCount); the ranking/value
@@ -184,9 +185,7 @@ internal static class WindowFunctionTranslator
 
         if (functionName == "count" && visitor.Dialect.WrapsCountResult)
         {
-            var rendered = visitor.Builder!.ToString(windowStart, visitor.Builder!.Length - windowStart);
-            visitor.Builder!.Length = windowStart;
-            visitor.Builder!.Append(visitor.Dialect.WrapCount(rendered, big: false));
+            AppendWrapped(visitor, windowStart, windowMark, rendered => visitor.Dialect.WrapCount(rendered, big: false));
         }
         else if (declaringType.GetGenericArguments()[0] == typeof(int))
         {
@@ -194,12 +193,34 @@ internal static class WindowFunctionTranslator
             // WindowFunction<int>, but some providers return an unsigned 64-bit value (ClickHouse
             // returns UInt64) that the row reader cannot materialise into the declared int. The
             // dialect decides whether the rendered expression needs a narrowing cast.
-            var rendered = visitor.Builder!.ToString(windowStart, visitor.Builder!.Length - windowStart);
-            visitor.Builder!.Length = windowStart;
-            visitor.Builder!.Append(visitor.Dialect.WrapIntegerWindowResult(rendered));
+            AppendWrapped(visitor, windowStart, windowMark, visitor.Dialect.WrapIntegerWindowResult);
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Replaces the window expression rendered after <paramref name="start"/> with
+    /// <paramref name="wrap"/> applied to it; the wrapper embeds the rendered window expression
+    /// unchanged. The parameter recorder is rewound to <paramref name="mark"/> and the detached
+    /// occurrences are relocated behind the wrapper prefix, so a cast around a window function that
+    /// contains a placeholder keeps the placeholder at its real offset instead of leaving the recorder
+    /// ahead of the builder.
+    /// </summary>
+    private static void AppendWrapped(
+        BaseExpressionVisitor visitor,
+        int start,
+        SqlParameterMark? mark,
+        Func<string, string> wrap)
+    {
+        var builder = visitor.Builder!;
+        var rendered = builder.ToString(start, builder.Length - start);
+        builder.Length = start;
+        var fragment = mark is { } checkpoint ? visitor.Recorder!.RewindTo(checkpoint) : null;
+        var fragments = fragment is { OccurrenceCount: > 0 }
+            ? new[] { new SqlParameterTrackedFragment(rendered, null, fragment) }
+            : Array.Empty<SqlParameterTrackedFragment>();
+        SqlParameterFragmentRelocation.AppendComposed(builder, visitor.Recorder, wrap(rendered), fragments);
     }
 
     /// <summary>

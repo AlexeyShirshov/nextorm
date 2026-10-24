@@ -430,12 +430,74 @@ internal static class SqlParameterFragmentRelocation
 
         if (targetRecorder is not null && fragmentRecorder is { OccurrenceCount: > 0 })
         {
-            var offset = target.Length;
-            targetRecorder.AdvanceTo(offset);
-            targetRecorder.AppendOccurrences(fragmentRecorder, offset);
+            AppendComposed(
+                target,
+                targetRecorder,
+                fragmentText,
+                [new SqlParameterTrackedFragment(fragmentText, null, fragmentRecorder)]);
+            return;
         }
 
         target.Append(fragmentText);
+    }
+
+    /// <summary>
+    /// Appends <paramref name="text"/> at the current end of <paramref name="target"/> and relocates every
+    /// tracked fragment's occurrences to where that fragment's appended text actually occurs inside
+    /// <paramref name="text"/>, so a wrapper that embeds rendered arguments unchanged (a cast prefix, a
+    /// function name and its separators) shifts the placeholder spans by its real prefix instead of
+    /// leaving them at their rewritten-away positions. Each fragment is located in order from the
+    /// previous match, so repeated identical fragment text relocates one after another and no whole-SQL
+    /// rescan is needed. A fragment that cannot be located contributes no occurrence (never a wrong
+    /// span); only text is appended in that case.
+    /// </summary>
+    /// <param name="target">The builder that receives the text.</param>
+    /// <param name="targetRecorder">The target's recorder, or <see langword="null"/> when it is untracked.</param>
+    /// <param name="text">The composed text appended at the current end of the target.</param>
+    /// <param name="fragments">The tracked fragments the text embeds, in emission order.</param>
+    internal static void AppendComposed(
+        StringBuilder target,
+        SqlParameterTemplateRecorder? targetRecorder,
+        string text,
+        IReadOnlyList<SqlParameterTrackedFragment> fragments)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(fragments);
+
+        var baseLength = target.Length;
+
+        if (targetRecorder is not null)
+        {
+            var searchFrom = 0;
+            foreach (var fragment in fragments)
+            {
+                if (fragment.Recorder.OccurrenceCount == 0)
+                    continue;
+
+                var start = text.IndexOf(fragment.AppendedText, searchFrom, StringComparison.Ordinal);
+                if (start < 0)
+                    continue;
+
+                searchFrom = start + 1;
+
+                var inner = 0;
+                if (fragment.FragmentText is { } fragmentText)
+                {
+                    inner = fragment.AppendedText.IndexOf(fragmentText, StringComparison.Ordinal);
+                    if (inner < 0)
+                        continue;
+                }
+
+                var offset = baseLength + start + inner;
+                targetRecorder.AdvanceTo(offset);
+                targetRecorder.AppendOccurrences(fragment.Recorder, offset);
+            }
+
+            targetRecorder.AdvanceTo(baseLength + text.Length);
+        }
+
+        target.Append(text);
     }
 
     internal static int IndexOfOccurrence(string text, string value, int occurrence)

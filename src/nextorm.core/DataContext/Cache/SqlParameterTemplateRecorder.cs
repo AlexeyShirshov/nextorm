@@ -3,6 +3,16 @@ using System.Data;
 namespace NextORM.Core;
 
 /// <summary>
+/// An explicit rewind checkpoint of a <see cref="SqlParameterTemplateRecorder"/>: the emitted length and
+/// the occurrence count at the moment the checkpoint was taken. Produced by
+/// <see cref="SqlParameterTemplateRecorder.MarkAt"/> and consumed by
+/// <see cref="SqlParameterTemplateRecorder.RewindTo"/>.
+/// </summary>
+/// <param name="Length">The emitted length the fragment starts at.</param>
+/// <param name="OccurrenceCount">The number of occurrences recorded when the fragment started.</param>
+internal readonly record struct SqlParameterMark(int Length, int OccurrenceCount);
+
+/// <summary>
 /// Render-local recorder for planner-owned parameter occurrences. It is created next to one statement
 /// render and fed at placeholder-emission time, never by searching the finished SQL:
 /// <list type="bullet">
@@ -167,7 +177,10 @@ internal sealed class SqlParameterTemplateRecorder
     /// <summary>
     /// Advances the recorded cursor to an absolute emitted length. The intended call at a placeholder
     /// site is <c>recorder.AdvanceTo(builder.Length - placeholder.Length)</c> followed by
-    /// <see cref="RecordOccurrence"/>; the cursor never moves backwards.
+    /// <see cref="RecordOccurrence"/>; the cursor is forward-only and a shrink throws. A renderer that
+    /// really does rewind its builder must say so explicitly: take a <see cref="MarkAt"/> checkpoint
+    /// before the fragment and call <see cref="RewindTo"/> (or <see cref="TrimTo"/> for a text-only
+    /// tail) after it.
     /// </summary>
     internal void AdvanceTo(int emittedLength)
     {
@@ -178,6 +191,132 @@ internal sealed class SqlParameterTemplateRecorder
                 nameof(emittedLength),
                 emittedLength,
                 $"The recorded length {_length} cannot shrink to {emittedLength}.");
+        }
+
+        _length = emittedLength;
+    }
+
+    /// <summary>
+    /// Takes an explicit rewind checkpoint at <paramref name="emittedLength"/>: the cursor is advanced
+    /// to that position (a *forward* move) and the occurrence count is remembered, so a renderer that
+    /// emits a fragment into the shared builder and then truncates it back can hand the fragment and
+    /// its occurrences to <see cref="RewindTo"/> instead of leaving the recorder ahead of the builder.
+    /// A position before the recorded length is an unmarked shrink and throws, exactly like
+    /// <see cref="AdvanceTo"/>.
+    /// </summary>
+    internal SqlParameterMark MarkAt(int emittedLength)
+    {
+        ThrowIfFinalized();
+        if (emittedLength < _length)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(emittedLength),
+                emittedLength,
+                $"The recorded length {_length} cannot be marked at the earlier position {emittedLength}.");
+        }
+
+        _length = emittedLength;
+        return new SqlParameterMark(emittedLength, _occurrences.Count);
+    }
+
+    /// <summary>
+    /// Rolls the fragment back to <paramref name="mark"/>, detaching every occurrence recorded after it
+    /// into a new recorder whose spans are rebased to zero and whose occurrence ids restart at zero. The
+    /// detached fragment accounts for exactly the characters the caller truncated from its builder, so
+    /// the caller can append it again through a wrapper (<see cref="SqlParameterFragmentRelocation.AppendComposed"/>)
+    /// without the recorder ever being ahead of the emitted text.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The mark lies beyond the recorded length or beyond the recorded occurrence count.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// An occurrence recorded after the mark starts before it, so it straddles the rewind point and its
+    /// span could not be detached without silently misplacing it.
+    /// </exception>
+    internal SqlParameterTemplateRecorder RewindTo(SqlParameterMark mark)
+    {
+        ThrowIfFinalized();
+        if (mark.Length < 0 || mark.OccurrenceCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(mark), mark, "A rewind mark cannot be negative.");
+        if (mark.Length > _length)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(mark),
+                mark,
+                $"The mark at {mark.Length} lies beyond the recorded length {_length}.");
+        }
+
+        if (mark.OccurrenceCount > _occurrences.Count)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(mark),
+                mark,
+                $"The mark records {mark.OccurrenceCount} occurrences but only {_occurrences.Count} were recorded.");
+        }
+
+        for (var i = mark.OccurrenceCount; i < _occurrences.Count; i++)
+        {
+            if (_occurrences[i].Start < mark.Length)
+            {
+                throw new InvalidOperationException(
+                    $"The occurrence {_occurrences[i].OccurrenceId} starts at {_occurrences[i].Start} and straddles " +
+                    $"the rewind mark at {mark.Length}; it cannot be detached at its real offset.");
+            }
+        }
+
+        var detached = new SqlParameterTemplateRecorder
+        {
+            _length = _length - mark.Length
+        };
+
+        for (var i = mark.OccurrenceCount; i < _occurrences.Count; i++)
+        {
+            var occurrence = _occurrences[i];
+            detached.AddOccurrence(
+                occurrence.BindingId,
+                occurrence.Role,
+                occurrence.Start - mark.Length,
+                occurrence.Length,
+                occurrence.Placeholder);
+        }
+
+        _occurrences.RemoveRange(mark.OccurrenceCount, _occurrences.Count - mark.OccurrenceCount);
+        _length = mark.Length;
+        return detached;
+    }
+
+    /// <summary>
+    /// Rewinds a text-only tail: the caller trimmed its builder back to <paramref name="emittedLength"/>
+    /// (the separator trims after the last rendered argument) and no occurrence can start at or after
+    /// that position. Occurrences that start at or after it are dropped; an occurrence that starts
+    /// before it but extends past it means the trim cut through a placeholder and throws.
+    /// </summary>
+    internal void TrimTo(int emittedLength)
+    {
+        ThrowIfFinalized();
+        if (emittedLength < 0 || emittedLength > _length)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(emittedLength),
+                emittedLength,
+                $"The recorded length {_length} can only be trimmed to a position between 0 and itself.");
+        }
+
+        for (var i = 0; i < _occurrences.Count; i++)
+        {
+            var occurrence = _occurrences[i];
+            if (occurrence.Start >= emittedLength)
+            {
+                _occurrences.RemoveRange(i, _occurrences.Count - i);
+                break;
+            }
+
+            if (checked(occurrence.Start + occurrence.Length) > emittedLength)
+            {
+                throw new InvalidOperationException(
+                    $"The occurrence {occurrence.OccurrenceId} extends past the trim point at {emittedLength}; " +
+                    "only a text-only tail can be trimmed.");
+            }
         }
 
         _length = emittedLength;

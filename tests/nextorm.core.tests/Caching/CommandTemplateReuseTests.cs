@@ -57,6 +57,43 @@ public class CommandTemplateReuseTests
         template.StatementText.Should().Be(OriginalStatement);
     }
 
+    [Fact]
+    public void Compose_Should_Reproduce_A_Rewound_Wrapper_Text_And_Stay_Stable_Across_Compositions()
+    {
+        // #327 DEF-04: a renderer emits a fragment, truncates its builder back and re-appends the
+        // fragment inside a wrapper. The template must reproduce that emitted text exactly (the
+        // relocated occurrence sits behind the wrapper prefix), and composing twice must not accumulate.
+        var recorder = new SqlParameterTemplateRecorder();
+        var textBinding = recorder.RegisterBinding("norm_p0", SqlParameterBindingOrigin.Captured);
+        var builder = new StringBuilder();
+        recorder.AppendText("select ");
+        builder.Append("select ");
+
+        var mark = recorder.MarkAt(recorder.Length);
+        recorder.RecordPlaceholder(textBinding, SqlStringLiteralRole.Value, "@norm_p0");
+        var fragment = recorder.RewindTo(mark);
+
+        var wrapper = "toInt32(@norm_p0)";
+        SqlParameterFragmentRelocation.AppendComposed(
+            builder,
+            recorder,
+            wrapper,
+            [new SqlParameterTrackedFragment("@norm_p0", null, fragment)]);
+
+        var emitted = "select " + wrapper;
+        builder.ToString().Should().Be(emitted, "the builder sees one copy of the wrapper");
+        var template = recorder.Finalize(emitted);
+
+        template.Occurrences[0].Start.Should().Be(emitted.IndexOf("@norm_p0", StringComparison.Ordinal));
+
+        var first = template.Compose(new string?[template.OccurrenceCount]);
+        var second = template.Compose(new string?[template.OccurrenceCount]);
+
+        first.Should().Be(emitted);
+        second.Should().Be(first, "composition never accumulates wrapper text");
+        template.StatementText.Should().Be(emitted);
+    }
+
     // ------------------------------------------------------------------------------------------------
     // Command-level reuse across checkouts
     // ------------------------------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace NextORM.Core;
@@ -394,21 +395,24 @@ internal static class NormSqlTranslator
             if (countFilter is not null
                 && visitor.Dialect.AggregateFilterStyle == AggregateFilterStyle.IfCombinator)
             {
-                var combinatorStart = visitor.IsParamMode ? 0 : visitor.Builder!.Length;
+                var combinatorBuilder = visitor.IsParamMode ? null : visitor.Builder!;
+                var combinatorStart = combinatorBuilder?.Length ?? 0;
+                var combinatorMark = visitor.IsParamMode
+                    ? (SqlParameterMark?)null
+                    : visitor.Recorder?.MarkAt(combinatorStart);
                 AggregateFilter.AppendCombinator(visitor, AggregateFilter.CombinatorName(visitor.Dialect, "count"), value: null, countFilter);
 
-                if (!visitor.IsParamMode && visitor.Dialect.WrapsCountResult)
-                {
-                    var builder = visitor.Builder!;
-                    var rendered = builder.ToString(combinatorStart, builder.Length - combinatorStart);
-                    builder.Length = combinatorStart;
-                    builder.Append(visitor.Dialect.WrapCount(rendered, countBig));
-                }
+                if (combinatorBuilder is not null && visitor.Dialect.WrapsCountResult)
+                    AppendCountWrap(visitor, combinatorBuilder, combinatorStart, combinatorMark, countBig);
 
                 return;
             }
 
-            var countStart = visitor.IsParamMode ? 0 : visitor.Builder!.Length;
+            var countBuilder = visitor.IsParamMode ? null : visitor.Builder!;
+            var countStart = countBuilder?.Length ?? 0;
+            var countMark = visitor.IsParamMode
+                ? (SqlParameterMark?)null
+                : visitor.Recorder?.MarkAt(countStart);
 
             if (!visitor.IsParamMode) visitor.Builder!.Append(visitor.Dialect.MakeCount(node.Method.Name.EndsWith("distinct", StringComparison.Ordinal), countBig));
 
@@ -434,7 +438,8 @@ internal static class NormSqlTranslator
                         subVisitor.Visit(argExp);
                         if (!visitor.IsParamMode) visitor.Builder!.Append(subVisitor.ToString()).Append(", ");
                     }
-                    if (!visitor.IsParamMode) visitor.Builder!.Length -= 2;
+
+                    if (countBuilder is not null) TrimTrailingSeparator(visitor, countBuilder);
                 }
             }
 
@@ -442,13 +447,8 @@ internal static class NormSqlTranslator
 
             if (countFilter is not null) AggregateFilter.Append(visitor, countFilter);
 
-            if (!visitor.IsParamMode && visitor.Dialect.WrapsCountResult)
-            {
-                var builder = visitor.Builder!;
-                var rendered = builder.ToString(countStart, builder.Length - countStart);
-                builder.Length = countStart;
-                builder.Append(visitor.Dialect.WrapCount(rendered, countBig));
-            }
+            if (countBuilder is not null && visitor.Dialect.WrapsCountResult)
+                AppendCountWrap(visitor, countBuilder, countStart, countMark, countBig);
 
             return;
         }
@@ -482,7 +482,7 @@ internal static class NormSqlTranslator
 
             if (!visitor.IsParamMode)
             {
-                if (last > 0) visitor.Builder!.Length -= 2;
+                if (last > 0) TrimTrailingSeparator(visitor, visitor.Builder!);
                 visitor.Builder!.Append(')');
             }
 
@@ -537,7 +537,7 @@ internal static class NormSqlTranslator
 
             if (!visitor.IsParamMode)
             {
-                if (last > 0) visitor.Builder!.Length -= 2;
+                if (last > 0) TrimTrailingSeparator(visitor, visitor.Builder!);
                 visitor.Builder!.Append(')');
             }
 
@@ -598,6 +598,45 @@ internal static class NormSqlTranslator
             return;
 
         throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// Wraps the count expression that was just rendered after <paramref name="start"/> with the dialect's
+    /// result cast. The wrapper embeds the rendered text unchanged, so the parameter recorder is rewound
+    /// to the checkpoint and the detached occurrences are relocated behind the wrapper prefix
+    /// (<c>toInt32(</c>/<c>toInt64(</c>), never left at their truncated positions.
+    /// </summary>
+    private static void AppendCountWrap(
+        BaseExpressionVisitor visitor,
+        StringBuilder builder,
+        int start,
+        SqlParameterMark? mark,
+        bool countBig)
+    {
+        var rendered = builder.ToString(start, builder.Length - start);
+        builder.Length = start;
+        var fragment = mark is { } checkpoint ? visitor.Recorder!.RewindTo(checkpoint) : null;
+        var fragments = fragment is { OccurrenceCount: > 0 }
+            ? new[] { new SqlParameterTrackedFragment(rendered, null, fragment) }
+            : Array.Empty<SqlParameterTrackedFragment>();
+        SqlParameterFragmentRelocation.AppendComposed(
+            builder,
+            visitor.Recorder,
+            visitor.Dialect.WrapCount(rendered, countBig),
+            fragments);
+    }
+
+    /// <summary>
+    /// Trims the trailing <c>", "</c> separator of an argument list. The recorder is first advanced over
+    /// the text it has not accounted for yet, then rewound over the separator, which carries no
+    /// occurrence; a trim that would cut through a placeholder throws instead of misplacing it.
+    /// </summary>
+    private static void TrimTrailingSeparator(BaseExpressionVisitor visitor, StringBuilder builder)
+    {
+        var recorder = visitor.Recorder;
+        recorder?.AdvanceTo(builder.Length);
+        builder.Length -= 2;
+        recorder?.TrimTo(builder.Length);
     }
 
     /// <summary>
