@@ -1,0 +1,30 @@
+=== T327 D4 corrections surface audit vs aafece5c ===
+worktree: /home/alex/sources/nextorm-worktrees/rc4/t327  HEAD: aafece5c  base: aafece5c
+
+--- cmd 0: changed/untracked src paths vs base (expect exactly the three correction files) ---
+ M src/nextorm.clickhouse/ClickHouseDataContext.cs
+ M src/nextorm.core/DataContext/SqlBuilder.cs
+ M src/nextorm.core/DataContext/SqlSourceRenderer.cs
+
+--- recipe A: anchored public/protected declaration lines ---
+base lines: 5207   head lines: 5208
+672a673
+>         public override object? Value
+DIFF-EXIT:1
+
+--- recipe B: public/protected token count ---
+base tokens: 5413   head tokens: 5414
+
+--- cmd E: InternalsVisibleTo entries (base vs head) ---
+base entries: 14  head entries: 14
+MSBUILD-IVT-ENTRIES-IDENTICAL
+
+--- cmd F: src diff vs base (bodies only) ---
+warning: LF will be replaced by CRLF in src/nextorm.clickhouse/ClickHouseDataContext.cs.
+The file will have its original line endings in your working directory
+ src/nextorm.clickhouse/ClickHouseDataContext.cs   | 20 ++++++++++++++++-
+ src/nextorm.core/DataContext/SqlBuilder.cs        | 26 +++++++++++++++++++++++
+ src/nextorm.core/DataContext/SqlSourceRenderer.cs |  7 ++++++
+ 3 files changed, 52 insertions(+), 1 deletion(-)
+
+VERDICT: FAIL - declaration delta or unexpected src path change (see above).
