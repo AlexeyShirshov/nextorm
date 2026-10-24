@@ -1331,6 +1331,182 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         ArgumentNullException.ThrowIfNull(predicate);
         return JoinInto(_dataProvider.From<TChild>(), predicate, collection, parentKey, childKey, options);
     }
+    /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to the mapping of <typeparamref name="TChild"/> that fills the
+    /// <paramref name="collection"/> member of every parent, taking both join keys from the relationship
+    /// the navigation declares. The navigation selects the relationship, so the caller does not restate
+    /// its keys: the <c>ON</c> condition is the ordered principal/foreign component equality of the
+    /// declared relationship, conjoined componentwise (a composite key contributes one equality per
+    /// component, in declaration order).
+    /// <para>
+    /// <paramref name="filter"/> is an <b>additional</b> restriction appended to that <c>ON</c> condition
+    /// as one more conjunct; it never replaces the declared-key equality and is never moved into a
+    /// parent-filtering <c>WHERE</c>, so a parent whose children are all filtered out is still returned
+    /// with an empty collection. <see langword="null"/> means no additional restriction. For a many-to-many
+    /// navigation the existing junction synthesis supplies both key edges, and the filter is appended to
+    /// the link-to-child edge exactly where the explicit forms append their predicate.
+    /// </para>
+    /// <para>
+    /// The child source is the mapping of <typeparamref name="TChild"/> resolved from the data context -
+    /// the same resolution the source-less overloads use, so a configured mapping keeps precedence. The
+    /// returned builder is a copy; the current builder is unchanged.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type, inferred from the collection navigation.</typeparam>
+    /// <param name="collection">The parent-side collection navigation the joined children fill.</param>
+    /// <param name="filter">An additional predicate over the parent and child, conjoined into the join's <c>ON</c>; <see langword="null"/> for no additional restriction.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="collection"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The navigation does not resolve to a declared relationship, the cardinality or the keys are unsupported, or the key type has no value equality.</exception>
+    // Outranks the reference form for a collection-typed navigation: both overloads are applicable to
+    // `p => p.Children` (a concrete List<Children> also converts to `TChild` itself), and the reference
+    // form is ordinarily the "more specific" candidate, which would bind the collection to a one-to-one
+    // join. The priority makes the collection form the winner for exactly the navigations it supports.
+    [OverloadResolutionPriority(1)]
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        Expression<Func<TEntity, TChild, bool>>? filter = null,
+        Action<JoinOptions>? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(collection);
+        EnsureJoinIntoSource(nameof(JoinInto));
+
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
+
+        var relationship = ResolveJoinIntoRelationship(collection, opts);
+        var condition = BuildNavigationJoinCondition(relationship, filter);
+        var child = _dataProvider.From<TChild>();
+
+        if (relationship.Kind is RelationshipKind.ManyToMany)
+        {
+            var (manyToMany, linkJoin, childJoin) = JoinIntoManyToManySpec<TEntity, TChild>.Create(
+                child, condition, collection, relationship, JoinType.Left, opts, _dataProvider);
+            return AddJoinInto(manyToMany, linkJoin, childJoin);
+        }
+
+        var spec = new JoinIntoSpec<TEntity, TChild>(child, condition, collection, relationship, JoinType.Left);
+        return AddJoinInto(spec, CreateJoinIntoEdge(child, condition, opts));
+    }
+    /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to the mapping of <typeparamref name="TChild"/> that assigns the single
+    /// joined child to the one-to-one <paramref name="navigation"/> reference of every parent, taking both
+    /// join keys from the relationship the navigation declares. The navigation selects the relationship,
+    /// so the caller does not restate its keys: the <c>ON</c> condition is the ordered principal/foreign
+    /// component equality of the declared relationship, conjoined componentwise.
+    /// <para>
+    /// <paramref name="filter"/> is an <b>additional</b> restriction appended to that <c>ON</c> condition
+    /// as one more conjunct; it never replaces the declared-key equality and is never moved into a
+    /// parent-filtering <c>WHERE</c>, so a parent whose only candidate child is filtered out keeps a
+    /// <see langword="null"/> reference instead of disappearing. <see langword="null"/> means no
+    /// additional restriction. At most one child is assigned per parent, as for the explicit forms.
+    /// </para>
+    /// <para>
+    /// The child source is the mapping of <typeparamref name="TChild"/> resolved from the data context -
+    /// the same resolution the source-less overloads use, so a configured mapping keeps precedence. The
+    /// returned builder is a copy; the current builder is unchanged.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type, inferred from the reference navigation.</typeparam>
+    /// <param name="navigation">The parent-side reference navigation the joined child fills.</param>
+    /// <param name="filter">An additional predicate over the parent and child, conjoined into the join's <c>ON</c>; <see langword="null"/> for no additional restriction.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="navigation"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The navigation does not resolve to a declared one-to-one relationship, the navigation has no setter, or the key type has no value equality.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        Expression<Func<TEntity, TChild?>> navigation,
+        Expression<Func<TEntity, TChild, bool>>? filter = null,
+        Action<JoinOptions>? options = null)
+        where TChild : class
+    {
+        ArgumentNullException.ThrowIfNull(navigation);
+        EnsureJoinIntoSource(nameof(JoinInto));
+
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
+
+        var relationship = ResolveJoinIntoReferenceRelationship(navigation, opts);
+        var condition = BuildNavigationJoinCondition(relationship, filter);
+        var child = _dataProvider.From<TChild>();
+
+        var spec = new JoinIntoReferenceSpec<TEntity, TChild>(child, condition, navigation, relationship, JoinType.Left);
+        return AddJoinInto(spec, CreateJoinIntoEdge(child, condition, opts));
+    }
+    /// <summary>
+    /// Builds the <c>ON</c> condition of a navigation-first <c>JoinInto</c> from the declared relationship:
+    /// one equality per ordered principal/foreign component, conjoined in declaration order, with
+    /// <paramref name="filter"/> appended as an additional conjunct. A junction relationship contributes no
+    /// direct key equality - the junction synthesis supplies both edges - so only the filter (or an
+    /// always-true predicate when it is absent) is returned.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="relationship">The declared relationship the navigation resolved to.</param>
+    /// <param name="filter">The additional restriction, or <see langword="null"/> for none.</param>
+    /// <returns>The join condition.</returns>
+    private static Expression<Func<TEntity, TChild, bool>> BuildNavigationJoinCondition<TChild>(
+        IRelationshipMetadata relationship,
+        Expression<Func<TEntity, TChild, bool>>? filter)
+    {
+        if (relationship.Kind is RelationshipKind.ManyToMany)
+        {
+            if (filter is not null)
+                return filter;
+
+            return static (_, _) => true;
+        }
+
+        // A hand-written IRelationshipMetadata validates its keys lazily (or not at all); validate here so
+        // a malformed declaration is rejected before an index past the shorter key list can be read, and
+        // never degrades into a partially-keyed join.
+        RelationshipResolver.ValidateRelationship(relationship);
+
+        var principalKey = relationship.PrincipalKey;
+        var foreignKey = relationship.ForeignKey;
+
+        // The filter's own parameters are reused as the join parameters, so the appended filter needs no
+        // re-binding and both entities are bound exactly once in the emitted SQL.
+        var parentParameter = filter?.Parameters[0] ?? Expression.Parameter(typeof(TEntity), "p");
+        var childParameter = filter?.Parameters[1] ?? Expression.Parameter(typeof(TChild), "c");
+
+        Expression? condition = null;
+        for (var i = 0; i < principalKey.Count; i++)
+        {
+            var equality = JoinIntoSpecHelpers.BuildKeyEquality(
+                Expression.Property(parentParameter, principalKey[i].PropertyInfo),
+                Expression.Property(childParameter, foreignKey[i].PropertyInfo),
+                principalKey[i].PropertyInfo.PropertyType,
+                "JoinInto");
+            condition = condition is null ? equality : Expression.AndAlso(condition, equality);
+        }
+
+        var body = filter is null ? condition! : Expression.AndAlso(condition!, filter.Body);
+        return Expression.Lambda<Func<TEntity, TChild, bool>>(body, parentParameter, childParameter);
+    }
+    /// <summary>
+    /// Builds the child join edge of a navigation-first <c>JoinInto</c>: the metadata-derived condition as
+    /// the <c>ON</c> of a left join, with the per-join options copied onto the edge. This mirrors the edge
+    /// construction inside the legacy overloads, whose bodies stay frozen by the compatibility contract.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="child">The child source.</param>
+    /// <param name="condition">The join condition.</param>
+    /// <param name="options">The already-applied per-join options.</param>
+    /// <returns>The child join edge.</returns>
+    private JoinExpression CreateJoinIntoEdge<TChild>(
+        EntityBuilder<TChild> child,
+        Expression<Func<TEntity, TChild, bool>> condition,
+        JoinOptions options)
+        => new(condition, JoinType.Left)
+        {
+            From = JoinSourceLock.Apply(GetJoinSource(child), options),
+            Strictness = options.Strictness ?? JoinStrictness.Default,
+            IsGlobal = options.IsGlobal,
+            JoinHint = options.JoinHint,
+            TableHints = options.TableHints,
+            SuppressCartesianWarning = options.CartesianWarningSuppressed
+        };
     /// <summary>Validates the <c>JoinInto</c> join kind: only inner and left edges are supported.</summary>
     private static void EnsureJoinIntoSupported(JoinType joinType)
     {

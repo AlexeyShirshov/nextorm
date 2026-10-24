@@ -171,7 +171,7 @@ var orders = ctx.From<Order>()
 
 ### Overloads
 
-`JoinInto` comes in two families that differ by one argument: the child source is either supplied as an `EntityBuilder<TChild>` or resolved from the mapping of `TChild`. Both families fill the same navigations and share one contract, so choose by whether you have a child source in hand.
+`JoinInto` comes in three families. Two of them differ by one argument — the child source is either supplied as an `EntityBuilder<TChild>` or resolved from the mapping of `TChild` — and take an explicit `(parent, child) => …` predicate as the join condition; both fill the same navigations and share one contract, so choose by whether you have a child source in hand. The third family takes a navigation only and derives the join condition from the declared relationship metadata: see [Metadata-driven joins](#metadata-driven-joins).
 
 #### Source-less
 
@@ -310,7 +310,44 @@ To narrow the child set, write the condition into the predicate, which *is* the 
 
 ### Metadata-driven joins
 
-The metadata-driven, navigation-first shapes — a navigation alone, with the `ON` synthesized from the declared relationship metadata (`JoinInto(o => o.Invoice)`, `JoinInto(o => o.Items)`) — are a separate follow-up (**#331**) and are **not** part of this API. Every form documented on this page takes an explicit `(parent, child) => …` predicate.
+The navigation-first family takes **only a navigation**. The `ON` condition is synthesized from the declared relationship metadata, so the caller never restates the keys:
+
+```csharp
+// reference navigation (one-to-one) — TChild : class, always LEFT
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild?>> navigation,
+    Expression<Func<TEntity, TChild, bool>>? filter = null,
+    Action<JoinOptions>? options = null)
+    where TChild : class;
+
+// collection navigation (one-to-many or many-to-many) — always LEFT
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, ICollection<TChild>>> collection,
+    Expression<Func<TEntity, TChild, bool>>? filter = null,
+    Action<JoinOptions>? options = null);
+```
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto(o => o.Invoice)                     // reference: fills Order.Invoice
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(o => o.Items)                       // collection: fills Order.Items
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(o => o.Items, (o, i) => i.Active)   // additional filter, still a LEFT join
+    .ToList();
+```
+
+**Inference.** The child type comes from the navigation, so no explicit type argument is written. A single reference navigation binds the **reference** form and assigns that member; a declared `ICollection<T>` binds the **collection** form and fills it. A **concrete** collection navigation (`List<T>`, `HashSet<T>`, any other `ICollection<T>` implementation) is routed to the collection form as well: overload resolution alone would prefer the reference form for a concrete type, so the collection overload carries an explicit overload-resolution priority. That is a deliberate rule of this API, not an incidental binding.
+
+**`ON`.** One equality per declared key component, conjoined in declaration order, is read from [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata): `parent.<PrincipalKey[i]> == child.<ForeignKey[i]>`. A composite key contributes every component, positionally; nothing is matched by column name, and a default principal key is never reduced to its first component. A many-to-many navigation keeps its junction synthesis — the parent→junction edge pairs the parent key with the junction's parent foreign key componentwise, the junction→child edge pairs the child key with the junction's child foreign key — and the optional filter is appended to that child edge.
+
+**The second argument is a filter, not a key restatement.** When supplied it becomes one more conjunct **inside the same `ON`** condition; it never replaces the declared-key equality and is never moved into a `WHERE`. Omitting it, or passing `null`, means no additional restriction. Because these are `LEFT` joins, a reference whose only candidate is filtered out stays `null`, a collection whose children are all filtered out stays empty, and the parent row is preserved either way. Key restatement is unnecessary, so an arbitrary child condition is the normal use: `(o, i) => i.Active` narrows the children while the declared keys still decide which parent they belong to.
+
+**Boundary with the ten predicate forms.** The five original `JoinInto` overloads and their five source-less counterparts are **unchanged**: they keep their signatures, their explicit join kinds and their predicate-as-`ON` semantics — the caller's `(parent, child) => …` remains the whole join condition and no declared key is synthesized into it. The metadata-driven semantics described here belong **only** to the two navigation-first overloads; no legacy form was retro-fitted. Choose the navigation-first forms when the relationship is declared and the keys should come from metadata; keep the predicate forms when the join condition is genuinely yours (a non-declared pair, an extra correlation, an explicit `Inner`/`Left` choice).
 
 ### One-to-one reference
 
