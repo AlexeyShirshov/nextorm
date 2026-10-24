@@ -111,6 +111,16 @@ internal static class AdvancedAggregateTranslator
                 && node.Method.DeclaringType == typeof(PostgresFunctions):
                 EmitOrdered(visitor, node, hasFraction: true);
                 return true;
+            case nameof(PostgresFunctions.median) when node.Arguments.Count == 1
+                && node.Method.DeclaringType == typeof(PostgresFunctions):
+                EmitOrderedMedian(visitor, node);
+                return true;
+            case nameof(PostgresFunctions.percentile) when node.Arguments.Count == 2
+                && node.Method.DeclaringType == typeof(PostgresFunctions):
+                throw new NotSupportedException("The percentile function is not supported by PostgreSQL.");
+            case nameof(SqlServerFunctions.percentile) when node.Arguments.Count == 2
+                && node.Method.DeclaringType == typeof(SqlServerFunctions):
+                throw new NotSupportedException("The percentile function is not supported by SQL Server.");
             case nameof(PostgresFunctions.mode) when node.Arguments.Count == 1:
                 EmitOrdered(visitor, node, hasFraction: false);
                 return true;
@@ -170,7 +180,8 @@ internal static class AdvancedAggregateTranslator
             case nameof(ClickHouseFunctions.top_k_weighted) when node.Arguments.Count == 3:
                 EmitTopK(visitor, node, "top_k_weighted", weighted: true);
                 return true;
-            case nameof(ClickHouseFunctions.median) when node.Arguments.Count == 1:
+            case nameof(ClickHouseFunctions.median) when node.Arguments.Count == 1
+                && node.Method.DeclaringType == typeof(ClickHouseFunctions):
                 EmitMedian(visitor, node);
                 return true;
 
@@ -417,7 +428,10 @@ internal static class AdvancedAggregateTranslator
     /// </summary>
     private static void EmitOrdered(BaseExpressionVisitor visitor, MethodCallExpression node, bool hasFraction)
     {
-        if (!visitor.Dialect.SupportsOrderedAggregates)
+        // A dialect may express ordered-set aggregates without exposing the percentile members
+        // (mode is not a percentile), so the percentile forms need both gates.
+        if (!visitor.Dialect.SupportsOrderedAggregates
+            || (hasFraction && !visitor.Dialect.SupportsOrderedPercentiles))
             throw new NotSupportedException("The ordered-set aggregates (percentile_cont/percentile_disc/mode) are not supported by this provider.");
 
         var name = node.Method.Name;
@@ -431,16 +445,137 @@ internal static class AdvancedAggregateTranslator
             return;
         }
 
+        if (fractionArg is not null)
+            ValidateFraction(fractionArg, name, ProviderLabel(visitor.Dialect));
+
         visitor.NeedAliasForColumn = true;
 
         var aggregate = fractionArg is null
             ? $"{name}()"
             : $"{name}({visitor.VisitToString(fractionArg)})";
 
-        var orderBy = visitor.VisitToString(UnwrapLambdaBody(orderArg));
+        var orderBy = UnwrapLambdaBody(orderArg);
 
-        visitor.Builder!.Append(visitor.Dialect.MakeWithinGroup(aggregate, orderBy, visitor.KeywordCase));
+        if (name == nameof(PostgresFunctions.percentile_cont))
+            RequireFloatingContinuousSort(orderBy);
+
+        visitor.Builder!.Append(visitor.Dialect.MakeWithinGroup(aggregate, visitor.VisitToString(orderBy), visitor.KeywordCase));
     }
+
+    /// <summary>
+    /// Renders the native median composition <c>percentile_cont(0.5) within group (order by key)</c>
+    /// (PostgreSQL): the median is not a server function there, while the interpolated 0.5 percentile is.
+    /// </summary>
+    private static void EmitOrderedMedian(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        if (!visitor.Dialect.SupportsOrderedPercentiles)
+            throw new NotSupportedException("The ordered-set aggregates (percentile_cont/percentile_disc/mode) are not supported by this provider.");
+
+        var orderArg = node.Arguments[0];
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(UnwrapLambdaBody(orderArg));
+            return;
+        }
+
+        var orderBy = UnwrapLambdaBody(orderArg);
+        RequireFloatingContinuousSort(orderBy);
+
+        visitor.NeedAliasForColumn = true;
+        visitor.Builder!.Append(visitor.Dialect.MakeWithinGroup(
+            "percentile_cont(0.5)", visitor.VisitToString(orderBy), visitor.KeywordCase));
+    }
+
+    /// <summary>
+    /// The continuous percentile interpolates, so PostgreSQL returns <c>double precision</c> and the
+    /// library requires the sort expression to be floating-point. An integer/numeric sort would silently
+    /// rely on the server's implicit cast, so it is refused with the provider's own restriction text.
+    /// </summary>
+    internal static void RequireFloatingContinuousSort(Expression orderBy)
+    {
+        var type = Nullable.GetUnderlyingType(orderBy.Type) ?? orderBy.Type;
+        if (type != typeof(double) && type != typeof(float))
+            throw new NotSupportedException(
+                "The percentile_cont function on PostgreSQL requires a floating-point sort expression.");
+    }
+
+    /// <summary>
+    /// Validates a percentile fraction at SQL-generation time. The providers disagree on an invalid
+    /// fraction (an error on MariaDB/SQL Server, NULL on PostgreSQL, a conversion error on ClickHouse and
+    /// nothing at all on SQLite), so an out-of-range or non-row-independent fraction is refused before it
+    /// reaches the SQL text. Row-independence is required because the fraction is a direct argument of the
+    /// aggregate, not a per-row input.
+    /// </summary>
+    internal static void ValidateFraction(Expression fraction, string functionName, string provider)
+    {
+        if (fraction.Has<ParameterExpression>())
+            throw new NotSupportedException(
+                $"The fraction for {functionName} on {provider} must be a constant or a captured scalar.");
+
+        var value = ReadFraction(fraction, functionName, provider);
+        if (!double.IsFinite(value) || value is < 0 or > 1)
+            throw new ArgumentOutOfRangeException(
+                "fraction",
+                value,
+                $"The fraction for {functionName} on {provider} must be finite and between 0 and 1 inclusive.");
+    }
+
+    /// <summary>
+    /// Reads a row-independent fraction expression: a literal, a captured closure field/property, or any
+    /// other expression that does not reference the query parameter (a computed constant).
+    /// </summary>
+    private static double ReadFraction(Expression fraction, string functionName, string provider)
+    {
+        var expression = TypeFacts.UnwrapConvert(fraction);
+
+        switch (expression)
+        {
+            case ConstantExpression { Value: { } literal }:
+                return Convert.ToDouble(literal, CultureInfo.InvariantCulture);
+            case MemberExpression { Expression: ConstantExpression closure } member:
+                var captured = member.Member switch
+                {
+                    System.Reflection.FieldInfo field => field.GetValue(closure.Value),
+                    System.Reflection.PropertyInfo property => property.GetValue(closure.Value),
+                    _ => null
+                };
+                if (captured is not null)
+                    return Convert.ToDouble(captured, CultureInfo.InvariantCulture);
+                break;
+        }
+
+        try
+        {
+            return (double)Expression.Lambda(Expression.Convert(expression, typeof(double)))
+                .Compile()
+                .DynamicInvoke()!;
+        }
+        catch (Exception ex)
+        {
+            // A captured value that cannot be read is not a fraction this translator can render; the
+            // refusal must name the provider rather than surface a raw reflection/compile error.
+            throw new NotSupportedException(
+                $"The fraction for {functionName} on {provider} must be a constant or a captured scalar.", ex);
+        }
+    }
+
+    /// <summary>
+    /// The provider label of a percentile message. Core cannot reference the provider assemblies, so the
+    /// shipped dialect types are named here; an external dialect falls back to its own type name (the same
+    /// convention the base dialect uses for its "cannot render" refusals).
+    /// </summary>
+    internal static string ProviderLabel(ISqlDialect dialect) => dialect.GetType().Name switch
+    {
+        "PostgresDialect" => "PostgreSQL",
+        "SqlServerDialect" => "SQL Server",
+        "MySqlDialect" => "MySQL",
+        "MariaDbDialect" => "MariaDB",
+        "SqliteDialect" => "SQLite",
+        "ClickHouseDialect" => "ClickHouse",
+        var other => other
+    };
+
 
     /// <summary>
     /// Extracts the body of a quoted ordering lambda

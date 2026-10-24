@@ -138,6 +138,14 @@ See [JSON and JSONB (PostgreSQL)](../../scalar-functions/index.md) and
 * `percentile_cont`/`percentile_disc` are ordered-set aggregates rendered as
   `percentile_cont(f) within group (order by x)` ([`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates),
   [`MakeWithinGroup`](xref:NextORM.Core.ISqlDialect.MakeWithinGroup(System.String,System.String,NextORM.Core.KeywordCase))); `mode()` is the ordered-set mode;
+* `median(() => x)` is the same surface with the fraction fixed at `0.5`
+  (`percentile_cont(0.5) within group (order by x)`, [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles)):
+  PostgreSQL has no `median` function, and this form is an **aggregate** (one row per group), not a window
+  function, so it never takes `OVER`;
+* the continuous forms interpolate and return `double precision`, so `percentile_cont`/`median` require a
+  floating-point sort expression (an integer/numeric key is refused); `percentile_disc` keeps the sort type.
+  Fractions are `double` in `[0, 1]`, finite and constant/captured, and are validated before rendering; the
+  generic `percentile` is refused;
 * `bool_and`/`bool_or`/`every`, the `regr_*` regression family and `bit_and`/`bit_or`/`bit_xor` are
   PostgreSQL-only and are rejected by every other dialect;
 * `array_agg` and the string/array aggregate surface are gated by

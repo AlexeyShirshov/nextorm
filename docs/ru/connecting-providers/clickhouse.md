@@ -62,7 +62,9 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   `count_big`/`count_big_distinct`) приводятся так же — в `toInt32(...)` для возвращающих `int`
   вариантов и `toInt64(...)` для 64-битных; параметрические агрегаты квантилей `quantile(level)(value)`/`quantileExact`/
   `quantileTiming` и `median`, обёрнутые в `toFloat64(...)` (чтобы любой вариант материализовался как
-  `double`); агрегат произвольного значения `any_agg` — как `any` (кросс-провайдерно: `ANY_VALUE(x)` в
+  `double`); `median` — обычный агрегат (одна строка на группу), а у общего
+  `SqlFunctions.ClickHouse.percentile` нет нативного написания: вызов бросает `NotSupportedException`,
+  а не становится псевдонимом `quantile`/`median`; агрегат произвольного значения `any_agg` — как `any` (кросс-провайдерно: `ANY_VALUE(x)` в
   MySQL), а агрегат последней строки `any_last` — как `anyLast`; возвращающие массивы агрегаты
   `group_array`/`group_uniq_array` — как `groupArray`/`groupUniqArray` (материализуются как CLR `T[]`);
   агрегаты последовательностей/воронки
@@ -228,7 +230,7 @@ public sealed class TvpRow
 | Логические агрегаты | не поддерживаются (`bool_and`/`bool_or`/`every` — только PostgreSQL) |
 | Фильтрованный агрегат | комбинатор `-If` `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`, генерируемый из общего API фильтрации (без ANSI `filter (where ...)`) |
 | ArgMin / ArgMax | `argMin`/`argMax` |
-| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (как `toFloat64(...)`) |
+| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (как `toFloat64(...)`, агрегат: одна строка на группу); общий `percentile` и оконные `percentile_cont`/`percentile_disc` бросают `NotSupportedException` |
 | any_agg (произвольное значение) | `any(x)` (кросс-провайдерно; `ANY_VALUE(x)` в MySQL) |
 | any_last (последняя строка) | `anyLast(x)` |
 | Условная функция | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |

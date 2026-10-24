@@ -65,6 +65,30 @@ select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (
 
 В ClickHouse тот же запрос генерирует `toInt32(countIf((id > 10)))` и `sumIf(id, (b = true))`.
 
+## Медиана и квантили
+
+Четыре имени непереносимы и намеренно не взаимозаменяемы: `percentile_cont` интерполирует,
+`percentile_disc` возвращает входное значение, `median` — фиксированный случай `0.5`, а общий член
+`percentile` отклоняется везде вместо того, чтобы стать псевдонимом непрерывной формы.
+
+| C# | SQL | Провайдеры |
+|---|---|---|
+| `SqlFunctions.Postgres.percentile_cont(fraction, () => x)` | `percentile_cont(f) within group (order by x)` (`double precision`) | PostgreSQL: упорядоченный агрегат, одна строка на группу; только сортировка с плавающей точкой |
+| `SqlFunctions.Postgres.percentile_disc(fraction, () => x)` | `percentile_disc(f) within group (order by x)` (сохраняет тип выражения сортировки) | PostgreSQL: упорядоченный агрегат |
+| `SqlFunctions.Postgres.median(() => x)` | `percentile_cont(0.5) within group (order by x)` | PostgreSQL: агрегат, одна строка на группу |
+| `SqlFunctions.Sql.percentile_cont(fraction, x).Over(...)`, `percentile_disc(fraction, x).Over(...)` | `percentile_cont(f) within group (order by x) over (...)` | SQL Server (`float(53)`), MariaDB (`double(18,10)`): аналитическая форма, одна строка на входную строку, окно только с `partition by` |
+| `SqlFunctions.SqlServer.median(x).Over(...)`, `SqlFunctions.MySql.median(x).Over(...)` | `percentile_cont(0.5) within group (order by x) over (...)` | SQL Server, MariaDB: аналитическая форма, одна строка на входную строку, окно только с `partition by` |
+| `SqlFunctions.ClickHouse.median(x)` | `toFloat64(median(x))` | ClickHouse: агрегат семейства `quantile` (приблизительный) |
+| общий `percentile(fraction, value)` | `NotSupportedException` | все провайдеры |
+
+Дробь — это `double` в `[0, 1]`, никогда не проценты 0–100; она должна быть конечной и константной
+(литерал или захваченная переменная), а зависящая от строки дробь отклоняется при генерации SQL. SQLite
+отклоняет `median` и любые квантили (в поставляемой сборке нет агрегата `median` и указан
+`SQLITE_ENABLE_PERCENTILE=0`, а nextorm не эмулирует их), MySQL отклоняет все четыре (нет ни `MEDIAN(…)`,
+ни `PERCENTILE_*`), а ClickHouse отклоняет имена квантилей: его `median` — нативный агрегат семейства
+`quantile`, и для переносимых написаний не создаётся псевдонима `quantile*`. Аналитические формы
+обязательно завершаются `Over(...)`, а оконный `ORDER BY` или рамка отклоняются.
+
 ## Функции, возвращающие наборы (PostgreSQL)
 
 `SqlFunctions.Postgres.generate_series` и `SqlFunctions.Postgres.unnest` — это предобъявленные источники

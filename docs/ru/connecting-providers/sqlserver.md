@@ -129,7 +129,13 @@ SQL Server 2017+ включает
 SQL Server отрисовывает оконные квантили `SqlFunctions.Sql.percentile_cont(fraction, property).Over()` и
 `percentile_disc(...)` как `percentile_cont(fraction) within group (order by property) over (...)`
 ([`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow)); точной
-упорядоченно-агрегатной формы у него нет. Агрегат произвольного значения `any_agg` (`ANY_VALUE`)
+упорядоченно-агрегатной формы у него нет. Медиана — та же нативная композиция:
+`SqlFunctions.SqlServer.median(value).Over(...)` рендерит
+`percentile_cont(0.5) within group (order by value) over (...)`, одна строка на входную строку (не на
+группу); поддерживается только окно с `partition by`, поэтому оконный `ORDER BY` или рамка отклоняются,
+а вызов обязан быть завершён `Over(...)`. У общего `SqlFunctions.SqlServer.percentile` нет отдельного
+нативного написания — вызов бросает `NotSupportedException`. Дроби — это `double` в `[0, 1]`, а не
+проценты, и проверяются до рендеринга. Агрегат произвольного значения `any_agg` (`ANY_VALUE`)
 **не** включён: T-SQL даёт `ANY_VALUE` только в SQL Server 2025 / Fabric, чего версионно-агностичный
 диалект предположить не может.
 Методы типа XML `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
@@ -326,6 +332,8 @@ SQL Server также поддерживает многоколоночный т
 | Бинарные/checksum/прочие T-SQL | `checksum` / `binary_checksum` / `compress` / `decompress` / `rand` / `stuff` / `str` / `isdate` / `isnumeric` / `formatmessage` (гейт по имени) |
 | Метаданные T-SQL | `col_length` / `col_name` / `object_id` / `object_name` / `db_id` / `db_name` / `schema_id` / `schema_name` / `type_id` / `type_name` / `file_id` / `file_name` / `current_timezone` / `parsename` / `stats_date` и остальные семейства A-D (гейт по имени) |
 | Оконные квантили | `percentile_cont`/`percentile_disc` как `... within group (order by x) over (...)` (SQL Server 2012+) |
+| Медиана (аналитическая) | `SqlFunctions.SqlServer.median(v).Over(...)` → `percentile_cont(0.5) within group (order by v) over (...)`: одна строка на входную строку; окно только с `partition by` (`ORDER BY`/рамка отклоняются) |
+| Общий квантиль | не поддерживается: `SqlFunctions.SqlServer.percentile` бросает `NotSupportedException` |
 | Агрегат произвольного значения | не поддерживается (`ANY_VALUE` только в SQL Server 2025 / Fabric) |
 | Условные функции | `iif(...)` (переносимая, [`Iif`](xref:NextORM.Core.ISqlDialect.Iif)) / `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)) |
 | Предикаты полнотекстового поиска | `contains(...)` / `freetext(...)` (колонка должна быть полнотекстово проиндексирована) |

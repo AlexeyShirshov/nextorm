@@ -64,6 +64,30 @@ select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (
 
 On ClickHouse the same query renders `toInt32(countIf((id > 10)))` and `sumIf(id, (b = true))`.
 
+## Median and percentiles
+
+The four names are not portable and are deliberately not interchangeable: `percentile_cont` interpolates,
+`percentile_disc` returns an input value, `median` is the fixed `0.5` case, and the generic `percentile`
+member is refused everywhere instead of aliasing the continuous form.
+
+| C# | SQL | Providers |
+|---|---|---|
+| `SqlFunctions.Postgres.percentile_cont(fraction, () => x)` | `percentile_cont(f) within group (order by x)` (`double precision`) | PostgreSQL: ordered-set aggregate, one row per group; floating-point sort only |
+| `SqlFunctions.Postgres.percentile_disc(fraction, () => x)` | `percentile_disc(f) within group (order by x)` (keeps the sort expression's type) | PostgreSQL: ordered-set aggregate |
+| `SqlFunctions.Postgres.median(() => x)` | `percentile_cont(0.5) within group (order by x)` | PostgreSQL: aggregate, one row per group |
+| `SqlFunctions.Sql.percentile_cont(fraction, x).Over(...)`, `percentile_disc(fraction, x).Over(...)` | `percentile_cont(f) within group (order by x) over (...)` | SQL Server (`float(53)`), MariaDB (`double(18,10)`): analytic, one row per input row, partition-only `OVER` |
+| `SqlFunctions.SqlServer.median(x).Over(...)`, `SqlFunctions.MySql.median(x).Over(...)` | `percentile_cont(0.5) within group (order by x) over (...)` | SQL Server, MariaDB: analytic, one row per input row, partition-only `OVER` |
+| `SqlFunctions.ClickHouse.median(x)` | `toFloat64(median(x))` | ClickHouse: aggregate over the `quantile` family (approximate) |
+| generic `percentile(fraction, value)` | `NotSupportedException` | every provider |
+
+A fraction is a `double` in `[0, 1]`, never a 0–100 percentage; it must be finite and constant (a literal or
+a captured variable), and a row-dependent fraction is refused when the SQL is generated. SQLite refuses
+`median` and every percentile (the shipped build has no `median` aggregate and reports
+`SQLITE_ENABLE_PERCENTILE=0`, and nextorm provides no emulation), MySQL refuses all four (there is no
+`MEDIAN(…)` and no `PERCENTILE_*`), and ClickHouse refuses the percentile names: its `median` is the native
+`quantile`-family aggregate, and no `quantile*` alias is created for the portable spellings. The analytic
+forms must be completed with `Over(...)`, and a window `ORDER BY` or a frame is refused.
+
 ## Set-returning helpers (PostgreSQL)
 
 `SqlFunctions.Postgres.generate_series` and `SqlFunctions.Postgres.unnest` are pre-declared

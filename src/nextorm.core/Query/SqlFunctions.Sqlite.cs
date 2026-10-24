@@ -348,6 +348,29 @@ public class SqliteFunctions : CommonFunctions
     /// <summary>FTS3/4 <c>snippet(table, startMatch, endMatch, ellipses, columnIndex, tokensNumber)</c>. SQL-only.</summary>
     public string? FTS3Snippet(string? table, string? startMatch, string? endMatch, string? ellipses, int columnIndex, int tokensNumber) => throw new NotSupportedException(InMemoryFtsMessage);
 
+    /// <summary>
+    /// <c>median</c>: not supported by SQLite. The shipped SQLite build has no median aggregate
+    /// (it is neither a core function nor part of an enabled extension: <c>ENABLE_PERCENTILE</c> is off),
+    /// and this library does not emulate it. Referencing this member throws
+    /// <see cref="NotSupportedException"/> at translation time; no window rewrite or custom aggregate is
+    /// produced.
+    /// </summary>
+    /// <typeparam name="T">The value expression's type.</typeparam>
+    /// <param name="value">The value whose median would be taken.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public double? median<T>(T? value) => default!;
+
+    /// <summary>
+    /// <c>percentile</c>: not supported by SQLite. There is no native percentile aggregate and no
+    /// emulation is provided. Referencing this member throws <see cref="NotSupportedException"/> at
+    /// translation time.
+    /// </summary>
+    /// <typeparam name="T">The value expression's type.</typeparam>
+    /// <param name="fraction">The percentile fraction, in <c>[0, 1]</c>.</param>
+    /// <param name="value">The value whose percentile would be taken.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public double? percentile<T>(double fraction, T? value) => default!;
+
     /// <summary>The sentinel SQL name of the FTS5 table-valued form, rewritten by <c>SqliteDialect</c>.</summary>
     internal const string Fts5TableFunction = "fts5";
 

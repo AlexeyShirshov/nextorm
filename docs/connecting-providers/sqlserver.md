@@ -140,7 +140,13 @@ ANSI key words and `current_schema()`/`current_database()`/`version()` as `schem
 SQL Server renders the window percentiles `SqlFunctions.Sql.percentile_cont(fraction, property).Over()` and
 `percentile_disc(...)` as `percentile_cont(fraction) within group (order by property) over (...)`
 ([`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow)); it has no exact ordered-set
-aggregate form. The arbitrary-value aggregate `any_agg` (`ANY_VALUE`) is **not** enabled: T-SQL exposes
+aggregate form. The median is the same native composition:
+`SqlFunctions.SqlServer.median(value).Over(...)` renders
+`percentile_cont(0.5) within group (order by value) over (...)`, one row per input row (not one row per
+group); only a partition-only `OVER` is supported, so a window `ORDER BY` or a frame is refused, and the
+call must be completed with `Over(...)`. The generic `SqlFunctions.SqlServer.percentile` has no distinct
+native spelling and throws `NotSupportedException`. Fractions are `double` values in `[0, 1]`, not
+percentages, and are validated before rendering. The arbitrary-value aggregate `any_agg` (`ANY_VALUE`) is **not** enabled: T-SQL exposes
 `ANY_VALUE` only on SQL Server 2025 / Fabric, which the version-agnostic dialect cannot assume.
 The XML data-type methods `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
 `xml_query(xml, xpath)` and `xml_exist(xml, xpath)`
@@ -325,6 +331,8 @@ SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` ter
 | T-SQL binary/checksum/other | `checksum` / `binary_checksum` / `compress` / `decompress` / `rand` / `stuff` / `str` / `isdate` / `isnumeric` / `formatmessage` (per-name gated) |
 | T-SQL metadata | `col_length` / `col_name` / `object_id` / `object_name` / `db_id` / `db_name` / `schema_id` / `schema_name` / `type_id` / `type_name` / `file_id` / `file_name` / `current_timezone` / `parsename` / `stats_date` and the rest of the A-D families (per-name gated) |
 | Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (SQL Server 2012+) |
+| Median (analytic) | `SqlFunctions.SqlServer.median(v).Over(...)` → `percentile_cont(0.5) within group (order by v) over (...)`: one row per input row; partition-only `OVER` (`ORDER BY`/frame refused) |
+| Generic percentile | not supported: `SqlFunctions.SqlServer.percentile` throws `NotSupportedException` |
 | Arbitrary-value aggregate | not supported (`ANY_VALUE` is SQL Server 2025 / Fabric only) |
 | JSON output | whole result set as one JSON document, terminal `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[]))) |
 | XML output | whole result set as one XML document, terminal `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[]))) |

@@ -164,6 +164,7 @@ select id
 
 * агрегаты числа уникальных `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` (`toInt64`);
 * параметрические `quantile(level)(value)`/`quantile_exact`/`quantile_timing` и `median` (`toFloat64`), многоуровневые `quantiles(level1, level2, ...)(value)` (возвращают `Array(Float64)`, материализуются как CLR `double[]`; уровни должны быть inline-массивом);
+* `median` — нативный агрегат семейства `quantile` (приблизительный; одна строка на группу) и единственное имя квантилеподобной формы, которое рендерится: общий `SqlFunctions.ClickHouse.percentile` и оконные `percentile_cont`/`percentile_disc` бросают `NotSupportedException`, и для этих переносимых написаний не создаётся псевдонима `quantile*`;
 * агрегаты наиболее частых значений `topK(k)(value)`/`topKWeighted(k)(value, weight)` (возвращают `Array(T)`, материализуются как CLR `T[]`);
 * агрегат последнего произвольного значения `any_last` (`anyLast`);
 * возвращающие массивы агрегаты `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`, материализуются как CLR `T[]`; `groupArray` над array-колонкой даёт вложенный `T[][]`);

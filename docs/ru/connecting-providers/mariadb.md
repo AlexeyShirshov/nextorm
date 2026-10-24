@@ -14,7 +14,10 @@
 набор возможностей: `INTERSECT ALL` и `EXCEPT ALL` поддерживаются в MariaDB 10.4 и новее, поэтому
 [`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) равно `true`, а MariaDB 10.3+ рендерит оконные
 квантили `percentile_cont`/`percentile_disc` (`... within group (order by ...) over (...)`), поэтому
-[`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow) тоже равно `true`; `UPDATE ... RETURNING` включается только при явно
+[`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow) тоже равно `true`; та же аналитическая форма лежит в
+основе `SqlFunctions.MySql.median(value).Over(...)` (`percentile_cont(0.5) within group (order by value) over (...)`,
+одна строка на входную строку, окно только с `partition by`), а у общего `SqlFunctions.MySql.percentile`
+нет написания в MariaDB — вызов бросает `NotSupportedException`; `UPDATE ... RETURNING` включается только при явно
 настроенной версии сервера 13.0+ ([`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning)). Агрегат произвольного значения
 `any_agg` при этом **отключён**, потому что в MariaDB нет `ANY_VALUE` в 10.4–12.x (возможность SQL-2023
 `T626` всё ещё ожидается, ориентир — 13.2). Всё остальное (параметры, квотирование, `concat`, coalesce,
@@ -106,7 +109,10 @@ MariaDB отличается от [MySQL](mysql.md) возможностью о�
 | Session/info-функции | наследуются от MySQL (`current_user()`, `session_user()`, `schema()`, `database()`, `version()`) |
 | Произвольное значение | не поддерживается (в 10.4–12.x нет `ANY_VALUE`; ожидается MDEV-10426, ориентир — 13.2) |
 | Условная функция | наследуется от MySQL (`iif(cond, a, b)` → `if(cond, a, b)`) |
-| Оконные квантили | `percentile_cont`/`percentile_disc` как `... within group (order by x) over (...)` (MariaDB 10.3+) |
+| Оконные квантили | `percentile_cont`/`percentile_disc` как `... within group (order by x) over (...)` (MariaDB 10.3+); аналитическая: одна строка на входную строку |
+| Медиана (аналитическая) | `SqlFunctions.MySql.median(v).Over(...)` → `percentile_cont(0.5) within group (order by v) over (...)`: одна строка на входную строку; окно только с `partition by` (оконный `ORDER BY`/рамка отклоняются) |
+| Общий квантиль | не поддерживается: `SqlFunctions.MySql.percentile(fraction, v)` бросает `NotSupportedException("The percentile function is not supported by MariaDB.")` |
+| Дробь квантиля | `double` в `[0, 1]` (не проценты), проверяется до рендеринга; значение вне диапазона или не конечное число бросает `ArgumentOutOfRangeException` |
 | Нативные функции | поверхность `SqlFunctions.MySql`, унаследованная от MySQL, **минус** `uuid_to_bin`/`bin_to_uuid`, **плюс** имена MariaDB (расширенный regexp, `nvl`/`nvl2`, `add_months`/`months_between`, `to_char`/`to_date`/`to_number`, `kdf`, `xxh3`/`xxh32`, `json_detailed`/`json_compact`, доступ к последовательностям) |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` |
 

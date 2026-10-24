@@ -53,6 +53,16 @@
   ([`SupportsBooleanAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBooleanAggregates), [`SupportsBitAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBitAggregates), [`SupportsStatisticalAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStatisticalAggregates) and
   [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) are `true`): `bool_and`/`bool_or`/`every`, `bit_and`/`bit_or`/`bit_xor`,
   `corr`/`covar_*`/`regr_*` and `percentile_cont`/`percentile_disc`/`mode` with `WITHIN GROUP`;
+- the ordered-set percentile surface adds the `median` composition
+  (`SqlFunctions.Postgres.median(() => x)` → `percentile_cont(0.5) within group (order by x)`, an
+  **aggregate**: one row per group) under the separate
+  [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles) flag. The
+  continuous form interpolates, so `percentile_cont` and `median` require a floating-point sort
+  expression and refuse an integer/numeric one
+  (`The percentile_cont function on PostgreSQL requires a floating-point sort expression.`);
+  `percentile_disc` keeps the sort expression's type. A fraction is a `double` in `[0, 1]`, not a
+  percentage, and is validated before rendering; the generic `SqlFunctions.Postgres.percentile` has no
+  native spelling and throws `NotSupportedException`;
 - aggregate names are remapped: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
   `varp`→`var_pop`;
 - `Math.Log` maps to `ln(...)` (PostgreSQL's `log()` is base 10);
@@ -347,6 +357,7 @@ select t1.value, t2.somestring as "String"
 | Window functions | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` supported |
 | `date_add` / `end_of_month` / `DateTime.Add*` | interval arithmetic (`x + (n * interval '1 day')`) |
 | `string_agg` / `array_agg` / aggregate `filter` | supported (aggregate `filter` requires 9.4+; unset assumes ≥9.4) |
+| Median / percentiles | `SqlFunctions.Postgres.median(() => x)` → `percentile_cont(0.5) within group (order by x)` (aggregate, one row per group; floating-point sort only); `percentile_cont`/`percentile_disc` ordered-set; generic `percentile` throws (`SupportsOrderedPercentiles`) |
 | Server version | configured explicitly via the context `Version` |
 | Session/info functions | `current_user`, `session_user`, `current_schema`, `current_database()`, `version()` |
 | Table functions | `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat` |

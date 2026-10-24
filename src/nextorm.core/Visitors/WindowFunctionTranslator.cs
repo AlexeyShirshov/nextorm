@@ -32,11 +32,47 @@ internal static class WindowFunctionTranslator
             || declaringType.GetGenericTypeDefinition() != typeof(WindowFunction<>))
             return false;
 
-        if (node.Object is not MethodCallExpression functionCall
-            || (functionCall.Method.DeclaringType != typeof(CommonFunctions)
-                && functionCall.Method.DeclaringType != typeof(ClickHouseFunctions))
-            || WindowSql.MapWindowFunctionName(functionCall.Method.Name) is not { } functionName)
+        if (node.Object is not MethodCallExpression functionCall)
             return false;
+
+        // The residual percentile members live on a provider surface rather than on CommonFunctions and
+        // are analytic-only: the median is the native composition percentile_cont(0.5), and the generic
+        // percentile is refused. The refusal must fire before any fraction inspection, and it names the
+        // actual dialect because one CLR member serves both MySQL (no percentile at all) and MariaDB
+        // (native percentile_cont/percentile_disc window forms).
+        var functionDeclaringType = functionCall.Method.DeclaringType;
+        var provider = AdvancedAggregateTranslator.ProviderLabel(visitor.Dialect);
+        var isResidualMember = functionDeclaringType == typeof(SqlServerFunctions)
+            || functionDeclaringType == typeof(MySqlFunctions);
+
+        var isResidualMedian = isResidualMember
+            && functionCall.Method.Name == nameof(SqlServerFunctions.median);
+        var isResidualPercentile = isResidualMember
+            && functionCall.Method.Name == nameof(SqlServerFunctions.percentile);
+
+        if (isResidualPercentile)
+            throw new NotSupportedException($"The percentile function is not supported by {provider}.");
+
+        // The median has no spelling of its own on MySQL, so the capability default (false) is reported
+        // with the median's name rather than as a generic percentile refusal.
+        if (isResidualMedian && !visitor.Dialect.SupportsPercentileWindow)
+            throw new NotSupportedException($"The median function is not supported by {provider}.");
+
+        string functionName;
+        if (isResidualMedian)
+        {
+            functionName = "percentile_cont";
+        }
+        else if ((functionCall.Method.DeclaringType == typeof(CommonFunctions)
+                || functionCall.Method.DeclaringType == typeof(ClickHouseFunctions))
+            && WindowSql.MapWindowFunctionName(functionCall.Method.Name) is { } mapped)
+        {
+            functionName = mapped;
+        }
+        else
+        {
+            return false;
+        }
 
         // The Over overloads differ in which parameters are present (partition-only, order-only, arrays,
         // a named window, frame), so the arguments are mapped by parameter name/type rather than by position.
@@ -80,9 +116,9 @@ internal static class WindowFunctionTranslator
         if (functionName == "nth_value" && !visitor.Dialect.SupportsNthValue)
             throw new NotSupportedException("The nth_value window function is not supported by this provider.");
 
-        var isPercentile = functionName is "percentile_cont" or "percentile_disc";
+        var isPercentile = isResidualMedian || functionName is "percentile_cont" or "percentile_disc";
         if (isPercentile && !visitor.Dialect.SupportsPercentileWindow)
-            throw new NotSupportedException("The percentile_cont/percentile_disc window functions are not supported by this provider.");
+            throw new NotSupportedException($"The {functionName} function is not supported by {provider}.");
 
         if (visitor.IsParamMode)
         {
@@ -103,6 +139,12 @@ internal static class WindowFunctionTranslator
         }
 
         var frame = EvaluateWindowFrame(visitor, frameArgument);
+
+        // The median composition takes its ordering from the value argument, so a window ORDER BY or a
+        // frame would silently change the statistic instead of the window shape; refuse it.
+        if (isResidualMedian && (orders.Count > 0 || frame is not null))
+            throw new NotSupportedException(
+                "The median window function supports a partition-only OVER clause; a window ORDER BY or a frame is not supported.");
 
         if (frame is not null)
         {
@@ -125,9 +167,24 @@ internal static class WindowFunctionTranslator
         if (isPercentile)
         {
             visitor.Builder!.Append(functionName).Append('(');
-            visitor.Visit(functionArgs[0]);
+
+            if (isResidualMedian)
+            {
+                // median == percentile_cont(0.5); the fraction is fixed, so there is no user input to
+                // validate and no literal interpolation of a caller value.
+                visitor.Builder!.Append("0.5");
+            }
+            else
+            {
+                AdvancedAggregateTranslator.ValidateFraction(
+                    functionArgs[0],
+                    functionName,
+                    AdvancedAggregateTranslator.ProviderLabel(visitor.Dialect));
+                visitor.Visit(functionArgs[0]);
+            }
+
             visitor.Builder!.Append(visitor.Kw(") within group (order by "));
-            visitor.Visit(functionArgs[1]);
+            visitor.Visit(functionArgs[isResidualMedian ? 0 : 1]);
             visitor.Builder!.Append(named ? visitor.Kw(") over ") : visitor.Kw(") over ("));
         }
         else

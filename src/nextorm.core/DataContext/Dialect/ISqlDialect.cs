@@ -352,6 +352,17 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsPercentileWindow { get; }
     /// <summary>
+    /// True when the provider expresses percentiles and the median as an ordered-set aggregate
+    /// (<c>percentile_cont(fraction) within group (order by key)</c>) rather than as a window function:
+    /// <see cref="PostgresFunctions.percentile_cont"/>, <see cref="PostgresFunctions.percentile_disc"/>
+    /// and <see cref="PostgresFunctions.median"/>. The safe default is <c>false</c>; only PostgreSQL opts
+    /// in today. This is deliberately separate from <see cref="SupportsOrderedAggregates"/>, which also
+    /// covers non-percentile members (<c>mode</c>), and from <see cref="SupportsPercentileWindow"/>,
+    /// which is the analytic shape. Declared as a default interface member so existing external
+    /// implementations keep compiling.
+    /// </summary>
+    bool SupportsOrderedPercentiles => false;
+    /// <summary>
     /// True when the provider can declare named windows (<c>WINDOW w AS (...)</c>) and reference them
     /// with <c>OVER w</c>. The safe default is <c>false</c>; PostgreSQL, MySQL, MariaDB, ClickHouse and
     /// SQLite opt in, while SQL Server has no <c>WINDOW</c> clause.

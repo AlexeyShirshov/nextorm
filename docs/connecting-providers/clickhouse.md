@@ -61,7 +61,9 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   the same way — to `toInt32(...)` for the `int`-returning variants and `toInt64(...)` for the 64-bit
   ones; the
   parameterised quantile aggregates `quantile(level)(value)`/`quantileExact`/`quantileTiming` and
-  `median` wrapped in `toFloat64(...)` (so every variant materialises as a CLR `double`); the
+  `median` wrapped in `toFloat64(...)` (so every variant materialises as a CLR `double`); `median` is a
+  plain aggregate (one row per group), and the generic `SqlFunctions.ClickHouse.percentile` has no native
+  spelling and throws `NotSupportedException` rather than aliasing `quantile`/`median`; the
   arbitrary-value aggregate `any_agg` as `any` (cross-provider: `ANY_VALUE(x)` on MySQL) and the
   last-row aggregate `any_last` as `anyLast`; the array-returning aggregates `group_array`/`group_uniq_array`
   as `groupArray`/`groupUniqArray` (materialised as a CLR `T[]`); the sequence/funnel aggregates
@@ -226,7 +228,7 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
 | Boolean aggregates | not supported (`bool_and`/`bool_or`/`every` are PostgreSQL-only) |
 | Filtered aggregate | the `-If` combinator `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`, emitted from the shared filter API (no ANSI `filter (where ...)`) |
 | ArgMin / ArgMax | `argMin`/`argMax` |
-| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (as `toFloat64(...)`) |
+| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (as `toFloat64(...)`, aggregate: one row per group); generic `percentile` and the window `percentile_cont`/`percentile_disc` throw `NotSupportedException` |
 | any_agg (arbitrary value) | `any(x)` (cross-provider; `ANY_VALUE(x)` on MySQL) |
 | any_last (last row) | `anyLast(x)` |
 | Conditional function | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |

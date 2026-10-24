@@ -112,6 +112,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsNthValue => false;
     /// <summary>Defaults to <c>false</c>; SQL Server and MariaDB opt into the window percentile functions.</summary>
     public virtual bool SupportsPercentileWindow => false;
+    /// <summary>Defaults to <c>false</c>; PostgreSQL opts into the ordered-set percentile/median form.</summary>
+    public virtual bool SupportsOrderedPercentiles => false;
     /// <summary>Defaults to <c>false</c>; PostgreSQL, MySQL, MariaDB, ClickHouse and SQLite opt into named windows.</summary>
     public virtual bool SupportsNamedWindows => false;
     /// <summary>Defaults to <c>false</c>; PostgreSQL, ClickHouse and SQLite opt into the <c>GROUPS</c> frame unit.</summary>

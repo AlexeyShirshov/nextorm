@@ -486,7 +486,7 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 | Последняя строка | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
 | С фильтром | `SqlFunctions.Sql.count(() => p)`, `sum(x, () => p)`, `avg(x, () => p)`, `min(x, () => p)`, `max(x, () => p)` | `count(*) filter (where p)`, ... / `countIf(p)`, `sumIf(x, p)`, ... | [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) | PostgreSQL (9.4+), SQLite (ANSI `FILTER`), ClickHouse (`-If`) |
 | Последовательности / воронка | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)`, `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
-| Упорядоченные | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
+| Упорядоченные | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `median(() => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, `percentile_cont(0.5) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) (`mode`), [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles) (квантили, `median`) | PostgreSQL |
 
 MariaDB **не** поддерживает `any_agg`: в 10.4–12.x нет `ANY_VALUE` (возможность SQL-2023 `T626` всё ещё
 ожидается, ориентир — 13.2), поэтому [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) равно `false`, а вызов отклоняется через `NotSupportedException`.
@@ -532,6 +532,17 @@ select groupBitAnd(id), covarPop(id, nullableint), argMax(somestring, id)
 Упорядоченные агрегаты принимают ключ сортировки как цитируемую лямбду, которая замыкается на параметр
 запроса; ключ становится `order by <key>`. Вызов такого агрегата у провайдера без соответствующей
 возможности бросает `NotSupportedException`.
+
+В PostgreSQL медиана не является серверной функцией: `SqlFunctions.Postgres.median(() => x)` рендерит
+`percentile_cont(0.5) within group (order by x)` и является **агрегатом** (одна строка на группу) под
+[`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles). Непрерывные формы интерполируют
+и возвращают `double precision`, поэтому `percentile_cont` и `median` требуют выражения сортировки с плавающей
+точкой — целочисленный/`numeric` ключ отклоняется с
+`The percentile_cont function on PostgreSQL requires a floating-point sort expression.`,
+а `percentile_disc` сохраняет тип выражения сортировки. Дробь — это `double` в `[0, 1]`, а не проценты; она
+должна быть конечной и константной (литерал или захваченная переменная), а зависящая от строки дробь
+отклоняется при генерации SQL. Общий `SqlFunctions.Postgres.percentile(fraction, () => x)` отклоняется:
+он никогда не становится псевдонимом непрерывной формы.
 
 Агрегаты ClickHouse для последовательностей/воронки принимают условия как встроенные булевы выражения
 (столбец `timestamp` — первым). `window_funnel` возвращает длину наибольшей последовательной цепочки в

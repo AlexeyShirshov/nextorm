@@ -100,7 +100,9 @@ ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // limit 184467440737
 | Session/info-функции | `current_user()`, `session_user()`, `schema()`, `database()`, `version()` |
 | Произвольное значение | `ANY_VALUE(x)` |
 | Условная функция | `iif(cond, a, b)` → `if(cond, a, b)` |
-| Оконные квантили | не поддерживаются (`PERCENTILE_CONT` только в MariaDB) |
+| Оконные квантили | не поддерживаются: `percentile_cont`/`percentile_disc` в оконной форме бросают `NotSupportedException` (в MySQL нет ни функций, ни `WITHIN GROUP`; `PERCENTILE_CONT` только в MariaDB) |
+| Медиана (аналитическая) | не поддерживается: `SqlFunctions.MySql.median(v).Over(...)` бросает `NotSupportedException("The median function is not supported by MySQL.")` |
+| Общий квантиль | не поддерживается: `SqlFunctions.MySql.percentile(fraction, v)` бросает `NotSupportedException("The percentile function is not supported by MySQL.")` |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` |
 
 MySQL 8.0.31 и новее поддерживает `INTERSECT`/`EXCEPT`; диалект отклоняет варианты `*ALL` с

@@ -53,6 +53,16 @@
   [`SupportsBitAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBitAggregates), [`SupportsStatisticalAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStatisticalAggregates) и [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) равны `true`):
   `bool_and`/`bool_or`/`every`, `bit_and`/`bit_or`/`bit_xor`, `corr`/`covar_*`/`regr_*` и
   `percentile_cont`/`percentile_disc`/`mode` с `WITHIN GROUP`;
+- поверхность упорядоченных квантилей добавляет композицию `median`
+  (`SqlFunctions.Postgres.median(() => x)` → `percentile_cont(0.5) within group (order by x)`,
+  **агрегат**: одна строка на группу) под отдельным флагом
+  [`SupportsOrderedPercentiles`](xref:NextORM.Core.ISqlDialect.SupportsOrderedPercentiles).
+  Непрерывная форма интерполирует, поэтому `percentile_cont` и `median` требуют выражения сортировки
+  с плавающей точкой и отклоняют целочисленное/numeric
+  (`The percentile_cont function on PostgreSQL requires a floating-point sort expression.`);
+  `percentile_disc` сохраняет тип выражения сортировки. Дробь — это `double` в `[0, 1]`, а не
+  проценты, и проверяется до рендеринга; у общего `SqlFunctions.Postgres.percentile` нет нативного
+  написания, вызов бросает `NotSupportedException`;
 - имена агрегатов переотображаются: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
   `varp`→`var_pop`;
 - `Math.Log` отображается на `ln(...)` (в PostgreSQL `log()` — это логарифм по основанию 10);
@@ -349,6 +359,7 @@ select t1.value, t2.somestring as "String"
 | Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются |
 | `date_add` / `end_of_month` / `DateTime.Add*` | интервальная арифметика (`x + (n * interval '1 day')`) |
 | `string_agg` / `array_agg` / `filter` у агрегатов | поддерживаются (`filter` у агрегатов требует 9.4+; незаданная версия — ≥9.4) |
+| Медиана / квантили | `SqlFunctions.Postgres.median(() => x)` → `percentile_cont(0.5) within group (order by x)` (агрегат, одна строка на группу; сортировка только с плавающей точкой); `percentile_cont`/`percentile_disc` — ordered-set; общий `percentile` бросает (`SupportsOrderedPercentiles`) |
 | Версия сервера | настраивается явно через `Version` у контекста |
 | Session/info-функции | `current_user`, `session_user`, `current_schema`, `current_database()`, `version()` |
 | Табличные функции | `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat`, `jsonb_to_record`/`jsonb_to_recordset` (схема из `TRow`) |

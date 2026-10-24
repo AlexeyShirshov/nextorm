@@ -213,6 +213,34 @@ internal static class NormSqlTranslator
             && !AdvancedAggregateTranslator.IsAggregateOverWindowName(node))
             throw new NotSupportedException($"The window function {windowFunction} must be completed with Over(...).");
 
+        // The residual percentile members live on a provider surface; only the median is native (the
+        // percentile member is refused by the aggregate translator, which keeps the provider-named
+        // refusal in one place). The median has no window spelling of its own, so the message names the
+        // native composition it becomes. The generic percentile is refused outright with the actual
+        // provider's name, before the missing-Over shape check.
+        if (node.Method.DeclaringType == typeof(MySqlFunctions)
+            && node.Method.Name == nameof(MySqlFunctions.percentile))
+            throw new NotSupportedException(
+                $"The percentile function is not supported by {AdvancedAggregateTranslator.ProviderLabel(visitor.Dialect)}.");
+
+        // ClickHouse spellings that the dialect does not expose as a native name are refused with the
+        // provider's name rather than falling through to a name-table lookup.
+        if (node.Method.DeclaringType == typeof(ClickHouseFunctions)
+            && node.Method.Name == nameof(ClickHouseFunctions.percentile))
+            throw new NotSupportedException("The percentile function is not supported by ClickHouse.");
+
+        if ((node.Method.DeclaringType == typeof(SqlServerFunctions)
+                || node.Method.DeclaringType == typeof(MySqlFunctions))
+            && node.Method.Name == nameof(SqlServerFunctions.median))
+        {
+            if (!visitor.Dialect.SupportsPercentileWindow)
+                throw new NotSupportedException(
+                    $"The median function is not supported by {AdvancedAggregateTranslator.ProviderLabel(visitor.Dialect)}.");
+
+            throw new NotSupportedException(
+                "The window function percentile_cont must be completed with Over(...).");
+        }
+
         // The ClickHouse-native functions are probed first: their names can collide with a
         // cross-provider built-in (for example extract, md5) that is matched by name only.
         if (ClickHouseNativeFunctionTranslator.TryTranslate(visitor, node))

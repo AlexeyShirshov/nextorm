@@ -878,4 +878,31 @@ namespace NextORM.Core;
         /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
         /// </summary>
         public short xact_state() => default!;
+
+        /// <summary>
+        /// <c>percentile_cont(0.5) within group (order by value) over (...)</c>: the median as the native
+        /// analytic composition (T-SQL has no <c>median</c> function). Complete the call with
+        /// <c>Over(...)</c>: a partition-only window (or an empty <c>over ()</c>) is
+        /// supported, while a window <c>ORDER BY</c> or a frame is refused. The result keeps one row per
+        /// input row, unlike an aggregate. Requires the window percentile capability
+        /// (see <see cref="ISqlDialect.SupportsPercentileWindow"/>; SQL Server and MariaDB).
+        /// </summary>
+        /// <typeparam name="T">The value expression's type.</typeparam>
+        /// <param name="value">The value to take the median of.</param>
+        /// <returns>The interpolated median of the window, or SQL NULL when the window has no non-null values.</returns>
+        public WindowFunction<double?> median<T>(T? value) => default!;
+
+        /// <summary>
+        /// <c>percentile</c>: not supported by SQL Server. The native spellings are
+        /// <c>CommonFunctions.percentile_cont</c> and
+        /// <c>CommonFunctions.percentile_disc</c> completed with
+        /// <c>Over(...)</c>, which differ in whether the result is interpolated or
+        /// an input value; a generic alias would hide that difference. Referencing this member throws
+        /// <see cref="NotSupportedException"/> at translation time.
+        /// </summary>
+        /// <typeparam name="T">The value expression's type.</typeparam>
+        /// <param name="fraction">The percentile fraction, in <c>[0, 1]</c>.</param>
+        /// <param name="value">The value to take the percentile of.</param>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public WindowFunction<double?> percentile<T>(double fraction, T? value) => default!;
     }

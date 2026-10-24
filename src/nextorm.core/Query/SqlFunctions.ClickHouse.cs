@@ -112,6 +112,18 @@ namespace NextORM.Core;
         public double? median<T>(T? value) => default!;
 
         /// <summary>
+        /// <c>percentile</c>: not supported by ClickHouse. The native spellings are the
+        /// <c>quantile(level)(value)</c> family and <see cref="median{T}"/>, which differ in their
+        /// algorithm and in whether the 0.5 level is fixed; a generic alias would hide that difference.
+        /// Referencing this member throws <see cref="NotSupportedException"/> at translation time.
+        /// </summary>
+        /// <typeparam name="T">The value expression's type.</typeparam>
+        /// <param name="fraction">The percentile fraction, in <c>[0, 1]</c>.</param>
+        /// <param name="value">The value whose percentile would be taken.</param>
+        /// <returns>Never returns; the call is refused when the query is translated.</returns>
+        public double? percentile<T>(double fraction, T? value) => default!;
+
+        /// <summary>
         /// <c>quantiles(level1, level2, ...)(value)</c>: the approximate quantiles at every
         /// <paramref name="levels"/> value in one pass. The native result is <c>Array(Float64)</c>,
         /// surfaced as <c>double[]</c> and projected directly. Requires a provider that supports the

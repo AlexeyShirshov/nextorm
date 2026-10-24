@@ -254,4 +254,33 @@ public class MySqlFunctions : CommonFunctions
     /// connection. MariaDB-only; the <paramref name="sequence"/> name is emitted as an identifier.
     /// </summary>
     public long? lastval(string? sequence) => default!;
+
+    /// <summary>
+    /// <c>percentile_cont(0.5) within group (order by value) over (...)</c>: the median as the native
+    /// analytic composition (neither MySQL nor MariaDB has a <c>median</c> function). Complete the call
+    /// with <c>Over(...)</c>: a partition-only window (or an empty <c>over ()</c>) is supported, while a
+    /// window <c>ORDER BY</c> or a frame is refused. The result keeps one row per input row, unlike an
+    /// aggregate. MariaDB supports the form (MariaDB 10.3+, <c>double(18,10)</c>); MySQL has neither the
+    /// function nor the <c>WITHIN GROUP</c> grammar and refuses the call with
+    /// <see cref="NotSupportedException"/> naming MySQL. Requires
+    /// <see cref="ISqlDialect.SupportsPercentileWindow"/>.
+    /// </summary>
+    /// <typeparam name="T">The value expression's type.</typeparam>
+    /// <param name="value">The value to take the median of.</param>
+    /// <returns>The interpolated median of the window, or SQL NULL when the window has no non-null values.</returns>
+    public WindowFunction<double?> median<T>(T? value) => default!;
+
+    /// <summary>
+    /// <c>percentile</c>: not supported by MySQL or MariaDB. The native spellings are the window
+    /// <c>CommonFunctions.percentile_cont</c> (interpolated) and
+    /// <c>CommonFunctions.percentile_disc</c> (an input value) completed with <c>Over(...)</c>, which
+    /// differ in whether the result is interpolated; a generic alias would hide that difference.
+    /// Referencing this member throws <see cref="NotSupportedException"/> at translation time, naming the
+    /// actual provider. The <paramref name="fraction"/> is a fraction in <c>[0, 1]</c>, not a percentage.
+    /// </summary>
+    /// <typeparam name="T">The value expression's type.</typeparam>
+    /// <param name="fraction">The percentile fraction, in <c>[0, 1]</c>.</param>
+    /// <param name="value">The value to take the percentile of.</param>
+    /// <returns>Never returns; the call is refused when the query is translated.</returns>
+    public WindowFunction<double?> percentile<T>(double fraction, T? value) => default!;
 }
