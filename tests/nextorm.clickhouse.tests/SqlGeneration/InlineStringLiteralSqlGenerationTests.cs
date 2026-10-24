@@ -311,4 +311,54 @@ public class InlineStringLiteralSqlGenerationTests
             DecodeClickHouseLiteral(sql).Should().Be(value);
         }
     }
+
+    /// <summary>
+    /// Renders a selected constant <c>char</c>. The single-row/single-column lane skips the row
+    /// materializer (char is not a materialisable result type), so the statement text is observable
+    /// without a database — exactly the seam this regression pins.
+    /// </summary>
+    private static string SqlForChar(IDataContext ctx, char value)
+    {
+        var parameter = Expression.Parameter(typeof(IComplexEntity), "x");
+        var projection = Expression.Lambda<Func<IComplexEntity, char>>(
+            Expression.Constant(value, typeof(char)), parameter);
+        var command = ctx.From<IComplexEntity>().Select(projection);
+        command.SingleRow = true;
+
+        return Normalize(((DbPreparedQueryCommand<char>)ctx.GetPreparedQueryCommand(
+            command, false, false, CancellationToken.None)).DbCommand.CommandText);
+    }
+
+    [Theory]
+    [Trait("Issue", "327")]
+    [InlineData('a', "'a'")]
+    [InlineData('\'', "'\\''")]
+    [InlineData('\\', "'\\\\'")]
+    public void InlineCharConstant_ShouldUseTheStringPolicy(char value, string expectedLiteral)
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        SqlForChar(ctx, value).Should().Contain(
+            "select " + expectedLiteral,
+            "a char constant is a one-character string and takes the ClickHouse backslash-escape policy");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineDefaultChar_ShouldUseTheFixedWidthHexRecipe()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        SqlForChar(ctx, default).Should().Contain(@"select '\x00'",
+            "default(char) is one U+0000, spelled as the fixed-width hex escape");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineCharC0Character_ShouldUseTheFixedWidthHexEscape()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        SqlForChar(ctx, '\u0001').Should().Contain(@"select '\x01'");
+    }
 }

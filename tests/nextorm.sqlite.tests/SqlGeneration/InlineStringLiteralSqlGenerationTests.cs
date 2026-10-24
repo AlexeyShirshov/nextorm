@@ -282,4 +282,56 @@ public class InlineStringLiteralSqlGenerationTests
         SqlOf(ctx, e.Where(x => x.String == "abc").Select(x => new { x.Id }))
             .Should().Contain("where somestring = 'abc'");
     }
+
+    /// <summary>
+    /// Renders a selected constant <c>char</c>. The single-row/single-column lane skips the row
+    /// materializer (char is not a materialisable result type), so the statement text is observable
+    /// without a database — exactly the seam this regression pins.
+    /// </summary>
+    private static string SqlForChar(IDataContext ctx, char value)
+    {
+        var parameter = Expression.Parameter(typeof(IComplexEntity), "x");
+        var projection = Expression.Lambda<Func<IComplexEntity, char>>(
+            Expression.Constant(value, typeof(char)), parameter);
+        var command = ctx.From<IComplexEntity>().Select(projection);
+        command.SingleRow = true;
+
+        return Normalize(((DbPreparedQueryCommand<char>)ctx.GetPreparedQueryCommand(
+            command, false, false, CancellationToken.None)).DbCommand.CommandText);
+    }
+
+    [Theory]
+    [Trait("Issue", "327")]
+    [InlineData('a', "'a'")]
+    [InlineData('\'', "''''")]
+    [InlineData('\\', "'\\'")]
+    public void InlineCharConstant_ShouldUseTheStringPolicy(char value, string expectedLiteral)
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        SqlForChar(ctx, value).Should().Contain(
+            "select " + expectedLiteral,
+            "a char constant is a one-character string and takes the SQLite string-literal policy");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineDefaultChar_ShouldUseTheNulBlobRecipe()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = SqlForChar(ctx, default);
+        sql.Should().Contain("select CAST(X'00' AS TEXT)", "default(char) is one U+0000, not an empty value");
+        DecodeTextBlobLiteral(sql).Should().Be("\0");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineCharC0Character_ShouldRemainVerbatim()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var value = '\u0001';
+
+        SqlForChar(ctx, value).Should().Contain("select '" + value + "'");
+    }
 }

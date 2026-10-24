@@ -279,4 +279,55 @@ public class InlineStringLiteralSqlGenerationTests
             "the whole 4096-character Unicode value is one literal with the N prefix");
         sql.Should().NotContain("' + N'", "the literal is neither split nor truncated");
     }
+
+    /// <summary>
+    /// Renders a selected constant <c>char</c>. The single-row/single-column lane skips the row
+    /// materializer (char is not a materialisable result type), so the statement text is observable
+    /// without a database — exactly the seam this regression pins.
+    /// </summary>
+    private static string SqlForChar(IDataContext ctx, char value)
+    {
+        var parameter = Expression.Parameter(typeof(IComplexEntity), "x");
+        var projection = Expression.Lambda<Func<IComplexEntity, char>>(
+            Expression.Constant(value, typeof(char)), parameter);
+        var command = ctx.From<IComplexEntity>().Select(projection);
+        command.SingleRow = true;
+
+        return Normalize(((DbPreparedQueryCommand<char>)ctx.GetPreparedQueryCommand(
+            command, false, false, CancellationToken.None)).DbCommand.CommandText);
+    }
+
+    [Theory]
+    [Trait("Issue", "327")]
+    [InlineData('a', "N'a'")]
+    [InlineData('\'', "N''''")]
+    [InlineData('\\', "N'\\'")]
+    public void InlineCharConstant_ShouldUseTheStringPolicy(char value, string expectedLiteral)
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        SqlForChar(ctx, value).Should().Contain(
+            "select " + expectedLiteral,
+            "a char constant is a one-character Unicode literal and takes the SQL Server string policy");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineDefaultChar_ShouldSpliceNcharZero()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        SqlForChar(ctx, default).Should().Contain("select NCHAR(0)",
+            "default(char) is one U+0000, spelled with the existing NCHAR(0) recipe");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineCharC0Character_ShouldRemainVerbatim()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var value = '\u0001';
+
+        SqlForChar(ctx, value).Should().Contain("select N'" + value + "'");
+    }
 }

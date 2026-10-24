@@ -272,4 +272,57 @@ public class InlineStringLiteralSqlGenerationTests
                 $"U+{code:X4} is transported as the lowercase fixed-width E-string escape");
         }
     }
+
+    /// <summary>
+    /// Renders a selected constant <c>char</c>. The single-row/single-column lane skips the row
+    /// materializer (char is not a materialisable result type), so the statement text is observable
+    /// without a database — exactly the seam this regression pins.
+    /// </summary>
+    private static string SqlForChar(IDataContext ctx, char value)
+    {
+        var parameter = Expression.Parameter(typeof(IComplexEntity), "x");
+        var projection = Expression.Lambda<Func<IComplexEntity, char>>(
+            Expression.Constant(value, typeof(char)), parameter);
+        var command = ctx.From<IComplexEntity>().Select(projection);
+        command.SingleRow = true;
+
+        return Normalize(((DbPreparedQueryCommand<char>)ctx.GetPreparedQueryCommand(
+            command, false, false, CancellationToken.None)).DbCommand.CommandText);
+    }
+
+    [Theory]
+    [Trait("Issue", "327")]
+    [InlineData('a', @"E'a'")]
+    [InlineData('\'', @"E'\''")]
+    [InlineData('\\', @"E'\\'")]
+    public void InlineCharConstant_ShouldUseTheStringPolicy(char value, string expectedLiteral)
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        SqlForChar(ctx, value).Should().Contain(
+            "select " + expectedLiteral,
+            "a char constant is a one-character E-string and takes the PostgreSQL string policy");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineDefaultChar_ShouldBeRejectedBeforeRendering()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var exception = FluentActions.Invoking(() => SqlForChar(ctx, default))
+            .Should().Throw<NotSupportedException>("default(char) is U+0000, which PostgreSQL cannot represent").Which;
+
+        exception.Message.Should().Contain("PostgreSQL").And.Contain("U+0000");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineCharC0Character_ShouldUseTheLowercaseHexEscape()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        SqlForChar(ctx, '\u0001').Should().Contain(@"select E'\x01'",
+            "U+0001 is transported as the lowercase fixed-width E-string escape");
+    }
 }

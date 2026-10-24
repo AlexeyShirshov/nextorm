@@ -286,4 +286,54 @@ public class InlineStringLiteralSqlGenerationTests
             DecodeHexLiteral(sql).Should().Be(value);
         }
     }
+
+    /// <summary>
+    /// Renders a selected constant <c>char</c>. The single-row/single-column lane skips the row
+    /// materializer (char is not a materialisable result type), so the statement text is observable
+    /// without a database — exactly the seam this regression pins.
+    /// </summary>
+    private static string SqlForChar(IDataContext ctx, char value)
+    {
+        var parameter = Expression.Parameter(typeof(IComplexEntity), "x");
+        var projection = Expression.Lambda<Func<IComplexEntity, char>>(
+            Expression.Constant(value, typeof(char)), parameter);
+        var command = ctx.From<IComplexEntity>().Select(projection);
+        command.SingleRow = true;
+
+        return Normalize(((DbPreparedQueryCommand<char>)ctx.GetPreparedQueryCommand(
+            command, false, false, CancellationToken.None)).DbCommand.CommandText);
+    }
+
+    [Theory]
+    [Trait("Issue", "327")]
+    [InlineData('a', "_utf8mb4 X'61'")]
+    [InlineData('\'', "_utf8mb4 X'27'")]
+    [InlineData('\\', "_utf8mb4 X'5c'")]
+    public void InlineCharConstant_ShouldUseTheStringPolicy(char value, string expectedLiteral)
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        SqlForChar(ctx, value).Should().Contain(
+            "select " + expectedLiteral,
+            "a char constant is a one-character value and takes the mode-independent MariaDB hex policy");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineDefaultChar_ShouldUseTheHexNulRecipe()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        SqlForChar(ctx, default).Should().Contain("select _utf8mb4 X'00'",
+            "default(char) is one U+0000, not an empty literal");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineCharC0Character_ShouldUseTheHexRecipe()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        SqlForChar(ctx, '\u0001').Should().Contain("select _utf8mb4 X'01'");
+    }
 }

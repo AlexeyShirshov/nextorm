@@ -944,12 +944,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     {
         if (v is null)
             _builder!.Append(Kw("null"));
-        else if (t == typeof(string) || t == typeof(Guid))
+        else if (t == typeof(string) || t == typeof(Guid) || t == typeof(char))
         {
-            // An inline string/Guid value is emitted as a string literal through the dialect's resolved
-            // string-literal policy: the value is quoted so `'` in it cannot terminate the literal early
-            // (the old raw append produced three apostrophes instead of four), while grammar and pattern
-            // sites keep their own spelling.
+            // An inline string/Guid/char value is emitted as a string literal through the dialect's
+            // resolved string-literal policy: the value is quoted so `'` in it cannot terminate the
+            // literal early (the old raw append produced three apostrophes instead of four), while
+            // grammar and pattern sites keep their own spelling. A char is a one-character string in
+            // SQL (there is no char literal), so it takes exactly the same policy — including NUL,
+            // which PostgreSQL rejects and the other providers transport with their measured recipe.
             _builder!.Append(RenderStringLiteral(v.ToString()!));
         }
         else if (t.IsPrimitive || t == typeof(decimal))
