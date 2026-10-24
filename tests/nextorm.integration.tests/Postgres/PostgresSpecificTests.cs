@@ -515,7 +515,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         capturedTextSql.Should().Contain("'sha256'");
         T261AssertCapturedTextParameter(capturedTextCommand, "abc");
 
-        parameterTextSql.Should().Contain("digest(@norm_p0, 'sha256')");
+        parameterTextSql.Should().Contain("digest(@norm_p0, E'sha256')");
         T261AssertExplicitPlaceholder(parameterTextCommand, "norm_p0");
     }
 

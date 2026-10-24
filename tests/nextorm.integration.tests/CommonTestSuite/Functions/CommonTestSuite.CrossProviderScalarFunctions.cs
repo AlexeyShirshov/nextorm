@@ -73,8 +73,19 @@ public abstract partial class CommonTestSuite
             })
             .First();
 
-        r.Bl.Should().Be(24);
-        r.Ol.Should().Be(3);
+        // SQL Server renders the inline literal as N'abc' (SqlStringLiteralPolicy.cs:219-267), so
+        // datalength(N'abc') counts six UTF-16 bytes: bit_length doubles that to 48 and octet_length
+        // keeps 6 (SqlServerDialect.cs:1011-1012). Every other provider measures the three ASCII bytes.
+        if (Provider.Name == "sqlserver")
+        {
+            r.Bl.Should().Be(48);
+            r.Ol.Should().Be(6);
+        }
+        else
+        {
+            r.Bl.Should().Be(24);
+            r.Ol.Should().Be(3);
+        }
         ((double?)r.Deg).GetValueOrDefault().Should().BeApproximately(180.0, 1e-6);
         ((double?)r.Rad).GetValueOrDefault().Should().BeApproximately(Math.PI, 1e-6);
         ((double?)r.Pi).GetValueOrDefault().Should().BeApproximately(Math.PI, 1e-6);
