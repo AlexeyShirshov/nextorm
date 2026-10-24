@@ -177,13 +177,21 @@ declares:
 
 Array-returning facades declare a closed CLR array type and the dialect normalises the server result to it
 with exactly one outer `cast(... as Array(...))`: `top_k`, `top_k_weighted`, `group_array`,
-`group_uniq_array` (a nullable input declares a nullable element type, `int?[]` →
-`Array(Nullable(Int32))`), `retention` (`int[]` → `Array(Int32)`, never `byte[]`), `array_map` and all
-three `range` overloads (`long[]` → `Array(Int64)`). This is a type correction of the rendered call only:
-it changes neither the lambda translation nor the operand rendering, so the higher-order lambda
-limitations described below still apply. Binding is symmetric for input: a **bound** rank-1 array whose
-declared element type is nullable is sent as `Array(Nullable(T))` derived from the declared CLR type, so
-`null` elements and their positions are preserved (see
+`group_uniq_array`, `retention` (`int[]` → `Array(Int32)`, never `byte[]`), `array_map` and all
+three `range` overloads (`long[]` → `Array(Int64)`). The declared element type follows two rules: a
+**value-type** element is spelled as declared (`int` → `Array(Int32)`, `int?` →
+`Array(Nullable(Int32))`; `byte` stays `UInt8`), while a **reference-type** element is declared
+`Nullable(...)` unconditionally — a CLR nullable annotation on an element is erased at runtime, so it is
+never consulted: `string[]` and `string?[]` both render `Array(Nullable(String))`, and a jagged
+`string[][]` renders `Array(Array(Nullable(String)))` (the array arm is applied first, never
+`Nullable(Array(...))`). For existing reference-element arrays this intentionally changes the emitted SQL
+text (a `string[]` result previously rendered `Array(String)`), while the data, the materialised CLR
+result type (still `string[]`) and the public API do not change, and value-type elements (`int[]`,
+`int?[]`, `byte[]`) are unaffected. Otherwise it is a type correction of the rendered call only: it
+changes neither the lambda translation nor the operand rendering, so the higher-order lambda limitations
+described below still apply. Binding is symmetric for input: a **bound** rank-1 array whose declared
+element type is nullable is sent as `Array(Nullable(T))` derived from the declared CLR type, so `null`
+elements and their positions are preserved (see
 [Arrays (ClickHouse)](../../scalar-functions/06-arrays.md#arrays-clickhouse)).
 
 Portable aggregates — including `count`, the arbitrary-value `any_agg` (rendered `ANY_VALUE` on MySQL and

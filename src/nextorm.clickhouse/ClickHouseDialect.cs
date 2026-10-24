@@ -202,16 +202,21 @@ public class ClickHouseDialect : SqlDialectBase
         return $"cast({call} as Array({MakeArrayElementType(resultType.GetElementType()!)}))";
     }
 
-    // Nullable value elements keep their CLR nullability; a reference element has no CLR nullable
-    // annotation, so it is never mapped to Nullable(...).
+    // Nullable value elements keep their CLR nullability. A reference element's nullable
+    // annotation is erased at runtime, so the CLR says nothing about whether its entries may be
+    // null: every reference element is declared Nullable(...) unconditionally. This intentionally
+    // changes the emitted SQL text for existing string-array results, not the data, the CLR result
+    // type or the public API. The array arm runs first, so a jagged reference element becomes
+    // Array(Array(Nullable(String))) and never Nullable(Array(...)).
     private string MakeArrayElementType(Type type)
     {
         if (Nullable.GetUnderlyingType(type) is { IsValueType: true } underlying)
             return $"Nullable({MakeTypeName(underlying)})";
 
-        return type.IsArray
-            ? $"Array({MakeArrayElementType(type.GetElementType()!)})"
-            : MakeTypeName(type);
+        if (type.IsArray)
+            return $"Array({MakeArrayElementType(type.GetElementType()!)})";
+
+        return type.IsValueType ? MakeTypeName(type) : $"Nullable({MakeTypeName(type)})";
     }
 
     /// <summary>

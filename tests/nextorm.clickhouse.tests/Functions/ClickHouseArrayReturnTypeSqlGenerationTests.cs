@@ -147,8 +147,8 @@ public class ClickHouseArrayReturnTypeSqlGenerationTests
                 "cast(groupArray(id) as Array(Int64))",
                 "a non-nullable long element maps to Int64, not Nullable(Int64)");
             sql.Should().Contain(
-                "cast(groupArray(somestring) as Array(String))",
-                "a reference element has no CLR nullable annotation, so it is never Nullable(String)");
+                "cast(groupArray(somestring) as Array(Nullable(String)))",
+                "a reference element is declared Nullable(...) unconditionally: its CLR nullable annotation is erased at runtime, so the emitted SQL text changes by design while the data and the CLR result type do not");
         }
     }
 

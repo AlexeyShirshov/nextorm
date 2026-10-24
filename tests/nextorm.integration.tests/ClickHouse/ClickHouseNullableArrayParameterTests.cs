@@ -27,11 +27,14 @@ namespace NextORM.Integration.Tests;
 /// <item>Int32, Double and DateTime (36 cells) return the T276-normalised
 /// <c>array_map(v =&gt; v, &lt;array&gt;)</c> result and assert the CLR array equality, length, order,
 /// NULL mask and runtime element type.</item>
-/// <item>String and Decimal (24 cells) do not materialise the array; the same operand is observed
-/// through server-side scalars only (<c>length</c>, <c>arrayCount(v =&gt; v == null, ...)</c>,
-/// <c>arrayFirstIndex</c> and <c>arraySlice</c>), because T276's declared output cast and the driver's
-/// decimal materialisation are outside this input-only repair. The substitutions are recorded in
+/// <item>Decimal (12 cells) does not materialise the array; the same operand is observed through
+/// server-side scalars only (<c>length</c>, <c>arrayCount(v =&gt; v == null, ...)</c>,
+/// <c>arrayFirstIndex</c> and <c>arraySlice</c>), because the driver's decimal materialisation is
+/// outside this input-only repair. The substitutions are recorded in
 /// <c>.pdca/T335/rv2/artifacts/oracle-notes.md</c>.</item>
+/// <item>String (12 cells) keeps the same scalar oracle as the T335 input-path regression, and in
+/// addition (T336) projects the same operand through <c>array_map(v =&gt; v, ...)</c> and materialises
+/// the actual <c>string[]</c> result, so a lost or mis-positioned NULL is observed on the output path.</item>
 /// </list>
 /// <para>
 /// The two focused facts (<see cref="Inline_Int_Mixed"/>, <see cref="Captured_Int_Mixed"/>) remain the
@@ -101,10 +104,20 @@ public sealed class ClickHouseNullableArrayParameterTests : ProviderTestSuite
         if (family is "string" or "decimal")
         {
             // Scalar oracle: the same bound array operand, observed without materialising an array.
-            var projection = ScalarOracle(family, content, form == "inline", out var input);
+            var projection = ScalarOracle(family, content, form == "inline", out var input, out var operand);
             var observation = query.Select(projection).First();
 
             AssertScalarCell(observation, expected, form, family, content);
+
+            if (family == "string")
+            {
+                // Output-path oracle (T336): the same operand, projected as an actual array and
+                // materialised, so a NULL lost by the declared result type cannot hide behind scalars.
+                var arrayProjection = StringArrayProjection(operand);
+                var result = query.Select(arrayProjection).First();
+                AssertStringArrayCell(result, expected, form, content);
+            }
+
             if (form == "captured")
                 AssertInputUnchanged(input, expected, family, content);
             return;
@@ -367,6 +380,13 @@ public sealed class ClickHouseNullableArrayParameterTests : ProviderTestSuite
         .GetMethods(BindingFlags.Public | BindingFlags.Instance)
         .Single(m => m.Name == nameof(ClickHouseFunctions.array_slice) && m.GetParameters().Length == 3);
 
+    /// <summary>The two-argument <c>array_map&lt;TIn, TOut&gt;</c> overload used by the output oracle.</summary>
+    private static readonly MethodInfo ArrayMapMethod = typeof(ClickHouseFunctions)
+        .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+        .Single(m => m.Name == nameof(ClickHouseFunctions.array_map)
+                     && m.IsGenericMethodDefinition
+                     && m.GetParameters().Length == 2);
+
     private static readonly PropertyInfo[] NullFlagProperties =
     [
         typeof(T335ScalarObservation).GetProperty(nameof(T335ScalarObservation.NullFlag0))!,
@@ -402,7 +422,8 @@ public sealed class ClickHouseNullableArrayParameterTests : ProviderTestSuite
         string family,
         string content,
         bool inlineForm,
-        out Array input)
+        out Array input,
+        out Expression operand)
     {
         var elementType = family == "string" ? typeof(string) : typeof(decimal?);
         var expected = ExpectedValues(family, content);
@@ -421,6 +442,8 @@ public sealed class ClickHouseNullableArrayParameterTests : ProviderTestSuite
             var holder = Activator.CreateInstance(holderType, expected)!;
             array = Expression.Field(Expression.Constant(holder, holderType), "Values");
         }
+
+        operand = array;
 
         var functions = Expression.Property(null, ClickHouseFunctionsProperty);
         var firstNullIndex = ArrayFirstIndex(functions, elementType, array, NullPredicate(elementType));
@@ -452,6 +475,26 @@ public sealed class ClickHouseNullableArrayParameterTests : ProviderTestSuite
         var parameter = Expression.Parameter(typeof(IT335NullableArrayParamEntity), "x");
         var body = Expression.MemberInit(Expression.New(typeof(T335ScalarObservation)), bindings);
         return Expression.Lambda<Func<IT335NullableArrayParamEntity, T335ScalarObservation>>(body, parameter);
+    }
+
+    /// <summary>
+    /// The output-path oracle: <c>array_map&lt;string, string&gt;(v =&gt; v, &lt;operand&gt;)</c> over the
+    /// very same operand the scalar oracle observes, projected as a declared <c>string[]</c> result.
+    /// </summary>
+    private static Expression<Func<IT335NullableArrayParamEntity, string[]>> StringArrayProjection(Expression arrayOperand)
+    {
+        var functions = Expression.Property(null, ClickHouseFunctionsProperty);
+        var value = Expression.Parameter(typeof(string), "v");
+        var identity = Expression.Lambda(
+            typeof(Func<,>).MakeGenericType(typeof(string), typeof(string)), value, value);
+        var call = Expression.Call(
+            functions,
+            ArrayMapMethod.MakeGenericMethod(typeof(string), typeof(string)),
+            Expression.Quote(identity),
+            arrayOperand);
+
+        var parameter = Expression.Parameter(typeof(IT335NullableArrayParamEntity), "x");
+        return Expression.Lambda<Func<IT335NullableArrayParamEntity, string[]>>(call, parameter);
     }
 
     private static Expression ElementConstant(Type elementType, object? value) =>
@@ -729,6 +772,36 @@ public sealed class ClickHouseNullableArrayParameterTests : ProviderTestSuite
 
             for (var i = 0; i < expected.Length; i++)
                 array.GetValue(i).Should().Be(expected.GetValue(i), $"{label}: element {i} keeps its value/NULL");
+        }
+    }
+
+    /// <summary>
+    /// Output-path assertion (T336): the materialised <c>string[]</c> must keep the expected length and
+    /// every element's exact value/NULL at its expected position.
+    /// </summary>
+    private static void AssertStringArrayCell(string[] actual, Array expected, string form, string content)
+    {
+        var label = $"{form} string {content}";
+
+        using (new AssertionScope(label))
+        {
+            actual.Should().BeOfType<string[]>($"{label}: the projected runtime type is the declared string array");
+            actual.Should().HaveCount(expected.Length, $"{label}: result length");
+
+            for (var i = 0; i < expected.Length && i < actual.Length; i++)
+            {
+                var expectedValue = (string?)expected.GetValue(i);
+                if (expectedValue is null)
+                {
+                    actual[i].Should().BeNull($"{label}: result[{i}] must be NULL");
+                }
+                else
+                {
+                    actual[i].Should().Be(
+                        expectedValue,
+                        $"{label}: result[{i}] must be the value \"{expectedValue}\" in its original position");
+                }
+            }
         }
     }
 

@@ -199,7 +199,9 @@ result column.
 > `array_map`, and the three `range` overloads) are normalised **server-side**: the dialect wraps the
 > completed call in exactly one `cast(... as Array(...))` built from the closed declared CLR type
 > (`int[]` → `Array(Int32)`, `int?[]` → `Array(Nullable(Int32))`, `long[]` → `Array(Int64)`,
-> `string[]` → `Array(String)`), so no caller-side cast is required and `retention` materialises as
+> `string[]`/`string?[]` → `Array(Nullable(String))`). A reference-type element is always declared
+> `Nullable(...)`, because its CLR nullable annotation is erased at runtime, so no caller-side cast is
+> required and `retention` materialises as
 > `int[]`, not `byte[]`. The same reader materialises a native `Tuple(...)` column (or a
 > `Tuple(...)`-returning expression) as a `System.Tuple<...>` of arity 1–7.
 
@@ -290,10 +292,14 @@ result column.
 > the same typed element, and the caller's array is not mutated. Non-nullable element arrays (`int[]`,
 > `double[]`, `DateTime[]`, `decimal[]`, `byte[]`) are unchanged; nested/jagged and multidimensional arrays
 > and a `null` array object are **not supported** and keep the previous (driver-inferred) behaviour.
-> Materialising a nullable **String** or **Decimal** array **result** back to `string?[]`/`decimal?[]` is
-> also not supported: the string facades still cast to `Array(String)`, and decimal arrays are not
-> materialised. This page documents the input side only — see
-> [Limitations](../advanced/limitations.md#limitations) for the remaining array restrictions.
+> Array **results** follow the same element rule: a **reference-type** element result is declared
+> `Nullable(...)` unconditionally (a `string[]`/`string?[]` result renders `Array(Nullable(String))`, a
+> jagged one `Array(Array(Nullable(String)))`) and still materialises as a CLR `string[]` — only the
+> rendered SQL text changes, not the data, the CLR type or the public API, while value-type elements
+> (`int[]`, `int?[]`, `byte[]`) are unaffected. Materialising a nullable **Decimal** array **result**
+> back to `decimal?[]` is still **not** supported: decimal arrays are materialised only as `decimal[]`
+> (`Array(Decimal(38, 10))`). The remaining array restrictions are listed under
+> [Limitations](../advanced/limitations.md#limitations).
 
 The CLR `string.Split` is rendered as `splitByChar(separator, value)` (gated by
 [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); only a single-character

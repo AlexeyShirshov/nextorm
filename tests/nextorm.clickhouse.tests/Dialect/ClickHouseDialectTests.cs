@@ -227,11 +227,22 @@ public class ClickHouseDialectTests
         Dialect.MakeArrayResult("range", "range(3)", typeof(long[]))
             .Should().Be("cast(range(3) as Array(Int64))");
 
-        // A reference element is never auto-nullable; a nested one-dimensional array recurses.
+        // A reference element is declared Nullable(...) unconditionally and a nested one-dimensional
+        // array recurses. The CLR nullable annotation is erased at runtime, so string[] and string?[]
+        // emit identical text: no NRT distinction is ever consulted.
         Dialect.MakeArrayResult("group_array", "groupArray(s)", typeof(string[]))
-            .Should().Be("cast(groupArray(s) as Array(String))");
+            .Should().Be("cast(groupArray(s) as Array(Nullable(String)))");
+        Dialect.MakeArrayResult("group_array", "groupArray(s)", typeof(string?[]))
+            .Should().Be("cast(groupArray(s) as Array(Nullable(String)))");
         Dialect.MakeArrayResult("group_array", "groupArray(tags)", typeof(string[][]))
-            .Should().Be("cast(groupArray(tags) as Array(Array(String)))");
+            .Should().Be("cast(groupArray(tags) as Array(Array(Nullable(String))))");
+
+        // Value-type elements keep their declaration unchanged: byte stays UInt8, decimal keeps its
+        // provider default precision/scale, and neither becomes Nullable(...).
+        Dialect.MakeArrayResult("group_array", "groupArray(bytes)", typeof(byte[]))
+            .Should().Be("cast(groupArray(bytes) as Array(UInt8))");
+        Dialect.MakeArrayResult("group_array", "groupArray(amount)", typeof(decimal[]))
+            .Should().Be("cast(groupArray(amount) as Array(Decimal(38, 10)))");
 
         // Every other facade result is the identity, without inspecting the result type.
         Dialect.MakeArrayResult("array_sort", "arraySort(nums)", typeof(long[]))
