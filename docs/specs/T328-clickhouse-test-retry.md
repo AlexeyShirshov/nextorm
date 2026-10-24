@@ -335,7 +335,8 @@ each probe asserts its facts first and then fails so that the runner records a g
   no retry on a fault-free run.
 - Solution coverage (C06): line **90.1 %** (56 981/63 175) and branch **83.9 %** (32 595/38 849),
   gates 85/75 cleared (`.pdca/T328/rv3/solution-coverage/Summary.txt`). The solution collect exits
-  1 because of one pre-existing failure, unrelated to T328 (§10.4).
+  1 because of the one C02 failure recorded in §10.4, later shown to be attributable interference and
+  fixed after the run.
 - Integration coverage (C06): line **81.5 %** (49 274/60 393) and branch **75.5 %**
   (29 366/38 855), gates 65/75 cleared (`.pdca/T328/rv3/integration-coverage/Summary.txt`).
 
@@ -405,12 +406,36 @@ the scope is unchanged.
    Why: the native runner form selects the integration project's 5285 tests (0 failed, 197
    skipped) and makes the gate measurable; settings and thresholds were not changed.
 
-### 10.4 Known pre-existing failure
+### 10.4 C02 failure: attributable interference, fixed after the run
 
 `NextORM.Core.Tests.TimedDictionaryEvictionTests.ExpireTimedEntriesForTesting_Should_Age_All_Five_ProcessWide_Caches`
-(`tests/nextorm.core.tests/Caching/TimedDictionaryEvictionTests.cs:176`) fails in the DB-free core
-project with `Expected DataContextCache.Metadata.ContainsKey(metadataKey) to be False, but found
-True.` It is **not attributable** to T328: the class passes in isolation (8/8,
-`.pdca/T328/rv3/c02-isolated-timed-dictionary.log`), the failure reproduces on unfiltered re-runs,
-and the collection baseline `c76483c4` also fails this project with different process-wide-cache
-ordering failures. It stays a failed C02 row for CHECK; no test was modified, skipped or waived.
+(`tests/nextorm.core.tests/Caching/TimedDictionaryEvictionTests.cs:176`) failed with `Expected
+DataContextCache.Metadata.ContainsKey(metadataKey) to be False, but found True.` The test was not
+broken: the failure was **interference**. `QueryCacheControlsTests` seeds
+`DataContextCache.Metadata[SimpleEntity]` (`StoreInCache_False_Should_Not_Mutate_Command_Cache_Flag`,
+`Disabled_QueryCache_Should_Rebuild_…`) and did not clear it; `CachedPreparationRecipeTests` is a
+second latent leaker. `TimedDictionary.MakeEntry` freezes `Timed = CacheSlidingExpiration > 0` at
+insert, so entries created under the zero window are permanently unageable — the leak only bites
+when the leaking class runs before `TimedDictionaryEvictionTests`.
+
+The T328 assembly change flipped xunit v3's per-assembly ordering seed (`1371423718` on the branch
+versus baseline `1434055667`), which reordered the `QueryCacheControlsTests` block immediately
+before the eviction class. Parallelism was irrelevant (the assembly is
+`[assembly: Parallelization(Mode = ParallelMode.None)]`; `-parallelMode none` reproduces the
+failure).
+
+Fixed in **`f8888a7c`** by making `QueryCacheControlsTests` an `IDisposable` whose `Dispose()`
+calls `DataContextCache.Clear()` (one file, +10/−1). The eviction test, its assertions and `src/**`
+were untouched; no assertion relaxed, no skip, no reorder.
+
+Proof: two consecutive full `nextorm.core.tests` runs with build — **2739/2739 passed, 0 failed**,
+exit 0 (`.pdca/T328/rv3/core-tests-fixed-1.log`, `.pdca/T328/rv3/core-tests-fixed-2.log`); the
+eviction class alone **8/8** (`.pdca/T328/rv3/c02-class-alone-postfix.log`); the five T328 classes
+**73/73** (`.pdca/T328/rv3/c02-t328-classes-postfix.log`). Controls: baseline `317e03e5` **2666/0**
+(`.pdca/T328/rv3/c02-baseline-317e03e5-core-tests.log`), T327 `8b931e23` **2858/0**, pre-fix branch
+`a827398b` **2739/1** (2/2).
+
+The failure is therefore attributable and fixed — not pre-existing, not non-attributable, and not
+red on baseline. It is a systemic instance, not a one-off: process-wide caches make the suite
+order/parallelism-sensitive (third case today), tracked in **#339** —
+`https://github.com/AlexeyShirshov/nextorm/issues/339`.
