@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -14,9 +15,9 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
 
     [Fact]
-    public void Utf8StringFunctions_ShouldExecute()
+    public async Task Utf8StringFunctions_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -26,8 +27,15 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 Rru = SqlFunctions.Sql.right("Привет", 3),
                 Upper = SqlFunctions.ClickHouse.upper_utf8("привет"),
                 Lower = SqlFunctions.ClickHouse.lower_utf8("ПРИВЕТ")
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseFunctionExecutionTests.Utf8StringFunctions_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.L.Should().Be("abc");
         r.R.Should().Be("def");
@@ -38,9 +46,9 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void TrimFunctions_ShouldExecute_WithAndWithoutCharacters()
+    public async Task TrimFunctions_ShouldExecute_WithAndWithoutCharacters()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -50,8 +58,15 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 TLC = SqlFunctions.ClickHouse.trim_left("xxabc", "x"),
                 TRC = SqlFunctions.ClickHouse.trim_right("abcxx", "x"),
                 TBC = SqlFunctions.ClickHouse.trim_both("xxabcxx", "x")
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseFunctionExecutionTests.TrimFunctions_ShouldExecute_WithAndWithoutCharacters#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.TL.Should().Be("x  ");
         r.TR.Should().Be("  x");
@@ -62,9 +77,9 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void RegexpFunctions_ShouldExecute()
+    public async Task RegexpFunctions_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -73,8 +88,15 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 M = SqlFunctions.ClickHouse.match("abc", "b"),
                 E = SqlFunctions.ClickHouse.extract("abc123", "[0-9]+"),
                 EA = SqlFunctions.ClickHouse.extract_all("a1b2", "[0-9]")
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseFunctionExecutionTests.RegexpFunctions_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.One.Should().Be("xbcabc");
         r.All.Should().Be("xbcxbc");
@@ -84,9 +106,9 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void SplitFunctions_ShouldExecute()
+    public async Task SplitFunctions_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -94,8 +116,15 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 R = SqlFunctions.ClickHouse.split_by_regexp("[,;]", "a,b;c"),
                 W = SqlFunctions.ClickHouse.split_by_whitespace("a b  c"),
                 C = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.split_by_string(",", "a,b,c"), string.Empty)
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseFunctionExecutionTests.SplitFunctions_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.S.Should().Be("a|b|c");
         r.R.Should().HaveCount(3);
@@ -104,9 +133,9 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void DateTimeFunctions_ShouldExecute()
+    public async Task DateTimeFunctions_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -118,8 +147,15 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 N = SqlFunctions.ClickHouse.now(),
                 T = SqlFunctions.ClickHouse.today(),
                 Y = SqlFunctions.ClickHouse.yesterday()
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseFunctionExecutionTests.DateTimeFunctions_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.F.Should().Be("2023/01/02");
         r.Ftz.Should().Be("2023");
@@ -130,9 +166,9 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void ArraySetFunctions_ShouldExecute()
+    public async Task ArraySetFunctions_ShouldExecute()
     {
-        var r = _sut.ArrayEntity
+        var query = _sut.ArrayEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -149,8 +185,15 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 Sorted = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_sort(x.Nums), ","),
                 Reversed = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_reverse(x.Nums), ","),
                 Distinct = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_distinct(x.Nums), ",")
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseFunctionExecutionTests.ArraySetFunctions_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.Concat.Should().Be(6);
         r.Uniq.Should().Be(3);
@@ -169,17 +212,24 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
     /// so the assertion pins the element order without depending on the array materialiser.
     /// </summary>
     [Fact]
-    public void ArrayRangeArity_ShouldExecute()
+    public async Task ArrayRangeArity_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
                 One = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.range(3), ","),
                 Two = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.range(1, 4), ","),
                 Three = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.range(1, 7, 2), ",")
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseFunctionExecutionTests.ArrayRangeArity_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.One.Should().Be("0,1,2");
         r.Two.Should().Be("1,2,3");
@@ -187,9 +237,9 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void MapFunctions_ShouldExecute()
+    public async Task MapFunctions_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -207,8 +257,15 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 Concatenated = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.map_keys(SqlFunctions.ClickHouse.map_concat(
                     SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L)),
                     SqlFunctions.ClickHouse.map(Tuple.Create("b", 2L))))),
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseFunctionExecutionTests.MapFunctions_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.Keys.Should().Be(2);
         r.Values.Should().Be(1);
@@ -219,9 +276,9 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void HashFunctions_ShouldExecute()
+    public async Task HashFunctions_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -240,8 +297,15 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 Murmur332 = SqlFunctions.ClickHouse.murmur_hash3_32("abc"),
                 Murmur364 = SqlFunctions.ClickHouse.murmur_hash3_64("abc"),
                 Murmur3128 = SqlFunctions.ClickHouse.murmur_hash3_128("abc")
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseFunctionExecutionTests.HashFunctions_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         // ClickHouse returns the digest as FixedString: the raw bytes, not a hex rendering.
         r.Md5.Should().NotBeNullOrEmpty();
@@ -262,9 +326,9 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void UlidAndLengthFunctions_ShouldExecute()
+    public async Task UlidAndLengthFunctions_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -272,8 +336,15 @@ public sealed class ClickHouseFunctionExecutionTests : ProviderTestSuite
                 Degrees = SqlFunctions.Sql.degrees(3.141592653589793),
                 Radians = SqlFunctions.Sql.radians(180.0),
                 Pi = SqlFunctions.Sql.pi()
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseFunctionExecutionTests.UlidAndLengthFunctions_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.Ulid.Should().HaveLength(26);
         r.Degrees.Should().BeApproximately(180.0, 1e-9);
