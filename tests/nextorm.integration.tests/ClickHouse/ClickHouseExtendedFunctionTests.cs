@@ -5,11 +5,24 @@ using NextORM.Core;
 namespace NextORM.Integration.Tests;
 
 /// <summary>
+/// Serializes <see cref="ClickHouseExtendedFunctionTests"/> against every other integration
+/// collection: <c>ArrayRewind_ShouldKeepParameterProvenanceAcrossCachedExecutions</c> asserts
+/// prepared-command <em>identity</em> across three executions, while a concurrent
+/// <see cref="DataContext.PurgeQueryCache"/> anywhere in the process bumps the process-wide
+/// <c>QueryPlanStore</c> generation and evicts every thread's thread-local plan dictionary. The
+/// second execution then legitimately re-prepares and returns a different
+/// <c>DbPreparedQueryCommand</c> — correct product behaviour, but not the identity the regression
+/// test is about, so the class must not overlap another collection.
+/// </summary>
+[CollectionDefinition("T327 array rewind cache", DisableParallelization = true)]
+public sealed class T327ArrayRewindCacheCollectionDefinition;
+
+/// <summary>
 /// ClickHouse specific surface, third sweep: JSON extraction, the array library (including the
 /// higher-order forms), the to* date family, the UTF-8/regexp string forms, the aggregate family
 /// and the conditional/window helpers. Each call renders ClickHouse SQL and executes it.
 /// </summary>
-[Collection("ClickHouse")]
+[Collection("T327 array rewind cache")]
 public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
