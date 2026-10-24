@@ -147,7 +147,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
             return this;
 
         var newCmd = QueryCommand.CloneForCache();
-        Debug.Assert(_comparer == newCmd.GetQueryPlanEqualityComparer(), "QueryPlanEqualityComparer must be equals, if not see QueryCommand.CopyTo function");
+        // Plan identity is behavioural: identical frozen hash and structural command equality (below), not comparer instance sharing.
         Debug.Assert(_hashPlan == ComputeHash(newCmd, _sql, _comparer), "Hash must be equals, if not see QueryCommand.CopyTo function");
         Debug.Assert(_comparer.Equals(newCmd, QueryCommand), "QueryCommands must be equals, if not see QueryCommand.CopyTo function");
         QueryCommand = newCmd;

@@ -123,12 +123,11 @@ public partial class QueryCommand
         dst.ForJsonClause = ForJsonClause;
         dst.ForXmlClause = ForXmlClause;
 
-        dst._queryPlanComparer = _queryPlanComparer;
-        dst._fromExpressionPlanComparer = _fromExpressionPlanComparer;
-        dst._expressionPlanComparer = _expressionPlanComparer;
-        dst._selectExpressionPlanComparer = _selectExpressionPlanComparer;
-        dst._joinExpressionPlanComparer = _joinExpressionPlanComparer;
-        dst._sortingExpressionPlanComparer = _sortingExpressionPlanComparer;
+        // The six lazily-created plan comparers are deliberately not copied: a comparer resolves
+        // ReferencedQueries through the command it was constructed with, so sharing one between command
+        // instances lets a reset/"discarded preparation" command hash through a foreign registry whose
+        // ReferencedQueries is null (DEF-T327-05 NullReferenceException in VisitIndex). Every command
+        // creates its own from the lazy getters.
         dst._unionType = _unionType;
 
         if (copyAll)
