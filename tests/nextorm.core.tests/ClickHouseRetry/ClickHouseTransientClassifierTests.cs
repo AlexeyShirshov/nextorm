@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using ClickHouse.Driver;
 using FluentAssertions;
 using NextORM.Tests.Shared.ClickHouseRetry;
+using System.Net.Http;
 
 namespace NextORM.Core.Tests.ClickHouseRetry;
 
@@ -78,24 +79,48 @@ public sealed class ClickHouseTransientClassifierTests
     }
 
     [Fact]
-    public void Classify_ShouldReportConnectionReset_ForAnHttpRequestExceptionCarryingAResetSocket()
-    {
-        var failure = new HttpRequestException(
-            "The response ended prematurely.",
-            new SocketException((int)SocketError.ConnectionReset));
-
-        var classification = ClickHouseTransientClassifier.Classify(failure, CancellationToken.None);
-
-        // D0b: provisional until the live reset signature is confirmed.
-        classification.Kind.Should().Be(ClickHouseFailureKind.ConnectionReset);
-        classification.ReasonCode.Should().Be("connection_reset");
-        classification.IsRetryable.Should().BeTrue();
-    }
-
-    [Fact]
     public void Classify_ShouldFailClosed_ForAnHttpRequestExceptionWithoutASocket()
     {
         var classification = ClickHouseTransientClassifier.Classify(new HttpRequestException("reset"), CancellationToken.None);
+
+        classification.Kind.Should().Be(ClickHouseFailureKind.UnknownShape);
+        classification.IsRetryable.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Classify_ShouldReportServerError_ForAResetShapedDriverExceptionWithMinusOneCode()
+    {
+        // Measured live (D0b / DEF-328-04): a pre-response RST surfaces as ClickHouseServerException
+        // with ErrorCode -1 and no inner chain. Because -1 also marks an unparseable genuine server
+        // error, the fail-closed classification is ServerError — never a retry (V18).
+        var failure = new ClickHouseServerException("Code: -1. (transport reset before response)", "select 42", -1);
+
+        var classification = ClickHouseTransientClassifier.Classify(failure, CancellationToken.None);
+
+        classification.Kind.Should().Be(ClickHouseFailureKind.ServerError);
+        classification.ReasonCode.Should().Be("server_error");
+        classification.IsRetryable.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Classify_ShouldFailClosed_ForABareHttpIoException()
+    {
+        // Measured live (D0b / DEF-328-04): an RST after a partial response surfaces as a bare
+        // HttpIOException — no HttpRequestException, no SocketException — with no attributable code.
+        var failure = new HttpIOException(HttpRequestError.ResponseEnded, "The response ended prematurely.");
+
+        var classification = ClickHouseTransientClassifier.Classify(failure, CancellationToken.None);
+
+        classification.Kind.Should().Be(ClickHouseFailureKind.UnknownShape);
+        classification.IsRetryable.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Classify_ShouldFailClosed_ForAnHttpRequestExceptionWithoutASocketSignal()
+    {
+        var failure = new HttpRequestException("The response ended prematurely.", new IOException("connection closed"));
+
+        var classification = ClickHouseTransientClassifier.Classify(failure, CancellationToken.None);
 
         classification.Kind.Should().Be(ClickHouseFailureKind.UnknownShape);
         classification.IsRetryable.Should().BeFalse();

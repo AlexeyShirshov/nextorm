@@ -120,6 +120,13 @@ internal sealed class FaultProxy : IAsyncDisposable
         /// forwarded, then both sockets are reset before any response byte reaches the client.
         /// </summary>
         ResetAlways,
+
+        /// <summary>
+        /// <see cref="DelayFirstRequest"/> semantics on every accepted connection: the request is read
+        /// but withheld for the configured delay (longer than the client's own timeout), then both
+        /// sockets are reset. Later connections are faulted too, so every attempt times out.
+        /// </summary>
+        DelayAlways,
     }
 
     /// <summary>The loopback port the proxy listens on.</summary>
@@ -186,6 +193,19 @@ internal sealed class FaultProxy : IAsyncDisposable
     /// <summary>Creates a proxy that resets every connection before the response reaches the client.</summary>
     internal static FaultProxy ResetAlways(string connectionString) =>
         new(connectionString, FaultMode.ResetAlways, TimeSpan.Zero, 0);
+
+    /// <summary>
+    /// Creates a proxy that withholds every connection's request for <paramref name="delay"/> and then
+    /// resets it, so a client whose configured timeout is shorter than the delay times out on every
+    /// attempt (T328 r3 retry-exhaustion drive).
+    /// </summary>
+    internal static FaultProxy DelayAlways(string connectionString, TimeSpan delay)
+    {
+        if (delay <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(delay), "The delay must be positive.");
+
+        return new FaultProxy(connectionString, FaultMode.DelayAlways, delay, 0);
+    }
 
     /// <summary>
     /// Rewrites the <c>Host</c>/<c>Port</c> pair of <paramref name="baseConnectionString"/> to this
@@ -335,6 +355,10 @@ internal sealed class FaultProxy : IAsyncDisposable
             switch (_mode)
             {
                 case FaultMode.DelayFirstRequest when firstConnection:
+                    await FaultAfterDelayAsync(client, server).ConfigureAwait(false);
+                    break;
+
+                case FaultMode.DelayAlways:
                     await FaultAfterDelayAsync(client, server).ConfigureAwait(false);
                     break;
 

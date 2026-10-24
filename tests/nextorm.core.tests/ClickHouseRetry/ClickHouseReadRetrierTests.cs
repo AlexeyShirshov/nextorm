@@ -1,5 +1,7 @@
+using ClickHouse.Driver;
 using FluentAssertions;
 using NextORM.Tests.Shared.ClickHouseRetry;
+using System.Net.Http;
 
 namespace NextORM.Core.Tests.ClickHouseRetry;
 
@@ -223,6 +225,43 @@ public sealed class ClickHouseReadRetrierTests
         thrown.Which.Should().BeSameAs(assertionFailure);
         invocations.Should().Be(1);
         records.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ShouldNotRetryAndPreserveTheOriginalFailClosedShapes()
+    {
+        // V18 / DEF-328-04: a reset-shaped fault has no typed signal in driver 1.4.0. Each of these
+        // forms must fail closed — one invocation, no record, no backoff — and the original exception
+        // instance must surface unchanged.
+        var shapes = new (string Name, Exception Failure)[]
+        {
+            ("ClickHouseServerException with ErrorCode -1", new ClickHouseServerException("Code: -1.", "select 42", -1)),
+            ("bare HttpIOException", new HttpIOException(HttpRequestError.ResponseEnded, "The response ended prematurely.")),
+            ("HttpRequestException without a socket signal", new HttpRequestException("reset")),
+        };
+
+        foreach (var (name, failure) in shapes)
+        {
+            var records = new List<ClickHouseRetryAttemptRecord>();
+            var invocations = 0;
+            var retrier = new ClickHouseReadRetrier(records.Add, (_, _) =>
+                throw new InvalidOperationException("the backoff must not run for a fail-closed reset shape"));
+
+            Func<Task> act = async () => await retrier.ExecuteAsync<string>(
+                Operation,
+                _ =>
+                {
+                    invocations++;
+                    return Task.FromException<string>(failure);
+                },
+                CancellationToken.None);
+
+            var thrown = await act.Should().ThrowAsync<Exception>();
+
+            thrown.Which.Should().BeSameAs(failure, $"{name} must surface the original exception instance");
+            invocations.Should().Be(1, $"{name} must never be retried");
+            records.Should().BeEmpty($"{name} must not emit a retry record");
+        }
     }
 
     [Fact]

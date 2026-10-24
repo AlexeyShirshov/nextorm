@@ -19,9 +19,11 @@ namespace NextORM.Integration.Tests;
 /// command filters out (<c>-notrait "Category=Diagnostic"</c>). Each fact carries exactly one
 /// <c>T328Scenario</c> trait, which the isolated C05 invocation selects.
 /// <para>
-/// Six probes fail by design (retry-exhaustion, assertion-failure, unknown-table, code216,
-/// unsafe-operation, recovered-then-assertion): each asserts its facts first and then fails, so the
-/// runner records a genuine failed test and the frozen C05 expectation of a nonzero exit holds.
+/// Seven probes fail by design (reset-not-retried, retry-exhaustion, assertion-failure, unknown-table,
+/// code216, unsafe-operation, recovered-then-assertion): each asserts its facts first and then fails, so
+/// the runner records a genuine failed test and the frozen C05 expectation of a nonzero exit holds.
+/// <c>reset-not-retried</c> is the expected-negative V18 probe: the driver exposes no typed reset
+/// signal, so the original <c>ClickHouseServerException</c> must surface after exactly one attempt.
 /// </para>
 /// <para>
 /// Evidence discipline: one machine-readable <c>CLICKHOUSE-PROBE scenario=… </c> line per probe, with
@@ -188,11 +190,11 @@ public sealed class ClickHouseRetryScenarioTests
             "the accounting block must qualify the recovery with the passing final outcome");
     }
 
-    // --- 3. reset-recovery ------------------------------------------------------------------------
+    // --- 3. reset-not-retried ---------------------------------------------------------------------
 
     [Fact]
-    [Trait(ScenarioTrait, "reset-recovery")]
-    public async Task ResetRecovery_ShouldResetBeforeTheLiveResponseThenRecover()
+    [Trait(ScenarioTrait, "reset-not-retried")]
+    public async Task ResetNotRetried_ShouldSurfaceTheOriginalDriverExceptionOnce()
     {
         var baseConnectionString = BaseConnectionString();
         await using var proxy = FaultProxy.ResetBeforeResponse(baseConnectionString);
@@ -201,13 +203,13 @@ public sealed class ClickHouseRetryScenarioTests
         using var context = CreateContext(proxy.ConnectionStringFor(baseConnectionString));
         var (succeeded, value) = await harness
             .TryExecuteAsync(
-                Audited("reset-recovery"),
+                Audited("reset-not-retried"),
                 cancellationToken => ReadScalarAsync(context, cancellationToken),
                 TestContext.Current.CancellationToken);
 
         // TEMPORARY D0b instrumentation (sanitised: type names and counters only).
         Console.WriteLine(
-            $"{ProbePrefix}-D0B scenario=reset-recovery chain={Describe(harness.FirstFailure)} " +
+            $"{ProbePrefix}-D0B scenario=reset-not-retried chain={Describe(harness.FirstFailure)} " +
             $"kind={(harness.FirstFailure is null ? "none" : Classify(harness.FirstFailure).Kind.ToString())} " +
             $"reason={(harness.FirstFailure is null ? "none" : Classify(harness.FirstFailure).ReasonCode)} " +
             $"attempts={harness.Attempts} succeeded={Lower(succeeded)} value={value} " +
@@ -219,8 +221,7 @@ public sealed class ClickHouseRetryScenarioTests
 
         // Endpoint proof for a pre-response reset: the proxy really connected to the live endpoint
         // and the client's request bytes really left the client. A response byte is deliberately not
-        // required — this fault happens before one, so ServerRespondedBeforeFault stays false and is
-        // only printed as a counter.
+        // required — this fault happens before one, so ServerRespondedBeforeFault stays false.
         proxy.TargetConnected.Should().BeTrue(
             "the proxy must have connected to the live endpoint: accepted={0} client_bytes={1} server_bytes={2} faulted={3}",
             proxy.AcceptedConnections,
@@ -234,49 +235,51 @@ public sealed class ClickHouseRetryScenarioTests
             proxy.ServerToClientBytes,
             proxy.FaultedConnections);
 
-        harness.FirstFailure.Should().NotBeNull("attempt 1 must fail before a retry can happen");
-        var firstClassification = Classify(harness.FirstFailure);
+        // V18 / DEF-328-04: the driver exposes no typed reset signal. The reset-shaped fault surfaces
+        // as ClickHouseServerException ErrorCode -1 (indistinguishable from an unparseable server
+        // error) and must fail closed — exactly one attempt, no retry record, no recovery claim.
+        succeeded.Should().BeFalse("a reset-shaped fault is never retryable under driver 1.4.0");
+        harness.Attempts.Should().Be(1, "no retry may start for a reset-shaped fault");
+        harness.Records.Should().BeEmpty("a fail-closed reset emits no retry record");
+        harness.Delays.Should().BeEmpty("no backoff precedes a suppressed retry");
 
-        // The D2 reset branch is provisional until its live signature is measured: this probe must be
-        // honest evidence, so an unexpected chain fails loudly instead of passing silently.
-        firstClassification.Kind.Should().Be(
-            ClickHouseFailureKind.ConnectionReset,
-            "the D2 connection-reset branch is provisional; the observed chain was {0}, classified {1} ({2}), " +
-            "proxy counters accepted={3} client_bytes={4} server_bytes={5} faulted={6} stage={7}",
-            DescribeFailure(harness.FirstFailure),
-            firstClassification.Kind,
-            firstClassification.ReasonCode,
-            proxy.AcceptedConnections,
-            proxy.ClientToServerBytes,
-            proxy.ServerToClientBytes,
-            proxy.FaultedConnections,
-            proxy.ResetStage);
-
-        harness.Attempts.Should().Be(
-            2,
-            "a retry happens only when the live reset classifies as retryable; observed chain {0}",
+        harness.FirstFailure.Should().BeOfType<ClickHouseServerException>(
+            "the measured pre-response RST shape is the driver's typed server exception; observed {0}",
             DescribeFailure(harness.FirstFailure));
-        succeeded.Should().BeTrue("attempt 2 must recover on the proxy's pass-through connection");
-        value.Should().Be(42L, "attempt 2 returned the live server value");
+        var firstFailure = (ClickHouseServerException)harness.FirstFailure!;
+        firstFailure.ErrorCode.Should().Be(
+            -1,
+            "the measured pre-response RST surfaces with ErrorCode -1 and no inner chain");
+        firstFailure.InnerException.Should().BeNull(
+            "the measured pre-response RST carries no inner exception chain");
 
-        var state = SingleState(harness.Ledger);
-        state.Attempts.Should().Be(2);
-        state.RetryScheduled.Should().BeTrue();
-        state.RecoveredOnSecondAttempt.Should().BeTrue();
+        var classification = Classify(harness.FirstFailure);
+        classification.Kind.Should().Be(ClickHouseFailureKind.ServerError);
+        classification.IsRetryable.Should().BeFalse("a reset-shaped fault must never be retried");
+
+        harness.Thrown.Should().BeSameAs(
+            harness.FirstFailure,
+            "the retrier must rethrow the original exception instance, unchanged");
+
+        SingleState(harness.Ledger).Attempts.Should().Be(1);
 
         WriteProbe(
-            "reset-recovery",
-            $"attempts={harness.Attempts} retry_records={harness.Records.Count} classification={firstClassification.ReasonCode} " +
-            $"target_connected={Lower(proxy.TargetConnected)} reset_stage={proxy.ResetStage} " +
-            $"server_responded_before_fault={Lower(proxy.ServerRespondedBeforeFault)} " +
-            $"accepted={proxy.AcceptedConnections} client_bytes={proxy.ClientToServerBytes} server_bytes={proxy.ServerToClientBytes} " +
+            "reset-not-retried",
+            $"attempts={harness.Attempts} retry_records={harness.Records.Count} thrown={harness.Thrown!.GetType().Name} " +
+            $"error_code={firstFailure.ErrorCode.ToString(CultureInfo.InvariantCulture)} " +
+            $"classification={classification.ReasonCode} target_connected={Lower(proxy.TargetConnected)} " +
+            $"reset_stage={proxy.ResetStage} accepted={proxy.AcceptedConnections} " +
+            $"client_bytes={proxy.ClientToServerBytes} server_bytes={proxy.ServerToClientBytes} " +
             $"faulted={proxy.FaultedConnections}");
 
-        var lines = WriteAccounting(harness.Ledger, finalOutcome: true);
+        var lines = WriteAccounting(harness.Ledger, finalOutcome: false);
         lines.Should().Contain(
-            line => line.Contains("operation_recovered=true", StringComparison.Ordinal)
-                && line.Contains("recovered=true", StringComparison.Ordinal),
-            "the accounting block must record the recovered operation");
+            line => line.Contains("retried=false", StringComparison.Ordinal)
+                && line.Contains("final=failed", StringComparison.Ordinal),
+            "a fail-closed reset is an unretried failure, never a recovery");
+
+        // Expected-nonzero exit: the original live failure is rethrown unchanged.
+        Rethrow(harness.Thrown!);
     }
 
     // --- 4. retry-exhaustion ----------------------------------------------------------------------
@@ -286,10 +289,17 @@ public sealed class ClickHouseRetryScenarioTests
     public async Task RetryExhaustion_ShouldStopAfterTwoAttempts()
     {
         var baseConnectionString = BaseConnectionString();
-        await using var proxy = FaultProxy.ResetAlways(baseConnectionString);
+
+        // r3: exhaustion is driven with persistent client timeouts (every connection is delayed past
+        // the small effective timeout), not with resets — a reset-shaped fault is no longer retryable.
+        await using var proxy = FaultProxy.DelayAlways(baseConnectionString, ProxyDelay);
+
+        var effective = ClickHouseTestTimeout.Resolve(baseConnectionString, EffectiveTimeoutSeconds);
+        effective.EffectiveSeconds.Should().Be(1, "the probe pins a deliberately small supported timeout");
+        effective.Source.Should().Be(ClickHouseTestTimeoutSource.Knob, "the explicit knob value must win");
 
         var harness = new ProbeRetrier();
-        using var context = CreateContext(proxy.ConnectionStringFor(baseConnectionString));
+        using var context = CreateContext(proxy.ConnectionStringFor(effective.ConnectionString));
         var (succeeded, _) = await harness
             .TryExecuteAsync(
                 Audited("retry-exhaustion"),
@@ -301,20 +311,30 @@ public sealed class ClickHouseRetryScenarioTests
             $"{ProbePrefix}-D0B scenario=retry-exhaustion chain={Describe(harness.FirstFailure)} " +
             $"first_kind={(harness.FirstFailure is null ? "none" : Classify(harness.FirstFailure).Kind.ToString())} " +
             $"first_reason={(harness.FirstFailure is null ? "none" : Classify(harness.FirstFailure).ReasonCode)} " +
-            $"first_code={(harness.FirstFailure as ClickHouseServerException)?.ErrorCode.ToString(CultureInfo.InvariantCulture) ?? "none"} " +
-            $"first_name={((harness.FirstFailure as ClickHouseServerException) is { } typed ? ErrorCodeName(typed.ErrorCode) : "none")} " +
             $"last_chain={Describe(harness.LastFailure)} attempts={harness.Attempts} succeeded={Lower(succeeded)} " +
             $"caller_token_cancelled={Lower(harness.CallerToken.IsCancellationRequested)} " +
             $"target_connected={Lower(proxy.TargetConnected)} reset_stage={proxy.ResetStage} " +
             $"faulted={proxy.FaultedConnections} server_responded_before_fault={Lower(proxy.ServerRespondedBeforeFault)}");
 
-        succeeded.Should().BeFalse("every connection is reset, so both attempts must fail");
+        succeeded.Should().BeFalse("every connection is withheld past the client timeout, so both attempts must fail");
 
         harness.Attempts.Should().Be(
             2,
             "exactly two total attempts are allowed and no third attempt may start; first failure {0}, second failure {1}",
             DescribeFailure(harness.FirstFailure),
             DescribeFailure(harness.LastFailure));
+
+        // Both attempts must be genuine client HTTP timeouts: the retry lifecycle is driven by the
+        // measured timeout chain, not by a reset.
+        Classify(harness.FirstFailure).Kind.Should().Be(
+            ClickHouseFailureKind.ClientHttpTimeout,
+            "attempt 1 must time out client-side; observed chain {0}",
+            DescribeFailure(harness.FirstFailure));
+        Classify(harness.LastFailure).Kind.Should().Be(
+            ClickHouseFailureKind.ClientHttpTimeout,
+            "attempt 2 must time out client-side too; observed chain {0}",
+            DescribeFailure(harness.LastFailure));
+
         harness.Records.Should().HaveCount(2, "one scheduled-retry record and one terminal failure record");
         harness.Records.Count(static record => record.ScheduledRetry).Should().Be(1);
         harness.Delays.Should().ContainSingle().Which.Should().Be(ClickHouseReadRetrier.BackoffDelay);
