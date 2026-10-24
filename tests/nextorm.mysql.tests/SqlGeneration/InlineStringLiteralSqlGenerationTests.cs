@@ -345,15 +345,16 @@ public class InlineStringLiteralSqlGenerationTests
         using var ctx = MySqlTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        // GROUP_CONCAT's SEPARATOR grammar accepts only a text-literal token, so the MySQL family
-        // spells a constant separator as an introduced quoted literal with apostrophes doubled. The
-        // value hex spelling (_utf8mb4 X'…') is a syntax error in this position.
+        // GROUP_CONCAT's SEPARATOR grammar accepts only a bare text-literal token, so the MySQL family
+        // spells a constant separator as the historic apostrophe-doubled quoted string. Both the value
+        // hex spelling (_utf8mb4 X'…') and an introduced literal (_utf8mb4'…') are syntax errors here
+        // (measured live on MySQL 8 and MariaDB 11); the introducer is parsed as an expression.
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, ",")))
-            .Should().Contain("separator _utf8mb4','");
+            .Should().Contain("separator ','");
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, "'")))
-            .Should().Contain("separator _utf8mb4''''", "an apostrophe is doubled inside the literal");
+            .Should().Contain("separator ''''", "an apostrophe is doubled inside the literal");
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, "")))
-            .Should().Contain("separator _utf8mb4''", "an empty separator is an empty literal, not a missing token");
+            .Should().Contain("separator ''", "an empty separator is an empty literal, not a missing token");
     }
 
     [Fact]
@@ -413,6 +414,24 @@ public class InlineStringLiteralSqlGenerationTests
             .Which;
 
         exception.Message.Should().NotContain("a\u0000b", "the rejection must not echo the rejected separator");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void StringAggNonAsciiSeparator_ShouldFailClosedWithoutEchoingTheValue()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // A bare token carries no charset introducer, so a non-ASCII separator would depend on the
+        // connection character set; the product rejects it instead of risking a lossy transcription.
+        var exception = FluentActions.Invoking(
+                () => SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, "\u00b7"))))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*MySQL*")
+            .Which;
+
+        exception.Message.Should().NotContain("\u00b7", "the rejection must not echo the rejected separator");
     }
 
     [Fact]

@@ -155,8 +155,10 @@ public sealed class MariaDbStringLiteralSafetyExecutionTests : IDisposable
             .Select(x => SqlFunctions.Sql.string_agg(x.Svalue, ","))
             .First();
 
-        // GROUP_CONCAT's SEPARATOR grammar accepts only a text-literal token, so the product renders the
-        // constant separator as _utf8mb4','. Row order inside an unordered aggregate is unspecified, so
+        // GROUP_CONCAT's SEPARATOR grammar accepts only a bare text-literal token, so the product renders
+        // the constant separator as ',': neither the charset-introduced hex value spelling nor an
+        // introduced quoted literal is accepted there. Row order inside an unordered aggregate is
+        // unspecified, so
         // either concatenation of the exact ordinal values is correct; the separator itself must be a
         // single comma and the payload must be byte-exact.
         concatenated.Should().BeOneOf("alpha,beta", "beta,alpha",
