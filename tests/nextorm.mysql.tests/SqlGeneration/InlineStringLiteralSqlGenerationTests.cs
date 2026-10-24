@@ -336,4 +336,43 @@ public class InlineStringLiteralSqlGenerationTests
 
         SqlForChar(ctx, '\u0001').Should().Contain("select _utf8mb4 X'01'");
     }
+
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void CapturedValueInSelectList_ShouldBeRecordedAsATemplateOccurrence()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var captured = "a\\b";
+
+        var command = ctx.From<IComplexEntity>().Limit(1).Select(e => captured);
+        var prepared = (DbPreparedQueryCommand<string>)ctx.GetPreparedQueryCommand(
+            command, false, false, CancellationToken.None);
+
+        prepared.ParameterTemplate.Should().NotBeNull(
+            "a captured value projected in the select list is a planner-owned occurrence");
+        prepared.ParameterTemplate!.OccurrenceCount.Should().Be(1,
+            "the select-list placeholder is recorded at emission time and merged into the statement template");
+        prepared.ParameterTemplate.Occurrences[0].Role.Should().Be(SqlStringLiteralRole.Value);
+        prepared.DbCommand.CommandText.Should().Contain("@captured");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void PredicateCapturedValue_OnAWarmCommand_ShouldKeepItsTemplateOccurrences()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var captured = "a\\b";
+        var command = ctx.From<IComplexEntity>().Where(e => e.String == captured).Select(e => e.Id);
+
+        var cold = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(
+            command, false, false, CancellationToken.None);
+        var warm = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(
+            command, false, false, CancellationToken.None);
+
+        cold.ParameterTemplate.Should().NotBeNull();
+        warm.ParameterTemplate.Should().NotBeNull("a warm checkout keeps the statement template");
+        warm.ParameterTemplate!.OccurrenceCount.Should().Be(3,
+            "the predicate null-safe expansion keeps its three occurrences on the warm command");
+    }
 }

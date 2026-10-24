@@ -1185,6 +1185,13 @@ internal static class SqlSourceRenderer
         var column = visitor.ToString();
         if (visitor.BooleanSelectProjection)
             column = ctx.Dialect.MakeBooleanPredicate(column, asPredicate: false);
+        else if (ctx.Capture is not null && visitor.Recorder is { } columnRecorder)
+        {
+            // The column was rendered by its own visitor; register the fragment so a caller that appends
+            // this exact text can merge the parameter occurrences it recorded at emission time. The
+            // boolean wrapper rewrites the text around the expression, so its offsets are not registered.
+            ctx.Capture.RegisterFragment(column, columnRecorder);
+        }
 
         // A projected column must be aliased when its property name differs from the column it is
         // read from (MyId = t.Id, or two sources exposing the same physical name). Without it an

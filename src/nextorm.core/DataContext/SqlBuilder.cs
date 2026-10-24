@@ -72,6 +72,14 @@ internal readonly struct SqlBuilder
         var capture = _ctx.Capture;
         var root = capture is null ? null : new SqlParameterTemplateRecorder();
 
+        // Select-list expressions are rendered into their own builder (SqlSourceRenderer.MakeColumn) and
+        // inserted at the head of the statement afterwards. Their placeholder occurrences therefore live
+        // in the column fragment's recorder, not in `root`; they are merged at their final statement
+        // offsets after both head insertions (select list, then WITH) have been relocated. Without this
+        // a captured value used only as a projected column has no template occurrence and the
+        // MySQL-family execution specialization cannot lower it.
+        List<(int Offset, SqlParameterTemplateRecorder Recorder)>? selectFragments = capture is null ? null : [];
+
         // Only the source entries this command adds may satisfy its own alias lookups. Without the
         // boundary a nested command over the same entity type as a sibling (or as the outer query)
         // resolves to that earlier alias (e.g. "from x as 't3' where t2.id = ...").
@@ -556,6 +564,14 @@ internal readonly struct SqlBuilder
 
                     if (!_ctx.ParamMode)
                     {
+                        var columnOffset = selectBuilder!.Length;
+                        if (selectFragments is not null
+                            && _ctx.Capture is { } selectCapture
+                            && selectCapture.TryGetFragment(column, out var columnRecorder))
+                        {
+                            selectFragments.Add((columnOffset, columnRecorder));
+                        }
+
                         selectBuilder!.Append(column);
 
                         if (needAliasForColumn)
@@ -597,6 +613,16 @@ internal readonly struct SqlBuilder
                 {
                     sqlBuilder!.Insert(0, withClause);
                     root?.RelocateInsertion(0, withClause.Length);
+                }
+
+                // The select-list fragments are now at their final offsets: the select text starts at 0
+                // and the WITH clause (when present) precedes it. Their occurrences are merged without
+                // moving the cursor (the recorded length already spans the finished statement).
+                if (root is not null && selectFragments is { Count: > 0 })
+                {
+                    var statementOffset = withClause?.Length ?? 0;
+                    foreach (var (offset, recorder) in selectFragments)
+                        root.AppendOccurrences(recorder, statementOffset + offset);
                 }
 
                 // FOR JSON / FOR XML come after ORDER BY but before the trailing OPTION clause.
