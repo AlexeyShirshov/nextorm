@@ -84,7 +84,7 @@ ctx.From<ISimpleEntity>().Page(5, 10).Select(x => x.Id);   // limit 5 offset 10
 ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // limit 18446744073709551615 offset 10
 ```
 
-### String literals and parameters
+## String literals and parameters
 
 Every inline text value — including an operand in a position where the grammar accepts only a
 literal — is rendered as the mode-independent `_utf8mb4 X'…'` form, an uppercase UTF-8 hex string,
