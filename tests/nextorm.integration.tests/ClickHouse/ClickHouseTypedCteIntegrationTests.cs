@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -13,7 +14,7 @@ public sealed class ClickHouseTypedCteIntegrationTests : ProviderTestSuite
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
 
     [Fact]
-    public void TypedCte_Ordinary_ShouldStillReturnData()
+    public async Task TypedCte_Ordinary_ShouldStillReturnData()
     {
         var ctx = _sut.DataProvider;
 
@@ -21,7 +22,15 @@ public sealed class ClickHouseTypedCteIntegrationTests : ProviderTestSuite
             .Select(c => new { c.Id, c.RequiredString })
             .AsCte("typed_recent");
 
-        var rows = ctx.From(recent).Select(r => new { r.Id, r.RequiredString }).ToList();
+        var query = ctx.From(recent).Select(r => new { r.Id, r.RequiredString });
+
+        var rows = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseTypedCteIntegrationTests.TypedCte_Ordinary_ShouldStillReturnData#1",
+                ClickHouseReadCategory.MaterialisedListRead),
+            token => query.ToListAsync(token),
+            TestContext.Current.CancellationToken);
 
         rows.Select(r => r.Id).OrderBy(id => id).Should().Equal(1, 2, 3);
     }

@@ -1,5 +1,6 @@
 using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -64,8 +65,18 @@ internal sealed class ClickHouseTestProvider : ITestProvider
         var builder = new DataContextBuilder();
         if (loggerFactory is not null)
             builder = builder.UseLoggerFactory(loggerFactory);
-        return new ClickHouseDataContext(ClickHouseContainer.ConnectionString, builder);
+        return new ClickHouseDataContext(EffectiveConnectionString(), builder);
     }
+
+    /// <summary>
+    /// The connection string every ClickHouse context in this process must use: the container/external
+    /// string with the effective HTTP timeout resolved by <see cref="ClickHouseTestTimeout"/>
+    /// (<c>NEXTORM_CLICKHOUSE_HTTP_TIMEOUT_SECONDS</c> &gt; an existing <c>Timeout</c> &gt; the driver
+    /// default of 120 seconds). Resolution is memoised, and an invalid knob fails configuration instead
+    /// of silently falling back.
+    /// </summary>
+    private static string EffectiveConnectionString() =>
+        ClickHouseTestTimeout.Resolve(ClickHouseContainer.ConnectionString).ConnectionString;
 
     public void EnsureSeeded()
     {
@@ -75,7 +86,7 @@ internal sealed class ClickHouseTestProvider : ITestProvider
         {
             if (_seeded) return;
 
-            using var ctx = new ClickHouseDataContext(ClickHouseContainer.ConnectionString, new DataContextBuilder());
+            using var ctx = new ClickHouseDataContext(EffectiveConnectionString(), new DataContextBuilder());
             using var conn = ctx.GetConnection();
             conn.Open();
 
