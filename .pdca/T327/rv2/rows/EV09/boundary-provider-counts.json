@@ -1,0 +1,37 @@
+{
+  "artifact": "boundary-provider-counts",
+  "row": "EV09",
+  "unit": "D8b",
+  "head": "475bfc8e0d9f5fd859a61d3228fcdb78dee99355",
+  "checkout": "/home/alex/sources/nextorm-worktrees/rc4/t327",
+  "command": [
+    "dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--",
+    "-noColor", "-notrait", "Category=Diagnostic"
+  ],
+  "serialized_under": "flock /tmp/opencode/nextorm-container-lease.lock -c /tmp/opencode/t327-d8b-full.sh",
+  "environment": {
+    "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock",
+    "NEXTORM_SKIP_PROVIDERS": "absent"
+  },
+  "exit": 1,
+  "summary": {
+    "total": 5352,
+    "errors": 0,
+    "failed": 7,
+    "skipped": 197,
+    "not_run": 0,
+    "time_seconds": 99.816
+  },
+  "provider_counts": {
+    "note": "Derived from the [FAIL]/[SKIP] lines of the single full run; the console reporter does not print per-provider selected/passed totals. No re-run was made to obtain them.",
+    "postgres": {"failures": 2, "skips": 26, "failures_list": ["PostgresJsonAccessExecutionTests.T263_R31_Apostrophes_InValueAndKey_ShouldRoundTrip", "PostgresSpecificTests.T261_SqlControls_ShouldBindWholeByteArray"]},
+    "sqlserver": {"failures": 2, "skips": 48, "failures_list": ["SqlServerIntegrationTests.CrossProviderScalarFunctions_NumericAndLength_ShouldCompute", "SqlServerExtendedFunctionTests.CompressionAndTimeZoneFunctions_ShouldExecute"]},
+    "mysql": {"failures": 1, "skips": 80, "failures_list": ["MySqlSpecificTests.StringAgg_ShouldConcatenateGroupValues"]},
+    "mariadb": {"failures": 0, "skips": 0, "failures_list": []},
+    "clickhouse": {"failures": 1, "skips": 0, "failures_list": ["ClickHouseExtendedFunctionTests.ArrayLibrary_ShouldExecute"]},
+    "sqlite": {"failures": 1, "skips": 43, "failures_list": ["CorrelatedSubquerySweepTests.CorrelatedOrderingAndGrouping_ShouldExecute"]}
+  },
+  "skip_budget": {"pinned": 197, "actual": 197, "delta": 0, "gate": "OK"},
+  "log": ".pdca/T327/rv2/logs/D8b-full-boundary.log",
+  "skip_budget_log": ".pdca/T327/rv2/logs/D8b-skip-budget.log"
+}

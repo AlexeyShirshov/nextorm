@@ -39,3 +39,8 @@ The D3 fix routes a CLR `char` through `RenderStringLiteral` in
    MySQL/MariaDB lower them to `_utf8mb4 X'...'` (full 12/12 matrix green, EV03).
 2. ClickHouse `char` parameters are normalized to a one-character string at every driver assignment
    (cold bind and refresh), so the captured-char cells are green (EV02/d8a-clickhouse-char.md).
+## D8b full fail-closed boundary (r=3, single run)
+
+One canonical full-suite run, serialized under the collection container lease, with no `NEXTORM_SKIP_PROVIDERS`: Total 5352, Failed 7, Skipped 197, Not Run 0, exit 1; skip budget 197/197 (delta 0). Log `.pdca/T327/rv2/logs/D8b-full-boundary.log`, details in `.pdca/T327/rv2/rows/EV09/d8b-boundary.json`. The boundary is red: 2 product regressions (DEF-T327-03, DEF-T327-04), 4 stale expectations under the declared representation (DEF-T327-06), 1 pre-existing unrelated SQLite failure (DEF-T327-05).
+
+The seven D8a targeted classes emitted no `[FAIL]`/`[SKIP]` line in the full run, so the matrix cells counted above stand; EV02 stays open until the boundary is green.

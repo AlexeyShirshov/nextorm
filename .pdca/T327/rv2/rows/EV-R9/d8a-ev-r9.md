@@ -12,3 +12,7 @@ All seven targeted suites green with 0 failed and 0 skipped (counts in
   previously failing mismatch cells are green across all 12 configurations.
 - ClickHouse: captured `char` (including `default(char)`) now binds as a one-character string and is
   exact.
+
+## D8b boundary
+
+Full run: no captured/explicit NUL failure in any provider class; the boundary is red on DEF-T327-03/04. Row continues.

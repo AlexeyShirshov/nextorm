@@ -13,3 +13,9 @@ native reference and the documented expected set.
 ClickHouse (dedicated class): default backslash escaping matches the expected sets; a prepared
 default-like statement contains no `escape` token; the custom escape `"!"` throws the product's
 `NotSupportedException` (`*ClickHouse*ESCAPE*`). The ClickHouse class is 3/3 green.
+
+## D8b full fail-closed boundary (r=3, single run)
+
+One canonical full-suite run, serialized under the collection container lease, with no `NEXTORM_SKIP_PROVIDERS`: Total 5352, Failed 7, Skipped 197, Not Run 0, exit 1; skip budget 197/197 (delta 0). Log `.pdca/T327/rv2/logs/D8b-full-boundary.log`, details in `.pdca/T327/rv2/rows/EV09/d8b-boundary.json`. The boundary is red: 2 product regressions (DEF-T327-03, DEF-T327-04), 4 stale expectations under the declared representation (DEF-T327-06), 1 pre-existing unrelated SQLite failure (DEF-T327-05).
+
+No LIKE/ESCAPE case failed in the full run; the recorded LIKE facts stand.

@@ -1,0 +1,602 @@
+The '-notrait' switch has been deprecated in favor of '-trait-' and will be removed in the next major version
+
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: nextorm.integration.tests
+  Discovered:  nextorm.integration.tests
+  Starting:    nextorm.integration.tests
+[testcontainers.org 00:00:00.31] Connected to Docker:
+  Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+  Server Version: 5.8.6
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.44
+  Operating System: fedora
+  Total Memory: 11.68 GB
+[testcontainers.org 00:00:00.31] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.31] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.31] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.40] Reusable resource found
+[testcontainers.org 00:00:00.40] Reusable resource found
+[testcontainers.org 00:00:00.40] Reusable resource found
+[testcontainers.org 00:00:00.50] Start Docker container 52fca0c8d20f
+[testcontainers.org 00:00:00.50] Start Docker container e5d50f8208fe
+[testcontainers.org 00:00:00.50] Start Docker container 8f7c88880fcd
+[testcontainers.org 00:00:04.65] Wait for Docker container 8f7c88880fcd to complete readiness checks
+[testcontainers.org 00:00:04.65] Wait for Docker container e5d50f8208fe to complete readiness checks
+[testcontainers.org 00:00:04.66] Execute "pg_isready --host localhost --dbname postgres --username postgres" at Docker container e5d50f8208fe
+[testcontainers.org 00:00:04.66] Execute "healthcheck.sh --connect --innodb_initialized" at Docker container 8f7c88880fcd
+[testcontainers.org 00:00:04.85] Wait for Docker container 52fca0c8d20f to complete readiness checks
+[testcontainers.org 00:00:04.90] Docker container e5d50f8208fe ready
+[testcontainers.org 00:00:05.74] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:05.75] Reusable resource found
+[testcontainers.org 00:00:05.75] Start Docker container d6e7e12a043b
+[testcontainers.org 00:00:07.00] Execute "healthcheck.sh --connect --innodb_initialized" at Docker container 8f7c88880fcd
+[testcontainers.org 00:00:07.18] Docker container 8f7c88880fcd ready
+[testcontainers.org 00:00:07.55] Docker container 52fca0c8d20f ready
+[testcontainers.org 00:00:07.87] Execute "mkdir /var/lib/mysql-files" at Docker container d6e7e12a043b
+[testcontainers.org 00:00:07.88] Add file to tar archive: Content length: 48 byte(s), Target file: "/etc/mysql/my.cnf", UID: 0, GID: 0, Mode: 0600
+[testcontainers.org 00:00:07.89] Copy tar archive to container: Content length: 48 byte(s), Docker container: d6e7e12a043b
+[testcontainers.org 00:00:08.38] Wait for Docker container d6e7e12a043b to complete readiness checks
+[testcontainers.org 00:00:08.39] Execute "mysql test --wait --silent --execute=SELECT 1;" at Docker container d6e7e12a043b
+[testcontainers.org 00:00:09.67] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:09.68] Reusable resource found
+[testcontainers.org 00:00:09.69] Start Docker container 264c4479ecbf
+    NextORM.Integration.Tests.PostgresJsonAccessExecutionTests.T263_R31_Apostrophes_InValueAndKey_ShouldRoundTrip [FAIL]
+      Expected sql "select (cast(E'{"k\'ey":"it\'s"}' as jsonb) -> cast(E'k\'ey' as text))
+       from simple_entity
+       where id = 1" to contain "''" because the inlined literal and key must double their apostrophes.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+           at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+        tests/nextorm.integration.tests/Postgres/PostgresJsonAccessExecutionTests.cs(789,0): at NextORM.Integration.Tests.PostgresJsonAccessExecutionTests.T263_R31_Apostrophes_InValueAndKey_ShouldRoundTrip()
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+[T263] AC1 generated SQL: select (cast(E'{"a":1}' as jsonb) -> cast(E'a' as text))
+ from simple_entity
+ where id = 1
+    NextORM.Integration.Tests.PostgresIntegrationTests.ExceptAll_WhenUnsupported_ShouldThrow [SKIP]
+      This provider supports EXCEPT ALL.
+    NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_JoinedToTable_ShouldReturnRows [SKIP]
+      The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
+    NextORM.Integration.Tests.PostgresIntegrationTests.CreateTableAs_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider materialises a query into a temporary table.
+    NextORM.Integration.Tests.PostgresIntegrationTests.IntersectAll_WhenUnsupported_ShouldThrow [SKIP]
+      This provider supports INTERSECT ALL.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReaderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Contains_TupleIn_OnProviderWithoutRowConstructor_ShouldReject [SKIP]
+      This provider supports tuple IN/Contains.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToStreamAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+[testcontainers.org 00:00:13.51] Docker container d6e7e12a043b ready
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+[testcontainers.org 00:00:14.21] Wait for Docker container 264c4479ecbf to complete readiness checks
+[testcontainers.org 00:00:14.22] Execute "/bin/sh -c find /opt/mssql-tools*/bin/sqlcmd -type f -print -quit" at Docker container 264c4479ecbf
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStreamAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+[testcontainers.org 00:00:14.60] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 264c4479ecbf
+    NextORM.Integration.Tests.PostgresIntegrationTests.ExecuteProcedure_UnsupportedProvider_ThrowsNotSupported [SKIP]
+      This provider supports stored procedures.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToTextReaderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.LobDataReader_UnsupportedProvider_ShouldThrowNotSupported [SKIP]
+      This provider implements the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Batch_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider supports batches.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.ExecuteProcedureAsync_UnsupportedProvider_ThrowsNotSupported [SKIP]
+      This provider supports stored procedures.
+    NextORM.Integration.Tests.MySqlSpecificTests.StringAgg_ShouldConcatenateGroupValues [FAIL]
+      MySqlConnector.MySqlException : You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '_utf8mb4 X'2c')
+       from complex_entity
+       where somestring is not null
+      limit 1' at line 1
+      Stack Trace:
+        /_/src/MySqlConnector/Core/ServerSession.cs(1185,0): at MySqlConnector.Core.ServerSession.ReceiveReplyAsync(IOBehavior ioBehavior, CancellationToken cancellationToken)
+        /_/src/MySqlConnector/Core/ResultSet.cs(37,0): at MySqlConnector.Core.ResultSet.ReadResultSetHeaderAsync(IOBehavior ioBehavior)
+        /_/src/MySqlConnector/MySqlDataReader.cs(133,0): at MySqlConnector.MySqlDataReader.ActivateResultSet(CancellationToken cancellationToken)
+        /_/src/MySqlConnector/MySqlDataReader.cs(489,0): at MySqlConnector.MySqlDataReader.InitAsync(CommandListPosition commandListPosition, ICommandPayloadCreator payloadCreator, IDictionary`2 cachedProcedures, IMySqlCommand command, CommandBehavior behavior, Activity activity, IOBehavior ioBehavior, CancellationToken cancellationToken)
+        /_/src/MySqlConnector/Core/CommandExecutor.cs(58,0): at MySqlConnector.Core.CommandExecutor.ExecuteReaderAsync(CommandListPosition commandListPosition, ICommandPayloadCreator payloadCreator, CommandBehavior behavior, Activity activity, MySqlConnectorSemanticConventionsKinds conventionsKinds, IOBehavior ioBehavior, CancellationToken cancellationToken)
+        /_/src/MySqlConnector/MySqlCommand.cs(324,0): at MySqlConnector.MySqlCommand.ExecuteScalarAsync(IOBehavior ioBehavior, CancellationToken cancellationToken)
+        /_/src/MySqlConnector/MySqlCommand.cs(110,0): at MySqlConnector.MySqlCommand.ExecuteScalar()
+        src/nextorm.core/DataContext/QueryExecutor.cs(149,0): at NextORM.Core.QueryExecutor.RunScalar(DbCommand command)
+        src/nextorm.core/DataContext/QueryExecutor.cs(882,0): at NextORM.Core.QueryExecutor.ExecuteScalar[TResult](IPreparedQueryCommand`1 preparedQueryCommand, ReadOnlySpan`1 params, Boolean throwIfNull)
+        src/nextorm.core/DataContext/QueryExecutor.cs(933,0): at NextORM.Core.QueryExecutor.First[TResult](IPreparedQueryCommand`1 preparedQueryCommand, ReadOnlySpan`1 params)
+        src/nextorm.core/DataContext/DataContext.cs(1718,0): at NextORM.Core.DataContext.First[TResult](IPreparedQueryCommand`1 preparedQueryCommand, ReadOnlySpan`1 params)
+        src/nextorm.core/Query/QueryCommand.TResult.cs(519,0): at NextORM.Core.QueryCommand`1.First(ReadOnlySpan`1 params)
+        src/nextorm.core/Query/QueryCommand.TResult.cs(503,0): at NextORM.Core.QueryCommand`1.First()
+        tests/nextorm.integration.tests/MySql/MySqlSpecificTests.cs(134,0): at NextORM.Integration.Tests.MySqlSpecificTests.StringAgg_ShouldConcatenateGroupValues()
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_GroupBy_ShouldAggregate [SKIP]
+      The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
+    NextORM.Integration.Tests.PostgresIntegrationTests.LobDataReader_UnsupportedProviderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_WhereAndOrderBy_ShouldFilterAndSort [SKIP]
+      The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Insert_Returning_ShouldThrow_WhenProviderCannot [SKIP]
+      This provider can return inserted rows.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.TableFunction_JsonEach_ShouldReturnRows [SKIP]
+      The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.
+    NextORM.Integration.Tests.ClickHouseExtendedFunctionTests.ArrayLibrary_ShouldExecute [FAIL]
+      System.ArgumentOutOfRangeException : The recorded length 4 cannot shrink to 0. (Parameter 'emittedLength')
+      Actual value was 0.
+      Stack Trace:
+        src/nextorm.core/DataContext/Cache/SqlParameterTemplateRecorder.cs(177,0): at NextORM.Core.SqlParameterTemplateRecorder.AdvanceTo(Int32 emittedLength)
+        src/nextorm.core/DataContext/Cache/SqlParameterTemplateCapture.cs(193,0): at NextORM.Core.SqlParameterEmission.Append(StringBuilder builder, SqlParameterTemplateRecorder recorder, ISqlDialect dialect, Boolean paramMode, List`1 parameters, Parameter parameter, SqlStringLiteralRole role, MutationParameterLowering lowering)
+        src/nextorm.core/Visitors/BaseExpressionVisitor.cs(353,0): at NextORM.Core.BaseExpressionVisitor.EmitParameter(Parameter parameter, SqlStringLiteralRole role)
+        src/nextorm.core/Visitors/SqlOperandTranslator.cs(90,0): at NextORM.Core.SqlOperandTranslator.AppendArrayOperand(BaseExpressionVisitor visitor, Expression arrayExp)
+        src/nextorm.core/Visitors/SqlOperandTranslator.cs(42,0): at NextORM.Core.SqlOperandTranslator.AppendArgument(BaseExpressionVisitor visitor, Expression argument)
+        src/nextorm.core/Visitors/SqlOperandTranslator.cs(176,0): at NextORM.Core.SqlOperandTranslator.AppendArrayOrColumn(BaseExpressionVisitor visitor, Expression argument)
+        src/nextorm.core/Visitors/ClickHouseNativeFunctionTranslator.cs(154,0): at NextORM.Core.ClickHouseNativeFunctionTranslator.<>c__DisplayClass5_1.<EmitParamsArray>b__0()
+        src/nextorm.core/Visitors/ClickHouseNativeFunctionTranslator.cs(261,0): at NextORM.Core.ClickHouseNativeFunctionTranslator.Capture(StringBuilder builder, Action emit)
+        src/nextorm.core/Visitors/ClickHouseNativeFunctionTranslator.cs(154,0): at NextORM.Core.ClickHouseNativeFunctionTranslator.EmitParamsArray(BaseExpressionVisitor visitor, MethodCallExpression node, IScalarFunctions scalars, String name)
+        src/nextorm.core/Visitors/ClickHouseNativeFunctionTranslator.cs(83,0): at NextORM.Core.ClickHouseNativeFunctionTranslator.TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
+        src/nextorm.core/Visitors/NormSqlTranslator.cs(220,0): at NextORM.Core.NormSqlTranslator.TranslateNormSql(BaseExpressionVisitor visitor, MethodCallExpression node)
+        src/nextorm.core/Visitors/NormSqlTranslator.cs(41,0): at NextORM.Core.NormSqlTranslator.TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
+        src/nextorm.core/Visitors/BaseExpressionVisitor.cs(559,0): at NextORM.Core.BaseExpressionVisitor.VisitMethodCall(MethodCallExpression node)
+        src/nextorm.core/DataContext/SqlSourceRenderer.cs(1181,0): at NextORM.Core.SqlSourceRenderer.MakeColumn(SqlBuildContext& ctx, SelectExpression selExp, Type entityType, Boolean dontNeedAlias, Boolean renameAware, Boolean selectList)
+        src/nextorm.core/DataContext/SqlBuilder.cs(563,0): at NextORM.Core.SqlBuilder.MakeSelect(QueryCommand cmd, String selectInto)
+        src/nextorm.core/DataContext/QueryPlanner.cs(634,0): at NextORM.Core.QueryPlanner.MakeSelect(QueryCommand queryCommand, Boolean paramMode, List`1 params, IQueryRegistry queryProvider, IAliasProvider aliasProvider, Boolean sequentialAccess, Boolean suppressLobLocator, SqlParameterTemplateCapture capture)
+        src/nextorm.core/DataContext/QueryPlanner.cs(949,0): at NextORM.Core.QueryPlanner.<GetPreparedQueryCommand>g__MakeSelectInternal|49_0[TResult](<>c__DisplayClass49_0`1&)
+        src/nextorm.core/DataContext/QueryPlanner.cs(803,0): at NextORM.Core.QueryPlanner.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean sequentialAccess, Boolean streamingRowsRequested, Boolean suppressLobLocator, CancellationToken cancellationToken)
+        src/nextorm.core/DataContext/QueryPlanner.cs(644,0): at NextORM.Core.QueryPlanner.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean sequentialAccess, Boolean streamingRowsRequested, CancellationToken cancellationToken)
+        src/nextorm.core/DataContext/DataContext.cs(346,0): at NextORM.Core.DataContext.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean streamingRows, CancellationToken cancellationToken)
+        src/nextorm.core/DataContext/DataContext.cs(325,0): at NextORM.Core.DataContext.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, CancellationToken cancellationToken)
+        src/nextorm.core/Query/QueryCommand.TResult.cs(518,0): at NextORM.Core.QueryCommand`1.First(ReadOnlySpan`1 params)
+        src/nextorm.core/Query/QueryCommand.TResult.cs(503,0): at NextORM.Core.QueryCommand`1.First()
+        tests/nextorm.integration.tests/ClickHouse/ClickHouseExtendedFunctionTests.cs(74,0): at NextORM.Integration.Tests.ClickHouseExtendedFunctionTests.ArrayLibrary_ShouldExecute()
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_RowStream_UnsupportedProvider_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.Lob_UnsupportedProvider_ToStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.PostgresIntegrationTests.TempTableSource_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider materialises a query into a temporary table.
+[testcontainers.org 00:00:23.90] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 264c4479ecbf
+    NextORM.Integration.Tests.CorrelatedSubquerySweepTests.CorrelatedOrderingAndGrouping_ShouldExecute [FAIL]
+      System.NullReferenceException : Object reference not set to an instance of an object.
+      Stack Trace:
+        src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs(814,0): at NextORM.Core.ExpressionPlanEqualityComparer.Visitor.VisitIndex(IndexExpression node)
+        src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs(843,0): at NextORM.Core.ExpressionPlanEqualityComparer.Visitor.VisitLambda[T](Expression`1 node)
+        src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs(843,0): at NextORM.Core.ExpressionPlanEqualityComparer.Visitor.VisitLambda[T](Expression`1 node)
+        src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs(90,0): at NextORM.Core.ExpressionPlanEqualityComparer.GetHashCode(Expression obj)
+        src/nextorm.core/Expressions/XxHash32.cs(363,0): at NextORM.Core.XxHash32.Add[T](T value, IEqualityComparer`1 comparer)
+        src/nextorm.core/Expressions/SortingExpressionPlanEqualityComparer.cs(66,0): at NextORM.Core.SortingExpressionPlanEqualityComparer.GetHashCodeRef(Sorting& obj)
+        src/nextorm.core/Query/QueryCommand.QueryPreparer.cs(2752,0): at NextORM.Core.QueryCommand.QueryPreparer.PrepareSorting(QueryCommand cmd, SelectExpression[] selectList, Boolean noHash, CancellationToken cancellationToken)
+        src/nextorm.core/Query/QueryCommand.QueryPreparer.cs(113,0): at NextORM.Core.QueryCommand.QueryPreparer.Prepare(QueryCommand cmd, Boolean dontCalculateHash, CancellationToken cancellationToken)
+        src/nextorm.core/Query/QueryCommand.Prepare.cs(18,0): at NextORM.Core.QueryCommand.PrepareCommand(Boolean dontCalculateHash, CancellationToken cancellationToken)
+        src/nextorm.core/Query/QueryCommand.TResult.cs(62,0): at NextORM.Core.QueryCommand`1.PrepareCommand(Boolean dontCalculateHash, CancellationToken cancellationToken)
+        src/nextorm.core/DataContext/QueryPlanner.cs(714,0): at NextORM.Core.QueryPlanner.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean sequentialAccess, Boolean streamingRowsRequested, Boolean suppressLobLocator, CancellationToken cancellationToken)
+        src/nextorm.core/DataContext/QueryPlanner.cs(644,0): at NextORM.Core.QueryPlanner.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean sequentialAccess, Boolean streamingRowsRequested, CancellationToken cancellationToken)
+        src/nextorm.core/DataContext/DataContext.cs(346,0): at NextORM.Core.DataContext.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean streamingRows, CancellationToken cancellationToken)
+        src/nextorm.core/DataContext/DataContext.cs(325,0): at NextORM.Core.DataContext.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, CancellationToken cancellationToken)
+        src/nextorm.core/Query/QueryCommand.TResult.cs(302,0): at NextORM.Core.QueryCommand`1.ToList(ReadOnlySpan`1 params)
+        tests/nextorm.integration.tests/Sqlite/CorrelatedSubquerySweepTests.cs(85,0): at NextORM.Integration.Tests.CorrelatedSubquerySweepTests.CorrelatedOrderingAndGrouping_ShouldExecute()
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+[testcontainers.org 00:00:26.80] Docker container 264c4479ecbf ready
+[native-measurement] rows=0 native[ms=2.05 alloc=16072 bytes=2 route=True serializer_count=1] managed[ms=14.86 alloc=30816 bytes=2 route=False serializer_count=0]
+[native-measurement] rows=1 native[ms=2.17 alloc=15744 bytes=24 route=True serializer_count=1] managed[ms=1.81 alloc=31240 bytes=43 route=False serializer_count=0]
+[native-measurement] rows=100 native[ms=2.26 alloc=22056 bytes=2389 route=True serializer_count=1] managed[ms=4.31 alloc=49576 bytes=4190 route=False serializer_count=0]
+[native-measurement] rows=10000 native[ms=40.80 alloc=1063720 bytes=271493 route=True serializer_count=1] managed[ms=42.40 alloc=1345688 bytes=451494 route=False serializer_count=0]
+    NextORM.Integration.Tests.MySqlIntegrationTests.ExecuteProcedureAsync_UnsupportedProvider_ThrowsNotSupported [SKIP]
+      This provider supports stored procedures.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.BulkInsert_IgnoreDuplicates_ShouldSkipConflictingKeys [SKIP]
+      This provider cannot skip conflicting rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.ValueConverters_Returning_ShouldMaterializeConvertedValue [SKIP]
+      This provider cannot return inserted rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_StreamingAfterBuffered_ShouldNotReuseBufferedPlan [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobAsync_Interceptor_ShouldRaiseLifecycleOncePerTerminal [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_DisposeAsync_ShouldReleaseReaderAndKeepContextUsable [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.PostgresSpecificTests.T261_SqlControls_ShouldBindWholeByteArray [FAIL]
+      Expected parameterTextSql "select digest(@norm_p0, E'sha256') as "H"
+       from simple_entity
+       where id = 1" to contain "digest(@norm_p0, 'sha256')".
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+           at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+        tests/nextorm.integration.tests/Postgres/PostgresSpecificTests.cs(518,0): at NextORM.Integration.Tests.PostgresSpecificTests.T261_SqlControls_ShouldBindWholeByteArray()
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+      Output:
+        T261SQL {"scenario":"captured-byte-array.sha256","sql":"select sha256(@data) as \u0022H\u0022\n from simple_entity\n where id = 1","parameters":[{"name":"data","db_type":"Binary","npgsql_type":"Bytea","value":"0x616263"}]}
+        T261SQL {"scenario":"captured-byte-array.digest","sql":"select digest(@data, E\u0027sha256\u0027) as \u0022H\u0022\n from simple_entity\n where id = 1","parameters":[{"name":"data","db_type":"Binary","npgsql_type":"Bytea","value":"0x616263"}]}
+        T261SQL {"scenario":"explicit-parameter-byte-array.sha256","sql":"select sha256(@norm_p0) as \u0022H\u0022\n from simple_entity\n where id = 1","parameters":[{"name":"norm_p0","db_type":"Object","npgsql_type":"Unknown","value":null}]}
+        T261SQL {"scenario":"captured-string.digest","sql":"select digest(@text, E\u0027sha256\u0027) as \u0022H\u0022\n from simple_entity\n where id = 1","parameters":[{"name":"text","db_type":"String","npgsql_type":"Text","value":"abc"}]}
+        T261SQL {"scenario":"explicit-parameter-string.digest","sql":"select digest(@norm_p0, E\u0027sha256\u0027) as \u0022H\u0022\n from simple_entity\n where id = 1","parameters":[{"name":"norm_p0","db_type":"Object","npgsql_type":"Unknown","value":null}]}
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Batch_CreateTempTableThenQueryAsync_ShouldReadTheTableInTheSameBatch [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TempTableSource_NestedTempTables_ShouldWork [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TempTableSource_Any_ShouldSeeTheMaterialisedRows [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TempTableSource_ShouldStreamTheRows [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.CreateTableAs_WithCteBody_ShouldBeReadableOnTheSameContext [SKIP]
+      This provider cannot materialise a query into a temporary table.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TempTableSource_ShouldMaterialiseOnRead [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TempTableSource_ShouldRematerialiseOnEachExecution [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Contains_TupleIn_Empty_ShouldReturnEmpty [SKIP]
+      This provider has no row-value constructor.
+    NextORM.Integration.Tests.MySqlIntegrationTests.DynamicColumns_FullMerge_ShouldInsertThenUpdateKeys [SKIP]
+      This provider cannot render a general multi-branch MERGE.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_ToStream_WithParameter_ShouldRoundTripAllBytes [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_ReadAfterDispose_ShouldThrowObjectDisposed [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.TableFunction_JoinedToTable_ShouldReturnRows [SKIP]
+      The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobClob_ToTextReader_ShouldRoundTripAllChars [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.CreateTableAs_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider materialises a query into a temporary table.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_RowStream_EarlyBreak_ShouldReleaseAndNotPinStatement [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobDataReader_ToDataReader_ShouldReadTwoColumnsAcrossRows [SKIP]
+      This provider does not implement the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.MySqlIntegrationTests.TableFunction_JsonEach_ShouldReturnRows [SKIP]
+      The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.
+    NextORM.Integration.Tests.MySqlIntegrationTests.FullJoin_ShouldReturnBothSides [SKIP]
+      This provider does not support FULL JOIN.
+    NextORM.Integration.Tests.MySqlIntegrationTests.ExceptAll_WhenSupported_ShouldReturnOnlyLeftRows [SKIP]
+      This provider does not support EXCEPT ALL.
+    NextORM.Integration.Tests.MySqlIntegrationTests.ReturningKey_Batch_ShouldReturnEveryKey [SKIP]
+      This provider cannot return generated columns on the insert.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Batch_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider supports batches.
+    NextORM.Integration.Tests.MySqlIntegrationTests.TableFunction_GroupBy_ShouldAggregate [SKIP]
+      The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Batch_CreateTempTableThenQuery_ToAsyncEnumerable_ShouldStreamTheRows [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStreamAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TableFunction_GroupBy_ShouldAggregate [SKIP]
+      The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_NonSingleColumnProjection_ShouldThrowInvalidOperationException [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_NonSingleColumnProjection_ShouldReleaseReaderAndKeepContextUsable [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobTextReader_NonSingleColumnProjection_ShouldThrowInvalidOperationException [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Contains_TupleIn_OnProviderWithoutRowConstructor_ShouldReject [SKIP]
+      This provider supports tuple IN/Contains.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_ToStreamAsync_ShouldRoundTripAllBytes [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobStreamAsync_CancelledMidRead_ShouldReleaseReaderAndKeepContextUsable [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobStreamAsync_NonSingleColumnProjection_ShouldReleaseReaderAndKeepContextUsable [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Contains_TupleIn_NullComponent_ShouldMatchNullRow [SKIP]
+      This provider has no row-value constructor.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobDataReader_CancelledBeforeOpenAsync_ShouldThrowAndNotLeak [SKIP]
+      This provider does not implement the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobStreamAsync_CancelledBeforeOpen_ShouldThrowAndNotLeak [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_NamedColumnAsStream_ShouldRoundTripAllBytes [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Update_Returning_ShouldReturnUpdatedRows [SKIP]
+      This provider cannot return updated rows.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.ExecuteProcedureAsync_UnsupportedProvider_ThrowsNotSupported [SKIP]
+      This provider supports stored procedures.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.LobBlob_ZeroColumnProjection_ShouldThrowInvalidOperationException [SKIP]
+      This provider cannot return a zero-column result set.
+    NextORM.Integration.Tests.MySqlIntegrationTests.TempTableSource_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider materialises a query into a temporary table.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobDataReader_Dispose_ShouldReleaseReaderAndKeepContextUsable [SKIP]
+      This provider does not implement the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.IntersectAll_WhenSupported_ShouldReturnCommonRows [SKIP]
+      This provider does not support INTERSECT ALL.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.CrossProviderScalarFunctions_NumericAndLength_ShouldCompute [FAIL]
+      Expected r.Bl to be 24, but found 48 (difference of 24).
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+           at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+        tests/nextorm.integration.tests/CommonTestSuite/Functions/CommonTestSuite.CrossProviderScalarFunctions.cs(76,0): at NextORM.Integration.Tests.CommonTestSuite.CrossProviderScalarFunctions_NumericAndLength_ShouldCompute()
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_BufferedAfterStreaming_ShouldStillMaterialize [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.LobDataReader_UnsupportedProviderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_Interceptor_OnFailure_ShouldRaiseFailedOnce [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Delete_ReturningWholeEntity_ShouldReturnRow [SKIP]
+      This provider cannot return removed rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_ThreeColumnProjection_ShouldThrowInvalidOperationException [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobDataReader_ToDataReaderAsync_ShouldReadTwoColumnsAcrossRows [SKIP]
+      This provider does not implement the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_ZeroColumnProjection_ShouldThrowInvalidOperationException [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_ThreeColumnProjectionAsync_ShouldThrowInvalidOperationException [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_Dispose_ShouldReleaseReaderAndKeepContextUsable [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobDataReader_CancelledBeforeOpen_ShouldThrowAndNotLeak [SKIP]
+      This provider does not implement the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobTextReaderAsync_NonSingleColumnProjection_ShouldThrowInvalidOperationException [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.ExecuteProcedure_UnsupportedProvider_ThrowsNotSupported [SKIP]
+      This provider supports stored procedures.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Insert_ReturningBatch_ShouldReturnEveryRow [SKIP]
+      This provider cannot return inserted rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Update_ReturningWholeEntity_ShouldReturnRow [SKIP]
+      This provider cannot return updated rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_RowStream_ShouldRoundTripAllBytes [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobTextReaderAsync_PartialReadThenDispose_ShouldReleaseReaderAndKeepContextUsable [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.IntersectAll_WhenSupported_ShouldReturnCommonRows [SKIP]
+      This provider does not support INTERSECT ALL.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_BufferedToListBeforeAndAfterStream_ShouldMatch [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TableFunction_JoinedToTable_ShouldReturnRows [SKIP]
+      The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_RowStream_ReadAfterMoveNext_ShouldBeInvalid [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Delete_ReturningAsync_ShouldReturnRemovedRows [SKIP]
+      This provider cannot return removed rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobTextReader_ReadAfterDispose_ShouldThrowObjectDisposed [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.TableFunction_WhereAndOrderBy_ShouldFilterAndSort [SKIP]
+      The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobDataReader_DisposeAsync_ShouldReleaseReaderAndKeepContextUsable [SKIP]
+      This provider does not implement the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_PartialReadThenDispose_ShouldReleaseReaderAndKeepContextUsable [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.BulkInsert_IgnoreDuplicates_WithReturning_ShouldReturnOnlyInsertedRows [SKIP]
+      This provider cannot both skip conflicting rows and return written rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobClob_RowTextReader_ShouldRoundTripAllChars [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_ContextDisposedBeforeStream_ShouldThrowObjectDisposed [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobClob_NamedColumnGetTextReader_ShouldRoundTripAllChars [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Insert_Returning_ShouldReturnWrittenRow [SKIP]
+      This provider cannot return inserted rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobSync_Interceptor_ShouldRaiseLifecycleOncePerTerminal [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobClob_RowStream_NullAndNonNull_ShouldReadIsDBNullThenGetTextReader [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_ToStream_ShouldRoundTripAllBytes [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Insert_ReturningWholeEntity_OnInterface_ShouldThrow [SKIP]
+      This provider cannot return inserted rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobClob_BufferedToListBeforeAndAfterTextReader_ShouldMatch [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Insert_FromQuery_ReturningSingle_OnMultipleRows_ShouldThrow [SKIP]
+      This provider cannot return inserted rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.ReturningKey_NullableKeyType_ShouldMaterialize [SKIP]
+      This provider cannot return inserted rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_NamedColumnGetStream_ShouldRoundTripAllBytes [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobStream_CancelledBeforeOpen_ShouldThrowAndNotLeak [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobClob_ToTextReaderAsync_ShouldRoundTripAllChars [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.AvgAsync_ShouldReturn6 [SKIP]
+      This provider evaluates AVG over an integer column as an integer.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Contains_TupleIn_CapturedList_ShouldFilter [SKIP]
+      This provider has no row-value constructor.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Batch_CreateTempTableThenQuery_ShouldReadTheTableInTheSameBatch [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.ExecuteProcedure_UnsupportedProvider_ThrowsNotSupported [SKIP]
+      This provider supports stored procedures.
+    NextORM.Integration.Tests.MySqlIntegrationTests.JsonColumn_Returning_ShouldMaterialize [SKIP]
+      This provider cannot return inserted rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Batch_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider supports batches.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Iteration14_PreparedDml_ExecutesEveryTime [SKIP]
+      Data-modifying CTE bodies are only supported by PostgreSQL.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.LobDataReader_UnsupportedProvider_ShouldThrowNotSupported [SKIP]
+      This provider implements the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Iteration14_PreparedDml_ExecutesEveryTime [SKIP]
+      Data-modifying CTE bodies are only supported by PostgreSQL.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TableFunction_WhereAndOrderBy_ShouldFilterAndSort [SKIP]
+      The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReaderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Avg_ShouldReturn6 [SKIP]
+      This provider evaluates AVG over an integer column as an integer.
+    NextORM.Integration.Tests.MySqlIntegrationTests.LobBlob_RowStream_NullAndNonNull_ShouldReadIsDBNullThenGetStream [SKIP]
+      This provider does not implement streaming LOB reads.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Insert_ReturningProjection_ShouldReturnProjection [SKIP]
+      This provider cannot return inserted rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.ReturningIdentitySelector_ShouldReturnGeneratedKey [SKIP]
+      This provider cannot return generated columns on the insert.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Update_ReturningAsync_ShouldReturnUpdatedRows [SKIP]
+      This provider cannot return updated rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Delete_Returning_ShouldReturnRemovedRows [SKIP]
+      This provider cannot return removed rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.Iteration14_MutationBesideRecursiveRead_ExecutesEveryTime [SKIP]
+      Data-modifying CTE bodies are only supported by PostgreSQL.
+    NextORM.Integration.Tests.MySqlIntegrationTests.BulkInsert_ReturningKey_ShouldReturnGeneratedKeys [SKIP]
+      This provider cannot return inserted rows.
+    NextORM.Integration.Tests.MySqlIntegrationTests.ReturningConversionProjection_ShouldMaterialize [SKIP]
+      This provider cannot return inserted rows.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TempTableSource_ScalarTerminals_ShouldWork [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_RowStream_UnsupportedProvider_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.ExceptAll_WhenSupported_ShouldReturnOnlyLeftRows [SKIP]
+      This provider does not support EXCEPT ALL.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_ToTextReaderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.CreateTableAs_TempTableIfNotExists_ShouldBeRepeatable [SKIP]
+      This provider cannot materialise a query into a temporary table.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Insert_Returning_ShouldThrow_WhenProviderCannot [SKIP]
+      This provider can return inserted rows.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.CreateTableAs_TempTable_ShouldBeReadableOnTheSameContext [SKIP]
+      This provider cannot materialise a query into a temporary table.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.BulkInsert_IgnoreDuplicates_WithReturning_ShouldReturnOnlyInsertedRows [SKIP]
+      This provider cannot both skip conflicting rows and return written rows.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Contains_TupleIn_Negation_ShouldExcludeNullComponentMatch [SKIP]
+      This provider has no row-value constructor.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Iteration14_MutationBesideRecursiveRead_ExecutesEveryTime [SKIP]
+      Data-modifying CTE bodies are only supported by PostgreSQL.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Contains_TupleIn_MismatchedComponents_ShouldReturnEmpty [SKIP]
+      This provider has no row-value constructor.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.TableFunction_JsonEach_ShouldReturnRows [SKIP]
+      The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_ToStreamAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Batch_CapturedParameterWithSameName_ShouldNotCollideAcrossStatements [SKIP]
+      This provider cannot run a CTAS batch.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_ToTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqlServerIntegrationTests.Lob_UnsupportedProvider_ToStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqliteIntegrationTests.CorrelatedCrossApply_BuilderSource_ShouldProjectEntityMembers [SKIP]
+      This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.
+    NextORM.Integration.Tests.SqliteIntegrationTests.LobDataReader_UnsupportedProviderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.SqliteIntegrationTests.DeleteJoin_ShouldRemoveRowsMatchingAnotherTable [SKIP]
+      This provider has no native multi-table DELETE.
+    NextORM.Integration.Tests.SqliteIntegrationTests.ExceptAll_WhenSupported_ShouldReturnOnlyLeftRows [SKIP]
+      This provider does not support EXCEPT ALL.
+    NextORM.Integration.Tests.SqliteIntegrationTests.CorrelatedScalarSingle_ShouldYieldValueWhenExactlyOneRowMatches [SKIP]
+      This provider's scalar subqueries do not enforce cardinality (Single/SingleOrDefault are rejected there).
+    NextORM.Integration.Tests.SqliteIntegrationTests.CreateTableAs_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider materialises a query into a temporary table.
+    NextORM.Integration.Tests.SqliteIntegrationTests.CorrelatedOuterApply_BuilderSource_ShouldPreserveUnmatchedRows [SKIP]
+      This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqliteIntegrationTests.CrossApply_OnPlainTable_ShouldCrossJoin [SKIP]
+      This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.
+    NextORM.Integration.Tests.SqliteIntegrationTests.LobBlob_ZeroColumnProjection_ShouldThrowInvalidOperationException [SKIP]
+      This provider cannot return a zero-column result set.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetTextReaderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Lob_UnsupportedProvider_ToTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqliteIntegrationTests.DeleteJoin_FromCte_ShouldRemoveRowsFromCte [SKIP]
+      This provider has no native multi-table DELETE.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsTextReader_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqliteIntegrationTests.CorrelatedCrossApply_ShouldEvaluatePerOuterRow [SKIP]
+      This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.
+    NextORM.Integration.Tests.SqliteIntegrationTests.CorrelatedOuterApply_ShouldPreserveUnmatchedRows [SKIP]
+      This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.
+    NextORM.Integration.Tests.SqliteIntegrationTests.T316_Apply_UncorrelatedThenCorrelated [SKIP]
+      This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Lob_UnsupportedProvider_ToTextReaderAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqliteIntegrationTests.DynamicColumns_FullMerge_ShouldInsertThenUpdateKeys [SKIP]
+      This provider cannot render a general multi-branch MERGE.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Lob_UnsupportedProvider_ToStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqliteIntegrationTests.CorrelatedScalarSingleOrDefaultValue_ShouldYieldDefaultWhenNoRowMatches [SKIP]
+      This provider's scalar subqueries do not enforce cardinality (Single/SingleOrDefault are rejected there).
+    NextORM.Integration.Tests.SqliteIntegrationTests.Batch_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider supports batches.
+    NextORM.Integration.Tests.SqliteIntegrationTests.CorrelatedScalarSingleOrDefault_ShouldYieldNullWhenNoRowMatches [SKIP]
+      This provider's scalar subqueries do not enforce cardinality (Single/SingleOrDefault are rejected there).
+    NextORM.Integration.Tests.SqliteIntegrationTests.CorrelatedScalarSingle_ShouldThrowWhenMultipleRowsMatch [SKIP]
+      This provider's scalar subqueries do not enforce cardinality (Single/SingleOrDefault are rejected there).
+    NextORM.Integration.Tests.SqliteIntegrationTests.SubQuerySelectOrderSingle_ShouldReturnData [SKIP]
+      This provider's scalar subqueries do not enforce cardinality (Single/SingleOrDefault are rejected there).
+    NextORM.Integration.Tests.SqliteIntegrationTests.Lob_UnsupportedProvider_NamedColumnGetStreamAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqliteIntegrationTests.ContainsOrdinal_ShouldBeCaseSensitive [SKIP]
+      This provider's LIKE cannot be made byte-wise.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Iteration14_PreparedDml_ExecutesEveryTime [SKIP]
+      Data-modifying CTE bodies are only supported by PostgreSQL.
+    NextORM.Integration.Tests.SqliteIntegrationTests.RowLock_SourcePrimary_ShouldLockTheTargetRow [SKIP]
+      This provider does not support source-level row locking.
+    NextORM.Integration.Tests.SqliteIntegrationTests.TempTableSource_UnsupportedProvider_ShouldThrow [SKIP]
+      This provider materialises a query into a temporary table.
+    NextORM.Integration.Tests.SqliteIntegrationTests.LobDataReader_UnsupportedProvider_ShouldThrowNotSupported [SKIP]
+      This provider implements the multi-column LOB reader terminal.
+    NextORM.Integration.Tests.SqliteIntegrationTests.OuterApply_OnPlainTable_ShouldKeepEveryLeftRow [SKIP]
+      This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Lob_UnsupportedProvider_NamedColumnAsStream_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqliteIntegrationTests.T316_Apply_CorrelatedThenUncorrelated [SKIP]
+      This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Insert_Returning_ShouldThrow_WhenProviderCannot [SKIP]
+      This provider can return inserted rows.
+    NextORM.Integration.Tests.SqliteIntegrationTests.RowLock_SkipLocked_ShouldSkipRowsLockedByAnotherTransaction [SKIP]
+      This provider does not support row locking.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Truncate_ShouldRemoveEveryRow [SKIP]
+      This provider has no TRUNCATE.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Contains_TupleIn_OnProviderWithoutRowConstructor_ShouldReject [SKIP]
+      This provider supports tuple IN/Contains.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Lob_RowStream_UnsupportedProvider_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqliteIntegrationTests.IntersectAll_WhenSupported_ShouldReturnCommonRows [SKIP]
+      This provider does not support INTERSECT ALL.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Lob_UnsupportedProvider_ToStreamAsync_ShouldThrowNotSupported [SKIP]
+      This provider implements streaming LOB reads.
+    NextORM.Integration.Tests.SqliteIntegrationTests.Iteration14_MutationBesideRecursiveRead_ExecutesEveryTime [SKIP]
+      Data-modifying CTE bodies are only supported by PostgreSQL.
+    NextORM.Integration.Tests.SqlServerExtendedFunctionTests.CompressionAndTimeZoneFunctions_ShouldExecute [FAIL]
+      Expected r.RoundTrip to be equal to {0x61, 0x62, 0x63}, but {0x61, 0x00, 0x62, 0x00, 0x63, 0x00} contains 3 item(s) too many.
+      Stack Trace:
+           at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+           at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+           at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+           at FluentAssertions.Execution.GivenSelectorExtensions.AssertCollectionHasNotTooManyItems[T](GivenSelector`1 givenSelector, Int32 length)
+           at FluentAssertions.Collections.GenericCollectionAssertions`3.Equal(T[] elements)
+        tests/nextorm.integration.tests/SqlServer/SqlServerExtendedFunctionTests.cs(58,0): at NextORM.Integration.Tests.SqlServerExtendedFunctionTests.CompressionAndTimeZoneFunctions_ShouldExecute()
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+[testcontainers.org 00:01:39.65] Stop Docker container e5d50f8208fe
+[testcontainers.org 00:01:40.47] Stop Docker container 264c4479ecbf
+[testcontainers.org 00:01:51.16] Stop Docker container d6e7e12a043b
+[testcontainers.org 00:01:54.79] Stop Docker container 8f7c88880fcd
+[testcontainers.org 00:01:55.51] Stop Docker container 52fca0c8d20f
+  Finished:    nextorm.integration.tests (ID = 'b955c1960c46da09b333e47c50ad86b962bcaa47078089483f4545b578700bba')
+=== TEST EXECUTION SUMMARY ===
+   nextorm.integration.tests  Total: 5352, Errors: 0, Failed: 7, Skipped: 197, Not Run: 0, Time: 99.816s
