@@ -14,10 +14,6 @@ internal enum ClickHouseFailureKind
     /// chain carries the driver's <see cref="TimeoutException"/> while the caller token is active.</summary>
     ClientHttpTimeout,
 
-    /// <summary>A connection reset: an <see cref="HttpRequestException"/> whose subtree carries a
-    /// reset/abort/close <see cref="SocketException"/>.</summary>
-    ConnectionReset,
-
     /// <summary>The caller's cancellation token is cancelled (or was cancelled during the attempt).</summary>
     CallerCancelled,
 
@@ -41,8 +37,8 @@ internal enum ClickHouseFailureKind
 /// </summary>
 internal readonly record struct ClickHouseFailureClassification(ClickHouseFailureKind Kind, string ReasonCode)
 {
-    /// <summary>True only for the two positively established client transport failures.</summary>
-    public bool IsRetryable => Kind is ClickHouseFailureKind.ClientHttpTimeout or ClickHouseFailureKind.ConnectionReset;
+    /// <summary>True only for the positively established client HTTP timeout.</summary>
+    public bool IsRetryable => Kind is ClickHouseFailureKind.ClientHttpTimeout;
 
     /// <summary>Accounting classification for an eligible failure that consumed the attempt limit.</summary>
     internal static ClickHouseFailureClassification Exhausted { get; } =
@@ -50,7 +46,7 @@ internal readonly record struct ClickHouseFailureClassification(ClickHouseFailur
 }
 
 /// <summary>
-/// Exclusion-first transient classifier for the ClickHouse test harness (T328 AC01/AC06/AC07, V01–V07/V17).
+/// Exclusion-first transient classifier for the ClickHouse test harness (T328 AC01/AC06/AC07, V01–V07/V17/V18).
 /// <para>
 /// The decision table is evaluated in this order and exclusions win over any positive match:
 /// </para>
@@ -66,17 +62,17 @@ internal readonly record struct ClickHouseFailureClassification(ClickHouseFailur
 /// <item>An <see cref="OperationCanceledException"/> whose own inner chain carries a
 /// <see cref="TimeoutException"/>, caller token active ⇒ <see cref="ClickHouseFailureKind.ClientHttpTimeout"/>.
 /// A bare timeout or a bare cancellation never matches.</item>
-/// <item>An <see cref="HttpRequestException"/> whose subtree carries a
-/// <see cref="SocketException"/> with <see cref="SocketError.ConnectionReset"/>,
-/// <see cref="SocketError.ConnectionAborted"/> or <see cref="SocketError.ConnectionClosed"/>
-/// ⇒ <see cref="ClickHouseFailureKind.ConnectionReset"/>. An HTTP exception without such a socket
-/// fails closed.</item>
-/// <item>Anything else — an unknown wrapper type anywhere in the chain, an <see cref="AggregateException"/>
+/// <item>Anything else — an <see cref="HttpRequestException"/> without a positive transport signal,
+/// a bare <see cref="IOException"/>/<see cref="System.Net.Http.HttpIOException"/>, a reset-shaped
+/// <see cref="ClickHouseServerException"/> (including <c>ErrorCode = -1</c>), an unknown wrapper type
+/// anywhere in the chain, an <see cref="AggregateException"/>
 /// wrapper, a truncated (deeper than the bound) chain, or a message-only lookalike
-/// ⇒ <see cref="ClickHouseFailureKind.UnknownShape"/>.</item>
+/// ⇒ <see cref="ClickHouseFailureKind.UnknownShape"/>. Reset-shaped faults fail closed: the driver
+/// (1.4.0) exposes no typed reset signal distinct from a genuine server error, so they are never
+/// retried (T328 V18 / DEF-328-04).</item>
 /// </list>
 /// <para>
-/// The node allow-list for steps 4/5 is the transport vocabulary measured live in D0b:
+/// The node allow-list for step 4 is the transport vocabulary measured live in D0b:
 /// <see cref="OperationCanceledException"/> (and its <see cref="TaskCanceledException"/> subclass),
 /// <see cref="TimeoutException"/>, <see cref="HttpRequestException"/>, <see cref="IOException"/> and
 /// <see cref="SocketException"/>. <see cref="IOException"/> is understood but carries no positive
@@ -94,23 +90,12 @@ internal readonly record struct ClickHouseFailureClassification(ClickHouseFailur
 internal static class ClickHouseTransientClassifier
 {
     internal const string ClientHttpTimeoutReason = "client_http_timeout";
-    internal const string ConnectionResetReason = "connection_reset";
     internal const string CallerCancelledReason = "caller_cancelled";
     internal const string ServerErrorReason = "server_error";
     internal const string AssertionFailureReason = "assertion_failure";
     internal const string UnknownShapeReason = "unknown_shape";
 
     private const int MaxChainDepth = 16;
-
-    // The brief names ConnectionReset/ConnectionAborted/ConnectionClosed; .NET has no
-    // SocketError.ConnectionClosed member, so SocketError.Shutdown (the peer shut the connection
-    // down) is the closest semantic equivalent and is documented as a deliberate deviation.
-    private static readonly HashSet<SocketError> ResetSocketErrors = new()
-    {
-        SocketError.ConnectionReset,
-        SocketError.ConnectionAborted,
-        SocketError.Shutdown,
-    };
 
     /// <summary>Classifies a failed attempt. The caller token is checked first and overrides every
     /// other shape; an unrecognised shape is never retryable.</summary>
@@ -141,10 +126,11 @@ internal static class ClickHouseTransientClassifier
                 return new ClickHouseFailureClassification(ClickHouseFailureKind.AssertionFailure, AssertionFailureReason);
         }
 
-        // 4/5. Positive matches are only considered when every node is a shape this classifier
-        //      understands; an unknown wrapper anywhere in the chain fails closed. IOException is a
-        //      tolerated transport node on the measured live timeout chain, but it is never a
-        //      positive match on its own.
+        // 4. Positive match: only the measured client-timeout chain. Every node must be a shape this
+        //    classifier understands; an unknown wrapper anywhere in the chain fails closed. IOException
+        //    (and its HttpIOException subclass) is a tolerated transport node on the measured live
+        //    timeout chain, but it is never a positive match on its own. A reset-shaped fault has no
+        //    typed signal in driver 1.4.0 (DEF-328-04) and therefore falls through to UnknownShape.
         foreach (var node in chain)
         {
             if (node is not (OperationCanceledException or TimeoutException or HttpRequestException or IOException or SocketException))
@@ -158,29 +144,8 @@ internal static class ClickHouseTransientClassifier
                 timeoutMatches++;
         }
 
-        var resetMatches = 0;
-        var httpWithoutReset = 0;
-        foreach (var node in chain)
-        {
-            if (node is not HttpRequestException http)
-                continue;
-
-            if (!TryFlatten(http, out var httpSubtree))
-                return new ClickHouseFailureClassification(ClickHouseFailureKind.UnknownShape, UnknownShapeReason);
-
-            var sockets = httpSubtree.OfType<SocketException>().ToList();
-            if (sockets.Count == 0 || !sockets.Any(socket => ResetSocketErrors.Contains(socket.SocketErrorCode)))
-                httpWithoutReset++;
-            else
-                resetMatches++;
-        }
-
-        // D0b: provisional until the live reset signature is confirmed.
-        if (timeoutMatches == 1 && resetMatches == 0 && httpWithoutReset == 0)
+        if (timeoutMatches == 1)
             return new ClickHouseFailureClassification(ClickHouseFailureKind.ClientHttpTimeout, ClientHttpTimeoutReason);
-
-        if (resetMatches == 1 && timeoutMatches == 0 && httpWithoutReset == 0)
-            return new ClickHouseFailureClassification(ClickHouseFailureKind.ConnectionReset, ConnectionResetReason);
 
         return new ClickHouseFailureClassification(ClickHouseFailureKind.UnknownShape, UnknownShapeReason);
     }
