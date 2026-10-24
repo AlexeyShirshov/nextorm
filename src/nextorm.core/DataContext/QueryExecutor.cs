@@ -836,6 +836,11 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return Unsafe.As<double, TResult>(ref v);
         }
 
+        // A provider-native array value (ClickHouse reports Decimal elements as ClickHouseDecimal)
+        // is converted element by element: Convert.ChangeType has no array conversion at all.
+        if (value is Array array && ArrayResultConverter.TryConvert(array, type, out var converted))
+            return (TResult)converted!;
+
         return (TResult)Convert.ChangeType(value, type);
     }
 

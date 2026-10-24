@@ -296,9 +296,16 @@ result column.
 > `Nullable(...)` unconditionally (a `string[]`/`string?[]` result renders `Array(Nullable(String))`, a
 > jagged one `Array(Array(Nullable(String)))`) and still materialises as a CLR `string[]` — only the
 > rendered SQL text changes, not the data, the CLR type or the public API, while value-type elements
-> (`int[]`, `int?[]`, `byte[]`) are unaffected. Materialising a nullable **Decimal** array **result**
-> back to `decimal?[]` is still **not** supported: decimal arrays are materialised only as `decimal[]`
-> (`Array(Decimal(38, 10))`). The remaining array restrictions are listed under
+> (`int[]`, `int?[]`, `byte[]`) are unaffected. Decimal array **results** are materialised in both
+> shapes since [#337](https://github.com/AlexeyShirshov/nextorm/issues/337):
+> `Array(Nullable(Decimal(38,10)))` → `decimal?[]` and `Array(Decimal(38,10))` → `decimal[]`, through
+> the direct, member-bound, multi-column and raw read routes, with every representable value preserved
+> exactly (no rounding, truncation or culture conversion). A `Decimal(38,10)` element whose scaled
+> mantissa exceeds 96 bits — for example `1e19`, whose mantissa at scale 10 is `1e29` while CLR
+> `decimal`'s mantissa is `2^96 − 1` — is **not** representable in CLR `decimal`: the materialisation
+> fails closed with the driver's `OverflowException` (`Value cannot be represented as System.Decimal`),
+> and because the pinned driver does not trim trailing zeros a mathematically smaller representation is
+> not substituted. The remaining array restrictions are listed under
 > [Limitations](../advanced/limitations.md#limitations).
 
 The CLR `string.Split` is rendered as `splitByChar(separator, value)` (gated by

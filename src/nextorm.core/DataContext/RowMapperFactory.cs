@@ -91,7 +91,7 @@ internal static class RowMapperFactory
             // Only nullable value types need a Convert; reference types are already exact.
             Expression value = getter.Type == column.PropertyType
                 ? getter
-                : Expression.Convert(getter, column.PropertyType);
+                : ArrayResultConverter.EmitConvert(getter, column.PropertyType);
 
             return Expression.Condition(
                 Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index)),
@@ -338,8 +338,9 @@ internal static class RowMapperFactory
 
             // The column carries the source CLR type, but the scalar terminal may project it as
             // another type (Returning(x => (long)x.IntCol), ReturningKey<long?>()); widen the read.
+            // A provider-native decimal array is converted element by element instead of cast.
             if (body.Type != resultType)
-                body = Expression.Convert(body, resultType);
+                body = ArrayResultConverter.EmitConvert(body, resultType);
 
             lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
         }

@@ -199,7 +199,7 @@ internal static class RowMaterializerBuilder
             for (var i = 0; i < values.Length; i++)
             {
                 if (values[i].Type != ctorParams[i].ParameterType)
-                    values[i] = Expression.Convert(values[i], ctorParams[i].ParameterType);
+                    values[i] = ArrayResultConverter.EmitConvert(values[i], ctorParams[i].ParameterType);
             }
 
             return Expression.New(ctorInfo, values);
@@ -227,7 +227,7 @@ internal static class RowMaterializerBuilder
                 : ResolveNonItemMember(resultType, columns[0]);
 
             if (member is PropertyInfo property && values[i].Type != property.PropertyType)
-                values[i] = Expression.Convert(values[i], property.PropertyType);
+                values[i] = ArrayResultConverter.EmitConvert(values[i], property.PropertyType);
 
             bindings.Add(Expression.Bind(member, values[i]));
         }
