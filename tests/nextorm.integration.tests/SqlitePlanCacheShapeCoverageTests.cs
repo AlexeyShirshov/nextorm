@@ -14,7 +14,7 @@ namespace NextORM.Integration.Tests;
 /// <see cref="QueryCommand.GetExpressionPlanEqualityComparer"/>) and the raw descriptor
 /// (<see cref="QueryCommand.RawShape"/>) are asserted next to the live results.
 /// </summary>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class SqlitePlanCacheShapeCoverageTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

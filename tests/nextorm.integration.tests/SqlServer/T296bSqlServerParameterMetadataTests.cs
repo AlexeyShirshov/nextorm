@@ -8,27 +8,14 @@ using NextORM.Core;
 namespace NextORM.Integration.Tests;
 
 /// <summary>
-/// Serializes <see cref="T296bSqlServerParameterMetadataTests"/> against every other integration
-/// collection: <c>NullToValueToNull_ShouldKeepParameterMetadataAndRefreshTheValue</c> asserts
-/// prepared-command <em>identity</em> across three executions, while a concurrent
-/// <see cref="DataContext.PurgeQueryCache"/> anywhere in the process bumps the process-wide
-/// plan-store generation and evicts every thread's thread-local plan dictionary. The next "cache hit"
-/// then legitimately re-prepares and returns a different <c>DbPreparedQueryCommand</c> — correct
-/// product behaviour, but not the identity this regression test is about, so the class must not
-/// overlap another collection. Same mechanism and same remedy as DEF-08 on the ClickHouse
-/// array-rewind test (#327/#296).
-/// </summary>
-[CollectionDefinition("T296b SQL Server cached-command identity", DisableParallelization = true)]
-public sealed class T296bSqlServerCachedCommandIdentityCollectionDefinition;
-
-/// <summary>
 /// T296b (#296, D4) / A20: a captured nullable value must not freeze an untyped SQL Server parameter
 /// when the first preparation observes <c>null</c>. The test drives the real cache path with the same
 /// expression shape and a captured variable that transitions null -> 42 -> null, and records the bound
 /// <see cref="SqlParameter"/> metadata (<c>DbType</c>, <c>SqlDbType</c>, precision/scale, value) before
 /// each execution.
 /// </summary>
-[Collection("T296b SQL Server cached-command identity")]
+// Consolidated: the shared "Query plan cache" collection is defined in Support/QueryPlanCacheCollection.cs (T339, #339).
+[Collection("Query plan cache")]
 public sealed class T296bSqlServerParameterMetadataTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqlServerTestProvider.Instance;

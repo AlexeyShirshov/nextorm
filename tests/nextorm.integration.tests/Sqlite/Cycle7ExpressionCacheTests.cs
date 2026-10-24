@@ -36,7 +36,7 @@ namespace NextORM.Integration.Tests;
 /// those arms by handing publicly constructed <see cref="Expression"/> trees to that public comparer and
 /// additionally runs a live differential query pair in every fact, so no fact is translation-only.
 /// </para>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class Cycle7ExpressionCacheTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

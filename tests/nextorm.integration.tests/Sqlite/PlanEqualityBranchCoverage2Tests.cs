@@ -28,7 +28,7 @@ namespace NextORM.Integration.Tests;
 /// fabricated with synthetic trees.
 /// </para>
 /// </summary>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class PlanEqualityBranchCoverage2Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

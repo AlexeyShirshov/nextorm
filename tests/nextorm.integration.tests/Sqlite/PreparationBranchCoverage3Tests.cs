@@ -48,7 +48,7 @@ namespace NextORM.Integration.Tests;
 /// <c>SqliteDialect.SupportsPreWhere</c> stays false).
 /// </para>
 /// </summary>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class PreparationBranchCoverage3Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;
