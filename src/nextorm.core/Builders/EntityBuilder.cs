@@ -1027,6 +1027,33 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         Action<JoinOptions>? options = null)
         => JoinInto(child, predicate, collection, JoinType.Left, options);
     /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to the mapping of <typeparamref name="TChild"/> that fills the
+    /// <paramref name="collection"/> member of every parent when the query is enumerated by a list
+    /// terminal. The child source is the mapping of <typeparamref name="TChild"/>, so no child builder is
+    /// supplied. The returned builder is a copy; the current builder is unchanged.
+    /// <para>
+    /// Equivalent to
+    /// <see cref="JoinInto{TChild}(EntityBuilder{TChild}, Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, ICollection{TChild}}}, Action{JoinOptions}?)"/>
+    /// with the child source resolved from the data context; the parent/child keys are resolved from the
+    /// declared relationship metadata (or from a local <see cref="JoinOptions"/> configuration) and a
+    /// relationship that cannot be resolved is rejected with <see cref="NotSupportedException"/>.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="collection">The parent-side collection member the joined children fill.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The join kind or relationship is not supported.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        Action<JoinOptions>? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return JoinInto(_dataProvider.From<TChild>(), predicate, collection, options);
+    }
+    /// <summary>
     /// Declares a typed join to <paramref name="child"/> (see
     /// <see cref="JoinInto{TChild}(EntityBuilder{TChild}, Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, ICollection{TChild}}}, Action{JoinOptions}?)"/>)
     /// that fills the <paramref name="collection"/> member. Only <see cref="JoinType.Inner"/> and
@@ -1077,6 +1104,29 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         });
     }
     /// <summary>
+    /// Declares a typed join to the mapping of <typeparamref name="TChild"/> (see
+    /// <see cref="JoinInto{TChild}(Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, ICollection{TChild}}}, Action{JoinOptions}?)"/>)
+    /// that fills the <paramref name="collection"/> member and uses the given <paramref name="joinType"/>.
+    /// Only <see cref="JoinType.Inner"/> and <see cref="JoinType.Left"/> are accepted; any other kind throws
+    /// <see cref="NotSupportedException"/>. The returned builder is a copy; the current builder is unchanged.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="collection">The parent-side collection member the joined children fill.</param>
+    /// <param name="joinType">The join kind; <see cref="JoinType.Inner"/> or <see cref="JoinType.Left"/>.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The join kind or relationship is not supported.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        JoinType joinType,
+        Action<JoinOptions>? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return JoinInto(_dataProvider.From<TChild>(), predicate, collection, joinType, options);
+    }
+    /// <summary>
     /// Declares a <c>LEFT JOIN</c> to <paramref name="child"/> that assigns the single joined child to the
     /// one-to-one <paramref name="navigation"/> reference of every parent when the query is enumerated by a
     /// list terminal. The returned builder is a copy; the current builder is unchanged.
@@ -1106,6 +1156,34 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         Action<JoinOptions>? options = null)
         where TChild : class
         => JoinInto(child, predicate, navigation, JoinType.Left, options);
+    /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to the mapping of <typeparamref name="TChild"/> that assigns the single
+    /// joined child to the one-to-one <paramref name="navigation"/> reference of every parent when the query
+    /// is enumerated by a list terminal. The child source is the mapping of <typeparamref name="TChild"/>, so
+    /// no child builder is supplied. The returned builder is a copy; the current builder is unchanged.
+    /// <para>
+    /// Equivalent to
+    /// <see cref="JoinInto{TChild}(EntityBuilder{TChild}, Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, TChild}}, Action{JoinOptions}?)"/>
+    /// with the child source resolved from the data context. The relationship must be declared as
+    /// one-to-one so the principal/foreign keys are known; an unresolvable relationship is rejected with
+    /// <see cref="NotSupportedException"/>.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="navigation">The parent-side reference navigation the joined child fills.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The join kind, relationship kind or keys are not supported.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, TChild?>> navigation,
+        Action<JoinOptions>? options = null)
+        where TChild : class
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return JoinInto(_dataProvider.From<TChild>(), predicate, navigation, options);
+    }
     /// <summary>
     /// Declares a typed join to <paramref name="child"/> (see
     /// <see cref="JoinInto{TChild}(EntityBuilder{TChild}, Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, TChild}}, Action{JoinOptions}?)"/>)
@@ -1150,6 +1228,31 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             TableHints = opts.TableHints,
             SuppressCartesianWarning = opts.CartesianWarningSuppressed
         });
+    }
+    /// <summary>
+    /// Declares a typed join to the mapping of <typeparamref name="TChild"/> (see
+    /// <see cref="JoinInto{TChild}(Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, TChild}}, Action{JoinOptions}?)"/>)
+    /// that assigns the single joined child to the one-to-one <paramref name="navigation"/> reference and
+    /// uses the given <paramref name="joinType"/>. Only <see cref="JoinType.Inner"/> and
+    /// <see cref="JoinType.Left"/> are accepted; any other kind throws <see cref="NotSupportedException"/>.
+    /// The returned builder is a copy; the current builder is unchanged.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="navigation">The parent-side reference navigation the joined child fills.</param>
+    /// <param name="joinType">The join kind; <see cref="JoinType.Inner"/> or <see cref="JoinType.Left"/>.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The join kind, relationship kind or keys are not supported.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, TChild?>> navigation,
+        JoinType joinType,
+        Action<JoinOptions>? options = null)
+        where TChild : class
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return JoinInto(_dataProvider.From<TChild>(), predicate, navigation, joinType, options);
     }
     /// <summary>
     /// Declares a <c>LEFT JOIN</c> to <paramref name="child"/> that fills the <paramref name="collection"/>
@@ -1197,6 +1300,36 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             TableHints = opts.TableHints,
             SuppressCartesianWarning = opts.CartesianWarningSuppressed
         });
+    }
+    /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to the mapping of <typeparamref name="TChild"/> that fills the
+    /// <paramref name="collection"/> member, using the explicit
+    /// <paramref name="parentKey"/>/<paramref name="childKey"/> selectors instead of declared relationship
+    /// metadata. The child source is the mapping of <typeparamref name="TChild"/>, so no child builder is
+    /// supplied; the call is equivalent to
+    /// <see cref="JoinInto{TChild, TKey}(EntityBuilder{TChild}, Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, ICollection{TChild}}}, Expression{Func{TEntity, TKey}}, Expression{Func{TChild, TKey}}, Action{JoinOptions}?)"/>
+    /// with the child source resolved from the data context. The returned builder is a copy; the current
+    /// builder is unchanged.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <typeparam name="TKey">The non-nullable key type shared by the two selectors.</typeparam>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="collection">The parent-side collection member the joined children fill.</param>
+    /// <param name="parentKey">Selects the parent key used to group the rows.</param>
+    /// <param name="childKey">Selects the child key used to group the rows.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The key selectors select different types.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild, TKey>(
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        Expression<Func<TEntity, TKey>> parentKey,
+        Expression<Func<TChild, TKey>> childKey,
+        Action<JoinOptions>? options = null)
+        where TKey : notnull
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return JoinInto(_dataProvider.From<TChild>(), predicate, collection, parentKey, childKey, options);
     }
     /// <summary>Validates the <c>JoinInto</c> join kind: only inner and left edges are supported.</summary>
     private static void EnsureJoinIntoSupported(JoinType joinType)

@@ -169,41 +169,148 @@ var orders = ctx.From<Order>()
     .ToList();
 ```
 
-The three overloads are:
+### Overloads
+
+`JoinInto` comes in two families that differ by one argument: the child source is either supplied as an `EntityBuilder<TChild>` or resolved from the mapping of `TChild`. Both families fill the same navigations and share one contract, so choose by whether you have a child source in hand.
+
+#### Source-less
+
+The five source-less forms take no child builder — the child source is the mapping of `TChild`:
 
 ```csharp
-// LEFT (the default)
+// collection, LEFT (the default)
 public EntityBuilder<TEntity> JoinInto<TChild>(
-    EntityBuilder<TChild> child,
-    Expression<Func<TEntity, TChild, bool>> predicate,
-    Expression<Func<TEntity, ICollection<TChild>>> collection);
-
-// explicit join kind: Inner or Left only
-public EntityBuilder<TEntity> JoinInto<TChild>(
-    EntityBuilder<TChild> child,
     Expression<Func<TEntity, TChild, bool>> predicate,
     Expression<Func<TEntity, ICollection<TChild>>> collection,
-    JoinType joinType);
+    Action<JoinOptions>? options = null);
 
-// fallback without declared metadata: explicit parent/child keys (always LEFT)
+// collection, explicit join kind: Inner or Left only
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild, bool>> predicate,
+    Expression<Func<TEntity, ICollection<TChild>>> collection,
+    JoinType joinType,
+    Action<JoinOptions>? options = null);
+
+// reference, LEFT (the default)
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild, bool>> predicate,
+    Expression<Func<TEntity, TChild?>> navigation,
+    Action<JoinOptions>? options = null)
+    where TChild : class;
+
+// reference, explicit join kind
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild, bool>> predicate,
+    Expression<Func<TEntity, TChild?>> navigation,
+    JoinType joinType,
+    Action<JoinOptions>? options = null)
+    where TChild : class;
+
+// fallback without declared metadata: explicit parent/child keys, always LEFT
 public EntityBuilder<TEntity> JoinInto<TChild, TKey>(
-    EntityBuilder<TChild> child,
     Expression<Func<TEntity, TChild, bool>> predicate,
     Expression<Func<TEntity, ICollection<TChild>>> collection,
     Expression<Func<TEntity, TKey>> parentKey,
-    Expression<Func<TChild, TKey>> childKey)
+    Expression<Func<TChild, TKey>> childKey,
+    Action<JoinOptions>? options = null)
     where TKey : notnull;
 ```
 
-The first two resolve the parent/child keys from the declared relationship; the third is symmetrical to the [`LoadWith`](eager-loading.md) fallback for an entity pair without relationship metadata:
+The same five shapes as calls:
 
 ```csharp
+// 1. collection, LEFT
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem>((o, i) => o.Id == i.OrderId, o => o.Items)
+    .ToList();
+
+// 2. collection, explicit kind
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem>((o, i) => o.Id == i.OrderId, o => o.Items, JoinType.Inner)
+    .ToList();
+
+// 3. reference, LEFT — TChild : class
+var orders = ctx.From<Order>()
+    .JoinInto<Invoice>((o, i) => o.Id == i.OrderId, o => o.Invoice)
+    .ToList();
+
+// 4. reference, explicit kind — TChild : class
+var orders = ctx.From<Order>()
+    .JoinInto<Invoice>((o, i) => o.Id == i.OrderId, o => o.Invoice, JoinType.Left)
+    .ToList();
+
+// 5. explicit keys — always LEFT
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem, int>((o, i) => o.Id == i.OrderId, o => o.Items, o => o.Id, i => i.OrderId)
+    .ToList();
+```
+
+Spell the child type argument explicitly, as above: inference from the predicate lambda is not a documented contract. The two **reference** forms require a reference-type child (`where TChild : class`); the **key** form requires a non-nullable key type and is **always `LEFT`** — that is the only join kind its signature exposes. The collection and reference forms resolve their keys from the declared relationship, and the key form is symmetrical to the [`LoadWith`](eager-loading.md) fallback for an entity pair without relationship metadata.
+
+#### Explicit source
+
+The explicit-source family is the same five shapes with the child source as the first argument:
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items)
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items, JoinType.Inner)
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<Invoice>(), (o, i) => o.Id == i.OrderId, o => o.Invoice)
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<Invoice>(), (o, i) => o.Id == i.OrderId, o => o.Invoice, JoinType.Left,
+        j => j.SuppressCartesianWarning())
+    .ToList();
+
 var orders = ctx.From<Order>()
     .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items, o => o.Id, i => i.OrderId)
     .ToList();
 ```
 
-`JoinInto` is **`LEFT` by default**: a parent with no children is kept with an empty collection. The explicit overload accepts only [`JoinType.Inner`](xref:NextORM.Core.JoinType) and [`JoinType.Left`](xref:NextORM.Core.JoinType); `Inner` drops childless parents.
+A source-less call is **exactly** this call with a bare `ctx.From<TChild>()` source: the source-less form resolves that source itself and then delegates, forwarding the predicate, the join kind and the options unchanged. The SQL, the plan and the results are the same, so for a bare source either family can be used interchangeably. Keep the explicit form when the child source is not the plain entity mapping — a raw table or CTE name, for example, exists only on a child builder.
+
+`JoinInto` is **`LEFT` by default**: a parent with no children is kept with an empty collection. The explicit-kind overloads accept only [`JoinType.Inner`](xref:NextORM.Core.JoinType) and [`JoinType.Left`](xref:NextORM.Core.JoinType); `Inner` drops childless parents.
+
+### Resolution and errors
+
+The child source is resolved once, while the join is declared:
+
+- a **configured mapping** wins over convention — when `From<Child>(…)` has already configured the child mapping (the table name, for instance), the source-less form joins that mapping, exactly as a bare explicit `ctx.From<Child>()` would;
+- an **unresolvable** child type fails **at the `JoinInto(...)` call**, with the same exception type and message as `From<TChild>()` itself; no builder is returned, so the failure does not surface later at `ToList()`;
+- a **`null` predicate** throws `ArgumentNullException` with `paramName: "predicate"` **before** the child source is resolved and **before** the options callback runs, so neither a broken child mapping nor a throwing callback can mask the argument error;
+- a **`null` navigation or key selector** behaves exactly as in the explicit-source form: the same guards in the same order, the same exceptions.
+
+The source-less form adds no second resolution path and no fallback table; everything the rest of this page says about keys, materialization, paging, `Where` and terminals applies to both families.
+
+### Options
+
+Every one of the ten forms takes a trailing `Action<JoinOptions>? options` argument. The callback runs **exactly once** per `JoinInto` call, and an exception thrown inside it propagates unchanged. Omitting the argument or passing `null` means no callback at all. The options object is not retained: its values are copied onto the resulting join.
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem>((o, i) => o.Id == i.OrderId, o => o.Items, JoinType.Left,
+        j => j.SuppressCartesianWarning())
+    .ToList();
+```
+
+The same parameter carries the local relationship configurations described below — [`JoinOptions.OneToOne`](xref:NextORM.Core.JoinOptions) and `JoinOptions.ManyToMany` — and the [join modifiers](#join-modifiers) of the underlying join.
+
+### Child filters
+
+"Source-less" describes the **source**, not a filter: the child source is the mapping of `TChild` and carries no condition. Neither family applies a **child-source** filter to the join today — a child builder that carries a `Where` does not add a condition to the join, and only the `(parent, child) => …` predicate reaches the `ON` clause. Filtering a child source is tracked as **#309**.
+
+To narrow the child set, write the condition into the predicate, which *is* the `ON` condition — `(o, i) => o.Id == i.OrderId && i.Active` pairs only matching active children. With `Left` a parent whose children are all filtered out is kept with an empty collection; with `Inner` it is dropped. Do not read a `Where` on the child source as the equivalent of that predicate: the join ignores it today.
+
+### Metadata-driven joins
+
+The metadata-driven, navigation-first shapes — a navigation alone, with the `ON` synthesized from the declared relationship metadata (`JoinInto(o => o.Invoice)`, `JoinInto(o => o.Items)`) — are a separate follow-up (**#331**) and are **not** part of this API. Every form documented on this page takes an explicit `(parent, child) => …` predicate.
 
 ### One-to-one reference
 

@@ -169,41 +169,148 @@ var orders = ctx.From<Order>()
     .ToList();
 ```
 
-Три перегрузки:
+### Перегрузки
+
+`JoinInto` существует в двух семействах, различающихся одним аргументом: дочерний источник либо передаётся как `EntityBuilder<TChild>`, либо разрешается из mapping'а `TChild`. Оба семейства заполняют одни и те же навигации и делят один контракт, поэтому выбирайте по тому, есть ли у вас дочерний источник на руках.
+
+#### Без источника
+
+Пять форм без источника не принимают дочерний билдер — дочерним источником служит mapping `TChild`:
 
 ```csharp
-// LEFT (по умолчанию)
+// коллекция, LEFT (по умолчанию)
 public EntityBuilder<TEntity> JoinInto<TChild>(
-    EntityBuilder<TChild> child,
-    Expression<Func<TEntity, TChild, bool>> predicate,
-    Expression<Func<TEntity, ICollection<TChild>>> collection);
-
-// явный вид соединения: только Inner или Left
-public EntityBuilder<TEntity> JoinInto<TChild>(
-    EntityBuilder<TChild> child,
     Expression<Func<TEntity, TChild, bool>> predicate,
     Expression<Func<TEntity, ICollection<TChild>>> collection,
-    JoinType joinType);
+    Action<JoinOptions>? options = null);
 
-// fallback без объявленных метаданных: явные parent/child-ключи (всегда LEFT)
+// коллекция, явный вид соединения: только Inner или Left
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild, bool>> predicate,
+    Expression<Func<TEntity, ICollection<TChild>>> collection,
+    JoinType joinType,
+    Action<JoinOptions>? options = null);
+
+// ссылка, LEFT (по умолчанию)
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild, bool>> predicate,
+    Expression<Func<TEntity, TChild?>> navigation,
+    Action<JoinOptions>? options = null)
+    where TChild : class;
+
+// ссылка, явный вид соединения
+public EntityBuilder<TEntity> JoinInto<TChild>(
+    Expression<Func<TEntity, TChild, bool>> predicate,
+    Expression<Func<TEntity, TChild?>> navigation,
+    JoinType joinType,
+    Action<JoinOptions>? options = null)
+    where TChild : class;
+
+// fallback без объявленных метаданных: явные parent/child-ключи, всегда LEFT
 public EntityBuilder<TEntity> JoinInto<TChild, TKey>(
-    EntityBuilder<TChild> child,
     Expression<Func<TEntity, TChild, bool>> predicate,
     Expression<Func<TEntity, ICollection<TChild>>> collection,
     Expression<Func<TEntity, TKey>> parentKey,
-    Expression<Func<TChild, TKey>> childKey)
+    Expression<Func<TChild, TKey>> childKey,
+    Action<JoinOptions>? options = null)
     where TKey : notnull;
 ```
 
-Первые две разрешают parent/child-ключи из объявленной связи; третья симметрична fallback'у [`LoadWith`](eager-loading.md) для пары без метаданных связи:
+Те же пять форм в виде вызовов:
 
 ```csharp
+// 1. коллекция, LEFT
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem>((o, i) => o.Id == i.OrderId, o => o.Items)
+    .ToList();
+
+// 2. коллекция, явный вид
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem>((o, i) => o.Id == i.OrderId, o => o.Items, JoinType.Inner)
+    .ToList();
+
+// 3. ссылка, LEFT — TChild : class
+var orders = ctx.From<Order>()
+    .JoinInto<Invoice>((o, i) => o.Id == i.OrderId, o => o.Invoice)
+    .ToList();
+
+// 4. ссылка, явный вид — TChild : class
+var orders = ctx.From<Order>()
+    .JoinInto<Invoice>((o, i) => o.Id == i.OrderId, o => o.Invoice, JoinType.Left)
+    .ToList();
+
+// 5. явные ключи — всегда LEFT
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem, int>((o, i) => o.Id == i.OrderId, o => o.Items, o => o.Id, i => i.OrderId)
+    .ToList();
+```
+
+Указывайте аргумент типа ребёнка явно, как выше: вывод из лямбды-предиката не является документированным контрактом. Две формы **по ссылке** требуют ссылочного типа ребёнка (`where TChild : class`); форма **по ключам** требует non-nullable типа ключа и **всегда `LEFT`** — это единственный вид соединения, который открывает её сигнатура. Формы по коллекции и по ссылке разрешают ключи из объявленной связи, а форма по ключам симметрична fallback'у [`LoadWith`](eager-loading.md) для пары сущностей без метаданных связи.
+
+#### С явным источником
+
+Семейство с явным источником — те же пять форм с дочерним источником первым аргументом:
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items)
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items, JoinType.Inner)
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<Invoice>(), (o, i) => o.Id == i.OrderId, o => o.Invoice)
+    .ToList();
+
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<Invoice>(), (o, i) => o.Id == i.OrderId, o => o.Invoice, JoinType.Left,
+        j => j.SuppressCartesianWarning())
+    .ToList();
+
 var orders = ctx.From<Order>()
     .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items, o => o.Id, i => i.OrderId)
     .ToList();
 ```
 
-`JoinInto` по умолчанию — **`LEFT`**: родитель без детей сохраняется с пустой коллекцией. Явная перегрузка принимает только [`JoinType.Inner`](xref:NextORM.Core.JoinType) и [`JoinType.Left`](xref:NextORM.Core.JoinType); `Inner` отбрасывает бездетных родителей.
+Вызов без источника — **в точности** этот вызов с голым источником `ctx.From<TChild>()`: форма без источника сама разрешает этот источник и затем делегирует, передавая предикат, вид соединения и опции без изменений. SQL, план и результаты совпадают, поэтому для голого источника оба семейства взаимозаменяемы. Оставляйте явную форму, когда дочерний источник — не простой mapping сущности: например, сырое имя таблицы или CTE существует только на дочернем билдере.
+
+`JoinInto` по умолчанию — **`LEFT`**: родитель без детей сохраняется с пустой коллекцией. Перегрузки с явным видом соединения принимают только [`JoinType.Inner`](xref:NextORM.Core.JoinType) и [`JoinType.Left`](xref:NextORM.Core.JoinType); `Inner` отбрасывает бездетных родителей.
+
+### Разрешение и ошибки
+
+Дочерний источник разрешается один раз, в момент объявления соединения:
+
+- **сконфигурированный mapping** побеждает конвенцию — если `From<Child>(…)` уже сконфигурировал mapping ребёнка (например, имя таблицы), форма без источника соединяет именно его, в точности как голый явный `ctx.From<Child>()`;
+- **неразрешимый** тип ребёнка падает **на вызове `JoinInto(...)`**, с тем же типом исключения и тем же сообщением, что и сам `From<TChild>()`; билдер не возвращается, поэтому ошибка не всплывает позже на `ToList()`;
+- **`null`-предикат** бросает `ArgumentNullException` с `paramName: "predicate"` **до** разрешения дочернего источника и **до** вызова лямбды опций, поэтому ни сломанный mapping ребёнка, ни бросающая лямбда не могут замаскировать ошибку аргумента;
+- **`null`-селектор навигации или ключа** ведёт себя в точности как в форме с явным источником: те же проверки в том же порядке, те же исключения.
+
+Форма без источника не добавляет второго пути разрешения и никакого fallback'а на таблицу; всё, что эта страница говорит о ключах, материализации, пагинации, `Where` и терминалах, относится к обоим семействам.
+
+### Опции
+
+Каждая из десяти форм принимает завершающий аргумент `Action<JoinOptions>? options`. Лямбда выполняется **ровно один раз** на вызов `JoinInto`, а исключение, брошенное внутри неё, пробрасывается без изменений. Если аргумент опущен или равен `null`, лямбда не вызывается вовсе. Объект опций не сохраняется: его значения копируются в результирующее соединение.
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto<OrderItem>((o, i) => o.Id == i.OrderId, o => o.Items, JoinType.Left,
+        j => j.SuppressCartesianWarning())
+    .ToList();
+```
+
+Тот же параметр несёт локальные конфигурации связи, описанные ниже, — [`JoinOptions.OneToOne`](xref:NextORM.Core.JoinOptions) и `JoinOptions.ManyToMany` — и [модификаторы соединения](#модификаторы-соединения) нижележащего join'а.
+
+### Фильтры дочернего набора
+
+«Без источника» описывает **источник**, а не фильтр: дочерний источник — это mapping `TChild`, и он не несёт условия. Ни одно из семейств сегодня не применяет фильтр **дочернего источника** к соединению — дочерний билдер с `Where` не добавляет условия к соединению, а в `ON` попадает только предикат `(родитель, ребёнок) => …`. Фильтрация дочернего источника отслеживается как **#309**.
+
+Чтобы сузить дочерний набор, пишите условие в предикат, который *и есть* условие `ON`: `(o, i) => o.Id == i.OrderId && i.Active` соединяет только подходящих активных детей. При `Left` родитель, у которого все дети отфильтрованы, сохраняется с пустой коллекцией; при `Inner` он исключается. Не читайте `Where` на дочернем источнике как эквивалент этого предиката: сегодня соединение его игнорирует.
+
+### Соединения по метаданным
+
+Формы, управляемые метаданными и начинающиеся с навигации — одна навигация, а `ON` синтезируется из объявленных метаданных связи (`JoinInto(o => o.Invoice)`, `JoinInto(o => o.Items)`), — это отдельное продолжение (**#331**), и в этот API они **не входят**. Каждая форма, описанная на этой странице, принимает явный предикат `(родитель, ребёнок) => …`.
 
 ### One-to-one (ссылка)
 
