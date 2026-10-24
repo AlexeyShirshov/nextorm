@@ -151,20 +151,29 @@ public class ImplicitNavigationR25InMemoryTests
 
     // ---- A1: reject matrix on the in-memory provider ---------------------------------------------
 
-    // A composite relationship key is unreachable through the fluent single-key API, so the metadata is
-    // built directly here to pin the resolver's fail-closed composite-key guard end to end.
+    // A composite relationship key is now declarable through the public surface (declaration and metadata
+    // are provider-neutral), but the in-memory provider keeps its pre-composite divergence: it still
+    // refuses composite-key navigation with the same typed error, and the refusal happens on the
+    // in-memory path, never at metadata resolution.
     [Fact]
-    public void Composite_relationship_key_should_fail_closed()
+    public void Composite_relationship_key_should_still_fail_closed_in_memory()
     {
         var parentProperties = new EntityMetadataBuilder<R25CompositeParent>().Build().Properties;
         var childProperties = new EntityMetadataBuilder<R25CompositeChild>().Build().Properties;
-        var parentKey = parentProperties.First(p => p.PropertyInfo.Name == nameof(R25CompositeParent.Id));
-        var childKey = childProperties.First(p => p.PropertyInfo.Name == nameof(R25CompositeChild.ParentId));
+        var parentTenantKey = parentProperties.First(p => p.PropertyInfo.Name == nameof(R25CompositeParent.TenantId));
+        var parentIdKey = parentProperties.First(p => p.PropertyInfo.Name == nameof(R25CompositeParent.Id));
+        var childTenantKey = childProperties.First(p => p.PropertyInfo.Name == nameof(R25CompositeChild.TenantId));
+        var childParentKey = childProperties.First(p => p.PropertyInfo.Name == nameof(R25CompositeChild.ParentId));
 
         DataContextCache.Metadata[typeof(R25CompositeParent)] = new EntityMetadata(
             "r25m_composite_parent",
             parentProperties,
-            relationships: [new CompositeKeyRelationship(parentKey, childKey)]);
+            relationships:
+            [
+                new CompositeKeyRelationship(
+                    [parentTenantKey, parentIdKey],
+                    [childTenantKey, childParentKey]),
+            ]);
 
         using var ctx = new InMemoryDataContext();
         Action act = () => ctx.From<R25CompositeParent>().Select(p => p.Children.Any()).ToList();
@@ -242,6 +251,9 @@ public sealed class R25MChild
 [SqlTable("r25m_composite_parent")]
 public sealed class R25CompositeParent
 {
+    [System.ComponentModel.DataAnnotations.Schema.Column("tenant_id")]
+    public int TenantId { get; set; }
+
     [System.ComponentModel.DataAnnotations.Key]
     [System.ComponentModel.DataAnnotations.Schema.Column("id")]
     public int Id { get; set; }
@@ -252,6 +264,9 @@ public sealed class R25CompositeParent
 [SqlTable("r25m_composite_child")]
 public sealed class R25CompositeChild
 {
+    [System.ComponentModel.DataAnnotations.Schema.Column("tenant_id")]
+    public int TenantId { get; set; }
+
     [System.ComponentModel.DataAnnotations.Key]
     [System.ComponentModel.DataAnnotations.Schema.Column("id")]
     public int Id { get; set; }
@@ -262,10 +277,12 @@ public sealed class R25CompositeChild
 
 file sealed class CompositeKeyRelationship : IRelationshipMetadata
 {
-    public CompositeKeyRelationship(IPropertyMetadata parentKey, IPropertyMetadata childKey)
+    public CompositeKeyRelationship(
+        IReadOnlyList<IPropertyMetadata> principalKey,
+        IReadOnlyList<IPropertyMetadata> foreignKey)
     {
-        ForeignKey = [childKey, childKey];
-        PrincipalKey = [parentKey, parentKey];
+        PrincipalKey = principalKey;
+        ForeignKey = foreignKey;
     }
 
     public RelationshipKind Kind => RelationshipKind.OneToMany;

@@ -28,19 +28,85 @@ Dependent-сторона объявляет навигацию-ссылку и �
 ctx.From<OrderItem>(b => b.HasOne(i => i.Order, i => i.OrderId));
 ```
 
-Principal-ключ берётся из существующих метаданных ключа principal-типа (`[Key]`, [`EntityPropertyBuilder<T>.Key()`](xref:NextORM.Core.EntityPropertyBuilder`1) или конвенция `Id`/`<TypeName>Id`), поэтому обе стороны сходятся в пару one-to-many/many-to-one. Четыре перегрузки объявления:
+Principal-ключ берётся из существующих метаданных ключа principal-типа (`[Key]`, [`EntityPropertyBuilder<T>.Key()`](xref:NextORM.Core.EntityPropertyBuilder`1) или конвенция `Id`/`<TypeName>Id`), поэтому обе стороны сходятся в пару one-to-many/many-to-one. Principal-ключ по умолчанию — **весь** ключ в порядке метаданных сущности: каждый компонент ключа, а не только первый.
+
+`HasMany`, `HasOne`, `HasOneToOne` и `HasManyThrough` предоставляют десять перегрузок объявления (A–J). Все десять используют один парсер селекторов и строят один и тот же внутренний дескриптор связи; шесть существующих сигнатур не изменены и продолжают работать. Сигнатуры десяти перегрузок:
 
 ```csharp
-public EntityMetadataBuilder<T> HasMany<TChild, TKey>(
+// A — 1:N, навигация + явный внешний ключ + явный principal-ключ
+public EntityMetadataBuilder<T> HasMany<TChild>(
     Expression<Func<T, ICollection<TChild>>> navigation,
-    Expression<Func<TChild, TKey>> foreignKey);
+    Expression<Func<TChild, object?>> foreignKey,
+    Expression<Func<T, object?>> principalKey) where TChild : class;
 
-public EntityMetadataBuilder<T> HasOne<TChild, TKey>(
+// B — 1:N, без навигации, явный внешний ключ + явный principal-ключ
+public EntityMetadataBuilder<T> HasMany<TChild>(
+    Expression<Func<TChild, object?>> foreignKey,
+    Expression<Func<T, object?>> principalKey) where TChild : class;
+
+// C — N:1, навигация + явный внешний ключ + явный principal-ключ
+public EntityMetadataBuilder<T> HasOne<TChild>(
     Expression<Func<T, TChild?>> navigation,
-    Expression<Func<T, TKey>> foreignKey);
+    Expression<Func<T, object?>> foreignKey,
+    Expression<Func<TChild, object?>> principalKey) where TChild : class;
+
+// D — N:1, без навигации, явный внешний ключ + явный principal-ключ
+public EntityMetadataBuilder<T> HasOne<TChild>(
+    Expression<Func<T, object?>> foreignKey,
+    Expression<Func<TChild, object?>> principalKey) where TChild : class;
+
+// E — 1:1, навигация + явный parent-ключ + явный внешний ключ ребёнка
+public EntityMetadataBuilder<T> HasOneToOne<TChild>(
+    Expression<Func<T, TChild?>> navigation,
+    Expression<Func<T, object?>> parentKey,
+    Expression<Func<TChild, object?>> childForeignKey) where TChild : class;
+
+// F — M:N, навигация + все четыре списка ключей явно
+public EntityMetadataBuilder<T> HasManyThrough<TChild, TJunction>(
+    Expression<Func<T, IEnumerable<TChild>>> navigation,
+    Expression<Func<T, object?>> parentKey,
+    Expression<Func<TJunction, object?>> junctionParentForeignKey,
+    Expression<Func<TChild, object?>> childKey,
+    Expression<Func<TJunction, object?>> junctionChildForeignKey)
+    where TChild : class where TJunction : class;
+
+// G — 1:N, без навигации; principal = полный ключ T
+public EntityMetadataBuilder<T> HasMany<TChild>(
+    Expression<Func<TChild, object?>> foreignKey) where TChild : class;
+
+// H — N:1, без навигации; principal = полный ключ TChild
+public EntityMetadataBuilder<T> HasOne<TChild>(
+    Expression<Func<T, object?>> foreignKey) where TChild : class;
+
+// I — 1:1 только с внешним ключом ребёнка; parent-ключ = полный ключ T
+public EntityMetadataBuilder<T> HasOneToOne<TChild, TKey>(
+    Expression<Func<T, TChild?>> navigation,
+    Expression<Func<TChild, TKey>> childForeignKey) where TChild : class;
+
+// J — M:N только с двумя внешними ключами junction; оба ключа сущностей = полные ключи
+public EntityMetadataBuilder<T> HasManyThrough<TChild, TJunction>(
+    Expression<Func<T, IEnumerable<TChild>>> navigation,
+    Expression<Func<TJunction, object?>> junctionParentForeignKey,
+    Expression<Func<TJunction, object?>> junctionChildForeignKey)
+    where TChild : class where TJunction : class;
 ```
 
-У каждой есть **fallback-перегрузка только по ключам** (`HasMany<TChild, TKey>(foreignKey, principalKey)` / `HasOne<TChild, TKey>(foreignKey, principalKey)`) для сущности, у которой связь не смоделирована навигационным свойством; она объявляет метаданные, не привязывая навигацию.
+Когда какая форма нужна: **A, C, E и I** выводят `TChild` из навигации; **I** дополнительно выводит `TKey` из внешнего ключа ребёнка, поэтому составной анонимный ключ не требует явного аргумента типа. Key-only формы **B, D, G и H** не могут вывести `TChild` из нетипизированной лямбды — вызывайте их с явным `<TChild>` (типизированная переменная селектора всё ещё может дать вывод, но публичная форма — явная). **F и J** требуют явных `<TChild, TJunction>`: `TJunction` встречается только в нетипизированных лямбдах, а C# не позволяет задать часть generic-аргументов. Используйте **A–F**, когда ключ должен быть явным — другой порядок компонентов, non-key свойство principal или обратная роль; **G–J** — когда principal-ключом является полный первичный ключ. Чтобы настроить только одну сторону many-to-many, используйте **F** со всеми четырьмя списками; частично упорядоченной перегрузки нет.
+
+#### Упорядоченные селекторы ключей
+
+Каждый селектор ключа — fluent или атрибутный — разрешается одним общим парсером, поэтому все объявления принимают ровно одни и те же формы:
+
+- прямой скалярный mapped-свойство-доступ — `c => c.ParentId`;
+- плоский анонимный объект из прямых скалярных mapped-свойств — `c => new { c.TenantId, c.ParentId }`.
+
+**Порядок — это контракт.** Компоненты сопоставляются **позиционно** между сторонами: первый компонент внешнего ключа пары с первым компонентом principal-ключа, второй со вторым и так далее. Они никогда не сопоставляются по имени, не сортируются по метаданным ключа и не сопоставляются по типу. Псевдонимы анонимных членов игнорируются: `new { Parent = c.ParentId }` выбирает `ParentId`. Boxing и nullable-преобразования вокруг отдельного компонента разворачиваются до сравнения нижележащих mapped CLR-типов.
+
+`null`-селектор (или селектор без тела) бросает `ArgumentNullException` с именем параметра. Структурные отказы бросают `NotSupportedException` с именем связи, позицией и количеством компонентов: доступ к полю, вложенный путь члена, вычисление, вызов метода, доступ по индексу, инициализатор массива или коллекции, tuple-литерал, конструирование DTO или объекта (`new Dto { ... }`), вложенный анонимный объект, пустой анонимный объект и повторно выбранное свойство.
+
+#### Principal-ключ по умолчанию и явный
+
+Перегрузка без параметра `principalKey` использует **весь** первичный ключ principal-сущности в порядке метаданных сущности — члены с `IsKey` в том порядке, в каком их перечисляет `IEntityMetadata.Properties`. **Fallback на первый ключ отсутствует**, как и сопоставление по имени: внешний ключ, выбирающий меньше компонентов, чем полный principal-ключ, — это ошибка арности при разрешении метаданных, а не молчаливое использование первого ключа. Явный principal-ключ может выбирать mapped **non-key** свойства (альтернативный логический ключ) и любой порядок компонентов; списки всё равно должны иметь одинаковую длину и совпадающий nullable-unwrapped тип в каждой позиции. `HasManyThrough` применяет то же правило к обеим ногам: ключ сущности и ссылающийся на него внешний ключ junction должны иметь одинаковое количество компонентов и одинаковые позиционные типы.
 
 Первая регистрация для типа побеждает, как у фильтра запросов: последующая конфигурация `From<T>(...)` того же типа игнорируется. Свойство, участвующее в объявленной связи, исключается из [`IEntityMetadata.Properties`](xref:NextORM.Core.IEntityMetadata) и доступно только через [`IEntityMetadata.Relationships`](xref:NextORM.Core.IEntityMetadata); его маппинг как колонки бросает `InvalidOperationException`. Члены, не входящие в объявленную связь (включая ссылочный член без объявления), по-прежнему мапятся как колонки.
 
@@ -58,7 +124,36 @@ public sealed class Order
 }
 ```
 
-`ForeignKey` называет свойство внешнего ключа на зависимой стороне; вид выводится из формы навигации, как и во fluent API. Атрибут и fluent-объявление на **одной и той же** навигации дают одну модель, и при наличии обоих побеждает fluent-объявление.
+`ForeignKey` называет единственное свойство внешнего ключа на зависимой стороне; вид выводится из формы навигации, как и во fluent API. Составная связь использует два массива:
+
+```csharp
+public sealed class Order
+{
+    public int TenantId { get; set; }
+    public int Id { get; set; }
+
+    [Relationship(
+        ForeignKeys = new[] { nameof(OrderItem.TenantId), nameof(OrderItem.OrderId) },
+        PrincipalKeys = new[] { nameof(Order.TenantId), nameof(Order.Id) })]
+    public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
+}
+```
+
+Ровно одна из форм — `ForeignKey` или `ForeignKeys` — должна быть задана. `ForeignKeys` — **упорядоченный** список; сопоставление компонентов позиционное, поэтому имена на двух сторонах могут различаться. `PrincipalKeys` опционален: если он не задан, principal-ключом является весь ключ principal-сущности в порядке метаданных, а явный список может выбирать mapped non-key свойства. Каждое имя должно называть mapped-свойство; пустая или отсутствующая форма внешнего ключа, пустой массив, дубликат имени, отсутствующий или unmapped член, несовпадение арности или позиционных типов отклоняются с `NotSupportedException` при разрешении метаданных. Атрибут объявляет только связи one-to-many и many-to-one — one-to-one и many-to-many доступны только через fluent API.
+
+Атрибут и fluent-объявление на **одной и той же** навигации дают одну модель, и при наличии обоих побеждает fluent-объявление; затенённый атрибут не валидируется. `[Relationship]` и fluent-перегрузки используют один язык селекторов и один набор правил валидации.
+
+### Момент валидации
+
+Валидация выполняется поэтапно:
+
+- **При объявлении** — `null`-селектор бросает `ArgumentNullException`, а синтаксис селектора (только скалярное свойство или плоский анонимный объект) проверяется общим парсером.
+- **При разрешении метаданных связи** — всё, что требует другого типа: разрешение mapped-свойств, полный principal-ключ по умолчанию, арность, дубликаты компонентов и позиционные nullable-unwrapped типы. Порядок регистрации не важен: `From<T>()` не валидирует заранее cross-reference, который ещё не зарегистрирован, и связанный тип может быть сконфигурирован позже.
+- **До SQL и до кэшированного плана** — связь валидируется при первом использовании, и валидация завершается **до генерации любого SQL** и **до вставки плана в кэш планов**. Невалидное или частично разрешённое объявление никогда не порождает SQL и никогда не кэширует план; исправление объявления после этого не блокируется закэшированной ошибкой.
+
+Та же структурная валидация применяется к вручную предоставленным [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata) и junction-спискам: минимум один компонент в каждом списке, равная арность на каждой ноге, отсутствие дубликатов компонентов, разрешение каждого компонента по семантической идентичности mapped-члена в сконфигурированное mapped-свойство и попарно совпадающие nullable-unwrapped CLR-типы. Пользовательский экземпляр метаданных свойства не обязан быть тем же объектом, что и сконфигурированный; валидный escape-hatch mapping — включая явный non-key principal-ключ — продолжает работать, а malformed-список бросает `NotSupportedException` до SQL и до вставки в кэш.
+
+`Inverse` участвует только в demand-time валидации: прямой навигации inverse не нужен, а несвязанное объявление не падает. Когда запрошенной операции inverse действительно нужен, отсутствующий inverse разрешается в `null`, а **неоднозначный** — две разные навигации с одним каноническим mapping — бросает `NotSupportedException` с именами обоих конфликтующих кандидатов.
 
 ## Загрузка через `JoinInto`
 
@@ -191,7 +286,7 @@ select t1.id, t1.title, t2.parent_key, t2.child_key, t2.occurrence, t3.id, t3.na
 
 Когда в запросе две и более навигации-коллекции (one-to-one исключается), подготовка один раз на план выдаёт предупреждение `JoinInto.MultipleCollections`, потому что промежуточное число строк умножается в декартово произведение. Передайте `JoinOptions.SuppressCartesianWarning()` через лямбду опций `JoinInto` (`j => j.SuppressCartesianWarning()`), чтобы его заглушить; предупреждение информационное и не меняет результат.
 
-Junction, у которого внешний ключ родителя и/или ребёнка охватывает несколько **компонентов**, полностью поддержан: соединение и секционирование occurrence используют каждый объявленный компонент, поэтому изменение любого компонента (не только первого) меняет связанного ребёнка, а повторные occurrence junction остаются различимыми. Диспетчер single-query ([`EagerLoadMode.SingleQuery`](eager-loading.md)) такую junction тоже обрабатывает. Списки компонентов должны приходить из метаданных связи — fluent-помощники объявления ниже принимают один ключевой столбец. Many-to-many `JoinInto` занимает **два** слота проекции, поэтому считается вдвойне против предела арности.
+Junction, у которого внешний ключ родителя и/или ребёнка охватывает несколько **компонентов**, полностью поддержан: соединение и секционирование occurrence используют каждый объявленный компонент, поэтому изменение любого компонента (не только первого) меняет связанного ребёнка, а повторные occurrence junction остаются различимыми. Диспетчер single-query ([`EagerLoadMode.SingleQuery`](eager-loading.md)) такую junction тоже обрабатывает. Объявляйте компоненты составными fluent-перегрузками (A–J) или через `ForeignKeys`/`PrincipalKeys` атрибута; legacy-форма `ForeignKey` остаётся для одного компонента. Many-to-many `JoinInto` занимает **два** слота проекции, поэтому считается вдвойне против предела арности.
 
 ## Один round trip
 
@@ -289,13 +384,13 @@ select t1.id, t1.name, t2.id, t2.order_id, t2.name
 - read-only член коллекции, равный `null` в рантайме;
 - более семи дочерних коллекций в одном запросе (предел арности проекции).
 
-**Арность** ключа не входит в эти границы: связь many-to-many под [`EagerLoadMode.SingleQuery`](eager-loading.md) и составной principal-, внешний или junction-ключ связи поддержаны на явном пути `JoinInto`, который соединяет и группирует по каждому объявленному компоненту (см. [Many-to-many через junction](#many-to-many-через-junction)). Списки компонентов должны приходить из метаданных связи, потому что fluent-помощники объявления принимают один ключевой столбец.
+**Арность** ключа не входит в эти границы: связь many-to-many под [`EagerLoadMode.SingleQuery`](eager-loading.md) и составной principal-, внешний или junction-ключ связи поддержаны на явном пути `JoinInto`, который соединяет и группирует по каждому объявленному компоненту (см. [Many-to-many через junction](#many-to-many-через-junction)). Списки компонентов приходят из метаданных связи: объявляйте их составными fluent-перегрузками (A–J) или через `ForeignKeys`/`PrincipalKeys`, и `JoinInto` использует каждый компонент по порядку.
 
-Сами метаданные связи тоже «падают закрыто»: FK-свойство, не сопоставленное на зависимом типе, principal-тип без ключа или несовпадение типов FK/principal-ключа бросают `NotSupportedException` при разрешении ключей.
+Сами метаданные связи тоже «падают закрыто»: FK-свойство, не сопоставленное на зависимом типе, principal-тип без ключа, пустой или продублированный список компонентов, несовпадение арности между сторонами (включая одноколоночный внешний ключ против составного principal-ключа по умолчанию), `null`-компонент, компонент без CLR-члена или несовпадение типов FK/principal-ключа (после разворачивания nullable) бросают `NotSupportedException` при разрешении ключей — до генерации любого SQL и до вставки плана в кэш планов. Та же структурная валидация применяется к вручную предоставленным [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata) (см. [Момент валидации](#момент-валидации)).
 
 ## Метаданные связей
 
-Модель метаданных раскрывается через [`IEntityMetadata.Relationships`](xref:NextORM.Core.IEntityMetadata); каждый элемент — [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata) с [`Kind`](xref:NextORM.Core.IRelationshipMetadata) ([`RelationshipKind`](xref:NextORM.Core.RelationshipKind)), `DeclaringType`, `RelatedType`, `Navigation`, `IsCollection`, `ForeignKey`, `PrincipalKey` и `Inverse`. `Inverse` указывает на метаданные другой стороны, когда обе стороны объявлены и сходятся по внешнему ключу и типам; иначе он `null` — он никогда не выводится. `Inverse` разрешается **лениво при первом чтении и кэшируется**: зарегистрируйте связанный тип (и объявляющий тип) до чтения, потому что чтение, выполненное до регистрации другой стороны, закэширует `null` и не будет обновлено позднейшей регистрацией.
+Модель метаданных раскрывается через [`IEntityMetadata.Relationships`](xref:NextORM.Core.IEntityMetadata); каждый элемент — [`IRelationshipMetadata`](xref:NextORM.Core.IRelationshipMetadata) с [`Kind`](xref:NextORM.Core.IRelationshipMetadata) ([`RelationshipKind`](xref:NextORM.Core.RelationshipKind)), `DeclaringType`, `RelatedType`, `Navigation`, `IsCollection`, `ForeignKey`, `PrincipalKey` и `Inverse`. `ForeignKey` и `PrincipalKey` — упорядоченные списки компонентов `IReadOnlyList<IPropertyMetadata>`: порядок — это порядок объявления (или, для principal-ключа по умолчанию, порядок метаданных сущности), и компонент в позиции `i` одной стороны пары с компонентом в позиции `i` другой. `Inverse` указывает на метаданные другой стороны, когда обе стороны объявлены и сходятся по **полному упорядоченному** внешнему ключу и типам; иначе он `null` — он никогда не выводится. `Inverse` разрешается **лениво при первом чтении и кэшируется**: зарегистрируйте связанный тип (и объявляющий тип) до чтения, потому что чтение, выполненное до регистрации другой стороны, закэширует `null` и не будет обновлено позднейшей регистрацией. Две разные навигации с одним каноническим mapping делают inverse неоднозначным, и его чтение бросает `NotSupportedException` с именами обоих кандидатов.
 
 ## См. также
 

@@ -134,6 +134,132 @@ internal static class JoinIntoCompositeKeyFixtures
         return (a, a + 1, a + 2);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // T251 declared surface: the same physical tables and the same row shape, declared through the
+    // public fluent A–J overloads instead of an injected IRelationshipMetadata. The CLR types are
+    // distinct so the process-wide metadata registration of the manual fixtures above cannot shadow
+    // or be shadowed by these declarations.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Registers the declared fixture graph: the child must be registered first so its own reference
+    /// navigation is excluded from the mapping before the parent-side collection provision resolves it.
+    /// </summary>
+    internal static void RegisterDeclared(IDataContext ctx)
+    {
+        ctx.From<T251DeclaredChild>((EntityMetadataBuilder<T251DeclaredChild> b) => b.HasOne(
+            c => c.Parent,
+            c => new { c.Tenant, c.ParentId },
+            p => new { p.Tenant, p.LinkId }));
+        ctx.From<T251DeclaredPrimary>();
+        ctx.From<T251DeclaredNullableChild>();
+        // Single-column nullable FK (legacy shape) to the same principal: the null component must mean
+        // "no relationship" without throwing Expression.Equal(int?, int).
+        ctx.From<T251SingleNullableChild>((EntityMetadataBuilder<T251SingleNullableChild> b) => b.HasOne(
+            c => c.Parent,
+            c => new { c.ParentId },
+            p => new { p.LinkId }));
+        // Composite FK with exactly one nullable component.
+        ctx.From<T251PartialNullableChild>((EntityMetadataBuilder<T251PartialNullableChild> b) => b.HasOne(
+            c => c.Parent,
+            c => new { c.Tenant, c.ParentId },
+            p => new { p.Tenant, p.LinkId }));
+        ctx.From<T251DeclaredManyParent>((EntityMetadataBuilder<T251DeclaredManyParent> b) => b
+            .HasMany(p => p.Children, c => new { c.Tenant, c.ParentId }, p => new { p.Tenant, p.LinkId })
+            .HasMany(p => p.SwappedChildren, c => new { c.Tenant, c.ParentId }, p => new { p.RowId, p.Tenant })
+            .HasMany(p => p.NullableChildren, c => new { c.Tenant, c.ParentId }, p => new { p.Tenant, p.LinkId })
+            .HasOneToOne(p => p.Primary, p => new { p.Tenant, p.LinkId }, c => new { c.OwnerTenant, c.ParentLink }));
+    }
+
+    /// <summary>
+    /// Seeds the declared one-to-many rows with the manual fixture's shape: three parents matching on
+    /// one component each, two children for the first, one each for the others, plus an orphan child
+    /// keyed to <c>(t2, l2)</c> that no parent matches.
+    /// </summary>
+    internal static (int A, int B, int C) SeedDeclaredOneToMany(IDataContext ctx)
+    {
+        RegisterDeclared(ctx);
+
+        var a = NextBase();
+        var t1 = a;
+        var t2 = a + 1;
+        var l1 = a + 10;
+        var l2 = a + 20;
+
+        ctx.CreateInsertBuilder<T251DeclaredManyParent>().Values([
+            new T251DeclaredManyParent { RowId = a, Tenant = t1, LinkId = l1 },
+            new T251DeclaredManyParent { RowId = a + 1, Tenant = t1, LinkId = l2 },
+            new T251DeclaredManyParent { RowId = a + 2, Tenant = t2, LinkId = l1 },
+        ]).Insert();
+
+        ctx.CreateInsertBuilder<T251DeclaredChild>().Values([
+            new T251DeclaredChild { Id = a + 100, Tenant = t1, ParentId = l1, SortKey = 1 },
+            new T251DeclaredChild { Id = a + 101, Tenant = t1, ParentId = l1, SortKey = 2 },
+            new T251DeclaredChild { Id = a + 102, Tenant = t1, ParentId = l2, SortKey = 3 },
+            new T251DeclaredChild { Id = a + 103, Tenant = t2, ParentId = l1, SortKey = 4 },
+            new T251DeclaredChild { Id = a + 104, Tenant = t2, ParentId = l2, SortKey = 5 },
+            // A dangling non-null foreign key: no parent carries link id <c>a + 99</c>.
+            new T251DeclaredChild { Id = a + 105, Tenant = t1, ParentId = a + 99, SortKey = 6 },
+        ]).Insert();
+
+        return (a, a + 1, a + 2);
+    }
+
+    /// <summary>
+    /// Seeds the declared one-to-one rows: all parents share the tenant and differ only in the trailing
+    /// link component, so a tenant-only match would pair each parent with both children.
+    /// </summary>
+    internal static (int WithChild, int OtherChild, int Childless) SeedDeclaredOneToOne(IDataContext ctx)
+    {
+        RegisterDeclared(ctx);
+
+        var a = NextBase();
+        var t1 = a;
+        var l1 = a + 10;
+        var l2 = a + 20;
+
+        ctx.CreateInsertBuilder<T251DeclaredManyParent>().Values([
+            new T251DeclaredManyParent { RowId = a, Tenant = t1, LinkId = l1 },
+            new T251DeclaredManyParent { RowId = a + 1, Tenant = t1, LinkId = l2 },
+            new T251DeclaredManyParent { RowId = a + 2, Tenant = t1, LinkId = a + 30 },
+        ]).Insert();
+
+        ctx.CreateInsertBuilder<T251DeclaredPrimary>().Values([
+            new T251DeclaredPrimary { Id = a + 110, OwnerTenant = t1, ParentLink = l1, SortKey = 1 },
+            new T251DeclaredPrimary { Id = a + 111, OwnerTenant = t1, ParentLink = l2, SortKey = 2 },
+        ]).Insert();
+
+        return (a, a + 1, a + 2);
+    }
+
+    /// <summary>
+    /// Seeds one valid child plus one row for each null position of the nullable composite foreign key
+    /// (first only, last only, both) and one dangling non-null row. A null-safe comparison would link
+    /// the all-null row; a first-component-only match would link the last-null and first-null rows.
+    /// </summary>
+    internal static (int Parent, int Tenant, int Link, int ValidChild) SeedDeclaredNullable(IDataContext ctx)
+    {
+        RegisterDeclared(ctx);
+
+        var a = NextBase();
+        var t1 = a;
+        var l1 = a + 10;
+
+        ctx.CreateInsertBuilder<T251DeclaredManyParent>().Values([
+            new T251DeclaredManyParent { RowId = a, Tenant = t1, LinkId = l1 },
+        ]).Insert();
+
+        ctx.CreateInsertBuilder<T251DeclaredNullableChild>().Values([
+            new T251DeclaredNullableChild { Id = a + 120, Tenant = t1, ParentId = l1, SortKey = 1 },
+            new T251DeclaredNullableChild { Id = a + 121, Tenant = null, ParentId = l1, SortKey = 2 },
+            new T251DeclaredNullableChild { Id = a + 122, Tenant = t1, ParentId = null, SortKey = 3 },
+            new T251DeclaredNullableChild { Id = a + 123, Tenant = null, ParentId = null, SortKey = 4 },
+            new T251DeclaredNullableChild { Id = a + 124, Tenant = t1, ParentId = a + 99, SortKey = 5 },
+        ]).Insert();
+
+        return (a, t1, l1, a + 120);
+    }
+
     private sealed class InjectedRelationship : IRelationshipMetadata
     {
         public InjectedRelationship(
@@ -215,4 +341,137 @@ public sealed class JiCompositeKeyChild
 
     [Column("sort_key")]
     public int SortKey { get; set; }
+}
+
+/// <summary>
+/// T251 declared-surface parent: the composite principal key <c>(tenant, link_id)</c> is not the table
+/// key (<c>row_id</c>) and is declared through the fluent overloads in
+/// <see cref="JoinIntoCompositeKeyFixtures.RegisterDeclared"/>.
+/// </summary>
+[SqlTable("eager_composite_parent")]
+public sealed class T251DeclaredManyParent
+{
+    [Key]
+    [Column("row_id")]
+    public int RowId { get; set; }
+
+    [Column("tenant")]
+    public int Tenant { get; set; }
+
+    [Column("link_id")]
+    public int LinkId { get; set; }
+
+    public ICollection<T251DeclaredChild> Children { get; set; } = new List<T251DeclaredChild>();
+
+    /// <summary>Same foreign-key list, principal components declared in the opposite order.</summary>
+    public ICollection<T251DeclaredChild> SwappedChildren { get; set; } = new List<T251DeclaredChild>();
+
+    public ICollection<T251DeclaredNullableChild> NullableChildren { get; set; } = new List<T251DeclaredNullableChild>();
+
+    public T251DeclaredPrimary? Primary { get; set; }
+}
+
+/// <summary>T251 declared-surface child; the foreign key <c>(tenant, parent_id)</c> pairs the principal.</summary>
+[SqlTable("eager_composite_child")]
+public sealed class T251DeclaredChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("tenant")]
+    public int Tenant { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("sort_key")]
+    public int SortKey { get; set; }
+
+    public T251DeclaredManyParent? Parent { get; set; }
+}
+
+/// <summary>T251 declared-surface one-to-one dependent; the composite foreign key is non-unique at the schema.</summary>
+[SqlTable("eager_composite_child")]
+public sealed class T251DeclaredPrimary
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("tenant")]
+    public int OwnerTenant { get; set; }
+
+    [Column("parent_id")]
+    public int ParentLink { get; set; }
+
+    [Column("sort_key")]
+    public int SortKey { get; set; }
+}
+
+/// <summary>
+/// T251 declared-surface child whose composite foreign key components are nullable, so each null
+/// position can be seeded on a live database. Mapped to the shared (nullable) table columns.
+/// </summary>
+[SqlTable("eager_composite_child")]
+public sealed class T251DeclaredNullableChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("tenant")]
+    public int? Tenant { get; set; }
+
+    [Column("parent_id")]
+    public int? ParentId { get; set; }
+
+    [Column("sort_key")]
+    public int SortKey { get; set; }
+}
+
+/// <summary>
+/// T251 live single-column nullable foreign key: <c>parent_id</c> is the only key component, so a null
+/// or dangling value must resolve the reference to <c>null</c> (plain equality, no throw).
+/// </summary>
+[SqlTable("eager_composite_child")]
+public sealed class T251SingleNullableChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("tenant")]
+    public int Tenant { get; set; }
+
+    [Column("parent_id")]
+    public int? ParentId { get; set; }
+
+    [Column("sort_key")]
+    public int SortKey { get; set; }
+
+    public T251DeclaredManyParent? Parent { get; set; }
+}
+
+/// <summary>
+/// T251 live composite foreign key with exactly one nullable component: <c>(tenant, parent_id)</c> where
+/// only <c>parent_id</c> is nullable. A null component breaks the key, so the reference is null.
+/// </summary>
+[SqlTable("eager_composite_child")]
+public sealed class T251PartialNullableChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("tenant")]
+    public int Tenant { get; set; }
+
+    [Column("parent_id")]
+    public int? ParentId { get; set; }
+
+    [Column("sort_key")]
+    public int SortKey { get; set; }
+
+    public T251DeclaredManyParent? Parent { get; set; }
 }

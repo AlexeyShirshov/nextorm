@@ -406,9 +406,26 @@ internal static class PredicateTranslator
         // predicate first, otherwise the emitted <c>and</c>/<c>or</c> is rejected (SQL Server).
         if (!visitor.IsParamMode && node.NodeType is ExpressionType.AndAlso or ExpressionType.OrElse)
         {
+            var logicalOperator = node.NodeType == ExpressionType.AndAlso
+                ? visitor.Kw(" and ")
+                : visitor.Kw(" or ");
+
+            // A logical value in a value context (a select-list projection, e.g. a composite reference
+            // presence check) is not a condition: a dialect without a boolean type has no infix form
+            // for it, so the whole expression is rendered as a predicate and materialised by the
+            // dialect (T-SQL: cast(case when ... then 1 else 0 end as bit)). On a dialect with a
+            // boolean type MakeBooleanPredicate is identity, so the emitted SQL is unchanged.
+            if (!visitor.IsPredicateContext)
+            {
+                visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(
+                    $"({RenderPredicate(visitor, node.Left)}{logicalOperator}{RenderPredicate(visitor, node.Right)})",
+                    asPredicate: false));
+                return node;
+            }
+
             visitor.Builder!.Append('(');
             AppendCondition(visitor, node.Left);
-            visitor.Builder!.Append(node.NodeType == ExpressionType.AndAlso ? visitor.Kw(" and ") : visitor.Kw(" or "));
+            visitor.Builder!.Append(logicalOperator);
             AppendCondition(visitor, node.Right);
             visitor.Builder!.Append(')');
             return node;

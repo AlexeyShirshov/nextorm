@@ -42,7 +42,7 @@ internal static class NavigationPathResolver
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">
     /// The path is not rooted at a bound visible parameter, an intermediate hop is a collection, a member is
-    /// not a declared navigation, a key is missing/composite, or the path contains a captured/static root,
+    /// not a declared navigation, a key is missing, or the path contains a captured/static root,
     /// an arbitrary method call, or a downcast/user-defined conversion. The resolver never returns a null or
     /// default marker instead of throwing.
     /// </exception>
@@ -207,7 +207,7 @@ internal static class NavigationPathResolver
             $"The member '{Describe(member)}' is not a declared navigation relationship on '{entityType.Name}'.");
     }
 
-    /// <summary>Snapshots one relationship into a resolved hop, refusing composite keys.</summary>
+    /// <summary>Snapshots one relationship into a resolved hop with its full ordered key components.</summary>
     private static ResolvedNavigationHop ResolveHop(IRelationshipMetadata relationship)
     {
         // The navigation is non-null for every relationship returned by FindRelationship (it matched by
@@ -219,7 +219,6 @@ internal static class NavigationPathResolver
         switch (relationship.Kind)
         {
             case RelationshipKind.OneToMany:
-                RequireSingleKey(relationship);
                 return new ResolvedNavigationHop(
                     navigation,
                     declaringType,
@@ -227,10 +226,9 @@ internal static class NavigationPathResolver
                     relationship.Kind,
                     isCollection: true,
                     NavigationDirection.PrincipalToDependent,
-                    new ResolvedNavigationLeg(relationship.ForeignKey[0], relationship.PrincipalKey[0]));
+                    new ResolvedNavigationLeg(relationship.ForeignKey, relationship.PrincipalKey));
 
             case RelationshipKind.ManyToOne:
-                RequireSingleKey(relationship);
                 return new ResolvedNavigationHop(
                     navigation,
                     declaringType,
@@ -238,12 +236,11 @@ internal static class NavigationPathResolver
                     relationship.Kind,
                     isCollection: relationship.IsCollection,
                     NavigationDirection.DependentToPrincipal,
-                    new ResolvedNavigationLeg(relationship.ForeignKey[0], relationship.PrincipalKey[0]));
+                    new ResolvedNavigationLeg(relationship.ForeignKey, relationship.PrincipalKey));
 
             // HasOneToOne declares the principal side: the declaring type holds the principal key and the
             // related (dependent) type holds the foreign key, so the hop traverses principal to dependent.
             case RelationshipKind.OneToOne:
-                RequireSingleKey(relationship);
                 return new ResolvedNavigationHop(
                     navigation,
                     declaringType,
@@ -251,7 +248,7 @@ internal static class NavigationPathResolver
                     relationship.Kind,
                     isCollection: relationship.IsCollection,
                     NavigationDirection.PrincipalToDependent,
-                    new ResolvedNavigationLeg(relationship.ForeignKey[0], relationship.PrincipalKey[0]));
+                    new ResolvedNavigationLeg(relationship.ForeignKey, relationship.PrincipalKey));
 
             case RelationshipKind.ManyToMany:
                 return ResolveJunctionHop(relationship, navigation);
@@ -262,24 +259,15 @@ internal static class NavigationPathResolver
         }
     }
 
-    /// <summary>Snapshots a many-to-many relationship, requiring a single-column key on each junction leg.</summary>
+    /// <summary>Snapshots a many-to-many relationship with both full ordered junction legs.</summary>
     private static ResolvedNavigationHop ResolveJunctionHop(IRelationshipMetadata relationship, PropertyInfo navigation)
     {
         var junction = relationship.Junction
             ?? throw new NotSupportedException(
                 $"The many-to-many relationship '{Describe(navigation)}' has no junction metadata.");
 
-        if (junction.ParentKey.Count != 1
-            || junction.ChildKey.Count != 1
-            || junction.JunctionParentForeignKey.Count != 1
-            || junction.JunctionChildForeignKey.Count != 1)
-        {
-            throw new NotSupportedException(
-                $"The many-to-many relationship '{Describe(navigation)}' has a composite junction key; only single-column junction keys are supported.");
-        }
-
-        var childLeg = new ResolvedNavigationLeg(junction.JunctionChildForeignKey[0], junction.ChildKey[0]);
-        var parentLeg = new ResolvedNavigationLeg(junction.JunctionParentForeignKey[0], junction.ParentKey[0]);
+        var childLeg = new ResolvedNavigationLeg(junction.JunctionChildForeignKey, junction.ChildKey);
+        var parentLeg = new ResolvedNavigationLeg(junction.JunctionParentForeignKey, junction.ParentKey);
 
         // The junction mapping identity is resolved through the same configured path; it is captured for
         // plan identity only and is never registered or mutated here.
@@ -296,14 +284,6 @@ internal static class NavigationPathResolver
             parentLeg,
             junction.JunctionType,
             junctionMetadata);
-    }
-
-    /// <summary>Fails closed when a relationship leg is not exactly one key member.</summary>
-    private static void RequireSingleKey(IRelationshipMetadata relationship)
-    {
-        if (relationship.ForeignKey.Count != 1 || relationship.PrincipalKey.Count != 1)
-            throw new NotSupportedException(
-                $"The relationship '{Describe(relationship)}' has a composite key; only single-column relationship keys are supported.");
     }
 
     private static string Describe(IRelationshipMetadata relationship)

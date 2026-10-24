@@ -257,8 +257,8 @@ internal sealed class MySqlTestProvider : ITestProvider
         create table eager_composite_child
         (
             id int not null primary key,
-            tenant int not null,
-            parent_id int not null,
+            tenant int null,
+            parent_id int null,
             sort_key int not null
         )
         """,

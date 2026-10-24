@@ -254,9 +254,6 @@ client-side evaluation:
   outside a query expression always throws.
 * **Undeclared navigations** — a reference- or collection-typed member with no declared relationship is
   not inferred from a convention.
-* **Composite relationship keys** — implicit navigation resolves only single-column
-  foreign/principal/junction keys and rejects a composite key; use an explicit
-  [`JoinInto`](relationships.md), which joins and groups on every declared component.
 * **Navigation in grouping/paging modifier keys** — `GROUP BY`, `DISTINCT ON`, `LIMIT BY` and
   extreme-row keys do not evaluate navigation (use explicit joins there).
 * **Temp-table / table-valued (TVP) navigation** — navigation over a temp-table/TVP source is
@@ -270,6 +267,21 @@ client-side evaluation:
 * **Bare reference-adapter projection** — projecting the reference marker itself
   (`Select(c => new { X = c.Parent!.AsEntityBuilder<Parent>() })`) is not a column and is rejected; use
   the `Any`/`Count`/`LongCount` terminals instead.
+
+### Composite relationship keys
+
+A relationship may span several components. The reference, collection and many-to-many SQL routes
+correlate on **every** declared component, in declaration order — not on one column and not on the
+first component alone. Per-component null semantics follow SQL: any null foreign-key component yields
+no relationship (a presence check reports the related row as absent, and a scalar chain yields `null`),
+and there is **no `null == null`** match — a null foreign-key component never matches a null principal
+component. Components are paired positionally, and the component lists come from the relationship
+metadata (see [Ordered key selectors](relationships.md#ordered-key-selectors)).
+
+This composite scope is the SQL routes only. The in-memory provider keeps its previous boundary: a
+composite relationship key is still refused by its navigation path with `NotSupportedException` (the
+declaration and the metadata are provider-neutral, but no component-wise in-memory matching is added).
+Use a SQL provider for composite implicit navigation.
 
 For the explicit, fully-featured relationship surface use [`JoinInto`](relationships.md) and
 the explicit join operators; see [Limitations](../advanced/limitations.md) for the general boundaries.

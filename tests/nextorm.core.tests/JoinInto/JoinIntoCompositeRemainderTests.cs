@@ -181,6 +181,7 @@ public class JoinIntoCompositeRemainderTests
 
     public sealed class CompositeJunctionParent
     {
+        public int TenantId { get; set; }
         public int Id { get; set; }
         public ICollection<CompositeJunctionChild> Children { get; set; } = new List<CompositeJunctionChild>();
     }
@@ -192,8 +193,8 @@ public class JoinIntoCompositeRemainderTests
 
     public sealed class CompositeJunctionLink
     {
+        public int ParentTenantId { get; set; }
         public int ParentId { get; set; }
-        public int ParentId2 { get; set; }
         public int ChildId { get; set; }
     }
 
@@ -203,6 +204,7 @@ public class JoinIntoCompositeRemainderTests
         var parentProps = Props<CompositeJunctionParent>();
         var childProps = Props<CompositeJunctionChild>();
         var linkProps = Props<CompositeJunctionLink>();
+        var parentTenantKey = Prop(parentProps, nameof(CompositeJunctionParent.TenantId)).PropertyInfo;
         var parentKey = Prop(parentProps, nameof(CompositeJunctionParent.Id)).PropertyInfo;
         var childKey = Prop(childProps, nameof(CompositeJunctionChild.Id)).PropertyInfo;
         var navigation = typeof(CompositeJunctionParent).GetProperty(nameof(CompositeJunctionParent.Children));
@@ -212,37 +214,45 @@ public class JoinIntoCompositeRemainderTests
             parentProps.Where(p => p.PropertyInfo != navigation).ToList(),
             relationships:
             [
+                // A genuinely composite junction key: both parent key components pair positionally with two
+                // distinct junction foreign-key columns. The former fixture announced a one-component parent
+                // key with a two-component junction foreign key (an over-arity declaration the shared
+                // structural validator rejects) and only exercised the first component.
                 new RelationshipMetadata(
                     RelationshipKind.ManyToMany,
                     typeof(CompositeJunctionParent),
                     typeof(CompositeJunctionChild),
                     navigation,
                     isCollection: true,
-                    childKey,
-                    parentKey,
+                    [childKey],
+                    [parentTenantKey, parentKey],
                     typeof(CompositeJunctionChild),
                     typeof(CompositeJunctionParent),
                     new RelationshipJunctionDeclaration
                     {
                         JunctionType = typeof(CompositeJunctionLink),
-                        ParentKey = [parentKey],
+                        ParentKey = [parentTenantKey, parentKey],
                         ChildKey = [childKey],
-                        JunctionParentForeignKey = [Prop(linkProps, nameof(CompositeJunctionLink.ParentId)).PropertyInfo, Prop(linkProps, nameof(CompositeJunctionLink.ParentId2)).PropertyInfo],
+                        JunctionParentForeignKey = [Prop(linkProps, nameof(CompositeJunctionLink.ParentTenantId)).PropertyInfo, Prop(linkProps, nameof(CompositeJunctionLink.ParentId)).PropertyInfo],
                         JunctionChildForeignKey = [Prop(linkProps, nameof(CompositeJunctionLink.ChildId)).PropertyInfo],
                     }),
             ]);
 
         using var ctx = new InMemoryDataContext();
-        ctx.From<CompositeJunctionParent>().WithData([new CompositeJunctionParent { Id = 1 }]);
+        ctx.From<CompositeJunctionParent>().WithData([new CompositeJunctionParent { TenantId = 1, Id = 1 }]);
         ctx.From<CompositeJunctionChild>().WithData([new CompositeJunctionChild { Id = 10 }]);
-        ctx.From<CompositeJunctionLink>().WithData([new CompositeJunctionLink { ParentId = 1, ParentId2 = 7, ChildId = 10 }]);
+        ctx.From<CompositeJunctionLink>().WithData([
+            new CompositeJunctionLink { ParentTenantId = 1, ParentId = 1, ChildId = 10 },
+            // Same parent id, different tenant: the junction must stitch by the full key, not by ParentId.
+            new CompositeJunctionLink { ParentTenantId = 2, ParentId = 1, ChildId = 10 },
+        ]);
 
         var parents = ctx.From<CompositeJunctionParent>()
             .JoinInto(ctx.From<CompositeJunctionChild>(), (p, c) => true, p => p.Children)
             .ToList();
 
         parents.Should().ContainSingle();
-        parents[0].Children.Select(c => c.Id).Should().Equal(10);
+        parents[0].Children.Select(c => c.Id).Should().Equal(new[] { 10 }, "only the link whose full parent key matches is stitched");
     }
 
     public sealed class SingleQueryRemainderParent
