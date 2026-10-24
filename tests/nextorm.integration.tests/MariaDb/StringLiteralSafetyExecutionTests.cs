@@ -133,6 +133,39 @@ public sealed class MariaDbStringLiteralSafetyExecutionTests : IDisposable
             $"{config} an external mode change is observed; the product must not issue its own SET");
     }
 
+    [Fact]
+    [Trait("Issue", "327")]
+    public void MariaDb_StringAggSeparator_ShouldJoinRowsWithTheLiteralCommaToken()
+    {
+        using var ctx = CreateContext("absent");
+        RecreateProbeTable(ctx);
+        var marker = NextProbeMarker();
+
+        foreach (var value in new[] { "alpha", "beta" })
+        {
+            ctx.CreateInsertBuilder<IMariaDbStringLiteralProbe>()
+                .Value(x => x.Id, NextProbeId())
+                .Value(x => x.Marker, marker)
+                .Value(x => x.Svalue, value)
+                .Insert();
+        }
+
+        var concatenated = ctx.From<IMariaDbStringLiteralProbe>()
+            .Where(x => x.Marker == marker)
+            .Select(x => SqlFunctions.Sql.string_agg(x.Svalue, ","))
+            .First();
+
+        // GROUP_CONCAT's SEPARATOR grammar accepts only a text-literal token, so the product renders the
+        // constant separator as _utf8mb4','. Row order inside an unordered aggregate is unspecified, so
+        // either concatenation of the exact ordinal values is correct; the separator itself must be a
+        // single comma and the payload must be byte-exact.
+        concatenated.Should().BeOneOf("alpha,beta", "beta,alpha",
+            "the SEPARATOR token must be accepted and join both rows");
+        concatenated!.Count(c => c == ',').Should().Be(1, "the separator is exactly one comma");
+        Encoding.UTF8.GetBytes(concatenated).Should().HaveCount(10,
+            "'alpha' + ',' + 'beta' is ten UTF-8 bytes with no loss");
+    }
+
     private static IEnumerable<string> HostileSubset()
     {
         string[] ids =

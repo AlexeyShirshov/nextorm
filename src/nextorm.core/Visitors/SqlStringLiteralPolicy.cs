@@ -49,6 +49,12 @@ internal enum SqlStringGrammar
     JsonPathElement,
     /// <summary>A padding character (<c>LPAD</c>/<c>RPAD</c>).</summary>
     PaddingCharacter,
+    /// <summary>
+    /// A position whose grammar accepts only a text-literal token rather than an expression: the
+    /// <c>GROUP_CONCAT(… SEPARATOR …)</c> delimiter on the MySQL family. The provider's value spelling
+    /// (a charset-introduced hex literal) is not legal there, so this position has its own token form.
+    /// </summary>
+    StringAggSeparator,
 }
 
 /// <summary>
@@ -124,6 +130,9 @@ internal sealed class SqlStringLiteralPolicy
             // cast(… as text), array[…]); the JSON translator only runs on PostgreSQL.
             SqlStringGrammar.JsonDocument or SqlStringGrammar.JsonKey or SqlStringGrammar.JsonPathElement =>
                 RenderJsonToken(value),
+            // The MySQL-family GROUP_CONCAT delimiter is a bare text-literal token: the charset-introduced
+            // hex value spelling is a syntax error there, so the family gets its own token form.
+            SqlStringGrammar.StringAggSeparator => RenderStringAggSeparator(value),
             // The padding character is a function argument (lpad/rpad/repeat/replicate), so an
             // expression is legal on every provider that supports padding.
             _ => RenderValue(value, role),
@@ -186,6 +195,26 @@ internal sealed class SqlStringLiteralPolicy
     /// <summary>A JSON document/key/path element: an expression position, PostgreSQL-only translator.</summary>
     private string RenderJsonToken(string value) =>
         _family == Family.Postgres ? RenderPostgresValidated(value) : RenderPlainToken(value);
+
+    /// <summary>
+    /// The <c>GROUP_CONCAT(… SEPARATOR …)</c> delimiter. MySQL and MariaDB accept only a text-literal
+    /// token there, so the value is spelled <c>_utf8mb4'…'</c> with apostrophes doubled. A backslash or
+    /// NUL cannot be written mode-independently in a quoted token (a backslash is escape-sensitive under
+    /// <c>NO_BACKSLASH_ESCAPES</c>), so such a separator fails closed instead of being misrendered.
+    /// </summary>
+    private string RenderStringAggSeparator(string value)
+    {
+        if (_family != Family.MySql)
+            return RenderPlainToken(value);
+
+        if (value.Contains('\\') || value.Contains('\0'))
+            throw new NotSupportedException(
+                "The GROUP_CONCAT separator on MySQL/MariaDB must be a constant string literal without " +
+                "backslash or NUL characters: no spelling of that character is independent of the " +
+                "NO_BACKSLASH_ESCAPES session mode.");
+
+        return "_utf8mb4'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+    }
 
     private string RenderPostgresValidated(string value)
     {

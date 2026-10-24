@@ -833,7 +833,8 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, ",")))
-            .Should().Contain("group_concat(somestring separator _utf8mb4 X'2c')");
+            .Should().Contain("group_concat(somestring separator _utf8mb4',')",
+                "the SEPARATOR grammar accepts a text-literal token, not the value hex spelling");
     }
 
     [Fact]

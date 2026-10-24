@@ -336,4 +336,81 @@ public class InlineStringLiteralSqlGenerationTests
 
         SqlForChar(ctx, '\u0001').Should().Contain("select _utf8mb4 X'01'");
     }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void StringAggConstantSeparator_ShouldRenderATextLiteralToken()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // MariaDB inherits the MySQL literal policy: GROUP_CONCAT's SEPARATOR grammar accepts only a
+        // text-literal token, so a constant separator is an introduced quoted literal with apostrophes
+        // doubled, and the value hex spelling is a syntax error in this position.
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, ",")))
+            .Should().Contain("separator _utf8mb4','");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, "'")))
+            .Should().Contain("separator _utf8mb4''''", "an apostrophe is doubled inside the literal");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, "")))
+            .Should().Contain("separator _utf8mb4''", "an empty separator is an empty literal, not a missing token");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void StringAggCapturedSeparator_ShouldFailClosed()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var separator = ",";
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, separator))))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*MySQL*")
+            .WithMessage("*constant string*");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void StringAggNullSeparator_ShouldFailClosed()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, null!))))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*MySQL*")
+            .WithMessage("*non-null constant string*");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void StringAggBackslashSeparator_ShouldFailClosedWithoutEchoingTheValue()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var exception = FluentActions.Invoking(
+                () => SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, "a\\b"))))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*MySQL*")
+            .Which;
+
+        exception.Message.Should().NotContain("a\\b", "the rejection must not echo the rejected separator");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void StringAggNulSeparator_ShouldFailClosedWithoutEchoingTheValue()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var exception = FluentActions.Invoking(
+                () => SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, "a\u0000b"))))
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("*MySQL*")
+            .Which;
+
+        exception.Message.Should().NotContain("a\u0000b", "the rejection must not echo the rejected separator");
+    }
 }
