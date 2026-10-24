@@ -53,7 +53,7 @@ namespace NextORM.Integration.Tests;
 /// being asserted here.
 /// </para>
 /// </summary>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class StructuralPlanBranchCoverage5Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

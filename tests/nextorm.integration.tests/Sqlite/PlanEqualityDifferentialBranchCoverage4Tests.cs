@@ -44,7 +44,7 @@ namespace NextORM.Integration.Tests;
 /// pair, a hand-built predicate with FRESH parameter instances, and one/two-level correlated nesting.
 /// </para>
 /// </summary>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class PlanEqualityDifferentialBranchCoverage4Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

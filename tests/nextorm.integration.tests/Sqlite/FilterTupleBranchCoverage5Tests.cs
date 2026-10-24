@@ -41,7 +41,7 @@ namespace NextORM.Integration.Tests;
 /// class, so it is recorded in <c>rv1/inputs/deferred.json</c> instead of being asserted here.
 /// </para>
 /// </summary>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class FilterTupleBranchCoverage5Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

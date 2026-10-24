@@ -19,7 +19,7 @@ namespace NextORM.Integration.Tests;
 /// (unary <c>Where</c>/<c>Select</c>, the two-parameter join family, <c>SelectMany</c>) takes at most two
 /// parameters, so the &gt;4-parameter arity arm has no call sequence on the public API.
 /// </para>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class PlanKeyBranchCoverage3Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

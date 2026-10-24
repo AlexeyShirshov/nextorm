@@ -14,7 +14,7 @@ namespace NextORM.Integration.Tests;
 /// <see cref="SqlParameter"/> metadata (<c>DbType</c>, <c>SqlDbType</c>, precision/scale, value) before
 /// each execution.
 /// </summary>
-[Collection("SqlServer")]
+[Collection("Query plan cache")]
 public sealed class T296bSqlServerParameterMetadataTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqlServerTestProvider.Instance;

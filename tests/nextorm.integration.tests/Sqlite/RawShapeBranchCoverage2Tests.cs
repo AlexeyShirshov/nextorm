@@ -23,7 +23,7 @@ namespace NextORM.Integration.Tests;
 /// trees.
 /// </para>
 /// </summary>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class RawShapeBranchCoverage2Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

@@ -38,7 +38,7 @@ namespace NextORM.Integration.Tests;
 /// not in the compared descriptor).
 /// </para>
 /// </summary>
-[Collection("Postgres")]
+[Collection("Query plan cache")]
 public sealed class PostgresPreparationDifferentialBranchCoverage4Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => PostgresTestProvider.Instance;

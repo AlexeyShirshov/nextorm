@@ -45,7 +45,7 @@ namespace NextORM.Integration.Tests;
 /// unreachable on a dialect that has a row-value renderer (<c>SqliteDialect.Tuple</c> is non-null).
 /// </para>
 /// </summary>
-[Collection("Sqlite")]
+[Collection("Query plan cache")]
 public sealed class InPreparationBranchCoverage2Tests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;
