@@ -178,7 +178,7 @@ public class ClickHouseDataContext : DataContext
     {
         // The driver rewrites the ADO-style @name placeholder to {name:Type} and infers the
         // ClickHouse type from the CLR value; the stored name is the one without the @ prefix.
-        var parameter = new ClickHouseDbParameter
+        var parameter = new ClickHouseValueParameter
         {
             ParameterName = name.TrimStart('@'),
             Value = value
@@ -208,6 +208,24 @@ public class ClickHouseDataContext : DataContext
 
         return parameter;
     }
+
+    /// <summary>
+    /// A <c>ClickHouseDbParameter</c> that normalizes a CLR <see cref="char"/> to the equivalent
+    /// one-character string at every driver assignment. ClickHouse has no char type (the driver's type
+    /// map rejects <see cref="char"/>), and SQL has no char value either; the mapping matches the
+    /// table-parameter storage rule (<c>TableParameterBinder</c>) and covers both the cold bind and the
+    /// cached-command value refresh, which writes <c>Value</c> on the existing driver parameter.
+    /// Every other value passes through byte-for-byte.
+    /// </summary>
+    private sealed class ClickHouseValueParameter : ClickHouseDbParameter
+    {
+        public override object? Value
+        {
+            get => base.Value;
+            set => base.Value = value is char character ? character.ToString() : value;
+        }
+    }
+
 
     /// <summary>
     /// Creates a <c>ClickHouseDbParameter</c> for a descriptor. A <see cref="TableParameterValue"/> is

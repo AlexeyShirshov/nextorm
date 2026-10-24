@@ -361,4 +361,20 @@ public class InlineStringLiteralSqlGenerationTests
 
         SqlForChar(ctx, '\u0001').Should().Contain(@"select '\x01'");
     }
+
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void CapturedCharParameter_ShouldBindAsAOneCharacterString()
+    {
+        using var ctx = ClickHouseTestContext.CreateClickHouse();
+
+        // ClickHouse has no char type: the driver's type map rejects System.Char, so the binding seam
+        // normalizes the value to the equivalent one-character string (the TableParameterBinder rule).
+        ctx.CreateParam("p", 'a').Value.Should().Be("a");
+        ctx.CreateParam("p", 'П').Value.Should().Be("П");
+        ctx.CreateParam("p", default(char)).Value.Should().Be("\0");
+        ctx.CreateParam("p", null).Value.Should().BeNull("null keeps its existing binding");
+        ctx.CreateParam("p", 42).Value.Should().Be(42, "non-char values are unchanged");
+    }
 }
