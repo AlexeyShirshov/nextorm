@@ -42,13 +42,6 @@ public sealed class ClickHouseRetryScenarioTests
     /// <summary>The probe's deliberately small supported client timeout, in seconds.</summary>
     private const string EffectiveTimeoutSeconds = "1";
 
-    /// <summary>
-    /// Response bytes forwarded before the reset. Large enough to prove the response really travelled
-    /// back from the live server through the proxy, small enough that the reset lands while the client
-    /// is still reading the response head rather than a materialised body.
-    /// </summary>
-    private const int ResponseBytesBeforeReset = 32;
-
     /// <summary>Longer than the probe's 1 s client timeout, so attempt 1 must fail client-side.</summary>
     private static readonly TimeSpan ProxyDelay = TimeSpan.FromSeconds(3);
 
@@ -142,8 +135,19 @@ public sealed class ClickHouseRetryScenarioTests
         using var context = CreateContext(proxy.ConnectionStringFor(effective.ConnectionString));
         var stopwatch = Stopwatch.StartNew();
         var (succeeded, value) = await harness
-            .TryExecuteAsync(Audited("timeout-recovery"), cancellationToken => ReadScalarAsync(context, cancellationToken));
+            .TryExecuteAsync(
+                Audited("timeout-recovery"),
+                cancellationToken => ReadScalarAsync(context, cancellationToken),
+                TestContext.Current.CancellationToken);
         stopwatch.Stop();
+
+        // TEMPORARY D0b instrumentation (sanitised: type names only, no messages/connection strings).
+        Console.WriteLine(
+            $"{ProbePrefix}-D0B scenario=timeout-recovery chain={Describe(harness.FirstFailure)} " +
+            $"kind={(harness.FirstFailure is null ? "none" : Classify(harness.FirstFailure).Kind.ToString())} " +
+            $"reason={(harness.FirstFailure is null ? "none" : Classify(harness.FirstFailure).ReasonCode)} " +
+            $"attempts={harness.Attempts} succeeded={Lower(succeeded)} " +
+            $"caller_token_cancelled={Lower(harness.CallerToken.IsCancellationRequested)}");
 
         harness.FirstFailure.Should().NotBeNull("attempt 1 must fail before a retry can happen");
         var firstClassification = Classify(harness.FirstFailure);
@@ -188,40 +192,65 @@ public sealed class ClickHouseRetryScenarioTests
 
     [Fact]
     [Trait(ScenarioTrait, "reset-recovery")]
-    public async Task ResetRecovery_ShouldResetAfterTheLiveResponseThenRecover()
+    public async Task ResetRecovery_ShouldResetBeforeTheLiveResponseThenRecover()
     {
         var baseConnectionString = BaseConnectionString();
-        await using var proxy = FaultProxy.ResetAfterFirstResponseBytes(baseConnectionString, ResponseBytesBeforeReset);
+        await using var proxy = FaultProxy.ResetBeforeResponse(baseConnectionString);
 
         var harness = new ProbeRetrier();
         using var context = CreateContext(proxy.ConnectionStringFor(baseConnectionString));
         var (succeeded, value) = await harness
-            .TryExecuteAsync(Audited("reset-recovery"), cancellationToken => ReadScalarAsync(context, cancellationToken));
+            .TryExecuteAsync(
+                Audited("reset-recovery"),
+                cancellationToken => ReadScalarAsync(context, cancellationToken),
+                TestContext.Current.CancellationToken);
 
-        proxy.ServerRespondedBeforeFault.Should().BeTrue(
-            "the request must reach the live endpoint before the fault: accepted={0} client_bytes={1} server_bytes={2} faulted={3}",
+        // TEMPORARY D0b instrumentation (sanitised: type names and counters only).
+        Console.WriteLine(
+            $"{ProbePrefix}-D0B scenario=reset-recovery chain={Describe(harness.FirstFailure)} " +
+            $"kind={(harness.FirstFailure is null ? "none" : Classify(harness.FirstFailure).Kind.ToString())} " +
+            $"reason={(harness.FirstFailure is null ? "none" : Classify(harness.FirstFailure).ReasonCode)} " +
+            $"attempts={harness.Attempts} succeeded={Lower(succeeded)} value={value} " +
+            $"caller_token_cancelled={Lower(harness.CallerToken.IsCancellationRequested)} " +
+            $"target_connected={Lower(proxy.TargetConnected)} reset_stage={proxy.ResetStage} " +
+            $"server_responded_before_fault={Lower(proxy.ServerRespondedBeforeFault)} " +
+            $"accepted={proxy.AcceptedConnections} client_bytes={proxy.ClientToServerBytes} " +
+            $"server_bytes={proxy.ServerToClientBytes} faulted={proxy.FaultedConnections}");
+
+        // Endpoint proof for a pre-response reset: the proxy really connected to the live endpoint
+        // and the client's request bytes really left the client. A response byte is deliberately not
+        // required — this fault happens before one, so ServerRespondedBeforeFault stays false and is
+        // only printed as a counter.
+        proxy.TargetConnected.Should().BeTrue(
+            "the proxy must have connected to the live endpoint: accepted={0} client_bytes={1} server_bytes={2} faulted={3}",
             proxy.AcceptedConnections,
             proxy.ClientToServerBytes,
+            proxy.ServerToClientBytes,
+            proxy.FaultedConnections);
+        proxy.ClientToServerBytes.Should().BeGreaterThan(
+            0,
+            "the request must have been forwarded to the live endpoint before the reset: accepted={0} server_bytes={1} faulted={2}",
+            proxy.AcceptedConnections,
             proxy.ServerToClientBytes,
             proxy.FaultedConnections);
 
         harness.FirstFailure.Should().NotBeNull("attempt 1 must fail before a retry can happen");
         var firstClassification = Classify(harness.FirstFailure);
 
-        // The D2 reset branch is provisional until D0b measures the live signature: this probe must be
+        // The D2 reset branch is provisional until its live signature is measured: this probe must be
         // honest evidence, so an unexpected chain fails loudly instead of passing silently.
         firstClassification.Kind.Should().Be(
             ClickHouseFailureKind.ConnectionReset,
             "the D2 connection-reset branch is provisional; the observed chain was {0}, classified {1} ({2}), " +
-            "proxy counters accepted={3} client_bytes={4} server_bytes={5} faulted={6} — D0b must confirm the " +
-            "live reset signature or the classifier and this probe must be revised",
+            "proxy counters accepted={3} client_bytes={4} server_bytes={5} faulted={6} stage={7}",
             DescribeFailure(harness.FirstFailure),
             firstClassification.Kind,
             firstClassification.ReasonCode,
             proxy.AcceptedConnections,
             proxy.ClientToServerBytes,
             proxy.ServerToClientBytes,
-            proxy.FaultedConnections);
+            proxy.FaultedConnections,
+            proxy.ResetStage);
 
         harness.Attempts.Should().Be(
             2,
@@ -238,7 +267,8 @@ public sealed class ClickHouseRetryScenarioTests
         WriteProbe(
             "reset-recovery",
             $"attempts={harness.Attempts} retry_records={harness.Records.Count} classification={firstClassification.ReasonCode} " +
-            $"response_bytes_before_reset={ResponseBytesBeforeReset} server_responded_before_fault={Lower(proxy.ServerRespondedBeforeFault)} " +
+            $"target_connected={Lower(proxy.TargetConnected)} reset_stage={proxy.ResetStage} " +
+            $"server_responded_before_fault={Lower(proxy.ServerRespondedBeforeFault)} " +
             $"accepted={proxy.AcceptedConnections} client_bytes={proxy.ClientToServerBytes} server_bytes={proxy.ServerToClientBytes} " +
             $"faulted={proxy.FaultedConnections}");
 
@@ -261,7 +291,22 @@ public sealed class ClickHouseRetryScenarioTests
         var harness = new ProbeRetrier();
         using var context = CreateContext(proxy.ConnectionStringFor(baseConnectionString));
         var (succeeded, _) = await harness
-            .TryExecuteAsync(Audited("retry-exhaustion"), cancellationToken => ReadScalarAsync(context, cancellationToken));
+            .TryExecuteAsync(
+                Audited("retry-exhaustion"),
+                cancellationToken => ReadScalarAsync(context, cancellationToken),
+                TestContext.Current.CancellationToken);
+
+        // TEMPORARY D0b instrumentation (sanitised: type names and counters only).
+        Console.WriteLine(
+            $"{ProbePrefix}-D0B scenario=retry-exhaustion chain={Describe(harness.FirstFailure)} " +
+            $"first_kind={(harness.FirstFailure is null ? "none" : Classify(harness.FirstFailure).Kind.ToString())} " +
+            $"first_reason={(harness.FirstFailure is null ? "none" : Classify(harness.FirstFailure).ReasonCode)} " +
+            $"first_code={(harness.FirstFailure as ClickHouseServerException)?.ErrorCode.ToString(CultureInfo.InvariantCulture) ?? "none"} " +
+            $"first_name={((harness.FirstFailure as ClickHouseServerException) is { } typed ? ErrorCodeName(typed.ErrorCode) : "none")} " +
+            $"last_chain={Describe(harness.LastFailure)} attempts={harness.Attempts} succeeded={Lower(succeeded)} " +
+            $"caller_token_cancelled={Lower(harness.CallerToken.IsCancellationRequested)} " +
+            $"target_connected={Lower(proxy.TargetConnected)} reset_stage={proxy.ResetStage} " +
+            $"faulted={proxy.FaultedConnections} server_responded_before_fault={Lower(proxy.ServerRespondedBeforeFault)}");
 
         succeeded.Should().BeFalse("every connection is reset, so both attempts must fail");
 
@@ -356,7 +401,8 @@ public sealed class ClickHouseRetryScenarioTests
                         .ExecuteRawAsync($"select id from {MissingTable}", [], cancellationToken);
 
                     return result.Read<int>();
-                });
+                },
+                TestContext.Current.CancellationToken);
 
         succeeded.Should().BeFalse("reading a non-existent table must fail");
         harness.Thrown.Should().BeOfType<ClickHouseServerException>(
@@ -436,7 +482,8 @@ public sealed class ClickHouseRetryScenarioTests
                         };
 
                         return await conflicting.ExecuteScalarAsync(cancellationToken);
-                    });
+                    },
+                    TestContext.Current.CancellationToken);
 
             succeeded.Should().BeFalse("a duplicate still-running query id must fail on the server");
             harness.Thrown.Should().BeOfType<ClickHouseServerException>(
@@ -574,7 +621,18 @@ public sealed class ClickHouseRetryScenarioTests
         using var context = CreateContext(proxy.ConnectionStringFor(effective.ConnectionString));
 
         var (succeeded, value) = await harness
-            .TryExecuteAsync(Audited("recovered-then-assertion"), cancellationToken => ReadScalarAsync(context, cancellationToken));
+            .TryExecuteAsync(
+                Audited("recovered-then-assertion"),
+                cancellationToken => ReadScalarAsync(context, cancellationToken),
+                TestContext.Current.CancellationToken);
+
+        // TEMPORARY D0b instrumentation (sanitised: type names only).
+        Console.WriteLine(
+            $"{ProbePrefix}-D0B scenario=recovered-then-assertion chain={Describe(harness.FirstFailure)} " +
+            $"kind={(harness.FirstFailure is null ? "none" : Classify(harness.FirstFailure).Kind.ToString())} " +
+            $"reason={(harness.FirstFailure is null ? "none" : Classify(harness.FirstFailure).ReasonCode)} " +
+            $"attempts={harness.Attempts} succeeded={Lower(succeeded)} value={value} " +
+            $"caller_token_cancelled={Lower(harness.CallerToken.IsCancellationRequested)}");
 
         succeeded.Should().BeTrue("the operation itself must recover on attempt 2 before the assertion runs");
         harness.Attempts.Should().Be(2);
@@ -732,11 +790,19 @@ public sealed class ClickHouseRetryScenarioTests
 
         internal Exception? Thrown { get; private set; }
 
-        /// <summary>Runs one audited read through the retrier and captures the outcome instead of unwinding.</summary>
+        /// <summary>TEMPORARY D0b instrumentation: the caller token actually handed to the retrier.</summary>
+        internal CancellationToken CallerToken { get; private set; }
+
+        /// <summary>Runs one audited read through the retrier and captures the outcome instead of unwinding.
+        /// The caller token defaults to <see cref="CancellationToken.None"/>; a probe whose caller-token
+        /// datum matters passes a real token (the test context's) explicitly.</summary>
         internal async Task<(bool Succeeded, T Value)> TryExecuteAsync<T>(
             ClickHouseReadOperation operation,
-            Func<CancellationToken, Task<T>> read)
+            Func<CancellationToken, Task<T>> read,
+            CancellationToken callerToken = default)
         {
+            CallerToken = callerToken;
+
             try
             {
                 var value = await Retrier.ExecuteAsync(
@@ -760,7 +826,7 @@ public sealed class ClickHouseRetryScenarioTests
                             throw;
                         }
                     },
-                    CancellationToken.None);
+                    CallerToken);
 
                 return (true, value);
             }

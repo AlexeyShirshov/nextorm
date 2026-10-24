@@ -34,6 +34,50 @@ public sealed class ClickHouseTransientClassifierTests
     }
 
     [Fact]
+    public void Classify_ShouldReportClientHttpTimeout_ForTheMeasuredLiveChainCarryingAnIoException()
+    {
+        // The exact chain measured live in C05 (type names only, no messages): the driver's own
+        // cancellation wrapper around its TimeoutException, around a TaskCanceledException, around an
+        // IOException carrying the reset socket. Before the IOException node was tolerated this shape
+        // was rejected as UnknownShape and the retry never happened.
+        var measured = new TaskCanceledException(
+            "measured live timeout chain",
+            new TimeoutException(
+                "measured live timeout chain",
+                new TaskCanceledException(
+                    "measured live timeout chain",
+                    new IOException(
+                        "measured live timeout chain",
+                        new SocketException((int)SocketError.ConnectionReset)))));
+
+        var classification = ClickHouseTransientClassifier.Classify(measured, CancellationToken.None);
+
+        classification.Kind.Should().Be(ClickHouseFailureKind.ClientHttpTimeout);
+        classification.ReasonCode.Should().Be("client_http_timeout");
+        classification.IsRetryable.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Classify_ShouldFailClosed_ForAStandaloneIoExceptionAndAStandaloneSocketException()
+    {
+        var shapes = new (string Name, Exception Failure)[]
+        {
+            ("standalone IOException", new IOException("transport failure")),
+            ("standalone reset SocketException", new SocketException((int)SocketError.ConnectionReset)),
+        };
+
+        foreach (var (name, failure) in shapes)
+        {
+            var classification = ClickHouseTransientClassifier.Classify(failure, CancellationToken.None);
+
+            classification.Kind.Should().Be(
+                ClickHouseFailureKind.UnknownShape,
+                $"{name} is tolerated as a transport node but is never a positive match on its own");
+            classification.IsRetryable.Should().BeFalse($"{name} must never be retried");
+        }
+    }
+
+    [Fact]
     public void Classify_ShouldReportConnectionReset_ForAnHttpRequestExceptionCarryingAResetSocket()
     {
         var failure = new HttpRequestException(
