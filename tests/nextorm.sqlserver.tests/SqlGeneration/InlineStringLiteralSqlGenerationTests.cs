@@ -6,9 +6,11 @@ using NextORM.Core;
 namespace NextORM.SqlServer.Tests;
 
 /// <summary>
-/// #299: inline string/Guid constants are rendered as SQL literals by the shared emitter, so an
-/// embedded apostrophe must be doubled while every other character is preserved verbatim. Captured
-/// values take the parameter path and must never be spliced into the statement. No database is touched.
+/// #299/#327: inline string/Guid constants are rendered through the provider's string-literal policy.
+/// Each case pins the dialect representation and, where the transport encodes the value, the decoded
+/// payload, so every hostile input (apostrophes, backslashes, statement terminators, C0 characters)
+/// stays data. Captured values take the parameter path; those assertions are plan-time only and cannot
+/// observe execution-time lowering. No database is touched.
 /// </summary>
 public class InlineStringLiteralSqlGenerationTests
 {
@@ -20,6 +22,27 @@ public class InlineStringLiteralSqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
         => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
+    /// <summary>Builds the predicate the literal lambdas use, for values a lambda cannot spell readably.</summary>
+    private static string SqlForConstant(IDataContext ctx, string value)
+    {
+        var parameter = Expression.Parameter(typeof(IComplexEntity), "x");
+        var predicate = Expression.Lambda<Func<IComplexEntity, bool>>(
+            Expression.Equal(Expression.Property(parameter, nameof(IComplexEntity.String)), Expression.Constant(value)),
+            parameter);
+
+        return SqlOf(ctx, ctx.From<IComplexEntity>().Where(predicate).Select(x => new { x.Id }));
+    }
+
+    /// <summary>Asserts the value appears only as a Unicode literal: the <c>N</c> prefix is pinned.</summary>
+    private static void ShouldRenderOnlyUnicodeLiteral(string sql, string value)
+    {
+        var token = "N'" + value + "'";
+
+        sql.Should().Contain(token, "SQL Server text literals are always Unicode and carry the N prefix");
+        sql.Replace(token, string.Empty, StringComparison.Ordinal)
+            .Should().NotContain("'" + value + "'", "the plain non-Unicode spelling must not appear");
+    }
+
     [Fact]
     [Trait("Issue", "299")]
     public void InlineApostrophe_ShouldDoubleTheEmbeddedQuote()
@@ -30,7 +53,7 @@ public class InlineStringLiteralSqlGenerationTests
         // A C# literal inside the lambda is an Expression.Constant, so it takes the inline literal path.
         var sql = SqlOf(ctx, e.Where(x => x.String == "it's (a) test").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'it''s (a) test'",
+        sql.Should().Contain("somestring = N'it''s (a) test'",
             "a literal apostrophe is doubled inside the SQL string literal");
         sql.Should().NotContain("'it's (a) test'",
             "the malformed three-apostrophe form terminates the literal early");
@@ -45,8 +68,8 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => x.String == @"a\b").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'a\\b'",
-            "a backslash is ordinary data in a SQLite literal and is neither removed nor duplicated here");
+        sql.Should().Contain("somestring = N'a\\b'",
+            "a backslash is ordinary data in a SQL Server literal and is neither removed nor duplicated here");
         sql.Should().NotContain("'a\\\\b'", "the literal renderer must not invent escape sequences");
     }
 
@@ -55,12 +78,9 @@ public class InlineStringLiteralSqlGenerationTests
     public void InlineUnicode_ShouldRemainVerbatim()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, e.Where(x => x.String == "привет").Select(x => new { x.Id }))
-            .Should().Contain("'привет'");
-        SqlOf(ctx, e.Where(x => x.String == "😀").Select(x => new { x.Id }))
-            .Should().Contain("'😀'");
+        ShouldRenderOnlyUnicodeLiteral(SqlForConstant(ctx, "привет"), "привет");
+        ShouldRenderOnlyUnicodeLiteral(SqlForConstant(ctx, "😀"), "😀");
     }
 
     [Fact]
@@ -71,7 +91,7 @@ public class InlineStringLiteralSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.String == "").Select(x => new { x.Id }))
-            .Should().Contain("somestring = ''");
+            .Should().Contain("somestring = N''");
     }
 
     [Fact]
@@ -84,8 +104,8 @@ public class InlineStringLiteralSqlGenerationTests
         var percent = SqlOf(ctx, e.Where(x => x.String == "%").Select(x => new { x.Id }));
         var underscore = SqlOf(ctx, e.Where(x => x.String == "_").Select(x => new { x.Id }));
 
-        percent.Should().Contain("somestring = '%'");
-        underscore.Should().Contain("somestring = '_'");
+        percent.Should().Contain("somestring = N'%'");
+        underscore.Should().Contain("somestring = N'_'");
         percent.Should().NotContain("'\\%'", "equality literals are not LIKE patterns and must not be wildcard-escaped");
         underscore.Should().NotContain("'\\_'");
     }
@@ -99,7 +119,7 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, e.Where(x => x.String == "it's; --").Select(x => new { x.Id }));
 
-        sql.Should().Contain("somestring = 'it''s; --'",
+        sql.Should().Contain("somestring = N'it''s; --'",
             "the whole text is data: the quote is doubled, the semicolon and comment marker stay inside the literal");
         sql.Should().NotContain("'it's; --'");
     }
@@ -114,7 +134,7 @@ public class InlineStringLiteralSqlGenerationTests
         var sql = SqlOf(ctx, e.Where(x => x.String == "a\r\nb\tc").Select(x => new { x.Id }));
 
         // Normalize collapses CRLF to LF for the assertion, so the LF and TAB must survive verbatim.
-        sql.Should().Contain("'a\nb\tc'", "CR, LF and TAB are data and are neither escaped nor stripped");
+        sql.Should().Contain("N'a\nb\tc'", "CR, LF and TAB are data and are neither escaped nor stripped");
     }
 
     [Fact]
@@ -128,6 +148,9 @@ public class InlineStringLiteralSqlGenerationTests
         var prepared = Prepare(ctx, e.Where(x => x.String == captured).Select(x => new { x.Id }));
         var sql = Normalize(prepared.DbCommand.CommandText);
 
+        // Plan-time assertion only: this inspects the prepared command text and proves the value is
+        // bound through a parameter slot rather than spliced. Execution-time lowering is not observable
+        // here and is covered by the execution/live stream.
         sql.Should().Contain("@captured", "a captured value is bound, not spliced into the statement");
         sql.Should().NotContain("it''s", "the bound value stays raw; escaping is a literal-only concern");
         sql.Should().NotContain("it's");
@@ -165,7 +188,7 @@ public class InlineStringLiteralSqlGenerationTests
 
         var sql = SqlOf(ctx, ctx.From<IComplexEntity>().Select(projection));
 
-        sql.Should().Contain("'00112233-4455-6677-8899-aabbccddeeff'", "the Guid literal remains a quoted string");
+        ShouldRenderOnlyUnicodeLiteral(sql, "00112233-4455-6677-8899-aabbccddeeff");
     }
 
     [Fact]
@@ -183,5 +206,128 @@ public class InlineStringLiteralSqlGenerationTests
             "a captured Guid is bound, never rendered as a literal");
         prepared.DbCommand.Parameters.Cast<DbParameter>().Single(p => p.ParameterName == "guid")
             .Value.Should().Be(guid);
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineNul_ShouldSpliceNcharZero()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.String == "a\u0000b").Select(x => new { x.Id }));
+
+        sql.Should().Contain("where somestring = N'a' + NCHAR(0) + N'b'");
+        sql.Should().NotContain("\u0000", "the statement text never carries a raw NUL");
+    }
+
+    [Theory]
+    [Trait("Issue", "327")]
+    [InlineData("a\\b", "N'a\\b'")]
+    [InlineData("\\'", "N'\\'''")]
+    [InlineData("\\\\'", "N'\\\\'''")]
+    [InlineData("a\\", "N'a\\'")]
+    [InlineData("a''b", "N'a''''b'")]
+    public void InlineHostileCorpus_ShouldRenderTheIntendedLiteral(string value, string expectedLiteral)
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        SqlForConstant(ctx, value).Should().Contain(
+            "somestring = " + expectedLiteral,
+            "SQL Server has no backslash escape: apostrophes are doubled inside the Unicode literal and every other character is verbatim");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineStatementBoundaryPayload_ShouldStayInsideTheLiteral()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlForConstant(ctx, "x'); SELECT 1; --");
+
+        sql.Should().Contain("somestring = N'x''); SELECT 1; --'",
+            "the doubled apostrophe keeps the injected terminator inside the Unicode literal");
+        sql.Should().NotContain("N'x');", "an early-closing literal would expose the injected statement");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineEveryC0CharacterExceptNul_ShouldRemainVerbatim()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        for (var code = 1; code <= 0x1f; code++)
+        {
+            var value = ((char)code).ToString();
+
+            SqlForConstant(ctx, value).Should().Contain(
+                "somestring = N'" + value + "'",
+                $"U+{code:X4} is ordinary data in a SQL Server literal");
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineLongUnicodeValue_ShouldStayOneUnbrokenLiteral()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var value = new string('ж', 4096);
+
+        var sql = SqlForConstant(ctx, value);
+
+        sql.Should().Contain("somestring = N'" + value + "'",
+            "the whole 4096-character Unicode value is one literal with the N prefix");
+        sql.Should().NotContain("' + N'", "the literal is neither split nor truncated");
+    }
+
+    /// <summary>
+    /// Renders a selected constant <c>char</c>. The single-row/single-column lane skips the row
+    /// materializer (char is not a materialisable result type), so the statement text is observable
+    /// without a database — exactly the seam this regression pins.
+    /// </summary>
+    private static string SqlForChar(IDataContext ctx, char value)
+    {
+        var parameter = Expression.Parameter(typeof(IComplexEntity), "x");
+        var projection = Expression.Lambda<Func<IComplexEntity, char>>(
+            Expression.Constant(value, typeof(char)), parameter);
+        var command = ctx.From<IComplexEntity>().Select(projection);
+        command.SingleRow = true;
+
+        return Normalize(((DbPreparedQueryCommand<char>)ctx.GetPreparedQueryCommand(
+            command, false, false, CancellationToken.None)).DbCommand.CommandText);
+    }
+
+    [Theory]
+    [Trait("Issue", "327")]
+    [InlineData('a', "N'a'")]
+    [InlineData('\'', "N''''")]
+    [InlineData('\\', "N'\\'")]
+    public void InlineCharConstant_ShouldUseTheStringPolicy(char value, string expectedLiteral)
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        SqlForChar(ctx, value).Should().Contain(
+            "select " + expectedLiteral,
+            "a char constant is a one-character Unicode literal and takes the SQL Server string policy");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineDefaultChar_ShouldSpliceNcharZero()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        SqlForChar(ctx, default).Should().Contain("select NCHAR(0)",
+            "default(char) is one U+0000, spelled with the existing NCHAR(0) recipe");
+    }
+
+    [Fact]
+    [Trait("Issue", "327")]
+    public void InlineCharC0Character_ShouldRemainVerbatim()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var value = '\u0001';
+
+        SqlForChar(ctx, value).Should().Contain("select N'" + value + "'");
     }
 }

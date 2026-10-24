@@ -8,6 +8,19 @@ using NextORM.Sqlite;
 namespace NextORM.Integration.Tests;
 
 /// <summary>
+/// Serializes <see cref="T296bNullableCacheTests"/> against every other integration collection: its
+/// nine facts assert prepared-command <em>identity</em> across executions, while a concurrent
+/// <see cref="DataContext.PurgeQueryCache"/> anywhere in the process bumps the process-wide
+/// plan-store generation and evicts every thread's thread-local plan dictionary. The next "cache hit"
+/// then legitimately re-prepares and returns a different <c>DbPreparedQueryCommand</c> — correct
+/// product behaviour, but not the identity these regression tests are about, so the class must not
+/// overlap another collection. Same mechanism and same remedy as DEF-08 (#327) and the sibling
+/// instances tracked on #339.
+/// </summary>
+[CollectionDefinition("T296b nullable cache identity", DisableParallelization = true)]
+public sealed class T296bNullableCacheIdentityCollectionDefinition;
+
+/// <summary>
 /// T296b (#296, D4b): cache identity and parameter refresh of the approved total comparison, executed
 /// against a real file-backed SQLite database.
 ///
@@ -20,13 +33,14 @@ namespace NextORM.Integration.Tests;
 /// </para>
 ///
 /// <para>
-/// The class runs in the serialized "Query plan cache" collection: the plan store is thread-static and
-/// shared by every context on the thread, so a concurrent purge from another test would turn a
+/// The class runs in the serialized "T296b nullable cache identity" collection
+/// (<see cref="CollectionDefinitionAttribute.DisableParallelization"/>): the plan store is
+/// process-wide and shared by every context, so a concurrent purge from another test would turn a
 /// deliberate cold preparation into an ambiguous hit. Each fact owns its own database file, so the
 /// live reads (not just the generated SQL) are the evidence.
 /// </para>
 /// </summary>
-[Collection("Query plan cache")]
+[Collection("T296b nullable cache identity")]
 public sealed class T296bNullableCacheTests : IDisposable
 {
     private const string Ddl = """

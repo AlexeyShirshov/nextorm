@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Text;
 
 namespace NextORM.Core;
 
@@ -149,11 +150,17 @@ internal static class ClickHouseNativeFunctionTranslator
         visitor.NeedAliasForColumn = true;
         var builder = visitor.Builder!;
         var rendered = new string[items.Count];
+        var fragments = new List<SqlParameterTrackedFragment>(items.Count);
 
         for (var (i, cnt) = (0, items.Count); i < cnt; i++)
-            rendered[i] = Capture(builder, () => SqlOperandTranslator.AppendArrayOrColumn(visitor, items[i]));
+        {
+            var (text, fragment) = Capture(visitor, builder, () => SqlOperandTranslator.AppendArrayOrColumn(visitor, items[i]));
+            rendered[i] = text;
+            if (fragment is { OccurrenceCount: > 0 })
+                fragments.Add(new SqlParameterTrackedFragment(text, null, fragment));
+        }
 
-        builder.Append(scalars.Render(name, rendered));
+        SqlParameterFragmentRelocation.AppendComposed(builder, visitor.Recorder, scalars.Render(name, rendered), fragments);
     }
 
     /// <summary>Renders a function with a single array argument (a column or a captured array).</summary>
@@ -169,8 +176,11 @@ internal static class ClickHouseNativeFunctionTranslator
 
         visitor.NeedAliasForColumn = true;
         var builder = visitor.Builder!;
-        var rendered = Capture(builder, () => SqlOperandTranslator.AppendArrayOrColumn(visitor, argument));
-        builder.Append(scalars.Render(name, [rendered]));
+        var (rendered, fragment) = Capture(visitor, builder, () => SqlOperandTranslator.AppendArrayOrColumn(visitor, argument));
+        var fragments = fragment is { OccurrenceCount: > 0 }
+            ? new[] { new SqlParameterTrackedFragment(rendered, null, fragment) }
+            : Array.Empty<SqlParameterTrackedFragment>();
+        SqlParameterFragmentRelocation.AppendComposed(builder, visitor.Recorder, scalars.Render(name, [rendered]), fragments);
     }
 
     /// <summary>Renders the <c>map(key, value, ...)</c> constructor from inline key/value tuples.</summary>
@@ -248,20 +258,34 @@ internal static class ClickHouseNativeFunctionTranslator
 
         visitor.NeedAliasForColumn = true;
         var builder = visitor.Builder!;
-        var keys = Capture(builder, () => SqlOperandTranslator.AppendArrayOrColumn(visitor, node.Arguments[0]));
+        var (keys, keysFragment) = Capture(visitor, builder, () => SqlOperandTranslator.AppendArrayOrColumn(visitor, node.Arguments[0]));
         var key = visitor.VisitToString(node.Arguments[1]);
         var value = visitor.VisitToString(node.Arguments[2]);
-        builder.Append(scalars.Render(name, [keys, key, value]));
+        var fragments = keysFragment is { OccurrenceCount: > 0 }
+            ? new[] { new SqlParameterTrackedFragment(keys, null, keysFragment) }
+            : Array.Empty<SqlParameterTrackedFragment>();
+        SqlParameterFragmentRelocation.AppendComposed(builder, visitor.Recorder, scalars.Render(name, [keys, key, value]), fragments);
     }
 
-    /// <summary>Renders <paramref name="emit"/> into the current builder and returns the emitted fragment.</summary>
-    private static string Capture(System.Text.StringBuilder builder, Action emit)
+    /// <summary>
+    /// Renders <paramref name="emit"/> into the current builder, rewinds both the builder and the
+    /// parameter recorder to the pre-render position, and returns the emitted text together with a
+    /// detached recorder that owns its occurrences rebased to zero. The text is not part of the builder
+    /// until the caller appends the composed wrapper through
+    /// <see cref="SqlParameterFragmentRelocation.AppendComposed"/>, which relocates those occurrences to
+    /// their real offsets inside the wrapper.
+    /// </summary>
+    private static (string Text, SqlParameterTemplateRecorder? Fragment) Capture(
+        BaseExpressionVisitor visitor, StringBuilder builder, Action emit)
     {
+        var recorder = visitor.Recorder;
         var start = builder.Length;
+        var mark = recorder?.MarkAt(start);
         emit();
-        var value = builder.ToString(start, builder.Length - start);
+        var text = builder.ToString(start, builder.Length - start);
         builder.Length = start;
-        return value;
+        var fragment = mark is { } checkpoint ? recorder!.RewindTo(checkpoint) : null;
+        return (text, fragment);
     }
 
     /// <summary>

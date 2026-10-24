@@ -88,7 +88,7 @@ internal static class StringFormatTranslator
             var part = parts[i];
             if (part.Literal is not null)
             {
-                pieces.Add(SqlLiteral.ToSqlStringLiteral(part.Literal));
+                pieces.Add(visitor.RenderStringLiteral(part.Literal));
                 continue;
             }
 
@@ -155,7 +155,13 @@ internal static class StringFormatTranslator
     private static string ApplyAlignment(BaseExpressionVisitor visitor, string rendered, int alignment)
     {
         var width = Math.Abs(alignment);
-        return visitor.Dialect.MakePad(rendered, width.ToString(CultureInfo.InvariantCulture), SqlLiteral.ToSqlStringLiteral(" "), left: alignment > 0);
+        // grammar token: the padding character is a function argument downstream
+        // (lpad/rpad/repeat/replicate), so an expression is legal on every padding provider.
+        return visitor.Dialect.MakePad(
+            rendered,
+            width.ToString(CultureInfo.InvariantCulture),
+            visitor.RenderStringLiteral(" ", SqlStringLiteralRole.GrammarToken, SqlStringGrammar.PaddingCharacter),
+            left: alignment > 0);
     }
 
     private static IStringFormatFunctions RequireFormats(BaseExpressionVisitor visitor) =>

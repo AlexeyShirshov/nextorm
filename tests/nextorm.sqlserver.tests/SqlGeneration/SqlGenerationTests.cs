@@ -225,8 +225,8 @@ public class SqlGenerationTests
         }));
 
         sql.Should().Contain("iif(");
-        sql.Should().Contain("'yes', 'no')");
-        sql.Should().Contain("choose(1, 'a', 'b', 'c')");
+        sql.Should().Contain("N'yes', N'no')");
+        sql.Should().Contain("choose(1, N'a', N'b', N'c')");
     }
 
     [Fact]
@@ -981,7 +981,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new { V = x.Id > 1 ? "big" : "small" }));
 
-        sql.Should().Contain("case when (id > 1) then 'big' else 'small' end");
+        sql.Should().Contain("case when (id > 1) then N'big' else N'small' end");
         sql.Should().Contain("as [V]");
     }
 
@@ -993,7 +993,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new { V = x.Boolean == true ? (x.Int == null ? "a" : "b") : "c" }));
 
-        sql.Should().Contain("case when b = 1 then case when nullableint is null then 'a' else 'b' end else 'c' end");
+        sql.Should().Contain("case when b = 1 then case when nullableint is null then N'a' else N'b' end else N'c' end");
     }
 
     [Fact]
@@ -1039,7 +1039,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(SwitchOfId("other", (1L, "one"), (2L, "two"))));
 
-        sql.Should().Contain("case when id = 1 then 'one' when id = 2 then 'two' else 'other' end");
+        sql.Should().Contain("case when id = 1 then N'one' when id = 2 then N'two' else N'other' end");
     }
 
     [Fact]
@@ -1092,7 +1092,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { M = Udf.FormatDate(x.Datetime, "yyyy-MM") }))
-            .Should().Be("select format(dt, 'yyyy-MM') as [M]\n from complex_entity");
+            .Should().Be("select format(dt, N'yyyy-MM') as [M]\n from complex_entity");
     }
 
     private static class Udf
@@ -1117,7 +1117,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.String!.Contains("df")).Select(x => new { x.Id }))
-            .Should().Contain("somestring like '%df%'");
+            .Should().Contain("somestring like N'%df%'");
     }
 
     [Fact]
@@ -1128,7 +1128,7 @@ public class SqlGenerationTests
 
         // T-SQL has no boolean scalar, so a projected LIKE has to become a bit through a CASE.
         SqlOf(ctx, e.Select(x => new { V = x.String!.Contains("df") }))
-            .Should().Contain("cast(case when somestring like '%df%' then 1 else 0 end as bit)");
+            .Should().Contain("cast(case when somestring like N'%df%' then 1 else 0 end as bit)");
     }
 
     [Fact]
@@ -1138,10 +1138,10 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => SqlFunctions.Sql.contains(x.String, "foo")).Select(x => new { x.Id }))
-            .Should().Contain("where contains(somestring, 'foo')");
+            .Should().Contain("where contains(somestring, N'foo')");
 
         SqlOf(ctx, e.Where(x => SqlFunctions.Sql.freetext(x.String, "foo")).Select(x => new { x.Id }))
-            .Should().Contain("where freetext(somestring, 'foo')");
+            .Should().Contain("where freetext(somestring, N'foo')");
     }
 
     [Fact]
@@ -1167,7 +1167,7 @@ public class SqlGenerationTests
 
         // T-SQL has no boolean scalar, so a projected CONTAINS has to become a bit through a CASE.
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.contains(x.String, "foo") }))
-            .Should().Contain("cast(case when contains(somestring, 'foo') then 1 else 0 end as bit)");
+            .Should().Contain("cast(case when contains(somestring, N'foo') then 1 else 0 end as bit)");
     }
 
     [Fact]
@@ -1207,7 +1207,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.Replace("a", "b") }))
-            .Should().Contain("replace(somestring, 'a', 'b')");
+            .Should().Contain("replace(somestring, N'a', N'b')");
     }
 
     [Fact]
@@ -1227,7 +1227,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => SqlFunctions.Sql.like(x.String, "%a!%", "!")).Select(x => new { x.Id }))
-            .Should().Contain("somestring like '%a!%' escape '!'");
+            .Should().Contain("somestring like N'%a!%' escape '!'");
     }
 
     [Fact]
@@ -2418,7 +2418,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, ",")))
-            .Should().Contain("string_agg(somestring, ',')");
+            .Should().Contain("string_agg(somestring, N',')");
     }
 
     [Fact]
@@ -2434,9 +2434,9 @@ public class SqlGenerationTests
             Updated = SqlFunctions.SqlServer.json_modify(x.String, "$.id", "1")
         }));
 
-        sql.Should().Contain("json_value(somestring, '$.id') as [Id]");
-        sql.Should().Contain("json_query(somestring, '$.name') as [Name]");
-        sql.Should().Contain("json_modify(somestring, '$.id', '1') as [Updated]");
+        sql.Should().Contain("json_value(somestring, N'$.id') as [Id]");
+        sql.Should().Contain("json_query(somestring, N'$.name') as [Name]");
+        sql.Should().Contain("json_modify(somestring, N'$.id', N'1') as [Updated]");
     }
 
     [Fact]
@@ -2650,11 +2650,11 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b") }))
-            .Should().Contain("case when (charindex('b', somestring)) = 0 then -1 else (charindex('b', somestring)) - 1 end");
+            .Should().Contain("case when (charindex(N'b', somestring)) = 0 then -1 else (charindex(N'b', somestring)) - 1 end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b", 1) }))
-            .Should().Contain("case when (charindex('b', somestring, 1 + 1)) = 0 then -1 else (charindex('b', somestring, 1 + 1)) - 1 end");
+            .Should().Contain("case when (charindex(N'b', somestring, 1 + 1)) = 0 then -1 else (charindex(N'b', somestring, 1 + 1)) - 1 end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
-            .Should().Contain("case when (charindex(reverse('b'), reverse(somestring))) = 0 then -1 else len(somestring) - (charindex(reverse('b'), reverse(somestring))) - (len('b')) + 1 end");
+            .Should().Contain("case when (charindex(reverse(N'b'), reverse(somestring))) = 0 then -1 else len(somestring) - (charindex(reverse(N'b'), reverse(somestring))) - (len(N'b')) + 1 end");
     }
 
     [Fact]
@@ -2664,9 +2664,9 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.PadLeft(5, '0') }))
-            .Should().Contain("case when len(somestring) >= (5) then somestring else replicate('0', (5) - len(somestring))+somestring end");
+            .Should().Contain("case when len(somestring) >= (5) then somestring else replicate(N'0', (5) - len(somestring))+somestring end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.PadRight(5) }))
-            .Should().Contain("case when len(somestring) >= (5) then somestring else somestring+replicate(' ', (5) - len(somestring)) end");
+            .Should().Contain("case when len(somestring) >= (5) then somestring else somestring+replicate(N' ', (5) - len(somestring)) end");
     }
 
     [Fact]
@@ -2680,9 +2680,9 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { V = x.String!.Remove(2, 1) }))
             .Should().Contain("stuff(somestring, 2 + 1, 1, '')");
         SqlOf(ctx, e.Select(x => new { V = x.String!.Insert(2, "x") }))
-            .Should().Contain("stuff(somestring, 2 + 1, 0, 'x')");
+            .Should().Contain("stuff(somestring, 2 + 1, 0, N'x')");
         SqlOf(ctx, e.Select(x => new { V = new string('*', 4) }))
-            .Should().Contain("replicate('*', 4)");
+            .Should().Contain("replicate(N'*', 4)");
     }
 
     [Fact]
@@ -3063,7 +3063,7 @@ public class SqlGenerationTests
             V = SqlFunctions.SqlServer.xml_value<int>(x.String, "(/root/item)[1]", "int")
         }));
 
-        sql.Should().Contain("somestring.value('(/root/item)[1]', 'int') as [V]");
+        sql.Should().Contain("somestring.value(N'(/root/item)[1]', N'int') as [V]");
     }
 
     [Fact]
@@ -3073,7 +3073,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.xml_query(x.String, "/root/item") }))
-            .Should().Contain("somestring.query('/root/item') as [V]");
+            .Should().Contain("somestring.query(N'/root/item') as [V]");
     }
 
     [Fact]
@@ -3085,11 +3085,11 @@ public class SqlGenerationTests
         // exist() returns bit (an int-like value in T-SQL), so a WHERE context compares it with 1 ...
         SqlOf(ctx, e.Where(x => SqlFunctions.SqlServer.xml_exist(x.String, "/root"))
             .Select(x => new { x.Id }))
-            .Should().Contain("where (somestring.exist('/root')) = 1");
+            .Should().Contain("where (somestring.exist(N'/root')) = 1");
 
         // ... and a projection keeps the bit value.
         SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.xml_exist(x.String, "/root") }))
-            .Should().Contain("somestring.exist('/root') as [V]");
+            .Should().Contain("somestring.exist(N'/root') as [V]");
     }
 
     [Fact]
@@ -3117,8 +3117,8 @@ public class SqlGenerationTests
                 Value = p.Item2.Value
             }));
 
-        sql.Should().Contain("from complex_entity as [t1]\n cross apply t1.somestring.nodes('/root/item') as [t2](value)");
-        sql.Should().Contain("t2.value.value('(.)[1]/@id', 'int') as [Id]");
+        sql.Should().Contain("from complex_entity as [t1]\n cross apply t1.somestring.nodes(N'/root/item') as [t2](value)");
+        sql.Should().Contain("t2.value.value(N'(.)[1]/@id', N'int') as [Id]");
         sql.Should().Contain("t2.value\n from complex_entity");
     }
 
@@ -3131,7 +3131,7 @@ public class SqlGenerationTests
             .OuterApply(x => SqlFunctions.SqlServer.xml_nodes(x.String, "/root/item"))
             .Select(p => new { Value = p.Item2.Value }));
 
-        sql.Should().Contain("outer apply t1.somestring.nodes('/root/item') as [t2](value)");
+        sql.Should().Contain("outer apply t1.somestring.nodes(N'/root/item') as [t2](value)");
     }
 
     [Fact]
@@ -3286,7 +3286,7 @@ public class SqlGenerationTests
         SqlOf(ctx, ctx.From(derived)
             .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.QuarterNum, PivotValue.Create("Q1"))
             .Select(t => new { Category = t.GetString("CategoryName"), Q1 = t.GetNullableDecimal("[Q1]") }))
-            .Should().Be("select CategoryName, [Q1]\n from (select category as [CategoryName], ('Q'+quarter) as [QuarterNum], (margin * cast(2 as decimal(38, 10))) as [Margin]\n from sales\n where (margin > cast(0 as decimal(38, 10)))) as [t1] pivot (sum([Margin]) for [QuarterNum] in ([Q1])) as [t2]");
+            .Should().Be("select CategoryName, [Q1]\n from (select category as [CategoryName], (N'Q'+quarter) as [QuarterNum], (margin * cast(2 as decimal(38, 10))) as [Margin]\n from sales\n where (margin > cast(0 as decimal(38, 10)))) as [t1] pivot (sum([Margin]) for [QuarterNum] in ([Q1])) as [t2]");
     }
 
     [Fact]

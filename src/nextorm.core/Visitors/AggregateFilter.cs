@@ -86,7 +86,7 @@ internal static class AggregateFilter
         filterVisitor.VisitCondition(lambda);
 
         if (!visitor.IsParamMode)
-            filterVisitor.WriteTo(visitor.Builder!);
+            filterVisitor.WriteTo(visitor.Builder!, visitor.Recorder);
     }
 
     /// <summary>

@@ -19,7 +19,7 @@ public class UpdateSqlGenerationTests
             .Set(x => x.Age, 5)
             .Where(x => x.Id == 1)
             .ToSql()
-            .Should().Be("update merge_entity set name = @p0, age = @p1 where id = 1");
+            .Should().Be("update merge_entity set name = _utf8mb4 X'61', age = @p1 where id = 1");
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class UpdateSqlGenerationTests
         ctx.CreateUpdateBuilder<IMergeEntity>()
             .Set(x => x.Name, "a")
             .ToSql()
-            .Should().Be("update merge_entity set name = @p0");
+            .Should().Be("update merge_entity set name = _utf8mb4 X'61'");
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public class UpdateSqlGenerationTests
             .Set(x => x.Name, "a")
             .Where(x => x.Id == 1)
             .ToSql()
-            .Should().Be("update `merge_entity` set `name` = @p0 where `id` = 1");
+            .Should().Be("update `merge_entity` set `name` = _utf8mb4 X'61' where `id` = 1");
     }
 
     [Fact]

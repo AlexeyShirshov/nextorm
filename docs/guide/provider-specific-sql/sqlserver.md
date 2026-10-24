@@ -436,9 +436,11 @@ select patindex('%a%', somestring) as [Pos],
   `stuff(value, start, length, newValue)` (string only — SQL Server's `STUFF` implicitly converts binary arguments to character data, so no `byte[]` overload is exposed). `format` is the native T-SQL
   `FORMAT`, distinct from the CLR `string.Format` translation; `str(value[, length[, decimals]])`
   is the fixed-width floating-point conversion. An apostrophe delimiter is an ordinary string argument:
-  `quotename("abc", "'")` renders `quotename('abc', '''')` and the server returns `'abc'`. Inline
-  apostrophes inside the value are doubled in the generated literal (`O'Brien` becomes `'O''Brien'`),
-  so the value is always passed as-is and is never pre-escaped by the caller.
+  `quotename("abc", "'")` renders `quotename(N'abc', N'''')` and the server returns `'abc'`. Text
+  literals are Unicode `N'…'` literals with inline apostrophes doubled (`O'Brien` becomes `N'O''Brien'`),
+  and a value containing a NUL character is rendered as a constructed Unicode expression over `NCHAR(0)`
+  rather than as one literal, so the value is always passed as-is and is never pre-escaped by the caller.
+  This paragraph describes SQL Server only and is not a cross-provider guarantee.
 * **Numeric:** `acos`, `asin`, `atan`, `atn2(y, x)`, `square` (`cot`/`degrees`/`radians`/`pi` are portable — see [`SqlFunctions.Sql`](../../scalar-functions/02-math-functions.md)) and `rand()` / `rand(seed)` (non-deterministic without a seed).
 * **Date/time:** `datename(datepart, date)` (the part is a constant), `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+), the server clocks `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`, the offset functions `switchoffset(value, offset)`/`todatetimeoffset(value, offset)` (a string such as `"+02:00"` or signed minutes) and the construction family `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/`datetimeoffsetfromparts`. The trailing `*FROMPARTS` precision must be a constant `0..7` (a non-constant, `null` or out-of-range value throws before any SQL is emitted).
 * **Binary/system:** `hashbytes(algorithm, data)` (the algorithm is a constant such as `SHA2_256`), `newsequentialid()` (valid only as a column `DEFAULT`, not in an ordinary `SELECT`), `checksum(values...)`/`binary_checksum(values...)` (at least one value; the `checksum(*)` wildcard is not exposed) and `compress(value)`/`decompress(value)` (GZIP over `varbinary(max)`).

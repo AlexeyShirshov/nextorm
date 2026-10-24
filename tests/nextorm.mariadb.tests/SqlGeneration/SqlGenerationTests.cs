@@ -68,7 +68,7 @@ public class SqlGenerationTests
         Normalize(ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicWriteEntity())
             .ToSql())
-            .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
+            .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, _utf8mb4 X'61', @p2, @p3)");
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class SqlGenerationTests
             .Set(DynamicWriteEntity())
             .Where(x => x.Id == 1)
             .ToSql())
-            .Should().Contain("set `alpha` = @p0, `mid` = @p1, `zeta` = @p2 where id = 1");
+            .Should().Contain("set `alpha` = _utf8mb4 X'61', `mid` = @p1, `zeta` = @p2 where id = 1");
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class SqlGenerationTests
             .WhenNotMatchedInsert()
             .ToSql());
 
-        sql.Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
+        sql.Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, _utf8mb4 X'61', @p2, @p3)");
         // MariaDB's upsert match is implicit (ON DUPLICATE KEY), so the dynamic keys must appear only in
         // the insert list and the update assignments, never as a match key.
         sql.Should().Contain("on duplicate key update `alpha` = values(`alpha`), `mid` = values(`mid`), `zeta` = values(`zeta`)");
@@ -111,7 +111,7 @@ public class SqlGenerationTests
         ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .ToSql()
-            .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
+            .Should().Be("insert into merge_entity (id, name, age) values (@p0, _utf8mb4 X'61', @p2)");
     }
 
     [Fact]
@@ -270,7 +270,7 @@ public class SqlGenerationTests
         var sql = SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.iif(x.Id > 0L, "yes", "no") }));
 
         sql.Should().Contain("if(");
-        sql.Should().Contain("'yes', 'no')");
+        sql.Should().Contain("_utf8mb4 X'796573', _utf8mb4 X'6e6f')");
     }
 
     [Fact]
@@ -537,15 +537,15 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b") }))
-            .Should().Contain("case when (instr(somestring, 'b')) = 0 then -1 else (instr(somestring, 'b')) - 1 end");
+            .Should().Contain("case when (instr(somestring, _utf8mb4 X'62')) = 0 then -1 else (instr(somestring, _utf8mb4 X'62')) - 1 end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
-            .Should().Contain("instr(reverse(somestring), reverse('b'))");
+            .Should().Contain("instr(reverse(somestring), reverse(_utf8mb4 X'62'))");
         SqlOf(ctx, e.Select(x => new { V = x.String!.PadLeft(5, '0') }))
-            .Should().Contain("case when char_length(somestring) >= (5) then somestring else concat(repeat('0', (5) - char_length(somestring)), somestring) end");
+            .Should().Contain("case when char_length(somestring) >= (5) then somestring else concat(repeat(_utf8mb4 X'30', (5) - char_length(somestring)), somestring) end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.Insert(2, "x") }))
-            .Should().Contain("insert(somestring, 2 + 1, 0, 'x')");
+            .Should().Contain("insert(somestring, 2 + 1, 0, _utf8mb4 X'78')");
         SqlOf(ctx, e.Select(x => new { V = new string('*', 4) }))
-            .Should().Contain("repeat('*', 4)");
+            .Should().Contain("repeat(_utf8mb4 X'2a', 4)");
     }
 
     [Fact]
@@ -792,7 +792,7 @@ public class SqlGenerationTests
 
         var sql = Dequoted(SqlOf(ctx, e.Where(x => Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "a")).Select(x => new { x.Id })));
 
-        sql.Should().Contain("where (id, somestring) = (1, 'a')");
+        sql.Should().Contain("where (id, somestring) = (1, _utf8mb4 X'61')");
     }
 
     [Fact]
@@ -803,7 +803,7 @@ public class SqlGenerationTests
 
         var sql = Dequoted(SqlOf(ctx, e.Where(x => Tuple.Create(x.Id, x.String) != Tuple.Create(2L, "b")).Select(x => new { x.Id })));
 
-        sql.Should().Contain("where (id, somestring) != (2, 'b')");
+        sql.Should().Contain("where (id, somestring) != (2, _utf8mb4 X'62')");
     }
 
     [Fact]
@@ -817,9 +817,9 @@ public class SqlGenerationTests
                         || (Tuple.Create(x.Id, x.String) == Tuple.Create(2L, "b")))
             .Select(x => new { x.Id })));
 
-        sql.Should().Contain("(id, somestring) = (1, 'a')");
+        sql.Should().Contain("(id, somestring) = (1, _utf8mb4 X'61')");
         sql.Should().Contain(" or ");
-        sql.Should().Contain("(id, somestring) = (2, 'b')");
+        sql.Should().Contain("(id, somestring) = (2, _utf8mb4 X'62')");
     }
 
     [Fact]
@@ -909,7 +909,7 @@ public class SqlGenerationTests
             .Where(x => new Tuple<long, string?>(x.Id, x.String) == new Tuple<long, string>(1L, "a"))
             .Select(x => new { x.Id })));
 
-        sql.Should().Contain("where (id, somestring) = (1, 'a')");
+        sql.Should().Contain("where (id, somestring) = (1, _utf8mb4 X'61')");
     }
 
     [Fact]
@@ -924,7 +924,7 @@ public class SqlGenerationTests
 
         // MariaDB inherits MySQL and spells the SQL-standard inequality "<>" as "!="; the engine emits "!="
         // for every NotEqual, so the assertion pins the actual emitted token (matching RawSourceBindingSqlGenerationTests).
-        sql.Should().Contain("where (id, somestring) != (2, 'b')");
+        sql.Should().Contain("where (id, somestring) != (2, _utf8mb4 X'62')");
     }
 
     [Fact]
@@ -981,6 +981,6 @@ public class SqlGenerationTests
             .Where(x => (object)Tuple.Create(x.Id, x.String) == (object)Tuple.Create(1L, "a"))
             .Select(x => new { x.Id })));
 
-        sql.Should().Contain("where (id, somestring) = (1, 'a')");
+        sql.Should().Contain("where (id, somestring) = (1, _utf8mb4 X'61')");
     }
 }

@@ -594,16 +594,25 @@ public class ClickHouseDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string MakeOrdinal(string value, bool ignoreCase) => ignoreCase ? $"lower({value})" : value;
 
+    // ClickHouse's LIKE always treats the backslash as the escape character and its parser accepts no
+    // ESCAPE clause in any spelling (measured live), so the clause is omitted rather than spelled: the
+    // pattern literal already carries the escaped wildcards as doubled backslashes.
+    /// <summary>Omits the <c>ESCAPE</c> clause entirely; a custom escape character is rejected.</summary>
+    public override string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) =>
+        escapeChar == "\\"
+            ? string.Empty
+            : throw new NotSupportedException("A custom LIKE escape character is not supported by ClickHouse, which rejects the ESCAPE clause.");
+
     /// <summary>ClickHouse matches with the RE2-based <c>match</c> and replaces with <c>replaceRegexpAll</c>.</summary>
     public override bool SupportsRegex => true;
 
     /// <inheritdoc/>
     public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
-        $"match({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : string.Empty) + pattern, escapeBackslash: true)})";
+        $"match({value}, {SqlStringLiteralPolicy.ClickHouse.Render((ignoreCase ? "(?i)" : string.Empty) + pattern, SqlStringLiteralRole.RegexPattern)})";
 
     /// <inheritdoc/>
     public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
-        $"replaceRegexpAll({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : string.Empty) + pattern, escapeBackslash: true)}, {QuoteStringLiteral(replacement, escapeBackslash: true)})";
+        $"replaceRegexpAll({value}, {SqlStringLiteralPolicy.ClickHouse.Render((ignoreCase ? "(?i)" : string.Empty) + pattern, SqlStringLiteralRole.RegexPattern)}, {SqlStringLiteralPolicy.ClickHouse.Render(replacement, SqlStringLiteralRole.RegexReplacement)})";
 
     // now() uses the server time zone; the optional argument selects a zone.
     /// <summary>Renders <c>now('UTC')</c> for UTC or the server-timezone <c>now()</c> for local time.</summary>

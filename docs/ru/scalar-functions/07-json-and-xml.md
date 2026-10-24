@@ -152,6 +152,11 @@ select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value], payload.que
  from xml_entity
 ```
 
+Аргументы-литералы, требуемые грамматикой (ключи и документы JSON, XQuery и шаблоны формата), рендерятся в
+собственной строковой форме литерала провайдера (PostgreSQL `E'…'`, SQL Server `N'…'`, MySQL/MariaDB
+`_utf8mb4 X'…'`, SQLite и ClickHouse — в кавычках с удвоенными апострофами), а аргумент PostgreSQL,
+содержащий `U+0000`, отвергается с `NotSupportedException`.
+
 | C# | SQL |
 |---|---|
 | `SqlFunctions.SqlServer.xml_value<T>(xml, xpath, sqlType)` | `xml.value('xpath', 'sqlType')` |

@@ -126,7 +126,7 @@ public class DeleteSqlGenerationTests
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
             .Where(p => p.Item1.String == "x")
             .ToSql()
-            .Should().Be("delete from complex_entity as \"t1\" using simple_entity as \"t2\" where t1.id = cast(t2.id as bigint) and t1.somestring = 'x'");
+            .Should().Be("delete from complex_entity as \"t1\" using simple_entity as \"t2\" where t1.id = cast(t2.id as bigint) and t1.somestring = E'x'");
     }
 
     [Fact]

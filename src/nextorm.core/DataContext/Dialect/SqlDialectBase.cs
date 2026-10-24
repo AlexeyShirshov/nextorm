@@ -546,6 +546,8 @@ public abstract class SqlDialectBase : ISqlDialect
     /// Quotes <paramref name="value"/> as a SQL string literal. <paramref name="escapeBackslash"/> selects
     /// the dialects whose string syntax treats a backslash as an escape (MySQL/MariaDB, ClickHouse) and so
     /// has to double it; PostgreSQL (with <c>standard_conforming_strings</c>) and SQLite leave it as-is.
+    /// Retained for external dialects and subclasses; the built-in providers resolve their spelling
+    /// through the internal string-literal policy instead.
     /// </summary>
     protected static string QuoteStringLiteral(string value, bool escapeBackslash = false) =>
         "'" + (escapeBackslash ? value.Replace("\\", "\\\\") : value).Replace("'", "''") + "'";
@@ -608,8 +610,11 @@ public abstract class SqlDialectBase : ISqlDialect
         throw new NotSupportedException("Ordinal string comparison is not supported by this provider.");
     /// <inheritdoc/>
     public virtual bool SupportsOrdinalLike => SupportsOrdinalComparison;
+    // Grammar token: the LIKE escape operand goes through the provider policy, which picks a spelling
+    // that stays valid in every session mode (PostgreSQL E'…', the MySQL family _utf8mb4 X'…').
     /// <inheritdoc/>
-    public virtual string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " escape ") + SqlLiteral.ToSqlStringLiteral(escapeChar);
+    public virtual string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) =>
+        Kw(keywordCase, " escape ") + SqlStringLiteralPolicies.For(this).Render(escapeChar, SqlStringLiteralRole.GrammarToken, SqlStringGrammar.LikeEscape);
     /// <inheritdoc/>
     public virtual string MakeOnesComplement(string operand) => $"~({operand})";
     // Dialects with a boolean type can use the predicate unchanged as a scalar.

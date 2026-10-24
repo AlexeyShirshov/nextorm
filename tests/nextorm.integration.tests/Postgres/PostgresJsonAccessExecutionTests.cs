@@ -786,9 +786,9 @@ public sealed class PostgresJsonAccessExecutionTests : ProviderTestSuite
             .Where(x => x.Id == 1)
             .Select(x => SqlFunctions.Postgres.json_get(document, "k'ey")));
 
-        sql.Should().Contain("''", "the inlined literal and key must double their apostrophes")
-            .And.Contain("it''s")
-            .And.Contain("k''ey");
+        sql.Should().Contain("E'", "the inlined literal and key must be explicit E-strings")
+            .And.Contain("it\\'s")
+            .And.Contain("k\\'ey");
     }
 
     [Fact]

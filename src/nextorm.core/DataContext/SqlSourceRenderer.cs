@@ -785,6 +785,8 @@ internal static class SqlSourceRenderer
         {
             sqlBuilder.Append(ctx.Dialect.MakeFunction(function.Name, function.Schema)).Append('(');
 
+            // grammar token: mode-aware lowering added in D6 — the leading column-definition list is a
+            // quoted token of the ClickHouse `values` table function, not a value expression.
             if (leadsWithSchema)
                 sqlBuilder.Append(SqlLiteral.ToSqlStringLiteral(columnDefinitions!));
 
@@ -806,14 +808,14 @@ internal static class SqlSourceRenderer
                 }
 
                 // A built-in table function's constant string value (for example the FTS5 match query) is
-                // an SQL literal owned by the library; render it with the quote-doubling literal helper.
-                // The generic constant path inlines without escaping, so a value such as "O'Brien" would
-                // otherwise break out of the literal; a captured value still goes through the visitor
-                // (and is bound as a parameter).
+                // an SQL literal owned by the library; render it through the dialect's string-literal
+                // policy. The generic constant path inlines without escaping, so a value such as "O'Brien"
+                // would otherwise break out of the literal; a captured value still goes through the
+                // visitor (and is bound as a parameter).
                 string renderedArgument;
                 if (isBuiltIn && arguments[i] is ConstantExpression { Value: string constantArgument })
                 {
-                    renderedArgument = SqlLiteral.ToSqlStringLiteral(constantArgument);
+                    renderedArgument = SqlStringLiteralPolicies.For(ctx.Dialect).Render(constantArgument);
                 }
                 else
                 {
@@ -926,7 +928,7 @@ internal static class SqlSourceRenderer
         visitor.Visit(nodes.Operand);
         var operand = visitor.ToString();
 
-        var rendered = xmlFunctions.Render("nodes", operand, new[] { SqlLiteral.ToSqlStringLiteral(nodes.XPath) });
+        var rendered = xmlFunctions.Render("nodes", operand, new[] { visitor.RenderStringLiteral(nodes.XPath) });
 
         ctx.ColumnsProvider.Add(entityType!, false);
         var alias = ctx.AliasProvider!.GetNextAlias(from);
@@ -1035,7 +1037,25 @@ internal static class SqlSourceRenderer
     /// is not aliased (<c>DELETE FROM &lt;table&gt; WHERE ...</c>): a single-source condition resolves
     /// its columns unqualified instead of failing to find an alias.
     /// </summary>
-    internal static void MakeWhere(in SqlBuildContext ctx, StringBuilder? target, Type entityType, Expression condition, int dim, bool dontNeedAlias)
+    /// <param name="ctx">The build context of the statement being rendered.</param>
+    /// <param name="target">The builder that receives the clause, or <see langword="null"/> in parameter mode.</param>
+    /// <param name="entityType">The entity type the condition resolves columns against.</param>
+    /// <param name="condition">The condition expression.</param>
+    /// <param name="dim">The projection dimension the condition resolves member names against.</param>
+    /// <param name="dontNeedAlias">When <see langword="true"/>, columns are rendered unqualified.</param>
+    /// <param name="recorder">
+    /// The statement's parameter recorder, or <see langword="null"/> when the clause's placeholder
+    /// occurrences do not take part in template capture. When it is supplied, the clause's emissions are
+    /// relocated onto it at the caller's current builder offset.
+    /// </param>
+    internal static void MakeWhere(
+        in SqlBuildContext ctx,
+        StringBuilder? target,
+        Type entityType,
+        Expression condition,
+        int dim,
+        bool dontNeedAlias,
+        SqlParameterTemplateRecorder? recorder = null)
     {
         using var visitor = ctx.CreateWhereVisitor(entityType, dim, dontNeedAlias);
         visitor.VisitCondition(condition);
@@ -1044,7 +1064,7 @@ internal static class SqlSourceRenderer
         // rendered clause is appended straight into the caller's builder, avoiding a temp string.
         if (ctx.ParamMode || target is null) return;
 
-        visitor.WriteTo(target);
+        visitor.WriteTo(target, recorder);
     }
 
     /// <summary>
@@ -1165,6 +1185,13 @@ internal static class SqlSourceRenderer
         var column = visitor.ToString();
         if (visitor.BooleanSelectProjection)
             column = ctx.Dialect.MakeBooleanPredicate(column, asPredicate: false);
+        else if (ctx.Capture is not null && visitor.Recorder is { } columnRecorder)
+        {
+            // The column was rendered by its own visitor; register the fragment so a caller that appends
+            // this exact text can merge the parameter occurrences it recorded at emission time. The
+            // boolean wrapper rewrites the text around the expression, so its offsets are not registered.
+            ctx.Capture.RegisterFragment(column, columnRecorder);
+        }
 
         // A projected column must be aliased when its property name differs from the column it is
         // read from (MyId = t.Id, or two sources exposing the same physical name). Without it an

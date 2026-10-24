@@ -64,7 +64,7 @@ internal static class XmlSqlTranslator
             if (!SqlLiteral.TryGetConstantString(args[i], out var literal))
                 throw new NotSupportedException($"The {name} XML data-type method requires constant string arguments (T-SQL accepts only literals).");
 
-            rendered[i - 1] = SqlLiteral.ToSqlStringLiteral(literal);
+            rendered[i - 1] = visitor.RenderStringLiteral(literal);
         }
 
         visitor.Builder!.Append(xmlFunctions.Render(name, operand, rendered));

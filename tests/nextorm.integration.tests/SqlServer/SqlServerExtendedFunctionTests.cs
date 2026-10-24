@@ -55,7 +55,9 @@ public sealed class SqlServerExtendedFunctionTests : ProviderTestSuite
             .First();
 
         r.Compressed.Should().NotBeEmpty();
-        r.RoundTrip.Should().Equal(System.Text.Encoding.UTF8.GetBytes("abc"));
+        // compress() receives the declared N'abc' literal (SqlStringLiteralPolicy.cs:219-267), so the
+        // decompressed payload is the UTF-16 byte sequence of "abc".
+        r.RoundTrip.Should().Equal(new byte[] { 0x61, 0x00, 0x62, 0x00, 0x63, 0x00 });
         r.Offset!.Value.Offset.Should().Be(TimeSpan.FromMinutes(120));
         r.Shifted!.Value.Offset.Should().Be(TimeSpan.FromMinutes(60));
         r.OffsetParts!.Value.Offset.Should().Be(TimeSpan.FromMinutes(60));

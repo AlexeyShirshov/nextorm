@@ -505,11 +505,11 @@ internal static class StringFunctionTranslator
             if (!SqlLiteral.TryGetConstantString(args[1], out var padValue))
                 throw new NotSupportedException("The string.PadLeft/PadRight padding character must be a constant.");
 
-            pad = SqlLiteral.ToSqlStringLiteral(padValue);
+            pad = visitor.RenderStringLiteral(padValue);
         }
         else
         {
-            pad = SqlLiteral.ToSqlStringLiteral(" ");
+            pad = visitor.RenderStringLiteral(" ");
         }
 
         if (visitor.IsParamMode)
@@ -576,7 +576,7 @@ internal static class StringFunctionTranslator
 
         visitor.NeedAliasForColumn = true;
         visitor.Builder!.Append(stringSplit.Render(
-            SqlLiteral.ToSqlStringLiteral(separator),
+            visitor.RenderStringLiteral(separator),
             visitor.VisitToString(node.Object)));
         return true;
     }
@@ -659,7 +659,9 @@ internal static class StringFunctionTranslator
         {
             var escapedValue = SqlLiteral.EscapeLikeWildcards(constant);
             escaped = escapedValue != constant;
-            return SqlLiteral.ToSqlStringLiteral(prefix + escapedValue + suffix);
+            // Wildcard escaping is a separate prior step: the policy only renders the resulting
+            // pattern as a literal in the role's provider spelling.
+            return visitor.RenderStringLiteral(prefix + escapedValue + suffix, SqlStringLiteralRole.LikePattern);
         }
 
         escaped = false;
@@ -667,12 +669,12 @@ internal static class StringFunctionTranslator
         var parts = new List<string>(3);
 
         if (prefix.Length > 0)
-            parts.Add(SqlLiteral.ToSqlStringLiteral(prefix));
+            parts.Add(visitor.RenderStringLiteral(prefix, SqlStringLiteralRole.LikePattern));
 
         parts.Add(visitor.VisitToString(argument));
 
         if (suffix.Length > 0)
-            parts.Add(SqlLiteral.ToSqlStringLiteral(suffix));
+            parts.Add(visitor.RenderStringLiteral(suffix, SqlStringLiteralRole.LikePattern));
 
         return visitor.Dialect.MakeConcat(parts);
     }

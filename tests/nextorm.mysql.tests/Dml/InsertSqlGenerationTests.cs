@@ -145,7 +145,7 @@ public class InsertSqlGenerationTests
             .Value(x => x.Name, "a")
             .Value(x => x.Age, 5)
             .ToSql()
-            .Should().Be("insert into insert_entity (name, age) values (@p0, @p1)");
+            .Should().Be("insert into insert_entity (name, age) values (_utf8mb4 X'61', @p1)");
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public class InsertSqlGenerationTests
         ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(new InsertEntity { Id = 99, Name = "a", Age = 5, Total = 7 })
             .ToSql()
-            .Should().Be("insert into insert_entity (name, age) values (@p0, @p1)");
+            .Should().Be("insert into insert_entity (name, age) values (_utf8mb4 X'61', @p1)");
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class InsertSqlGenerationTests
                 new InsertEntity { Name = "b", Age = 2 },
             ])
             .ToSql()
-            .Should().Be("insert into insert_entity (name, age) values (@p0, @p1), (@p2, @p3)");
+            .Should().Be("insert into insert_entity (name, age) values (_utf8mb4 X'61', @p1), (_utf8mb4 X'62', @p3)");
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public class InsertSqlGenerationTests
         ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .ToSql()
-            .Should().Be("insert into `insert_entity` (`name`) values (@p0)");
+            .Should().Be("insert into `insert_entity` (`name`) values (_utf8mb4 X'61')");
     }
 
     [Fact]
@@ -206,7 +206,7 @@ public class InsertSqlGenerationTests
             .Value(x => x.Name, "a")
             .ReturningKey<long>()
             .ToSql()
-            .Should().Be("insert into insert_entity (name) values (@p0); select last_insert_id()");
+            .Should().Be("insert into insert_entity (name) values (_utf8mb4 X'61'); select last_insert_id()");
     }
 
     [Fact]
@@ -218,7 +218,7 @@ public class InsertSqlGenerationTests
             .Value(x => x.Name, "a")
             .ReturningIdentity<long>()
             .ToSql()
-            .Should().Be("insert into insert_entity (name) values (@p0); select last_insert_id()");
+            .Should().Be("insert into insert_entity (name) values (_utf8mb4 X'61'); select last_insert_id()");
     }
 
     [Fact]
@@ -235,7 +235,7 @@ public class InsertSqlGenerationTests
         ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(sources, s => new { Name = s.Name, Age = s.Age })
             .ToSql()
-            .Should().Be("insert into insert_entity (name, age) values (@p0, @p1), (@p2, @p3)");
+            .Should().Be("insert into insert_entity (name, age) values (_utf8mb4 X'61', @p1), (_utf8mb4 X'62', @p3)");
     }
 
     [Fact]
@@ -252,7 +252,7 @@ public class InsertSqlGenerationTests
         ctx.CreateInsertBuilder<InsertEntity>()
             .Values(sources, s => new InsertEntity { Name = s.Name, Age = s.Age })
             .ToSql()
-            .Should().Be("insert into insert_entity (name, age) values (@p0, @p1), (@p2, @p3)");
+            .Should().Be("insert into insert_entity (name, age) values (_utf8mb4 X'61', @p1), (_utf8mb4 X'62', @p3)");
     }
 
     [Fact]
@@ -263,7 +263,7 @@ public class InsertSqlGenerationTests
         ctx.CreateInsertBuilder<IScalarEntity>()
             .Value("a")
             .ToSql()
-            .Should().Be("insert into scalar_entity (name) values (@p0)");
+            .Should().Be("insert into scalar_entity (name) values (_utf8mb4 X'61')");
     }
 
     [Fact]
@@ -274,7 +274,7 @@ public class InsertSqlGenerationTests
         ctx.CreateInsertBuilder<IScalarEntity>()
             .Values(new[] { "a", "b" })
             .ToSql()
-            .Should().Be("insert into scalar_entity (name) values (@p0), (@p1)");
+            .Should().Be("insert into scalar_entity (name) values (_utf8mb4 X'61'), (_utf8mb4 X'62')");
     }
 
     [Fact]
@@ -286,7 +286,7 @@ public class InsertSqlGenerationTests
             .Values(x => x.Name, new[] { "a", "b" })
             .Values(x => x.Age, new[] { 1, 2 })
             .ToSql()
-            .Should().Be("insert into insert_entity (name, age) values (@p0, @p1), (@p2, @p3)");
+            .Should().Be("insert into insert_entity (name, age) values (_utf8mb4 X'61', @p1), (_utf8mb4 X'62', @p3)");
     }
 
     [Fact]

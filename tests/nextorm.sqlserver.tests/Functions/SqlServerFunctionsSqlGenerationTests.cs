@@ -33,16 +33,16 @@ public class SqlServerFunctionsSqlGenerationTests
             F2 = SqlFunctions.SqlServer.format(x.Id, "N", "en-US")
         }));
 
-        sql.Should().Contain("patindex('%a%', somestring)");
+        sql.Should().Contain("patindex(N'%a%', somestring)");
         sql.Should().Contain("quotename(somestring)");
-        sql.Should().Contain("quotename(somestring, '[')");
+        sql.Should().Contain("quotename(somestring, N'[')");
         sql.Should().Contain("soundex(somestring)");
-        sql.Should().Contain("difference(somestring, 'abc')");
-        sql.Should().Contain("string_escape(somestring, 'json')");
+        sql.Should().Contain("difference(somestring, N'abc')");
+        sql.Should().Contain("string_escape(somestring, N'json')");
         sql.Should().Contain("unicode(somestring)");
         sql.Should().Contain("nchar(65)");
-        sql.Should().Contain("format(id, 'N')");
-        sql.Should().Contain("format(id, 'N', 'en-US')");
+        sql.Should().Contain("format(id, N'N')");
+        sql.Should().Contain("format(id, N'N', N'en-US')");
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class SqlServerFunctionsSqlGenerationTests
             N = SqlFunctions.SqlServer.newsequentialid()
         }));
 
-        sql.Should().Contain("hashbytes('SHA2_256'");
+        sql.Should().Contain("hashbytes(N'SHA2_256'");
         sql.Should().Contain("newsequentialid()");
     }
 
@@ -116,9 +116,9 @@ public class SqlServerFunctionsSqlGenerationTests
             O = SqlFunctions.SqlServer.json_object("k", x.Id, "k2", "v2")
         }));
 
-        sql.Should().Contain("json_array('a', id, 'b')");
+        sql.Should().Contain("json_array(N'a', id, N'b')");
         sql.Should().Contain("json_array()");
-        sql.Should().Contain("json_object('k' : id, 'k2' : 'v2')");
+        sql.Should().Contain("json_object(N'k' : id, N'k2' : N'v2')");
     }
 
     [Fact]
@@ -149,8 +149,8 @@ public class SqlServerFunctionsSqlGenerationTests
             P = SqlFunctions.SqlServer.json_path_exists(x.String, "$.x")
         }));
 
-        sql.Should().Contain("cast(case when json_contains(somestring, 'a', '$.x') = 1 then 1 else 0 end as bit)");
-        sql.Should().Contain("cast(case when json_path_exists(somestring, '$.x') = 1 then 1 else 0 end as bit)");
+        sql.Should().Contain("cast(case when json_contains(somestring, N'a', N'$.x') = 1 then 1 else 0 end as bit)");
+        sql.Should().Contain("cast(case when json_path_exists(somestring, N'$.x') = 1 then 1 else 0 end as bit)");
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public class SqlServerFunctionsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => SqlFunctions.SqlServer.json_path_exists(x.String, "$.x")).Select(x => new { x.Id }))
-            .Should().Contain("where json_path_exists(somestring, '$.x') = 1");
+            .Should().Contain("where json_path_exists(somestring, N'$.x') = 1");
     }
 
     [Fact]
@@ -189,9 +189,9 @@ public class SqlServerFunctionsSqlGenerationTests
         sql.Should().Contain("sysdatetime()");
         sql.Should().Contain("sysdatetimeoffset()");
         sql.Should().Contain("sysutcdatetime()");
-        sql.Should().Contain("switchoffset(sysdatetimeoffset(), '-08:00')");
+        sql.Should().Contain("switchoffset(sysdatetimeoffset(), N'-08:00')");
         sql.Should().Contain("switchoffset(sysdatetimeoffset(), 480)");
-        sql.Should().Contain("todatetimeoffset(dt, '+02:00')");
+        sql.Should().Contain("todatetimeoffset(dt, N'+02:00')");
         sql.Should().Contain("todatetimeoffset(dt, -120)");
         sql.Should().Contain("timefromparts(1, 2, 3, 4, 7)");
         sql.Should().Contain("smalldatetimefromparts(2020, 1, 2, 3, 4)");
@@ -347,7 +347,7 @@ public class SqlServerFunctionsSqlGenerationTests
         sql.Should().Contain("rand()");
         sql.Should().Contain("rand(0)");
         sql.Should().Contain("rand(-7)");
-        sql.Should().Contain("stuff(somestring, 2, 3, 'xy')");
+        sql.Should().Contain("stuff(somestring, 2, 3, N'xy')");
     }
 
     [Fact]
@@ -374,14 +374,14 @@ public class SqlServerFunctionsSqlGenerationTests
             Sd = SqlFunctions.SqlServer.stats_date(x.Int, 1)
         }));
 
-        sql.Should().Contain("col_length('t', somestring)");
+        sql.Should().Contain("col_length(N't', somestring)");
         sql.Should().Contain("col_name(nullableint, 1)");
-        sql.Should().Contain("ident_incr('t')");
-        sql.Should().Contain("ident_seed('t')");
+        sql.Should().Contain("ident_incr(N't')");
+        sql.Should().Contain("ident_seed(N't')");
         sql.Should().Contain("index_col(somestring, 1, 2)");
         sql.Should().Contain("object_definition(nullableint)");
         sql.Should().Contain("object_id(somestring)");
-        sql.Should().Contain("object_id(somestring, 'U')");
+        sql.Should().Contain("object_id(somestring, N'U')");
         sql.Should().Contain("object_name(nullableint)");
         sql.Should().Contain("object_name(nullableint, 1)");
         sql.Should().Contain("object_schema_name(nullableint)");
@@ -412,15 +412,15 @@ public class SqlServerFunctionsSqlGenerationTests
         }));
 
         sql.Should().Contain("db_id()");
-        sql.Should().Contain("db_id('db')");
+        sql.Should().Contain("db_id(N'db')");
         sql.Should().Contain("db_name()");
         sql.Should().Contain("db_name(1)");
         sql.Should().Contain("original_db_name()");
         sql.Should().Contain("schema_id()");
-        sql.Should().Contain("schema_id('s')");
+        sql.Should().Contain("schema_id(N's')");
         sql.Should().Contain("schema_name()");
         sql.Should().Contain("schema_name(1)");
-        sql.Should().Contain("type_id('t')");
+        sql.Should().Contain("type_id(N't')");
         sql.Should().Contain("type_name(1)");
     }
 
@@ -440,10 +440,10 @@ public class SqlServerFunctionsSqlGenerationTests
             Fn = SqlFunctions.SqlServer.file_name(1)
         }));
 
-        sql.Should().Contain("filegroup_id('fg')");
+        sql.Should().Contain("filegroup_id(N'fg')");
         sql.Should().Contain("filegroup_name(1)");
-        sql.Should().Contain("file_id('f')");
-        sql.Should().Contain("file_idex('f')");
+        sql.Should().Contain("file_id(N'f')");
+        sql.Should().Contain("file_idex(N'f')");
         sql.Should().Contain("file_name(1)");
     }
 
@@ -469,8 +469,8 @@ public class SqlServerFunctionsSqlGenerationTests
         sql.Should().Contain("current_timezone()");
         sql.Should().Contain("current_timezone_id()");
         sql.Should().Contain("getansinull()");
-        sql.Should().Contain("getansinull('db')");
-        sql.Should().Contain("parsename('a.b.c.d', 1)");
+        sql.Should().Contain("getansinull(N'db')");
+        sql.Should().Contain("parsename(N'a.b.c.d', 1)");
         sql.Should().Contain("publishingservername()");
         // ISDATE/ISNUMERIC return SQL int, so they must not be materialised as a bit predicate.
         sql.Should().Contain("isdate(somestring)");
@@ -514,9 +514,9 @@ public class SqlServerFunctionsSqlGenerationTests
             Id1 = SqlFunctions.SqlServer.formatmessage(50001, x.String)
         }));
 
-        sql.Should().Contain("formatmessage('plain')");
-        sql.Should().Contain("formatmessage('hello %s', somestring)");
-        sql.Should().Contain("formatmessage('a %s b %d', somestring, nullableint)");
+        sql.Should().Contain("formatmessage(N'plain')");
+        sql.Should().Contain("formatmessage(N'hello %s', somestring)");
+        sql.Should().Contain("formatmessage(N'a %s b %d', somestring, nullableint)");
         sql.Should().Contain("formatmessage(50001)");
         sql.Should().Contain("formatmessage(50001, somestring)");
     }
@@ -535,8 +535,8 @@ public class SqlServerFunctionsSqlGenerationTests
                 "a11", "a12", "a13", "a14", "a15", "a16", "a17", "a18", "a19", "a20")
         }));
 
-        sql.Should().Contain("formatmessage('m', 'a1', 'a2'");
-        sql.Should().Contain("'a20'");
+        sql.Should().Contain("formatmessage(N'm', N'a1', N'a2'");
+        sql.Should().Contain("N'a20'");
     }
 
     [Fact]
@@ -785,7 +785,7 @@ public class SqlServerFunctionsSqlGenerationTests
             Q = SqlFunctions.SqlServer.quotename("abc", "'")
         }));
 
-        sql.Should().Contain("quotename('abc', '''')",
+        sql.Should().Contain("quotename(N'abc', N'''')",
             "the apostrophe delimiter is an inline string value whose apostrophe is doubled, not the malformed three-apostrophe argument");
     }
 
@@ -801,7 +801,7 @@ public class SqlServerFunctionsSqlGenerationTests
             Q = SqlFunctions.SqlServer.quotename("O'Brien", "'")
         }));
 
-        sql.Should().Contain("quotename('O''Brien', '''')",
+        sql.Should().Contain("quotename(N'O''Brien', N'''')",
             "the apostrophe inside the value is doubled, and the delimiter argument is doubled as well");
         sql.Should().NotContain("quotename('O'Brien'",
             "the raw value with a single embedded apostrophe terminates the literal early and must never be emitted");
@@ -818,18 +818,18 @@ public class SqlServerFunctionsSqlGenerationTests
         // doubled; every other character is emitted verbatim and leaves the delimiter choice to the server.
         var cases = new (string Expected, string Sql)[]
         {
-            ("quotename('abc', '''')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "'") }))),
-            ("quotename('abc', '\"')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "\"") }))),
-            ("quotename('abc', '[')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "[") }))),
-            ("quotename('abc', ']')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "]") }))),
-            ("quotename('abc', '(')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "(") }))),
-            ("quotename('abc', ')')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", ")") }))),
-            ("quotename('abc', '<')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "<") }))),
-            ("quotename('abc', '>')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", ">") }))),
-            ("quotename('abc', '`')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "`") }))),
-            ("quotename('abc', '{')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "{") }))),
-            ("quotename('abc', '}')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "}") }))),
-            ("quotename('abc')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc") })))
+            ("quotename(N'abc', N'''')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "'") }))),
+            ("quotename(N'abc', N'\"')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "\"") }))),
+            ("quotename(N'abc', N'[')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "[") }))),
+            ("quotename(N'abc', N']')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "]") }))),
+            ("quotename(N'abc', N'(')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "(") }))),
+            ("quotename(N'abc', N')')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", ")") }))),
+            ("quotename(N'abc', N'<')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "<") }))),
+            ("quotename(N'abc', N'>')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", ">") }))),
+            ("quotename(N'abc', N'`')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "`") }))),
+            ("quotename(N'abc', N'{')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "{") }))),
+            ("quotename(N'abc', N'}')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc", "}") }))),
+            ("quotename(N'abc')", SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.quotename("abc") })))
         };
 
         foreach (var (expected, sql) in cases)
@@ -855,12 +855,12 @@ public class SqlServerFunctionsSqlGenerationTests
             EmptyQuote = SqlFunctions.SqlServer.quotename("abc", "")
         }));
 
-        sql.Should().Contain("quotename(null, '''')", "a null value stays SQL null");
-        sql.Should().Contain("quotename('abc', null)", "a null delimiter stays SQL null, not the default bracket");
-        sql.Should().Contain("quotename('', '''')", "an empty value is a paired-delimiter case, not null");
-        sql.Should().Contain("quotename('abc', 'x')");
-        sql.Should().Contain("quotename('abc', 'aa')");
-        sql.Should().Contain("quotename('abc', '')");
+        sql.Should().Contain("quotename(null, N'''')", "a null value stays SQL null");
+        sql.Should().Contain("quotename(N'abc', null)", "a null delimiter stays SQL null, not the default bracket");
+        sql.Should().Contain("quotename(N'', N'''')", "an empty value is a paired-delimiter case, not null");
+        sql.Should().Contain("quotename(N'abc', N'x')");
+        sql.Should().Contain("quotename(N'abc', N'aa')");
+        sql.Should().Contain("quotename(N'abc', N'')");
         sql.Should().NotContain("'null'", "a null argument must never become the text 'null'");
     }
 
@@ -923,7 +923,7 @@ public class SqlServerFunctionsSqlGenerationTests
             Q = SqlFunctions.SqlServer.quotename("abc", x.String)
         }));
 
-        sql.Should().Contain("quotename('abc', somestring)",
+        sql.Should().Contain("quotename(N'abc', somestring)",
             "a column delimiter is forwarded as a SQL expression, never quoted as an identifier or evaluated client-side");
         sql.Should().NotContain("quotename('abc', 'somestring')");
     }
@@ -945,8 +945,8 @@ public class SqlServerFunctionsSqlGenerationTests
             At129 = SqlFunctions.SqlServer.quotename(Value129, "'")
         }));
 
-        sql.Should().Contain("quotename('" + Value128 + "', '''')", "no client-side truncation at the 128-character boundary");
-        sql.Should().Contain("quotename('" + Value129 + "', '''')", "the 129-character input is forwarded unchanged; the server decides");
+        sql.Should().Contain("quotename(N'" + Value128 + "', N'''')", "no client-side truncation at the 128-character boundary");
+        sql.Should().Contain("quotename(N'" + Value129 + "', N'''')", "the 129-character input is forwarded unchanged; the server decides");
     }
 
     [Fact]

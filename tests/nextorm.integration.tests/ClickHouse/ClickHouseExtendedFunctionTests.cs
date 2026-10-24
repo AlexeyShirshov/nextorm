@@ -6,11 +6,24 @@ using NextORM.Tests.Shared.ClickHouseRetry;
 namespace NextORM.Integration.Tests;
 
 /// <summary>
+/// Serializes <see cref="ClickHouseExtendedFunctionTests"/> against every other integration
+/// collection: <c>ArrayRewind_ShouldKeepParameterProvenanceAcrossCachedExecutions</c> asserts
+/// prepared-command <em>identity</em> across three executions, while a concurrent
+/// <see cref="DataContext.PurgeQueryCache"/> anywhere in the process bumps the process-wide
+/// <c>QueryPlanStore</c> generation and evicts every thread's thread-local plan dictionary. The
+/// second execution then legitimately re-prepares and returns a different
+/// <c>DbPreparedQueryCommand</c> — correct product behaviour, but not the identity the regression
+/// test is about, so the class must not overlap another collection.
+/// </summary>
+[CollectionDefinition("T327 array rewind cache", DisableParallelization = true)]
+public sealed class T327ArrayRewindCacheCollectionDefinition;
+
+/// <summary>
 /// ClickHouse specific surface, third sweep: JSON extraction, the array library (including the
 /// higher-order forms), the to* date family, the UTF-8/regexp string forms, the aggregate family
 /// and the conditional/window helpers. Each call renders ClickHouse SQL and executes it.
 /// </summary>
-[Collection("ClickHouse")]
+[Collection("T327 array rewind cache")]
 public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
@@ -154,6 +167,73 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
         r.Intersect.Should().Equal(1, 2);
         r.Union.Should().HaveCount(4);
         r.SymDiff.Should().HaveCount(3);
+    }
+
+    /// <summary>
+    /// #327 DEF-04 regression: the array renderers emit an argument fragment into the shared builder,
+    /// truncate it back and re-append it inside the function wrapper. The parameter recorder must follow
+    /// that rewind instead of running ahead of the builder, so the immutable template keeps every
+    /// occurrence at its real offset. Before the fix the <c>params</c>-array renderer threw
+    /// <see cref="ArgumentOutOfRangeException"/> during planning (the D8b failure of
+    /// <c>ArrayLibrary_ShouldExecute</c>); now one prepared command serves <c>null → value → null</c>
+    /// with byte-identical SQL, the same command instance and correct results.
+    /// </summary>
+    [Fact]
+    [Trait("Issue", "327")]
+    public void ArrayRewind_ShouldKeepParameterProvenanceAcrossCachedExecutions()
+    {
+        var ctx = _sut.DataProvider;
+        int? captured = null;
+        int[] expectedValue = [1, 2, 2, 9];
+        var query = _sut.ComplexEntity
+            .Where(x => x.Int == captured)
+            .Select(_ => SqlFunctions.ClickHouse.array_concat(new[] { 1, 2 }, new[] { 2, 9 }));
+
+        DbPreparedQueryCommand<int[]>? prepared = null;
+        string? canonicalText = null;
+
+        void Execute(string scenario, int? value, int expectedRowCount)
+        {
+            captured = value;
+            var current = (DbPreparedQueryCommand<int[]>)((DataContext)ctx).GetPreparedQueryCommand(
+                query,
+                createEnumerator: false,
+                storeInCache: true,
+                TestContext.Current.CancellationToken);
+
+            if (prepared is null)
+            {
+                prepared = current;
+                canonicalText = current.DbCommand.CommandText;
+            }
+            else
+            {
+                current.Should().BeSameAs(prepared, "every later execution is a cache hit on the same prepared command");
+            }
+
+            current.DbCommand.CommandText.Should().Be(canonicalText, scenario);
+
+            var template = current.ParameterTemplate;
+            template.Should().NotBeNull("a rewound fragment must still finalize into a parameter template");
+            template!.StatementText.Should().Be(canonicalText, scenario);
+            foreach (var occurrence in template.Occurrences)
+            {
+                template.StatementText.Substring(occurrence.Start, occurrence.Length)
+                    .Should().Be("@" + template.Bindings[occurrence.BindingId].Name,
+                        "every occurrence span points at the placeholder actually emitted for its binding");
+            }
+
+            template.Compose(new string?[template.OccurrenceCount]).Should().Be(canonicalText, scenario);
+
+            var rows = ctx.ToList(current);
+            rows.Should().HaveCount(expectedRowCount, scenario);
+            foreach (var row in rows)
+                row.Should().Equal(expectedValue, scenario);
+        }
+
+        Execute("captured null", null, 1);
+        Execute("captured 1", 1, 2);
+        Execute("captured null again", null, 1);
     }
 
     [Fact]

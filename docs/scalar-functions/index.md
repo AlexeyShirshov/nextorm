@@ -15,8 +15,12 @@ The dispatch lives in [`BaseExpressionVisitor`](xref:NextORM.Core.BaseExpression
 Two rules apply throughout:
 
 * a **captured** value (a local or parameter) becomes a query **parameter**, not a literal;
-* a **constant** is inlined. For `Contains`/`StartsWith`/`EndsWith` that also means `%`, `_` and `\` in a
-  constant are escaped and an `escape '\'` clause is emitted.
+* a **constant** is inlined in the provider's own string-literal form. For `Contains`/`StartsWith`/`EndsWith`
+  that also means `%`, `_` and `\` in a constant are escaped before rendering.
+
+The `ESCAPE` clause of the rendered `LIKE` pattern is provider-dependent: ClickHouse emits none (and fails
+closed on a custom escape character), MySQL/MariaDB emit the operand as a mode-independent hex token, and
+the remaining providers keep the clause.
 
 The built-in translations are attempted **before** any [`[SqlFunction]`](../guide/12-user-defined-functions.md)
 mapping, so a user-defined attribute cannot change the behaviour of `string`/`Math`/`DateTime` members.

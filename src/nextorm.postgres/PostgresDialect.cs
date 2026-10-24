@@ -554,11 +554,11 @@ public class PostgresDialect : SqlDialectBase
 
     /// <inheritdoc/>
     public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
-        $"{value} {(ignoreCase ? "~*" : "~")} {QuoteStringLiteral(pattern)}";
+        $"{value} {(ignoreCase ? "~*" : "~")} {SqlStringLiteralPolicy.Postgres.Render(pattern, SqlStringLiteralRole.RegexPattern)}";
 
     /// <inheritdoc/>
     public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
-        $"regexp_replace({value}, {QuoteStringLiteral(pattern)}, {QuoteStringLiteral(replacement)}, {(ignoreCase ? "'gi'" : "'g'")})";
+        $"regexp_replace({value}, {SqlStringLiteralPolicy.Postgres.Render(pattern, SqlStringLiteralRole.RegexPattern)}, {SqlStringLiteralPolicy.Postgres.Render(replacement, SqlStringLiteralRole.RegexReplacement)}, {(ignoreCase ? "'gi'" : "'g'")})";
 
     /// <inheritdoc/>
     public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)

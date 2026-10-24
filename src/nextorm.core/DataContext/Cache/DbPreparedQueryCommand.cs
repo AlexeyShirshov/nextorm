@@ -23,8 +23,10 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     private DbConnection? DbCommandConnection;
     private DbTransaction? DbCommandTransaction;
     /// <summary>
-    /// The parameter collection of <see cref="DbCommand"/>, cached so parameter lookups do not touch
-    /// the command property on every execution.
+    /// The canonical parameter collection of the statement, sorted by canonical binding ordinal. It
+    /// stores the same <see cref="DbParameter"/> objects the command binds, but it is never shortened,
+    /// so a checkout can restore the complete driver collection after an execution lowered some text
+    /// bindings into literals.
     /// </summary>
     public readonly DbParameterCollection DbCommandParams;
     /// <summary>
@@ -70,12 +72,52 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     internal ParamRefreshRecipe? ParamRecipe { get; private set; }
 
     /// <summary>
+    /// The immutable parameter-occurrence template of the statement the command was prepared with, or
+    /// <see langword="null"/> when the command carries no planner-owned emission (caller-owned raw SQL)
+    /// or when its render could not be recorded reliably. Created once by the planner at plan
+    /// construction; it is never mutated, so every execution of the cached command composes from the
+    /// same original statement.
+    /// </summary>
+    internal SqlParameterTemplate? ParameterTemplate { get; private set; }
+
+    /// <summary>
+    /// The string-literal policy the statement was planned with, or <see langword="null"/> only for a
+    /// command constructed outside the planner. Execution-time specialization is enabled only for the
+    /// MySQL-family policy; every other policy keeps the prepared statement byte-identical. The
+    /// PostgreSQL policy enables the final-value NUL guard on every checkout.
+    /// </summary>
+    private SqlStringLiteralPolicy? _stringLiteralPolicy;
+
+    /// <summary>
+    /// Whether the driver-visible command still carries a previous execution's specialization. The next
+    /// checkout restores the canonical text and parameter collection before refreshing values.
+    /// </summary>
+    private bool _specialized;
+
+    /// <summary>
+    /// Whether a failed restoration left the command in a state that must never be returned again.
+    /// </summary>
+    private bool _stateBroken;
+
+    /// <summary>
     /// Sets the immutable parameter-refresh recipe. Called exactly once, by the planner at plan
     /// construction; the characterization tests use the same seam to install an intentionally
     /// incompatible recipe and prove the mismatch-safe fallback. The recipe itself is never mutated.
     /// </summary>
     /// <param name="recipe">The recipe, or <see langword="null"/> to keep the original extraction path.</param>
     internal void SetParamRecipe(ParamRefreshRecipe? recipe) => ParamRecipe = recipe;
+    /// <summary>
+    /// Sets the immutable parameter-occurrence template and the string-literal policy the statement was
+    /// planned with. Called exactly once, by the planner at plan construction, for a statement the ORM
+    /// rendered itself. Neither value is ever mutated.
+    /// </summary>
+    /// <param name="template">The statement template, or <see langword="null"/> when none could be recorded.</param>
+    /// <param name="policy">The policy resolved for the planning dialect, or <see langword="null"/>.</param>
+    internal void SetParameterTemplate(SqlParameterTemplate? template, SqlStringLiteralPolicy? policy)
+    {
+        ParameterTemplate = template;
+        _stringLiteralPolicy = policy;
+    }
     /// <summary>
     /// Wraps an already prepared <see cref="DbCommand"/> and its execution options.
     /// </summary>
@@ -87,7 +129,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     {
         DbCommand = dbCommand;
         DbCommandConnection = dbCommand.Connection;
-        DbCommandParams = dbCommand.Parameters;
+        DbCommandParams = new CanonicalParameterCollection(dbCommand.Parameters);
         if (options.SingleRow)
             Behavior = CommandBehavior.SingleRow;
         if (options.SequentialAccess)
@@ -205,8 +247,20 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
                 aware is null ? nameof(legacy) : nameof(aware));
         }
 
+        if (_stateBroken)
+        {
+            throw new InvalidOperationException(
+                "The prepared command's canonical parameter state could not be restored after a previous execution; " +
+                "the plan must be rebuilt instead of executing a partially restored command.");
+        }
+
+        // Restore first: a previous execution may have lowered text bindings into literals and removed
+        // them from the driver collection. The canonical text and the complete canonical parameter set
+        // must be back in place before any value refresh runs, so every index-based access is valid.
+        RestoreCanonicalCommand();
+
         var cmd = DbCommand;
-        var parameters = DbCommandParams;//cmd.Parameters;
+        var parameters = cmd.Parameters;
 
         if (!@params.IsEmpty)
         {
@@ -243,30 +297,19 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
                     var newValue = @params[i] ?? DBNull.Value;
                     if (parameters[idx].Value != newValue)
                     {
-                        // if (cmd == DbCommand)
-                        // {
-                        // cmd = conn.CreateCommand();
-                        // cmd.CommandText = CommandText;
-                        // foreach (var p in parameters) cmd.Parameters.Add(p);
-                        // parameters = cmd.Parameters;
-                        //}
                         parameters[idx].Value = newValue;
                     }
                 }
                 else
                 {
-                    // if (cmd == DbCommand)
-                    // {
-                    //     cmd = conn.CreateCommand();
-                    //     cmd.CommandText = CommandText;
-                    //     foreach (var p in parameters) cmd.Parameters.Add(p);
-                    //     parameters = cmd.Parameters;
-                    // }
-
-                    ParamMap[i] = parameters.Count;
-                    parameters.Add(aware is not null
+                    var created = aware is not null
                         ? aware(cmd, paramName!, @params[i])
-                        : legacy!(paramName!, @params[i]));
+                        : legacy!(paramName!, @params[i]);
+                    ParamMap[i] = DbCommandParams.Count;
+                    parameters.Add(created);
+                    // The runtime minted a parameter the planning render did not produce; the canonical
+                    // set has to know it too, or the next restoration would drop it.
+                    DbCommandParams.Add(created);
                 }
             }
         }
@@ -283,7 +326,137 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
             cmd.Transaction = transaction;
         }
 
+        // The final values are now in the driver collection (cold bind or cache refresh), so PostgreSQL's
+        // NUL rejection runs here, before the command can be executed. It runs on every checkout: a second
+        // execution that receives a NUL-bearing value throws instead of reaching the server. PostgreSQL
+        // never specializes, so this guard is independent of the MySQL branch below.
+        PostgresParameterGuard.Validate(_stringLiteralPolicy, parameters);
+
+        if (ParameterTemplate is { } template && ReferenceEquals(_stringLiteralPolicy, SqlStringLiteralPolicy.MySql))
+            SpecializeMySql(template);
+
         return cmd;
+    }
+
+    /// <summary>
+    /// Restores the canonical statement text and the complete canonical parameter set when a previous
+    /// execution specialized the driver-visible command. A no-op otherwise.
+    /// </summary>
+    private void RestoreCanonicalCommand(bool force = false)
+    {
+        if (!_specialized && !force)
+            return;
+
+        try
+        {
+            if (ParameterTemplate is { } template)
+                DbCommand.CommandText = template.StatementText;
+
+            var driver = DbCommand.Parameters;
+            var canonical = DbCommandParams;
+            if (driver.Count != canonical.Count)
+            {
+                driver.Clear();
+                for (var i = 0; i < canonical.Count; i++)
+                    driver.Add(canonical[i]);
+            }
+
+            _specialized = false;
+        }
+        catch
+        {
+            // A partial restoration must never be handed to an execution: the command cannot be used
+            // again, so the next checkout fails instead of binding values against a broken collection.
+            _stateBroken = true;
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Specializes the MySQL-family statement for this execution: every planner-owned value occurrence
+    /// whose final bound value is text becomes a charset-introduced UTF-8 hex literal, and a binding is
+    /// removed from the driver collection only when every one of its occurrences was lowered. The
+    /// composition and the replacement set are computed before the command is mutated, so a failure
+    /// restores the canonical state instead of leaving a half-specialized command.
+    /// </summary>
+    /// <param name="template">The immutable statement template of this prepared command.</param>
+    private void SpecializeMySql(SqlParameterTemplate template)
+    {
+        var occurrences = template.Occurrences;
+        if (occurrences.Length == 0)
+            return;
+
+        var replacements = new string?[occurrences.Length];
+        var occurrenceCounts = new int[template.BindingCount];
+        var loweredCounts = new int[template.BindingCount];
+        var anyLowered = false;
+
+        for (var i = 0; i < occurrences.Length; i++)
+        {
+            var occurrence = occurrences[i];
+            occurrenceCounts[occurrence.BindingId]++;
+
+            // Grammar and pattern roles keep the original placeholder: D6 owns their spelling.
+            if (occurrence.Role != SqlStringLiteralRole.Value)
+                continue;
+
+            var parameter = DbCommandParams[occurrence.BindingId];
+            switch (parameter.Value)
+            {
+                case string text:
+                    replacements[i] = SqlStringLiteralPolicy.MySql.Render(text);
+                    loweredCounts[occurrence.BindingId]++;
+                    anyLowered = true;
+                    break;
+                case char value:
+                    replacements[i] = SqlStringLiteralPolicy.MySql.Render(value.ToString());
+                    loweredCounts[occurrence.BindingId]++;
+                    anyLowered = true;
+                    break;
+            }
+        }
+
+        if (!anyLowered)
+            return;
+
+        var composed = template.Compose(replacements);
+
+        try
+        {
+            DbCommand.CommandText = composed;
+
+            var driver = DbCommand.Parameters;
+            for (var bindingId = 0; bindingId < template.BindingCount; bindingId++)
+            {
+                if (occurrenceCounts[bindingId] == 0 || loweredCounts[bindingId] != occurrenceCounts[bindingId])
+                    continue;
+
+                var index = IndexOfReference(driver, DbCommandParams[bindingId]);
+                if (index >= 0)
+                    driver.RemoveAt(index);
+            }
+
+            _specialized = true;
+        }
+        catch
+        {
+            // Installation is transactional with respect to the cached command: restore the canonical
+            // text and complete parameter collection before propagating the failure. There is never a
+            // text-binding fallback.
+            RestoreCanonicalCommand(force: true);
+            throw;
+        }
+    }
+
+    private static int IndexOfReference(DbParameterCollection collection, DbParameter parameter)
+    {
+        for (var i = 0; i < collection.Count; i++)
+        {
+            if (ReferenceEquals(collection[i], parameter))
+                return i;
+        }
+
+        return -1;
     }
     /// <summary>
     /// Detaches the command from its connection and any active enumerator from its context so the

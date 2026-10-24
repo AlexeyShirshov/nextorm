@@ -331,9 +331,11 @@ internal static class ArraySqlTranslator
         visitor.NeedAliasForColumn = true;
 
         var builder = visitor.Builder!;
+        var recorder = visitor.Recorder;
         var start = builder.Length;
+        var mark = recorder?.MarkAt(start);
         builder.Append(sqlName).Append('(').Append(name).Append(" -> ");
-        bodyVisitor.WriteTo(builder);
+        bodyVisitor.WriteTo(builder, recorder);
 
         for (var (i, cnt) = (1, args.Count); i < cnt; i++)
         {
@@ -345,7 +347,11 @@ internal static class ArraySqlTranslator
 
         var call = builder.ToString(start, builder.Length - start);
         builder.Length = start;
-        builder.Append(visitor.Dialect.MakeArrayFunction(sqlName, call));
+        var fragment = mark is { } checkpoint ? recorder!.RewindTo(checkpoint) : null;
+        var fragments = fragment is { OccurrenceCount: > 0 }
+            ? new[] { new SqlParameterTrackedFragment(call, null, fragment) }
+            : Array.Empty<SqlParameterTrackedFragment>();
+        SqlParameterFragmentRelocation.AppendComposed(builder, recorder, visitor.Dialect.MakeArrayFunction(sqlName, call), fragments);
     }
 
     private static LambdaExpression ExtractLambda(Expression expression)
@@ -369,7 +375,9 @@ internal static class ArraySqlTranslator
         visitor.NeedAliasForColumn = true;
 
         var builder = visitor.Builder!;
+        var recorder = visitor.Recorder;
         var start = builder.Length;
+        var mark = recorder?.MarkAt(start);
         builder.Append(sqlName).Append('(');
 
         for (var (i, cnt) = (0, args.Count); i < cnt; i++)
@@ -384,7 +392,11 @@ internal static class ArraySqlTranslator
 
         var call = builder.ToString(start, builder.Length - start);
         builder.Length = start;
-        builder.Append(visitor.Dialect.MakeArrayFunction(sqlName, call));
+        var fragment = mark is { } checkpoint ? recorder!.RewindTo(checkpoint) : null;
+        var fragments = fragment is { OccurrenceCount: > 0 }
+            ? new[] { new SqlParameterTrackedFragment(call, null, fragment) }
+            : Array.Empty<SqlParameterTrackedFragment>();
+        SqlParameterFragmentRelocation.AppendComposed(builder, recorder, visitor.Dialect.MakeArrayFunction(sqlName, call), fragments);
     }
 
     private static void RequireArrayFunctions(BaseExpressionVisitor visitor)
@@ -437,13 +449,18 @@ internal sealed class HigherOrderLambdaVisitor : BaseExpressionVisitor
     internal override IReadOnlyDictionary<ParameterExpression, string>? LambdaParameters => _parameters;
 
     public override BaseExpressionVisitor Clone()
-        => IsParamMode
-            ? throw new NotSupportedException("Cannot clone in param mode")
-            : new HigherOrderLambdaVisitor(Options, _parameters)
-            {
-                SuppressColumnCollation = SuppressColumnCollation,
-                ConverterContext = ConverterContext,
-            };
+    {
+        if (IsParamMode)
+            throw new NotSupportedException("Cannot clone in param mode");
+
+        var clone = new HigherOrderLambdaVisitor(Options, _parameters)
+        {
+            SuppressColumnCollation = SuppressColumnCollation,
+            ConverterContext = ConverterContext,
+        };
+        Adopt(clone);
+        return clone;
+    }
 
     protected override Expression VisitParameter(ParameterExpression node)
     {

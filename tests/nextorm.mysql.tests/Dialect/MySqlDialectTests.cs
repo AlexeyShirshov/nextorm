@@ -189,10 +189,14 @@ public class MySqlDialectTests
     }
 
     [Fact]
-    public void MakeLikeEscape_ShouldDoubleTheBackslash()
+    public void MakeLikeEscape_ShouldRenderModeIndependentHexTokens()
     {
-        Dialect.MakeLikeEscape("\\").Should().Be(" escape '\\\\'");
-        Dialect.MakeLikeEscape("!").Should().Be(" escape '!'");
+        // A charset-introduced hex literal is spelled the same way with and without NO_BACKSLASH_ESCAPES,
+        // so the escape operand never depends on the session mode or on driver string escaping.
+        Dialect.MakeLikeEscape("\\").Should().Be(" escape _utf8mb4 X'5c'");
+        Dialect.MakeLikeEscape("!").Should().Be(" escape _utf8mb4 X'21'");
+        Dialect.MakeLikeEscape("'").Should().Be(" escape _utf8mb4 X'27'",
+            "the apostrophe is carried as its byte, never as a doubled quote");
     }
 
     [Fact]

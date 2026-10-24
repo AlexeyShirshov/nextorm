@@ -104,14 +104,20 @@ internal static class DictionaryLookupTranslator
         {
             var keyName = visitor.ParameterProvider.GetParamName();
             var valueName = visitor.ParameterProvider.GetParamName();
-            visitor.Params.Add(new Parameter(keyName, entries[i].Key));
-            visitor.Params.Add(new Parameter(valueName, entries[i].Value));
+            var keyParameter = new Parameter(keyName, entries[i].Key);
+            var valueParameter = new Parameter(valueName, entries[i].Value);
+            visitor.Params.Add(keyParameter);
+            visitor.Params.Add(valueParameter);
 
             if (caseBuilder is null)
                 continue;
 
-            caseBuilder.Append(visitor.Kw(" when ")).Append(key).Append(" = ").Append(visitor.Dialect.MakeParam(keyName))
-                .Append(visitor.Kw(" then ")).Append(visitor.Dialect.MakeParam(valueName));
+            // The single emission funnel. The CASE builder is not a tracked fragment yet, so no recorder
+            // is passed; the placeholder text and the branch order are unchanged.
+            caseBuilder.Append(visitor.Kw(" when ")).Append(key).Append(" = ");
+            visitor.EmitParameter(caseBuilder, null, keyParameter);
+            caseBuilder.Append(visitor.Kw(" then "));
+            visitor.EmitParameter(caseBuilder, null, valueParameter);
         }
     }
 }

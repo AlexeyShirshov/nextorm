@@ -35,6 +35,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     protected readonly bool _paramMode;
     private bool _disposedValue;
     private readonly VisitorOptions _options;
+    private readonly SqlParameterTemplateCapture? _capture;
+    private SqlParameterTemplateRecorder? _recorder;
+    private List<SqlParameterTrackedFragment>? _tracked;
+    private List<BaseExpressionVisitor>? _adopted;
+    private string? _renderedText;
+    private bool _flattened;
 
     /// <summary>
     /// Creates a visitor from a single <see cref="VisitorOptions"/> value.
@@ -55,6 +61,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         _builder = options.ParamMode ? null : _sbPool.Get();
         _params = options.Params;
         _logger = options.Logger;
+        _capture = options.Capture;
     }
 
     /// <summary>
@@ -264,8 +271,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// <param name="name">The placeholder name the caller emits.</param>
     /// <param name="value">The evaluated value of the captured local.</param>
     /// <param name="source">The captured member-access expression.</param>
-    /// <returns><see langword="true"/> when a new parameter was added.</returns>
-    internal bool TryAddCapturedParameter(string name, object? value, Expression source)
+    /// <returns>The registered parameter, or the existing one a repeated occurrence reuses.</returns>
+    internal Parameter TryAddCapturedParameter(string name, object? value, Expression source)
     {
         var key = new ExpressionKey(source, _queryProvider);
         for (var i = 0; i < _params.Count; i++)
@@ -274,12 +281,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             // parameter list with a per-statement prefix, so the same captured source has to stay a
             // distinct parameter in each statement.
             if (_params[i].Name == name && _params[i].CapturedKey is { } existing && existing.Equals(key))
-                return false;
+                return _params[i];
         }
 
         var normalized = NormalizeParameterValue(value);
         var typeInfo = ParameterTypeContext;
-        _params.Add(new Parameter(name, normalized)
+        var parameter = new Parameter(name, normalized)
         {
             CapturedKey = key,
             DbType = typeInfo?.DbType,
@@ -294,8 +301,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             HasConversion = ConverterContext is not null
                 || (DurationUnitContext is not null && value is TimeSpan)
                 || !Equals(normalized, value),
-        });
-        return true;
+        };
+        _params.Add(parameter);
+        return parameter;
     }
     /// <summary>
     /// True when the built expression is used as a condition (WHERE/HAVING) instead of a value.
@@ -304,7 +312,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
     // Internal collaboration surface for the visitor's translator classes (Visitors/*.cs).
     // Deliberately internal (and not protected) so the public/protected API of this type is
-    // unchanged; there is no InternalsVisibleTo, so it stays inside NextORM.Core.
+    // unchanged; it is not part of any provider-facing contract.
     internal ISqlDialect Dialect => _dialect;
     internal IColumnsProvider ColumnsProvider => _columnsProvider;
     internal IAliasProvider? AliasProvider => _aliasProvider;
@@ -319,6 +327,121 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     internal bool IncludeNestedSources => _options.IncludeNestedSources;
     internal bool IsParamMode => _paramMode;
     internal StringBuilder? Builder => _builder;
+    /// <summary>The render-local capture of planner-owned parameter occurrences, or <see langword="null"/>.</summary>
+    internal SqlParameterTemplateCapture? Capture => _capture;
+    /// <summary>
+    /// The lowering of the mutation statement this visitor renders a fragment of, or <see langword="null"/>
+    /// when the visitor is not part of a mutation render (D4g).
+    /// </summary>
+    internal MutationParameterLowering? MutationLowering => _options.MutationLowering;
+    /// <summary>
+    /// The recorder of this visitor's own builder, created on first use. Occurrences are recorded
+    /// fragment-relative and relocated into the enclosing fragment when this visitor's text is written.
+    /// </summary>
+    internal SqlParameterTemplateRecorder? Recorder => _capture is null ? null : _recorder ??= new SqlParameterTemplateRecorder();
+
+    /// <summary>
+    /// The single funnel for a placeholder emitted into this visitor's builder: appends the placeholder
+    /// exactly as before and records its occurrence. In parameter-extraction mode nothing is emitted and
+    /// no occurrence is recorded, so the collected parameter list stays identical between the two passes.
+    /// </summary>
+    internal void EmitParameter(Parameter parameter, SqlStringLiteralRole role = SqlStringLiteralRole.Value)
+    {
+        if (_paramMode)
+            return;
+
+        SqlParameterEmission.Append(_builder!, Recorder, _dialect, _paramMode, _params, parameter, role, MutationLowering);
+    }
+
+    /// <summary>
+    /// The single funnel for a placeholder appended into an arbitrary (local) builder and recorded by
+    /// <paramref name="recorder"/>.
+    /// </summary>
+    internal void EmitParameter(
+        StringBuilder builder,
+        SqlParameterTemplateRecorder? recorder,
+        Parameter parameter,
+        SqlStringLiteralRole role = SqlStringLiteralRole.Value)
+        => SqlParameterEmission.Append(builder, recorder, _dialect, _paramMode, _params, parameter, role, MutationLowering);
+
+    /// <summary>
+    /// Registers a placeholder whose text is embedded in a larger composed expression and records it as a
+    /// one-occurrence fragment of this visitor's builder. Returns <see langword="null"/> in parameter mode.
+    /// </summary>
+    internal string? EmitParameterPlaceholder(Parameter parameter, SqlStringLiteralRole role = SqlStringLiteralRole.Value)
+    {
+        if (_paramMode)
+            return null;
+
+        var fragment = new SqlParameterTemplateRecorder();
+        var placeholder = SqlParameterEmission.Create(fragment, _dialect, _paramMode, _params, parameter, role);
+        if (placeholder is not null)
+            TrackFragment(placeholder, fragment);
+        return placeholder;
+    }
+
+    /// <summary>Tracks a child fragment that will appear verbatim in this visitor's builder.</summary>
+    internal void TrackFragment(string text, SqlParameterTemplateRecorder? fragment)
+    {
+        if (_capture is not null && fragment is { OccurrenceCount: > 0 })
+            (_tracked ??= []).Add(new SqlParameterTrackedFragment(text, null, fragment));
+    }
+
+    /// <summary>Appends a rendered fragment (looked up by string identity) to this visitor's builder.</summary>
+    internal void AppendSql(string sql)
+    {
+        ArgumentNullException.ThrowIfNull(sql);
+        if (_capture is not null && _capture.TryGetFragment(sql, out var fragment) && fragment.OccurrenceCount > 0)
+            (_tracked ??= []).Add(new SqlParameterTrackedFragment(sql, null, fragment));
+
+        _builder!.Append(sql);
+    }
+
+    /// <summary>Appends a fragment whose recorder is already known to this visitor's builder.</summary>
+    internal void AppendOwnFragment(string text, SqlParameterTemplateRecorder? fragment)
+    {
+        TrackFragment(text, fragment);
+        _builder!.Append(text);
+    }
+
+    /// <summary>
+    /// Appends transformed text that embeds <paramref name="fragmentText"/> unchanged (a dialect wrapper
+    /// such as <c>MakeCase</c>) and tracks the child occurrences at their offset inside the wrapper. When
+    /// <paramref name="fragment"/> is omitted, the child's recorder is looked up by string identity in the
+    /// capture (the renderer registers every statement it renders).
+    /// </summary>
+    internal void AppendTransformed(string appendedText, string fragmentText, SqlParameterTemplateRecorder? fragment = null)
+    {
+        if (_capture is not null)
+        {
+            fragment ??= _capture.TryGetFragment(fragmentText, out var tracked) ? tracked : null;
+            if (fragment is { OccurrenceCount: > 0 })
+                (_tracked ??= []).Add(new SqlParameterTrackedFragment(appendedText, fragmentText, fragment));
+        }
+
+        _builder!.Append(appendedText);
+    }
+
+    /// <summary>
+    /// Appends a fragment at the end of an arbitrary target builder, merging its occurrences immediately.
+    /// </summary>
+    internal void AppendAtEnd(
+        StringBuilder target,
+        SqlParameterTemplateRecorder? targetRecorder,
+        string text,
+        SqlParameterTemplateRecorder? fragment = null)
+    {
+        fragment ??= _capture is not null && _capture.TryGetFragment(text, out var tracked) ? tracked : null;
+        SqlParameterFragmentRelocation.AppendAtEnd(target, targetRecorder, text, fragment);
+    }
+
+    /// <summary>Adopts a child visitor whose rendered text this visitor embeds.</summary>
+    internal void Adopt(BaseExpressionVisitor child)
+    {
+        if (_capture is not null)
+            (_adopted ??= []).Add(child);
+    }
+
     /// <summary>
     /// True when the builder currently renders a condition. A boolean SELECT projection assembles its
     /// expression in predicate context too: only the scalar boundary
@@ -616,8 +739,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         var p = new Parameter(paramName, NormalizeParameterValue(value)) { Stable = InValues.IsStableValueExpression(node) };
         _params.Add(p);
 
-        if (!_paramMode)
-            _builder!.Append(_dialect.MakeParam(paramName));
+        EmitParameter(p);
     }
 
     /// <summary>
@@ -630,8 +752,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     internal string? EmitStableStringParameter(string value)
     {
         var paramName = _parameterProvider.GetParamName();
-        _params.Add(new Parameter(paramName, NormalizeParameterValue(value)) { Stable = true });
-        return _paramMode ? null : _dialect.MakeParam(paramName);
+        var parameter = new Parameter(paramName, NormalizeParameterValue(value)) { Stable = true };
+        _params.Add(parameter);
+        return EmitParameterPlaceholder(parameter);
     }
 
     internal static bool TryEvaluateCachedExpression(Delegate? cached, Expression node, out object? value)
@@ -749,7 +872,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
             _needAliasForColumn = true;
             _builder!.Append(_dialect.MakeRepeat(
-                SqlLiteral.ToSqlStringLiteral(character),
+                RenderStringLiteral(character),
                 VisitToString(countArg)));
             return node;
         }
@@ -802,6 +925,18 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     }
 
     /// <summary>
+    /// Renders <paramref name="value"/> as a SQL string literal through the dialect's resolved policy
+    /// (see <see cref="SqlStringLiteralPolicies"/>). Used by emitters that distinguish a value from a
+    /// grammar-required token or a pattern; for a dialect without a built-in policy the result is the
+    /// historic apostrophe-doubling helper.
+    /// </summary>
+    internal string RenderStringLiteral(
+        string value,
+        SqlStringLiteralRole role = SqlStringLiteralRole.Value,
+        SqlStringGrammar grammar = SqlStringGrammar.None) =>
+        SqlStringLiteralPolicies.For(Dialect).Render(value, role, grammar);
+
+    /// <summary>
     /// Appends a constant literal (null, string/GUID, or primitive) to the builder. Returns
     /// <see langword="false"/> for values the caller must handle itself (anything non-primitive).
     /// </summary>
@@ -809,12 +944,15 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     {
         if (v is null)
             _builder!.Append(Kw("null"));
-        else if (t == typeof(string) || t == typeof(Guid))
+        else if (t == typeof(string) || t == typeof(Guid) || t == typeof(char))
         {
-            // An inline string/Guid value is emitted as a string literal through the single shared
-            // escaping helper: embedded apostrophes are doubled, so `'` as a value cannot terminate the
-            // literal early (the old raw append produced three apostrophes instead of four).
-            _builder!.Append(SqlLiteral.ToSqlStringLiteral(v.ToString()!));
+            // An inline string/Guid/char value is emitted as a string literal through the dialect's
+            // resolved string-literal policy: the value is quoted so `'` in it cannot terminate the
+            // literal early (the old raw append produced three apostrophes instead of four), while
+            // grammar and pattern sites keep their own spelling. A char is a one-character string in
+            // SQL (there is no char literal), so it takes exactly the same policy — including NUL,
+            // which PostgreSQL rejects and the other providers transport with their measured recipe.
+            _builder!.Append(RenderStringLiteral(v.ToString()!));
         }
         else if (t.IsPrimitive || t == typeof(decimal))
         {
@@ -836,8 +974,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             else
             {
                 var paramName = _parameterProvider.GetParamName();
-                _params.Add(new Parameter(paramName, duration));
-                _builder!.Append(_dialect.MakeParam(paramName));
+                var parameter = new Parameter(paramName, duration);
+                _params.Add(parameter);
+                EmitParameter(parameter);
             }
         }
         else
@@ -903,14 +1042,66 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// <returns>The rendered SQL text.</returns>
     public override string ToString()
     {
-        return _builder!.ToString();
+        var text = _builder!.ToString();
+        Flatten(text);
+        return text;
     }
 
     /// <summary>
     /// Appends the rendered SQL directly to <paramref name="target"/> instead of materialising an
     /// intermediate string. Used where the caller immediately appends the result to a larger builder.
     /// </summary>
-    internal void WriteTo(StringBuilder target) => target.Append(_builder);
+    /// <param name="target">The builder that receives the rendered SQL.</param>
+    /// <param name="targetRecorder">The target builder's parameter recorder, when it is tracked.</param>
+    internal void WriteTo(StringBuilder target, SqlParameterTemplateRecorder? targetRecorder)
+        => SqlParameterFragmentRelocation.AppendAtEnd(target, targetRecorder, ToString(), Recorder);
+
+    /// <summary>
+    /// Relocates this visitor's fragment-relative occurrences into its recorder: tracked child fragments
+    /// are located by their appended text and adopted child visitors by their rendered text.
+    /// </summary>
+    private void Flatten(string text)
+    {
+        _renderedText = text;
+        if (_capture is null || _flattened)
+            return;
+
+        _flattened = true;
+        var recorder = Recorder;
+        if (recorder is null)
+            return;
+
+        if (_tracked is { Count: > 0 })
+            SqlParameterFragmentRelocation.Flatten(text, recorder, _tracked, _capture);
+        else
+            recorder.AdvanceTo(text.Length);
+
+        if (_adopted is null)
+            return;
+
+        Dictionary<string, int>? seen = null;
+        foreach (var child in _adopted)
+        {
+            if (child._renderedText is not { } childText
+                || child.Recorder is not { OccurrenceCount: > 0 } childRecorder)
+            {
+                continue;
+            }
+
+            seen ??= new Dictionary<string, int>(StringComparer.Ordinal);
+            seen.TryGetValue(childText, out var previous);
+            seen[childText] = previous + 1;
+
+            var start = SqlParameterFragmentRelocation.IndexOfOccurrence(text, childText, previous);
+            if (start < 0)
+            {
+                _capture.NotifyUnresolved();
+                continue;
+            }
+
+            recorder.AppendOccurrences(childRecorder, start);
+        }
+    }
 
 
     object ICloneable.Clone()
@@ -928,12 +1119,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     {
         if (_paramMode) throw new NotSupportedException("Cannot clone in param mode");
 
-        return new BaseExpressionVisitor(_options)
+        var clone = new BaseExpressionVisitor(_options)
         {
             SuppressColumnCollation = SuppressColumnCollation,
             ConverterContext = ConverterContext,
             BooleanSelectProjection = BooleanSelectProjection,
         };
+        Adopt(clone);
+        return clone;
     }
 
     /// <summary>

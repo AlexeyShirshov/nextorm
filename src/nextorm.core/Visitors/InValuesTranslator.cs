@@ -101,11 +101,15 @@ internal static class InValuesTranslator
             for (var i = 0; i < nonNull.Count; i++)
             {
                 var paramName = visitor.ParameterProvider.GetParamName();
-                visitor.Params.Add(new Parameter(paramName, BaseExpressionVisitor.ConvertToProviderValue(converter, nonNull[i])) { Stable = stableValues });
+                var parameter = new Parameter(paramName, BaseExpressionVisitor.ConvertToProviderValue(converter, nonNull[i])) { Stable = stableValues };
+                visitor.Params.Add(parameter);
 
                 if (i > 0)
                     inBuilder.Append(", ");
-                inBuilder.Append(visitor.Dialect.MakeParam(paramName));
+
+                // The single emission funnel. This value-list builder is not a tracked fragment yet, so
+                // no recorder is passed; the placeholder text and its position are unchanged.
+                visitor.EmitParameter(inBuilder, null, parameter);
             }
             inBuilder.Append(')');
 

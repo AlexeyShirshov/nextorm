@@ -198,7 +198,9 @@ internal sealed class QueryPlanner : IQueryPlanner
 
     // Overload used by UPDATE so the WHERE parameters continue the sequence started by the SET list
     // (a fresh provider/list would restart parameter numbering and collide with the SET parameters).
-    internal (string Sql, List<Parameter> Parameters) RenderPredicate(QueryCommand command, IParameterProvider? parameterProvider, List<Parameter>? parameters, string parameterNamePrefix = "")
+    // A mutation fragment carries the statement's lowering, so a text value the visitor emits becomes the
+    // same literal the mutation builder would emit for it (D4g).
+    internal (string Sql, List<Parameter> Parameters) RenderPredicate(QueryCommand command, IParameterProvider? parameterProvider, List<Parameter>? parameters, string parameterNamePrefix = "", MutationParameterLowering? lowering = null)
     {
         if (!command.IsPrepared)
             command.PrepareCommand(false, CancellationToken.None);
@@ -221,6 +223,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             NamingConvention = command.ResolvedNamingConvention,
             KeywordCase = command.ResolvedKeywordCase,
             ParameterNamePrefix = parameterNamePrefix,
+            MutationLowering = lowering,
         };
         ctx.ColumnsProvider.Add(command.EntityType!, false);
 
@@ -389,7 +392,8 @@ internal sealed class QueryPlanner : IQueryPlanner
         UpdateCommand command,
         IParameterProvider parameterProvider,
         List<Parameter> parameters,
-        string parameterNamePrefix = "")
+        string parameterNamePrefix = "",
+        MutationParameterLowering? lowering = null)
     {
         var source = command.Source;
         if (!source.IsPrepared)
@@ -412,6 +416,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             NamingConvention = namingConvention,
             KeywordCase = source.ResolvedKeywordCase,
             ParameterNamePrefix = parameterNamePrefix,
+            MutationLowering = lowering,
         };
         ctx.ColumnsProvider.Add(command.EntityType!, false);
 
@@ -429,7 +434,16 @@ internal sealed class QueryPlanner : IQueryPlanner
             {
                 case UpdateValueKind.Constant:
                     var name = parameterProvider.GetParamName();
-                    parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(assignment.Constant, assignment.Property, ctx.Dialect)));
+                    var finalValue = DurationStorage.ToParameterValue(assignment.Constant, assignment.Property, ctx.Dialect);
+                    if (lowering is not null && lowering.TryRender(name, finalValue, out var literal))
+                    {
+                        // The lowered literal occupies the assignment's position; the name was still
+                        // allocated, so the remaining parameters keep their numbering.
+                        builder.Append(literal);
+                        break;
+                    }
+
+                    parameters.Add(new Parameter(name, finalValue));
                     builder.Append(ctx.Dialect.MakeParam(name));
                     break;
                 case UpdateValueKind.Column:
@@ -439,7 +453,10 @@ internal sealed class QueryPlanner : IQueryPlanner
                     using (var visitor = ctx.CreateColumnVisitor(command.EntityType!, 0, dontNeedAlias: true))
                     {
                         visitor.Visit(assignment.Expression!);
-                        visitor.WriteTo(builder);
+
+                        // The UPDATE statement's template capture is not part of D4b-1 (only the SELECT
+                        // planner path attaches one), so the assignment fragment stays untracked here.
+                        visitor.WriteTo(builder, null);
                     }
                     break;
             }
@@ -451,13 +468,23 @@ internal sealed class QueryPlanner : IQueryPlanner
         if (command.DynamicColumns is not null)
         {
             var dynamicKeys = command.DynamicColumns.RenderKeys(ctx.Dialect);
+            var dynamicStart = parameters.Count;
             var dynamicNames = command.DynamicColumns.AddValueParameters(0, parameters, parameterProvider, ctx.Dialect);
             for (var d = 0; d < dynamicKeys.Length; d++)
             {
                 if (builder.Length > 0)
                     builder.Append(", ");
 
-                builder.Append(dynamicKeys[d]).Append(" = ").Append(ctx.Dialect.MakeParam(dynamicNames[d]));
+                builder.Append(dynamicKeys[d]).Append(" = ");
+
+                // The stored value is already converted by AddValueParameters, so the lowering inspects
+                // the bound value rather than converting it a second time (the same rule as the VALUES rows
+                // of an insert or a key upsert).
+                var dynamicValue = parameters[dynamicStart + d].Value;
+                if (lowering is not null && lowering.TryRender(dynamicNames[d], dynamicValue, out var dynamicLiteral))
+                    builder.Append(dynamicLiteral);
+                else
+                    builder.Append(ctx.Dialect.MakeParam(dynamicNames[d]));
             }
         }
 
@@ -562,7 +589,15 @@ internal sealed class QueryPlanner : IQueryPlanner
         return (sql, renderedParams);
     }
 
-    private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider, bool sequentialAccess, bool suppressLobLocator)
+    private string? MakeSelect(
+        QueryCommand queryCommand,
+        bool paramMode,
+        List<Parameter> @params,
+        IQueryRegistry queryProvider,
+        IAliasProvider? aliasProvider,
+        bool sequentialAccess,
+        bool suppressLobLocator,
+        SqlParameterTemplateCapture? capture = null)
     {
         // The single render funnel for cold, warm-miss and prepared-miss renders (including the cached-hit
         // parameter refresh through ExtractParams). A previously prepared command skips re-preparation, so
@@ -591,6 +626,9 @@ internal sealed class QueryPlanner : IQueryPlanner
             // JSON-shape preparation (ForJsonClause null) and the scalar ForJson terminal are untouched.
             ExactProjectionAliases = queryCommand.JsonShapeMode && queryCommand.ForJsonClause is not null,
             RenderMutationBody = _renderMutationBody,
+            // The statement-level occurrence capture, created by the planning render only. The parameter
+            // extraction pass (paramMode) never creates one, so it records nothing.
+            Capture = capture,
         };
         var sqlBuilder = new SqlBuilder(in ctx);
         return sqlBuilder.MakeSelect(queryCommand);
@@ -760,9 +798,11 @@ internal sealed class QueryPlanner : IQueryPlanner
                 }
             }
 
-            var (sql, @params) = ext is null
+            // A planner-rendered statement captures its own parameter occurrences; caller-owned text
+            // (RawSqlOverride) has no planner-owned emission and therefore never gets a template.
+            var (sql, @params, capture) = ext is null
                 ? MakeSelectInternal()
-                : (ext.ManualSql, ext.MakeParams?.Invoke());
+                : (ext.ManualSql, ext.MakeParams?.Invoke(), null);
 
             // A streaming row projection needs a compiled mapper (it materializes the row, including
             // the streaming column); the single-column LOB terminals keep the map-less path below.
@@ -819,6 +859,16 @@ internal sealed class QueryPlanner : IQueryPlanner
             {
                 SequentialAccess = sequentialAccess,
             });
+
+            // Attach the policy the planning dialect resolved and, when the statement is planner-rendered,
+            // the immutable occurrence template. The policy is attached even without a template because it
+            // also selects the PostgreSQL final-value guard on every checkout (D5); caller-owned text
+            // (`RawSqlOverride`) keeps no template because it carries no planner-owned emission.
+            compiledQuery.SetParameterTemplate(
+                ext is null && capture is not null && sql is not null && @params is not null
+                    ? capture.Finalize(sql, @params)
+                    : null,
+                SqlStringLiteralPolicies.For(_dialect()));
 
             // Build the immutable guarded refresh recipe once, on the miss. Unsupported shapes leave it
             // null and keep the original ExtractParams refresh on every hit.
@@ -891,11 +941,13 @@ internal sealed class QueryPlanner : IQueryPlanner
 
             return compiledQuery;
         }
-        (string?, List<Parameter>) MakeSelectInternal()
+        (string?, List<Parameter>, SqlParameterTemplateCapture?) MakeSelectInternal()
         {
             var @params = new List<Parameter>();
             var aliasProvider = new DefaultAliasProvider();
-            return (MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider, sequentialAccess, suppressLobLocator), @params);
+            var capture = new SqlParameterTemplateCapture();
+            var sql = MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider, sequentialAccess, suppressLobLocator, capture);
+            return (sql, @params, capture);
         }
     }
 

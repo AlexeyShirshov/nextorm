@@ -45,6 +45,15 @@ public class MariaDbDialectTests
     }
 
     [Fact]
+    public void MakeLikeEscape_ShouldRenderModeIndependentHexTokens()
+    {
+        // MariaDB inherits the MySQL policy: a charset-introduced hex literal is spelled identically
+        // with and without NO_BACKSLASH_ESCAPES, so the escape operand never depends on session mode.
+        Dialect.MakeLikeEscape("\\").Should().Be(" escape _utf8mb4 X'5c'");
+        Dialect.MakeLikeEscape("!").Should().Be(" escape _utf8mb4 X'21'");
+    }
+
+    [Fact]
     public void InheritedBackslashQuoting_ShouldRemainUnchanged()
     {
         // Scope lock for #161: MariaDB inherits MySQL quoting and must not adopt the ClickHouse
