@@ -4,6 +4,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.ExceptionServices;
 using ClickHouse.Driver;
+using ClickHouse.Driver.ADO;
+using ClickHouse.Driver.Utility;
 using FluentAssertions;
 using NextORM.ClickHouse;
 using NextORM.Tests.Shared.ClickHouseRetry;
@@ -37,8 +39,6 @@ public sealed class ClickHouseRetryScenarioTests
 
     private const string ProbePrefix = "CLICKHOUSE-PROBE";
 
-    private const string TestIdentity = "ClickHouseRetryScenarioTests";
-
     /// <summary>The probe's deliberately small supported client timeout, in seconds.</summary>
     private const string EffectiveTimeoutSeconds = "1";
 
@@ -55,11 +55,17 @@ public sealed class ClickHouseRetryScenarioTests
     /// <summary>The table name the unknown-table probe reads from; it never exists anywhere.</summary>
     private const string MissingTable = "t328_probe_missing_table";
 
-    /// <summary>The session-scoped temporary table used only by the code216 probe.</summary>
-    private const string TemporaryTable = "t328_probe_code216";
+    /// <summary>
+    /// The ClickHouse error code the code216 probe asserts (contract §10 C05): server ErrorCodes
+    /// 216 is <c>QUERY_WITH_SAME_ID_IS_ALREADY_RUNNING</c>.
+    /// </summary>
+    private const int SameQueryIdCode = 216;
 
-    /// <summary>The ClickHouse error code the code216 probe asserts (contract §10 C05).</summary>
-    private const int UnknownTableArgumentCode = 216;
+    /// <summary>How long the code216 probe waits for its long-running query to register.</summary>
+    private static readonly TimeSpan QueryRegistrationTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>The polling interval used while waiting for that registration.</summary>
+    private static readonly TimeSpan QueryRegistrationPollInterval = TimeSpan.FromMilliseconds(50);
 
     public ClickHouseRetryScenarioTests()
     {
@@ -100,9 +106,20 @@ public sealed class ClickHouseRetryScenarioTests
 
         var external = ClickHouseContainer.IsExternallyConfigured;
 
+        // AC05: the ledger identity must be the same identifier the reporter keys on
+        // (ITestStarting.TestDisplayName); a fallback is explicitly non-correlatable.
+        var identity = ClickHouseTestIdentity.CurrentTestDisplayName();
+        identity.Should().NotStartWith(
+            ClickHouseTestIdentity.UnavailablePrefix,
+            "the probe identity must be the runner's TestDisplayName so the retry ledger can be " +
+            "correlated with this test's final outcome");
+        ClickHouseTestIdentity.IsCorrelatable(identity).Should().BeTrue(
+            "a fallback identity can never be correlated with the reporter's final outcome");
+
         WriteProbe(
             "version",
-            $"server_version={version} endpoint_external={Lower(external)} endpoint_container={Lower(!external)}");
+            $"server_version={version} endpoint_external={Lower(external)} endpoint_container={Lower(!external)} " +
+            $"identity_correlated={Lower(ClickHouseTestIdentity.IsCorrelatable(identity))}");
 
         version.Should().StartWith("25.8.", "the acceptance criteria pin a real ClickHouse 25.8 server");
     }
@@ -375,64 +392,124 @@ public sealed class ClickHouseRetryScenarioTests
 
     [Fact]
     [Trait(ScenarioTrait, "code216")]
-    public async Task Code216_ShouldRunOnceWithAServerErrorFromTheMissingColumn()
+    public async Task Code216_ShouldRunOnceWithAServerErrorForADuplicateQueryId()
     {
         var harness = new ProbeRetrier();
+        var baseConnectionString = BaseConnectionString();
+        var queryId = $"t328-code216-{Guid.NewGuid():N}";
 
-        // A session-scoped temporary table: the only write any probe performs, and it disappears with
-        // the session. UseSession/SessionId keep both statements on one server session.
-        using var context = CreateContext(WithSession(BaseConnectionString()));
+        // Two disposable, session-scoped connections. The long-running read owns the pinned query id;
+        // the conflicting read is a second request carrying the same id. They deliberately do not
+        // share one SessionId: ClickHouse validates the named-session lock in
+        // NamedSessionsStorage::acquireSession (HTTPHandler.cpp:216) before it even reads query_id
+        // (HTTPHandler.cpp:252-258), so a concurrent request on the *same* session fails with 373
+        // SESSION_IS_LOCKED, never 216. Query ids, by contrast, are unique per user across sessions:
+        // ProcessList::insert rejects the duplicate with 216 QUERY_WITH_SAME_ID_IS_ALREADY_RUNNING
+        // (ProcessList.cpp:231-259) as soon as the query starts (executeQuery.cpp:1292).
+        await using var runningConnection = new ClickHouseConnection(
+            WithSession(baseConnectionString, $"t328-code216-running-{Guid.NewGuid():N}"));
+        await using var conflictingConnection = new ClickHouseConnection(
+            WithSession(baseConnectionString, $"t328-code216-conflict-{Guid.NewGuid():N}"));
 
-        using (await context
-                   .ExecuteRawAsync($"create temporary table {TemporaryTable} (id Int32) engine = Memory", [], CancellationToken.None)
-                   )
+        using var longRunning = new ClickHouseCommand(runningConnection)
         {
-            // The temporary table is created; it never touches a persistent table.
+            CommandText = "select sleep(3)",
+            QueryId = queryId,
+        };
+
+        // Deliberately not awaited: the query must still be running when the second request arrives.
+        var longRunningTask = longRunning.ExecuteScalarAsync(CancellationToken.None);
+
+        try
+        {
+            await WaitUntilQueryIsRunningAsync(conflictingConnection, queryId);
+
+            var (succeeded, _) = await harness
+                .TryExecuteAsync(
+                    Audited("code216"),
+                    async cancellationToken =>
+                    {
+                        using var conflicting = new ClickHouseCommand(conflictingConnection)
+                        {
+                            CommandText = "select 1",
+                            QueryId = queryId,
+                        };
+
+                        return await conflicting.ExecuteScalarAsync(cancellationToken);
+                    });
+
+            succeeded.Should().BeFalse("a duplicate still-running query id must fail on the server");
+            harness.Thrown.Should().BeOfType<ClickHouseServerException>(
+                "the failure must be the driver's typed server error; observed {0}",
+                DescribeFailure(harness.Thrown));
+
+            var serverError = (ClickHouseServerException)harness.Thrown!;
+            var code = serverError.ErrorCode;
+            var classification = Classify(serverError);
+
+            classification.Kind.Should().Be(
+                ClickHouseFailureKind.ServerError,
+                "code {0} ({1}) is a server error and is never retryable",
+                code,
+                ErrorCodeName(code));
+            harness.Attempts.Should().Be(1, "the operation ran exactly once");
+            harness.Records.Should().BeEmpty("no retry record exists for a server error");
+            SingleState(harness.Ledger).Attempts.Should().Be(1);
+
+            WriteProbe(
+                "code216",
+                $"observed_code={code} observed_name={ErrorCodeName(code)} mechanism=duplicate_query_id " +
+                $"attempts={harness.Attempts} retry_records={harness.Records.Count} " +
+                $"classification={classification.ReasonCode}");
+
+            var lines = WriteAccounting(harness.Ledger, finalOutcome: false);
+            lines.Should().Contain(
+                line => line.Contains("retried=false", StringComparison.Ordinal),
+                "a server error is an unretried failure");
+
+            code.Should().Be(
+                SameQueryIdCode,
+                "the probe must observe a genuine server code 216; the observed code was {0} ({1}) with chain {2}",
+                code,
+                ErrorCodeName(code),
+                Describe(harness.Thrown));
+
+            Rethrow(harness.Thrown!);
+        }
+        finally
+        {
+            // Drain the long-running read before its connection is disposed: disposing while the
+            // request is in flight would turn the probe's deliberate failure into a transport error.
+            await longRunningTask;
+        }
+    }
+
+    /// <summary>
+    /// Waits until the server has registered <paramref name="queryId"/> in its process list, so the
+    /// conflicting request cannot race the long-running one. A query that never registers fails with
+    /// a precise message instead of letting the probe draw a conclusion from a silent miss.
+    /// </summary>
+    private static async Task WaitUntilQueryIsRunningAsync(ClickHouseConnection connection, string queryId)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.Elapsed < QueryRegistrationTimeout)
+        {
+            using var poll = new ClickHouseCommand(connection)
+            {
+                CommandText = "select count() from system.processes where query_id = {queryId:String}",
+            };
+            poll.AddParameter("queryId", queryId);
+
+            if (await poll.ExecuteScalarAsync(CancellationToken.None) is ulong running && running > 0)
+                return;
+
+            await Task.Delay(QueryRegistrationPollInterval, CancellationToken.None);
         }
 
-        var (succeeded, _) = await harness
-            .TryExecuteAsync(
-                Audited("code216"),
-                async cancellationToken =>
-                {
-                    await using var result = await context
-                        .ExecuteRawAsync($"select missing_column from {TemporaryTable}", [], cancellationToken);
-
-                    return result.Read<int>();
-                });
-
-        succeeded.Should().BeFalse("the missing column must fail on the server");
-        harness.Thrown.Should().BeOfType<ClickHouseServerException>(
-            "the failure must be a genuine server error; observed {0}",
-            DescribeFailure(harness.Thrown));
-
-        var serverError = (ClickHouseServerException)harness.Thrown!;
-        var code = serverError.ErrorCode;
-        var classification = Classify(serverError);
-
-        classification.Kind.Should().Be(ClickHouseFailureKind.ServerError, "a server error is never retryable");
-        harness.Attempts.Should().Be(1, "the operation ran exactly once");
-        harness.Records.Should().BeEmpty("no retry record exists for a server error");
-        SingleState(harness.Ledger).Attempts.Should().Be(1);
-
-        WriteProbe(
-            "code216",
-            $"error_code={code} error_name={ErrorCodeName(code)} attempts={harness.Attempts} " +
-            $"retry_records={harness.Records.Count} classification={classification.ReasonCode}");
-
-        var lines = WriteAccounting(harness.Ledger, finalOutcome: false);
-        lines.Should().Contain(
-            line => line.Contains("retried=false", StringComparison.Ordinal),
-            "a server error is an unretried failure");
-
-        code.Should().Be(
-            UnknownTableArgumentCode,
-            "the probe must observe a genuine server code 216; the observed code was {0} ({1}) with chain {2}",
-            code,
-            ErrorCodeName(code),
-            Describe(harness.Thrown));
-
-        Rethrow(harness.Thrown!);
+        throw new InvalidOperationException(
+            "T328 code216 probe: the pinned query id was not observed in system.processes within " +
+            $"{QueryRegistrationTimeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)} s, " +
+            "so a genuine duplicate-id collision cannot be provoked.");
     }
 
     // --- 8. unsafe-operation ----------------------------------------------------------------------
@@ -458,7 +535,7 @@ public sealed class ClickHouseRetryScenarioTests
             Action enrol = () =>
             {
                 _ = ClickHouseReadOperation.Audited(
-                    $"{TestIdentity}.unsafe-operation",
+                    ClickHouseTestIdentity.CurrentTestDisplayName(),
                     $"unsafe-operation/{category.ToString().ToLowerInvariant()}",
                     category);
 
@@ -544,7 +621,10 @@ public sealed class ClickHouseRetryScenarioTests
     }
 
     private static ClickHouseReadOperation Audited(string scenario) =>
-        ClickHouseReadOperation.Audited($"{TestIdentity}.{scenario}", $"{scenario}/select-42", ClickHouseReadCategory.PointRead);
+        ClickHouseReadOperation.Audited(
+            ClickHouseTestIdentity.CurrentTestDisplayName(),
+            $"{scenario}/select-42",
+            ClickHouseReadCategory.PointRead);
 
     private static ClickHouseFailureClassification Classify(Exception? failure) =>
         failure is null
@@ -588,14 +668,15 @@ public sealed class ClickHouseRetryScenarioTests
     };
 
     /// <summary>
-    /// Keeps both statements of the code216 probe on one ClickHouse HTTP session, which is what makes a
-    /// temporary table visible: the session ends with the context and the table with it.
+    /// Adds the driver's <c>UseSession</c>/<c>SessionId</c> connection-string keys. Each code216
+    /// connection gets its own session id: the sessions are disposable and never share state, while
+    /// the duplicate query id (not the session) is what the server rejects with code 216.
     /// </summary>
-    private static string WithSession(string connectionString)
+    private static string WithSession(string connectionString, string sessionId)
     {
         var builder = new DbConnectionStringBuilder { ConnectionString = connectionString };
         builder["UseSession"] = "true";
-        builder["SessionId"] = $"t328-code216-{Guid.NewGuid():N}";
+        builder["SessionId"] = sessionId;
         return builder.ConnectionString;
     }
 
