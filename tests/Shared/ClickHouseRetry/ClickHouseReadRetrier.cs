@@ -14,7 +14,13 @@ internal readonly record struct ClickHouseRetryAttemptRecord(
     int Attempt,
     int AttemptLimit,
     string ReasonCode,
-    bool ScheduledRetry);
+    bool ScheduledRetry,
+    bool Succeeded = false)
+{
+    /// <summary>The attempt that a scheduled retry will start, or <see langword="null"/> when no
+    /// additional attempt was scheduled. It completes AC03's tuple on the record itself.</summary>
+    public int? NextAttempt => ScheduledRetry ? Attempt + 1 : null;
+}
 
 /// <summary>
 /// The two-attempt lifecycle for an explicitly audited, wholly read-only ClickHouse operation
@@ -40,19 +46,28 @@ internal sealed class ClickHouseReadRetrier
     /// <summary>Reason token for a backoff interrupted by the caller's cancellation token.</summary>
     internal const string BackoffCancelledReason = "backoff_cancelled";
 
+    /// <summary>Reason token of an attempt outcome that returned successfully.</summary>
+    internal const string SucceededReasonCode = "attempt_succeeded";
+
     private readonly Action<ClickHouseRetryAttemptRecord> _sink;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+    private readonly ClickHouseRetryLedger? _ledger;
 
     /// <param name="sink">Receives one record per observed attempt outcome; per instance, never shared.</param>
     /// <param name="delay">The backoff implementation; defaults to <see cref="Task.Delay(TimeSpan, CancellationToken)"/>
     /// so a test can observe and control timing without sleeping.</param>
+    /// <param name="ledger">Optional accounting ledger. When supplied it enforces the one
+    /// retry-controlled operation per test invocation before any operation runs; it never decides
+    /// whether a retry happens.</param>
     internal ClickHouseReadRetrier(
         Action<ClickHouseRetryAttemptRecord> sink,
-        Func<TimeSpan, CancellationToken, Task>? delay = null)
+        Func<TimeSpan, CancellationToken, Task>? delay = null,
+        ClickHouseRetryLedger? ledger = null)
     {
         ArgumentNullException.ThrowIfNull(sink);
         _sink = sink;
         _delay = delay ?? Task.Delay;
+        _ledger = ledger;
     }
 
     /// <summary>Executes <paramref name="read"/> at most twice, retrying only a positive
@@ -64,6 +79,7 @@ internal sealed class ClickHouseReadRetrier
     {
         ValidateOperation(operation);
         ArgumentNullException.ThrowIfNull(read);
+        ClaimOperation(operation);
 
         var firstAttempt = StartAttempt(read, cancellationToken);
 
@@ -104,7 +120,12 @@ internal sealed class ClickHouseReadRetrier
         Exception secondFailure;
         try
         {
-            return await secondAttempt.ConfigureAwait(false);
+            var secondResult = await secondAttempt.ConfigureAwait(false);
+
+            // Recovery is an observed success outcome, not the absence of a second failure: the
+            // ledger can therefore never infer it.
+            Emit(operation, attempt: 2, SucceededReasonCode, scheduledRetry: false, succeeded: true);
+            return secondResult;
         }
         catch (Exception exception)
         {
@@ -136,7 +157,7 @@ internal sealed class ClickHouseReadRetrier
         }
     }
 
-    private void Emit(ClickHouseReadOperation operation, int attempt, string reasonCode, bool scheduledRetry)
+    private void Emit(ClickHouseReadOperation operation, int attempt, string reasonCode, bool scheduledRetry, bool succeeded = false)
     {
         _sink(new ClickHouseRetryAttemptRecord(
             operation.TestIdentity,
@@ -144,7 +165,26 @@ internal sealed class ClickHouseReadRetrier
             attempt,
             AttemptLimit,
             reasonCode,
-            scheduledRetry));
+            scheduledRetry,
+            succeeded));
+    }
+
+    /// <summary>
+    /// Enforces decision 4 before the first attempt: a second retry-controlled operation for the
+    /// same opted-in test invocation is a programming error, and it is rejected before any
+    /// operation runs.
+    /// </summary>
+    private void ClaimOperation(ClickHouseReadOperation operation)
+    {
+        if (_ledger is null)
+            return;
+
+        if (!_ledger.TryClaimOperation(operation.TestIdentity, operation.OperationIdentity))
+        {
+            throw new InvalidOperationException(
+                $"T328: test '{operation.TestIdentity}' already claimed a retry-controlled ClickHouse operation; " +
+                "only one retry-controlled operation is permitted per test invocation.");
+        }
     }
 
     /// <summary>
