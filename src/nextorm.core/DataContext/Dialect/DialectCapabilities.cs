@@ -170,6 +170,33 @@ public interface ITopKAggregateRenderer
 }
 
 /// <summary>
+/// A dialect's renderer for the ClickHouse aggregate catalogue that has no cross-provider spelling
+/// (the statistical/probability aggregates, the parameterised quantile algorithms, the array- and
+/// tuple-returning aggregates, the sequence aggregates and the time-series grid aggregates). The
+/// object's presence is the capability, so a name the dialect reports as supported always has a
+/// rendering; every other provider fails closed instead of emitting invalid SQL.
+/// </summary>
+public interface IClickHouseAggregateRenderer
+{
+    /// <summary>True when the aggregate <paramref name="name"/> can be rendered.</summary>
+    bool Supports(string name);
+
+    /// <summary>
+    /// Renders the aggregate <paramref name="name"/> over the already-rendered
+    /// <paramref name="arguments"/>; <paramref name="resultType"/> is the declared CLR result type,
+    /// used to normalise the native result (signed/int/array/tuple casts).
+    /// </summary>
+    string Render(string name, IReadOnlyList<string> arguments, Type resultType);
+
+    /// <summary>
+    /// Renders the parameterised aggregate <paramref name="name"/> in the two-parenthesis form
+    /// <c>name(parameters)(arguments)</c>; <paramref name="resultType"/> is the declared CLR result
+    /// type, used to normalise the native result.
+    /// </summary>
+    string RenderParameterised(string name, IReadOnlyList<string> parameters, IReadOnlyList<string> arguments, Type resultType);
+}
+
+/// <summary>
 /// A dialect's renderer for the ClickHouse multi-branch conditional
 /// <c>multiIf(cond1, then1, ..., else)</c>. The object's presence is the capability.
 /// </summary>

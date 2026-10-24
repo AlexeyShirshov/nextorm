@@ -130,6 +130,65 @@ result can be projected like a scalar column.
 | `SqlFunctions.ClickHouse.array_last(f, a)` | `arrayLast(f, a)` |
 | `SqlFunctions.ClickHouse.array_last_index(f, a)` | `arrayLastIndex(f, a)` |
 
+### Delivered array, tuple and map functions (#286, T286b)
+
+The members below complete the array catalogue on the pinned 25.8.33.6 server. Result shapes are
+declared explicitly: element-wise predicates return `bool`, aggregations return the scalar/array CLR
+type they declare, and the sort/split/fill families return `T[]`.
+
+| Function | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.array_element(a, i)` | `arrayElement(a, i)` |
+| `SqlFunctions.ClickHouse.array_enumerate_dense(a)` | `arrayEnumerateDense(a)` |
+| `SqlFunctions.ClickHouse.array_zip(a, b)` | `arrayZip(a, b)` |
+| `SqlFunctions.ClickHouse.array_difference(a)` | `arrayDifference(a)` |
+| `SqlFunctions.ClickHouse.array_avg(a)` | `arrayAvg(a)` |
+| `SqlFunctions.ClickHouse.array_sum(a)` | `arraySum(a)` |
+| `SqlFunctions.ClickHouse.array_min(a)` | `arrayMin(a)` |
+| `SqlFunctions.ClickHouse.array_max(a)` | `arrayMax(a)` |
+| `SqlFunctions.ClickHouse.array_product(a)` | `arrayProduct(a)` |
+| `SqlFunctions.ClickHouse.array_top_k(a, k)` | `arrayTopK(a, k)` (version-gated: 26.6) |
+| `SqlFunctions.ClickHouse.array_bottom_k(a, k)` | `arrayBottomK(a, k)` (version-gated: 26.6) |
+| `SqlFunctions.ClickHouse.array_random_sample(a, n)` | `arrayRandomSample(a, n)` |
+| `SqlFunctions.ClickHouse.array_compact(a)` | `arrayCompact(a)` |
+| `SqlFunctions.ClickHouse.array_pop_back(a)` | `arrayPopBack(a)` |
+| `SqlFunctions.ClickHouse.array_pop_front(a)` | `arrayPopFront(a)` |
+| `SqlFunctions.ClickHouse.array_push_front(a, element)` | `arrayPushFront(a, element)` |
+| `SqlFunctions.ClickHouse.array_resize(a, size[, extender])` | `arrayResize(a, size[, extender])` |
+| `SqlFunctions.ClickHouse.array_remove(a, f)` | `arrayRemove(a, f)` (version-gated: 25.11) |
+| `SqlFunctions.ClickHouse.array_rotate_left(a, n)` / `array_rotate_right(a, n)` | `arrayRotateLeft` / `arrayRotateRight` |
+| `SqlFunctions.ClickHouse.array_shift_left(a, n)` / `array_shift_right(a, n)` | `arrayShiftLeft` / `arrayShiftRight` |
+| `SqlFunctions.ClickHouse.array_fold(f, a, init)` | `arrayFold(f, a, init)` |
+| `SqlFunctions.ClickHouse.array_fill(f, a)` / `array_reverse_fill(f, a)` | `arrayFill` / `arrayReverseFill` |
+| `SqlFunctions.ClickHouse.array_split(f, a)` / `array_reverse_split(f, a)` | `arraySplit` / `arrayReverseSplit` |
+| `SqlFunctions.ClickHouse.array_reverse_sort(a)` / `array_partial_sort(a, k)` | `arrayReverseSort` / `arrayPartialSort` |
+| `SqlFunctions.ClickHouse.array_sort(a)` | `arraySort(a)` |
+| `SqlFunctions.ClickHouse.array_shingles(a, n)` | `arrayShingles(a, n)` |
+| `SqlFunctions.ClickHouse.array_transpose(a)` | `arrayTranspose(a)` (version-gated: 26.4) |
+| `SqlFunctions.ClickHouse.array_cum_sum_non_negative(a)` | `arrayCumSumNonNegative(a)` |
+| `SqlFunctions.ClickHouse.count_equal(a, b)` | `countEqual(a, b)` |
+| `SqlFunctions.ClickHouse.array_with_constant(n, value)` | `arrayWithConstant(n, value)` |
+| `SqlFunctions.ClickHouse.array_jaccard_index(a, b)` / `array_similarity(a, b)` | `arrayJaccardIndex` / `arraySimilarity` |
+| `SqlFunctions.ClickHouse.tuple_concat(a, b)` | `tupleConcat(a, b)` |
+| `SqlFunctions.ClickHouse.tuple_names(t)` | `tupleNames(t)` |
+| `SqlFunctions.ClickHouse.flatten_tuple(t)` | `flattenTuple(t)` |
+| `SqlFunctions.ClickHouse.tuple_to_name_value_pairs(t)` | `tupleToNameValuePairs(t)` |
+| `SqlFunctions.ClickHouse.tuple_plus` / `tuple_minus` / `tuple_multiply` / `tuple_divide` | `tuplePlus` / `tupleMinus` / `tupleMultiply` / `tupleDivide` |
+| `SqlFunctions.ClickHouse.tuple_hamming_distance(a, b)` | `tupleHammingDistance(a, b)` |
+| `SqlFunctions.ClickHouse.dot_product(a, b)` | `dotProduct(a, b)` |
+| `SqlFunctions.ClickHouse.map_subtract(a, b)` | `mapSubtract(a, b)` |
+| `SqlFunctions.ClickHouse.map_update(a, b)` | `mapUpdate(a, b)` |
+| `SqlFunctions.ClickHouse.map_reverse_sort(m[, f])` / `map_partial_sort(m, k[, f])` | `mapReverseSort` / `mapPartialSort` |
+| `SqlFunctions.ClickHouse.map_from_arrays(keys, values)` | `mapFromArrays(keys, values)` |
+| `SqlFunctions.ClickHouse.map_populate_series(m, start, end[, step])` | `mapPopulateSeries(...)` |
+| `SqlFunctions.ClickHouse.extract_key_value_pairs(s)` | `extractKeyValuePairs(s)` |
+
+`arrayReduce`/`arrayReduceInRanges` stay refused: the aggregate is named by a runtime SQL string, so no
+typed contract can close it (see
+[ClickHouse-specific SQL › Not yet supported](../guide/provider-specific-sql/clickhouse.md#not-yet-supported)).
+`untuple` is refused for the same structural reason: one projection expression maps to exactly one
+result column.
+
 > `length`/`indexOf` return `UInt64` natively, so the dialect casts them with `toInt64(...)`. Functions
 > that return an array (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`, `range`,
 > `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`, `group_array`,

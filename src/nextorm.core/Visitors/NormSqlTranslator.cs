@@ -209,7 +209,8 @@ internal static class NormSqlTranslator
         // PostgresFunctions) distinct from the CommonFunctions window percentile (same method name).
         if ((node.Method.DeclaringType == typeof(CommonFunctions)
                 || node.Method.DeclaringType == typeof(ClickHouseFunctions))
-            && WindowSql.MapWindowFunctionName(node.Method.Name) is { } windowFunction)
+            && WindowSql.MapWindowFunctionName(node.Method.Name) is { } windowFunction
+            && !AdvancedAggregateTranslator.IsAggregateOverWindowName(node))
             throw new NotSupportedException($"The window function {windowFunction} must be completed with Over(...).");
 
         // The ClickHouse-native functions are probed first: their names can collide with a

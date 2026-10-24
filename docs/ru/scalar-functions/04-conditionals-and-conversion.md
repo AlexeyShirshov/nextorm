@@ -125,3 +125,28 @@ SQL Server):
 Они намеренно возвращают нативный T-SQL `int` (1/0), **не** `bit`, поэтому проецируются как обычные
 целочисленные значения и не материализуются в предикат
 `cast(case when ... then 1 else 0 end as bit)`.
+
+## Приведение типов (ClickHouse)
+
+Поверхность `to*`/`accurateCast`/`reinterpretAs` ClickHouse типизирована на `SqlFunctions.ClickHouse` и
+проходит через общий шлюз скалярных функций, поэтому все остальные диалекты её отклоняют. Цели
+точные: `Int8` расширяется до `short`/`Int16`, а `UInt16` — до `int`, потому что в общем построителе
+строк нет аксессоров `sbyte`/`ushort`; `to_decimal32`/`to_decimal64` принимают проверенный
+compile-time масштаб, а `accurate_cast_*` поставлен как двенадцать типизированных проверяемых целей
+(базовая, `_or_null`, `_or_default`), а не схлопывается в плечо `to*`.
+
+| Функция | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.to_string(v)` / `to_bool(v)` / `to_fixed_string(v, n)` / `to_low_cardinality(v)` | `toString` / `toBool` / `toFixedString` / `toLowCardinality` |
+| `SqlFunctions.ClickHouse.to_int8(v)` … `to_int64(v)` | `toInt8` … `toInt64` |
+| `SqlFunctions.ClickHouse.to_uint8(v)` … `to_uint64(v)` | `toUInt8` … `toUInt64` |
+| `SqlFunctions.ClickHouse.to_float32(v)` / `to_float64(v)` | `toFloat32` / `toFloat64` |
+| `SqlFunctions.ClickHouse.to_decimal32(v, scale)` / `to_decimal64(v, scale)` | `toDecimal32` / `toDecimal64` |
+| `SqlFunctions.ClickHouse.accurate_cast_int8(v)` … плюс `_or_null` / `_or_default` для каждой цели | `accurateCast` / `accurateCastOrNull` / `accurateCastOrDefault` |
+| `SqlFunctions.ClickHouse.reinterpret_as_uint8` … `reinterpret_as_uint64`, `_int8` … `_int64`, `_float32`/`_float64`, `_date`/`_date_time`/`_string`/`_fixed_string`/`_uuid` | `reinterpretAs*` |
+
+`reinterpretAs*` сохраняет little-endian битовый шаблон. 128/256-битные целые, `Decimal128`/
+`Decimal256` и одиннадцать единиц `to_interval_*` остаются отклонёнными (нет точного CLR-носителя —
+`BigInteger`, 96-битная мантисса `System.Decimal` и типы `Interval*`, существующие только в
+ClickHouse соответственно). См.
+[ClickHouse-specific SQL › Пока не поддерживается](../guide/provider-specific-sql/clickhouse.md#пока-не-поддерживается).

@@ -57,6 +57,23 @@ internal static class WindowFunctionTranslator
         if (functionName is "lagInFrame" or "leadInFrame" && !visitor.Dialect.SupportsInFrameWindowFunctions)
             throw new NotSupportedException("The lagInFrame/leadInFrame window functions are not supported by this provider.");
 
+        // nonNegativeDerivative is a ClickHouse window-only aggregate. The provider gate reuses the
+        // dialect's name-keyed scalar table (the ClickHouse table carries the name) so no new
+        // ISqlDialect member is added; every other provider fails closed before emitting invalid SQL.
+        if (functionName == "nonNegativeDerivative"
+            && (visitor.Dialect.ScalarFunctions is not { } windowScalars
+                || !windowScalars.Supports(nameof(ClickHouseFunctions.non_negative_derivative))))
+            throw new NotSupportedException("The nonNegativeDerivative window function is not supported by this provider.");
+
+        // The exponentialTimeDecayed* aggregates are ClickHouse window-only functions; the capability
+        // object's presence is the provider gate (no other dialect carries it).
+        var parameterCount = WindowSql.MapWindowParameterCount(functionCall.Method.Name);
+        if (parameterCount > 0
+            && (visitor.Dialect.ClickHouseAggregates is not { } decayedAggregates
+                || !decayedAggregates.Supports(functionCall.Method.Name)))
+            throw new NotSupportedException(
+                $"The {functionName} window function is not supported by this provider.");
+
         if (functionName is "percent_rank" or "cume_dist" && !visitor.Dialect.SupportsPercentRankCumeDist)
             throw new NotSupportedException("The percent_rank/cume_dist window functions are not supported by this provider.");
 
@@ -124,6 +141,22 @@ internal static class WindowFunctionTranslator
                 visitor.Builder!.Append(functionName is "sum" or "avg" or "min" or "max"
                     ? visitor.Dialect.MakeAggregate(functionName)
                     : functionName);
+
+                // A parameterised window aggregate renders the vendor's two-parenthesis grammar
+                // name(parameters)(arguments): the leading ClickHouse exponentialTimeDecayed* parameter
+                // (the decay) is the only such family.
+                if (parameterCount > 0)
+                {
+                    visitor.Builder!.Append('(');
+                    for (var (i, cnt) = (0, parameterCount); i < cnt; i++)
+                    {
+                        if (i > 0) visitor.Builder!.Append(", ");
+                        visitor.Visit(functionArgs[i]);
+                    }
+
+                    visitor.Builder!.Append(')');
+                }
+
                 visitor.Builder!.Append('(');
             }
 
@@ -133,9 +166,9 @@ internal static class WindowFunctionTranslator
             }
             else
             {
-                for (var (i, cnt) = (0, functionArgs.Count); i < cnt; i++)
+                for (var (i, cnt) = (parameterCount, functionArgs.Count); i < cnt; i++)
                 {
-                    if (i > 0) visitor.Builder!.Append(", ");
+                    if (i > parameterCount) visitor.Builder!.Append(", ");
                     visitor.Visit(functionArgs[i]);
                 }
             }

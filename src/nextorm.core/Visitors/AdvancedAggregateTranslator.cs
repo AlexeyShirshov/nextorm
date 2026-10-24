@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 
 namespace NextORM.Core;
@@ -26,6 +27,18 @@ internal static class AdvancedAggregateTranslator
     /// <summary>Translates an advanced aggregate call; returns <c>false</c> when it is not one of them.</summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
+        // The ClickHouse-only aggregate catalogue (T286b F16) is probed first: its members live on
+        // ClickHouseFunctions, and the state-returning members must be refused on every provider with
+        // their precise technical reason before the provider capability gate.
+        if (node.Method.DeclaringType == typeof(ClickHouseFunctions))
+        {
+            if (ClickHouseAggregateRefusals.TryGetValue(node.Method.Name, out var refusal))
+                throw new NotSupportedException(refusal);
+
+            if (TryTranslateClickHouseAggregate(visitor, node))
+                return true;
+        }
+
         switch (node.Method.Name)
         {
             case nameof(PostgresFunctions.bool_and) when node.Arguments.Count == 1:
@@ -441,5 +454,409 @@ internal static class AdvancedAggregateTranslator
             expression = quote.Operand;
 
         return expression is LambdaExpression lambda ? lambda.Body : expression;
+    }
+
+    /// <summary>
+    /// True when the ClickHouse method is an aggregate that shares its name with a window function
+    /// (<c>first_value</c>/<c>last_value</c>): the bare call is the aggregate form, while the same
+    /// member completed with <c>Over(...)</c> stays the window form. The window guard in
+    /// <see cref="NormSqlTranslator"/> must let the bare aggregate call through.
+    /// </summary>
+    internal static bool IsAggregateOverWindowName(MethodCallExpression node) =>
+        node.Method.DeclaringType == typeof(ClickHouseFunctions)
+        && node.Method.Name is nameof(ClickHouseFunctions.first_value) or nameof(ClickHouseFunctions.last_value);
+
+    /// <summary>
+    /// The state-returning ClickHouse aggregates refused by T286b F16: they return an opaque
+    /// <c>AggregateFunction</c> state (a binary serialization with no CLR representation), so no typed
+    /// projection can materialise them. The precise reason is raised on every provider, before the
+    /// capability gate, and pinned by a negative test.
+    /// </summary>
+    private static readonly Dictionary<string, string> ClickHouseAggregateRefusals = new(StringComparer.Ordinal)
+    {
+        [nameof(ClickHouseFunctions.stochastic_linear_regression)] =
+            "The stochastic_linear_regression aggregate returns an AggregateFunction state (an opaque binary " +
+            "serialization) and has no typed CLR result; only the -Merge combinator yields weights, and it " +
+            "requires an AggregateFunction-typed column the provider cannot read.",
+        [nameof(ClickHouseFunctions.stochastic_logistic_regression)] =
+            "The stochastic_logistic_regression aggregate returns an AggregateFunction state (an opaque binary " +
+            "serialization) and has no typed CLR result; only the -Merge combinator yields weights, and it " +
+            "requires an AggregateFunction-typed column the provider cannot read.",
+        [nameof(ClickHouseFunctions.exponential_moving_average)] =
+            "The exponential_moving_average aggregate returns an AggregateFunction state (an opaque binary " +
+            "serialization) and has no typed CLR result; only the -Merge combinator yields the moving average, " +
+            "and it requires an AggregateFunction-typed column the provider cannot read."
+    };
+
+    /// <summary>The ClickHouse-only aggregate members translated by <see cref="TryTranslateClickHouseAggregate"/>.</summary>
+    private static readonly HashSet<string> ClickHouseAggregateNames = new(StringComparer.Ordinal)
+    {
+        nameof(ClickHouseFunctions.entropy), nameof(ClickHouseFunctions.first_value),
+        nameof(ClickHouseFunctions.last_value), nameof(ClickHouseFunctions.max_intersections),
+        nameof(ClickHouseFunctions.max_intersections_position),
+        nameof(ClickHouseFunctions.simple_linear_regression),
+        nameof(ClickHouseFunctions.delta_sum), nameof(ClickHouseFunctions.delta_sum_timestamp),
+        nameof(ClickHouseFunctions.gini), nameof(ClickHouseFunctions.skew_pop),
+        nameof(ClickHouseFunctions.skew_samp), nameof(ClickHouseFunctions.kurt_pop),
+        nameof(ClickHouseFunctions.kurt_samp), nameof(ClickHouseFunctions.rank_corr),
+        nameof(ClickHouseFunctions.contingency), nameof(ClickHouseFunctions.cramers_v),
+        nameof(ClickHouseFunctions.cramers_v_bias_corrected), nameof(ClickHouseFunctions.theils_u),
+        nameof(ClickHouseFunctions.welch_t_test), nameof(ClickHouseFunctions.student_t_test),
+        nameof(ClickHouseFunctions.student_t_test_one_sample),
+        nameof(ClickHouseFunctions.mann_whitney_u_test),
+        nameof(ClickHouseFunctions.kolmogorov_smirnov_test),
+        nameof(ClickHouseFunctions.mean_z_test), nameof(ClickHouseFunctions.analysis_of_variance),
+        nameof(ClickHouseFunctions.quantile_tdigest), nameof(ClickHouseFunctions.quantile_gk),
+        nameof(ClickHouseFunctions.quantile_dd), nameof(ClickHouseFunctions.quantile_bfloat16),
+        nameof(ClickHouseFunctions.quantile_prometheus_histogram),
+        nameof(ClickHouseFunctions.quantiles_exact), nameof(ClickHouseFunctions.quantiles_exact_low),
+        nameof(ClickHouseFunctions.quantiles_exact_high),
+        nameof(ClickHouseFunctions.quantiles_exact_weighted),
+        nameof(ClickHouseFunctions.quantiles_timing),
+        nameof(ClickHouseFunctions.quantiles_tdigest),
+        nameof(ClickHouseFunctions.quantiles_bfloat16), nameof(ClickHouseFunctions.quantiles_dd),
+        nameof(ClickHouseFunctions.quantiles_gk),
+        nameof(ClickHouseFunctions.quantiles_prometheus_histogram),
+        nameof(ClickHouseFunctions.approx_top_k), nameof(ClickHouseFunctions.approx_top_sum),
+        nameof(ClickHouseFunctions.any_heavy), nameof(ClickHouseFunctions.max_map),
+        nameof(ClickHouseFunctions.min_map), nameof(ClickHouseFunctions.sum_count),
+        nameof(ClickHouseFunctions.sum_kahan),
+        nameof(ClickHouseFunctions.group_array_moving_avg),
+        nameof(ClickHouseFunctions.group_array_moving_sum),
+        nameof(ClickHouseFunctions.group_array_sample),
+        nameof(ClickHouseFunctions.group_array_sorted),
+        nameof(ClickHouseFunctions.group_array_last),
+        nameof(ClickHouseFunctions.group_array_insert_at),
+        nameof(ClickHouseFunctions.group_array_intersect),
+        nameof(ClickHouseFunctions.group_concat), nameof(ClickHouseFunctions.group_format),
+        nameof(ClickHouseFunctions.histogram), nameof(ClickHouseFunctions.sparkbar),
+        nameof(ClickHouseFunctions.uniq_up_to),
+        nameof(ClickHouseFunctions.sequence_count),
+        nameof(ClickHouseFunctions.sequence_match_events),
+        nameof(ClickHouseFunctions.sequence_next_node),
+        nameof(ClickHouseFunctions.time_series_group_sum),
+        nameof(ClickHouseFunctions.time_series_group_rate_sum),
+        nameof(ClickHouseFunctions.time_series_instant_rate_to_grid),
+        nameof(ClickHouseFunctions.time_series_rate_to_grid),
+        nameof(ClickHouseFunctions.time_series_resample_to_grid_with_staleness)
+    };
+
+    /// <summary>
+    /// Translates a member of the ClickHouse-only aggregate catalogue through
+    /// <see cref="ISqlDialect.ClickHouseAggregates"/>; returns <c>false</c> when the name is not one
+    /// of them. Every other provider fails closed because the capability is <c>null</c> there.
+    /// </summary>
+    private static bool TryTranslateClickHouseAggregate(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var name = node.Method.Name;
+        if (!ClickHouseAggregateNames.Contains(name))
+            return false;
+
+        if (visitor.Dialect.ClickHouseAggregates is not { } aggregates || !aggregates.Supports(name))
+            throw new NotSupportedException($"The {name} aggregate is not supported by this provider.");
+
+        if (name is nameof(ClickHouseFunctions.sequence_count)
+            or nameof(ClickHouseFunctions.sequence_match_events))
+        {
+            EmitClickHouseSequence(visitor, node, name, aggregates);
+            return true;
+        }
+
+        if (name == nameof(ClickHouseFunctions.sequence_next_node))
+        {
+            EmitClickHouseSequenceNextNode(visitor, node, aggregates);
+            return true;
+        }
+
+        if (name == nameof(ClickHouseFunctions.group_format))
+        {
+            EmitClickHouseGroupFormat(visitor, node, aggregates);
+            return true;
+        }
+
+        if (ClickHouseQuantilePluralShapes.TryGetValue(name, out var plural))
+        {
+            EmitClickHouseQuantiles(visitor, node, name, plural.LeadingParameters, plural.TrailingArguments, aggregates);
+            return true;
+        }
+
+        var parameterCount = ClickHouseParameterCount(name, node.Arguments.Count);
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, node.Arguments.Count); i < cnt; i++)
+                visitor.Visit(node.Arguments[i]);
+
+            return true;
+        }
+
+        visitor.NeedAliasForColumn = true;
+
+        var parameters = new List<string>(parameterCount);
+        var arguments = new List<string>(node.Arguments.Count - parameterCount);
+        for (var (i, cnt) = (0, node.Arguments.Count); i < cnt; i++)
+        {
+            // The parameter list of a parametric aggregate is type-inferred by the server, so an
+            // integral double literal (1.0) must keep its decimal point: a bare 1 binds UInt8 and the
+            // aggregate then fails inside the server with BAD_GET "has UInt64, requested Float64".
+            var rendered = i < parameterCount
+                ? RenderAggregateParameter(visitor, node.Arguments[i])
+                : visitor.VisitToString(node.Arguments[i]);
+            (i < parameterCount ? parameters : arguments).Add(rendered);
+        }
+
+        visitor.Builder!.Append(parameterCount == 0
+            ? aggregates.Render(name, arguments, node.Method.ReturnType)
+            : aggregates.RenderParameterised(name, parameters, arguments, node.Method.ReturnType));
+
+        return true;
+    }
+
+    /// <summary>
+    /// Maps a ClickHouse aggregate member and its CLR argument count to the number of leading
+    /// parameters (the first parenthesis pair); every remaining argument belongs to the second pair.
+    /// </summary>
+    private static int ClickHouseParameterCount(string name, int argumentCount) => name switch
+    {
+        nameof(ClickHouseFunctions.mean_z_test) => 3,
+        nameof(ClickHouseFunctions.quantile_tdigest) => 1,
+        nameof(ClickHouseFunctions.quantile_gk) => 2,
+        nameof(ClickHouseFunctions.quantile_dd) => 2,
+        nameof(ClickHouseFunctions.quantile_bfloat16) => 1,
+        nameof(ClickHouseFunctions.quantile_prometheus_histogram) => 1,
+        nameof(ClickHouseFunctions.approx_top_k) => 1,
+        nameof(ClickHouseFunctions.approx_top_sum) => 1,
+        nameof(ClickHouseFunctions.group_array_sorted) => 1,
+        nameof(ClickHouseFunctions.group_array_last) => 1,
+        nameof(ClickHouseFunctions.group_array_sample) => argumentCount - 1,
+        nameof(ClickHouseFunctions.group_array_insert_at) => argumentCount == 4 ? 2 : 0,
+        nameof(ClickHouseFunctions.group_concat) => argumentCount - 1,
+        nameof(ClickHouseFunctions.histogram) => 1,
+        nameof(ClickHouseFunctions.sparkbar) => argumentCount == 5 ? 3 : 1,
+        nameof(ClickHouseFunctions.uniq_up_to) => 1,
+        nameof(ClickHouseFunctions.time_series_group_sum) => 0,
+        nameof(ClickHouseFunctions.time_series_group_rate_sum) => 0,
+        nameof(ClickHouseFunctions.time_series_instant_rate_to_grid) => 4,
+        nameof(ClickHouseFunctions.time_series_rate_to_grid) => 4,
+        nameof(ClickHouseFunctions.time_series_resample_to_grid_with_staleness) => 4,
+        _ => 0
+    };
+
+    /// <summary>
+    /// The plural quantile aggregates, whose levels are written as separate scalar parameters (the
+    /// vendor rejects an array literal in the parameter list).
+    /// </summary>
+    private static readonly Dictionary<string, (int LeadingParameters, int TrailingArguments)> ClickHouseQuantilePluralShapes =
+        new(StringComparer.Ordinal)
+        {
+            [nameof(ClickHouseFunctions.quantiles_exact)] = (0, 1),
+            [nameof(ClickHouseFunctions.quantiles_exact_low)] = (0, 1),
+            [nameof(ClickHouseFunctions.quantiles_exact_high)] = (0, 1),
+            [nameof(ClickHouseFunctions.quantiles_exact_weighted)] = (0, 2),
+            [nameof(ClickHouseFunctions.quantiles_timing)] = (0, 1),
+            [nameof(ClickHouseFunctions.quantiles_tdigest)] = (0, 1),
+            [nameof(ClickHouseFunctions.quantiles_bfloat16)] = (0, 1),
+            [nameof(ClickHouseFunctions.quantiles_dd)] = (1, 1),
+            [nameof(ClickHouseFunctions.quantiles_gk)] = (1, 1),
+            [nameof(ClickHouseFunctions.quantiles_prometheus_histogram)] = (0, 2)
+        };
+
+    /// <summary>
+    /// Renders an aggregate parameter, keeping the decimal point of a whole floating-point literal:
+    /// the server infers the parameter type from the literal, and a bare <c>1</c> would bind
+    /// <c>UInt8</c> where the vendor requires <c>Float64</c> (BAD_GET at execution).
+    /// </summary>
+    private static string RenderAggregateParameter(BaseExpressionVisitor visitor, Expression expression)
+    {
+        var bare = TypeFacts.UnwrapConvert(expression);
+
+        if (bare is ConstantExpression { Value: double value })
+            return WithDecimalPoint(value.ToString("R", CultureInfo.InvariantCulture));
+
+        if (bare is ConstantExpression { Value: float single })
+            return WithDecimalPoint(single.ToString("R", CultureInfo.InvariantCulture));
+
+        return visitor.VisitToString(expression);
+    }
+
+    /// <summary>Appends <c>.0</c> to an integral floating-point literal.</summary>
+    private static string WithDecimalPoint(string literal) =>
+        literal.Contains('.') || literal.Contains('E') || literal.Contains('e')
+            ? literal
+            : literal + ".0";
+
+    /// <summary>
+    /// Renders a plural quantile aggregate: the leading parameters (the algorithm accuracy), then
+    /// every level of the inline levels array as its own parameter, then the trailing aggregate
+    /// arguments. A captured levels array is rejected exactly like the shipped <c>quantiles</c>.
+    /// </summary>
+    private static void EmitClickHouseQuantiles(
+        BaseExpressionVisitor visitor,
+        MethodCallExpression node,
+        string name,
+        int leadingParameters,
+        int trailingArguments,
+        IClickHouseAggregateRenderer aggregates)
+    {
+        if (node.Arguments.Count != leadingParameters + 1 + trailingArguments)
+            throw new NotSupportedException($"The {name} aggregate has an unexpected argument count.");
+
+        if (node.Arguments[leadingParameters] is not NewArrayExpression { NodeType: ExpressionType.NewArrayInit } levels)
+            throw new NotSupportedException("The quantiles levels must be inline expressions, not a captured array.");
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, leadingParameters); i < cnt; i++)
+                visitor.Visit(node.Arguments[i]);
+
+            for (var (i, cnt) = (0, levels.Expressions.Count); i < cnt; i++)
+                visitor.Visit(levels.Expressions[i]);
+
+            for (var (i, cnt) = (leadingParameters + 1, node.Arguments.Count); i < cnt; i++)
+                visitor.Visit(node.Arguments[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+
+        var parameters = new List<string>(leadingParameters + levels.Expressions.Count);
+        for (var (i, cnt) = (0, leadingParameters); i < cnt; i++)
+            parameters.Add(RenderAggregateParameter(visitor, node.Arguments[i]));
+
+        for (var (i, cnt) = (0, levels.Expressions.Count); i < cnt; i++)
+            parameters.Add(RenderAggregateParameter(visitor, levels.Expressions[i]));
+
+        var arguments = new List<string>(trailingArguments);
+        for (var (i, cnt) = (leadingParameters + 1, node.Arguments.Count); i < cnt; i++)
+            arguments.Add(visitor.VisitToString(node.Arguments[i]));
+
+        visitor.Builder!.Append(aggregates.RenderParameterised(name, parameters, arguments, node.Method.ReturnType));
+    }
+
+    /// <summary>
+    /// Renders <c>sequenceCount(pattern)(timestamp, cond...)</c> or
+    /// <c>sequenceMatchEvents(pattern)(timestamp, cond...)</c>; the conditions are an inline
+    /// <c>new[]</c> of boolean expressions, so each element is rendered separately.
+    /// </summary>
+    private static void EmitClickHouseSequence(
+        BaseExpressionVisitor visitor,
+        MethodCallExpression node,
+        string name,
+        IClickHouseAggregateRenderer aggregates)
+    {
+        if (node.Arguments.Count != 3
+            || node.Arguments[2] is not NewArrayExpression { NodeType: ExpressionType.NewArrayInit } conditions)
+            throw new NotSupportedException($"The {name} conditions must be inline expressions, not a captured array.");
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(node.Arguments[0]);
+            visitor.Visit(node.Arguments[1]);
+
+            for (var (i, cnt) = (0, conditions.Expressions.Count); i < cnt; i++)
+                visitor.Visit(conditions.Expressions[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+
+        var arguments = new List<string>(conditions.Expressions.Count + 1)
+        {
+            visitor.VisitToString(node.Arguments[1])
+        };
+        for (var (i, cnt) = (0, conditions.Expressions.Count); i < cnt; i++)
+            arguments.Add(visitor.VisitToString(conditions.Expressions[i]));
+
+        visitor.Builder!.Append(aggregates.RenderParameterised(
+            name,
+            [visitor.VisitToString(node.Arguments[0])],
+            arguments,
+            node.Method.ReturnType));
+    }
+
+    /// <summary>
+    /// Renders <c>sequenceNextNode(direction, base)(timestamp, event_column, base_condition, event...)</c>.
+    /// The event chain is an inline <c>new[]</c> of boolean expressions.
+    /// </summary>
+    private static void EmitClickHouseSequenceNextNode(
+        BaseExpressionVisitor visitor,
+        MethodCallExpression node,
+        IClickHouseAggregateRenderer aggregates)
+    {
+        if (node.Arguments.Count != 6
+            || node.Arguments[5] is not NewArrayExpression { NodeType: ExpressionType.NewArrayInit } conditions)
+            throw new NotSupportedException(
+                "The sequence_next_node events must be inline expressions, not a captured array.");
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, node.Arguments.Count); i < cnt; i++)
+            {
+                if (i == 5)
+                {
+                    for (var (j, jcnt) = (0, conditions.Expressions.Count); j < jcnt; j++)
+                        visitor.Visit(conditions.Expressions[j]);
+                }
+                else
+                {
+                    visitor.Visit(node.Arguments[i]);
+                }
+            }
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+
+        var arguments = new List<string>(conditions.Expressions.Count + 3);
+        for (var i = 2; i < 5; i++)
+            arguments.Add(visitor.VisitToString(node.Arguments[i]));
+
+        for (var (i, cnt) = (0, conditions.Expressions.Count); i < cnt; i++)
+            arguments.Add(visitor.VisitToString(conditions.Expressions[i]));
+
+        visitor.Builder!.Append(aggregates.RenderParameterised(
+            nameof(ClickHouseFunctions.sequence_next_node),
+            [visitor.VisitToString(node.Arguments[0]), visitor.VisitToString(node.Arguments[1])],
+            arguments,
+            node.Method.ReturnType));
+    }
+
+    /// <summary>
+    /// Renders <c>groupFormat(format)(x, y, ...)</c>; the params array is flattened into the
+    /// aggregate argument list.
+    /// </summary>
+    private static void EmitClickHouseGroupFormat(
+        BaseExpressionVisitor visitor,
+        MethodCallExpression node,
+        IClickHouseAggregateRenderer aggregates)
+    {
+        if (node.Arguments.Count != 2
+            || node.Arguments[1] is not NewArrayExpression { NodeType: ExpressionType.NewArrayInit } values)
+            throw new NotSupportedException("The group_format values must be inline expressions, not a captured array.");
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(node.Arguments[0]);
+
+            for (var (i, cnt) = (0, values.Expressions.Count); i < cnt; i++)
+                visitor.Visit(values.Expressions[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+
+        var arguments = new List<string>(values.Expressions.Count);
+        for (var (i, cnt) = (0, values.Expressions.Count); i < cnt; i++)
+            arguments.Add(visitor.VisitToString(TypeFacts.UnwrapConvert(values.Expressions[i])));
+
+        visitor.Builder!.Append(aggregates.RenderParameterised(
+            nameof(ClickHouseFunctions.group_format),
+            [visitor.VisitToString(node.Arguments[0])],
+            arguments,
+            node.Method.ReturnType));
     }
 }

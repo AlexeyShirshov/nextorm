@@ -222,6 +222,44 @@ ClickHouse, у которых нет переносимого написания
   остаётся `NULL`); остальные провайдеры и in-memory провайдер их отклоняют;
 * `generate_ulid` (`generateULID`).
 
+### Поставленные семейства (#286, T286b)
+
+Таблицы ниже дополняют нативную поверхность. Каждый член — типизированный метод
+`ClickHouseFunctions`, который рендерит точное имя вендора, явно объявляет CLR-форму результата и
+отклоняется с `NotSupportedException` всеми остальными диалектами (общий шлюз
+`IScalarFunctions`/capabilities). Закреплённый сервер — ClickHouse **25.8.33.6**
+(`clickhouse/clickhouse-server:25.8-alpine`); имена, появившиеся позже, и CLR-формы, которые нельзя
+материализовать, перечислены в разделе [Пока не поддерживается](#пока-не-поддерживается).
+
+| Семейство | Члены |
+|---|---|
+| Строки | `overlay`, `initcap`, `soundex`, `base64_encode`, `base64_decode`, `hex`, `unhex`, `edit_distance`, `jaro_similarity`, `byte_hamming_distance`, `substring_index`, `count_substrings`, `extract_groups`, `normalize_utf8_nfc`, `normalize_utf8_nfd`, `normalize_utf8_nfkc`, `normalize_utf8_nfkd` |
+| Числа и округление | `erf`, `erfc`, `lgamma`, `tgamma`, `gcd`, `lcm`, `is_finite`, `is_infinite`, `is_nan`, `hypot`, `int_div`, `int_exp2`, `int_exp10`, `sigmoid`, `sqr`; округление `round_age`, `round_bankers`, `round_down`, `round_duration`, `round_to_exp2` |
+| Дата и время | `make_date`, `make_date32`, `make_date_time`, `now64`, `now_in_block`, `time_slot`, `time_slots`, `to_start_of_fifteen_minutes`, `to_start_of_five_minutes`, `to_start_of_ten_minutes`, `to_start_of_interval`, `to_iso_year`, `to_week`, `to_year_week`, `to_last_day_of_week`, `to_days_in_month`, `to_modified_julian_day`, `age`, `date_name`, `server_timezone`, `timezone_of`, `timezone_offset`, `to_time`, `timestamp`, `from_unix_timestamp`, `from_unix_timestamp64_milli`, `from_unix_timestamp64_micro` |
+| Массивы | `array_element`, `array_enumerate_dense`, `array_zip`, `array_difference`, `array_avg`, `array_sum`, `array_min`, `array_max`, `array_product`, `array_top_k`, `array_bottom_k`, `array_random_sample`, `array_compact`, `array_pop_back`, `array_pop_front`, `array_push_front`, `array_resize`, `array_remove`, `array_rotate_left`, `array_rotate_right`, `array_shift_left`, `array_shift_right`, `array_fold`, `array_fill`, `array_reverse_fill`, `array_split`, `array_reverse_split`, `array_reverse_sort`, `array_partial_sort`, `array_sort`, `array_shingles`, `array_transpose`, `array_cum_sum_non_negative`, `count_equal`, `array_with_constant`, `array_jaccard_index`, `array_similarity` |
+| Кортежи | `tuple_concat`, `tuple_names`, `flatten_tuple`, `tuple_to_name_value_pairs`, `tuple_plus`, `tuple_minus`, `tuple_multiply`, `tuple_divide`, `tuple_hamming_distance`, `dot_product` |
+| Map | `map_subtract`, `map_update`, `map_reverse_sort`, `map_partial_sort`, `map_from_arrays`, `map_populate_series`, `extract_key_value_pairs` |
+| JSON | `json_merge_patch`, `json_array_length`, `json_dynamic_paths`, `json_shared_data_paths` (у каждого есть `_with_types`-вариант), `json_key`, `json_extract_keys_and_values_raw`, `json_extract_uint`, `is_valid_json`, `simple_json_extract_raw`, `simple_json_extract_int`, `simple_json_extract_uint`, `simple_json_extract_float`, `simple_json_extract_bool`, `simple_json_extract_string` |
+| Хэши | `sha224`, `sha384`, `sha512_256`, `blake3`, `md4`, `ripemd160`, `keccak256`, `farm_hash64`, `metro_hash64`, `java_hash`, `hive_hash`, `half_md5`, `url_hash`, `wy_hash64`, `int_hash32`, `int_hash64`, `ngram_min_hash`, `ngram_sim_hash`, `ngram_min_hash_arg`, `word_shingle_min_hash`, `word_shingle_sim_hash`, `word_shingle_min_hash_arg` |
+| Кодирование | `bin`, `unbin`, `bitmask_to_array`, `bitmask_to_list`, `bit_positions_to_array`, `sqid_encode`, `sqid_decode`, `hilbert_encode`, `hilbert_decode`, `morton_encode`, `morton_decode`, `base32_encode`, `base32_decode`, `base58_encode`, `base58_decode`, `base64_url_encode`, `base64_url_decode`, `bech32_encode`, `bech32_decode` |
+| UUID/ULID | `uuid_num_to_string`, `uuid_string_to_num`, `uuid_to_num`, `uuid_v7_to_datetime`, `to_uuid`, `to_uuid_or_default`, `to_uuid_or_null`, `ulid_string_to_datetime`, `generate_snowflake_id`, `date_time_to_snowflake_id`, `date_time64_to_snowflake_id`, `date_time_to_uuid_v7`, `snowflake_id_to_date_time`, `snowflake_id_to_date_time64` |
+| URL/IP | `domain`, `protocol`, `path`, `query_string`, `fragment`, `port`, `cut_url_parameter`, `top_level_domain`, `encode_url_component`, `ipv4_num_to_string`, `ipv6_num_to_string`, `to_ipv4`, `to_ipv6`, `is_ipv4_string`, `is_ipv6_string`, `is_ip_address_in_range`, `ipv4_cidr_to_range`, `ipv6_cidr_to_range`, `extract_url_parameter`, `extract_url_parameter_names`, `cut_to_first_significant_subdomain`, `cut_to_first_significant_subdomain_with_www`, `cut_to_first_significant_subdomain_custom`, `cut_to_first_significant_subdomain_custom_with_www`, `url_hierarchy`, `url_path_hierarchy`, `domain_without_www`, `first_significant_subdomain`, `first_significant_subdomain_custom`, `path_full`, `query_string_and_fragment`, `cut_www`, `cut_query_string`, `cut_fragment`, `cut_query_string_and_fragment`, `decode_url_component`, `encode_url_form_component`, `decode_url_form_component`, `ipv4_string_to_num`, `ipv4_string_to_num_or_default`, `ipv4_string_to_num_or_null`, `ipv4_num_to_string_class_c`, `ipv6_string_to_num`, `ipv6_string_to_num_or_default`, `ipv6_string_to_num_or_null`, `ipv4_to_ipv6`, `cut_ipv6` |
+| Биты | `bitAnd`, `bitOr`, `bitXor`, `bitNot`, `bitShiftLeft`, `bitShiftRight`, `bitRotateLeft`, `bitRotateRight`, `bitCount`, `bitTest`, `bitTestAll`, `bitTestAny`, `bitHammingDistance` |
+| Приведение типов | `to_string`, `to_bool`, `to_fixed_string`, `to_low_cardinality`, `to_int8`…`to_int64`, `to_uint8`…`to_uint64`, `to_float32`, `to_float64`, `to_decimal32`, `to_decimal64`, `accurate_cast_*` с вариантами `_or_null`/`_or_default`, `reinterpret_as_uint8`…`reinterpret_as_uuid` |
+| Агрегаты | `entropy`, `first_value`, `last_value`, `max_intersections` (+`max_intersections_position`), `simple_linear_regression`, `delta_sum`, `delta_sum_timestamp`, `gini`, `skew_pop`, `skew_samp`, `kurt_pop`, `kurt_samp`, `rank_corr`, `contingency`, `cramers_v`, `cramers_v_bias_corrected`, `theils_u`, `welch_t_test`, `mann_whitney_u_test`, `kolmogorov_smirnov_test`, `mean_z_test`, `analysis_of_variance`, `quantile_tdigest`, `quantile_gk`, `quantile_dd`, `quantile_bfloat16`, `quantile_prometheus_histogram`, `approx_top_k`, `approx_top_sum`, `any_heavy`, `max_map`, `min_map`, `sum_count`, `sum_kahan`, `group_array_moving_avg`, `group_array_moving_sum`, `group_array_sample`, `group_array_sorted`, `group_array_last`, `group_array_insert_at`, `group_array_intersect`, `group_concat`, `group_format`, `histogram`, `sparkbar`, `uniq_up_to`, `sequence_count`, `sequence_match_events`, `sequence_next_node`, `exponential_time_decayed_sum`, `exponential_time_decayed_max`, `exponential_time_decayed_count`, `exponential_time_decayed_avg`, `student_t_test`, `student_t_test_one_sample`, `quantiles`, `quantiles_exact`, `quantiles_exact_low`, `quantiles_exact_high`, `quantiles_exact_weighted`, `quantiles_timing`, `quantiles_tdigest`, `quantiles_bfloat16`, `quantiles_dd`, `quantiles_gk`, `quantiles_prometheus_histogram`, `time_series_group_sum`, `time_series_group_rate_sum`, `time_series_instant_rate_to_grid`, `time_series_rate_to_grid`, `time_series_resample_to_grid_with_staleness`, `group_array` |
+| Оконные | `non_negative_derivative` (возвращает `WindowFunction<double>`, дополните `Over(...)`) |
+| Словари | `dict_get_or_null`, `dict_get_all`, `dict_get_descendants`, `region_to_name`, `region_to_city`, `region_to_area`, `region_to_district`, `region_to_country`, `region_to_continent`, `region_to_top_continent`, `region_to_population`, `region_hierarchy`, `region_in` (плюс уже поставленные `dict_get`, `dict_get_or_default`, `dict_get_hierarchy`, `dict_get_children`, `dict_has`, `dict_is_in`) |
+
+Объявленные CLR-формы точные, а не выведенные: результаты `UInt64`/`UInt32`/`UInt16` проецируются как
+`ulong`/`uint`/`int`, `UInt8` — как `byte` или `bool`, результаты `FixedString` — как hex-текст
+(бинарные UUID, IPv6 и кодирование), результаты `Tuple`/`Array` — как `System.Tuple<...>`/`T[]` с
+явно выписанными типами компонентов, а каждый nullable-аргумент вендора даёт `NULL`, а не значение по
+умолчанию. Члены с версионными ограничениями (`array_top_k`, `array_bottom_k`, `array_remove`,
+`array_transpose`, `gini`, `quantile_prometheus_histogram`, `group_format`, сетки `time_series_*`)
+сохраняют нативное плечо и фиксируют пробел сервера живым негативом `UNKNOWN_FUNCTION`/`BAD_ARGUMENTS`;
+`sequence_next_node` и сетки time-series требуют `allow_experimental_funnel_functions` /
+`allow_experimental_time_series_aggregate_functions`.
+
 Шесть строковых хэшей кодируются на сервере в нижний шестнадцатеричный регистр, поэтому проекция
 `string?` получает текст хэша, а не сырые байты `FixedString` (которые драйвер декодировал бы как
 UTF-8 с потерями):
@@ -358,16 +396,26 @@ cast(arrayMap((k, v) -> k,
 
 ## Табличные функции
 
-`numbers`/`numbers_mt` и генераторы строк `zeros`/`zeros_mt` доступны через
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). Колонка `number` типа `UInt64` приводится к
-`Int64` внутри оборачивающего подзапроса, чтобы материализоваться в CLR `long`; `zeros`
-материализуется сразу в `byte`:
+`numbers`/`numbers_mt`, генераторы строк `zeros`/`zeros_mt`, `generate_random` и `values` доступны через
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})),
+как и серверные/кластерные источники `url`, `s3`, `file`, `remote`, `remote_secure`, `cluster` и
+`cluster_all_replicas`. Именно эти тринадцать имён принимает `ISqlDialect.SupportsTableFunction`.
+Колонка `number` типа `UInt64` приводится к `Int64` внутри оборачивающего подзапроса, чтобы
+материализоваться в CLR `long`; `zeros` материализуется сразу в `byte`:
 
 ```csharp
 var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
     .Select(r => new { r.Value })
     .ToList();
 ```
+
+Табличные функции внешних движков (`mysql`, `postgresql`, `sqlite`, `jdbc`, `odbc`, `mongodb`,
+`redis`, `hdfs`, `s3Cluster`, `azureBlobStorage`, `deltaLake`, `iceberg`, `hudi`, `paimon`, `bigquery`,
+`gcs`, `ytsaurus`, `arrowFlight`, `prometheusQuery`, `input`, `view`, `format`, `null`, `executable`,
+`primes`, `merge`, `dictionary`, `eval`, `loop`, `fuzzJSON`, `fuzzQuery`) **не** моделируются: они
+относятся к границе внешнего I/O, описанной как §4 каталога покрытия, и доступны только через сырой
+SQL или обёртку `[SqlFunction]`. Диалект отклоняет каждую из них, а живой boundary-тест перебирает все
+функции из `system.table_functions` и доказывает, что принимаются только тринадцать имён выше.
 
 См. [Табличные функции](../13-table-valued-functions.md).
 
@@ -390,9 +438,30 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 
 ## Пока не поддерживается
 
-Серверные/кластерные табличные функции (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`,
-`cluster_all_replicas`) **предобъявлены** в `SqlFunctions.ClickHouse` и рендерят свой SQL, но их сквозной
-прогон на реальном кластере не покрыт и остаётся вне области охвата. См.
+Каталог закрывает остаточный набор §3 на закреплённом сервере **25.8.33.6**: перечисленные ниже члены
+существуют как типизированные методы-отказы на `ClickHouseFunctions` и падают с точным
+`NotSupportedException` до отправки SQL провайдеру — они никогда не переписываются молча, не
+подменяются значением по умолчанию и не усекаются.
+
+| Семейство | Отклонённый член | Проверенная причина |
+|---|---|---|
+| Дата/время | `from_utc_timestamp` | Результат вендора не несёт зону в своём типе, а его «настенное» время — это время целевой зоны, поэтому пара (настенное время, зона) непредставима в `System.DateTime`. |
+| Дата/время | `to_time64` | `Time64(scale)` не имеет CLR-носителя: `TimeSpan` отображается на хранение длительности `Int64`, и драйвер не может материализовать значение. |
+| Дата/время | `from_unix_timestamp64_nano` | `DateTime64(9)` превышает разрешение `DateTime` в 100 нс и усекалось бы молча. |
+| Массивы | `array_reduce`, `array_reduce_in_ranges` | Агрегат задаётся строкой SQL во время выполнения, поэтому типизированный контракт агрегата невозможен, а строка попала бы на сервер как непрозрачный фрагмент. |
+| Кортежи | `untuple` | Подставляет динамический набор колонок с реализационными именами в место вызова, тогда как nextorm отображает одно выражение проекции ровно в одну колонку результата. |
+| JSON | `pretty_print_json` | Появился в ClickHouse 26.4; отсутствует на закреплённом 25.8.33.6 (`UNKNOWN_FUNCTION`), документированной эквивалентной композиции нет. |
+| JSON | `json_extract_uint_or_default` | Такой функции не существует; `json_extract_uint` уже возвращает дефолт вендора `0` для отсутствующего пути/неверного типа/битого JSON и `NULL` для `NULL`-входа. |
+| Хэши | `ngram_sim_hash_arg`, `word_shingle_sim_hash_arg` | Таких функций нет: аргументы возвращают только формы `MinHashArg`; имена отсутствуют в `system.functions` на 25.8.33.6 и в справочнике вендора. |
+| Приведение типов | `to_int128`, `to_int256`, `to_uint128`, `to_uint256`, `reinterpret_as_int128`, `reinterpret_as_int256`, `reinterpret_as_uint128`, `reinterpret_as_uint256` | Драйвер отдаёт 128/256-битные типы как `System.Numerics.BigInteger`; в общем построителе строк нет аксессора `BigInteger`, поэтому значение или битовый шаблон нельзя материализовать в целое фиксированной ширины. |
+| Приведение типов | `to_decimal128`, `to_decimal256` | 38/76 значащих цифр против 96-битной мантиссы `System.Decimal` (28–29 цифр): значение выше этого диапазона потеряло бы точность молча или дало `OverflowException`. |
+| Приведение типов | одиннадцать единиц `to_interval_*` | У результатов `Interval*`, существующих только в ClickHouse, нет CLR-представления, и сам драйвер не может их материализовать (`Unknown type: Interval*` на 25.8.33.6). |
+| Агрегаты | `stochastic_linear_regression`, `stochastic_logistic_regression`, `exponential_moving_average` | Агрегат возвращает непрозрачное бинарное состояние `AggregateFunction` без типизированного CLR-результата; значение даёт только комбинатор `-Merge`, которому нужна колонка типа `AggregateFunction`, недоступная провайдеру. |
+| Словари | `dict_get_keys`, `dict_get_root` | Появились в 25.12 и 26.7 соответственно; отсутствуют на закреплённом сервере. Используйте `dict_get_hierarchy` (последний элемент — для корня). |
+| Словари | `region_to_parent`, `region_to_parents` | Таких функций в 25.8.33.6 нет; документированная композиция — `region_hierarchy` без первого элемента. |
+
+Сквозной прогон серверных/кластерных табличных функций (`url`, `s3`, `file`, `remote`, `remote_secure`,
+`cluster`, `cluster_all_replicas`) на реальном кластере **не** покрыт и остаётся вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

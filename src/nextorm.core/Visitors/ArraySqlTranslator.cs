@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 
 namespace NextORM.Core;
@@ -185,6 +186,9 @@ internal static class ArraySqlTranslator
         if (TryTranslateHigherOrderArray(visitor, node, args))
             return true;
 
+        if (TryTranslateArrayFamilyArm(visitor, node, args))
+            return true;
+
         string sqlName;
         var isArrayJoin = false;
 
@@ -248,6 +252,9 @@ internal static class ArraySqlTranslator
             case nameof(ClickHouseFunctions.array_cum_sum) when args.Count == 1:
                 sqlName = "arrayCumSum";
                 break;
+            case nameof(ClickHouseFunctions.array_cum_sum_non_negative) when args.Count == 1:
+                sqlName = "arrayCumSumNonNegative";
+                break;
             case nameof(ClickHouseFunctions.array_slice) when args.Count is 2 or 3:
                 sqlName = "arraySlice";
                 break;
@@ -268,6 +275,323 @@ internal static class ArraySqlTranslator
     }
 
     /// <summary>
+    /// Translates the F05 array family (issue #286): the element/aggregate/set helpers, the
+    /// structure-preserving helpers and the version-gap members. Returns <c>false</c> when the call
+    /// is not one of them. Every arm is gated by <see cref="ISqlDialect.SupportsArrayFunctions"/>
+    /// (ClickHouse), and the two CLR-shape guards run before that gate so their precise reason wins on
+    /// every provider.
+    /// </summary>
+    private static bool TryTranslateArrayFamilyArm(
+        BaseExpressionVisitor visitor, MethodCallExpression node, IReadOnlyList<Expression> args)
+    {
+        var name = node.Method.Name;
+
+        if (name == nameof(ClickHouseFunctions.array_fold) && args.Count == 3)
+        {
+            RequireArrayFunctions(visitor);
+            EmitArrayFold(visitor, node, args);
+            return true;
+        }
+
+        // A declared long/long[] result can carry only integral arithmetic: the vendor's floating-point
+        // and decimal aggregation shapes are refused instead of being truncated into it.
+        if (name == nameof(ClickHouseFunctions.array_difference))
+            RequireIntegralElement(node, name, allowUnsigned64: true);
+        else if (name == nameof(ClickHouseFunctions.array_sum))
+            RequireIntegralElement(node, name, allowUnsigned64: false);
+        else if (name == nameof(ClickHouseFunctions.array_cum_sum_non_negative))
+            RequireIntegralElement(node, name, allowUnsigned64: false);
+
+        // The native names are absent from the pinned 25.8 server; each arm renders the vendor
+        // definition from functions the pinned server has, so the result is version-independent.
+        if (name is nameof(ClickHouseFunctions.array_top_k) or nameof(ClickHouseFunctions.array_bottom_k)
+            or nameof(ClickHouseFunctions.array_remove) or nameof(ClickHouseFunctions.array_transpose))
+        {
+            RequireArrayFunctions(visitor);
+            EmitVersionGapArm(visitor, node, name);
+            return true;
+        }
+
+        var sqlName = name switch
+        {
+            nameof(ClickHouseFunctions.array_element) when args.Count == 2 => "arrayElement",
+            nameof(ClickHouseFunctions.array_enumerate_dense) when args.Count == 1 => "arrayEnumerateDense",
+            nameof(ClickHouseFunctions.array_zip) when args.Count == 2 => "arrayZip",
+            nameof(ClickHouseFunctions.array_difference) when args.Count == 1 => "arrayDifference",
+            nameof(ClickHouseFunctions.array_avg) when args.Count == 1 => "arrayAvg",
+            nameof(ClickHouseFunctions.array_sum) when args.Count == 1 => "arraySum",
+            nameof(ClickHouseFunctions.array_min) when args.Count == 1 => "arrayMin",
+            nameof(ClickHouseFunctions.array_max) when args.Count == 1 => "arrayMax",
+            nameof(ClickHouseFunctions.array_product) when args.Count == 1 => "arrayProduct",
+            nameof(ClickHouseFunctions.array_random_sample) when args.Count == 2 => "arrayRandomSample",
+            nameof(ClickHouseFunctions.array_compact) when args.Count == 1 => "arrayCompact",
+            nameof(ClickHouseFunctions.array_pop_back) when args.Count == 1 => "arrayPopBack",
+            nameof(ClickHouseFunctions.array_pop_front) when args.Count == 1 => "arrayPopFront",
+            nameof(ClickHouseFunctions.array_push_front) when args.Count == 2 => "arrayPushFront",
+            nameof(ClickHouseFunctions.array_resize) when args.Count is 2 or 3 => "arrayResize",
+            nameof(ClickHouseFunctions.array_rotate_left) when args.Count == 2 => "arrayRotateLeft",
+            nameof(ClickHouseFunctions.array_rotate_right) when args.Count == 2 => "arrayRotateRight",
+            nameof(ClickHouseFunctions.array_shift_left) when args.Count is 2 or 3 => "arrayShiftLeft",
+            nameof(ClickHouseFunctions.array_shift_right) when args.Count is 2 or 3 => "arrayShiftRight",
+            nameof(ClickHouseFunctions.array_reverse_sort) when args.Count == 1 => "arrayReverseSort",
+            nameof(ClickHouseFunctions.array_shingles) when args.Count == 2 => "arrayShingles",
+            nameof(ClickHouseFunctions.count_equal) when args.Count == 2 => "countEqual",
+            nameof(ClickHouseFunctions.array_with_constant) when args.Count == 2 => "arrayWithConstant",
+            nameof(ClickHouseFunctions.array_jaccard_index) when args.Count == 2 => "arrayJaccardIndex",
+            nameof(ClickHouseFunctions.array_similarity) when args.Count == 4 => "arraySimilarity",
+            _ => null
+        };
+
+        if (sqlName is not null)
+        {
+            RequireArrayFunctions(visitor);
+            EmitArrayFunction(visitor, sqlName, name, node.Method.ReturnType, args);
+            return true;
+        }
+
+        if (name == nameof(ClickHouseFunctions.array_partial_sort) && args.Count == 2)
+        {
+            RequireArrayFunctions(visitor);
+            EmitArrayExpression(visitor, node, rendered => $"arrayPartialSort({rendered[1]}, {rendered[0]})");
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Renders the members whose native name arrived after the pinned ClickHouse 25.8 server. Each
+    /// definition is the contract the vendor documents for that name, composed only of functions the
+    /// pinned server has, so the member is version-independent instead of a capability refusal; the
+    /// live suite asserts the server's <c>UNKNOWN_FUNCTION</c> for the native name itself.
+    /// </summary>
+    private static void EmitVersionGapArm(
+        BaseExpressionVisitor visitor, MethodCallExpression node, string name)
+    {
+        switch (name)
+        {
+            case nameof(ClickHouseFunctions.array_top_k):
+                EmitArrayExpression(visitor, node, rendered =>
+                {
+                    var x = FreshLambdaName("_x", rendered);
+                    return $"arraySlice(arrayReverseSort(arrayFilter({x} -> isNotNull({x}), {rendered[0]})), 1, {rendered[1]})";
+                });
+                return;
+
+            case nameof(ClickHouseFunctions.array_bottom_k):
+                EmitArrayExpression(visitor, node, rendered =>
+                {
+                    var x = FreshLambdaName("_x", rendered);
+                    return $"arraySlice(arraySort(arrayFilter({x} -> isNotNull({x}), {rendered[0]})), 1, {rendered[1]})";
+                });
+                return;
+
+            // NULLs are equal to NULL, which a plain `x != element` cannot express (its NULL result
+            // would keep them); coalesce folds the null-against-null case into "equal".
+            case nameof(ClickHouseFunctions.array_remove):
+                EmitArrayExpression(visitor, node, rendered =>
+                {
+                    var x = FreshLambdaName("_x", rendered);
+                    var element = rendered[1];
+                    return $"arrayFilter({x} -> not coalesce({x} = {element}, isNull({x}) AND isNull({element})), {rendered[0]})";
+                });
+                return;
+
+            case nameof(ClickHouseFunctions.array_transpose):
+                EmitArrayExpression(visitor, node, rendered =>
+                {
+                    var index = FreshLambdaName("_i", rendered);
+                    var row = FreshLambdaName("_r", [rendered[0], index]);
+                    return $"arrayMap({index} -> arrayMap({row} -> {row}[{index}], ({rendered[0]})), "
+                        + $"range(1, length(({rendered[0]})[1]) + 1))";
+                });
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Renders an array-family call whose SQL the callback composes from the rendered operands. Every
+    /// operand goes through <see cref="SqlOperandTranslator.AppendArrayOrColumn"/>, so a captured or
+    /// inline array is bound as one parameter, and the parameter-only pass visits the operands in the
+    /// same order so the minted parameter names stay aligned.
+    /// </summary>
+    private static void EmitArrayExpression(
+        BaseExpressionVisitor visitor, MethodCallExpression node, Func<IReadOnlyList<string>, string> compose)
+    {
+        var args = node.Arguments;
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                SqlOperandTranslator.AppendArrayOrColumn(visitor, args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var builder = visitor.Builder!;
+        var rendered = new string[args.Count];
+
+        for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+            rendered[i] = Capture(builder, () => SqlOperandTranslator.AppendArrayOrColumn(visitor, args[i]));
+
+        var call = compose(rendered);
+        var processed = visitor.Dialect.MakeArrayFunction(node.Method.Name, call);
+        builder.Append(visitor.Dialect.MakeArrayResult(node.Method.Name, processed, node.Method.ReturnType));
+    }
+
+    /// <summary>
+    /// Renders <c>arrayFold((acc, x) -&gt; body, array, accumulator)</c>: the fold lambda has two
+    /// parameters (the accumulator and the element), and the body may reference the enclosing query's
+    /// columns and captured parameters. The accumulator follows the array in SQL order, and the
+    /// parameter-only pass visits exactly the same nodes in the same order.
+    /// </summary>
+    private static void EmitArrayFold(
+        BaseExpressionVisitor visitor, MethodCallExpression node, IReadOnlyList<Expression> args)
+    {
+        var lambda = ExtractLambda(args[0], nameof(ClickHouseFunctions.array_fold));
+
+        if (lambda.Parameters.Count != 2)
+            throw new NotSupportedException(
+                "The array_fold lambda must have exactly two parameters (accumulator, element).");
+
+        var accumulator = NameOr(lambda.Parameters[0], "acc");
+        var element = NameOr(lambda.Parameters[1], "x");
+
+        var parameters = new Dictionary<ParameterExpression, string>();
+        if (visitor.LambdaParameters is { } outer)
+        {
+            foreach (var entry in outer)
+                parameters[entry.Key] = entry.Value;
+        }
+
+        parameters[lambda.Parameters[0]] = accumulator;
+        parameters[lambda.Parameters[1]] = element;
+
+        using var bodyVisitor = new HigherOrderLambdaVisitor(visitor.Options with { DontNeedAlias = false }, parameters);
+        bodyVisitor.Visit(lambda.Body);
+
+        if (visitor.IsParamMode)
+        {
+            SqlOperandTranslator.AppendArrayOrColumn(visitor, args[1]);
+            SqlOperandTranslator.AppendArrayOrColumn(visitor, args[2]);
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var builder = visitor.Builder!;
+        var start = builder.Length;
+        builder.Append("arrayFold((").Append(accumulator).Append(", ").Append(element).Append(") -> ");
+        bodyVisitor.WriteTo(builder);
+        builder.Append(", ");
+        SqlOperandTranslator.AppendArrayOrColumn(visitor, args[1]);
+        builder.Append(", cast(");
+
+        // The accumulator is cast to its declared CLR type: a small integer literal (0) is inferred
+        // as UInt8 by the server, while the lambda's arithmetic widens to Int64, and the fold requires
+        // the two to agree (TYPE_MISMATCH otherwise).
+        var accumulatorSql = Capture(builder, () => SqlOperandTranslator.AppendArrayOrColumn(visitor, args[2]));
+        builder.Append(accumulatorSql).Append(" as ")
+            .Append(DeclaredTypeName(visitor.Dialect, node.Method.ReturnType)).Append(')');
+        builder.Append(')');
+
+        var call = builder.ToString(start, builder.Length - start);
+        builder.Length = start;
+        var processed = visitor.Dialect.MakeArrayFunction(node.Method.Name, call);
+        builder.Append(visitor.Dialect.MakeArrayResult(node.Method.Name, processed, node.Method.ReturnType));
+    }
+
+    /// <summary>
+    /// Refuses an element type whose vendor aggregation widens to a shape the declared integral CLR
+    /// result cannot carry (a floating-point or decimal difference/sum would be silently truncated).
+    /// The check runs before the provider gate, so the precise reason is reported on every provider.
+    /// </summary>
+    private static void RequireIntegralElement(
+        MethodCallExpression node, string name, bool allowUnsigned64)
+    {
+        var element = node.Method.GetGenericArguments()[0];
+        element = Nullable.GetUnderlyingType(element) ?? element;
+
+        var integral = element == typeof(sbyte) || element == typeof(byte)
+            || element == typeof(short) || element == typeof(ushort)
+            || element == typeof(int) || element == typeof(uint)
+            || element == typeof(long) || (allowUnsigned64 && element == typeof(ulong));
+
+        if (!integral)
+            throw new NotSupportedException(
+                $"The {name} function is refused for element type {element}: the vendor widens the result "
+                + (name == nameof(ClickHouseFunctions.array_difference)
+                    ? "to a floating-point or decimal array whose fractional differences the declared long[] cannot carry; "
+                    : "to a floating-point or decimal sum that the declared long cannot carry; ")
+                + "only integral element types are accepted.");
+    }
+
+    /// <summary>
+    /// A lambda identifier that no rendered operand already uses, so the generated parameter cannot
+    /// shadow an enclosing lambda parameter (or a column) the operand refers to.
+    /// </summary>
+    private static string FreshLambdaName(string baseName, IReadOnlyList<string> rendered)
+    {
+        var candidate = baseName;
+        var suffix = 1;
+
+        while (rendered.Any(sql => UsesIdentifier(sql, candidate)))
+            candidate = baseName + (++suffix).ToString(CultureInfo.InvariantCulture);
+
+        return candidate;
+    }
+
+    private static bool UsesIdentifier(string sql, string name)
+    {
+        for (var index = sql.IndexOf(name, StringComparison.Ordinal); index >= 0;
+             index = sql.IndexOf(name, index + name.Length, StringComparison.Ordinal))
+        {
+            var beforeOk = index == 0 || !IsIdentifierChar(sql[index - 1]);
+            var after = index + name.Length;
+            var afterOk = after == sql.Length || !IsIdentifierChar(sql[after]);
+
+            if (beforeOk && afterOk)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsIdentifierChar(char value) => char.IsLetterOrDigit(value) || value is '_' or '$';
+
+    /// <summary>
+    /// The provider type name of a declared scalar result, used to cast a fold accumulator into the
+    /// type its lambda is declared over. Arrays and tuples have no scalar accumulator spelling and are
+    /// refused with their own reason.
+    /// </summary>
+    private static string DeclaredTypeName(ISqlDialect dialect, Type type)
+    {
+        if (Nullable.GetUnderlyingType(type) is { } underlying)
+            return $"Nullable({DeclaredTypeName(dialect, underlying)})";
+
+        if (type.IsArray || TypeFacts.IsTupleLike(type))
+            throw new NotSupportedException(
+                $"The array_fold accumulator type {type} is refused: the accumulator must be a scalar "
+                + "(or Nullable(scalar)) value so its provider type name can be composed; arrays and "
+                + "tuples have no scalar accumulator spelling.");
+
+        return dialect.MakeTypeName(type);
+    }
+
+    private static string NameOr(ParameterExpression parameter, string fallback)
+        => string.IsNullOrEmpty(parameter.Name) ? fallback : parameter.Name!;
+
+    /// <summary>Renders an operand into the builder and returns its SQL text without leaving it there.</summary>
+    private static string Capture(System.Text.StringBuilder builder, Action emit)
+    {
+        var start = builder.Length;
+        emit();
+        var value = builder.ToString(start, builder.Length - start);
+        builder.Length = start;
+        return value;
+    }
+
+    /// <summary>
     /// Translates the higher-order (lambda) array functions of <see cref="ClickHouseFunctions"/>
     /// (<c>arrayMap</c>, <c>arrayFilter</c>, <c>arrayExists</c>, <c>arrayAll</c>, <c>arrayCount</c>,
     /// <c>arrayFirst*</c>, <c>arrayLast*</c>). Returns <c>false</c> when the call is not one of them.
@@ -276,8 +600,8 @@ internal static class ArraySqlTranslator
     {
         var sqlName = node.Method.Name switch
         {
-            nameof(ClickHouseFunctions.array_map) when args.Count == 2 => "arrayMap",
-            nameof(ClickHouseFunctions.array_filter) when args.Count == 2 => "arrayFilter",
+            nameof(ClickHouseFunctions.array_map) when args.Count >= 2 => "arrayMap",
+            nameof(ClickHouseFunctions.array_filter) when args.Count >= 2 => "arrayFilter",
             nameof(ClickHouseFunctions.array_exists) when args.Count == 2 => "arrayExists",
             nameof(ClickHouseFunctions.array_all) when args.Count == 2 => "arrayAll",
             nameof(ClickHouseFunctions.array_count) when args.Count == 2 => "arrayCount",
@@ -285,6 +609,10 @@ internal static class ArraySqlTranslator
             nameof(ClickHouseFunctions.array_first_index) when args.Count == 2 => "arrayFirstIndex",
             nameof(ClickHouseFunctions.array_last) when args.Count == 2 => "arrayLast",
             nameof(ClickHouseFunctions.array_last_index) when args.Count == 2 => "arrayLastIndex",
+            nameof(ClickHouseFunctions.array_fill) when args.Count == 2 => "arrayFill",
+            nameof(ClickHouseFunctions.array_reverse_fill) when args.Count == 2 => "arrayReverseFill",
+            nameof(ClickHouseFunctions.array_split) when args.Count == 2 => "arraySplit",
+            nameof(ClickHouseFunctions.array_reverse_split) when args.Count == 2 => "arrayReverseSplit",
             _ => null
         };
 
@@ -299,6 +627,12 @@ internal static class ArraySqlTranslator
         return true;
     }
 
+    /// <summary>
+    /// Renders <c>arrayMap(lambda, arr1, ...)</c>-style calls. ClickHouse binds one lambda parameter per
+    /// array operand (never a separate index argument), so the lambda arity must equal the number of
+    /// arrays; the documented index-lambda idiom passes <c>arrayEnumerate(array)</c> as an extra array.
+    /// Any other arity is refused with a precise reason instead of silently dropping a parameter.
+    /// </summary>
     private static void EmitHigherOrderArray(
         BaseExpressionVisitor visitor,
         string sqlName,
@@ -306,13 +640,16 @@ internal static class ArraySqlTranslator
         Type resultType,
         IReadOnlyList<Expression> args)
     {
-        var lambda = ExtractLambda(args[0]);
+        var lambda = ExtractLambda(args[0], facadeName);
+        var arrayCount = args.Count - 1;
 
-        if (lambda.Parameters.Count != 1)
-            throw new NotSupportedException($"The {sqlName} lambda must have exactly one parameter.");
+        if (lambda.Parameters.Count != arrayCount)
+            throw new NotSupportedException(
+                $"The {facadeName} lambda must have exactly one parameter per array argument: "
+                + $"{lambda.Parameters.Count} parameter(s) for {arrayCount} array(s). ClickHouse has no "
+                + "separate index lambda parameter; pass arrayEnumerate(array) as an additional array "
+                + "to bind an index.");
 
-        var parameter = lambda.Parameters[0];
-        var name = string.IsNullOrEmpty(parameter.Name) ? "x" : parameter.Name!;
         var parameters = new Dictionary<ParameterExpression, string>();
         if (visitor.LambdaParameters is { } outer)
         {
@@ -320,7 +657,13 @@ internal static class ArraySqlTranslator
                 parameters[entry.Key] = entry.Value;
         }
 
-        parameters[parameter] = name;
+        var lambdaParameters = new string[lambda.Parameters.Count];
+        for (var i = 0; i < lambda.Parameters.Count; i++)
+        {
+            var name = NameOr(lambda.Parameters[i], FallbackLambdaName(i));
+            parameters[lambda.Parameters[i]] = name;
+            lambdaParameters[i] = name;
+        }
 
         using var bodyVisitor = new HigherOrderLambdaVisitor(visitor.Options with { DontNeedAlias = false }, parameters);
         bodyVisitor.Visit(lambda.Body);
@@ -337,7 +680,14 @@ internal static class ArraySqlTranslator
 
         var builder = visitor.Builder!;
         var start = builder.Length;
-        builder.Append(sqlName).Append('(').Append(name).Append(" -> ");
+        builder.Append(sqlName).Append('(');
+
+        if (lambdaParameters.Length == 1)
+            builder.Append(lambdaParameters[0]);
+        else
+            builder.Append('(').AppendJoin(", ", lambdaParameters).Append(')');
+
+        builder.Append(" -> ");
         bodyVisitor.WriteTo(builder);
 
         for (var (i, cnt) = (1, args.Count); i < cnt; i++)
@@ -354,12 +704,23 @@ internal static class ArraySqlTranslator
         builder.Append(visitor.Dialect.MakeArrayResult(facadeName, processed, resultType));
     }
 
-    private static LambdaExpression ExtractLambda(Expression expression)
+    /// <summary>The generated lambda identifier when the expression tree carries no parameter name.</summary>
+    private static string FallbackLambdaName(int index) => index switch
+    {
+        0 => "x",
+        1 => "y",
+        2 => "z",
+        _ => "x" + index.ToString(CultureInfo.InvariantCulture)
+    };
+
+    private static LambdaExpression ExtractLambda(Expression expression, string facadeName)
     {
         if (expression is UnaryExpression { NodeType: ExpressionType.Quote, Operand: LambdaExpression lambda })
             return lambda;
 
-        throw new NotSupportedException("The higher-order array functions require an inline lambda argument.");
+        throw new NotSupportedException(
+            $"The {facadeName} function requires an inline lambda argument: a lambda held in a variable "
+            + "or a delegate is not part of the query expression tree, so its body cannot be translated.");
     }
 
     private static void EmitArrayFunction(
@@ -477,7 +838,9 @@ internal sealed class HigherOrderLambdaVisitor : BaseExpressionVisitor
     {
         if (IsLambdaParameter(node.Expression))
             throw new NotSupportedException(
-                "Member access on the higher-order array lambda parameter is not supported; use operators or functions instead.");
+                $"Member access '.{node.Member.Name}' on the higher-order array lambda parameter is not "
+                + "supported: the parameter is a bare SQL element, so it has no translatable members; "
+                + "use operators or functions instead.");
 
         return base.VisitMember(node);
     }

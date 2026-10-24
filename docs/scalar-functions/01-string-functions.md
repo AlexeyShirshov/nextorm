@@ -289,6 +289,37 @@ var rows = dataContext.From<IComplexEntity>()
 The in-memory provider evaluates the same calls through their CLR equivalents, so the same query runs
 without a database.
 
+## ClickHouse string functions (#286, T286b)
+
+The ClickHouse-only string surface lives on `SqlFunctions.ClickHouse`; every member renders the exact
+vendor name and is rejected by every other dialect. Result shapes are explicit: `overlay`/`initcap`/
+`soundex`/`substring_index`/`normalize_utf8_*` return `string` (or `string?` for a nullable argument),
+`count_substrings`/`edit_distance`/`byte_hamming_distance` return `ulong`/`int`, and
+`extract_groups`/`split_by_*` return `string[]`.
+
+| Function | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.overlay(s, replacement, offset[, length])` | `overlay(s, replacement, offset[, length])` |
+| `SqlFunctions.ClickHouse.initcap(s)` | `initcap(s)` |
+| `SqlFunctions.ClickHouse.soundex(s)` | `soundex(s)` |
+| `SqlFunctions.ClickHouse.base64_encode(s)` / `base64_decode(s)` | `base64Encode` / `base64Decode` |
+| `SqlFunctions.ClickHouse.hex(s)` / `unhex(s)` | `hex` / `unhex` |
+| `SqlFunctions.ClickHouse.edit_distance(a, b)` | `editDistance(a, b)` |
+| `SqlFunctions.ClickHouse.jaro_similarity(a, b)` | `jaroSimilarity(a, b)` |
+| `SqlFunctions.ClickHouse.byte_hamming_distance(a, b)` | `byteHammingDistance(a, b)` |
+| `SqlFunctions.ClickHouse.substring_index(s, delim, count)` | `substringIndex(s, delim, count)` |
+| `SqlFunctions.ClickHouse.count_substrings(s, sub[, start])` | `countSubstrings(s, sub[, start])` |
+| `SqlFunctions.ClickHouse.extract_groups(pattern, s)` | `extractGroups(pattern, s)` → `string[]` |
+| `SqlFunctions.ClickHouse.normalize_utf8_nfc(s)` / `_nfd` / `_nfkc` / `_nfkd` | `normalizeUTF8NFC` / `NFD` / `NFKC` / `NFKD` |
+
+Edge semantics are pinned live on 25.8.33.6: `overlay` is 1-based with the default length equal to the
+replacement length (a zero length inserts, an offset past the end appends); `initcap` is ASCII-only;
+`soundex` returns `0000` when the input has no ASCII letter; `editDistance` counts UTF-8 **bytes** and
+`byteHammingDistance` zero-pads the shorter input. `base64Decode('!!!')`, a multi-character
+`substringIndex` delimiter and a negative `countSubstrings` start are rejected by the server rather than
+defaulted, and `extractGroups` over a nullable argument is refused because ClickHouse cannot nest
+`Array(String)` inside `Nullable`.
+
 ## String and regular-expression extensions (PostgreSQL)
 
 Besides the portable `string` and [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) methods

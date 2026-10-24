@@ -83,3 +83,32 @@ var elements = dataContext
 
 `generate_series` selects [`Value`](xref:NextORM.Core.SqlFunctions.IGenerateSeriesRow.Value) and `unnest` selects
 [`Value`](xref:NextORM.Core.SqlFunctions.IUnnestRow`1.Value); both map to the single column the function returns.
+
+## ClickHouse aggregate catalogue (#286, T286b)
+
+The residual ClickHouse aggregate catalogue is typed on `ClickHouseFunctions` and dispatched by
+`AdvancedAggregateTranslator` over the ClickHouse-only `IClickHouseAggregateRenderer` capability (null on
+every other provider, so a call fails closed before SQL). Parametric aggregates use the vendor
+two-parenthesis grammar — the accuracy/level/limit parameters are the leading CLR arguments and the value
+arguments form the second pair — and the result is normalised to the declared CLR shape (`toInt64`,
+`toInt32`, `toFloat64`, or a composite cast for `Array`/`Tuple` results).
+
+| Group | Members |
+|---|---|
+| Statistical | `entropy`, `simple_linear_regression`, `delta_sum`, `delta_sum_timestamp`, `gini`, `skew_pop`, `skew_samp`, `kurt_pop`, `kurt_samp`, `rank_corr`, `contingency`, `cramers_v`, `cramers_v_bias_corrected`, `theils_u`, `welch_t_test`, `mann_whitney_u_test`, `kolmogorov_smirnov_test`, `mean_z_test`, `analysis_of_variance`, `student_t_test`, `student_t_test_one_sample` |
+| Quantiles | `quantile_tdigest`, `quantile_gk`, `quantile_dd`, `quantile_bfloat16`, `quantile_prometheus_histogram`, `quantiles`, `quantiles_exact`, `quantiles_exact_low`, `quantiles_exact_high`, `quantiles_exact_weighted`, `quantiles_timing`, `quantiles_tdigest`, `quantiles_bfloat16`, `quantiles_dd`, `quantiles_gk`, `quantiles_prometheus_histogram`, `uniq_up_to` |
+| Top-K and maps | `approx_top_k`, `approx_top_sum`, `any_heavy`, `max_map`, `min_map` |
+| Group-array family | `group_array`, `group_array_moving_avg`, `group_array_moving_sum`, `group_array_sample`, `group_array_sorted`, `group_array_last`, `group_array_insert_at`, `group_array_intersect`, `group_concat` |
+| Counting and sums | `sum_count`, `sum_kahan`, `histogram`, `sparkbar`, `group_format`, `max_intersections` (+`max_intersections_position`) |
+| Row picking | `first_value`, `last_value` (aggregate forms; the window forms stay on `CommonFunctions`) |
+| Sequences | `sequence_count`, `sequence_match_events`, `sequence_next_node` |
+| Time series | `time_series_group_sum`, `time_series_group_rate_sum`, `time_series_instant_rate_to_grid`, `time_series_rate_to_grid`, `time_series_resample_to_grid_with_staleness`; window-only `exponential_time_decayed_sum`/`_max`/`_count`/`_avg` (complete them with `Over(...)`) |
+
+Version facts are pinned, not hidden: `gini`, `student_t_test_one_sample`, `group_format` and
+`quantile_prometheus_histogram` were introduced after 25.8 and `time_series_group_sum`/
+`time_series_group_rate_sum` were removed, so their arms render the vendor name and the live test pins
+`UNKNOWN_FUNCTION`. `sequence_next_node` needs `allow_experimental_funnel_functions` and the time-series
+grids need `allow_experimental_time_series_aggregate_functions`. Three members stay refused
+(`stochastic_linear_regression`, `stochastic_logistic_regression`, `exponential_moving_average`: opaque
+`AggregateFunction` states) — see
+[ClickHouse-specific SQL › Not yet supported](../guide/provider-specific-sql/clickhouse.md#not-yet-supported).

@@ -93,6 +93,35 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+### Delivered numeric, rounding and bit functions (#286, T286b)
+
+The remaining ClickHouse-only numeric families are typed members too. `is_finite`/`is_infinite`/`is_nan`
+return `bool`, the integer forms keep the vendor width (`int_div`/`int_exp2`/`int_exp10` are `UInt64` →
+`ulong`), the rounding family returns the argument's integer width, and the bit family declares
+`UInt64`-widened arithmetic (`bitAnd`/`bitOr`/`bitXor`/`bit_count`/`bit_hamming_distance` → `ulong`) with
+the width-preserving shifts/rotations and the `bitTest*` booleans. Each has a `NULL`-propagating
+overload where the vendor accepts `Nullable`.
+
+| Function | SQL | Result |
+|---|---|---|
+| `SqlFunctions.ClickHouse.erf(x)` / `erfc(x)` | `erf(x)` / `erfc(x)` | `double` (`Nullable` for `double?`) |
+| `SqlFunctions.ClickHouse.lgamma(x)` / `tgamma(x)` | `lgamma(x)` / `tgamma(x)` | `double` |
+| `SqlFunctions.ClickHouse.gcd(a, b)` / `lcm(a, b)` | `gcd(a, b)` / `lcm(a, b)` | `ulong` |
+| `SqlFunctions.ClickHouse.is_finite(x)` / `is_infinite(x)` / `is_nan(x)` | `isFinite(x)` / `isInfinite(x)` / `isNaN(x)` | `bool` |
+| `SqlFunctions.ClickHouse.hypot(a, b)` | `hypot(a, b)` | `double` |
+| `SqlFunctions.ClickHouse.int_div(a, b)` / `int_exp2(x)` / `int_exp10(x)` | `intDiv(a, b)` / `intExp2(x)` / `intExp10(x)` | `ulong` |
+| `SqlFunctions.ClickHouse.sigmoid(x)` / `sqr(x)` | `sigmoid(x)` / `sqr(x)` | `double` |
+| `SqlFunctions.ClickHouse.round_age(x)` / `round_bankers(x)` / `round_down(x)` / `round_duration(x)` / `round_to_exp2(x)` | `roundAge` / `roundBankers` / `roundDown` / `roundDuration` / `roundToExp2` | the argument's integer width |
+| `SqlFunctions.ClickHouse.bitAnd(a, b)` / `bitOr` / `bitXor` | `bitAnd(a, b)` / `bitOr` / `bitXor` | `ulong` |
+| `SqlFunctions.ClickHouse.bitNot(a)` / `bitShiftLeft(a, n)` / `bitShiftRight(a, n)` | `bitNot(a)` / `bitShiftLeft(a, n)` / `bitShiftRight(a, n)` | the operand width (`byte`/`int`/`uint`/`ulong`) |
+| `SqlFunctions.ClickHouse.bitRotateLeft(a, n)` / `bitRotateRight(a, n)` | `bitRotateLeft(a, n)` / `bitRotateRight(a, n)` | the operand width |
+| `SqlFunctions.ClickHouse.bitCount(a)` | `bitCount(a)` | `byte` |
+| `SqlFunctions.ClickHouse.bitTest(a, i)` / `bitTestAll` / `bitTestAny` | `bitTest(a, i)` / `bitTestAll` / `bitTestAny` | `bool` |
+| `SqlFunctions.ClickHouse.bitHammingDistance(a, b)` | `bitHammingDistance(a, b)` | `ulong` (string overload included) |
+
+The portable equivalents of `e`, `plus`, `minus`, `multiply`, `divide` and `negate` are the `Math.E`
+constant and the CLR arithmetic operators, not ClickHouse-only members.
+
 ## PostgreSQL extended math
 
 The remaining math functions are part of the extended scalar library

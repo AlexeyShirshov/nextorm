@@ -374,3 +374,35 @@ var rows = dataContext.From<IComplexEntity>()
 select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart`
  from complex_entity
 ```
+
+### Поставленные функции даты и времени (#286, T286b)
+
+Остальной каталог даты/времени ClickHouse типизирован на `ClickHouseFunctions`. Результаты объявлены
+явно: `make_date`/`make_date32`/`to_modified_julian_day`/`to_time` возвращают целые,
+`make_date_time` — `DateTime`, `server_timezone`/`timezone_of`/`date_name` — `string`, семейство
+`timezone_offset` — `int`, а `now64`/`time_slot`/`from_unix_timestamp*` сохраняют точность
+`DateTime64` вендора.
+
+| Функция | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.make_date(y, m, d)` / `make_date32(y, m, d)` | `makeDate` / `makeDate32` |
+| `SqlFunctions.ClickHouse.make_date_time(y, m, d, h, mi, s)` | `makeDateTime(...)` |
+| `SqlFunctions.ClickHouse.now64([scale[, timezone]])` | `now64(...)` |
+| `SqlFunctions.ClickHouse.now_in_block([scale[, timezone]])` | `nowInBlock(...)` |
+| `SqlFunctions.ClickHouse.time_slot(ts)` / `time_slots(start, duration)` | `timeSlot` / `timeSlots` |
+| `SqlFunctions.ClickHouse.to_start_of_five_minutes(ts)` / `_ten` / `_fifteen` | `toStartOfFiveMinutes` / `Ten` / `FifteenMinutes` |
+| `SqlFunctions.ClickHouse.to_start_of_interval(ts, seconds[, origin])` | `toStartOfInterval(ts, INTERVAL ...)` |
+| `SqlFunctions.ClickHouse.to_iso_year(ts)` / `to_week` / `to_year_week` / `to_last_day_of_week` | `toISOYear` / `toWeek` / `toYearWeek` / `toLastDayOfWeek` |
+| `SqlFunctions.ClickHouse.to_days_in_month(ts)` | `toDaysInMonth(ts)` |
+| `SqlFunctions.ClickHouse.to_modified_julian_day(ts)` | `toModifiedJulianDay(ts)` |
+| `SqlFunctions.ClickHouse.age(ts1, ts2)` | `age(ts1, ts2)` |
+| `SqlFunctions.ClickHouse.date_name(part, ts)` | `dateName(part, ts)` |
+| `SqlFunctions.ClickHouse.server_timezone()` / `timezone_of(ts)` / `timezone_offset(ts)` | `serverTimezone` / `timezoneOf` / `timezoneOffset` |
+| `SqlFunctions.ClickHouse.to_time(ts)` | `toTime(ts)` |
+| `SqlFunctions.ClickHouse.timestamp(ts)` | `timestamp(ts)` |
+| `SqlFunctions.ClickHouse.from_unix_timestamp(ts[, tz])` / `_64_milli` / `_64_micro` | `fromUnixTimestamp` / `fromUnixTimestamp64Milli` / `Micro` |
+
+Три члена остаются отклонёнными с проверенной причиной: `from_utc_timestamp` (пара «настенное время,
+зона» непредставима в `System.DateTime`), `to_time64` (`Time64(scale)` не имеет CLR-носителя) и
+`from_unix_timestamp64_nano` (`DateTime64(9)` превышает разрешение `DateTime` в 100 нс). См.
+[ClickHouse-specific SQL › Пока не поддерживается](../guide/provider-specific-sql/clickhouse.md#пока-не-поддерживается).

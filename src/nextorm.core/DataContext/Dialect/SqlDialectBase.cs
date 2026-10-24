@@ -194,6 +194,9 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>null</c>; ClickHouse opts into the <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c> aggregates.</summary>
     public virtual ISequenceAggregateRenderer? SequenceAggregates => null;
 
+    /// <summary>Defaults to <c>null</c>; ClickHouse opts into the ClickHouse-only aggregate catalogue (statistical, quantile-algorithm, array/tuple and time-series aggregates).</summary>
+    public virtual IClickHouseAggregateRenderer? ClickHouseAggregates => null;
+
     /// <summary>Defaults to <c>false</c>; ClickHouse opts into the string-JSON <c>JSONExtract*</c> family and the native-JSON functions.</summary>
     public virtual bool SupportsJsonExtract => false;
 

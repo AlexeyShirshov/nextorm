@@ -92,6 +92,35 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+### Поставленные числовые, округляющие и битовые функции (#286, T286b)
+
+Остальные числовые семейства ClickHouse — тоже типизированные члены. `is_finite`/`is_infinite`/
+`is_nan` возвращают `bool`, целочисленные формы сохраняют ширину вендора (`int_div`/`int_exp2`/
+`int_exp10` — `UInt64` → `ulong`), семейство округления возвращает целочисленную ширину аргумента, а
+битовое семейство объявляет `UInt64`-расширенную арифметику (`bitAnd`/`bitOr`/`bitXor`/`bit_count`/
+`bit_hamming_distance` → `ulong`) с сохраняющими ширину сдвигами/ротациями и булевыми `bitTest*`. У
+каждой есть перегрузка, пробрасывающая `NULL`, там где вендор принимает `Nullable`.
+
+| Функция | SQL | Результат |
+|---|---|---|
+| `SqlFunctions.ClickHouse.erf(x)` / `erfc(x)` | `erf(x)` / `erfc(x)` | `double` (`Nullable` для `double?`) |
+| `SqlFunctions.ClickHouse.lgamma(x)` / `tgamma(x)` | `lgamma(x)` / `tgamma(x)` | `double` |
+| `SqlFunctions.ClickHouse.gcd(a, b)` / `lcm(a, b)` | `gcd(a, b)` / `lcm(a, b)` | `ulong` |
+| `SqlFunctions.ClickHouse.is_finite(x)` / `is_infinite(x)` / `is_nan(x)` | `isFinite(x)` / `isInfinite(x)` / `isNaN(x)` | `bool` |
+| `SqlFunctions.ClickHouse.hypot(a, b)` | `hypot(a, b)` | `double` |
+| `SqlFunctions.ClickHouse.int_div(a, b)` / `int_exp2(x)` / `int_exp10(x)` | `intDiv(a, b)` / `intExp2(x)` / `intExp10(x)` | `ulong` |
+| `SqlFunctions.ClickHouse.sigmoid(x)` / `sqr(x)` | `sigmoid(x)` / `sqr(x)` | `double` |
+| `SqlFunctions.ClickHouse.round_age(x)` / `round_bankers(x)` / `round_down(x)` / `round_duration(x)` / `round_to_exp2(x)` | `roundAge` / `roundBankers` / `roundDown` / `roundDuration` / `roundToExp2` | целочисленная ширина аргумента |
+| `SqlFunctions.ClickHouse.bitAnd(a, b)` / `bitOr` / `bitXor` | `bitAnd(a, b)` / `bitOr` / `bitXor` | `ulong` |
+| `SqlFunctions.ClickHouse.bitNot(a)` / `bitShiftLeft(a, n)` / `bitShiftRight(a, n)` | `bitNot(a)` / `bitShiftLeft(a, n)` / `bitShiftRight(a, n)` | ширина операнда (`byte`/`int`/`uint`/`ulong`) |
+| `SqlFunctions.ClickHouse.bitRotateLeft(a, n)` / `bitRotateRight(a, n)` | `bitRotateLeft(a, n)` / `bitRotateRight(a, n)` | ширина операнда |
+| `SqlFunctions.ClickHouse.bitCount(a)` | `bitCount(a)` | `byte` |
+| `SqlFunctions.ClickHouse.bitTest(a, i)` / `bitTestAll` / `bitTestAny` | `bitTest(a, i)` / `bitTestAll` / `bitTestAny` | `bool` |
+| `SqlFunctions.ClickHouse.bitHammingDistance(a, b)` | `bitHammingDistance(a, b)` | `ulong` (включая строковую перегрузку) |
+
+Переносимые эквиваленты `e`, `plus`, `minus`, `multiply`, `divide` и `negate` — это константа
+`Math.E` и арифметические операторы CLR, а не члены только для ClickHouse.
+
 ## Расширенная математика PostgreSQL
 
 Остальные математические функции входят в расширенную библиотеку скалярных функций

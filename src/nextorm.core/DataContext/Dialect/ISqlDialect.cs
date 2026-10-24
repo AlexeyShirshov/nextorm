@@ -585,6 +585,15 @@ public interface ISqlDialect
     ITopKAggregateRenderer? TopKAggregates => null;
 
     /// <summary>
+    /// The provider's renderer for the ClickHouse aggregate catalogue that has no cross-provider
+    /// spelling (the statistical aggregates, the parameterised quantile algorithms, the array- and
+    /// tuple-returning aggregates, the sequence aggregates and the time-series grid aggregates);
+    /// <c>null</c> means the provider cannot express them. Declared as a default interface method so
+    /// that existing external implementations keep compiling.
+    /// </summary>
+    IClickHouseAggregateRenderer? ClickHouseAggregates => null;
+
+    /// <summary>
     /// True when the provider can render the <c>anyLast</c> row-picking aggregate (the value of an
     /// arbitrary last row; <c>ClickHouseFunctions.any_last</c>). The safe default is <c>false</c>;
     /// ClickHouse opts in today. The arbitrary-value aggregate without the last-row restriction is
@@ -668,7 +677,11 @@ public interface ISqlDialect
 
     /// <summary>
     /// True when the provider can render the ClickHouse dictionary functions
-    /// (<c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>).
+    /// (<c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictGetOrNull</c>/<c>dictGetAll</c>/
+    /// <c>dictGetDescendants</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>)
+    /// and the embedded-geobase region functions (<c>regionToName</c>/<c>regionToCity</c>/<c>regionToArea</c>/
+    /// <c>regionToDistrict</c>/<c>regionToCountry</c>/<c>regionToContinent</c>/<c>regionToTopContinent</c>/
+    /// <c>regionToPopulation</c>/<c>regionHierarchy</c>/<c>regionIn</c>).
     /// The safe default is <c>false</c>; ClickHouse opts in today.
     /// </summary>
     bool SupportsDictionaries { get; }
