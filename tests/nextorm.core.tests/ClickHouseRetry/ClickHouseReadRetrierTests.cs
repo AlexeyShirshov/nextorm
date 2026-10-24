@@ -67,13 +67,21 @@ public sealed class ClickHouseReadRetrierTests
         invocations.Should().Be(2);
         delays.Should().ContainSingle().Which.Should().Be(TimeSpan.FromSeconds(1));
 
-        var record = records.Should().ContainSingle().Subject;
+        records.Should().HaveCount(2);
+        var record = records[0];
         record.TestIdentity.Should().Be("test.identity");
         record.OperationIdentity.Should().Be("operation.identity");
         record.Attempt.Should().Be(1);
         record.AttemptLimit.Should().Be(2);
         record.ReasonCode.Should().Be("client_http_timeout");
         record.ScheduledRetry.Should().BeTrue();
+        record.NextAttempt.Should().Be(2);
+
+        var recovered = records[1];
+        recovered.Attempt.Should().Be(2);
+        recovered.Succeeded.Should().BeTrue();
+        recovered.ScheduledRetry.Should().BeFalse();
+        recovered.NextAttempt.Should().BeNull();
     }
 
     [Fact]
@@ -311,7 +319,9 @@ public sealed class ClickHouseReadRetrierTests
 
         await retrierB.ExecuteAsync(Operation, _ => Task.FromResult("ok"), CancellationToken.None);
 
-        recordsA.Should().ContainSingle().Which.ScheduledRetry.Should().BeTrue();
+        recordsA.Should().HaveCount(2);
+        recordsA[0].ScheduledRetry.Should().BeTrue();
+        recordsA[1].Succeeded.Should().BeTrue();
         recordsB.Should().BeEmpty();
     }
 
