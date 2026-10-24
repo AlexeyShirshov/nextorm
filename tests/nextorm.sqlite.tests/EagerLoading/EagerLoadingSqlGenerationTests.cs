@@ -1360,6 +1360,132 @@ public class EagerLoadingSqlGenerationTests
             File.Delete(path);
         }
     }
+
+    // --- T249-D4b: a nested path that repeats the query-root type must qualify the repeated root
+    // --- occurrence with its own alias. An unqualified slot in the shared select list makes the whole
+    // --- join ambiguous ("ambiguous column name: id") although every column belongs to a joined table.
+
+    private static (SqliteDataContext Ctx, string Path) CreateRepeatedRootDb()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nextorm-eager-repeat-root-{Guid.NewGuid():N}.db");
+        using (var conn = new SqliteConnection($"Data Source={path}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText =
+                "create table eager_repeat_root (id integer primary key, parent_mid_id int not null, name text);" +
+                "create table eager_repeat_mid (id integer primary key, root_id int not null, name text);" +
+                "insert into eager_repeat_root (id, parent_mid_id, name) values (1, 0, 'root'), (100, 10, 'owned-of-mid-10');" +
+                "insert into eager_repeat_mid (id, root_id, name) values (10, 1, 'mid-10'), (11, 1, 'mid-11');";
+            cmd.ExecuteNonQuery();
+        }
+
+        return (new SqliteDataContext($"Data Source={path}", new DataContextBuilder()), path);
+    }
+
+    [Fact]
+    public void SingleQuery_NestedRepeatedRootType_QualifiesTheRepeatedRootSlot()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateRepeatedRootDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Root R -> collection M -> collection R: the level-2 item repeats the query-root type.
+            var roots = ctx.From<EagerRepeatRoot>()
+                .Where(r => r.Id == 1)
+                .LoadWith(
+                    r => r.Mids,
+                    c => c.From<EagerRepeatMid>().LoadWith(m => m.OwnedRoots, p => p.From<EagerRepeatRoot>(), m => m.Id, p => p.ParentMidId),
+                    r => r.Id,
+                    m => m.RootId,
+                    EagerLoadMode.SingleQuery)
+                .ToList();
+
+            roots.Should().ContainSingle();
+            roots[0].Mids.Select(m => m.Id).Should().BeEquivalentTo([10, 11]);
+            roots[0].Mids.Single(m => m.Id == 10).OwnedRoots.Select(x => x.Id).Should().Equal(100);
+            roots[0].Mids.Single(m => m.Id == 11).OwnedRoots.Should().BeEmpty();
+
+            interceptor.Statements.Should().HaveCount(1, "the repeated-root nested graph still stitches from one command");
+            var sql = interceptor.Statements[0].ToLowerInvariant();
+            CountOccurrences(sql, " join ").Should().Be(2);
+            SqlSnapshot.Write("repeated-root-legacy", sql);
+
+            // Every column of this three-table select list belongs to a joined table and therefore must
+            // carry its alias; a bare slot is exactly what SQLite rejects as ambiguous.
+            var select = sql[..sql.IndexOf(" from ", StringComparison.Ordinal)];
+            foreach (var column in select.Split(','))
+                column.Trim().Should().Contain(".", "the repeated root slot must emit <alias>.<column>, got '{0}'", column.Trim());
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void SingleQuery_NestedDistinctTypes_RecordsTheNonRepeatedRootSql()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateNestedDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Control: parent -> mid -> leaf, no repeated CLR type anywhere on the path.
+            var parents = ctx.From<EagerNestedParent>()
+                .Where(p => p.Id <= 2)
+                .LoadWith(
+                    p => p.Mids,
+                    c => c.From<EagerNestedMid>().LoadWith(m => m.Leaves, l => l.From<EagerNestedLeaf>(), m => m.Id, l => l.MidId),
+                    p => p.Id,
+                    m => m.ParentId,
+                    EagerLoadMode.SingleQuery)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2);
+            parents[0].Mids.Single(m => m.Id == 10).Leaves.Select(l => l.Id).Should().Equal(100, 101);
+
+            var sql = interceptor.Statements.Should().ContainSingle().Subject;
+            var select = sql.ToLowerInvariant();
+            select = select[..select.IndexOf(" from ", StringComparison.Ordinal)];
+            select.Should().Contain("t3.", "the distinct level-2 type keeps its own qualifier");
+            foreach (var column in select.Split(','))
+                column.Trim().Should().Contain(".", "every column of a multi-join select list is table-qualified, got '{0}'", column.Trim());
+
+            SqlSnapshot.Write("legacy", sql);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+}
+
+/// <summary>
+/// Writes emitted SQL to a directory named by <c>NEXTORM_T249_SQL_SNAPSHOT_DIR</c> (no-op otherwise),
+/// so the T249-D4b evidence can compare the non-repeated-root corpus before and after the alias fix.
+/// </summary>
+internal static class SqlSnapshot
+{
+    private const string DirectoryVariable = "NEXTORM_T249_SQL_SNAPSHOT_DIR";
+
+    public static void Write(string name, string sql)
+    {
+        var directory = Environment.GetEnvironmentVariable(DirectoryVariable);
+        if (string.IsNullOrEmpty(directory))
+            return;
+
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, name + ".sql"), sql);
+    }
 }
 
 [SqlTable("eager_parent")]
@@ -1456,4 +1582,36 @@ public sealed class MixedNote
 
     [Column("name")]
     public string? Name { get; set; }
+}
+
+[SqlTable("eager_repeat_root")]
+public sealed class EagerRepeatRoot
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_mid_id")]
+    public int ParentMidId { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<EagerRepeatMid> Mids { get; } = new List<EagerRepeatMid>();
+}
+
+[SqlTable("eager_repeat_mid")]
+public sealed class EagerRepeatMid
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("root_id")]
+    public int RootId { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<EagerRepeatRoot> OwnedRoots { get; } = new List<EagerRepeatRoot>();
 }

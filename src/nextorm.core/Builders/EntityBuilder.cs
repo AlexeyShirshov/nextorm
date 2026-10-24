@@ -407,6 +407,12 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         // so a different eager graph cannot reuse an incompatible parent plan.
         if (_loadSpecs is { Count: > 0 } || _eagerLoadMode != EagerLoadMode.Default)
         {
+            // Capability gate at construction: the additive metadata-driven form resolves a declared
+            // relationship into a SQL navigation, and a provider without a SQL pipeline (in-memory) has no
+            // implementation for it. Rejecting here is before any command exists, any SQL is built and any
+            // plan is inserted, and it never touches the sticky QueryCommand.Cache flag.
+            EntityBuilderEagerLoading.EnsureMetadataEagerLoadSupported(_dataProvider, _loadSpecs);
+
             cmd.EagerLoadMode = _eagerLoadMode != EagerLoadMode.Default ? _eagerLoadMode : null;
             cmd.EagerLoadShape = BuildEagerLoadShape();
         }
@@ -414,7 +420,10 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
     /// <summary>
     /// Builds the ordered structural shape of this builder's eager-load specifications, or the empty shape
-    /// when there are none. Used to key the plan cache by the eager graph.
+    /// when there are none. Used to key the plan cache by the eager graph. Each segment is the declaration's
+    /// <see cref="IEagerLoadNodeSpec.PlanShapeKey"/>: the legacy explicit-key fingerprint, or the canonical
+    /// metadata relationship identity when the explicit keys select a declared relationship — so the two
+    /// frontends of one 1:N declaration cannot split otherwise-equivalent plan entries.
     /// </summary>
     private EagerLoadShape BuildEagerLoadShape()
     {
@@ -423,7 +432,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         var parts = new string[_loadSpecs.Count];
         for (var i = 0; i < _loadSpecs.Count; i++)
-            parts[i] = _loadSpecs[i].ShapeKey;
+            parts[i] = _loadSpecs[i].PlanShapeKey;
 
         return new EagerLoadShape(parts);
     }
@@ -655,7 +664,17 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         EnsureValidEagerLoadMode(mode);
         var resolvedMode = ResolveEagerLoadMode(mode);
 
-        var spec = new EagerLoadSpec<TEntity, TChild, TKey>(collection, childQuery, parentKey, childKey, mode);
+        // Plan-identity normalization: when these explicit keys select exactly a declared 1:N
+        // relationship of the same navigation, the declaration is semantically the inferred-metadata
+        // declaration and must key the same plan entry. ShapeKey (the graph identity) is untouched and
+        // the legacy SQL/execution path is unchanged; only the plan identity is canonicalized. A
+        // missing, ambiguous or malformed declaration returns null and keeps the legacy identity, so the
+        // legacy overload never gains a metadata failure mode or a behavioural change.
+        var planShapeKey = MetadataEagerLoadResolver.TryResolveEquivalentPlanShape(
+            _dataProvider, collection, parentKey, childKey);
+
+        var spec = new EagerLoadSpec<TEntity, TChild, TKey>(
+            collection, childQuery, parentKey, childKey, mode, planShapeKey: planShapeKey);
 
         if (spec.CollectionMember is { } member && _loadSpecs is not null)
         {
@@ -665,6 +684,265 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
                     throw new InvalidOperationException(
                         $"The collection member '{member.Name}' on '{typeof(TEntity).Name}' already has an " +
                         "eager-load declaration; remove the earlier LoadWith call or load a different collection.");
+            }
+        }
+
+        var b = Clone();
+        b._eagerLoadMode = resolvedMode;
+        b._loadSpecs = _loadSpecs is null ? [spec] : [.. _loadSpecs, spec];
+
+        return b;
+    }
+    /// <summary>
+    /// Declares the eager loading of a <em>declared</em> collection navigation without explicit key
+    /// selectors: the relationship is read from the mapping metadata — <c>HasMany</c> or
+    /// <c>HasManyThrough</c> (fluent) or <c>[Relationship]</c> — and its ordered key components are
+    /// paired positionally, parent component at position <c>i</c> with child component at position
+    /// <c>i</c>.
+    /// <para>
+    /// The relationship is resolved and structurally validated when this method is called, so an
+    /// undeclared navigation, a reference cardinality and malformed metadata are rejected before any SQL
+    /// is generated and before any plan-cache entry exists. nextorm never infers a relationship from a
+    /// naming convention, never matches key columns by name and never falls back to the first component
+    /// of a composite key. A collection navigation can only be loaded through this collection route; the
+    /// reference route rejects a collection relationship.
+    /// </para>
+    /// <para>
+    /// The child query is the context's ordinary <c>From&lt;TChild&gt;()</c> source, so the related
+    /// type's mapping and global filters apply; use the <c>childQuery</c> overload to add the child's own
+    /// filters, ordering or per-parent paging. Modes, chunking, the assignment rule, ordering and the
+    /// stitching terminals are the same as for the explicit-key overload. The declared-metadata form is
+    /// SQL-only: the in-memory provider rejects it while the parent command is constructed, before any SQL
+    /// and before any plan-cache entry.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The related entity type.</typeparam>
+    /// <param name="collection">The parent-side collection navigation to fill.</param>
+    /// <param name="mode">
+    /// The whole-builder eager-load mode; <see cref="EagerLoadMode.Default"/> inherits the current choice.
+    /// </param>
+    /// <returns>A copy of this builder carrying the eager-load declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The navigation already carries an eager-load declaration on this builder.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The selector is not a collection navigation, no relationship is declared for it, the declared
+    /// relationship is not a collection relationship of <typeparamref name="TChild"/>, its key lists are
+    /// structurally invalid, a different explicit mode is already active, or the context is the in-memory
+    /// provider.
+    /// </exception>
+    public EntityBuilder<TEntity> LoadWith<TChild>(
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        EagerLoadMode mode = EagerLoadMode.Default)
+    {
+        ArgumentNullException.ThrowIfNull(collection);
+        EnsureValidEagerLoadMode(mode);
+
+        const string form = "LoadWith(collection)";
+        var binding = MetadataEagerLoadResolver.Resolve<TEntity, TChild>(
+            _dataProvider, collection, MetadataEagerLoadRoute.Collection, mode, form);
+        var spec = new MetadataEagerLoadSpec<TEntity, TChild>(binding, collection, static ctx => ctx.From<TChild>());
+
+        return AddMetadataLoadSpec(spec, binding.Navigation, ResolveEagerLoadMode(mode));
+    }
+    /// <summary>
+    /// Declares the eager loading of a <em>declared</em> collection navigation through a child query,
+    /// without explicit key selectors: the relationship is read from the mapping metadata — <c>HasMany</c>
+    /// or <c>HasManyThrough</c> (fluent) or <c>[Relationship]</c> — and its ordered key components are
+    /// paired positionally.
+    /// <para>
+    /// The relationship is resolved and structurally validated when this method is called, so an
+    /// undeclared navigation, a reference cardinality and malformed metadata are rejected before any SQL
+    /// is generated and before any plan-cache entry exists. nextorm never infers a relationship from a
+    /// naming convention, never matches key columns by name and never falls back to the first component
+    /// of a composite key. A collection navigation can only be loaded through this collection route; the
+    /// reference route rejects a collection relationship.
+    /// </para>
+    /// <para>
+    /// <paramref name="childQuery"/> supplies the child source, so it can add the child's own filters,
+    /// ordering or per-parent paging; split loading honors every child-query shape. Modes, chunking, the
+    /// assignment rule, ordering and the stitching terminals are the same as for the explicit-key
+    /// overload. The declared-metadata form is SQL-only: the in-memory provider rejects it while the
+    /// parent command is constructed, before any SQL and before any plan-cache entry.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The related entity type.</typeparam>
+    /// <param name="collection">The parent-side collection navigation to fill.</param>
+    /// <param name="childQuery">Builds the child query from the data context that owns the parent query.</param>
+    /// <param name="mode">
+    /// The whole-builder eager-load mode; <see cref="EagerLoadMode.Default"/> inherits the current choice.
+    /// </param>
+    /// <returns>A copy of this builder carrying the eager-load declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The navigation already carries an eager-load declaration on this builder.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The selector is not a collection navigation, no relationship is declared for it, the declared
+    /// relationship is not a collection relationship of <typeparamref name="TChild"/>, its key lists are
+    /// structurally invalid, a different explicit mode is already active, or the context is the in-memory
+    /// provider.
+    /// </exception>
+    public EntityBuilder<TEntity> LoadWith<TChild>(
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        Func<IDataContext, EntityBuilder<TChild>> childQuery,
+        EagerLoadMode mode = EagerLoadMode.Default)
+    {
+        ArgumentNullException.ThrowIfNull(collection);
+        ArgumentNullException.ThrowIfNull(childQuery);
+        EnsureValidEagerLoadMode(mode);
+
+        const string form = "LoadWith(collection, childQuery)";
+        var binding = MetadataEagerLoadResolver.Resolve<TEntity, TChild>(
+            _dataProvider, collection, MetadataEagerLoadRoute.Collection, mode, form);
+        var spec = new MetadataEagerLoadSpec<TEntity, TChild>(binding, collection, childQuery);
+
+        return AddMetadataLoadSpec(spec, binding.Navigation, ResolveEagerLoadMode(mode));
+    }
+    /// <summary>
+    /// Declares the eager loading of a <em>declared</em> reference navigation without explicit key
+    /// selectors: the relationship is read from the mapping metadata — <c>HasOne</c>/<c>HasOneToOne</c>
+    /// (fluent) or <c>[Relationship]</c> — and its ordered key components are paired positionally, parent
+    /// component at position <c>i</c> with child component at position <c>i</c>.
+    /// <para>
+    /// The relationship is resolved and structurally validated when this method is called, so an
+    /// undeclared navigation, a collection cardinality and malformed metadata are rejected before any SQL
+    /// is generated and before any plan-cache entry exists. nextorm never infers a relationship from a
+    /// naming convention, never matches key columns by name and never falls back to the first component
+    /// of a composite key. A collection navigation can only be loaded through the collection route; this
+    /// reference route rejects a collection relationship, including a many-to-many one.
+    /// </para>
+    /// <para>
+    /// One related row is assigned per parent: no matching row assigns <see langword="null"/>, and more
+    /// than one distinct full identity for the same parent throws
+    /// <see cref="InvalidOperationException"/> before any parent is mutated. A read-only navigation can
+    /// only be loaded when its current value already is the resolved row; otherwise it fails closed with
+    /// <see cref="NotSupportedException"/>. The child query is the context's ordinary
+    /// <c>From&lt;TChild&gt;()</c> source, so the related type's mapping and global filters apply; use the
+    /// <c>childQuery</c> overload to add the child's own filters or ordering. Modes, chunking, ordering and
+    /// the stitching terminals are the same as for the explicit-key overload, and a child page is rejected
+    /// because a per-parent top-N applies to a collection. The declared-metadata form is SQL-only: the
+    /// in-memory provider rejects it while the parent command is constructed, before any SQL and before
+    /// any plan-cache entry.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The related entity type.</typeparam>
+    /// <param name="reference">The parent-side reference navigation to fill.</param>
+    /// <param name="mode">
+    /// The whole-builder eager-load mode; <see cref="EagerLoadMode.Default"/> inherits the current choice.
+    /// </param>
+    /// <returns>A copy of this builder carrying the eager-load declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The navigation already carries an eager-load declaration on this builder, or more than one distinct
+    /// related row matches a single parent.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The selector is not a reference navigation, no relationship is declared for it, the declared
+    /// relationship is not a reference relationship of <typeparamref name="TChild"/>, its key lists are
+    /// structurally invalid, a different explicit mode is already active, the child query pages per
+    /// parent, the navigation is read-only and would have to be written, or the context is the in-memory
+    /// provider.
+    /// </exception>
+    [OverloadResolutionPriority(-1)]
+    public EntityBuilder<TEntity> LoadWith<TChild>(
+        Expression<Func<TEntity, TChild?>> reference,
+        EagerLoadMode mode = EagerLoadMode.Default)
+        where TChild : class
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        EnsureValidEagerLoadMode(mode);
+
+        const string form = "LoadWith(reference)";
+        var binding = MetadataEagerLoadResolver.Resolve<TEntity, TChild>(
+            _dataProvider, reference, MetadataEagerLoadRoute.Reference, mode, form);
+        var spec = new MetadataEagerLoadSpec<TEntity, TChild>(binding, collection: null, static ctx => ctx.From<TChild>());
+
+        return AddMetadataLoadSpec(spec, binding.Navigation, ResolveEagerLoadMode(mode));
+    }
+    /// <summary>
+    /// Declares the eager loading of a <em>declared</em> reference navigation through a child query,
+    /// without explicit key selectors: the relationship is read from the mapping metadata —
+    /// <c>HasOne</c>/<c>HasOneToOne</c> (fluent) or <c>[Relationship]</c> — and its ordered key components
+    /// are paired positionally.
+    /// <para>
+    /// The relationship is resolved and structurally validated when this method is called, so an
+    /// undeclared navigation, a collection cardinality and malformed metadata are rejected before any SQL
+    /// is generated and before any plan-cache entry exists. nextorm never infers a relationship from a
+    /// naming convention, never matches key columns by name and never falls back to the first component
+    /// of a composite key. A collection navigation can only be loaded through the collection route; this
+    /// reference route rejects a collection relationship, including a many-to-many one.
+    /// </para>
+    /// <para>
+    /// One related row is assigned per parent: no matching row assigns <see langword="null"/>, and more
+    /// than one distinct full identity for the same parent throws
+    /// <see cref="InvalidOperationException"/> before any parent is mutated. A read-only navigation can
+    /// only be loaded when its current value already is the resolved row; otherwise it fails closed with
+    /// <see cref="NotSupportedException"/>. <paramref name="childQuery"/> can add the child's own filters
+    /// or ordering; a child page is rejected because a per-parent top-N applies to a collection. Modes,
+    /// chunking, ordering and the stitching terminals are the same as for the explicit-key overload. The
+    /// declared-metadata form is SQL-only: the in-memory provider rejects it while the parent command is
+    /// constructed, before any SQL and before any plan-cache entry.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The related entity type.</typeparam>
+    /// <param name="reference">The parent-side reference navigation to fill.</param>
+    /// <param name="childQuery">Builds the child query from the data context that owns the parent query.</param>
+    /// <param name="mode">
+    /// The whole-builder eager-load mode; <see cref="EagerLoadMode.Default"/> inherits the current choice.
+    /// </param>
+    /// <returns>A copy of this builder carrying the eager-load declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The navigation already carries an eager-load declaration on this builder, or more than one distinct
+    /// related row matches a single parent.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The selector is not a reference navigation, no relationship is declared for it, the declared
+    /// relationship is not a reference relationship of <typeparamref name="TChild"/>, its key lists are
+    /// structurally invalid, a different explicit mode is already active, the child query pages per
+    /// parent, the navigation is read-only and would have to be written, or the context is the in-memory
+    /// provider.
+    /// </exception>
+    [OverloadResolutionPriority(-1)]
+    public EntityBuilder<TEntity> LoadWith<TChild>(
+        Expression<Func<TEntity, TChild?>> reference,
+        Func<IDataContext, EntityBuilder<TChild>> childQuery,
+        EagerLoadMode mode = EagerLoadMode.Default)
+        where TChild : class
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        ArgumentNullException.ThrowIfNull(childQuery);
+        EnsureValidEagerLoadMode(mode);
+
+        const string form = "LoadWith(reference, childQuery)";
+        var binding = MetadataEagerLoadResolver.Resolve<TEntity, TChild>(
+            _dataProvider, reference, MetadataEagerLoadRoute.Reference, mode, form);
+        var spec = new MetadataEagerLoadSpec<TEntity, TChild>(binding, collection: null, childQuery);
+
+        return AddMetadataLoadSpec(spec, binding.Navigation, ResolveEagerLoadMode(mode));
+    }
+    /// <summary>
+    /// Registers one additive metadata-driven eager-load declaration on a copy of this builder, applying
+    /// the same duplicate-member rule as the explicit-key overload: a member that already carries a
+    /// declaration on this builder is rejected instead of silently loading twice.
+    /// </summary>
+    /// <param name="spec">The metadata-driven specification to register.</param>
+    /// <param name="member">The navigation member the declaration targets.</param>
+    /// <param name="resolvedMode">The already resolved whole-builder eager-load mode.</param>
+    /// <returns>A copy of this builder carrying the declaration.</returns>
+    /// <exception cref="InvalidOperationException">The member already carries an eager-load declaration.</exception>
+    private EntityBuilder<TEntity> AddMetadataLoadSpec(IEagerLoadSpec<TEntity> spec, MemberInfo member, EagerLoadMode resolvedMode)
+    {
+        if (_loadSpecs is not null)
+        {
+            foreach (var registered in _loadSpecs)
+            {
+                if (registered.CollectionMember is { } existing && existing.Equals(member))
+                    throw new InvalidOperationException(
+                        $"The navigation member '{member.Name}' on '{typeof(TEntity).Name}' already has an " +
+                        "eager-load declaration; remove the earlier LoadWith call or load a different navigation.");
             }
         }
 

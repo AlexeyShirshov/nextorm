@@ -202,6 +202,16 @@ called with an explicit generic argument so that it never steals collection infe
 it is absent — exactly like `c.Parent != null`. Projecting the adapted **marker itself** (rather than one
 of those terminals) and composing LINQ operators after the adapter remain unsupported and fail closed.
 
+The adapter is a **query** surface: it answers presence and count inside a query. Filling a navigation on
+already materialized parents is the job of [`LoadWith`](eager-loading.md): its declared-metadata form
+(`LoadWith(navigation)` / `LoadWith(navigation, childQuery)`) reads the same declared relationship this
+page translates and returns entities with the navigation populated (see
+[Declared-metadata form](eager-loading.md#declared-metadata-form)). Collection-valued `Select` slots, the
+`AsEntityBuilder … Select(...).ToList()` adapter composition and standalone collection-projection syntax
+are a **separate surface that is not delivered in this release** (the rest of
+[#249](https://github.com/AlexeyShirshov/nextorm/issues/249) is still DRAFT): they are not a loading
+alternative to `LoadWith` and remain unimplemented, with the prohibitions below unchanged.
+
 ## Providers
 
 | Provider | Reference chains / presence | Whole-reference | Collection terminals | In-memory |
@@ -267,6 +277,11 @@ client-side evaluation:
 * **Bare reference-adapter projection** — projecting the reference marker itself
   (`Select(c => new { X = c.Parent!.AsEntityBuilder<Parent>() })`) is not a column and is rejected; use
   the `Any`/`Count`/`LongCount` terminals instead.
+* **Not a loading surface** — the adapter and the composition forms above never fill a navigation.
+  Loading a declared navigation is done with [`LoadWith`](eager-loading.md) on the parent query, whose
+  declared-metadata form reads the same declared relationship; collection-valued projection slots,
+  `AsEntityBuilder … Select(...).ToList()` adapter terminals and standalone collection-projection syntax
+  are a separate surface that is not delivered in this release.
 
 ### Composite relationship keys
 

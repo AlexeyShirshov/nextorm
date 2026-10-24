@@ -351,7 +351,18 @@ internal static class MemberTranslator
             return node;
         }
 
-        if (node.Expression?.Type == visitor.EntityType)
+        // A projection-item access (p.ItemN.Member) whose item type equals the command's own entity type
+        // would normally be taken for a direct access to the source. When the projection repeats that
+        // type (a nested eager-load path that ends at the query-root type), the direct access resolves
+        // the projection parameter itself and drops the slot's alias, emitting a bare column that makes
+        // the join ambiguous. Only that repeated-root shape is routed through the occurrence-aware
+        // projection branch below; every non-repeated shape keeps the existing path and SQL.
+        var repeatedRootProjectionItemAccess =
+            node.Expression is MemberExpression { Expression: ParameterExpression { Type: var slotOwner }, Member: var slotMember }
+            && slotOwner.IsAssignableTo(typeof(IProjection))
+            && ProjectionAliasCache.GetOccurrence(slotOwner, ProjectionAliasCache.GetMemberPosition(slotMember)) is not null;
+
+        if (!repeatedRootProjectionItemAccess && node.Expression?.Type == visitor.EntityType)
         {
             if (node.Expression!.Type!.IsAssignableTo(typeof(IProjection)))
             {
