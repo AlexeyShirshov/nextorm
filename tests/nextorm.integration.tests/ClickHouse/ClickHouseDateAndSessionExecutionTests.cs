@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -15,9 +16,9 @@ public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
     private static readonly DateTime Value = new(2023, 5, 17, 13, 45, 30);
 
     [Fact]
-    public void DateParts_ShouldExecute()
+    public async Task DateParts_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -33,8 +34,15 @@ public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
                 Minute = SqlFunctions.Sql.extract("minute", Value),
                 Second = SqlFunctions.Sql.extract("second", Value),
                 Epoch = SqlFunctions.Sql.date_part("epoch", Value)
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseDateAndSessionExecutionTests.DateParts_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.Year.Should().Be(2023);
         r.Quarter.Should().Be(2);
@@ -51,9 +59,9 @@ public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void DateTrunc_ShouldExecute()
+    public async Task DateTrunc_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -64,8 +72,15 @@ public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
                 Month = SqlFunctions.Sql.date_trunc("month", Value),
                 Quarter = SqlFunctions.Sql.date_trunc("quarter", Value),
                 Year = SqlFunctions.Sql.date_trunc("year", Value)
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseDateAndSessionExecutionTests.DateTrunc_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.Second.Should().Be(new DateTime(2023, 5, 17, 13, 45, 30));
         r.Minute.Should().Be(new DateTime(2023, 5, 17, 13, 45, 0));
@@ -88,9 +103,9 @@ public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void DateAdd_ShouldExecute()
+    public async Task DateAdd_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -106,8 +121,15 @@ public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
                 Microseconds = SqlFunctions.Sql.date_add("microseconds", 500, Value),
                 Decade = SqlFunctions.Sql.date_add("decade", 1, Value),
                 DecadeAgain = SqlFunctions.Sql.date_add("decade", 2, Value)
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseDateAndSessionExecutionTests.DateAdd_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.Year.Should().Be(Value.AddYears(1));
         r.Quarter.Should().Be(Value.AddMonths(3));
@@ -135,9 +157,9 @@ public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void DateDiff_ShouldExecute()
+    public async Task DateDiff_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -147,8 +169,15 @@ public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
                 Minutes = SqlFunctions.Sql.date_diff_big("minute", Value, Value.AddMinutes(5)),
                 Seconds = SqlFunctions.Sql.date_diff_big("second", Value, Value.AddSeconds(5)),
                 Milliseconds = SqlFunctions.Sql.date_diff_big("milliseconds", Value, Value.AddMilliseconds(500)),
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseDateAndSessionExecutionTests.DateDiff_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.Days.Should().Be(10);
         r.Months.Should().Be(3);
@@ -159,9 +188,9 @@ public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void SessionInfoFunctions_ShouldExecute()
+    public async Task SessionInfoFunctions_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -171,8 +200,15 @@ public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
                 Connection = SqlFunctions.Sql.connection_id(),
                 Host = SqlFunctions.ClickHouse.host_name(),
                 Port = SqlFunctions.ClickHouse.tcp_port()
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseDateAndSessionExecutionTests.SessionInfoFunctions_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.User.Should().NotBeNullOrEmpty();
         r.Database.Should().NotBeNullOrEmpty();
@@ -183,23 +219,30 @@ public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void UuidGenerators_ShouldExecute()
+    public async Task UuidGenerators_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
                 V4 = SqlFunctions.Sql.gen_random_uuid(),
                 V7 = SqlFunctions.Sql.uuidv7()
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseDateAndSessionExecutionTests.UuidGenerators_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.V4.Should().NotBe(Guid.Empty);
         r.V7.Should().NotBe(Guid.Empty);
     }
 
     [Fact]
-    public void GroupingModifiers_ShouldExecute()
+    public async Task GroupingModifiers_ShouldExecute()
     {
         _sut.ComplexEntity
             .GroupByRollup(x => x.Int)
@@ -213,18 +256,34 @@ public sealed class ClickHouseDateAndSessionExecutionTests : ProviderTestSuite
             .ToList()
             .Should().HaveCountGreaterThan(2);
 
-        _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .GroupByGroupingSets(x => new { x.Int }, [0], [])
-            .Select(x => new { x.Int, Count = SqlFunctions.Sql.count() })
-            .ToList()
-            .Should().HaveCountGreaterThan(2);
+            .Select(x => new { x.Int, Count = SqlFunctions.Sql.count() });
+
+        var groupingSets = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseDateAndSessionExecutionTests.GroupingModifiers_ShouldExecute#1",
+                ClickHouseReadCategory.MaterialisedListRead),
+            token => query.ToListAsync(token),
+            TestContext.Current.CancellationToken);
+
+        groupingSets.Should().HaveCountGreaterThan(2);
     }
 
     [Fact]
-    public void OffsetOnlyPaging_ShouldExecute()
+    public async Task OffsetOnlyPaging_ShouldExecute()
     {
         var all = _sut.ComplexEntity.OrderBy(x => x.Id).Select(x => x.Id).ToList();
-        var shifted = _sut.ComplexEntity.OrderBy(x => x.Id).Offset(1).Select(x => x.Id).ToList();
+        var query = _sut.ComplexEntity.OrderBy(x => x.Id).Offset(1).Select(x => x.Id);
+
+        var shifted = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseDateAndSessionExecutionTests.OffsetOnlyPaging_ShouldExecute#1",
+                ClickHouseReadCategory.MaterialisedListRead),
+            token => query.ToListAsync(token),
+            TestContext.Current.CancellationToken);
 
         shifted.Should().Equal(all.Skip(1));
     }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -18,38 +19,59 @@ public sealed class ClickHouseT332StringFormatInvariantProviderTests : ProviderT
     protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
 
     [Fact]
-    public void T332StringFormat_StaticPropertyInvariantProvider_ShouldExecute()
+    public async Task T332StringFormat_StaticPropertyInvariantProvider_ShouldExecute()
     {
-        var value = _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .Where(e => e.Id == 1)
-            .Select(e => string.Format(CultureInfo.InvariantCulture, "{0}-{1}", e.String, e.RequiredString))
-            .First();
+            .Select(e => string.Format(CultureInfo.InvariantCulture, "{0}-{1}", e.String, e.RequiredString));
+
+        var value = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseT332StringFormatInvariantProviderTests.T332StringFormat_StaticPropertyInvariantProvider_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         value.Should().Be("dadfasd-sdf");
     }
 
     [Fact]
-    public void T332StringFormat_ConstantInvariantProvider_ShouldExecute()
+    public async Task T332StringFormat_ConstantInvariantProvider_ShouldExecute()
     {
-        var value = _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .Where(e => e.Id == 1)
-            .Select(T332ConstantProviderCase("{0}-{1}"))
-            .First();
+            .Select(T332ConstantProviderCase("{0}-{1}"));
+
+        var value = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseT332StringFormatInvariantProviderTests.T332StringFormat_ConstantInvariantProvider_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         value.Should().Be("dadfasd-sdf");
     }
 
     [Fact]
-    public void T332StringFormat_NullProvider_ShouldKeepBehavingLikeTheProviderlessOverload()
+    public async Task T332StringFormat_NullProvider_ShouldKeepBehavingLikeTheProviderlessOverload()
     {
-        var value = _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .Where(e => e.Id == 1)
             .Select(e => new
             {
                 LiteralNull = string.Format((IFormatProvider?)null, "{0}-{1}", e.String, e.RequiredString),
                 NoProvider = string.Format("{0}-{1}", e.String, e.RequiredString)
-            })
-            .First();
+            });
+
+        var value = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseT332StringFormatInvariantProviderTests.T332StringFormat_NullProvider_ShouldKeepBehavingLikeTheProviderlessOverload#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         value.LiteralNull.Should().Be(value.NoProvider);
     }

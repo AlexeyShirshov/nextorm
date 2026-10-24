@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -16,9 +17,9 @@ public sealed class ClickHouseHashAndFormatTests : ProviderTestSuite
     private static readonly DateTime Value = new(2023, 5, 17, 13, 45, 30);
 
     [Fact]
-    public void HashFamily_ShouldExecute()
+    public async Task HashFamily_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -39,8 +40,16 @@ public sealed class ClickHouseHashAndFormatTests : ProviderTestSuite
                 Sha256 = SqlFunctions.ClickHouse.sha256("abc"),
                 Sha512 = SqlFunctions.ClickHouse.sha512("abc"),
                 SameXx = SqlFunctions.ClickHouse.xx_hash64("abc") == SqlFunctions.ClickHouse.xx_hash64("abc")
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseHashAndFormatTests.HashFamily_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
+
 
         r.Xx32.Should().NotBe(0);
         r.Xx64.Should().NotBe(0);
@@ -62,9 +71,9 @@ public sealed class ClickHouseHashAndFormatTests : ProviderTestSuite
     }
 
     [Fact]
-    public void TrimAndFormatFamily_ShouldExecute()
+    public async Task TrimAndFormatFamily_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -81,8 +90,16 @@ public sealed class ClickHouseHashAndFormatTests : ProviderTestSuite
                 Pi = SqlFunctions.Sql.pi(),
                 Degrees = SqlFunctions.Sql.degrees(SqlFunctions.Sql.pi()),
                 Radians = SqlFunctions.Sql.radians(180.0),
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseHashAndFormatTests.TrimAndFormatFamily_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
+
 
         r.Left.Should().Be("abcxx");
         r.Right.Should().Be("xxabc");

@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Tests.Shared.ClickHouseRetry;
 
 namespace NextORM.Integration.Tests;
 
@@ -30,9 +31,9 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     private const string Doc = "{\"a\":1,\"b\":\"x\",\"c\":[1,2]}";
 
     [Fact]
-    public void JsonExtraction_ShouldExecute()
+    public async Task JsonExtraction_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -56,8 +57,15 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 VisitF = SqlFunctions.ClickHouse.visit_param_extract_float("{\"p\":1.5}", "p"),
                 VisitB = SqlFunctions.ClickHouse.visit_param_extract_bool("{\"p\":true}", "p"),
                 VisitRaw = SqlFunctions.ClickHouse.visit_param_extract_raw("{\"p\":\"v\"}", "p")
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.JsonExtraction_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.S.Should().Be("x");
         r.I.Should().Be(1);
@@ -82,9 +90,9 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void ArrayLibrary_ShouldExecute()
+    public async Task ArrayLibrary_ShouldExecute()
     {
-        var r = _sut.ArrayEntity
+        var query = _sut.ArrayEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -120,8 +128,15 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 Intersect = SqlFunctions.ClickHouse.array_intersect(new[] { 3, 1, 2 }, new[] { 1, 2, 9 }),
                 Union = SqlFunctions.ClickHouse.array_union(new[] { 3, 1, 2 }, new[] { 9 }),
                 SymDiff = SqlFunctions.ClickHouse.array_symmetric_difference(new[] { 3, 1, 2 }, new[] { 1, 9 })
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.ArrayLibrary_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.Len.Should().Be(3);
         r.Has.Should().BeTrue();
@@ -222,11 +237,11 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void ToDateFamily_ShouldExecute()
+    public async Task ToDateFamily_ShouldExecute()
     {
         var value = new DateTime(2023, 5, 17, 13, 45, 30);
 
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -257,8 +272,15 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 Now = SqlFunctions.ClickHouse.now(),
                 Today = SqlFunctions.ClickHouse.today(),
                 Yesterday = SqlFunctions.ClickHouse.yesterday()
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.ToDateFamily_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.D.Should().Be(new DateTime(2023, 5, 17));
         r.Dt.Should().Be(value);
@@ -289,9 +311,9 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void Utf8AndRegexpStrings_ShouldExecute()
+    public async Task Utf8AndRegexpStrings_ShouldExecute()
     {
-        var r = _sut.SimpleEntity
+        var query = _sut.SimpleEntity
             .Where(x => x.Id == 1)
             .Select(x => new
             {
@@ -305,8 +327,15 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 SplitStr = SqlFunctions.ClickHouse.split_by_string(",", "a,b,c"),
                 SplitRegexp = SqlFunctions.ClickHouse.split_by_regexp("[,;]", "a,b;c"),
                 SplitWs = SqlFunctions.ClickHouse.split_by_whitespace("a b  c")
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.Utf8AndRegexpStrings_ShouldExecute#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.Lower.Should().Be("привет");
         r.Upper.Should().Be("ПРИВЕТ");
@@ -321,9 +350,9 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void Aggregates_ShouldExecute()
+    public async Task Aggregates_ShouldExecute()
     {
-        var r = _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .Where(x => x.Int != null)
             .Select(x => new
             {
@@ -341,8 +370,15 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 AnyLast = SqlFunctions.ClickHouse.any_last(x.Int),
                 WindowFunnel = SqlFunctions.ClickHouse.window_funnel(3600, x.Datetime, true, true),
                 SequenceMatch = SqlFunctions.ClickHouse.sequence_match("(?1)(?2)", x.Datetime, true, true)
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.Aggregates_ShouldExecute#1",
+                ClickHouseReadCategory.ScalarAggregate),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.ArgMin.Should().BeGreaterThan(0);
         r.ArgMax.Should().BeGreaterThan(0);
@@ -361,7 +397,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void ConditionalAndWindowHelpers_ShouldExecute()
+    public async Task ConditionalAndWindowHelpers_ShouldExecute()
     {
         var conditional = _sut.SimpleEntity
             .Where(x => x.Id == 1)
@@ -384,7 +420,7 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
         conditional.Host.Should().NotBeNullOrEmpty();
         conditional.Port.Should().BeGreaterThan(0);
 
-        var lag = _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .OrderBy(x => x.Id)
             .Select(x => new
             {
@@ -394,8 +430,15 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 Lead = SqlFunctions.ClickHouse.lead_in_frame(x.Id).Over(),
                 Lead2 = SqlFunctions.ClickHouse.lead_in_frame(x.Id, 1).Over(),
                 Lead3 = SqlFunctions.ClickHouse.lead_in_frame(x.Id, 1, 0L).Over()
-            })
-            .ToList();
+            });
+
+        var lag = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.ConditionalAndWindowHelpers_ShouldExecute#1",
+                ClickHouseReadCategory.MaterialisedListRead),
+            token => query.ToListAsync(token),
+            TestContext.Current.CancellationToken);
 
         lag.Should().HaveCount(3);
         lag[2].Lag.Should().Be(2);
@@ -403,9 +446,9 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void ArrayAndRankingAggregates_ShouldExecute()
+    public async Task ArrayAndRankingAggregates_ShouldExecute()
     {
-        var r = _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .Where(x => x.Int != null)
             .Select(x => new
             {
@@ -413,8 +456,15 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 GroupedUniq = SqlFunctions.ClickHouse.group_uniq_array((int)x.Int!),
                 TopK = SqlFunctions.ClickHouse.top_k(2, (int)x.Int!),
                 TopKWeighted = SqlFunctions.ClickHouse.top_k_weighted(2, (int)x.Int!, x.Id)
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.ArrayAndRankingAggregates_ShouldExecute#1",
+                ClickHouseReadCategory.ScalarAggregate),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         // Both non-null rows carry Int == 1, so the unordered groupArray result is [1, 1].
         r.Grouped.Should().Equal(1, 1);
@@ -424,9 +474,9 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void StatisticalAndBitAggregates_ShouldExecute()
+    public async Task StatisticalAndBitAggregates_ShouldExecute()
     {
-        var r = _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .Select(x => new
             {
                 Corr = SqlFunctions.Sql.corr((double)x.Id, (double)x.Id),
@@ -435,8 +485,15 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
                 BitAnd = SqlFunctions.Postgres.bit_and((int)x.Id),
                 BitOr = SqlFunctions.Postgres.bit_or((int)x.Id),
                 BitXor = SqlFunctions.Postgres.bit_xor((int)x.Id)
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.StatisticalAndBitAggregates_ShouldExecute#1",
+                ClickHouseReadCategory.ScalarAggregate),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.Corr.Should().BeApproximately(1.0, 1e-12);
         r.CovarPop.Should().BeApproximately(2.0 / 3.0, 1e-12);
@@ -447,19 +504,26 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     }
 
     [Fact]
-    public void RetentionAggregate_ShouldExecute()
+    public async Task RetentionAggregate_ShouldExecute()
     {
         // ClickHouse returns retention(...) as Array(UInt8), while the public signature declares int[]:
         // projecting the mask itself throws InvalidCastException (Byte[] -> Int32[]) during
         // materialization. The aggregate is executed through length() so the renderer and the server
         // path stay covered; the declared-array materialization mismatch is recorded as a product defect.
-        var r = _sut.ComplexEntity
+        var query = _sut.ComplexEntity
             .Select(x => new
             {
                 MaskLength = SqlFunctions.ClickHouse.length(
                     SqlFunctions.ClickHouse.retention(x.Id > 0, x.Id > 1, x.Id > 2))
-            })
-            .First();
+            });
+
+        var r = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.RetentionAggregate_ShouldExecute#1",
+                ClickHouseReadCategory.ScalarAggregate),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         r.MaskLength.Should().Be(3);
     }
@@ -533,31 +597,45 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     // the issue: no wrapper, no scalar normalization, so the value has to materialize as a real array.
 
     [Fact]
-    public void T277_ArrayFilter_Column_BareProjection()
+    public async Task T277_ArrayFilter_Column_BareProjection()
     {
-        var nums = _sut.ArrayEntity
+        var query = _sut.ArrayEntity
             .Where(x => x.Id == 1)
-            .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > 1, x.Nums))
-            .First();
+            .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > 1, x.Nums));
+
+        var nums = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.T277_ArrayFilter_Column_BareProjection#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         nums.Should().Equal(3, 2);
     }
 
     [Fact]
-    public void T277_ArrayFilter_Column_CorrelatedBody()
+    public async Task T277_ArrayFilter_Column_CorrelatedBody()
     {
         // The lambda body also reads the outer entity column, so the inner parameter and the outer binding
         // have to coexist in one expression tree.
-        var nums = _sut.ArrayEntity
+        var query = _sut.ArrayEntity
             .Where(x => x.Id == 1)
-            .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > x.Id, x.Nums))
-            .First();
+            .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > x.Id, x.Nums));
+
+        var nums = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.T277_ArrayFilter_Column_CorrelatedBody#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         nums.Should().Equal(3, 2);
     }
 
     [Fact]
-    public void T277_ArrayFilter_NegativeControls()
+    public async Task T277_ArrayFilter_NegativeControls()
     {
         var rejected = _sut.ArrayEntity
             .Where(x => x.Id == 1)
@@ -566,10 +644,17 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
 
         rejected.Should().BeEmpty("no element of [3, 1, 2] is greater than 100");
 
-        var emptySource = _sut.ArrayEntity
+        var query = _sut.ArrayEntity
             .Where(x => x.Id == 3)
-            .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > 1, x.Nums))
-            .First();
+            .Select(x => SqlFunctions.ClickHouse.array_filter(v => v > 1, x.Nums));
+
+        var emptySource = await ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.T277_ArrayFilter_NegativeControls#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
 
         emptySource.Should().BeEmpty("entity 3 carries an empty nums array");
     }
@@ -629,9 +714,9 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
     [InlineData("array_last_index", "inline-array", 3L)]
     [InlineData("array_last_index", "outer-column", 3L)]
     [InlineData("array_last_index", "captured-scalar", 3L)]
-    public void T277_HigherOrder_SourceMatrix(string function, string variant, object expected)
+    public async Task T277_HigherOrder_SourceMatrix(string function, string variant, object expected)
     {
-        var actual = ExecuteHigherOrderCell(function, variant);
+        var actual = await ExecuteHigherOrderCellAsync(function, variant);
 
         if (expected is bool expectedBool)
         {
@@ -644,9 +729,11 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
 
     /// <summary>
     /// Builds one matrix cell. Every numeric terminal is widened to <c>long</c> so the theory compares a
-    /// single numeric type; array-returning functions are measured through <c>length()</c>.
+    /// single numeric type; array-returning functions are measured through <c>length()</c>. Exactly one
+    /// cell is read per theory row, and only the <c>long</c> cell is retry-controlled (T328 D4b), which
+    /// keeps the one-operation-per-invocation budget.
     /// </summary>
-    private object ExecuteHigherOrderCell(string function, string variant)
+    private async Task<object> ExecuteHigherOrderCellAsync(string function, string variant)
     {
         int[] captured = { 3, 1, 2 };
         int t = 1;
@@ -655,29 +742,29 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
         {
             "array_map" => variant switch
             {
-                "column" => LongCell(x => SqlFunctions.ClickHouse.length(
+                "column" => await LongCellAsync(x => SqlFunctions.ClickHouse.length(
                     SqlFunctions.ClickHouse.array_map(v => v + 1, x.Nums))),
-                "captured-array" => LongCell(x => SqlFunctions.ClickHouse.length(
+                "captured-array" => await LongCellAsync(x => SqlFunctions.ClickHouse.length(
                     SqlFunctions.ClickHouse.array_map(v => v + 1, captured))),
-                "inline-array" => LongCell(x => SqlFunctions.ClickHouse.length(
+                "inline-array" => await LongCellAsync(x => SqlFunctions.ClickHouse.length(
                     SqlFunctions.ClickHouse.array_map(v => v + 1, new[] { 3, 1, 2 }))),
-                "outer-column" => LongCell(x => SqlFunctions.ClickHouse.length(
+                "outer-column" => await LongCellAsync(x => SqlFunctions.ClickHouse.length(
                     SqlFunctions.ClickHouse.array_map(v => v + x.Id, x.Nums))),
-                "captured-scalar" => LongCell(x => SqlFunctions.ClickHouse.length(
+                "captured-scalar" => await LongCellAsync(x => SqlFunctions.ClickHouse.length(
                     SqlFunctions.ClickHouse.array_map(v => v + t, x.Nums))),
                 _ => throw UnknownVariant(function, variant)
             },
             "array_filter" => variant switch
             {
-                "column" => LongCell(x => SqlFunctions.ClickHouse.length(
+                "column" => await LongCellAsync(x => SqlFunctions.ClickHouse.length(
                     SqlFunctions.ClickHouse.array_filter(v => v > 1, x.Nums))),
-                "captured-array" => LongCell(x => SqlFunctions.ClickHouse.length(
+                "captured-array" => await LongCellAsync(x => SqlFunctions.ClickHouse.length(
                     SqlFunctions.ClickHouse.array_filter(v => v > 1, captured))),
-                "inline-array" => LongCell(x => SqlFunctions.ClickHouse.length(
+                "inline-array" => await LongCellAsync(x => SqlFunctions.ClickHouse.length(
                     SqlFunctions.ClickHouse.array_filter(v => v > 1, new[] { 3, 1, 2 }))),
-                "outer-column" => LongCell(x => SqlFunctions.ClickHouse.length(
+                "outer-column" => await LongCellAsync(x => SqlFunctions.ClickHouse.length(
                     SqlFunctions.ClickHouse.array_filter(v => v > x.Id, x.Nums))),
-                "captured-scalar" => LongCell(x => SqlFunctions.ClickHouse.length(
+                "captured-scalar" => await LongCellAsync(x => SqlFunctions.ClickHouse.length(
                     SqlFunctions.ClickHouse.array_filter(v => v > t, x.Nums))),
                 _ => throw UnknownVariant(function, variant)
             },
@@ -701,11 +788,11 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
             },
             "array_count" => variant switch
             {
-                "column" => LongCell(x => SqlFunctions.ClickHouse.array_count(v => v > 1, x.Nums)),
-                "captured-array" => LongCell(x => SqlFunctions.ClickHouse.array_count(v => v > 1, captured)),
-                "inline-array" => LongCell(x => SqlFunctions.ClickHouse.array_count(v => v > 1, new[] { 3, 1, 2 })),
-                "outer-column" => LongCell(x => SqlFunctions.ClickHouse.array_count(v => v > x.Id, x.Nums)),
-                "captured-scalar" => LongCell(x => SqlFunctions.ClickHouse.array_count(v => v > t, x.Nums)),
+                "column" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_count(v => v > 1, x.Nums)),
+                "captured-array" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_count(v => v > 1, captured)),
+                "inline-array" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_count(v => v > 1, new[] { 3, 1, 2 })),
+                "outer-column" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_count(v => v > x.Id, x.Nums)),
+                "captured-scalar" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_count(v => v > t, x.Nums)),
                 _ => throw UnknownVariant(function, variant)
             },
             "array_first" => variant switch
@@ -719,11 +806,11 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
             },
             "array_first_index" => variant switch
             {
-                "column" => LongCell(x => SqlFunctions.ClickHouse.array_first_index(v => v > 1, x.Nums)),
-                "captured-array" => LongCell(x => SqlFunctions.ClickHouse.array_first_index(v => v > 1, captured)),
-                "inline-array" => LongCell(x => SqlFunctions.ClickHouse.array_first_index(v => v > 1, new[] { 3, 1, 2 })),
-                "outer-column" => LongCell(x => SqlFunctions.ClickHouse.array_first_index(v => v > x.Id, x.Nums)),
-                "captured-scalar" => LongCell(x => SqlFunctions.ClickHouse.array_first_index(v => v > t, x.Nums)),
+                "column" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_first_index(v => v > 1, x.Nums)),
+                "captured-array" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_first_index(v => v > 1, captured)),
+                "inline-array" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_first_index(v => v > 1, new[] { 3, 1, 2 })),
+                "outer-column" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_first_index(v => v > x.Id, x.Nums)),
+                "captured-scalar" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_first_index(v => v > t, x.Nums)),
                 _ => throw UnknownVariant(function, variant)
             },
             "array_last" => variant switch
@@ -737,19 +824,29 @@ public sealed class ClickHouseExtendedFunctionTests : ProviderTestSuite
             },
             "array_last_index" => variant switch
             {
-                "column" => LongCell(x => SqlFunctions.ClickHouse.array_last_index(v => v > 1, x.Nums)),
-                "captured-array" => LongCell(x => SqlFunctions.ClickHouse.array_last_index(v => v > 1, captured)),
-                "inline-array" => LongCell(x => SqlFunctions.ClickHouse.array_last_index(v => v > 1, new[] { 3, 1, 2 })),
-                "outer-column" => LongCell(x => SqlFunctions.ClickHouse.array_last_index(v => v > x.Id, x.Nums)),
-                "captured-scalar" => LongCell(x => SqlFunctions.ClickHouse.array_last_index(v => v > t, x.Nums)),
+                "column" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_last_index(v => v > 1, x.Nums)),
+                "captured-array" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_last_index(v => v > 1, captured)),
+                "inline-array" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_last_index(v => v > 1, new[] { 3, 1, 2 })),
+                "outer-column" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_last_index(v => v > x.Id, x.Nums)),
+                "captured-scalar" => await LongCellAsync(x => SqlFunctions.ClickHouse.array_last_index(v => v > t, x.Nums)),
                 _ => throw UnknownVariant(function, variant)
             },
             _ => throw UnknownVariant(function, variant)
         };
     }
 
-    private long LongCell(Expression<Func<IArrayEntity, long>> projection) =>
-        _sut.ArrayEntity.Where(x => x.Id == 1).Select(projection).First();
+    private Task<long> LongCellAsync(Expression<Func<IArrayEntity, long>> projection)
+    {
+        var query = _sut.ArrayEntity.Where(x => x.Id == 1).Select(projection);
+
+        return ClickHouseReadRetry.ExecuteAsync(
+            ClickHouseReadOperation.Audited(
+                ClickHouseTestIdentity.CurrentTestDisplayName(),
+                "ClickHouseExtendedFunctionTests.T277_HigherOrder_SourceMatrix#1",
+                ClickHouseReadCategory.PointRead),
+            token => query.FirstAsync(token),
+            TestContext.Current.CancellationToken);
+    }
 
     private long IntCell(Expression<Func<IArrayEntity, int>> projection) =>
         _sut.ArrayEntity.Where(x => x.Id == 1).Select(projection).First();
