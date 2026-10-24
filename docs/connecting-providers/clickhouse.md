@@ -238,6 +238,20 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
 | Native JSON column type | a native object-rooted `JSON` type: a `[JsonColumn]` property (`Auto`/`Native`: object-root POCO/`JsonObject`/`JsonDocument`/`JsonElement`) and a bare `JsonObject`/`JsonDocument`/`JsonElement` property (read and parameter) map to it; arrays/scalar roots fail closed. A bare top-level scalar `Select(x => x.Doc)` is not handled by the core projection classifier — use an anonymous type or a DTO. `Text` keeps a `String` column; a bare `string` and the legacy `Object('json')` alias are not supported. See [JSON support](../guide/16-json.md#map-a-clr-object-to-a-native-json-column) |
 | LOB streaming (`ToStream`/`ToTextReader`) | `NotSupportedException` (the driver exposes no streaming getters) |
 
+### String literals and LIKE escapes
+
+An inline string literal is single-quoted with apostrophes and backslashes doubled and the other C0
+characters written as `\xNN`. An `ESCAPE` clause is **never** emitted: the engine rejects every
+spelling of it, and the `LIKE` pattern literal already carries `\%`/`\_`. A custom `LIKE` escape
+character (the third argument of `SqlFunctions.Sql.like`) therefore fails closed with
+`NotSupportedException` naming ClickHouse.
+
+```sql
+select `Id` as `Id`
+ from simple_entity
+ where `Name` like 'a\%b'
+```
+
 ## Notes and limitations
 
 - `GROUP BY ... WITH TOTALS` renders correctly, but the official `ClickHouse.Driver` returns the totals

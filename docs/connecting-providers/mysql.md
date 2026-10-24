@@ -23,8 +23,9 @@ property. [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) (`src/nextorm.mysql/
   `double`, `decimal`, `char`, `datetime`) rather than the ANSI `bigint`/`integer`;
 - the integer ones-complement renders as `(-(x) - 1)`, because MySQL's `~` yields an unsigned 64-bit
   value that overflows the signed CLR integer;
-- the `ESCAPE` character of a `LIKE` predicate is written as `'\\'`, since MySQL also treats the
-  backslash as a string-literal escape;
+- the `ESCAPE` character of a `LIKE` predicate is emitted as the mode-independent `_utf8mb4 X'5c'`
+  token, so `NO_BACKSLASH_ESCAPES`, `ANSI_QUOTES` and the driver's `NoBackslashEscapes` cannot
+  change its meaning;
 - paging is `limit n` / `limit n offset m`; an offset without a limit becomes
   `limit 18446744073709551615 offset m`, because MySQL only accepts `offset` together with `limit`;
 - the session/information family ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) renders
@@ -81,6 +82,46 @@ select concat('id:', id) as `Label`
 ```csharp
 ctx.From<ISimpleEntity>().Page(5, 10).Select(x => x.Id);   // limit 5 offset 10
 ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // limit 18446744073709551615 offset 10
+```
+
+### String literals and parameters
+
+Every inline text value — including an operand in a position where the grammar accepts only a
+literal — is rendered as the mode-independent `_utf8mb4 X'…'` form, an uppercase UTF-8 hex string,
+so neither `sql_mode` nor `ANSI_QUOTES`, `NO_BACKSLASH_ESCAPES` or the driver's
+`NoBackslashEscapes` can change its meaning. An ORM-owned text **parameter slot** in a read query
+keeps its `@name` placeholder in the cached command and is lowered to the same `_utf8mb4 X'…'`
+literal at execution time: the driver parameter is omitted for that execution, and the command is
+restored to its canonical text and bindings before the next one. Mutations
+(`INSERT`/`UPDATE`/`DELETE`) are never prepared, so their text values are lowered at render time and
+no template is kept.
+
+`GROUP_CONCAT ... SEPARATOR` is a grammar-token position where the engine accepts only a text
+literal. A **constant** separator is rendered as a bare apostrophe-doubled literal from the accepted
+set `U+0020`–`U+007E` excluding the backslash; a non-constant, `null`, backslash-containing,
+NUL-containing or otherwise non-printable-ASCII separator fails closed with `NotSupportedException`
+naming MySQL/MariaDB — no placeholder, no invalid SQL, and the value is never echoed.
+
+```csharp
+var query = ctx.From<IComplexEntity>().Where(e => e.String == "O'Brien").Select(e => e.Id);
+```
+
+```sql
+-- the text parameter slot is lowered to a literal for this execution
+select `Id` as `Id`
+ from complex_entity
+ where `String` = _utf8mb4 X'4F27427269656E'
+```
+
+A constant `SEPARATOR` keeps the literal form:
+
+```csharp
+var names = ctx.From<IComplexEntity>().Select(e => SqlFunctions.Sql.string_agg(e.String, ","));
+```
+
+```sql
+select group_concat(`String` separator ',')
+ from complex_entity
 ```
 
 ## Provider differences
