@@ -76,6 +76,16 @@ internal readonly record struct ClickHouseFailureClassification(ClickHouseFailur
 /// ⇒ <see cref="ClickHouseFailureKind.UnknownShape"/>.</item>
 /// </list>
 /// <para>
+/// The node allow-list for steps 4/5 is the transport vocabulary measured live in D0b:
+/// <see cref="OperationCanceledException"/> (and its <see cref="TaskCanceledException"/> subclass),
+/// <see cref="TimeoutException"/>, <see cref="HttpRequestException"/>, <see cref="IOException"/> and
+/// <see cref="SocketException"/>. <see cref="IOException"/> is understood but carries no positive
+/// match of its own: it appears between the driver's cancellation wrapper and the socket on the
+/// measured client-timeout chain, and a standalone <see cref="IOException"/> still fails closed.
+/// An <see cref="AggregateException"/> node itself stays unrecognised (its inners are still walked),
+/// so an aggregate wrapper keeps failing closed.
+/// </para>
+/// <para>
 /// Chain walking is cycle-safe (reference identity) and bounded to <see cref="MaxChainDepth"/> nodes;
 /// <see cref="AggregateException.InnerExceptions"/> is traversed. A chain that exceeds the bound is
 /// treated as unknown and never retried.
@@ -132,10 +142,12 @@ internal static class ClickHouseTransientClassifier
         }
 
         // 4/5. Positive matches are only considered when every node is a shape this classifier
-        //      understands; an unknown wrapper anywhere in the chain fails closed.
+        //      understands; an unknown wrapper anywhere in the chain fails closed. IOException is a
+        //      tolerated transport node on the measured live timeout chain, but it is never a
+        //      positive match on its own.
         foreach (var node in chain)
         {
-            if (node is not (OperationCanceledException or TimeoutException or HttpRequestException or SocketException))
+            if (node is not (OperationCanceledException or TimeoutException or HttpRequestException or IOException or SocketException))
                 return new ClickHouseFailureClassification(ClickHouseFailureKind.UnknownShape, UnknownShapeReason);
         }
 

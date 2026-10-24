@@ -15,7 +15,9 @@ namespace NextORM.Integration.Tests;
 /// gets a rewritten string back from <see cref="ConnectionStringFor"/> and the only observable state
 /// is the counter read-back below. The counters are how a probe proves endpoint reachability without
 /// ever touching a payload: <see cref="ServerRespondedBeforeFault"/> is true only when bytes came back
-/// from the live server through this proxy before the connection was faulted.
+/// from the live server through this proxy before the connection was faulted, and a pre-response
+/// reset proves reachability with <see cref="TargetConnected"/> plus <see cref="ClientToServerBytes"/>,
+/// which show that a TCP connection was established and the request was forwarded.
 /// </para>
 /// <para>
 /// Disposal is robust by construction: every pump swallows transport teardown, every connection task
@@ -32,6 +34,24 @@ internal sealed class FaultProxy : IAsyncDisposable
 
     /// <summary>Upper bound on waiting for the live endpoint to respond, so a stuck server cannot hang a probe.</summary>
     private static readonly TimeSpan ResponseWait = TimeSpan.FromSeconds(15);
+
+    /// <summary>Reset-stage marker: no fault was staged on this proxy.</summary>
+    internal const string ResetStageNone = "none";
+
+    /// <summary>Reset-stage marker: the client's request bytes were forwarded to the target.</summary>
+    internal const string ResetStageRequestForwarded = "request_forwarded";
+
+    /// <summary>Reset-stage marker: no request byte could be forwarded before the wait expired.</summary>
+    internal const string ResetStageRequestTimeout = "request_timeout";
+
+    /// <summary>Reset-stage marker: the configured response-byte threshold was never reached.</summary>
+    internal const string ResetStageResponseTimeout = "response_timeout";
+
+    /// <summary>Reset-stage marker: exactly the configured response bytes were forwarded, then reset.</summary>
+    internal const string ResetStageResponseBytesForwarded = "response_bytes_forwarded";
+
+    /// <summary>Reset-stage marker: the configured pre-request delay elapsed, then reset.</summary>
+    internal const string ResetStageDelayElapsed = "delay_elapsed";
 
     private readonly TcpListener _listener;
     private readonly string _targetHost;
@@ -51,7 +71,9 @@ internal sealed class FaultProxy : IAsyncDisposable
     private long _serverToClientBytes;
     private int _faultedConnections;
     private int _serverRespondedBeforeFault;
+    private int _targetConnected;
     private int _connectionsObserved;
+    private string _resetStage = ResetStageNone;
 
     private FaultProxy(string connectionString, FaultMode mode, TimeSpan delay, int responseBytesBeforeReset)
     {
@@ -80,15 +102,22 @@ internal sealed class FaultProxy : IAsyncDisposable
         DelayFirstRequest,
 
         /// <summary>
-        /// Forward the request, let at least the configured number of response bytes come back from
-        /// the live server through this proxy, then reset both sockets. Only the first connection is
-        /// faulted; later connections pass through.
+        /// Forward the request and reset both sockets as soon as it has been forwarded, before a
+        /// single response byte reaches the client. Only the first connection is faulted; later
+        /// connections pass through.
+        /// </summary>
+        ResetBeforeResponse,
+
+        /// <summary>
+        /// Forward the request, let at most the configured number of response bytes come back from
+        /// the live server through this proxy, then reset both sockets. Never forwards the remainder
+        /// of that response. Only the first connection is faulted; later connections pass through.
         /// </summary>
         ResetAfterFirstResponseBytes,
 
         /// <summary>
-        /// Forward the request on every connection and reset both sockets as soon as the live server
-        /// starts responding, before any response byte reaches the client.
+        /// <see cref="ResetBeforeResponse"/> semantics on every accepted connection: the request is
+        /// forwarded, then both sockets are reset before any response byte reaches the client.
         /// </summary>
         ResetAlways,
     }
@@ -115,6 +144,16 @@ internal sealed class FaultProxy : IAsyncDisposable
     /// </summary>
     internal bool ServerRespondedBeforeFault => Volatile.Read(ref _serverRespondedBeforeFault) != 0;
 
+    /// <summary>
+    /// True when the proxy established a TCP connection to the live endpoint. A pre-response reset
+    /// carries no response bytes, so this counter (together with <see cref="ClientToServerBytes"/>)
+    /// is the endpoint proof for <see cref="FaultMode.ResetBeforeResponse"/>.
+    /// </summary>
+    internal bool TargetConnected => Volatile.Read(ref _targetConnected) != 0;
+
+    /// <summary>The stage at which the proxy stopped forwarding, as a short symbolic marker.</summary>
+    internal string ResetStage => Volatile.Read(ref _resetStage);
+
     /// <summary>Creates a proxy that forwards both directions and never faults.</summary>
     internal static FaultProxy PassThrough(string connectionString) =>
         new(connectionString, FaultMode.PassThrough, TimeSpan.Zero, 0);
@@ -136,6 +175,13 @@ internal sealed class FaultProxy : IAsyncDisposable
 
         return new FaultProxy(connectionString, FaultMode.ResetAfterFirstResponseBytes, TimeSpan.Zero, responseBytes);
     }
+
+    /// <summary>
+    /// Creates a proxy that forwards the first connection's request to the live endpoint and then
+    /// resets it before any response byte is delivered; later connections pass through.
+    /// </summary>
+    internal static FaultProxy ResetBeforeResponse(string connectionString) =>
+        new(connectionString, FaultMode.ResetBeforeResponse, TimeSpan.Zero, 0);
 
     /// <summary>Creates a proxy that resets every connection before the response reaches the client.</summary>
     internal static FaultProxy ResetAlways(string connectionString) =>
@@ -281,6 +327,7 @@ internal sealed class FaultProxy : IAsyncDisposable
             server = new Socket(endpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
             Track(server);
             await server.ConnectAsync(endpoint, _cancellation.Token).ConfigureAwait(false);
+            Volatile.Write(ref _targetConnected, 1);
 
             client.NoDelay = true;
 
@@ -291,12 +338,16 @@ internal sealed class FaultProxy : IAsyncDisposable
                     await FaultAfterDelayAsync(client, server).ConfigureAwait(false);
                     break;
 
+                case FaultMode.ResetBeforeResponse when firstConnection:
+                    await ResetBeforeResponseAsync(client, server).ConfigureAwait(false);
+                    break;
+
                 case FaultMode.ResetAfterFirstResponseBytes when firstConnection:
                     await FaultAfterResponseBytesAsync(client, server).ConfigureAwait(false);
                     break;
 
                 case FaultMode.ResetAlways:
-                    await FaultBeforeResponseAsync(client, server).ConfigureAwait(false);
+                    await ResetBeforeResponseAsync(client, server).ConfigureAwait(false);
                     break;
 
                 default:
@@ -388,6 +439,7 @@ internal sealed class FaultProxy : IAsyncDisposable
 
             Count(countsRequestBytes: true, read);
             await Task.Delay(_delay, _cancellation.Token).ConfigureAwait(false);
+            Volatile.Write(ref _resetStage, ResetStageDelayElapsed);
         }
         catch (OperationCanceledException)
         {
@@ -406,9 +458,9 @@ internal sealed class FaultProxy : IAsyncDisposable
     }
 
     /// <summary>
-    /// Mode <see cref="FaultMode.ResetAfterFirstResponseBytes"/>: forward the request, wait until at
-    /// least the configured number of bytes came back from the live endpoint through this proxy, then
-    /// reset both sockets.
+    /// Mode <see cref="FaultMode.ResetAfterFirstResponseBytes"/>: forward the request, forward at
+    /// most the configured number of response bytes from the live endpoint, then reset both sockets.
+    /// The remainder of that response is never forwarded.
     /// </summary>
     private async Task FaultAfterResponseBytesAsync(Socket client, Socket server)
     {
@@ -423,6 +475,7 @@ internal sealed class FaultProxy : IAsyncDisposable
         }
         catch (TimeoutException)
         {
+            Volatile.Write(ref _resetStage, ResetStageResponseTimeout);
             await ObserveAsync([request, response]).ConfigureAwait(false);
             return;
         }
@@ -432,6 +485,7 @@ internal sealed class FaultProxy : IAsyncDisposable
             return;
         }
 
+        Volatile.Write(ref _resetStage, ResetStageResponseBytesForwarded);
         Fault(client, server);
         await ObserveAsync([request, response]).ConfigureAwait(false);
     }
@@ -443,28 +497,30 @@ internal sealed class FaultProxy : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         var buffer = new byte[BufferSize];
+        var forwarded = 0;
 
         try
         {
-            while (!cancellationToken.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested && forwarded < _responseBytesBeforeReset)
             {
                 var read = await source.ReceiveAsync(buffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
                 if (read == 0)
                     return;
 
-                var total = Count(countsRequestBytes: false, read);
-                await destination.SendAsync(buffer.AsMemory(0, read), SocketFlags.None, cancellationToken).ConfigureAwait(false);
+                // Any byte read back from the endpoint proves reachability, even when it is not
+                // delivered to the client.
+                Volatile.Write(ref _serverRespondedBeforeFault, 1);
 
-                // Stop after the chunk that crosses the threshold: at least that many response bytes
-                // demonstrably travelled back from the live server through this proxy, and no further
-                // bytes are delivered before the reset.
-                if (total >= _responseBytesBeforeReset)
-                {
-                    Volatile.Write(ref _serverRespondedBeforeFault, 1);
-                    thresholdReached.TrySetResult();
-                    return;
-                }
+                // Forward at most the remaining threshold: the rest of this chunk is dropped, so the
+                // client can never receive a complete response before the reset.
+                var toForward = Math.Min(read, _responseBytesBeforeReset - forwarded);
+                await destination.SendAsync(buffer.AsMemory(0, toForward), SocketFlags.None, cancellationToken).ConfigureAwait(false);
+                Count(countsRequestBytes: false, toForward);
+                forwarded += toForward;
             }
+
+            if (forwarded >= _responseBytesBeforeReset)
+                thresholdReached.TrySetResult();
         }
         catch (OperationCanceledException)
         {
@@ -485,46 +541,86 @@ internal sealed class FaultProxy : IAsyncDisposable
     }
 
     /// <summary>
-    /// Mode <see cref="FaultMode.ResetAlways"/>: forward the request, wait for the live endpoint to
-    /// start responding (proof of reachability) but never deliver that response, then reset both
-    /// sockets.
+    /// Modes <see cref="FaultMode.ResetBeforeResponse"/> and <see cref="FaultMode.ResetAlways"/>:
+    /// accept the client, connect to the live endpoint, forward the client's request bytes and then
+    /// reset the client's TCP connection before a single response byte is forwarded. The target's
+    /// response is never read, so it can never reach the client; the target socket is reset too, so
+    /// the server drops the in-flight query.
     /// </summary>
-    private async Task FaultBeforeResponseAsync(Socket client, Socket server)
+    private async Task ResetBeforeResponseAsync(Socket client, Socket server)
     {
         var token = _cancellation.Token;
-        var request = PumpAsync(client, server, countsRequestBytes: true, token);
+        var requestForwarded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var request = PumpFirstRequestChunkAsync(client, server, requestForwarded, token);
 
         try
         {
-            var buffer = new byte[BufferSize];
-            var response = server.ReceiveAsync(buffer, SocketFlags.None, token).AsTask();
-            var read = await response.WaitAsync(ResponseWait, token).ConfigureAwait(false);
-
-            if (read > 0)
-            {
-                Count(countsRequestBytes: false, read);
-                Volatile.Write(ref _serverRespondedBeforeFault, 1);
-            }
+            await requestForwarded.Task.WaitAsync(ResponseWait, token).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
-            // No response in time: reset anyway; the counters stay honest about the missing response.
+            Volatile.Write(ref _resetStage, ResetStageRequestTimeout);
+            Fault(client, server);
+            await ObserveAsync([request]).ConfigureAwait(false);
+            return;
         }
         catch (OperationCanceledException)
         {
-            return;
-        }
-        catch (SocketException)
-        {
-            return;
-        }
-        catch (ObjectDisposedException)
-        {
+            await ObserveAsync([request]).ConfigureAwait(false);
             return;
         }
 
+        Volatile.Write(ref _resetStage, ResetStageRequestForwarded);
+
+        // The RST is sent on the client socket with LingerState(true, 0), and only after the request
+        // left the client: the client is mid-request/response and observes a transport reset instead
+        // of a response (a server exception can therefore never be manufactured here).
         Fault(client, server);
         await ObserveAsync([request]).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Forwards the client's request chunks to the target and signals after the first chunk has been
+    /// delivered. No response byte is ever read or forwarded by this pump.
+    /// </summary>
+    private async Task PumpFirstRequestChunkAsync(
+        Socket source,
+        Socket destination,
+        TaskCompletionSource requestForwarded,
+        CancellationToken cancellationToken)
+    {
+        var buffer = new byte[BufferSize];
+
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var read = await source.ReceiveAsync(buffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
+                if (read == 0)
+                    return;
+
+                Count(countsRequestBytes: true, read);
+                await destination.SendAsync(buffer.AsMemory(0, read), SocketFlags.None, cancellationToken).ConfigureAwait(false);
+                requestForwarded.TrySetResult();
+                return;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Teardown.
+        }
+        catch (SocketException)
+        {
+            // Peer reset or shutdown.
+        }
+        catch (IOException)
+        {
+            // Transport closed underneath the pump.
+        }
+        catch (ObjectDisposedException)
+        {
+            // Aborted by another path.
+        }
     }
 
     private long Count(bool countsRequestBytes, int byteCount) =>
