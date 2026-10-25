@@ -256,6 +256,12 @@ throw `NotSupportedException`. Combining it with `DISTINCT`/`DISTINCT ON` is rej
 generation with `BuildSqlCommandException`; the `WithTies()` fluent call itself does not validate the
 combination.
 
+On SQL Server the modifier is supported only in the no-offset `TOP(n) WITH TIES` form. A positive
+`OFFSET` together with `WithTies()` — `Page(5, 3).WithTies()` or `Offset(3).Limit(5).WithTies()` —
+throws `NotSupportedException` while the query is prepared, before any SQL is rendered, sent or cached:
+T-SQL accepts `WITH TIES` only in `TOP`, not in `OFFSET … FETCH … ONLY`. Use `WithTies()` without an
+`OFFSET`, or ordinary paging without ties.
+
 ## First, FirstOrDefault, Single, SingleOrDefault
 
 The single-row terminals are available in synchronous and asynchronous forms:

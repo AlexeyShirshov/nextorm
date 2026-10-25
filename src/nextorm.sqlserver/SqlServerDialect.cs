@@ -692,6 +692,11 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>Renders <c>offset n rows</c> and an optional <c>fetch next m rows only|with ties</c>.</summary>
     public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
     {
+        // T-SQL accepts WITH TIES only in TOP(n); OFFSET/FETCH permits ONLY. Refuse the combination before
+        // any fragment is appended so preparation fails closed instead of the server rejecting invalid SQL.
+        if (paging.HasWithTies && paging.Offset > 0)
+            throw new NotSupportedException("SQL Server does not support WITH TIES with a non-zero OFFSET. Use WithTies() without OFFSET.");
+
         sqlBuilder.Append(Kw(keywordCase, "offset ")).Append(paging.Offset).Append(Kw(keywordCase, " rows"));
 
         if (paging.Limit > 0)

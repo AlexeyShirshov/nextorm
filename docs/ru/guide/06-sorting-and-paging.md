@@ -255,6 +255,12 @@ select top(3) with ties id, nullableint
 контекст бросают `NotSupportedException`. Сочетание с `DISTINCT`/`DISTINCT ON` отклоняется при
 генерации SQL с `BuildSqlCommandException`; сам fluent-вызов `WithTies()` сочетание не проверяет.
 
+В SQL Server модификатор поддерживается только в форме `TOP(n) WITH TIES` без offset. Положительный
+`OFFSET` вместе с `WithTies()` — `Page(5, 3).WithTies()` или `Offset(3).Limit(5).WithTies()` —
+бросает `NotSupportedException` во время подготовки запроса, до того как SQL отрендерен, отправлен или
+закэширован: T-SQL принимает `WITH TIES` только в `TOP`, но не в `OFFSET … FETCH … ONLY`. Используйте
+`WithTies()` без `OFFSET` либо обычное разбиение на страницы без ties.
+
 ## First, FirstOrDefault, Single, SingleOrDefault
 
 Терминальные методы для одной строки доступны в синхронной и асинхронной формах:
