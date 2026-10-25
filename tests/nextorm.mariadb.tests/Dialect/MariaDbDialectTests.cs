@@ -21,6 +21,10 @@ public class MariaDbDialectTests
         => Dialect.SupportsSequentialAccess.Should().BeFalse();
 
     [Fact]
+    public void SupportsSavepoints_InheritsMySqlTrue()
+        => Dialect.SupportsSavepoints.Should().BeTrue();
+
+    [Fact]
     public void DurationHooks_ShouldUseNativeTime()
     {
         Dialect.SupportsNativeDuration.Should().BeTrue();

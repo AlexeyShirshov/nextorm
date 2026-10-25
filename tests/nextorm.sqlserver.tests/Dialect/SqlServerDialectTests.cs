@@ -287,6 +287,7 @@ public class SqlServerDialectTests
         Dialect.SupportsSequentialAccess.Should().BeTrue();
         // No trailing locator: SqlClient streams the payload without a rowid, so no "<payload>, rowid" SQL.
         Dialect.LobLocatorColumn.Should().BeNull();
+        Dialect.SupportsSavepoints.Should().BeTrue();
         Dialect.SupportsApply.Should().BeTrue();
         Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsGreatestLeast.Should().BeTrue();

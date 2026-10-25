@@ -12,6 +12,12 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>The shared SQL Server dialect instance.</summary>
     public static readonly SqlServerDialect Instance = new();
 
+    /// <summary>
+    /// SQL Server supports <c>SAVE TRANSACTION</c> and <c>ROLLBACK TRANSACTION &lt;name&gt;</c>; its ADO.NET
+    /// release is a driver no-op, which this capability still reports as supported.
+    /// </summary>
+    public override bool SupportsSavepoints => true;
+
     private readonly IPivotRenderer _pivot;
 
     /// <summary>Creates the dialect and its capability renderers.</summary>

@@ -49,6 +49,9 @@ internal sealed class MySqlTestProvider : ITestProvider
     /// <summary>The provider binds table-valued parameters (native SQL Server UDTT or JSON/array emulation).</summary>
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => true;
+
+    /// <summary>Savepoints are available inside a transaction on this provider.</summary>
+    public bool SupportsSavepoints => true;
     public bool SupportsRegex => true;
     public bool SupportsLobStreaming => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.";

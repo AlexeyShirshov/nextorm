@@ -77,6 +77,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | Optimistic concurrency | partial (explicit token-guarded pattern; no concurrency-token metadata) | yes | yes |
 | `OUTPUT ... INTO` | yes (SQL Server) | partial (`…WithOutputInto` writes to a table; combined returning+INTO open [#3832](https://github.com/linq2db/linq2db/issues/3832)) | no |
 | Transactions (own and enlisted) | yes (SQLite, PostgreSQL, SQL Server, MySQL/MariaDB; ClickHouse and in-memory reject) | yes | yes |
+| Savepoints (create / rollback to / release) | yes (through `ITransactionManager`; SQL Server release is a no-op, ClickHouse has none) | partial (raw SQL only) | yes (`IDbContextTransaction` savepoint methods; provider-dependent) |
 | Captured-collection lookup (`dict[column]`, `list[column]`) | yes | no (open [linq2db#5879](https://github.com/linq2db/linq2db/issues/5879); only `Contains` → `IN`) | no (indexer not translated; client evaluation blocked) |
 | Entity class optional (query without a mapped type) | yes | partial | no |
 | Navigation properties / associations / eager loading | partial (declarative O2M/M2O/O2O/M2M metadata, `JoinInto`, `LoadWith` eager loading — split or single-query, nested level 2+ with a graph-wide mode and per-level ordering/top-N — and declared-relationship implicit navigation; convention-over-FK inference is absent in linq2db too) | yes (`[Association]`, `LoadWith`) | yes |
@@ -92,7 +93,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | In-memory provider (query-only, registered CLR datasets) | yes | partial | partial |
 | Connection lifecycle (`IConnectionManager`: supplied vs owned, reuse, disposal) | yes | yes | yes |
 | Extensibility (dialect, `[SqlFunction]`/`[SqlTableFunction]`, interceptors, global query filters, raw SQL) | yes | yes (extensive) | yes |
-| **Total** | 72 / 5 / 3 | 49 / 21 / 10 | 27 / 27 / 25 |
+| **Total** | 73 / 5 / 3 | 49 / 22 / 10 | 28 / 27 / 25 |
 
 ## Where Nextorm leads
 

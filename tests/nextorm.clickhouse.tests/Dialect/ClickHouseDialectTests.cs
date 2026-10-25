@@ -434,6 +434,7 @@ public class ClickHouseDialectTests
         Dialect.SupportsRightFullJoin.Should().BeTrue();
         Dialect.SupportsIntersectExceptAll.Should().BeTrue();
         Dialect.SupportsSequentialAccess.Should().BeFalse();
+        Dialect.SupportsSavepoints.Should().BeFalse();
         Dialect.SupportsApply.Should().BeFalse();
         Dialect.SupportsQueryHints.Should().BeFalse();
         Dialect.SupportsDateTrunc.Should().BeTrue();

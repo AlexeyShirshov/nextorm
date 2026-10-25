@@ -253,6 +253,16 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual bool SupportsTransactions => true;
 
+    /// <summary>
+    /// True when the provider supports savepoints inside an ADO.NET transaction; the fail-closed
+    /// default is <c>false</c>, so a dialect opts in with an override. The member exists on the base
+    /// class as well as on <see cref="ISqlDialect"/> because a class member declared in a derived type
+    /// does not implement — and is not re-mapped to — an interface default member: without this
+    /// <c>virtual</c> member a third-party dialect deriving from this base and declaring
+    /// <c>SupportsSavepoints => true</c> would still read <c>false</c> through <see cref="ISqlDialect"/>.
+    /// </summary>
+    public virtual bool SupportsSavepoints => false;
+
     /// <summary>Defaults to <c>null</c>; ClickHouse exposes the <c>LIMIT n BY expr</c> renderer.</summary>
     public virtual ILimitByRenderer? LimitBy => null;
 

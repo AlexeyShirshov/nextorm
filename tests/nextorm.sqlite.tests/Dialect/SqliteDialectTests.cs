@@ -97,6 +97,7 @@ public class SqliteDialectTests
         Dialect.SupportsIntersectExceptAll.Should().BeFalse();
         Dialect.SupportsSequentialAccess.Should().BeTrue();
         Dialect.LobLocatorColumn.Should().Be("rowid");
+        Dialect.SupportsSavepoints.Should().BeTrue();
         Dialect.SupportsApply.Should().BeFalse();
         Dialect.SupportsQueryHints.Should().BeFalse();
         Dialect.SupportsDateArithmetic.Should().BeTrue();

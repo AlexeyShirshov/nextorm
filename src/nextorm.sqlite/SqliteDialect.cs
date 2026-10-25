@@ -9,6 +9,9 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>Gets the shared SQLite dialect instance.</summary>
     public static readonly SqliteDialect Instance = new();
 
+    /// <summary>SQLite supports <c>SAVEPOINT</c>/<c>ROLLBACK TO</c>/<c>RELEASE</c> inside a transaction.</summary>
+    public override bool SupportsSavepoints => true;
+
     // Microsoft.Data.Sqlite exposes a blob as a seekable SqliteBlob when it is read through
     // SequentialAccess, but only if the row has a rowid it can address lazily.
     /// <inheritdoc/>

@@ -20,6 +20,9 @@ public class PostgresDialect : SqlDialectBase
     // The first PostgreSQL release with the ANSI aggregate FILTER clause (SQL:2003 T612, 9.4).
     private static readonly Version AggregatesFilterMinVersion = new(9, 4);
 
+    /// <summary>PostgreSQL supports <c>SAVEPOINT</c>/<c>ROLLBACK TO SAVEPOINT</c>/<c>RELEASE SAVEPOINT</c>.</summary>
+    public override bool SupportsSavepoints => true;
+
     /// <summary>
     /// Gets the shared PostgreSQL dialect instance. Subclassing the dialect does not change this
     /// instance; a derived dialect is created through the public constructors instead.

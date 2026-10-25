@@ -752,6 +752,15 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsTransactions => true;
     /// <summary>
+    /// True when the provider supports savepoints inside an ADO.NET transaction — create, roll back to
+    /// and release a named point (<c>SAVEPOINT</c>/<c>ROLLBACK TO SAVEPOINT</c>/<c>RELEASE SAVEPOINT</c>,
+    /// or the SQL Server <c>SAVE TRANSACTION</c>/<c>ROLLBACK TRANSACTION</c> forms). Declared as a default
+    /// interface method returning <c>false</c> so existing external implementations keep compiling;
+    /// SQLite, PostgreSQL, SQL Server and MySQL opt in, MariaDB inherits MySQL's value, and ClickHouse
+    /// has no transaction at all.
+    /// </summary>
+    bool SupportsSavepoints => false;
+    /// <summary>
     /// Applies the statement-level <paramref name="hints"/> to an already-rendered <paramref name="sql"/>
     /// statement. <paramref name="maxRecursionOption"/> is the trailing option produced by
     /// <see cref="MakeMaxRecursion"/> (or <c>null</c>); a dialect that must coalesce it into a single

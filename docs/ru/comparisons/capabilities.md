@@ -78,6 +78,7 @@
 | Оптимистичная конкурентность | partial (явный паттерн с токеном; метаданных concurrency-токена нет) | yes | yes |
 | `OUTPUT ... INTO` | yes (SQL Server) | partial (`…WithOutputInto` пишет в таблицу; совмещённый returning+INTO открыт [#3832](https://github.com/linq2db/linq2db/issues/3832)) | no |
 | Транзакции (собственные и переданные извне) | yes (SQLite, PostgreSQL, SQL Server, MySQL/MariaDB; ClickHouse и in-memory отклоняют) | yes | yes |
+| Savepoints (создание / откат к / освобождение) | yes (через `ITransactionManager`; release в SQL Server — no-op, в ClickHouse их нет) | partial (только сырой SQL) | yes (методы savepoint у `IDbContextTransaction`; зависит от провайдера) |
 | Поиск по захваченной коллекции (`dict[column]`, `list[column]`) | yes | no (открытый [linq2db#5879](https://github.com/linq2db/linq2db/issues/5879); поддержан только `Contains` → `IN`) | no (индексатор не транслируется; клиентская оценка заблокирована) |
 | Класс сущности необязателен (запрос без маппинга типа) | yes | partial | no |
 | Навигационные свойства / связи / eager loading | partial (декларативные метаданные O2M/M2O/O2O/M2M, `JoinInto`, eager loading `LoadWith` — split или single-query, вложенность уровня 2+ с единым режимом на граф и порядком/top-N на уровне — и неявная навигация по объявленным связям; вывод по конвенции FK отсутствует и в linq2db) | yes (`[Association]`, `LoadWith`) | yes |
@@ -93,7 +94,7 @@
 | In-memory-провайдер (только чтение, зарегистрированные CLR-наборы) | yes | partial | partial |
 | Жизненный цикл соединения (`IConnectionManager`: переданное vs собственное, переиспользование, dispose) | yes | yes | yes |
 | Расширяемость (диалект, `[SqlFunction]`/`[SqlTableFunction]`, интерцепторы, глобальные фильтры, сырой SQL) | yes | yes (обширно) | yes |
-| **Итого** | 72 / 5 / 3 | 49 / 21 / 10 | 27 / 27 / 25 |
+| **Итого** | 73 / 5 / 3 | 49 / 22 / 10 | 28 / 27 / 25 |
 
 ## Где Nextorm впереди
 

@@ -44,6 +44,7 @@ change.
 | Parameter placeholder | `$name` | `@name` | `@name` | `@name` | `@name` | `@name` | not applicable |
 | Table-valued parameters (`ProcedureParameter.Table<T>`) | `json_each` JSON document | native `SqlDbType.Structured` + `TypeName` | typed array / `jsonb` document | `JSON_TABLE` JSON document | `JSON_TABLE` JSON document | bound `Array(T)`/`Array(Tuple(...))` + `arrayJoin` | throws `NotSupportedException` |
 | Transactions (`ITransactionManager`) | supported | supported | supported | supported | supported | throws `NotSupportedException` | not applicable (no connection) |
+| Savepoints (create / rollback to / release) | supported | supported (release is a no-op) | supported | supported | supported | throws `NotSupportedException` | not applicable (no connection) |
 | `INSERT ... VALUES` | supported | supported | supported | supported | supported | supported (small batches) | throws `NotSupportedException` |
 | Bulk insert (`CreateBulkInsertBuilder`) | portable `INSERT ... VALUES` | native `SqlBulkCopy` | native binary `COPY` | portable `INSERT ... VALUES` | portable `INSERT ... VALUES` | portable `INSERT ... VALUES` | throws `NotSupportedException` |
 | Bulk-copy flags (`CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers`) | throws `NotSupportedException` | `SqlBulkCopyOptions` (native path only) | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` |

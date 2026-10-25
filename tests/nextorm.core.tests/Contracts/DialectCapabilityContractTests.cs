@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text;
 using FluentAssertions;
 
 namespace NextORM.Core.Tests;
@@ -278,6 +279,53 @@ public sealed class DialectCapabilityContractTests
         dialects.Should().Contain(d => d.SupportsCollation);
         dialects.Should().Contain(d => d.SupportsOrdinalComparison);
         dialects.Should().Contain(d => d.SupportsRegex);
+        dialects.Should().Contain(d => d.SupportsSavepoints);
+    }
+
+    /// <summary>
+    /// <see cref="ISqlDialect.SupportsSavepoints"/> is a default interface method, so it cannot be
+    /// implemented by a member declared in a derived class: an interface DIM stays in force for the
+    /// interface dispatch even when the class declares a same-named member. The base class therefore
+    /// carries a <c>virtual</c> member as well, and a third-party dialect opts in with
+    /// <c>override</c>. Both shapes are pinned here so a regression to the class-member-only form
+    /// fails loudly instead of silently reporting <c>false</c> through the interface.
+    /// </summary>
+    [Fact]
+    public void SupportsSavepoints_ThirdPartyDialectDerivedFromBase_ReadsThroughTheInterface()
+    {
+        ISqlDialect optingIn = SavepointCapableThirdPartyDialect.Instance;
+        ISqlDialect defaulted = SavepointlessThirdPartyDialect.Instance;
+
+        optingIn.SupportsTransactions.Should().BeTrue();
+        optingIn.SupportsSavepoints.Should().BeTrue();
+        defaulted.SupportsTransactions.Should().BeTrue();
+        defaulted.SupportsSavepoints.Should().BeFalse("the base-class default is fail-closed");
+    }
+
+    /// <summary>A third-party-style dialect deriving from <see cref="SqlDialectBase"/> and opting in.</summary>
+    private sealed class SavepointCapableThirdPartyDialect : SqlDialectBase
+    {
+        internal static readonly SavepointCapableThirdPartyDialect Instance = new();
+
+        public override bool SupportsSavepoints => true;
+
+        public override string MakeParam(string name) => "@" + name;
+
+        public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
+        {
+        }
+    }
+
+    /// <summary>A third-party-style dialect deriving from <see cref="SqlDialectBase"/> that declares nothing.</summary>
+    private sealed class SavepointlessThirdPartyDialect : SqlDialectBase
+    {
+        internal static readonly SavepointlessThirdPartyDialect Instance = new();
+
+        public override string MakeParam(string name) => "@" + name;
+
+        public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
+        {
+        }
     }
 
     /// <summary>

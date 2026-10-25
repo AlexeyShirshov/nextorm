@@ -86,6 +86,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             providedConnection,
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData),
             () => Dialect.SupportsTransactions,
+            () => Dialect.SupportsSavepoints,
             _interceptors);
 
         // Bound once: parameter creation is handed to the execution/planning layers as a delegate
@@ -268,7 +269,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     public DbConnection GetConnection() => _connectionManager.GetConnection();
 
     // Transaction axis (ITransactionManager). Implemented explicitly so the concrete context does not
-    // grow six public members; callers reach them through the ITransactionManager role, as documented.
+    // grow twelve public members; callers reach them through the ITransactionManager role, as documented.
     DbTransaction? ITransactionManager.CurrentTransaction => _connectionManager.CurrentTransaction;
 
     DbTransaction ITransactionManager.BeginTransaction() => _connectionManager.BeginTransaction();
@@ -280,6 +281,18 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     Task<DbTransaction> ITransactionManager.BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken) => _connectionManager.BeginTransactionAsync(isolationLevel, cancellationToken);
 
     void ITransactionManager.UseTransaction(DbTransaction? transaction) => _connectionManager.UseTransaction(transaction);
+
+    void ITransactionManager.CreateSavepoint(string name) => _connectionManager.CreateSavepoint(name);
+
+    Task ITransactionManager.CreateSavepointAsync(string name, CancellationToken cancellationToken) => _connectionManager.CreateSavepointAsync(name, cancellationToken);
+
+    void ITransactionManager.RollbackToSavepoint(string name) => _connectionManager.RollbackToSavepoint(name);
+
+    Task ITransactionManager.RollbackToSavepointAsync(string name, CancellationToken cancellationToken) => _connectionManager.RollbackToSavepointAsync(name, cancellationToken);
+
+    void ITransactionManager.ReleaseSavepoint(string name) => _connectionManager.ReleaseSavepoint(name);
+
+    Task ITransactionManager.ReleaseSavepointAsync(string name, CancellationToken cancellationToken) => _connectionManager.ReleaseSavepointAsync(name, cancellationToken);
 
     /// <summary>Creates the provider-specific connection. Called only when no connection was supplied.</summary>
     protected abstract DbConnection CreateDbConnection(string? connectionString);

@@ -181,7 +181,8 @@ These are fully implemented and covered by SQL-generation or integration tests:
 
 Per-feature details and owners live in the per-feature `docs/specs/roadmap/todo_*.md`; the full matrix
 is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md). Shipped items were moved
-to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
+to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 58 (savepoints) moved on
+2026-10-25.
 
 60. **Metadata-driven loading of declared relationships (issue [#249](https://github.com/AlexeyShirshov/nextorm/issues/249)).**
     `LoadWith` declares each edge with key selectors at the call site and does not consume relationship
@@ -217,11 +218,6 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     inside a CTE, so on SQL Server the rows are consumed by the mutation itself (`Returning`,
     `OutputInto`, `OutputIntoThenOutput`) and cannot feed a second statement of the same query. #266
     tracks making `OUTPUT` a composable source.
-58. **Savepoints (issue [#289](https://github.com/AlexeyShirshov/nextorm/issues/289)).**
-    `ITransactionManager` exposes begin/commit/rollback only; a savepoint needs `ExecuteRaw`, and the
-    caller owns names and nesting ([Transactions](../../guide/23-transactions.md#nested-transactions-and-savepoints)).
-    #289 proposes `CreateSavepoint`/`RollbackToSavepoint`/`ReleaseSavepoint` (SQL Server has
-    `SAVE`/`ROLLBACK TRANSACTION` and no release; ClickHouse and in-memory reject).
 56. **`ORDER BY ... NULLS FIRST/LAST` (issue [#287](https://github.com/AlexeyShirshov/nextorm/issues/287)).**
     There is no null-placement overload, so NULLs sort the way the provider sorts them — and the default
     differs: PostgreSQL is `NULLS LAST` ascending / `FIRST` descending, SQL Server/MySQL/MariaDB/SQLite
@@ -767,6 +763,30 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     cells, 0 skips). Docs: [Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from)
     (EN+RU), [Filtering](../../guide/03-filtering-where.md#explicit-null-safe-comparison-is-not-distinct-from),
     [Limitations](../../advanced/limitations.md).
+
+58. **Savepoints — <span style="color:green">shipped</span> (issue [#289](https://github.com/AlexeyShirshov/nextorm/issues/289)).**
+    `ITransactionManager` gained six members — `CreateSavepoint`/`CreateSavepointAsync`,
+    `RollbackToSavepoint`/`RollbackToSavepointAsync` and `ReleaseSavepoint`/`ReleaseSavepointAsync` —
+    declared as XML-documented default interface methods, so an existing third-party implementation keeps
+    compiling; `DataContext` implements them explicitly and the concrete type gains no public savepoint
+    member. **Driver-delegated, never rendered:** every call goes to the active or enlisted `DbTransaction`
+    (`Save`/`Rollback`/`Release` and their async forms), so nextorm keeps no savepoint registry or stack,
+    never commits, never rolls the whole transaction back and never changes ownership. The capability is
+    nextorm-owned (`ISqlDialect.SupportsSavepoints`, fail-closed default `false`, with a `SqlDialectBase`
+    virtual twin because a derived-class member does not re-map an interface default member): SQLite,
+    PostgreSQL, SQL Server and MySQL opt in, MariaDB inherits MySQL, ClickHouse has no transaction at all,
+    and an unmodified third-party dialect stays `false`. Guard order is part of the contract —
+    transactions → savepoints → an active transaction → the name — so a multiply-invalid call reports the
+    first applicable failure and never touches the driver. Names are a portable API policy, not a driver
+    limit: 1–32 ASCII identifier characters (`[A-Za-z_][A-Za-z0-9_]*`), validated ordinally, which keeps
+    SQL Server's 32-character truncation out of reach; a duplicate valid name is delegated unchanged and
+    uniqueness/nesting stay with the caller. SQL Server's release still calls the driver and is a
+    **non-throwing no-op that preserves the data** (T-SQL has no `RELEASE SAVEPOINT`), Npgsql applies a
+    savepoint immediately so create-then-rollback needs no intervening command, and rollback-after-release
+    stays provider-defined (not promised). Verified on all five supported providers (105 live cases,
+    0 failed, 0 skipped), plus unit coverage of the guards, the name boundaries and the DIM defaults, and
+    the ClickHouse refusal on the transaction guard. Docs:
+    [Transactions](../../guide/23-transactions.md#nested-transactions-and-savepoints) (EN+RU).
 
 ## 6. Implementation plan
 

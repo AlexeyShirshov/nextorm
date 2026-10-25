@@ -16,6 +16,12 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>Gets the shared MySQL dialect instance.</summary>
     public static readonly MySqlDialect Instance = new();
 
+    /// <summary>
+    /// MySQL supports <c>SAVEPOINT</c>/<c>ROLLBACK TO SAVEPOINT</c>/<c>RELEASE SAVEPOINT</c>; MariaDB
+    /// inherits this value from its MySQL dialect base.
+    /// </summary>
+    public override bool SupportsSavepoints => true;
+
     /// <summary>A MySQL derived table (subquery in FROM) must have an alias.</summary>
     public override bool RequireSubqueryAlias => true;
 
