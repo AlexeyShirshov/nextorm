@@ -574,12 +574,17 @@ internal readonly struct SqlBuilder
 
                         selectBuilder!.Append(column);
 
-                        if (needAliasForColumn)
+                        if (needAliasForColumn
+                            || (_ctx.RequireDerivedScalarOutputName && item.PropertyName is null && item.OutputName is not null))
                         {
                             // A generated output name (an unaliased computed scalar) is an alias only for
-                            // a typed-CTE declaration body; anywhere else the column keeps its implicit
-                            // name (the alias text was null before, and MakeColumnAlias emits nothing).
-                            var alias = item.PropertyName ?? (_ctx.ExactProjectionAliases ? item.OutputName : null);
+                            // a typed-CTE declaration body and for a boundary an enclosing query addresses
+                            // by identifier (a derived subquery or a CTAS source): those consumers reference
+                            // the generated name, so it must be declared exactly once. Anywhere else the
+                            // column keeps its implicit name (the alias text was null before, and
+                            // MakeColumnAlias emits nothing).
+                            var alias = item.PropertyName
+                                ?? ((_ctx.ExactProjectionAliases || _ctx.RequireDerivedScalarOutputName) ? item.OutputName : null);
                             selectBuilder.Append(_ctx.Dialect.MakeColumnAlias(alias, _ctx.KeywordCase));
                         }
 

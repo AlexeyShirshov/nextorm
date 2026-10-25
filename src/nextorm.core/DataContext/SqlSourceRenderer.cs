@@ -571,8 +571,11 @@ internal static class SqlSourceRenderer
                 // A nested derived table is an ordinary subquery: the typed-CTE declaration flag scopes
                 // to the declaration's own select list and must not leak here, where a case-only alias
                 // would rename the derived column while the enclosing body still references the physical
-                // name. Clear it so the nested source keeps the default case-insensitive aliasing.
-                var sql = new SqlBuilder(ctx with { ExactProjectionAliases = false }).MakeSelect(cmd);
+                // name. Clear it so the nested source keeps the default case-insensitive aliasing. The
+                // derived boundary does need the generated output name of an unaliased computed scalar:
+                // its enclosing query and ORDER BY address that identifier. Both flags ride on a copy of
+                // the context scoped to this one render, so the caller's context is restored by construction.
+                var sql = new SqlBuilder(ctx with { ExactProjectionAliases = false, RequireDerivedScalarOutputName = true }).MakeSelect(cmd);
 
                 if (ctx.ParamMode) return string.Empty;
 

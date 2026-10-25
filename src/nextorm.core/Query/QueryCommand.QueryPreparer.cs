@@ -1568,11 +1568,14 @@ public partial class QueryCommand
         /// <returns>A consumer-side column referencing the derived source's output identifier.</returns>
         private static SelectExpression DerivedPassThroughColumn(SelectExpression src)
         {
-            // Mirror MakeColumn's alias decision exactly: a column whose defining expression references
-            // the source column named exactly like its target member is emitted without an alias, so the
-            // derived table exposes that bare column name; every other shape exposes the target member
-            // name through the alias MakeColumn emits. PropertyName participates in the identifier only
-            // when an alias is actually emitted, so a case-sensitive server still resolves the bare name.
+            // Mirror the select-list alias rule the derived boundary actually rendered
+            // (SqlBuildContext.RequireDerivedScalarOutputName, read where SqlBuilder appends the alias).
+            // A named projection exposes the alias MakeColumn emits: the target member name, except for a
+            // column-valued expression that already reads the source column named like the member
+            // (emitted bare, so the physical/declared column name is the identifier). An unaliased
+            // computed scalar has no member name: the boundary declares its generated OutputName, and
+            // that is exactly the identifier the consumer must reference. Predicting anything else here
+            // would make the consumer address a column the derived table does not expose.
             var outputName = src.PropertyName is { } propertyName
                 ? TryGetColumnIdentifier(src.Expression, out var columnIdentifier)
                     && string.Equals(columnIdentifier, propertyName, StringComparison.OrdinalIgnoreCase)

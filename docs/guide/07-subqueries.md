@@ -55,6 +55,19 @@ var nested = dataContext.From<IComplexEntity>().Select(x => new { x.Id, Calc = x
 var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 ```
 
+Two different aliases appear in these examples. The **table alias** (`t1`, `t2`, ...) names the derived
+source in `FROM` and qualifies every reference to it (`t1.id`); the provider generates it, you never
+write it. The **output-column alias** is what the derived `SELECT` itself declares: a projected member's
+name (`Calc`, `requiredstring as 'String'`), or — for an unaliased computed scalar — the generated output
+name that the enclosing query references. That generated name keeps the provider's own quoting
+(`'c0'`, `"c0"`, `[c0]`, `` `c0` ``); the spelling is an internal detail of the rendered statement, not a
+public naming guarantee. Read such a value through the builder, never by hard-coding the name:
+
+```csharp
+var inner = dataContext.From<IComplexEntity>().Where(x => x.Id <= 2).Select(x => x.Id * 2);
+var rows = dataContext.From(inner).OrderBy(x => x).Select(x => x * 3).ToList(); // 6, 12
+```
+
 ## Naming a derived table with `As`
 
 `As<TResult>(...)` wraps a projection as a derived table in `FROM`: it projects each row into the

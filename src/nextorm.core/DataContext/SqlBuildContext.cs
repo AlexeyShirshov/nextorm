@@ -77,6 +77,18 @@ internal readonly record struct SqlBuildContext
     internal bool ExactProjectionAliases { get; init; }
 
     /// <summary>
+    /// When <see langword="true"/> the select list being rendered is a boundary that an enclosing query
+    /// addresses by column identifier: a derived subquery/derived table body or a CTAS source projection.
+    /// Such a boundary must declare the generated output name (see <see cref="SelectExpression.OutputName"/>)
+    /// of an unaliased computed scalar, because the enclosing query and its ORDER BY already reference that
+    /// identifier (<c>c0</c>). Every occurrence is supplied through <c>with</c> on a copy scoped to that one
+    /// render, so the prior value is restored by construction and no shared command state is mutated. It
+    /// never grants a public naming guarantee and leaves the named, physical, typed-CTE and JSON policies
+    /// untouched; elsewhere it stays <see langword="false"/>.
+    /// </summary>
+    internal bool RequireDerivedScalarOutputName { get; init; }
+
+    /// <summary>
     /// Renders the body of a data-modifying CTE whose command is a single-table <c>UPDATE</c> or
     /// <c>DELETE</c> (an <c>INSERT</c> body is rendered directly by <see cref="SqlSourceRenderer"/>).
     /// Set on the context that renders a statement which may declare such a CTE, so the body is emitted
