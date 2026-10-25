@@ -69,6 +69,13 @@ public class PostgresDialect : SqlDialectBase
     /// <summary>Npgsql exposes streaming <c>GetStream</c>/<c>GetTextReader</c> accessors for LOB columns.</summary>
     public override bool SupportsSequentialAccess => true;
 
+    /// <summary>PostgreSQL renders the native <c>NULLS FIRST</c>/<c>NULLS LAST</c> ordering modifier.</summary>
+    public override bool SupportsNullsOrdering => true;
+
+    /// <inheritdoc/>
+    public override string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
+        => NullsOrderingRenderer.RenderNative(expressionSql, direction, nullsPosition);
+
     /// <summary>PostgreSQL allows a data-modifying statement (<c>INSERT ... RETURNING</c>) as a CTE body.</summary>
     public override bool SupportsDataModifyingCtes => true;
 

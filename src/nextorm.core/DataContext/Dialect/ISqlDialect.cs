@@ -358,6 +358,31 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsNamedWindows { get; }
     /// <summary>
+    /// True when the provider understands the native <c>NULLS FIRST</c>/<c>NULLS LAST</c> ordering
+    /// modifier, which the SQLite, PostgreSQL and ClickHouse dialects opt into. The safe default is
+    /// <c>false</c>: a provider that does not opt in gets the portable <c>CASE</c> emulation from
+    /// <see cref="RenderOrderBy"/>. Declared as a default interface member so existing external
+    /// implementations keep compiling without a new abstract obligation.
+    /// </summary>
+    bool SupportsNullsOrdering => false;
+    /// <summary>
+    /// Renders one logical <c>ORDER BY</c> item for <paramref name="expressionSql"/> with the requested
+    /// NULL placement. The default implementation emulates the placement with a <c>CASE</c> rank key
+    /// (<c>CASE WHEN K IS NULL THEN n ELSE m END ASC, K</c>, plus the descending suffix on the key only),
+    /// so the rank prefix stays ascending even for a descending key. Providers that opt into
+    /// <see cref="SupportsNullsOrdering"/> override it with the native <c>NULLS FIRST</c>/<c>NULLS LAST</c>
+    /// form. <see cref="NullsPosition.Default"/> bypasses this renderer entirely; passing it here is an
+    /// error. The returned fragment may contain two physical sort keys but is consumed as one item, and a
+    /// parameterized key therefore occurs twice and must be bound twice.
+    /// </summary>
+    /// <param name="expressionSql">The already-qualified, already-quoted key SQL.</param>
+    /// <param name="direction">The requested key direction; the emulated rank prefix ignores it.</param>
+    /// <param name="nullsPosition">The explicit NULL placement (<see cref="NullsPosition.First"/> or <see cref="NullsPosition.Last"/>).</param>
+    /// <returns>The rendered ordering item.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not an explicit placement.</exception>
+    string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
+        => NullsOrderingRenderer.Render(expressionSql, direction, nullsPosition);
+    /// <summary>
     /// True when the provider can render the <c>GROUPS</c> window frame unit (peer groups rather than
     /// physical rows or ordering values). The safe default is <c>false</c>; PostgreSQL, ClickHouse and
     /// SQLite opt in, while SQL Server, MySQL and MariaDB only support <c>ROWS</c>/<c>RANGE</c>.

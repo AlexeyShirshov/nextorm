@@ -26,6 +26,13 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>SQLite emulates a table-valued parameter with a JSON document (<c>json_each</c>/<c>json_extract</c>).</summary>
     public override bool SupportsTableValuedParameters => true;
 
+    /// <summary>SQLite renders the native <c>NULLS FIRST</c>/<c>NULLS LAST</c> ordering modifier.</summary>
+    public override bool SupportsNullsOrdering => true;
+
+    /// <inheritdoc/>
+    public override string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
+        => NullsOrderingRenderer.RenderNative(expressionSql, direction, nullsPosition);
+
     // SQLite 3.35.0+ supports the ANSI INSERT ... RETURNING clause; last_insert_rowid() stays
     // available as a fallback but RETURNING is preferred because it is scoped to the statement.
     /// <inheritdoc/>

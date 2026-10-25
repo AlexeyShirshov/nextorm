@@ -114,6 +114,23 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsPercentileWindow => false;
     /// <summary>Defaults to <c>false</c>; PostgreSQL, MySQL, MariaDB, ClickHouse and SQLite opt into named windows.</summary>
     public virtual bool SupportsNamedWindows => false;
+    /// <summary>
+    /// True when the dialect understands the native <c>NULLS FIRST</c>/<c>NULLS LAST</c> modifier; the safe
+    /// default is <c>false</c>, which selects the portable <c>CASE</c> emulation from
+    /// <see cref="RenderOrderBy"/>. SQLite, PostgreSQL and ClickHouse opt in.
+    /// </summary>
+    public virtual bool SupportsNullsOrdering => false;
+    /// <summary>
+    /// Renders one logical <c>ORDER BY</c> item with an explicit NULL placement. The default emulates the
+    /// placement with a <c>CASE</c> rank key whose prefix is always ascending; providers that opt into
+    /// <see cref="SupportsNullsOrdering"/> override it with the native form.
+    /// </summary>
+    /// <param name="expressionSql">The already-qualified, already-quoted key SQL.</param>
+    /// <param name="direction">The requested key direction.</param>
+    /// <param name="nullsPosition">The explicit NULL placement.</param>
+    /// <returns>The rendered ordering item.</returns>
+    public virtual string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
+        => NullsOrderingRenderer.Render(expressionSql, direction, nullsPosition);
     /// <summary>Defaults to <c>false</c>; PostgreSQL, ClickHouse and SQLite opt into the <c>GROUPS</c> frame unit.</summary>
     public virtual bool SupportsWindowFrameGroups => false;
     /// <summary>Defaults to <c>false</c>; PostgreSQL and SQLite opt into the frame <c>EXCLUDE</c> clause.</summary>

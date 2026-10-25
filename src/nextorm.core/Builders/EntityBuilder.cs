@@ -4162,6 +4162,199 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <returns>A builder with the added ordering key.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public EntityBuilder<TEntity> OrderByDescending(int columnIdx) => OrderBy(columnIdx, OrderDirection.Desc);
+    /// <summary>
+    /// Adds an ascending ordering key by <paramref name="orderExp"/> with the requested NULL placement.
+    /// Repeated calls append keys, so the existing order is preserved.
+    /// </summary>
+    /// <param name="orderExp">The key selector.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A builder with the added ordering key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public EntityBuilder<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp, NullsPosition nullsPosition)
+        => OrderBy(orderExp, OrderDirection.Asc, nullsPosition);
+    /// <summary>
+    /// Adds an ordering key by <paramref name="orderExp"/> with the given direction and NULL placement.
+    /// Repeated calls append keys, so the existing order is preserved.
+    /// </summary>
+    /// <param name="orderExp">The key selector.</param>
+    /// <param name="direction">Ascending or descending.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A builder with the added ordering key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public EntityBuilder<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp, OrderDirection direction, NullsPosition nullsPosition)
+        => AppendOrdering(orderExp ?? throw new ArgumentNullException(nameof(orderExp)), null, direction, nullsPosition);
+    /// <summary>
+    /// Adds a descending ordering key by <paramref name="orderExp"/> with the requested NULL placement.
+    /// </summary>
+    /// <param name="orderExp">The key selector.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A builder with the added ordering key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public EntityBuilder<TEntity> OrderByDescending(Expression<Func<TEntity, object?>> orderExp, NullsPosition nullsPosition)
+        => OrderBy(orderExp, OrderDirection.Desc, nullsPosition);
+    /// <summary>
+    /// Adds an ascending ordering key by 1-based output column index with the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIdx">The 1-based result column index; must be greater than zero.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A builder with the added ordering key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public EntityBuilder<TEntity> OrderBy(int columnIdx, NullsPosition nullsPosition)
+        => OrderBy(columnIdx, OrderDirection.Asc, nullsPosition);
+    /// <summary>
+    /// Adds an ordering key by 1-based output column index with the given direction and NULL placement.
+    /// </summary>
+    /// <param name="columnIdx">The 1-based result column index; must be greater than zero.</param>
+    /// <param name="direction">Ascending or descending.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A builder with the added ordering key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public EntityBuilder<TEntity> OrderBy(int columnIdx, OrderDirection direction, NullsPosition nullsPosition)
+    {
+        if (columnIdx < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIdx));
+
+        return AppendOrdering(expression: null, columnIdx, direction, nullsPosition);
+    }
+    /// <summary>
+    /// Adds a descending ordering key by 1-based output column index with the requested NULL placement.
+    /// </summary>
+    /// <param name="columnIdx">The 1-based result column index; must be greater than zero.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A builder with the added ordering key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public EntityBuilder<TEntity> OrderByDescending(int columnIdx, NullsPosition nullsPosition)
+        => OrderBy(columnIdx, OrderDirection.Desc, nullsPosition);
+    /// <summary>
+    /// Adds an ascending secondary ordering key by <paramref name="orderExp"/>. The key is appended after
+    /// every existing key; it never replaces one.
+    /// </summary>
+    /// <param name="orderExp">The key selector.</param>
+    /// <returns>A builder with the appended ordering key.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public EntityBuilder<TEntity> ThenBy(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp);
+    /// <summary>
+    /// Adds a secondary ordering key by <paramref name="orderExp"/> with the given direction. The key is
+    /// appended after every existing key; it never replaces one.
+    /// </summary>
+    /// <param name="orderExp">The key selector.</param>
+    /// <param name="direction">Ascending or descending.</param>
+    /// <returns>A builder with the appended ordering key.</returns>
+    public EntityBuilder<TEntity> ThenBy(Expression<Func<TEntity, object?>> orderExp, OrderDirection direction)
+        => OrderBy(orderExp, direction);
+    /// <summary>
+    /// Adds an ascending secondary ordering key by <paramref name="orderExp"/> with the requested NULL
+    /// placement. The key is appended after every existing key; it never replaces one.
+    /// </summary>
+    /// <param name="orderExp">The key selector.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A builder with the appended ordering key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public EntityBuilder<TEntity> ThenBy(Expression<Func<TEntity, object?>> orderExp, NullsPosition nullsPosition)
+        => OrderBy(orderExp, nullsPosition);
+    /// <summary>
+    /// Adds a secondary ordering key by <paramref name="orderExp"/> with the given direction and NULL
+    /// placement. The key is appended after every existing key; it never replaces one.
+    /// </summary>
+    /// <param name="orderExp">The key selector.</param>
+    /// <param name="direction">Ascending or descending.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A builder with the appended ordering key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public EntityBuilder<TEntity> ThenBy(Expression<Func<TEntity, object?>> orderExp, OrderDirection direction, NullsPosition nullsPosition)
+        => OrderBy(orderExp, direction, nullsPosition);
+    /// <summary>
+    /// Adds a descending secondary ordering key by <paramref name="orderExp"/>. The key is appended after
+    /// every existing key; it never replaces one.
+    /// </summary>
+    /// <param name="orderExp">The key selector.</param>
+    /// <returns>A builder with the appended ordering key.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public EntityBuilder<TEntity> ThenByDescending(Expression<Func<TEntity, object?>> orderExp) => OrderByDescending(orderExp);
+    /// <summary>
+    /// Adds a descending secondary ordering key by <paramref name="orderExp"/> with the requested NULL
+    /// placement. The key is appended after every existing key; it never replaces one.
+    /// </summary>
+    /// <param name="orderExp">The key selector.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A builder with the appended ordering key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public EntityBuilder<TEntity> ThenByDescending(Expression<Func<TEntity, object?>> orderExp, NullsPosition nullsPosition)
+        => OrderByDescending(orderExp, nullsPosition);
+    /// <summary>
+    /// Adds an ascending secondary ordering key by 1-based output column index. The key is appended after
+    /// every existing key; it never replaces one.
+    /// </summary>
+    /// <param name="columnIdx">The 1-based result column index; must be greater than zero.</param>
+    /// <returns>A builder with the appended ordering key.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public EntityBuilder<TEntity> ThenBy(int columnIdx) => OrderBy(columnIdx);
+    /// <summary>
+    /// Adds a secondary ordering key by 1-based output column index with the given direction. The key is
+    /// appended after every existing key; it never replaces one.
+    /// </summary>
+    /// <param name="columnIdx">The 1-based result column index; must be greater than zero.</param>
+    /// <param name="direction">Ascending or descending.</param>
+    /// <returns>A builder with the appended ordering key.</returns>
+    public EntityBuilder<TEntity> ThenBy(int columnIdx, OrderDirection direction) => OrderBy(columnIdx, direction);
+    /// <summary>
+    /// Adds an ascending secondary ordering key by 1-based output column index with the requested NULL
+    /// placement. The key is appended after every existing key; it never replaces one.
+    /// </summary>
+    /// <param name="columnIdx">The 1-based result column index; must be greater than zero.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A builder with the appended ordering key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public EntityBuilder<TEntity> ThenBy(int columnIdx, NullsPosition nullsPosition) => OrderBy(columnIdx, nullsPosition);
+    /// <summary>
+    /// Adds a secondary ordering key by 1-based output column index with the given direction and NULL
+    /// placement. The key is appended after every existing key; it never replaces one.
+    /// </summary>
+    /// <param name="columnIdx">The 1-based result column index; must be greater than zero.</param>
+    /// <param name="direction">Ascending or descending.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A builder with the appended ordering key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    public EntityBuilder<TEntity> ThenBy(int columnIdx, OrderDirection direction, NullsPosition nullsPosition)
+        => OrderBy(columnIdx, direction, nullsPosition);
+    /// <summary>
+    /// Adds a descending secondary ordering key by 1-based output column index. The key is appended after
+    /// every existing key; it never replaces one.
+    /// </summary>
+    /// <param name="columnIdx">The 1-based result column index; must be greater than zero.</param>
+    /// <returns>A builder with the appended ordering key.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public EntityBuilder<TEntity> ThenByDescending(int columnIdx) => OrderByDescending(columnIdx);
+    /// <summary>
+    /// Adds a descending secondary ordering key by 1-based output column index with the requested NULL
+    /// placement. The key is appended after every existing key; it never replaces one.
+    /// </summary>
+    /// <param name="columnIdx">The 1-based result column index; must be greater than zero.</param>
+    /// <param name="nullsPosition">Where SQL <c>NULL</c> values are placed for this key.</param>
+    /// <returns>A builder with the appended ordering key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="nullsPosition"/> is not a defined <see cref="NullsPosition"/> member.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public EntityBuilder<TEntity> ThenByDescending(int columnIdx, NullsPosition nullsPosition)
+        => OrderByDescending(columnIdx, nullsPosition);
+    /// <summary>
+    /// Appends one sort key and returns the forked builder. Shared by the additive placement overloads and
+    /// the <c>ThenBy</c> family; the existing <c>OrderBy</c> overloads keep their own bodies so their
+    /// behavior is unchanged.
+    /// </summary>
+    private EntityBuilder<TEntity> AppendOrdering(Expression? expression, int? columnIdx, OrderDirection direction, NullsPosition nullsPosition)
+    {
+        var key = expression is not null
+            ? new Sorting(expression, nullsPosition) { Direction = direction }
+            : new Sorting(columnIdx!.Value, nullsPosition) { Direction = direction };
+
+        var b = Clone();
+        // _sorting is shared with the parent/siblings after a clone; detach with a new list before
+        // appending so a fork never grows the parent's ordering.
+        b._sorting = b._sorting is null ? [key] : [.. b._sorting, key];
+        return b;
+    }
 }
 
 /// <summary>

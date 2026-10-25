@@ -54,6 +54,13 @@ public class ClickHouseDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsRangeColumns => true;
 
+    /// <summary>ClickHouse renders the native <c>NULLS FIRST</c>/<c>NULLS LAST</c> ordering modifier.</summary>
+    public override bool SupportsNullsOrdering => true;
+
+    /// <inheritdoc/>
+    public override string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
+        => NullsOrderingRenderer.RenderNative(expressionSql, direction, nullsPosition);
+
     /// <summary>
     /// ClickHouse emulates a table-valued parameter with a native array bound through the driver and
     /// expanded server-side with <c>arrayJoin(@p)</c>: a scalar set is an <c>Array(T)</c> and an entity
