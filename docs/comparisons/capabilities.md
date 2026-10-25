@@ -56,7 +56,7 @@ provider list is not scored). The per-engine API breadth is on [Provider feature
 | Value converters | yes | yes | yes (`HasConversion`) |
 | Dynamic columns (`[DynamicColumns]` store) | yes | yes | no (JSON/TPH workarounds) |
 | JSON column ↔ object | yes | partial ([linq2db#1661](https://github.com/linq2db/linq2db/issues/1661)) | yes (JSON columns) |
-| Duration / interval columns | yes | yes | partial (provider interval mapping) |
+| Duration / interval columns | yes (PostgreSQL `interval` → `TimeSpan` only for representable zero-month values) | yes | partial (provider interval mapping) |
 | Native JSON documents | yes on PostgreSQL | partial (the `json`/`jsonb` type plus `@>`, `#>>` and `Json.Value`; not the full `jsonb_*` library) | partial (JSON column mapping + Npgsql `EF.Functions.Json*`) |
 | JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes (SQL Server, MySQL/MariaDB) | yes | partial |
 | String JSON + native-JSON + dictionary functions (ClickHouse) | yes on ClickHouse | no | no |

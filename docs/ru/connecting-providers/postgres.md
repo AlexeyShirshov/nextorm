@@ -33,6 +33,12 @@
 - арифметика дат включена ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic) равно `true`): `SqlFunctions.Sql.date_add`/`end_of_month`
   и методы `DateTime.Add*` отрисовывают интервальную арифметику PostgreSQL
   (`x + (n * interval '1 day')`, `date_trunc('month', x) + interval '1 month - 1 day'`);
+- колонка `TimeSpan` отображает PostgreSQL `interval` только для значений с **нулевыми месяцами**:
+  возвращённый interval с ненулевой месячной составляющей (любого знака) отклоняется через
+  `InvalidCastException` с указанием календарных месяцев, дни и микросекунды при нулевых месяцах
+  конвертируются точно с проверяемой арифметикой (непредставимое значение падает с
+  `OverflowException`, а не переполняется-обёрткой), а колонки `time`/`timetz` сохраняют прежний
+  аксессор `TimeSpan` драйвера;
 - агрегаты `string_agg`/`array_agg` включены ([`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates) равно `true`);
 - полнотекстовый поиск включён ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) равно `true`): `SqlFunctions.Sql.contains` отрисовывает
   `to_tsvector(col) @@ plainto_tsquery(search)`, а `freetext` — `websearch_to_tsquery(search)`;

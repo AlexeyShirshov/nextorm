@@ -19,7 +19,10 @@ namespace NextORM.Postgres;
 public class PostgresDataContext : DataContext
 {
     private static readonly MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!;
+    private static readonly MethodInfo GetTimeSpanMI = GetFieldValueMI.MakeGenericMethod(typeof(TimeSpan));
     private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
+    private static readonly MethodInfo GetDataTypeNameMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetDataTypeName))!;
+    private static readonly MethodInfo ReadIntervalMI = typeof(PostgresIntervalReader).GetMethod(nameof(PostgresIntervalReader.Read), BindingFlags.Static | BindingFlags.NonPublic)!;
     private static readonly MethodInfo ToRangeMI = typeof(PostgresRange).GetMethod(nameof(PostgresRange.ToRange), BindingFlags.Static | BindingFlags.Public)!;
     private static readonly MethodInfo ToRangesMI = typeof(PostgresRange).GetMethod(nameof(PostgresRange.ToRanges), BindingFlags.Static | BindingFlags.Public)!;
 
@@ -263,7 +266,61 @@ public class PostgresDataContext : DataContext
             && element.IsGenericType && element.GetGenericTypeDefinition() == typeof(Range<>))
             return MapMultirangeColumn(column, param, element.GetGenericArguments()[0]);
 
+        // A mapped TimeSpan is either a real PostgreSQL interval or a time-of-day column; the
+        // projection carries no SQL type, so the driver type is discriminated per value. A configured
+        // converter keeps its precedence over the interval probe (it is handled by the base mapping).
+        if (realType == typeof(TimeSpan) && column.Converter is null)
+            return MapIntervalTimeSpanColumn(column, param);
+
         return base.MapColumnExpression(column, param);
+    }
+
+    /// <summary>
+    /// Maps a <see cref="TimeSpan"/> column whose PostgreSQL storage type is only known from the open
+    /// reader: an <c>interval</c> is read as the driver's raw interval through
+    /// <see cref="PostgresIntervalReader"/> (calendar months are rejected, zero-month values convert
+    /// exactly), while <c>time</c>/<c>timetz</c> keep the existing <c>GetFieldValue&lt;TimeSpan&gt;</c>
+    /// accessor. Null handling wraps the discriminator, so SQL NULL never reads an interval value.
+    /// </summary>
+    /// <param name="column">The projected column being read.</param>
+    /// <param name="param">The data-reader expression the accessor is built from.</param>
+    /// <returns>An expression that reads the column value.</returns>
+    private static Expression MapIntervalTimeSpanColumn(SelectExpression column, Expression param)
+    {
+        var index = Expression.Constant(column.Index);
+        var intervalRead = Expression.Call(ReadIntervalMI, param, index);
+        var timeSpanRead = Expression.Call(
+            Expression.Convert(param, typeof(DbDataReader)),
+            GetTimeSpanMI,
+            index);
+        var getter = Expression.Condition(
+            Expression.Equal(
+                Expression.Call(param, GetDataTypeNameMI, index),
+                Expression.Constant(PostgresIntervalReader.DataTypeName)),
+            intervalRead,
+            timeSpanRead);
+
+        if (column.Nullable)
+        {
+            Expression value = getter.Type == column.PropertyType
+                ? getter
+                : Expression.Convert(getter, column.PropertyType);
+
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Constant(null, column.PropertyType),
+                value);
+        }
+
+        if (column.DefaultOnNull)
+        {
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Default(column.PropertyType),
+                getter);
+        }
+
+        return getter;
     }
 
     private static Expression MapMultirangeColumn(SelectExpression column, Expression param, Type boundType)

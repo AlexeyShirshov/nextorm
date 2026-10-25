@@ -197,6 +197,11 @@ The [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) surface adds `pg_typeo
 `to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) and the array constructors, all gated
 by `SupportsExtendedScalarFunctions`.
 
+On the mapped-column path the duration rule follows the **returned** interval, never the function name:
+`make_interval`, a `justify_*` normalization and `age` all reject a result carrying a non-zero month
+component (either sign) with `InvalidCastException` naming calendar months, and convert a zero-month
+result exactly.
+
 See [Scalar functions](../../scalar-functions/index.md).
 
 ## `DISTINCT ON`

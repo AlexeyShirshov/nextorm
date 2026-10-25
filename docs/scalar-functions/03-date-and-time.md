@@ -124,7 +124,7 @@ PostgreSQL only):
 |---|---|
 | `SqlFunctions.Postgres.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, 0, d, h, mi, s)` (PostgreSQL's `weeks` is pinned to `0`) |
 | `SqlFunctions.Postgres.make_time(h, mi, sec)` / `make_timestamp(y, mo, d, h, mi, sec)` | `make_time(...)` / `make_timestamp(...)` |
-| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (the result is an `interval`; a whole-month part is read back as 30 days) |
+| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (the result is an `interval`; materialising it into a `TimeSpan` column throws `InvalidCastException` when the returned value carries a non-zero month component — either sign — naming calendar months, so a month is never read back as 30 days; a zero-month value converts exactly) |
 | `SqlFunctions.Postgres.date_bin(stride, source, origin)` | `date_bin(cast(stride as interval), source, origin)` |
 | `SqlFunctions.Postgres.justify_days(interval)` / `justify_hours(interval)` | `justify_days(interval)` / `justify_hours(interval)` |
 | `SqlFunctions.Postgres.to_char(value, format)` | `to_char(value, format)` |
