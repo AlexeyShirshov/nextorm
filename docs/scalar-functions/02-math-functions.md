@@ -84,6 +84,38 @@ The remaining math functions are part of the extended scalar library
 PostgreSQL function returns `void`, so a projected value is always `null` and the call is made for its
 side effect (subsequent `random()` calls in the session become reproducible).
 
+## PostgreSQL numeric scale
+
+Three PostgreSQL-only functions describe the scale of a `numeric` value. They are gated **per name**
+by [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), so every
+other provider rejects them with `NotSupportedException` instead of rendering PostgreSQL SQL:
+
+| C# | SQL | Result |
+|---|---|---|
+| `SqlFunctions.Postgres.scale(decimal? value)` | `scale(value)` | `int?`: digits in the fractional part, trailing zeroes included |
+| `SqlFunctions.Postgres.min_scale(decimal? value)` | `min_scale(value)` | `int?`: digits that remain after the trailing zeroes are removed |
+| `SqlFunctions.Postgres.trim_scale(decimal? value)` | `trim_scale(value)` | `decimal?`: the value with its trailing fractional zeroes removed |
+
+`scale` is available on every supported PostgreSQL version; `min_scale` and `trim_scale` were added in
+PostgreSQL 13. All three return NULL for a NULL argument. `trim_scale` only removes trailing zeroes —
+it is not `round`/`trunc` and never changes a significant digit:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Scale = SqlFunctions.Postgres.scale(12.3400m),
+        MinScale = SqlFunctions.Postgres.min_scale(12.3400m),
+        Trimmed = SqlFunctions.Postgres.trim_scale(12.3400m)
+    })
+    .ToList();
+// Scale = 4, MinScale = 2, Trimmed = 12.34 (decimal scale 2)
+```
+
+`12.3400` reports scale 4 because the fractional part holds four digits, while `min_scale` ignores the
+trailing zeroes and reports 2. `trim_scale(12.3456m)` returns `12.3456` unchanged, keeping scale 4, and
+`trim_scale(0.0000m)` returns `0` with scale 0.
+
 ## SQL Server random
 
 `SqlFunctions.SqlServer.rand()` / `rand(seed)` render `rand()` / `rand(seed)` and are gated per name

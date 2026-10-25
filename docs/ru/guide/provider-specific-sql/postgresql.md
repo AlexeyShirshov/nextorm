@@ -206,6 +206,39 @@ Native-поверхность реализована только в PostgreSQL;
 
 См. [Скалярные функции](../../scalar-functions/index.md).
 
+## Функции числового масштаба
+
+`SqlFunctions.Postgres.scale`/`min_scale`/`trim_scale` описывают и нормализуют масштаб значения
+`numeric`. Каждое имя гейтится **отдельно** через
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)), а не общим
+флагом семейства, и любой другой провайдер отклоняет вызов `NotSupportedException`, поэтому SQL
+PostgreSQL не попадает на сервер, который его не исполняет.
+
+| C# | SQL | Возвращает |
+|---|---|---|
+| `SqlFunctions.Postgres.scale(decimal? value)` | `scale(value)` | `int?` — цифры дробной части, включая хвостовые нули |
+| `SqlFunctions.Postgres.min_scale(decimal? value)` | `min_scale(value)` | `int?` — цифры дробной части без хвостовых нулей |
+| `SqlFunctions.Postgres.trim_scale(decimal? value)` | `trim_scale(value)` | `decimal?` — значение без хвостовых нулей |
+
+`scale` есть во всех поддерживаемых версиях PostgreSQL; `min_scale`/`trim_scale` требуют PostgreSQL 13
+или новее. NULL-аргумент даёт NULL для всех трёх. `trim_scale` удаляет только хвостовые нули: в
+отличие от `round`/`trunc` она не округляет и не меняет значимые цифры, поэтому `trim_scale(12.3400)`
+равно `12.34` (масштаб decimal 2), а `trim_scale(12.3456)` возвращается без изменений с масштабом 4.
+Значение проходит через numeric-ридер Npgsql, поэтому возвращённый decimal сохраняет серверный масштаб.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Scale = SqlFunctions.Postgres.scale(e.Numeric),
+        MinScale = SqlFunctions.Postgres.min_scale(e.Numeric),
+        Trimmed = SqlFunctions.Postgres.trim_scale(e.Numeric)
+    })
+    .ToList();
+```
+
+См. [Математические функции](../../scalar-functions/02-math-functions.md#числовой-масштаб-postgresql).
+
 ## Null-safe-сравнение
 
 PostgreSQL имеет операторы ANSI нативно, поэтому оба помощника отображаются один-к-одному, а результат —

@@ -84,6 +84,38 @@ var rows = dataContext.From<IComplexEntity>()
 PostgreSQL возвращает `void`, поэтому проецируемое значение всегда `null`, а вызов делается ради
 побочного эффекта (последующие `random()` в сессии становятся воспроизводимыми).
 
+## Числовой масштаб PostgreSQL
+
+Три функции только для PostgreSQL описывают масштаб значения `numeric`. Они гейтятся **по имени**
+через [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)),
+поэтому все остальные провайдеры отклоняют их `NotSupportedException`, не рендеря SQL PostgreSQL:
+
+| C# | SQL | Результат |
+|---|---|---|
+| `SqlFunctions.Postgres.scale(decimal? value)` | `scale(value)` | `int?`: число цифр в дробной части, включая хвостовые нули |
+| `SqlFunctions.Postgres.min_scale(decimal? value)` | `min_scale(value)` | `int?`: число цифр, остающихся после удаления хвостовых нулей |
+| `SqlFunctions.Postgres.trim_scale(decimal? value)` | `trim_scale(value)` | `decimal?`: значение без хвостовых нулей в дробной части |
+
+`scale` доступна во всех поддерживаемых версиях PostgreSQL; `min_scale` и `trim_scale` появились в
+PostgreSQL 13. Все три возвращают NULL для NULL-аргумента. `trim_scale` только удаляет хвостовые
+нули — это не `round`/`trunc`, значимые цифры не меняются:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Scale = SqlFunctions.Postgres.scale(12.3400m),
+        MinScale = SqlFunctions.Postgres.min_scale(12.3400m),
+        Trimmed = SqlFunctions.Postgres.trim_scale(12.3400m)
+    })
+    .ToList();
+// Scale = 4, MinScale = 2, Trimmed = 12.34 (масштаб decimal 2)
+```
+
+`12.3400` сообщает масштаб 4, потому что в дробной части четыре цифры, а `min_scale` игнорирует
+хвостовые нули и сообщает 2. `trim_scale(12.3456m)` возвращает `12.3456` без изменений с масштабом 4,
+а `trim_scale(0.0000m)` возвращает `0` с масштабом 0.
+
 ## Случайные числа SQL Server
 
 `SqlFunctions.SqlServer.rand()` / `rand(seed)` рендерятся как `rand()` / `rand(seed)` и гейтятся по
