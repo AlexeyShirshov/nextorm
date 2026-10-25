@@ -549,6 +549,9 @@ internal static class NormSqlTranslator
         if (BuiltinFunctionTranslator.TryTranslate(visitor, node))
             return;
 
+        if (PortableBinaryFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
         if (SqlServerScalarFunctionTranslator.TryTranslate(visitor, node))
             return;
 

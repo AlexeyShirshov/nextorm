@@ -568,6 +568,57 @@ public interface ISqlDialect
     ISqlServerFunctions? SqlServerFunctions => null;
 
     /// <summary>
+    /// True when the provider can render <see cref="CommonFunctions.base64_encode(byte[])"/> in its
+    /// standard RFC 4648 form. The safe default is <see langword="false"/>; SQL Server, PostgreSQL,
+    /// MySQL and MariaDB opt in. Declared as a default interface method so existing external
+    /// implementations keep compiling.
+    /// </summary>
+    bool SupportsBase64Encode => false;
+
+    /// <summary>
+    /// Renders <c>base64_encode(value)</c> over the already-rendered operand. Reached only when
+    /// <see cref="SupportsBase64Encode"/> is true. A literal NULL operand arrives as the bare token
+    /// <c>null</c> and must be replaced by the provider's typed binary NULL so the argument keeps its
+    /// SQL input type. The default rejects the call.
+    /// </summary>
+    string MakeBase64Encode(string value) =>
+        throw new NotSupportedException("The base64_encode function is not supported by this provider.");
+
+    /// <summary>
+    /// True when the provider can render <see cref="CommonFunctions.base64_decode(string?)"/> in its
+    /// standard RFC 4648 form. The safe default is <see langword="false"/>; SQL Server, PostgreSQL,
+    /// MySQL and MariaDB opt in. Declared as a default interface method so existing external
+    /// implementations keep compiling.
+    /// </summary>
+    bool SupportsBase64Decode => false;
+
+    /// <summary>
+    /// Renders <c>base64_decode(value)</c> over the already-rendered operand. Reached only when
+    /// <see cref="SupportsBase64Decode"/> is true. A literal NULL operand arrives as the bare token
+    /// <c>null</c> and must be replaced by the provider's typed text NULL. The default rejects the
+    /// call.
+    /// </summary>
+    string MakeBase64Decode(string value) =>
+        throw new NotSupportedException("The base64_decode function is not supported by this provider.");
+
+    /// <summary>
+    /// True when the provider can render <see cref="CommonFunctions.crypt_gen_random(int?)"/>.
+    /// The safe default is <see langword="false"/>; SQL Server, PostgreSQL, MySQL and MariaDB opt
+    /// in. Declared as a default interface method so existing external implementations keep
+    /// compiling.
+    /// </summary>
+    bool SupportsCryptGenRandom => false;
+
+    /// <summary>
+    /// Renders <c>crypt_gen_random(length)</c> over the already-rendered operand. Reached only when
+    /// <see cref="SupportsCryptGenRandom"/> is true. A literal NULL operand arrives as the bare
+    /// token <c>null</c> and must be replaced by the provider's typed integer NULL. The default
+    /// rejects the call.
+    /// </summary>
+    string MakeCryptGenRandom(string length) =>
+        throw new NotSupportedException("The crypt_gen_random function is not supported by this provider.");
+
+    /// <summary>
     /// True when the provider can render the boolean aggregates <c>bool_and</c>, <c>bool_or</c> and
     /// <c>every</c>. The safe default is <c>false</c>; only PostgreSQL opts in today.
     /// </summary>

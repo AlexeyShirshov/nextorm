@@ -264,6 +264,13 @@ ctx.From<IComplexEntity>()
 описана в разделе [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql).
 Остальные провайдеры отклоняют её с `NotSupportedException`.
 
+`SqlFunctions.Sql.base64_encode` и `base64_decode` используют пару ядра `encode(value, 'base64')` /
+`decode(value, 'base64')` (у результата encode явно удаляется завершающий перевод строки).
+`SqlFunctions.Sql.crypt_gen_random` вызывает `gen_random_bytes` из расширения **`pgcrypto`**:
+расширение должно быть установлено на сервере (`CREATE EXTENSION pgcrypto`). nextorm его не
+устанавливает и не детектирует отсутствие — отсутствующее расширение проявляется нативной ошибкой
+провайдера.
+
 ## Дополнительная поверхность функций
 
 PostgreSQL также включает `greatest`/`least`, `date_trunc`, агрегаты `string_agg`/`array_agg`, предложение

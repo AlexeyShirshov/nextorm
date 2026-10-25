@@ -486,6 +486,39 @@ public class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL renders every cross-provider scalar function natively (<c>space</c> as <c>repeat(' ', n)</c>).</summary>
     public override IScalarFunctions ScalarFunctions => PostgresScalarFunctions.Instance;
 
+    /// <summary>PostgreSQL encodes base64 through the core <c>encode</c> function.</summary>
+    public override bool SupportsBase64Encode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Encode(string value) =>
+        $"replace(encode({TypedNull(value, "bytea")}, 'base64'), E'\\n', '')";
+
+    /// <summary>PostgreSQL decodes base64 through the core <c>decode</c> function.</summary>
+    public override bool SupportsBase64Decode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Decode(string value) =>
+        $"decode({TypedNull(value, "text")}, 'base64')";
+
+    /// <summary>PostgreSQL generates random bytes through <c>pgcrypto</c>'s <c>gen_random_bytes</c>.</summary>
+    public override bool SupportsCryptGenRandom => true;
+
+    /// <inheritdoc/>
+    public override string MakeCryptGenRandom(string length)
+    {
+        var argument = TypedNull(length, "integer");
+        return $"CASE WHEN {argument} IS NULL THEN CAST(NULL AS bytea) ELSE gen_random_bytes({argument}) END";
+    }
+
+    /// <summary>
+    /// Replaces the bare <c>null</c> token of a literal NULL argument with the provider's typed NULL,
+    /// so the function resolves the expected binary/text/integer input type instead of the
+    /// polymorphic <c>unknown</c> literal.
+    /// </summary>
+    private static string TypedNull(string value, string sqlType) =>
+        value == "null" ? $"CAST(NULL AS {sqlType})" : value;
+
+
     /// <inheritdoc/>
     public override bool SupportsBooleanAggregates => true;
     /// <inheritdoc/>

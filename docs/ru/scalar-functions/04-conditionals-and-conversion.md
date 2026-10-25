@@ -186,6 +186,30 @@ In-memory-провайдер применяет ту же таблицу ист�
 строк в CLR — **не** коллация базы: in-memory-провайдер сравнивает строки CLR, а SQL-провайдер — с
 коллацией колонки, поэтому равенство при разных коллациях не обещается.
 
+## BASE64 и разбор decimal
+
+`SqlFunctions.Sql.base64_encode(byte[]?)` и `base64_decode(string?)` рендерят стандартный BASE64 по
+RFC 4648 (`+`, `/`, паддинг `=`, без переносов строк):
+
+| C# | SQL Server 2025 | PostgreSQL | MySQL / MariaDB |
+|---|---|---|---|---|
+| `base64_encode(value)` | `BASE64_ENCODE(value)` | `replace(encode(value, 'base64'), E'\n', '')` | `CAST(REPLACE(REPLACE(TO_BASE64(value), CHAR(13), ''), CHAR(10), '') AS CHAR)` |
+| `base64_decode(value)` | `BASE64_DECODE(value)` | `decode(value, 'base64')` | `FROM_BASE64(value)` |
+
+SQL NULL (литерал, параметр или nullable-столбец) даёт SQL NULL; пустой вход даёт пустой результат.
+Невалидный или URL-safe BASE64 находится вне переносимого входного домена, и ошибка провайдера не
+маскируется. ClickHouse, SQLite и in-memory провайдер отклоняют оба члена с
+`The {name} function is not supported by this provider.` В ClickHouse есть нативные `base64Encode`/
+`base64Decode`, но nextorm не открывает их в этом срезе: адаптер привязывает аргумент `byte[]` как
+`Array(UInt8)` и читает результат `String` как `string`, поэтому сигнатуру `byte[]` соблюсти нельзя.
+В SQL Server `base64_decode` принимает `varchar`, поэтому столбец `nvarchar` требует явного приведения.
+
+`SqlFunctions.SqlServer.parse(string?)` и `try_parse(string?)` разбирают `decimal(38,18)` с
+фиксированной культурой `en-US` — никогда не с языком сессии и никогда не с аргументом культуры.
+`parse` отдаёт серверную ошибку на неверном тексте (`Microsoft.Data.SqlClient.SqlException`),
+`try_parse` возвращает NULL. Оба возвращают `decimal?`, и неверный текст никогда не уходит в
+клиентский разбор.
+
 ## Предикаты типов SQL Server
 
 `SqlFunctions.SqlServer.isdate(value)` и `isnumeric(value)` рендерятся как `isdate(...)` / `isnumeric(...)`

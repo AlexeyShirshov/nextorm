@@ -182,6 +182,29 @@ otherwise `EqualityComparer<T>.Default` — so a `NULL` reference is never deref
 equality is **not** database collation: the in-memory provider compares CLR strings, while a SQL
 provider compares with the column's collation, so no cross-collation equality is promised.
 
+## BASE64 and decimal parsing
+
+`SqlFunctions.Sql.base64_encode(byte[]?)` and `base64_decode(string?)` render standard RFC 4648 BASE64
+(`+`, `/`, `=` padding, no line wrapping):
+
+| C# | SQL Server 2025 | PostgreSQL | MySQL / MariaDB |
+|---|---|---|---|---|
+| `base64_encode(value)` | `BASE64_ENCODE(value)` | `replace(encode(value, 'base64'), E'\n', '')` | `CAST(REPLACE(REPLACE(TO_BASE64(value), CHAR(13), ''), CHAR(10), '') AS CHAR)` |
+| `base64_decode(value)` | `BASE64_DECODE(value)` | `decode(value, 'base64')` | `FROM_BASE64(value)` |
+
+A SQL NULL (literal, parameter or nullable column) yields SQL NULL; an empty input yields an empty
+result. Invalid or URL-safe BASE64 is outside the portable input domain and the provider error is not
+masked. ClickHouse, SQLite and the in-memory provider reject both members with
+`The {name} function is not supported by this provider.` ClickHouse has native `base64Encode`/
+`base64Decode`, but nextorm does not expose them in this slice: the adapter binds a `byte[]` argument
+as `Array(UInt8)` and reads a `String` result as `string`, so the `byte[]` signature cannot be honoured.
+On SQL Server `base64_decode` takes `varchar` input, so an `nvarchar` column needs an explicit cast.
+
+`SqlFunctions.SqlServer.parse(string?)` and `try_parse(string?)` parse a `decimal(38,18)` with the
+fixed `en-US` culture — never the session language and never a culture argument. `parse` raises the
+server error for invalid text (`Microsoft.Data.SqlClient.SqlException`); `try_parse` returns NULL.
+Both return `decimal?`, and invalid text never falls back to client-side parsing.
+
 ## SQL Server type predicates
 
 `SqlFunctions.SqlServer.isdate(value)` and `isnumeric(value)` render `isdate(...)` / `isnumeric(...)`

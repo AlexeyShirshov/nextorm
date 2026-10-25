@@ -158,6 +158,23 @@ public sealed class DialectCapabilityContractTests
                 }
             }
 
+            // T282 (#282): a capability flag and its renderer agree, and an absent capability fails
+            // closed instead of emitting SQL the provider cannot execute.
+            if (dialect.SupportsBase64Encode)
+                dialect.MakeBase64Encode("[x]").Should().NotBeNullOrEmpty();
+            else
+                FluentActions.Invoking(() => dialect.MakeBase64Encode("[x]")).Should().Throw<NotSupportedException>();
+
+            if (dialect.SupportsBase64Decode)
+                dialect.MakeBase64Decode("[x]").Should().NotBeNullOrEmpty();
+            else
+                FluentActions.Invoking(() => dialect.MakeBase64Decode("[x]")).Should().Throw<NotSupportedException>();
+
+            if (dialect.SupportsCryptGenRandom)
+                dialect.MakeCryptGenRandom("[n]").Should().NotBeNullOrEmpty();
+            else
+                FluentActions.Invoking(() => dialect.MakeCryptGenRandom("[n]")).Should().Throw<NotSupportedException>();
+
             if (dialect.StringSplit is { } split)
                 split.Render("','", "[x]").Should().NotBeNullOrEmpty();
 

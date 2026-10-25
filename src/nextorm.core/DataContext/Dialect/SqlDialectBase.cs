@@ -189,6 +189,28 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>null</c>; only SQL Server exposes the T-SQL-only scalar-function renderer.</summary>
     public virtual ISqlServerFunctions? SqlServerFunctions => null;
 
+    /// <summary>Defaults to <c>false</c>; SQL Server, PostgreSQL, MySQL and MariaDB opt in.</summary>
+    public virtual bool SupportsBase64Encode => false;
+
+    /// <summary>Defaults to the unsupported-provider exception; reached only when <see cref="SupportsBase64Encode"/> is true.</summary>
+    public virtual string MakeBase64Encode(string value) =>
+        throw new NotSupportedException("The base64_encode function is not supported by this provider.");
+
+    /// <summary>Defaults to <c>false</c>; SQL Server, PostgreSQL, MySQL and MariaDB opt in.</summary>
+    public virtual bool SupportsBase64Decode => false;
+
+    /// <summary>Defaults to the unsupported-provider exception; reached only when <see cref="SupportsBase64Decode"/> is true.</summary>
+    public virtual string MakeBase64Decode(string value) =>
+        throw new NotSupportedException("The base64_decode function is not supported by this provider.");
+
+    /// <summary>Defaults to <c>false</c>; SQL Server, PostgreSQL, MySQL and MariaDB opt in.</summary>
+    public virtual bool SupportsCryptGenRandom => false;
+
+    /// <summary>Defaults to the unsupported-provider exception; reached only when <see cref="SupportsCryptGenRandom"/> is true.</summary>
+    public virtual string MakeCryptGenRandom(string length) =>
+        throw new NotSupportedException("The crypt_gen_random function is not supported by this provider.");
+
+
     /// <inheritdoc/>
     public virtual bool SupportsBooleanAggregates => false;
     /// <inheritdoc/>

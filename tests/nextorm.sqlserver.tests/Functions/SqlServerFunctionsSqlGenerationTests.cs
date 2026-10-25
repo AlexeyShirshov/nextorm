@@ -967,6 +967,30 @@ public class SqlServerFunctionsSqlGenerationTests
         sql.Should().Contain("'00112233-4455-6677-8899-aabbccddeeff'");
     }
 
+    [Fact]
+    public void T282_DecimalParse_ShouldUseTheFixedEnUsCaseForm()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => new
+        {
+            Parsed = SqlFunctions.SqlServer.parse(x.String),
+            ParsedNull = SqlFunctions.SqlServer.parse(null),
+            Tried = SqlFunctions.SqlServer.try_parse(x.String),
+            TriedNull = SqlFunctions.SqlServer.try_parse(null)
+        }));
+
+        sql.Should().Contain("CASE WHEN somestring IS NULL THEN CAST(NULL AS decimal(38,18)) ELSE PARSE(somestring AS decimal(38,18) USING N'en-US') END");
+        sql.Should().Contain("CASE WHEN CAST(NULL AS nvarchar(4000)) IS NULL THEN CAST(NULL AS decimal(38,18)) ELSE PARSE(CAST(NULL AS nvarchar(4000)) AS decimal(38,18) USING N'en-US') END");
+        sql.Should().Contain("CASE WHEN somestring IS NULL THEN CAST(NULL AS decimal(38,18)) ELSE TRY_PARSE(somestring AS decimal(38,18) USING N'en-US') END");
+        sql.Should().Contain("CASE WHEN CAST(NULL AS nvarchar(4000)) IS NULL THEN CAST(NULL AS decimal(38,18)) ELSE TRY_PARSE(CAST(NULL AS nvarchar(4000)) AS decimal(38,18) USING N'en-US') END");
+
+        // The culture is a grammar literal, never a bound parameter.
+        sql.Should().NotMatchRegex(@"USING\s+@\w+");
+        sql.Should().NotContain("culture");
+    }
+
     private static void AssertUnsupported(Action act, string pattern)
         => act.Should().Throw<NotSupportedException>().WithMessage(pattern);
 }

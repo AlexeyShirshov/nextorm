@@ -43,7 +43,7 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
     /// <summary>
     /// The complete SQL Server-only function inventory of <c>SqlServerSpecificFunctions.Supports</c>
     /// (<c>src/nextorm.sqlserver/SqlServerDialect.cs:1046-1067</c>), read through the live context's
-    /// public <see cref="ISqlServerFunctions"/> surface: 72 T-SQL function names.
+    /// public <see cref="ISqlServerFunctions"/> surface: 74 T-SQL function names.
     /// </summary>
     private static readonly string[] SqlServerFunctionNames =
     [
@@ -58,16 +58,17 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
         "object_schema_name", "stats_date", "db_id", "db_name", "original_db_name", "schema_id",
         "schema_name", "type_id", "type_name", "filegroup_id", "filegroup_name", "file_id", "file_idex",
         "file_name", "current_timezone", "current_timezone_id", "formatmessage", "getansinull",
-        "isdate", "isnumeric", "parsename", "publishingservername", "str", "next_value_for", "nextval"
+        "isdate", "isnumeric", "parsename", "publishingservername", "str", "parse", "try_parse",
+        "next_value_for", "nextval"
     ];
 
     /// <summary>
     /// Every <c>SqlServerSpecificFunctions.Render</c> arm, written out literally and independently of
-    /// the renderer: the 68 switch arms, the 12 arms that also carry an optional-arity form
+    /// the renderer: the 70 switch arms, the 12 arms that also carry an optional-arity form
     /// (<c>quotename</c>, <c>format</c>, <c>date_bucket</c>, <c>rand</c>, <c>object_id</c>,
     /// <c>object_name</c>, <c>object_schema_name</c>, <c>db_id</c>, <c>db_name</c>, <c>schema_id</c>,
     /// <c>schema_name</c>, <c>getansinull</c>) and a second <c>datename</c> argument variant for the
-    /// quote-stripping helper. 85 assertion rows over 72 names / 68 source switch arms.
+    /// quote-stripping helper. 87 assertion rows over 74 names / 70 source switch arms.
     /// </summary>
     private static readonly (string Name, string[] Args, string Expected)[] RenderArms =
     [
@@ -158,6 +159,8 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
         ("parsename", ["'a.b'", "1"], "parsename('a.b', 1)"),
         ("publishingservername", [], "publishingservername()"),
         ("str", ["123.456"], "str(123.456)"),
+        ("parse", ["x"], "CASE WHEN x IS NULL THEN CAST(NULL AS decimal(38,18)) ELSE PARSE(x AS decimal(38,18) USING N'en-US') END"),
+        ("try_parse", ["x"], "CASE WHEN x IS NULL THEN CAST(NULL AS decimal(38,18)) ELSE TRY_PARSE(x AS decimal(38,18) USING N'en-US') END"),
         ("next_value_for", ["[seq]"], "next value for [seq]"),
         ("nextval", ["[seq]"], "next value for [seq]")
     ];
@@ -458,7 +461,7 @@ public sealed class SqlServerDialectBranchCoverage3Tests : ProviderTestSuite
     [Fact]
     public void SqlServerFunctions_ShouldAcceptTheCompleteInventoryAndNothingElse()
     {
-        SqlServerFunctionNames.Should().HaveCount(72, "the SQL Server table accepts 72 T-SQL function names");
+        SqlServerFunctionNames.Should().HaveCount(74, "the SQL Server table accepts 74 T-SQL function names");
         SqlServerFunctionNames.Should().OnlyHaveUniqueItems();
 
         using (new AssertionScope())
