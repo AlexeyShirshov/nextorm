@@ -144,7 +144,8 @@ public class MySqlFunctionsSqlGenerationTests
         [
             "regexp_substr", "regexp_instr", "regexp_replace", "nvl", "nvl2", "add_months",
             "months_between", "to_char", "to_date", "to_number", "kdf", "xxh3", "xxh32",
-            "json_detailed", "json_compact", "next_value_for", "nextval", "setval", "lastval"
+            "json_detailed", "json_compact", "json_equals", "json_normalize",
+            "next_value_for", "nextval", "setval", "lastval"
         ];
         var declared = typeof(MySqlFunctions)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
@@ -211,5 +212,18 @@ public class MySqlFunctionsSqlGenerationTests
 
         var sequence = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.next_value_for("s")));
         sequence.Should().Throw<NotSupportedException>().WithMessage("*next_value_for*not supported*");
+    }
+
+    [Fact]
+    public void T284_JsonFunctions_ShouldThrowOnUnsupportedProvider()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var equals = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_equals(x.String, "{\"a\":1}")));
+        equals.Should().Throw<NotSupportedException>().WithMessage("*json_equals*not supported*");
+
+        var normalize = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_normalize(x.String)));
+        normalize.Should().Throw<NotSupportedException>().WithMessage("*json_normalize*not supported*");
     }
 }

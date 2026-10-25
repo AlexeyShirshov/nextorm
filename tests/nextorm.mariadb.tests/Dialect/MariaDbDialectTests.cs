@@ -135,6 +135,16 @@ public class MariaDbDialectTests
     }
 
     [Fact]
+    public void T284_JsonFunctions_ShouldAdvertiseMariaDbCapability()
+    {
+        Dialect.MySqlFunctions.Should().NotBeNull();
+        Dialect.MySqlFunctions!.Supports("json_equals").Should().BeTrue();
+        Dialect.MySqlFunctions!.Supports("json_normalize").Should().BeTrue();
+        Dialect.MySqlFunctions!.Render("json_equals", ["lhs", "rhs"]).Should().Be("json_equals(lhs, rhs)");
+        Dialect.MySqlFunctions!.Render("json_normalize", ["j"]).Should().Be("json_normalize(j)");
+    }
+
+    [Fact]
     public void MariaDbOnlyFunctionHooks_ShouldRenderTheNativeSurface()
     {
         Dialect.MySqlFunctions.Should().NotBeNull();

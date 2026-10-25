@@ -61,6 +61,18 @@ MySQL; MariaDB, PostgreSQL, SQL Server, SQLite, ClickHouse и in-memory-пров
 |---|---|---|---|
 | `json_storage_free(json)` | `json_storage_free(...)` | `long?` — байты, освобождённые в бинарном значении `JSON`-колонки при частичном `JSON_SET`/`JSON_REPLACE`/`JSON_REMOVE`; `0`, если ничего не освободилось, `null` для SQL NULL | [только MySQL](../guide/provider-specific-sql/mysql.md#native-functions); MariaDB отклоняет |
 
+## Функции JSON только для MariaDB
+
+`json_equals` и `json_normalize` из
+[`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md#mariadb) рендерятся только на MariaDB
+(проверено на базовой версии 11.4); MySQL, PostgreSQL, SQL Server, SQLite, ClickHouse и
+in-memory-провайдер отклоняют оба имени с `NotSupportedException`.
+
+| Член | SQL | Результат | Доступность |
+|---|---|---|---|
+| `json_equals(json1, json2)` | `json_equals(...)` | `int?` — `1` для равных JSON-документов (порядок ключей объекта не важен), `0`, если различаются, `null` при SQL NULL | [только MariaDB](../guide/provider-specific-sql/mysql.md#mariadb); MySQL и другие провайдеры отклоняют |
+| `json_normalize(json)` | `json_normalize(...)` | `string?` — канонический текст JSON с отсортированными ключами объекта и без лишних пробелов (идемпотентно), `null` при SQL NULL | [только MariaDB](../guide/provider-specific-sql/mysql.md#mariadb); MySQL и другие провайдеры отклоняют |
+
 ## Явно не поддерживается
 
 Эти случаи бросают `NotSupportedException`, а не генерируют SQL с другой семантикой:

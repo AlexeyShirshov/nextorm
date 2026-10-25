@@ -5894,3 +5894,22 @@ EC233-COMPAT. Действующий поддерживаемый consumer-по�
 ℹ️ **Наблюдения.** (1) Extend-only: только новый член существующего типа; внешний реализатор `ISqlDialect` компилируется без доработки. (2) `docs/specs/**` internal, публичные ссылки на specs отсутствуют; EN+RU доки обновлены (`guide/provider-specific-sql/mysql.md` +RU, `scalar-functions/08-reference.md` +RU). (3) Срез не закрывает #283: `JSON_STORAGE_SIZE` и остальные имена остаются в §3; T284 (`JSON_EQUALS`/`JSON_NORMALIZE`) не затронут.
 
 **Итог.** P0 — нет; P1 по именам — нет; P2 — T283-1 (трекинг Шага 5). Новых публичных типов — 0, членов — 1, DIM/virtual — 0.
+---
+
+## Аудит 26.10.2026 — T284 (#284): MariaDB `JSON_EQUALS`/`JSON_NORMALIZE`, uncommitted working tree (P0 — нет; P1 по именам — нет; P2 — T284-1)
+
+**Область.** Ограниченный срез [#284](https://github.com/AlexeyShirshov/nextorm/issues/284) в `1.0.9-rc4`: **2** новых публичных члена `NextORM.Core.MySqlFunctions` — `json_equals(string?, string?) -> int?` (`src/nextorm.core/Query/SqlFunctions.MySql.cs:251`) и `json_normalize(string?) -> string?` (`src/nextorm.core/Query/SqlFunctions.MySql.cs:258`), XML-doc полный. Продукт: оба имени добавлены только в `MariaDbNativeFunctions.IsMariaDbOnly` (`src/nextorm.mariadb/MariaDbDialect.cs:121`) и `Render` (`src/nextorm.mariadb/MariaDbDialect.cs:146-147`). `MySqlDialect.cs`, `IMySqlFunctions`, DIM `ISqlDialect.MySqlFunctions`, `SqlDialectBase` и `MySqlFunctionTranslator` не менялись — MySQL и остальные провайдеры отклоняют оба имени. Новых публичных типов — **0**; DIM/virtual — **0**.
+
+**Счёт поверхности.** `roslyn members NextORM.Core.MySqlFunctions` на базе коллекции (аудит 24.09.2026) — **47**; после T283 — **48** (`json_storage_free`); после этого среза — **50**. Дельта T284 — **+2**. Слепое «49» не предполагалось: реальный текущий счёт проверен Roslyn и равен 48 до среза. `PublicAPI.*.txt` — **0** (Шаг 5, issue #53, открыт).
+
+**P0 — нет.** Новых публичных типов и затенений нет; оба члена аддитивны на существующем типе, внешний реализатор `ISqlDialect` компилируется без доработки.
+
+**P1 по именам — нет.** Оба имени — snake_case-зеркала SQL-токенов в принятом DSL-исключении **P1-10**. `int?` вместо `bool?` обоснован документированным серверным результатом `1/0/NULL` и отсутствием boolean-прецедента на `SqlFunctions.MySql` (`find_in_set -> int?`); `string?` — текстовый канонический результат. Перегрузок, `params`, generic и optional-параметров нет. XML-doc полный; `dotnet build nextorm.slnx -c Debug` — **0 warnings / 0 errors** при `GenerateDocumentationFile=true` + `TreatWarningsAsErrors=true`, `NoWarn` — 0 ⇒ CS1591 гейтится.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| T284-1 | **P2 (трекинг Шага 5)** | `Query/SqlFunctions.MySql.cs:251,258`; `PublicAPI.*.txt` — **0** | Два новых публичных члена `MySqlFunctions` не попали в inventory заморозки. Продолжение MY1/MD1/T283-1/Шаг 5 (issue #53); `PublicApiAnalyzers`/ApiCompat не подключены | При заморозке внести подписи `json_equals(string?, string?) -> int?` и `json_normalize(string?) -> string?`; отдельной записи поверх MY1/MD1 не требуется |
+
+ℹ️ **Наблюдения.** (1) Extend-only: только два члена существующего типа; capability/render добавлены в MariaDB-декоратор, `MySqlDialect.cs` не менялся. (2) `docs/specs/**` internal, публичные ссылки на specs отсутствуют; EN+RU доки обновлены (`guide/provider-specific-sql/mysql.md` +RU, `scalar-functions/08-reference.md` +RU). (3) Срез не закрывает #284: остальные имена каталога остаются в §3; T280 и T283 не затронуты. (4) `json_normalize(NULL)` подтверждён независимым raw-ADO.NET оракулом на MariaDB 11.4.13 (SQL NULL) до утверждения в тесте.
+
+**Итог.** P0 — нет; P1 по именам — нет; P2 — T284-1 (трекинг Шага 5). Новых публичных типов — 0, членов — 2, DIM/virtual — 0.

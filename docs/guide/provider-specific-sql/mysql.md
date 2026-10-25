@@ -99,6 +99,8 @@ entry point. MySQL's dialect does not report them, so a MySQL query using one of
 | `kdf(password, salt, info, kdfName)` | `kdf(...)` | MariaDB 11.3+; key derivation, returns binary |
 | `xxh3(value)` / `xxh32(value)` | same | MariaDB 13.1+; fast 64/32-bit xxHash |
 | `json_detailed(json)` / `json_compact(json)` | same | re-indent / strip whitespace |
+| `json_equals(json1, json2)` | `json_equals(...)` | `1` when the JSON documents are equal (object key order does not matter), `0` when they differ, `null` for SQL NULL; MariaDB 11.4 baseline, MySQL rejects it |
+| `json_normalize(json)` | `json_normalize(...)` | canonical JSON text (sorted object keys, no unnecessary whitespace, idempotent), `null` for SQL NULL; MariaDB 11.4 baseline, MySQL rejects it |
 
 Sequence access is provider-specific; see the common
 [Sequences and UUID generators](../../scalar-functions/10-sequences.md) page.

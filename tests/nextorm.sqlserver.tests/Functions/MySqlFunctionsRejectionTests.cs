@@ -41,4 +41,17 @@ public class MySqlFunctionsRejectionTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*uuid_to_bin*not supported*");
     }
+
+    [Fact]
+    public void T284_JsonFunctions_ShouldThrowOnUnsupportedProvider()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var equals = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_equals(x.String, "{\"a\":1}")));
+        equals.Should().Throw<NotSupportedException>().WithMessage("*json_equals*not supported*");
+
+        var normalize = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_normalize(x.String)));
+        normalize.Should().Throw<NotSupportedException>().WithMessage("*json_normalize*not supported*");
+    }
 }

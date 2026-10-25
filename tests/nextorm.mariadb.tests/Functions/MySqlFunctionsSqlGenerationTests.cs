@@ -177,6 +177,47 @@ public class MySqlFunctionsSqlGenerationTests
     }
 
     [Fact]
+    public void T284_JsonFunctions_ShouldRenderExactSql()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(_ => SqlFunctions.MySql.json_equals("{\"a\":1}", "{\"a\":1}")))
+            .Should().Contain("json_equals(_utf8mb4 X'7b2261223a317d', _utf8mb4 X'7b2261223a317d')")
+            .And.StartWith("select json_equals(");
+        SqlOf(ctx, e.Select(_ => SqlFunctions.MySql.json_normalize("{\"b\":true,\"a\":false}")))
+            .Should().Contain("json_normalize(_utf8mb4 X'7b2262223a747275652c2261223a66616c73657d')")
+            .And.StartWith("select json_normalize(");
+    }
+
+    [Fact]
+    public void T284_JsonFunctions_ShouldRenderColumnsAndLiterals()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_equals(x.String, "{\"a\":1}")))
+            .Should().Contain("json_equals(somestring, _utf8mb4 X'7b2261223a317d')");
+        SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_normalize(x.String)))
+            .Should().Contain("json_normalize(somestring)");
+        SqlOf(ctx, e.Select(_ => SqlFunctions.MySql.json_equals("true", "true")))
+            .Should().Contain("json_equals(_utf8mb4 X'74727565', _utf8mb4 X'74727565')");
+    }
+
+    [Fact]
+    public void T284_JsonFunctions_ShouldBindCapturedJson()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var captured = "{\"a\":1}";
+
+        SqlOf(ctx, e.Select(_ => SqlFunctions.MySql.json_normalize(captured)))
+            .Should().Contain("json_normalize(@captured)");
+        SqlOf(ctx, e.Select(_ => SqlFunctions.MySql.json_equals(SqlFunctions.Parameter<string>(0), "{\"a\":1}")))
+            .Should().Contain("json_equals(@norm_p0, _utf8mb4 X'7b2261223a317d')");
+    }
+
+    [Fact]
     public void MariaDbSequenceFunctions_ShouldRenderIdentifiers()
     {
         using var ctx = MariaDbTestContext.Create();

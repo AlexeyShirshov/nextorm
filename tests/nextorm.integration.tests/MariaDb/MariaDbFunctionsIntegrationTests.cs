@@ -12,6 +12,8 @@ namespace NextORM.Integration.Tests;
 /// </summary>
 public sealed class MariaDbFunctionsIntegrationTests : IDisposable
 {
+    private const string Doc = "{\"a\":1}";
+
     private readonly IDataContext _ctx;
 
     public MariaDbFunctionsIntegrationTests()
@@ -203,6 +205,81 @@ public sealed class MariaDbFunctionsIntegrationTests : IDisposable
         Probe.Select(_ => SqlFunctions.MySql.setval("fn_seq", 500)).First().Should().Be(500);
         Probe.Select(_ => SqlFunctions.MySql.nextval("fn_seq")).First().Should().Be(510);
         Probe.Select(_ => SqlFunctions.MySql.lastval("fn_seq")).First().Should().Be(510);
+    }
+
+    [Fact]
+    public void T284_JsonEquals_ShouldEvaluate()
+    {
+        int? equal = Probe.Select(_ => SqlFunctions.MySql.json_equals("{\"a\":1}", "{\"a\":1}")).First();
+        int? different = Probe.Select(_ => SqlFunctions.MySql.json_equals("{\"a\":1}", "{\"a\":2}")).First();
+        int? reordered = Probe
+            .Select(_ => SqlFunctions.MySql.json_equals("{\"a\":1,\"b\":2}", "{\"b\":2,\"a\":1}"))
+            .First();
+        int? boundEqual = Probe
+            .Select(_ => SqlFunctions.MySql.json_equals(SqlFunctions.Parameter<string>(0), Doc))
+            .First(Doc);
+
+        equal.Should().Be(1);
+        different.Should().Be(0);
+        reordered.Should().Be(1, "object key order must not affect equality");
+        boundEqual.Should().Be(1);
+    }
+
+    [Fact]
+    public void T284_JsonEquals_NullArguments_ShouldReturnNull()
+    {
+        int? nullLeft = Probe.Select(_ => SqlFunctions.MySql.json_equals(null, "{\"a\":1}")).ExecuteScalar();
+        int? nullRight = Probe.Select(_ => SqlFunctions.MySql.json_equals("{\"a\":1}", null)).ExecuteScalar();
+        int? nullBoth = Probe.Select(_ => SqlFunctions.MySql.json_equals(null, null)).ExecuteScalar();
+        int? jsonTextNull = Probe.Select(_ => SqlFunctions.MySql.json_equals("null", "null")).First();
+
+        nullLeft.Should().BeNull();
+        nullRight.Should().BeNull();
+        nullBoth.Should().BeNull();
+        jsonTextNull.Should().Be(1, "the JSON text null is a value, not SQL NULL");
+    }
+
+    [Fact]
+    public void T284_JsonNormalize_ShouldEvaluate()
+    {
+        string? normalizedTrue = Probe.Select(_ => SqlFunctions.MySql.json_normalize("true")).First();
+        string? normalizedObject = Probe
+            .Select(_ => SqlFunctions.MySql.json_normalize("{ \"b\" : true, \"a\" : false }"))
+            .First();
+        string? renormalized = Probe
+            .Select(_ => SqlFunctions.MySql.json_normalize(SqlFunctions.MySql.json_normalize("{ \"b\" : true, \"a\" : false }")))
+            .First();
+        string? captured = Probe.Select(_ => SqlFunctions.MySql.json_normalize(Doc)).First();
+
+        normalizedTrue.Should().Be("true");
+        normalizedObject.Should().Be("{\"a\":false,\"b\":true}");
+        renormalized.Should().Be(normalizedObject, "normalisation must be idempotent");
+        captured.Should().Be("{\"a\":1.0E0}");
+    }
+
+    [Fact]
+    public void T284_JsonNormalize_NullArgument_ShouldMatchRawOracle()
+    {
+        string? normalizedNull = Probe.Select(_ => SqlFunctions.MySql.json_normalize(null)).ExecuteScalar();
+        string? normalizedJsonNull = Probe.Select(_ => SqlFunctions.MySql.json_normalize("null")).ExecuteScalar();
+
+        normalizedNull.Should().BeNull(
+            "the raw ADO.NET observation on MariaDB 11.4.13 recorded SQL NULL for json_normalize(NULL) before this assertion (.pdca/T284/rv1/raw-oracle.log)");
+        normalizedJsonNull.Should().Be("null", "the JSON text null is a value, not SQL NULL");
+    }
+
+    [Fact]
+    public void T284_JsonFunctions_QuotedPayload_ShouldRemainData()
+    {
+        string? normalized = Probe
+            .Select(_ => SqlFunctions.MySql.json_normalize("{\"quoted\":\"a b\"}"))
+            .First();
+        int? equal = Probe
+            .Select(_ => SqlFunctions.MySql.json_equals("{\"quoted\":\"a b\"}", "{\"quoted\":\"a b\"}"))
+            .First();
+
+        normalized.Should().Be("{\"quoted\":\"a b\"}");
+        equal.Should().Be(1);
     }
 
     private sealed class TvpEntity

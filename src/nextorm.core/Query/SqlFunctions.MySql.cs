@@ -6,7 +6,8 @@ namespace NextORM.Core;
 /// conversion and Unix-epoch functions, the hexadecimal hash functions, the IPv4 conversion pair, the
 /// JSON mutation family, the binary UUID pair and the MariaDB-only names (extended regexp,
 /// <c>nvl</c>/<c>nvl2</c>, the Oracle-compatible date/number conversions, <c>kdf</c>, <c>xxh3</c>/
-/// <c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c> and sequence access).
+/// <c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c>, the JSON canonicalisation pair
+/// <c>json_equals</c>/<c>json_normalize</c> and sequence access).
 /// <para>
 /// Exposed through <see cref="SqlFunctions.MySql"/>; every member is gated per name by the dialect's
 /// <see cref="IMySqlFunctions"/> capability object and rejected by providers that do not opt in.
@@ -241,6 +242,20 @@ public class MySqlFunctions : CommonFunctions
     /// MariaDB-only.
     /// </summary>
     public string? json_compact(string? json) => default!;
+
+    /// <summary>
+    /// <c>json_equals(json1, json2)</c>: <c>1</c> when the two JSON documents are equal (object key
+    /// order does not matter), <c>0</c> when they differ, and <c>null</c> when either argument is SQL
+    /// NULL. MariaDB-only.
+    /// </summary>
+    public int? json_equals(string? json1, string? json2) => default!;
+
+    /// <summary>
+    /// <c>json_normalize(json)</c>: the canonical text of the JSON document with sorted object keys and
+    /// no unnecessary whitespace (idempotent), or <c>null</c> when <paramref name="json"/> is SQL NULL.
+    /// MariaDB-only.
+    /// </summary>
+    public string? json_normalize(string? json) => default!;
 
     /// <summary>
     /// <c>next value for sequence</c>: the next value of the named sequence. MariaDB-only; the

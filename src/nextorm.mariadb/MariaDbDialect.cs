@@ -92,7 +92,8 @@ public sealed class MariaDbDialect : MySqlDialect
     /// which it does not implement (it converts through <c>CAST(... AS BINARY(16))</c>/<c>CAST(... AS UUID)</c>),
     /// and adds the MariaDB-only names (extended regexp, <c>NVL</c>/<c>NVL2</c>, <c>ADD_MONTHS</c>,
     /// <c>MONTHS_BETWEEN</c>, <c>TO_CHAR</c>/<c>TO_DATE</c>/<c>TO_NUMBER</c>, <c>KDF</c>,
-    /// <c>XXH3</c>/<c>XXH32</c>, <c>JSON_DETAILED</c>/<c>JSON_COMPACT</c> and sequence access).
+    /// <c>XXH3</c>/<c>XXH32</c>, <c>JSON_DETAILED</c>/<c>JSON_COMPACT</c>, the JSON canonicalisation pair
+    /// <c>JSON_EQUALS</c>/<c>JSON_NORMALIZE</c> and sequence access).
     /// </summary>
     public override IMySqlFunctions MySqlFunctions => MariaDbNativeFunctions.Instance;
 }
@@ -103,8 +104,8 @@ public sealed class MariaDbDialect : MySqlDialect
 /// <c>cast(... as binary(16))</c>/<c>cast(... as uuid)</c>), and <c>json_storage_free</c>, whose
 /// binary-JSON update accounting MariaDB does not implement, and the MariaDB-only names are added here
 /// (extended regexp, <c>nvl</c>/<c>nvl2</c>, the Oracle-compatible date/number conversions, <c>kdf</c>,
-/// <c>xxh3</c>/<c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c> and sequence access). MySQL's
-/// renderer does not report the MariaDB-only names, so MySQL rejects them.
+/// <c>xxh3</c>/<c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c>, <c>json_equals</c>/<c>json_normalize</c>
+/// and sequence access). MySQL's renderer does not report the MariaDB-only names, so MySQL rejects them.
 /// </summary>
 internal sealed class MariaDbNativeFunctions : IMySqlFunctions
 {
@@ -117,6 +118,7 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "nvl" or "nvl2" or "add_months" or "months_between" or
         "to_char" or "to_date" or "to_number" or "kdf" or
         "xxh3" or "xxh32" or "json_detailed" or "json_compact" or
+        "json_equals" or "json_normalize" or
         "next_value_for" or "nextval" or "setval" or "lastval";
 
     /// <inheritdoc/>
@@ -141,6 +143,8 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
         "xxh32" => $"xxh32({args[0]})",
         "json_detailed" => $"json_detailed({args[0]})",
         "json_compact" => $"json_compact({args[0]})",
+        "json_equals" => $"json_equals({args[0]}, {args[1]})",
+        "json_normalize" => $"json_normalize({args[0]})",
         "next_value_for" => "next value for " + SequenceName(args[0]),
         "nextval" => $"nextval({SequenceName(args[0])})",
         "setval" => $"setval({SequenceName(args[0])}, {args[1]})",

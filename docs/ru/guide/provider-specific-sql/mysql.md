@@ -97,6 +97,8 @@ var updated = dataContext.From<IComplexEntity>()
 | `kdf(password, salt, info, kdfName)` | `kdf(...)` | MariaDB 11.3+; вывод ключа, возвращает binary |
 | `xxh3(value)` / `xxh32(value)` | то же | MariaDB 13.1+; быстрый 64/32-битный xxHash |
 | `json_detailed(json)` / `json_compact(json)` | то же | переформатирование / удаление пробелов |
+| `json_equals(json1, json2)` | `json_equals(...)` | `1`, если JSON-документы равны (порядок ключей объекта не важен), `0`, если различаются, `null` при SQL NULL; базовая версия MariaDB 11.4, MySQL отклоняет |
+| `json_normalize(json)` | `json_normalize(...)` | канонический текст JSON (ключи объекта отсортированы, лишние пробелы удалены, идемпотентно), `null` при SQL NULL; базовая версия MariaDB 11.4, MySQL отклоняет |
 
 Доступ к последовательностям провайдерный; см. общий раздел
 [Последовательности и генераторы UUID](../../scalar-functions/10-sequences.md).

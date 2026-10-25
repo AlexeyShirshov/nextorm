@@ -48,4 +48,15 @@ public class InMemoryMySqlFunctionsTests
         act.Should().Throw<NotSupportedException>()
             .WithMessage("*nvl*MySQL/MariaDB*in-memory*");
     }
+
+    [Fact]
+    public void T284_JsonFunctions_ShouldThrowOnUnsupportedProvider()
+    {
+        var act = () => _sut.SimpleEntity
+            .Select(it => SqlFunctions.MySql.json_equals("{\"a\":1}", "{\"a\":1}"))
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*json_equals*MySQL/MariaDB*in-memory*");
+    }
 }
