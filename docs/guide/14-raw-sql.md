@@ -33,7 +33,7 @@ public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this Entity
 * `@params` is a plain object. Its **public instance properties** become named parameters, in property
   order, with the property name as the parameter name.
 * `mode` is a `[Flags]` value: [`None`](xref:NextORM.Core.PrepareFromSqlMode.None) (the default) is for buffered/scalar execution
-  (same as `nonStreamUsing: true` in `Prepare(...)`), [`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming) is required for streaming/non-buffered
+  (the buffered form that a parameterless `Prepare()` selects by default), [`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming) is required for streaming/non-buffered
   consumption, and [`StoreInCache`](xref:NextORM.Core.PrepareFromSqlMode.StoreInCache) populates the plan cache. Every overload defaults to `None`, so raw SQL
   prepared this way does not populate the plan cache unless asked.
 
@@ -786,7 +786,7 @@ ClickHouse has no stored procedures, so a table parameter is consumed by `Execut
 
 ## See also
 
-* [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md) - the `nonStreamUsing` / `storeInCache` trade-offs.
+* [Query reuse: cache vs Prepare](../engine/03-plan-cache-and-reuse.md) - the `PrepareOptions` / `storeInCache` trade-offs.
 * [Scalar functions](../scalar-functions/index.md) - stay in LINQ instead of dropping to raw SQL.
 * [Provider overview](../connecting-providers/overview.md) - parameter placeholder per provider.
 

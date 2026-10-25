@@ -1,11 +1,21 @@
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace NextORM.Core;
 
 /// <summary>
 /// Prepared query command backed by an ADO.NET <see cref="System.Data.IDataRecord"/> reader.
+/// <para>
+/// Immutable preparation data (mapper, reader behavior, SQL text, parameter flags, refresh recipe and
+/// the planned batch) lives on this object. Everything that depends on the connection an execution
+/// runs on lives in a <see cref="CommandState"/> held by a weak table keyed on that
+/// connection, so one prepared command can be executed concurrently through contexts on distinct
+/// connections while each connection keeps its own command, parameter positions and execution lease.
+/// Nothing here holds a connection, a transaction, a context or a reader.
+/// </para>
 /// </summary>
 public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResult, IDataRecord>, IDbCommandHolder
 {
@@ -16,39 +26,6 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// </summary>
     public readonly CommandBehavior Behavior = 0;
     /// <summary>
-    /// The underlying ADO.NET command. Its parameter values and connection are mutated in place and
-    /// reused across executions of the compiled query.
-    /// </summary>
-    public readonly DbCommand DbCommand;
-    private DbConnection? DbCommandConnection;
-    private DbTransaction? DbCommandTransaction;
-    /// <summary>
-    /// The parameter collection of <see cref="DbCommand"/>, cached so parameter lookups do not touch
-    /// the command property on every execution.
-    /// </summary>
-    public readonly DbParameterCollection DbCommandParams;
-    /// <summary>
-    /// The enumerator currently reading this command, tracked so it can be detached from its context
-    /// when the connection is reset.
-    /// </summary>
-    public ResultSetEnumerator<TResult>? Enumerator;
-    /// <summary>
-    /// The batch that must run before this command's rows can be read (a lazy temporary-table
-    /// materialisation). When set, the execution terminals route through the batch runner instead of
-    /// this command's <see cref="DbCommand"/>; the batch's result-bearing query is this command, so
-    /// <see cref="PreparedQueryCommand{TResult, IDataRecord}.MapDelegate"/> maps its rows.
-    /// </summary>
-    internal BatchPlan? PendingBatch { get; set; }
-    /// <summary>
-    /// Number of rows returned by the most recent execution of the compiled query.
-    /// </summary>
-    public int LastRowCount;
-    /// <summary>
-    /// Maps each positional parameter index to its index in <see cref="DbCommandParams"/>, or <c>-1</c>
-    /// when the mapping has not been resolved yet. Built lazily on first execution and reused afterwards.
-    /// </summary>
-    public int[]? ParamMap;
-    /// <summary>
     /// The SQL text the command was prepared with, when known.
     /// </summary>
     public readonly string? SqlStmt;
@@ -58,36 +35,117 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     public readonly bool NoParams;
     /// <summary>
     /// Whether parameter values must be refreshed before each execution rather than assuming the
-    /// cached values on <see cref="DbCommand"/> are still current.
+    /// values baked into the plan are still current.
     /// </summary>
     public readonly bool NeedsParamRefresh;
+
+    private readonly PreparedCommandFactory _factory;
+    private readonly PreparedCommandCache _cachePolicy;
+    private readonly ConditionalWeakTable<DbConnection, CommandState> _states = new();
+    private readonly ConditionalWeakTable<DbConnection, CommandState>.CreateValueCallback _createState;
+    private readonly DbCommand? _diagnosticCommand;
+    private readonly PlanCommand _planCommand;
+    private Memo? _memo;
+    private int[]? _planParamMap;
+    private int _createdCommandCount;
+    private int _disposedCommandCount;
+
+    /// <summary>
+    /// The plan's command-shaped diagnostic view: SQL text, timeout and connection-free parameter
+    /// descriptors. It is never executed and never attached to a connection; SQL-generation tests and
+    /// the guarded refresh recipe read it. Execution always runs a per-connection command.
+    /// </summary>
+    internal DbCommand DbCommand => _diagnosticCommand ?? _planCommand;
+
+    /// <summary>
+    /// The plan's parameter descriptors (provider-normalized name/value pairs minted without a command).
+    /// The guarded refresh recipe binds refreshed captured values into this collection on a cache hit.
+    /// </summary>
+    internal DbParameterCollection DbCommandParams => DbCommand.Parameters;
+
+    /// <summary>The statement text every per-connection command is created with.</summary>
+    internal string CommandText => _factory.CommandText;
+
+    /// <summary>The plan-time parameter seeds, in placeholder order.</summary>
+    internal IReadOnlyList<Parameter> ParamSeeds => _factory.Seeds;
+
+    /// <summary>
+    /// The batch that must run before this command's rows can be read (a lazy temporary-table
+    /// materialisation). When set, the execution terminals route through the batch runner instead of
+    /// this command; the batch's result-bearing query is this command, so
+    /// <see cref="PreparedQueryCommand{TResult, IDataRecord}.MapDelegate"/> maps its rows. Immutable
+    /// planning information: it is written once, by the planner/context, before publication.
+    /// </summary>
+    internal BatchPlan? PendingBatch { get; set; }
+
     /// <summary>
     /// The immutable guarded parameter-refresh recipe for this plan, or <see langword="null"/> when the
     /// plan does not support the scalar subset and the original <c>ExtractParams</c> refresh path must be
-    /// used. The recipe is immutable and retains neither the miss-time closure nor a mutable command or
-    /// enumerator.
+    /// used.
     /// </summary>
     internal ParamRefreshRecipe? ParamRecipe { get; private set; }
 
     /// <summary>
-    /// Sets the immutable parameter-refresh recipe. Called exactly once, by the planner at plan
-    /// construction; the characterization tests use the same seam to install an intentionally
-    /// incompatible recipe and prove the mismatch-safe fallback. The recipe itself is never mutated.
+    /// The command-reuse policy this prepared command was created with, as supplied to
+    /// <see cref="PreparedCommandOptions.Cache"/>. Read-only: the policy is never re-derived at execution.
     /// </summary>
-    /// <param name="recipe">The recipe, or <see langword="null"/> to keep the original extraction path.</param>
-    internal void SetParamRecipe(ParamRefreshRecipe? recipe) => ParamRecipe = recipe;
+    internal PreparedCommandCache CachePolicy => _cachePolicy;
+
     /// <summary>
-    /// Wraps an already prepared <see cref="DbCommand"/> and its execution options.
+    /// Whether this prepared command may produce streaming enumerators. Set when preparation requested
+    /// an enumerator; a cached plan first created for a buffered terminal is promoted on the first
+    /// streaming request (the plan is reused, not rebuilt).
     /// </summary>
-    /// <param name="dbCommand">The command to execute; its connection is captured for later resets.</param>
+    internal bool StreamingEnabled { get; private set; }
+
+    /// <summary>
+    /// Creates a fresh execution-local enumerator. The factory captures this prepared command and the
+    /// logging switches only — never the planner, the context or a connection.
+    /// </summary>
+    internal Func<ResultSetEnumerator<TResult>>? EnumeratorFactory { get; private set; }
+
+    /// <summary>Number of execution commands this prepared command has created. Diagnostic only.</summary>
+    internal int CreatedCommandCount => Volatile.Read(ref _createdCommandCount);
+
+    /// <summary>Number of execution commands this prepared command has disposed. Diagnostic only.</summary>
+    internal int DisposedCommandCount => Volatile.Read(ref _disposedCommandCount);
+
+    /// <summary>
+    /// Number of live per-connection states, read from the weak table itself so an entry reclaimed by
+    /// the garbage collector is no longer counted. Diagnostic only.
+    /// </summary>
+    internal int LiveStateCount => System.Linq.Enumerable.Count(_states);
+
+    /// <summary>
+    /// The command currently published for <paramref name="connection"/>, or <see langword="null"/> when
+    /// the state is idle or does not exist. Test/diagnostic seam — never used by execution.
+    /// </summary>
+    internal DbCommand? PeekCommand(DbConnection connection)
+        => _states.TryGetValue(connection, out var state) ? state.Command : null;
+
+    /// <summary>The lease token currently owning <paramref name="connection"/>'s state, or <c>0</c>. Test seam.</summary>
+    internal int GetLeaseOwnerForTest(DbConnection connection)
+        => _states.TryGetValue(connection, out var state) ? Volatile.Read(ref state.LeaseOwner) : 0;
+
+    /// <summary>
+    /// Wraps an already prepared command and its execution options.
+    /// </summary>
+    /// <param name="factory">Creates an equivalent command per execution connection.</param>
+    /// <param name="planParameters">The connection-free plan parameter descriptors.</param>
     /// <param name="mapDelegate">Maps each <see cref="IDataRecord"/> to a result, or <see langword="null"/> when no projection is needed.</param>
     /// <param name="options">Prepared-command options such as the SQL text and parameter flags.</param>
-    public DbPreparedQueryCommand(DbCommand dbCommand, Func<IDataRecord, TResult>? mapDelegate, PreparedCommandOptions options)
+    internal DbPreparedQueryCommand(
+        PreparedCommandFactory factory,
+        DbParameter[] planParameters,
+        Func<IDataRecord, TResult>? mapDelegate,
+        PreparedCommandOptions options)
         : base(mapDelegate)
     {
-        DbCommand = dbCommand;
-        DbCommandConnection = dbCommand.Connection;
-        DbCommandParams = dbCommand.Parameters;
+        _factory = factory;
+        _cachePolicy = options.Cache;
+        _createState = static _ => new CommandState();
+        _planCommand = new PlanCommand(factory.CommandText, factory.CommandTimeout, planParameters);
+
         if (options.SingleRow)
             Behavior = CommandBehavior.SingleRow;
         if (options.SequentialAccess)
@@ -97,107 +155,365 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         NoParams = options.NoParams;
         NeedsParamRefresh = options.NeedsParamRefresh;
     }
-    // private readonly string CommandText;
-    //public DbParameterCollection DbCommandParams;
-    /// <summary>
-    /// Binds <paramref name="params"/> to the command and attaches it to <paramref name="conn"/>,
-    /// treating a <see langword="null"/> array as no parameters.
-    /// </summary>
-    /// <param name="params">The positional parameter values to bind, or <see langword="null"/> for none.</param>
-    /// <param name="createParam">Creates a provider parameter when the command has no matching one yet.</param>
-    /// <param name="conn">The connection the returned command must be attached to.</param>
-    /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "Both branches are reachable: @params may be null at any call site, so the ReadOnlySpan conversion is not dead code; the analyzer cannot model the span conversion.")]
-    public DbCommand GetDbCommand(object[]? @params, Func<string, object?, DbParameter> createParam, DbConnection conn)
-        => GetDbCommand(@params is null ? ReadOnlySpan<object?>.Empty : @params, createParam, conn);
 
     /// <summary>
-    /// Binds <paramref name="params"/> to the command, caching each parameter's position in
-    /// <see cref="ParamMap"/> so subsequent executions skip the provider's parameter lookup, and
-    /// attaches the command to <paramref name="conn"/>.
+    /// Test/diagnostic seam: wraps an already-minted command as the plan's diagnostic command so the
+    /// parameter-factory contract can be exercised without a provider connection. Production always
+    /// uses the factory constructor above.
     /// </summary>
-    /// <param name="params">The positional parameter values to bind; an empty span binds nothing.</param>
-    /// <param name="createParam">Creates a provider parameter from its name and value; the executing command is not passed, preserving the command-unaware contract.</param>
-    /// <param name="conn">The connection the returned command must be attached to.</param>
-    /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
-    public DbCommand GetDbCommand(ReadOnlySpan<object?> @params, Func<string, object?, DbParameter> createParam, DbConnection conn)
-        => GetDbCommand(@params, createParam, conn, null);
+    internal DbPreparedQueryCommand(DbCommand diagnosticCommand, Func<IDataRecord, TResult>? mapDelegate, PreparedCommandOptions options)
+        : this(new PreparedCommandFactory(diagnosticCommand.CommandText, null, []), [], mapDelegate, options)
+    {
+        _diagnosticCommand = diagnosticCommand;
+    }
 
     /// <summary>
-    /// Binds <paramref name="params"/> to the command, attaches it to <paramref name="conn"/> and binds
-    /// <paramref name="transaction"/> (or clears it when <see langword="null"/>).
+    /// Sets the immutable parameter-refresh recipe. Called exactly once, by the planner at plan
+    /// construction; the characterization tests use the same seam to install an intentionally
+    /// incompatible recipe and prove the mismatch-safe fallback.
     /// </summary>
-    /// <param name="params">The positional parameter values to bind, or <see langword="null"/> for none.</param>
-    /// <param name="createParam">Creates a provider parameter from its name and value; the executing command is not passed, preserving the command-unaware contract.</param>
-    /// <param name="conn">The connection the returned command must be attached to.</param>
-    /// <param name="transaction">The transaction to bind, or <see langword="null"/> to clear it.</param>
-    /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
-    public DbCommand GetDbCommand(object[]? @params, Func<string, object?, DbParameter> createParam, DbConnection conn, DbTransaction? transaction)
-        => GetDbCommand(@params is null ? ReadOnlySpan<object?>.Empty : @params, createParam, conn, transaction);
+    internal void SetParamRecipe(ParamRefreshRecipe? recipe) => ParamRecipe = recipe;
+
+    /// <summary>Enables streaming enumerators on this prepared command. Called once, by the planner.</summary>
+    internal void EnableStreaming(Func<ResultSetEnumerator<TResult>> factory)
+    {
+        EnumeratorFactory = factory;
+        StreamingEnabled = true;
+    }
 
     /// <summary>
-    /// Binds <paramref name="params"/> to the command, caching each parameter's position in
-    /// <see cref="ParamMap"/> so subsequent executions skip the provider's parameter lookup, and
-    /// attaches the command to <paramref name="conn"/> and <paramref name="transaction"/>.
+    /// Acquires this connection's execution lease and returns the bound command for exactly one
+    /// execution. The lease is acquired <b>before</b> any command state is mutated; overlapping
+    /// executions of this prepared command on the same connection fail promptly, while different
+    /// connections proceed independently (there is no prepared-object-wide lock).
     /// </summary>
-    /// <remarks>
-    /// Public compatibility overload: the command-unaware <paramref name="createParam"/> is forwarded to
-    /// the shared core as its legacy factory; the core execution paths instead call the internal
-    /// command-aware overloads below. Forwarding the delegate directly means this public path allocates
-    /// no capturing adapter per call.
-    /// </remarks>
-    /// <param name="params">The positional parameter values to bind; an empty span binds nothing.</param>
-    /// <param name="createParam">Creates a provider parameter from its name and value; the executing command is not passed, preserving the command-unaware contract.</param>
-    /// <param name="conn">The connection the returned command must be attached to.</param>
-    /// <param name="transaction">The transaction to bind, or <see langword="null"/> to clear it.</param>
-    /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
-    public DbCommand GetDbCommand(ReadOnlySpan<object?> @params, Func<string, object?, DbParameter> createParam, DbConnection conn, DbTransaction? transaction)
+    /// <param name="connection">The connection the execution runs on; it keys the per-connection state.</param>
+    /// <param name="createParam">The executing context's command-aware parameter factory.</param>
+    /// <param name="params">Positional runtime parameter values, or <see langword="null"/> for none.</param>
+    /// <param name="transaction">The transaction active for this execution, or <see langword="null"/>.</param>
+    /// <param name="onCommandCreated">Raises the command-initialized event when a command is minted.</param>
+    /// <returns>The lease; the caller must dispose (success) or fail (pre-transfer failure) it exactly once.</returns>
+    /// <exception cref="InvalidOperationException">This prepared command is already executing on the same connection.</exception>
+    internal CommandLease Acquire(
+        DbConnection connection,
+        Func<DbCommand, string, object?, DbParameter> createParam,
+        object[]? @params,
+        DbTransaction? transaction,
+        Action<DbCommand>? onCommandCreated)
+        => Acquire(connection, createParam, @params is null ? ReadOnlySpan<object?>.Empty : @params, transaction, onCommandCreated);
+
+    /// <summary>Span overload of the array-parameter <c>Acquire</c>.</summary>
+    internal CommandLease Acquire(
+        DbConnection connection,
+        Func<DbCommand, string, object?, DbParameter> createParam,
+        ReadOnlySpan<object?> @params,
+        DbTransaction? transaction,
+        Action<DbCommand>? onCommandCreated)
+    {
+        var state = GetOrCreateState(connection);
+        var token = NextLeaseToken(state);
+        if (Interlocked.CompareExchange(ref state.LeaseOwner, token, 0) != 0)
+        {
+            throw new InvalidOperationException(
+                "This prepared command is already executing on the same connection. One prepared command allows a "
+                + "single concurrent operation per connection: complete or dispose the active operation first, or "
+                + "execute through a different connection (executions on distinct connections run concurrently).");
+        }
+
+        var nonePolicy = _cachePolicy == PreparedCommandCache.None;
+        var lease = new CommandLease(this, connection, state, token, nonePolicy);
+        try
+        {
+            DbCommand command;
+            var created = false;
+
+            if (nonePolicy)
+            {
+                command = _factory.Create(connection, createParam);
+                created = true;
+            }
+            else if (state.Command is { } existing)
+            {
+                command = existing;
+            }
+            else
+            {
+                command = _factory.Create(connection, createParam);
+                state.Command = command;
+                created = true;
+            }
+
+            lease.SetCommand(command, created);
+            if (created)
+            {
+                Interlocked.Increment(ref _createdCommandCount);
+                onCommandCreated?.Invoke(command);
+            }
+
+            Bind(command, state, createParam, @params, connection, transaction);
+            return lease;
+        }
+        catch
+        {
+            lease.Fail();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Binds the plan's refreshed captured values and the positional runtime parameters to
+    /// <paramref name="command"/>, validates the transaction belongs to the executing connection, and
+    /// verifies the command is attached to it.
+    /// </summary>
+    private void Bind(
+        DbCommand command,
+        CommandState state,
+        Func<DbCommand, string, object?, DbParameter> createParam,
+        ReadOnlySpan<object?> @params,
+        DbConnection connection,
+        DbTransaction? transaction)
+    {
+        // A cached plan's captured values are refreshed on the plan descriptors before execution; copy
+        // them onto this connection's own command.
+        if (NeedsParamRefresh)
+            ApplyPlanValues(command, state);
+
+        if (!@params.IsEmpty)
+            BindRuntimeParameters(command, state, createParam, @params);
+
+        if (!ReferenceEquals(command.Connection, connection))
+            command.Connection = connection;
+
+        if (transaction is null)
+        {
+            if (command.Transaction is not null)
+                command.Transaction = null;
+
+            return;
+        }
+
+        // Reading Connection also validates a disposed/changed transaction: a stale transaction must
+        // fail this execution instead of being silently attached to another connection.
+        if (!ReferenceEquals(transaction.Connection, connection))
+        {
+            throw new InvalidOperationException(
+                "The transaction supplied to the execution does not belong to the executing connection; a prepared "
+                + "command never reuses a transaction bound to a different connection.");
+        }
+
+        if (!ReferenceEquals(command.Transaction, transaction))
+            command.Transaction = transaction;
+    }
+
+    private void ApplyPlanValues(DbCommand command, CommandState state)
+    {
+        var planParameters = DbCommandParams;
+        if (planParameters.Count == 0)
+            return;
+
+        var parameters = command.Parameters;
+        var map = state.PlanParamMap;
+        if (map is null || map.Length != planParameters.Count)
+        {
+            map = new int[planParameters.Count];
+            for (var i = 0; i < map.Length; i++)
+                map[i] = -1;
+            state.PlanParamMap = map;
+        }
+
+        for (var i = 0; i < planParameters.Count; i++)
+        {
+            var name = planParameters[i].ParameterName;
+            var idx = map[i];
+            if (idx < 0 || idx >= parameters.Count || !string.Equals(parameters[idx].ParameterName, name, StringComparison.Ordinal))
+            {
+                idx = parameters.IndexOf(name);
+                map[i] = idx;
+            }
+
+            if (idx >= 0)
+                parameters[idx].Value = planParameters[i].Value ?? DBNull.Value;
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "Both branches are reachable: @params may be empty, so the loop is not dead code; the analyzer cannot model the span conversion.")]
+    private static void BindRuntimeParameters(
+        DbCommand command,
+        CommandState state,
+        Func<DbCommand, string, object?, DbParameter> createParam,
+        ReadOnlySpan<object?> @params)
+    {
+        var parameters = command.Parameters;
+        var pLength = @params.Length;
+        var map = state.ParamMap;
+        if (map is null || map.Length < pLength)
+        {
+            var next = new int[pLength];
+            if (map is not null)
+                Array.Copy(map, next, map.Length);
+            for (var i = map?.Length ?? 0; i < pLength; i++)
+                next[i] = -1;
+            map = next;
+            state.ParamMap = map;
+        }
+
+        for (var i = 0; i < pLength; i++)
+        {
+            var idx = map[i];
+
+            string? paramName = null;
+            if (idx < 0)
+            {
+                paramName = NormParam.GetName(i);
+                // parameters.IndexOf is a provider-side linear scan, but the map caches the result
+                // below, so it runs at most once per parameter per connection.
+                idx = parameters.IndexOf(paramName);
+
+                if (idx >= 0)
+                    map[i] = idx;
+            }
+
+            if (idx >= 0)
+            {
+                // Normalize null to DBNull so providers that reject null parameter values
+                // (Microsoft.Data.Sqlite) work and the equality check stays stable.
+                var newValue = @params[i] ?? DBNull.Value;
+                if (parameters[idx].Value != newValue)
+                    parameters[idx].Value = newValue;
+            }
+            else
+            {
+                map[i] = parameters.Count;
+                parameters.Add(createParam(command, paramName!, @params[i]));
+            }
+        }
+    }
+
+    private CommandState GetOrCreateState(DbConnection connection)
+    {
+        var memo = Volatile.Read(ref _memo);
+        if (memo is not null && memo.TryGet(connection, out var cached))
+            return cached!;
+
+        var state = _states.GetValue(connection, _createState);
+        Volatile.Write(ref _memo, new Memo(connection, state));
+        return state;
+    }
+
+    private static int NextLeaseToken(CommandState state)
+    {
+        var token = Interlocked.Increment(ref state.NextLeaseToken);
+        // 0 means "no owner"; skip it on overflow.
+        return token == 0 ? Interlocked.Increment(ref state.NextLeaseToken) : token;
+    }
+
+    /// <summary>
+    /// Records the disposal of an execution-owned (<c>None</c>) command. Called by a lease, or by a
+    /// streaming enumerator that took the command over from its lease, so the creation/disposal counters
+    /// stay balanced for both buffered and streaming executions.
+    /// </summary>
+    internal void OnLeaseCommandDisposed() => Interlocked.Increment(ref _disposedCommandCount);
+
+    /// <summary>
+    /// Evicts the state for <paramref name="connection"/> and disposes its command. Used when the
+    /// command must never be reused — a failed execution poisoned it (a partial read, a rejected
+    /// transaction). The command is disposed here because its connection is still the one that owns it.
+    /// </summary>
+    internal void Evict(DbConnection connection)
+    {
+        CommandState? state = null;
+        if (_states.TryGetValue(connection, out var found))
+        {
+            state = found;
+            _states.Remove(connection);
+        }
+
+        if (state?.Command is { } command)
+        {
+            state.Command = null;
+            command.Connection = null;
+            command.Transaction = null;
+            command.Dispose();
+            Interlocked.Increment(ref _disposedCommandCount);
+        }
+
+        ClearMemo(connection);
+    }
+
+    private void ClearMemo(DbConnection connection)
+    {
+        var memo = Volatile.Read(ref _memo);
+        if (memo is not null && memo.Targets(connection))
+            Volatile.Write(ref _memo, null);
+    }
+
+    /// <summary>
+    /// Drops this connection's execution state without touching its command. Called when the connection
+    /// itself goes away (closed or disposed): a command attached to a connection belongs to that
+    /// connection — Microsoft.Data.Sqlite disposes the commands attached to it in <c>Close</c> — and a
+    /// provider-disposed command must never be touched again (Npgsql throws
+    /// <see cref="ObjectDisposedException"/> from <c>set_DbConnection</c>).
+    /// </summary>
+    void IDbCommandHolder.ResetConnection(DbConnection conn, IDataContext dbContext) => Forget(conn);
+
+    /// <summary>
+    /// Drops the state and memo of <paramref name="connection"/> without touching the command it held.
+    /// </summary>
+    private void Forget(DbConnection connection)
+    {
+        _states.Remove(connection);
+        ClearMemo(connection);
+    }
+
+    /// <inheritdoc cref="IDbCommandHolder.EvictConnection"/>
+    void IDbCommandHolder.EvictConnection(DbConnection conn) => Evict(conn);
+
+    /// <inheritdoc cref="IDbCommandHolder.OnCommandDisposed"/>
+    void IDbCommandHolder.OnCommandDisposed() => OnLeaseCommandDisposed();
+
+    /// <summary>
+    /// Diagnostic-only binding used by the parameter-allocation benchmark and by the parameter-factory
+    /// contract tests: applies positional parameters to the plan's diagnostic command. Execution never
+    /// uses this path — it binds onto a per-connection command inside <c>Acquire</c>.
+    /// </summary>
+    internal DbCommand GetDbCommand(ReadOnlySpan<object?> @params, Func<string, object?, DbParameter> createParam, DbConnection conn)
+        => GetDbCommandCore(@params, null, createParam, conn, null);
+
+    /// <inheritdoc cref="GetDbCommand(ReadOnlySpan{object?}, Func{string, object?, DbParameter}, DbConnection)"/>
+    internal DbCommand GetDbCommand(object[]? @params, Func<string, object?, DbParameter> createParam, DbConnection conn)
+        => GetDbCommandCore(@params is null ? ReadOnlySpan<object?>.Empty : @params, null, createParam, conn, null);
+
+    /// <inheritdoc cref="GetDbCommand(ReadOnlySpan{object?}, Func{string, object?, DbParameter}, DbConnection)"/>
+    internal DbCommand GetDbCommand(ReadOnlySpan<object?> @params, Func<string, object?, DbParameter> createParam, DbConnection conn, DbTransaction? transaction)
         => GetDbCommandCore(@params, null, createParam, conn, transaction);
 
+    /// <inheritdoc cref="GetDbCommand(ReadOnlySpan{object?}, Func{string, object?, DbParameter}, DbConnection)"/>
+    internal DbCommand GetDbCommand(object[]? @params, Func<string, object?, DbParameter> createParam, DbConnection conn, DbTransaction? transaction)
+        => GetDbCommandCore(@params is null ? ReadOnlySpan<object?>.Empty : @params, null, createParam, conn, transaction);
+
     /// <summary>
-    /// Command-aware variant used by the core execution paths: <paramref name="createParam"/> receives
-    /// the command the parameter is added to, so a connection whose ADO driver rejects foreign
-    /// parameters can mint one through <c>command.CreateParameter()</c>.
+    /// Diagnostic command-aware binding: <paramref name="createParam"/> receives the diagnostic command
+    /// the parameter is added to.
     /// </summary>
-    /// <param name="params">The positional parameter values to bind; an empty span binds nothing.</param>
-    /// <param name="createParam">Creates a provider parameter bound to the executing command.</param>
-    /// <param name="conn">The connection the returned command must be attached to.</param>
-    /// <param name="transaction">The transaction to bind, or <see langword="null"/> to clear it.</param>
-    /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
     internal DbCommand GetDbCommand(ReadOnlySpan<object?> @params, Func<DbCommand, string, object?, DbParameter> createParam, DbConnection conn, DbTransaction? transaction)
         => GetDbCommandCore(@params, createParam, null, conn, transaction);
 
-    /// <summary>
-    /// Command-aware variant used by the core execution paths; see
-    /// <see cref="GetDbCommand(ReadOnlySpan{object?}, Func{DbCommand, string, object?, DbParameter}, DbConnection, DbTransaction?)"/>.
-    /// </summary>
-    /// <param name="params">The positional parameter values to bind, or <see langword="null"/> for none.</param>
-    /// <param name="createParam">Creates a provider parameter bound to the executing command.</param>
-    /// <param name="conn">The connection the returned command must be attached to.</param>
-    /// <param name="transaction">The transaction to bind, or <see langword="null"/> to clear it.</param>
-    /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
+    /// <inheritdoc cref="GetDbCommand(ReadOnlySpan{object?}, Func{DbCommand, string, object?, DbParameter}, DbConnection, DbTransaction?)"/>
     internal DbCommand GetDbCommand(object[]? @params, Func<DbCommand, string, object?, DbParameter> createParam, DbConnection conn, DbTransaction? transaction)
         => GetDbCommandCore(@params is null ? ReadOnlySpan<object?>.Empty : @params, createParam, null, conn, transaction);
 
     /// <summary>
-    /// Shared binding core for both the command-unaware public overloads and the command-aware
-    /// execution-path overloads. Exactly one of <paramref name="aware"/> and <paramref name="legacy"/>
-    /// is non-null: <paramref name="legacy"/> is the public 2-arg factory, invoked directly so the
-    /// public path allocates no capturing adapter; <paramref name="aware"/> receives the executing
-    /// command so a connection whose ADO driver rejects foreign parameters can mint one through
-    /// <c>command.CreateParameter()</c>.
+    /// Shared diagnostic binding core. Exactly one parameter factory must be supplied; the connection
+    /// and transaction arguments are accepted for source compatibility but never attached, because this
+    /// path must not root a connection in the prepared plan.
     /// </summary>
-    /// <param name="params">The positional parameter values to bind; an empty span binds nothing.</param>
-    /// <param name="aware">The command-aware factory, or <see langword="null"/> on the public path.</param>
-    /// <param name="legacy">The command-unaware factory, or <see langword="null"/> on the execution path.</param>
-    /// <param name="conn">The connection the returned command must be attached to.</param>
-    /// <param name="transaction">The transaction to bind, or <see langword="null"/> to clear it.</param>
-    /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
-    internal DbCommand GetDbCommandCore(ReadOnlySpan<object?> @params, Func<DbCommand, string, object?, DbParameter>? aware, Func<string, object?, DbParameter>? legacy, DbConnection conn, DbTransaction? transaction)
+    internal DbCommand GetDbCommandCore(
+        ReadOnlySpan<object?> @params,
+        Func<DbCommand, string, object?, DbParameter>? aware,
+        Func<string, object?, DbParameter>? legacy,
+        DbConnection conn,
+        DbTransaction? transaction)
     {
-        // Real runtime guard, not a Debug.Assert: the invariant must also hold in Release, where a
-        // malformed call must fail loudly instead of silently dereferencing the wrong (or a null)
-        // factory for every parameter.
         if ((aware is null) == (legacy is null))
         {
             throw new ArgumentException(
@@ -206,102 +522,80 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         }
 
         var cmd = DbCommand;
-        var parameters = DbCommandParams;//cmd.Parameters;
+        var parameters = cmd.Parameters;
 
-        if (!@params.IsEmpty)
+        if (@params.IsEmpty)
+            return cmd;
+
+        var pLength = @params.Length;
+        if (_planParamMap is null)
         {
-            var pLength = @params.Length;
-            if (ParamMap is null)
+            _planParamMap = new int[pLength];
+            for (var i = 0; i < pLength; i++) _planParamMap[i] = -1;
+        }
+
+        for (var i = 0; i < pLength; i++)
+        {
+            var idx = _planParamMap[i];
+
+            string? paramName = null;
+            if (idx < 0)
             {
-                ParamMap = new int[pLength];
-                for (var i = 0; i < pLength; i++) ParamMap[i] = -1;
-            }
-            Debug.Assert(pLength == ParamMap.Length, "Arrays must be equal size", "{0} and {1} found", pLength, ParamMap.Length);
-
-            for (var i = 0; i < pLength; i++)
-            {
-                var idx = ParamMap[i];
-
-                string? paramName = null;
-                if (idx < 0)
-                {
-                    paramName = NormParam.GetName(i);
-                    // parameters.IndexOf is a provider-side linear scan, but ParamMap caches the
-                    // result below, so it runs at most once per parameter per compiled command.
-                    idx = parameters.IndexOf(paramName);
-
-                    if (idx >= 0)
-                    {
-                        ParamMap[i] = idx;
-                    }
-                }
+                paramName = NormParam.GetName(i);
+                idx = parameters.IndexOf(paramName);
 
                 if (idx >= 0)
-                {
-                    // Normalize null to DBNull so providers that reject null parameter values
-                    // (Microsoft.Data.Sqlite) work and the equality check stays stable.
-                    var newValue = @params[i] ?? DBNull.Value;
-                    if (parameters[idx].Value != newValue)
-                    {
-                        // if (cmd == DbCommand)
-                        // {
-                        // cmd = conn.CreateCommand();
-                        // cmd.CommandText = CommandText;
-                        // foreach (var p in parameters) cmd.Parameters.Add(p);
-                        // parameters = cmd.Parameters;
-                        //}
-                        parameters[idx].Value = newValue;
-                    }
-                }
-                else
-                {
-                    // if (cmd == DbCommand)
-                    // {
-                    //     cmd = conn.CreateCommand();
-                    //     cmd.CommandText = CommandText;
-                    //     foreach (var p in parameters) cmd.Parameters.Add(p);
-                    //     parameters = cmd.Parameters;
-                    // }
-
-                    ParamMap[i] = parameters.Count;
-                    parameters.Add(aware is not null
-                        ? aware(cmd, paramName!, @params[i])
-                        : legacy!(paramName!, @params[i]));
-                }
+                    _planParamMap[i] = idx;
             }
-        }
 
-        if (DbCommandConnection != conn)
-        {
-            DbCommandConnection = conn;
-            cmd.Connection = conn;
-        }
-
-        if (DbCommandTransaction != transaction)
-        {
-            DbCommandTransaction = transaction;
-            cmd.Transaction = transaction;
+            if (idx >= 0)
+            {
+                var newValue = @params[i] ?? DBNull.Value;
+                if (parameters[idx].Value != newValue)
+                    parameters[idx].Value = newValue;
+            }
+            else
+            {
+                _planParamMap[i] = parameters.Count;
+                parameters.Add(aware is not null
+                    ? aware(cmd, paramName!, @params[i])
+                    : legacy!(paramName!, @params[i]));
+            }
         }
 
         return cmd;
     }
+
     /// <summary>
-    /// Detaches the command from its connection and any active enumerator from its context so the
-    /// compiled command can be rebound to another connection on a later execution.
+    /// Weak last-pair memo: a hint that lets the hot path skip the weak-table lookup for a repeated
+    /// connection. Both references are weak, so the memo can never keep a connection (or its state)
+    /// alive; a read confirms the identity of both targets before using the state.
     /// </summary>
-    /// <param name="conn">The connection being reset; detached only when it is the command's current one.</param>
-    /// <param name="dbContext">The context the active enumerator is reading from.</param>
-    public void ResetConnection(DbConnection conn, IDataContext dbContext)
+    private sealed class Memo
     {
-        if (DbCommand?.Connection == conn)
+        private readonly WeakReference<DbConnection> _connection;
+        private readonly WeakReference<CommandState> _state;
+
+        internal Memo(DbConnection connection, CommandState state)
         {
-            DbCommand.Connection = null;
-            DbCommand.Transaction = null;
-            DbCommandTransaction = null;
+            _connection = new WeakReference<DbConnection>(connection);
+            _state = new WeakReference<CommandState>(state);
         }
 
-        Enumerator?.DetachFrom(dbContext);
+        internal bool TryGet(DbConnection connection, out CommandState? state)
+        {
+            state = null;
+            if (!_connection.TryGetTarget(out var memoConnection) || !ReferenceEquals(memoConnection, connection))
+                return false;
 
-        DbCommandConnection = null;
+            if (!_state.TryGetTarget(out var memoState))
+                return false;
+
+            state = memoState;
+            return true;
+        }
+
+        internal bool Targets(DbConnection connection)
+            => _connection.TryGetTarget(out var memoConnection) && ReferenceEquals(memoConnection, connection);
     }
 }

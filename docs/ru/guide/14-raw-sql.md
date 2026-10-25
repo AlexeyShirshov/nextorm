@@ -33,7 +33,7 @@ public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this Entity
 * `@params` — это обычный объект. Его **открытые свойства экземпляра** становятся именованными параметрами
   в порядке свойств, причём имя свойства используется как имя параметра.
 * `mode` — это `[Flags]`-значение: [`None`](xref:NextORM.Core.PrepareFromSqlMode.None) (по умолчанию) — буферизованное/скалярное
-  выполнение (как `nonStreamUsing: true` в `Prepare(...)`), [`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming) требуется для потокового
+  выполнение (буферизованная форма, которую `Prepare()` без аргументов выбирает по умолчанию), [`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming) требуется для потокового
   (небуферизованного) чтения, а [`StoreInCache`](xref:NextORM.Core.PrepareFromSqlMode.StoreInCache) заполняет кэш планов. Все перегрузки по умолчанию
   используют `None`, поэтому необработанный SQL не заполняет кэш планов без явного запроса.
 
@@ -794,7 +794,7 @@ using (var result = dataContext.ExecuteRaw(
 
 ## См. также
 
-* [Переиспользование запросов: кэш против Prepare](../engine/03-plan-cache-and-reuse.md) — компромиссы `nonStreamUsing` / `storeInCache`.
+* [Переиспользование запросов: кэш против Prepare](../engine/03-plan-cache-and-reuse.md) — компромиссы `PrepareOptions` / `storeInCache`.
 * [Скалярные функции](../scalar-functions/index.md) — оставайтесь в LINQ вместо перехода к необработанному SQL.
 * [Обзор провайдеров](../connecting-providers/overview.md) — заполнитель параметра для каждого провайдера.
 

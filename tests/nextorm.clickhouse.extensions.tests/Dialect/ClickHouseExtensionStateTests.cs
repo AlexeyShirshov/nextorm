@@ -32,7 +32,7 @@ public class ClickHouseExtensionStateTests
         return (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
     }
 
-    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).SqlStmt!);
 
     [Fact]
     public void ArrayJoinElement_CarriesProjectionIndependentState()

@@ -925,11 +925,28 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="nonStreamUsing">Whether the prepared command favors buffered (non-streaming) execution.</param>
+    /// <param name="options">
+    /// How the prepared command reuses its underlying command and whether rows are streamed. The default
+    /// value prepares a buffered command whose underlying command is reused per connection.
+    /// </param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <returns>The prepared query command.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="options"/> carries a <see cref="PreparedCommandCache"/> value that is not defined.
+    /// </exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static IPreparedQueryCommand<TEntity> Prepare<TEntity>(this EntityBuilder<TEntity> builder, bool nonStreamUsing = true, CancellationToken cancellationToken = default) => builder.ToParentCommand().Prepare(nonStreamUsing, cancellationToken);
+    public static IPreparedQueryCommand<TEntity> Prepare<TEntity>(this EntityBuilder<TEntity> builder, PrepareOptions options = default, CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(options.Cache))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.Cache,
+                "The prepared-command cache policy is not a defined PreparedCommandCache value; use PreparedCommandCache.Connection or PreparedCommandCache.None.");
+        }
+
+        return builder.ToParentCommand().Prepare(options, cancellationToken);
+    }
 
     /// <summary>
     /// Counts the matching rows by emitting a SQL <c>COUNT(*)</c>.

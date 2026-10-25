@@ -27,6 +27,10 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     private InterceptorHooks? _interceptors;
     private IDataContext? _context;
     private readonly DbPreparedQueryCommand<TResult> _compiledQuery;
+    // Execution-local hold on the per-connection state: acquired when the reader opens and released
+    // when the reader is disposed (stream completion or early abandon), never later.
+    private CommandLease? _lease;
+    private Action<DbCommand>? _onCommandCreated;
     private CancellationToken _cancellationToken;
     private object[]? _params;
     private readonly Func<IDataRecord, TResult>? _map;
@@ -39,9 +43,9 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     // disposed by the context (DataContext.DisposeStaff). Disposing it here would close a connection
     // that is still in use, so it is only cleared (Reset/DisposeAsync).
     private DbConnection? _conn;
-    // Owned only on the transient streaming-row path: the planner creates a per-call DbCommand that
-    // is never stored in the plan cache, so nothing else can release it. Cached plans leave this null
-    // (their command is owned by the plan and reused). Cleared before disposal so it is disposed once.
+    // Owned only under the None policy: the execution created a fresh command that nothing else can
+    // release. Under Connection the command belongs to the per-connection state, so this stays null.
+    // Cleared before disposal so it is disposed once.
     private DbCommand? _ownedCommand;
     private bool _disposed;
     private TResult _current = default!;
@@ -83,27 +87,30 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     }
 
     /// <summary>
-    /// Clears the connection-manager reference when it points at the given context, so a command
-    /// that outlives its context (the plan cache) cannot use a disposed one.
+    /// Makes this enumerator responsible for disposing the command this execution owns (the
+    /// <see cref="PreparedCommandCache.None"/> policy). The lease stops owning it so disposal happens
+    /// exactly once; under <see cref="PreparedCommandCache.Connection"/> the state keeps the command.
     /// </summary>
-    internal void DetachFrom(IDataContext context)
+    /// <param name="command">The command acquired by this execution.</param>
+    internal void OwnCommand(DbCommand command)
     {
-        if (ReferenceEquals(_connectionManager, context))
-            _connectionManager = null;
+        // The lease is a struct: mutate this holder's own copy and write it back, otherwise the
+        // cleared ownership flag would be lost and the lease would dispose the command as well.
+        if (_lease is { } lease)
+        {
+            lease.ReleaseCommandOwnership();
+            _lease = lease;
+        }
+
+        _ownedCommand = command;
     }
 
     /// <summary>
-    /// Makes this enumerator responsible for disposing the compiled query's per-call command. Called
-    /// only for a streaming-row command that was not stored in the plan cache and therefore has no
-    /// other owner; a cached plan's command must never be taken over.
+    /// Asynchronously disposes the active data reader, if any, releases an execution-owned command and
+    /// releases this execution's per-connection lease. The underlying connection is owned by the
+    /// context and is not closed here; the lease is released even when the reader disposal throws.
     /// </summary>
-    internal void OwnCommand() => _ownedCommand = _compiledQuery.DbCommand;
-
-    /// <summary>
-    /// Asynchronously disposes the active data reader, if any, and releases the reference to it. The
-    /// underlying connection is owned by the context and is not closed here.
-    /// </summary>
-    /// <returns>A value task completing when the reader has been disposed.</returns>
+    /// <returns>A value task completing when the reader, command and lease have been released.</returns>
     public ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
@@ -115,21 +122,55 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         var command = _ownedCommand;
         _ownedCommand = null;
 
+        var lease = _lease;
+        _lease = null;
+
         if (reader is not null)
         {
             if (_logDebug) _logger!.LogDebug("Disposing data reader");
-            // The cached path (no owned command) keeps the allocation-free reader-only fast path.
-            return command is null ? reader.DisposeAsync() : DisposeReaderAndCommandAsync(reader, command);
+            return DisposeReaderAndCommandAsync(reader, command, lease);
         }
 
-        command?.Dispose();
+        try
+        {
+            DisposeOwnedCommand(command);
+        }
+        finally
+        {
+            lease?.Dispose();
+        }
+
         return ValueTask.CompletedTask;
     }
 
-    private static async ValueTask DisposeReaderAndCommandAsync(DbDataReader reader, DbCommand command)
+    private async ValueTask DisposeReaderAndCommandAsync(DbDataReader reader, DbCommand? command, CommandLease? lease)
     {
-        await reader.DisposeAsync().ConfigureAwait(false);
+        try
+        {
+            await reader.DisposeAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            DisposeOwnedCommand(command);
+            lease?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Disposes the command this enumeration owns and records the disposal on the prepared command, so
+    /// the diagnostic creation/disposal counters balance for the streaming form as well as the buffered
+    /// one. The lease handed disposal over earlier
+    /// (<see cref="CommandLease.ReleaseCommandOwnership"/>), so this runs exactly once per
+    /// execution and never disposes a command the state still publishes.
+    /// </summary>
+    /// <param name="command">The execution-owned command, or <see langword="null"/> when the policy reuses one.</param>
+    private void DisposeOwnedCommand(DbCommand? command)
+    {
+        if (command is null)
+            return;
+
         command.Dispose();
+        _compiledQuery.OnLeaseCommandDisposed();
     }
 
     // public void Init(object data)
@@ -216,6 +257,16 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         _interceptors = interceptors;
         _context = context;
         _conn = connectionManager.GetConnection();
+        _onCommandCreated = RaiseCommandInitialized;
+    }
+
+    private void RaiseCommandInitialized(DbCommand command)
+    {
+        var interceptors = _interceptors!.QueryInterceptors;
+        if (interceptors.Length == 0)
+            return;
+
+        InterceptorHooks.RaiseCommandInitialized(interceptors, _context!, command);
     }
 
     // Raises CommandExecuting/CommandExecuted/CommandFailed around the reader creation. With no
@@ -288,11 +339,25 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         // DataContext.EnsureConnectionOpen.
         _connectionManager.EnsureConnectionOpen();
 
-        var sqlCommand = _compiledQuery.GetDbCommand(@params, _createParam!, _conn, _currentTransaction?.Invoke());
+        var lease = _compiledQuery.Acquire(_conn, _createParam!, @params, _currentTransaction?.Invoke(), _onCommandCreated);
+        DbDataReader reader;
+        try
+        {
+            var sqlCommand = lease.Command;
+            if (_logDebug) LogCommand(sqlCommand);
+            reader = ExecuteReader(sqlCommand);
+        }
+        catch
+        {
+            lease.Fail();
+            throw;
+        }
 
-        if (_logDebug) LogCommand(sqlCommand);
+        _lease = lease;
+        if (lease.OwnsCommand)
+            OwnCommand(lease.Command);
 
-        _reader = ExecuteReader(sqlCommand);
+        _reader = reader;
     }
     /// <summary>
     /// Asynchronously opens the connection and executes the command, creating the data reader. Does
@@ -310,11 +375,25 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
 
-        var sqlCommand = _compiledQuery.GetDbCommand(@params, _createParam!, _conn, _currentTransaction?.Invoke());
+        var lease = _compiledQuery.Acquire(_conn, _createParam!, @params, _currentTransaction?.Invoke(), _onCommandCreated);
+        DbDataReader reader;
+        try
+        {
+            var sqlCommand = lease.Command;
+            if (_logDebug) LogCommand(sqlCommand);
+            reader = await ExecuteReaderAsync(sqlCommand, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            lease.Fail();
+            throw;
+        }
 
-        if (_logDebug) LogCommand(sqlCommand);
+        _lease = lease;
+        if (lease.OwnsCommand)
+            OwnCommand(lease.Command);
 
-        _reader = await ExecuteReaderAsync(sqlCommand, cancellationToken).ConfigureAwait(false);
+        _reader = reader;
     }
     private void LogCommand(DbCommand sqlCommand)
     {
@@ -360,13 +439,27 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     /// </summary>
     public void Reset()
     {
-        if (_reader is not null)
-        {
-            if (_logDebug) _logger!.LogDebug("Disposing data reader");
-            _reader.Dispose();
+        var reader = _reader;
+        _reader = null;
+        _conn = null;
 
-            _reader = null;
-            _conn = null;
+        try
+        {
+            if (reader is not null)
+            {
+                if (_logDebug) _logger!.LogDebug("Disposing data reader");
+                reader.Dispose();
+            }
+        }
+        finally
+        {
+            var command = _ownedCommand;
+            _ownedCommand = null;
+            DisposeOwnedCommand(command);
+
+            var lease = _lease;
+            _lease = null;
+            lease?.Dispose();
         }
     }
 
@@ -378,11 +471,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         {
             if (disposing)
             {
-                // Reset() releases the reader but deliberately keeps the command, because Reset is
-                // also "start over". Only real disposal releases the owned command.
-                var command = _ownedCommand;
-                _ownedCommand = null;
-                command?.Dispose();
+                // Reset() already released the reader, an execution-owned command and the lease.
             }
 
             _disposed = true;

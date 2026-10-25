@@ -102,7 +102,7 @@ public class JoinIntoTerminalBoundaryTests
             streamed.Should().HaveCount(3, "ToAsyncEnumerable drops the JoinInto join and returns parents only");
             streamed.Should().OnlyContain(p => p.Children.Count == 0);
 
-            var prepared = Joined(ctx).Prepare(cancellationToken: TestContext.Current.CancellationToken);
+            var prepared = Joined(ctx).Prepare(default, TestContext.Current.CancellationToken);
             ((DbPreparedQueryCommand<BoundaryParent>)prepared).DbCommand.CommandText.Should().NotContain(" join ");
 
             prepared.ToList(ctx).Should().HaveCount(3);

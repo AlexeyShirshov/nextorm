@@ -3,27 +3,31 @@ using System.Data.Common;
 namespace NextORM.Core;
 
 /// <summary>
-/// Owns the per-call <see cref="DbCommand"/> and <see cref="DbDataReader"/> of a raw command. Unlike a
-/// prepared query, a raw command is never reused, so this object owns a fresh command and disposes it
-/// together with the reader. The underlying connection stays owned by the context and is never closed
-/// here.
+/// Owns the <see cref="DbCommand"/> and <see cref="DbDataReader"/> of one execution. A raw command is
+/// never reused, so the owner disposes its fresh command; a prepared command carries a
+/// <see cref="CommandLease"/> instead, which disposes a <c>None</c> command or detaches a
+/// <c>Connection</c> command and releases the per-connection state. The underlying connection stays
+/// owned by the context and is never closed here.
 /// </summary>
 /// <remarks>
 /// The reader can be closed early (to make ADO.NET output parameters available) while the command is
 /// kept alive: <see cref="CloseReader"/> disposes only the reader. <see cref="Dispose"/> and
-/// <see cref="DisposeAsync"/> release both, reader first.
+/// <see cref="DisposeAsync"/> release the reader, then the command/lease, in a <c>finally</c> so a
+/// throwing reader disposal can never leak the lease.
 /// </remarks>
 internal sealed class CommandReaderOwner : IDisposable, IAsyncDisposable
 {
     private DbCommand? _command;
     private DbDataReader? _reader;
+    private CommandLease? _lease;
     private int _recordsAffected = -1;
     private bool _recordsAffectedCaptured;
 
-    internal CommandReaderOwner(DbCommand command, DbDataReader reader)
+    internal CommandReaderOwner(DbCommand command, DbDataReader reader, CommandLease? lease)
     {
         _command = command;
         _reader = reader;
+        _lease = lease;
     }
 
     /// <summary>The command this owner created; available until the owner is disposed.</summary>
@@ -106,39 +110,69 @@ internal sealed class CommandReaderOwner : IDisposable, IAsyncDisposable
         PublishAfterRelease(reader);
     }
 
-    /// <summary>Disposes the reader (when still open) and then the command. Safe to call more than once.</summary>
+    /// <summary>Disposes the reader (when still open), then the command or the lease. Safe to call more than once.</summary>
     public void Dispose()
     {
         var reader = _reader;
         _reader = null;
-        if (reader is not null)
+        try
         {
-            PublishBeforeRelease(reader);
-            reader.Dispose();
-            PublishAfterRelease(reader);
+            if (reader is not null)
+            {
+                PublishBeforeRelease(reader);
+                reader.Dispose();
+                PublishAfterRelease(reader);
+            }
         }
-
-        var command = _command;
-        _command = null;
-        command?.Dispose();
+        finally
+        {
+            var command = _command;
+            _command = null;
+            var lease = _lease;
+            _lease = null;
+            try
+            {
+                // A raw command has no lease and is owned here; a prepared command is owned by its lease.
+                if (lease is null)
+                    command?.Dispose();
+            }
+            finally
+            {
+                lease?.Dispose();
+            }
+        }
     }
 
-    /// <summary>Asynchronously disposes the reader (when still open) and then the command. Safe to call more than once.</summary>
-    /// <returns>A value task that completes once both have been disposed.</returns>
+    /// <summary>Asynchronously disposes the reader (when still open), then the command or the lease. Safe to call more than once.</summary>
+    /// <returns>A value task that completes once the reader and the command/lease have been released.</returns>
     public async ValueTask DisposeAsync()
     {
         var reader = _reader;
         _reader = null;
-        if (reader is not null)
+        try
         {
-            PublishBeforeRelease(reader);
-            await reader.DisposeAsync().ConfigureAwait(false);
-            PublishAfterRelease(reader);
+            if (reader is not null)
+            {
+                PublishBeforeRelease(reader);
+                await reader.DisposeAsync().ConfigureAwait(false);
+                PublishAfterRelease(reader);
+            }
         }
-
-        var command = _command;
-        _command = null;
-        if (command is not null)
-            await command.DisposeAsync().ConfigureAwait(false);
+        finally
+        {
+            var command = _command;
+            _command = null;
+            var lease = _lease;
+            _lease = null;
+            try
+            {
+                if (lease is null && command is not null)
+                    await command.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                lease?.Dispose();
+            }
+        }
     }
 }

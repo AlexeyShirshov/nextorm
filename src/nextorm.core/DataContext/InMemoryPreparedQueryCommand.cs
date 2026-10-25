@@ -41,16 +41,13 @@ public sealed class InMemoryPreparedQueryCommand<TResult>(object compiledQuery, 
     public object? Data;
     /// <summary>
     /// The enumerator reused across executions, re-initialised with new parameter values via
-    /// <see cref="Resolver"/>.
+    /// <see cref="Resolver"/>. Internal: connection-bound execution state is not part of the public
+    /// prepared surface (the in-memory executor keeps per-call locals).
     /// </summary>
-    public IAsyncEnumerator<TResult>? Enumerator;
+    internal IAsyncEnumerator<TResult>? Enumerator;
     /// <summary>
     /// Cached per-call resolver: re-initialises the (already compiled) enumerator with new parameter
     /// values, skipping the per-call data resolution / joins / sorting checks. Built on first use.
     /// </summary>
     public Func<object[]?, IAsyncEnumerator<TResult>>? Resolver;
-    /// <summary>
-    /// The number of rows returned by the most recent execution.
-    /// </summary>
-    public int LastRowCount;
 }

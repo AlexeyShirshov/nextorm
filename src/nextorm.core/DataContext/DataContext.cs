@@ -115,9 +115,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             this,
             GetDialect,
             GetType(),
-            new ProviderHooks(MapColumn, _createParam, CreateCommand),
-            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData, QueryFilterLogger: _environment.QueryFilterLogger),
-            _interceptors);
+            new ProviderHooks(MapColumn, _createParam, _createParamSimple),
+            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData, QueryFilterLogger: _environment.QueryFilterLogger));
     }
 
     /// <summary>
@@ -321,7 +320,21 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="cancellationToken">Token used to cancel preparation.</param>
     /// <returns>The prepared command, ready to execute.</returns>
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
-        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, streamingRows: false, cancellationToken);
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, PreparedCommandCache.Connection, streamingRows: false, cancellationToken);
+
+    /// <summary>
+    /// Prepares <paramref name="queryCommand"/> against the current dialect with an explicit command-reuse
+    /// policy, optionally building a streaming enumerator and storing the plan in the cache.
+    /// </summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="queryCommand">The command to prepare.</param>
+    /// <param name="createEnumerator">When <see langword="true"/>, compiles a streaming row enumerator as part of preparation.</param>
+    /// <param name="storeInCache">When <see langword="true"/> (and <see cref="QueryCacheEnabled"/> is set), stores the prepared command in the plan cache.</param>
+    /// <param name="cache">The command-reuse policy the prepared command is built with.</param>
+    /// <param name="cancellationToken">Token used to cancel preparation.</param>
+    /// <returns>The prepared command, ready to execute.</returns>
+    public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, CancellationToken cancellationToken)
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cache, streamingRows: false, cancellationToken);
 
     /// <summary>
     /// Prepares the command for the <c>ToAsyncEnumerable</c> terminal. This is the only preparation
@@ -329,9 +342,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// member to sequential access; every other terminal keeps the buffered path and rejects the shape.
     /// </summary>
     internal IPreparedQueryCommand<TResult> GetStreamingRowsQueryCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
-        => GetPreparedQueryCommand(queryCommand, createEnumerator: true, storeInCache: true, streamingRows: true, cancellationToken);
+        => GetPreparedQueryCommand(queryCommand, createEnumerator: true, storeInCache: true, cache: PreparedCommandCache.Connection, streamingRows: true, cancellationToken);
 
-    private IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool streamingRows, CancellationToken cancellationToken)
+    private IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, PreparedCommandCache cache, bool streamingRows, CancellationToken cancellationToken)
     {
         // The check is allocation-free and false for every ordinary query, so the common preparation
         // path only pays a few branches.
@@ -339,10 +352,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         {
             var tempTables = new List<ITempTableSource>();
             queryCommand.CollectTempTableSources(tempTables);
-            return GetPreparedTemporaryTableCommand(queryCommand, tempTables, createEnumerator, cancellationToken);
+            return GetPreparedTemporaryTableCommand(queryCommand, tempTables, createEnumerator, cache, cancellationToken);
         }
 
-        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, false, streamingRows, cancellationToken);
+        // A policy of None must never read or write the plan cache: the call-local storeInCache is cleared
+        // here (never on QueryCommand, whose Cache flag is shared and sticky).
+        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, (storeInCache && cache != PreparedCommandCache.None) && QueryCacheEnabled, cache, false, streamingRows, cancellationToken);
     }
 
     /// <summary>
@@ -418,7 +433,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             nativeCmd.ForJsonClause = new ForJsonClause(ForJsonMode.Path, null, IncludeNullValues: !options.IgnoreNull);
 
             var nativePrepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
-                nativeCmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
+                nativeCmd, createEnumerator: false, storeInCache: false, cache: PreparedCommandCache.Connection, streamingRows: false, cancellationToken);
 
             var nativePlan = JsonShapePlan.Build(nativeCmd.SelectList, nativeCmd.OneColumn, options, nativeCmd.JsonShape);
             if (JsonNativeStream.IsEligible(nativePlan, options))
@@ -427,7 +442,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         var cmd = CloneForJsonStream(queryCommand, tempSource);
         var prepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
-            cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
+            cmd, createEnumerator: false, storeInCache: false, cache: PreparedCommandCache.Connection, streamingRows: false, cancellationToken);
 
         var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options, cmd.JsonShape);
         return (prepared, _jsonRowWriters.GetOrBuild(plan), plan, false);
@@ -459,13 +474,14 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         QueryCommand<TResult> queryCommand,
         List<ITempTableSource> tempTables,
         bool createEnumerator,
+        PreparedCommandCache cache,
         CancellationToken cancellationToken)
     {
         // storeInCache: false is what keeps the read plan out of the plan cache (the source query's
         // captured parameters must be re-rendered on every execution). Setting Cache = false here
         // would leak: for `Any` the command is the context-shared AnyCommand, so it would disable
         // plan caching for every later query on that context.
-        var prepared = (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, createEnumerator, false, cancellationToken);
+        var prepared = (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, createEnumerator, false, cache, cancellationToken);
 
         prepared.PendingBatch = BuildTemporaryTableBatch(queryCommand, tempTables);
         return prepared;
@@ -500,7 +516,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (terminalName is not null && queryCommand.HasTemporaryTableSource())
             throw new NotSupportedException(LazyTemporaryTableMessage(terminalName));
 
-        return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, true, cancellationToken);
+        // Execution-local, not connection-cached: this plan is prepared with storeInCache: false, so no
+        // cached plan publishes it and nothing would ever call IDbCommandHolder.ResetConnection for it. A
+        // Connection-policy command would therefore be retained by the per-connection state and never be
+        // disposed. The streaming terminal owns exactly one execution, so the command is minted per
+        // execution and disposed exactly once when the reader's CommandReaderOwner releases its lease
+        // (PreparedCommandCache.None, AC03).
+        return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, PreparedCommandCache.None, true, cancellationToken);
     }
 
     // The plain (non-LOB) multi-column reader seam: unlike PrepareLobCommand it demands neither
@@ -578,10 +600,17 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (queryCommand.HasTemporaryTableSource())
             throw new NotSupportedException(LazyTemporaryTableMessage(terminalName));
 
+        // Execution-local, not connection-cached: the plan is prepared with storeInCache: false, so no
+        // cached plan publishes this prepared command and nothing would ever call
+        // IDbCommandHolder.ResetConnection for it — a Connection-policy command would be retained by the
+        // per-connection state and never disposed. The reader terminal owns exactly one execution, so the
+        // command is minted per execution and disposed exactly once when the reader's CommandReaderOwner
+        // releases its lease (PreparedCommandCache.None, AC03).
         return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(
             queryCommand,
             createEnumerator: false,
             storeInCache: false,
+            cache: PreparedCommandCache.None,
             sequentialAccess: sequentialAccess,
             streamingRowsRequested: false,
             suppressLobLocator: suppressLobLocator,

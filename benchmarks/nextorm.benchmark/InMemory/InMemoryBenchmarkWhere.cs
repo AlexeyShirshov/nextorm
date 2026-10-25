@@ -31,7 +31,7 @@ public class InMemoryBenchmarkWhere
         _ctx = new InMemoryDataRepository(_provider);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Prepare(false);
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Prepare(new PrepareOptions { Streaming = true });
     }
 
     private EFInMemoryDataContext EfContext => _efCtx ??= EfInMemory.Create(10_000);

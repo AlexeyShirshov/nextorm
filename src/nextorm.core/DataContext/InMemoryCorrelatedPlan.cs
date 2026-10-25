@@ -143,10 +143,23 @@ internal static class InMemoryCorrelatedEvaluator
 {
     private static readonly MethodInfo BuildTypedMI = typeof(InMemoryCorrelatedEvaluator)
         .GetMethod(nameof(BuildTyped), BindingFlags.NonPublic | BindingFlags.Static)!;
-    private static readonly MethodInfo GetPreparedMI = typeof(InMemoryDataContext)
-        .GetMethod(nameof(InMemoryDataContext.GetPreparedQueryCommand))!;
+    private static readonly MethodInfo GetPreparedMI = ResolveGetPreparedMethod();
     private static readonly MethodInfo GetEnumerableMI = typeof(InMemoryDataContext)
         .GetMethod(nameof(InMemoryDataContext.GetEnumerable))!;
+
+    // The context carries more than one GetPreparedQueryCommand overload (the policy overload adds a
+    // PreparedCommandCache parameter), so the policy-less four-parameter one is resolved explicitly
+    // instead of by name alone.
+    private static MethodInfo ResolveGetPreparedMethod()
+    {
+        foreach (var method in typeof(InMemoryDataContext).GetMethods(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (method.Name == nameof(InMemoryDataContext.GetPreparedQueryCommand) && method.GetParameters().Length == 4)
+                return method;
+        }
+
+        throw new MissingMethodException(typeof(InMemoryDataContext).FullName, nameof(InMemoryDataContext.GetPreparedQueryCommand));
+    }
 
     /// <summary>Builds (or returns) the plan for <paramref name="cmd"/> on <paramref name="context"/>.</summary>
     public static InMemoryCorrelatedPlan Build(InMemoryDataContext context, QueryCommand cmd)

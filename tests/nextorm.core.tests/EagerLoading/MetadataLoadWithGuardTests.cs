@@ -103,8 +103,8 @@ public sealed class MetadataLoadWithGuardTests
         return context;
     }
 
-    private static IPreparedQueryCommand<T> Prepare<T>(IDataContext context, QueryCommand<T> command)
-        => context.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
+    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext context, QueryCommand<T> command)
+        => (DbPreparedQueryCommand<T>)context.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
 
     private static int StoredPlans() => QueryPlanStore.Values.Count();
 
@@ -226,9 +226,11 @@ public sealed class MetadataLoadWithGuardTests
 
         repeat.Should().BeSameAs(first, "a neighbouring query still caches after the rejection");
         StoredPlans().Should().Be(1);
-        interceptor.Initialized.Should().Be(1, "exactly the scalar command was constructed");
-        interceptor.Executing.Should().Be(0, "preparation alone never executes")
-            ;
+        first.SqlStmt.Should().NotBeNullOrEmpty("the cached plan carries its SQL even before a connection runs it");
+        // The provider command is minted per connection when the prepared command first executes, not
+        // during planning: preparation constructs no command and therefore raises no initialized event.
+        interceptor.Initialized.Should().Be(0, "no provider command is minted until a connection executes it");
+        interceptor.Executing.Should().Be(0, "preparation alone never executes");
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -322,18 +324,19 @@ public sealed class MetadataLoadWithGuardTests
 
         // Any: the shared EXISTS command is the parent only — no child table, no child query.
         var any = builder.AnyCommand();
-        Prepare(context, any);
-        interceptor.Initialized.Should().BeGreaterThan(0);
+        var anySql = Prepare(context, any).SqlStmt;
 
         // Count: the aggregate command is likewise parent-only.
         var count = builder.SelectParent(o => SqlFunctions.Sql.count());
         count.SingleRow = true;
-        Prepare(context, count);
+        var countSql = Prepare(context, count).SqlStmt;
 
-        interceptor.Statements.Should().NotBeEmpty();
-        interceptor.Statements.Should().OnlyContain(sql =>
+        anySql.Should().NotBeNullOrEmpty("the prepared Any command exposes its own SQL");
+        countSql.Should().NotBeNullOrEmpty("the prepared Count command exposes its own SQL");
+        new[] { anySql!, countSql! }.Should().OnlyContain(sql =>
             !sql.Contains("guard_line", StringComparison.OrdinalIgnoreCase)
             && !sql.Contains(" join ", StringComparison.OrdinalIgnoreCase));
+        interceptor.Initialized.Should().Be(0, "preparation mints no provider command; commands are created per connection at execution");
         interceptor.Executing.Should().Be(0, "preparing the scalar terminals executes nothing");
     }
 }

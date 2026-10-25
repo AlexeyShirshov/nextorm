@@ -48,7 +48,7 @@ public class SqliteBenchmarkLargeIteration
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
-        _cmdExec = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare(false);
+        _cmdExec = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare(new PrepareOptions { Streaming = true });
 
         _cmdToList = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare();
 
