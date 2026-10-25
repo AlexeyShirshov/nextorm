@@ -378,6 +378,9 @@ public class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL 11+ supports the <c>GROUPS</c> window frame unit.</summary>
     public override bool SupportsWindowFrameGroups => true;
 
+    /// <summary>PostgreSQL renders both null-safe comparison forms natively (<c>IS [NOT] DISTINCT FROM</c>).</summary>
+    public override INullSafeComparisonRenderer? NullSafeComparison => PostgresNullSafeComparisonRenderer.Instance;
+
     /// <summary>PostgreSQL supports the frame <c>EXCLUDE CURRENT ROW</c>/<c>GROUP</c>/<c>TIES</c>/<c>NO OTHERS</c> clause.</summary>
     public override bool SupportsWindowFrameExclusion => true;
     /// <inheritdoc/>
@@ -849,4 +852,26 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
     };
 
     private static string Pad(IReadOnlyList<string> args) => args.Count == 3 ? args[2] : "' '";
+}
+
+/// <summary>
+/// Renders the explicit null-safe comparison helpers on PostgreSQL, which has the ANSI spellings as
+/// native operators: <c>a IS NOT DISTINCT FROM b</c> and <c>a IS DISTINCT FROM b</c>. Both are
+/// two-valued, so the result is a plain boolean and needs no scalar legalisation.
+/// </summary>
+internal sealed class PostgresNullSafeComparisonRenderer : INullSafeComparisonRenderer
+{
+    internal static readonly PostgresNullSafeComparisonRenderer Instance = new();
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition DistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition NotDistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public string RenderDistinct(string left, string right) => $"({left} is distinct from {right})";
+
+    /// <inheritdoc/>
+    public string RenderNotDistinct(string left, string right) => $"({left} is not distinct from {right})";
 }

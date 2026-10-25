@@ -299,6 +299,16 @@ nextorm never sets, and even then reads materialize as `Tuple<SByte,String>` rat
 native `JsonObject` transport. See
 [JSON support](../16-json.md#map-a-clr-object-to-a-native-json-column).
 
+## Null-safe comparison
+
+ClickHouse has no usable scalar native form: `isNotDistinctFrom(...)` and the `<=>` operator are accepted
+only in a `JOIN ON` section and fail elsewhere on 25.8 with server error Code 48 `NOT_IMPLEMENTED`
+("Function isNotDistinctFrom can be used only in the JOIN ON section"), so both helpers are emulated as a
+guarded predicate: `((a is null and b is null) or (a is not null and b is not null and a = b))`, with
+`is_distinct_from` as its `not (...)` complement. No sentinel normalisation is used, so `NULL` never
+compares equal to a real value (including `0`), and the scalar result is already `UInt8`. See
+[Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from).
+
 ## Not yet supported
 
 The server/cluster table functions (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`,

@@ -59,6 +59,14 @@ select printf('%d-%s', id, somestring) as 'Label',
  from complex_entity
 ```
 
+## Null-safe-сравнение
+
+Оператор `IS` в SQLite — это нативное null-safe-равенство, поэтому
+`SqlFunctions.Sql.is_not_distinct_from(a, b)` рендерит `(a is b)`, а `is_distinct_from(a, b)` —
+`(a is not b)`. Оба двузначны (0/1) и не требуют скалярной легализации; обычные `==`/`!=` сохраняют
+семантику SQL NULL. См.
+[Null-safe-сравнение](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
+
 ## JSON1
 
 Доступ к скалярам, построение и изменение:

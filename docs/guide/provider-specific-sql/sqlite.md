@@ -60,6 +60,13 @@ select printf('%d-%s', id, somestring) as 'Label',
  from complex_entity
 ```
 
+## Null-safe comparison
+
+SQLite's `IS` operator is the native null-safe equality, so `SqlFunctions.Sql.is_not_distinct_from(a, b)`
+renders `(a is b)` and `is_distinct_from(a, b)` renders `(a is not b)`. Both are two-valued (0/1) and
+need no scalar legalisation; ordinary `==`/`!=` keep their SQL NULL semantics. See
+[Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from).
+
 ## JSON1
 
 Scalar access, construction and mutation:

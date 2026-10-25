@@ -383,6 +383,16 @@ public interface ISqlDialect
     string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
         => NullsOrderingRenderer.Render(expressionSql, direction, nullsPosition);
     /// <summary>
+    /// The renderer for the explicit null-safe comparison helpers
+    /// (<see cref="CommonFunctions.is_distinct_from{T}(T, T)"/> and
+    /// <see cref="CommonFunctions.is_not_distinct_from{T}(T, T)"/>), or <see langword="null"/> when
+    /// the provider does not support them. The safe default is <see langword="null"/>: the helper is
+    /// then rejected with an exception naming the provider and the form instead of emitting SQL the
+    /// provider cannot execute. Declared as a default interface member so existing external
+    /// implementations keep compiling without a new abstract obligation.
+    /// </summary>
+    INullSafeComparisonRenderer? NullSafeComparison => null;
+    /// <summary>
     /// True when the provider can render the <c>GROUPS</c> window frame unit (peer groups rather than
     /// physical rows or ordering values). The safe default is <c>false</c>; PostgreSQL, ClickHouse and
     /// SQLite opt in, while SQL Server, MySQL and MariaDB only support <c>ROWS</c>/<c>RANGE</c>.

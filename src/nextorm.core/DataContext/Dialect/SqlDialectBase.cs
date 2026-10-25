@@ -131,6 +131,12 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <returns>The rendered ordering item.</returns>
     public virtual string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
         => NullsOrderingRenderer.Render(expressionSql, direction, nullsPosition);
+    /// <summary>
+    /// The renderer for the explicit null-safe comparison helpers, or <see langword="null"/> when the
+    /// provider has not opted in. The safe default is <see langword="null"/>, which makes the
+    /// translator reject both helper forms with an exception naming the provider and the form.
+    /// </summary>
+    public virtual INullSafeComparisonRenderer? NullSafeComparison => null;
     /// <summary>Defaults to <c>false</c>; PostgreSQL, ClickHouse and SQLite opt into the <c>GROUPS</c> frame unit.</summary>
     public virtual bool SupportsWindowFrameGroups => false;
     /// <summary>Defaults to <c>false</c>; PostgreSQL and SQLite opt into the frame <c>EXCLUDE</c> clause.</summary>

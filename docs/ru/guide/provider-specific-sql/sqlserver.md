@@ -464,6 +464,17 @@ select patindex('%a%', somestring) as [Pos],
 `HOST_ID`, `HOST_NAME`, `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) открыты. Используйте сырой SQL или
 обёртку `[SqlFunction]` при появлении конкретного построчного применения.
 
+## Null-safe-сравнение
+
+В нижней границе поддерживаемых версий SQL Server нет `IS [NOT] DISTINCT FROM`, поэтому оба помощника
+эмулируются поверх обычного равенства всегда двузначным охраняемым предикатом:
+`((a is not null and b is not null and a = b) or (a is null and b is null))`, а `is_distinct_from` —
+его дополнение `not (...)`. Логическая проекция легализуется как
+`cast(case when ... then 1 else 0 end as bit)`. Поскольку операнды сравниваются дважды, захваченному
+null-операнду нужен SQL-тип, выведенный из метаданных; операнд без маппинга отклоняется до выполнения с
+`Null-safe comparison requires a SQL Server type mapping for null operands.` См.
+[Null-safe-сравнение](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
+
 ## Пока не поддерживается
 
 Открытых специфичных для SQL Server поверхностей не осталось. См.

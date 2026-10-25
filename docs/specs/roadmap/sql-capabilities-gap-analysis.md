@@ -55,7 +55,7 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 >
 > The workstreams above are closed; the remaining gaps are itemized in
 > [Remaining gaps](#4-remaining-gaps-in-order-of-significance): relationship metadata (#249, #251),
-> SQL Server composable DML `OUTPUT` (#266), NULLS placement (#287), `IS [NOT] DISTINCT FROM` (#288)
+> SQL Server composable DML `OUTPUT` (#266), NULLS placement (#287)
 > and savepoints (#289), plus the ClickHouse `AggregateFunction` driver blocker (#62) and the
 > dynamic-schema tail (item 11).
 >
@@ -229,11 +229,6 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     ([Sorting and paging](../../guide/06-sorting-and-paging.md)). #287 proposes a `NullsPosition`
     overload family: native syntax on PostgreSQL/SQLite 3.30+/ClickHouse, a `CASE` sort key on SQL
     Server/MySQL/MariaDB. Deferred earlier in the D233 window work.
-57. **`IS [NOT] DISTINCT FROM` (issue [#288](https://github.com/AlexeyShirshov/nextorm/issues/288)).**
-    `==`/`!=` keep SQL NULL semantics and there is no NULL-safe comparison, so a nullable "changed?"
-    predicate has to be written by hand. #288 proposes `SqlFunctions.Sql.is_distinct_from` /
-    `is_not_distinct_from`: native on PostgreSQL/SQLite (`IS`)/MySQL/MariaDB (`<=>`)/ClickHouse
-    (`isNotDistinctFrom`), emulated on SQL Server.
 
 ---
 
@@ -746,6 +741,31 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     so several PostgreSQL versions in one process need distinct context subclasses; MariaDB imposes no such
     guard, because its gated `UPDATE ... RETURNING` is a mutation whose SQL is not plan-cached.
     Shipped: [PostgreSQL provider](../../connecting-providers/postgres.md), [MariaDB provider](../../connecting-providers/mariadb.md),
+    [Limitations](../../advanced/limitations.md).
+
+57. **`IS [NOT] DISTINCT FROM` — <span style="color:green">shipped</span> (issue [#288](https://github.com/AlexeyShirshov/nextorm/issues/288)).**
+    `SqlFunctions.Sql.is_not_distinct_from`/`is_distinct_from` are explicit, always-two-valued
+    null-safe comparison helpers (both `NULL` equal, exactly one `NULL` unequal, otherwise ordinary
+    comparison), and ordinary `==`/`!=` keep their SQL NULL semantics untouched. Rendering is
+    **driver-free but dialect-owned**: one focused translator
+    (`Visitors/NullSafeComparisonTranslator.cs`) validates the operands, folds literal NULLs, and calls
+    the per-dialect `INullSafeComparisonRenderer` capability (`DataContext/Dialect/DialectCapabilities.cs`)
+    — no provider-name switch in the visitor, and a provider without the capability fails closed before
+    any SQL is emitted. Native forms: PostgreSQL `IS [NOT] DISTINCT FROM`, SQLite `IS`/`IS NOT`,
+    MySQL and MariaDB (inherited) `<=>` with `not (<=>)` as the distinct form. Emulated with a guarded
+    equality predicate: SQL Server (so the supported version floor stays free of the 2022+ operator) and
+    ClickHouse. The original ClickHouse assumption in this document was **wrong**: the native spellings
+    are not usable in scalar context — `isNotDistinctFrom(...)` and `a <=> b` are accepted only in a
+    `JOIN ON` section and fail elsewhere on 25.8 with server error Code 48
+    `NOT_IMPLEMENTED` ("Function isNotDistinctFrom can be used only in the JOIN ON section"), so they are
+    never emitted. Literal NULLs fold (`1 = 1`/`1 = 0`, or `is null`/`is not null` for one literal), a
+    captured operand stays a metadata-typed parameter (never value-specialised; SQL Server rejects an
+    unmapped null operand with `Null-safe comparison requires a SQL Server type mapping for null
+    operands.` and incompatible operands with `Null-safe comparison requires compatible operand types.`),
+    a statically non-nullable CLR value pair may lower to `=`/`<>`, and the in-memory provider applies
+    the same truth table without a CLR-collation promise. Verified on all six providers (37/37 live
+    cells, 0 skips). Docs: [Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from)
+    (EN+RU), [Filtering](../../guide/03-filtering-where.md#explicit-null-safe-comparison-is-not-distinct-from),
     [Limitations](../../advanced/limitations.md).
 
 ## 6. Implementation plan

@@ -102,6 +102,29 @@ select id
 выражения, а не значением во время выполнения: одно и то же выражение рендерит один и тот же SQL
 независимо от того, содержит захваченная переменная `null` или значение.
 
+### Явное null-safe-сравнение (`IS [NOT] DISTINCT FROM`)
+
+Перезаписи выше автоматические и ограничены формой выражения. Когда сравнение должно быть двузначным
+для **любых** операндов — в том числе для двух колонок — включите его явно через
+[`SqlFunctions.Sql.is_not_distinct_from`](xref:NextORM.Core.CommonFunctions.is_not_distinct_from``1(``0,``0))
+и [`SqlFunctions.Sql.is_distinct_from`](xref:NextORM.Core.CommonFunctions.is_distinct_from``1(``0,``0)):
+оба возвращают non-nullable `bool`:
+
+```csharp
+int? captured = 42;
+
+var rows = await dataContext.From<ComplexEntity>()
+    .Where(x => SqlFunctions.Sql.is_not_distinct_from(x.Int, captured))
+    .Select(x => new { x.Id })
+    .ToListAsync();
+```
+
+Оба `NULL` равны, ровно один `NULL` не равен, а два не-null операнда сравниваются обычным сравнением
+провайдера; `is_distinct_from` — дополнение. Обычные `==` / `!=` остаются ровно такими, как описано
+выше, — помощник включается явно и никогда не меняет их SQL. Таблица истинности, рендеринг по
+провайдерам и правила типизации — в разделе
+[Null-safe-сравнение](../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
+
 ### Проверка наличия (`HasValue`)
 
 `HasValue` / `!HasValue` у смэппленной колонки `Nullable<T>` транслируются в `is not null` / `is null`
@@ -146,17 +169,17 @@ SQL Server отрисовывает `cast(case when ... then 1 else 0 end as bit
 ### Что не покрыто
 
 Перезапись намеренно ограничена сравнением колонки с захваченной переменной nullable/string-типа.
-Следующие случаи сохраняют прежнее поведение и **не** являются null-safe:
+Следующие случаи сохраняют прежнее поведение и **не** становятся null-safe автоматически:
 
 * сравнение nullable-колонки с другой nullable-колонкой — в `WHERE`, проекции `SELECT` или
   `JOIN ON`;
 * `ORDER BY`, `GROUP BY`, `PARTITION BY`/`ORDER BY` оконных функций и `LIMIT BY` в ClickHouse;
 * `Nullable<T>.Value`;
-* вручную построенный `DefaultExpression`;
-* оператор `IS [NOT] DISTINCT FROM` (issue #288).
+* вручную построенный `DefaultExpression`.
 
-Null-safe-сравнение колонок между собой и нативный оператор различимости остаются отдельной, пока не
-реализованной работой.
+Обычные `==` / `!=` для этих операндов сохраняют трёхзначную логику SQL; если нужен двузначный
+результат, используйте явный помощник
+[null-safe-сравнения](#явное-null-safe-сравнение-is-not-distinct-from).
 
 ## Объединение предикатов
 
@@ -570,6 +593,7 @@ SQLite и завершаются ошибкой при выполнении оп
 | Конструкция C# | SQL |
 |---|---|
 | `==` / `!=` | `=` / `!=`; `is` / `is not` для литерала `null` (включая `(int?)null`); захваченные nullable/string-значения подчиняются семантике равенства с null из C# (см. [Обработка null](#обработка-null)) |
+| `SqlFunctions.Sql.is_not_distinct_from` / `is_distinct_from` | двузначное null-safe-сравнение — нативные `IS [NOT] DISTINCT FROM` / `IS` / `<=>`, эмуляция в SQL Server и ClickHouse (см. [Null-safe-сравнение](../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from)) |
 | `>`, `>=`, `<`, `<=` | `>`, `>=`, `<`, `<=` (в скобках); не null-safe |
 | `&&` / `\|\|` | `and` / `or` |
 | `!` | `not (...)`; в логической проекции `SELECT` SQL Server приводит предикат к `bit` |

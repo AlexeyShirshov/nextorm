@@ -106,6 +106,14 @@ var rows = dataContext.From<IOrderEntity>()
     .ToList();
 ```
 
+## Null-safe comparison (MySQL and MariaDB)
+
+Both providers have the null-safe equality operator `<=>`: `SqlFunctions.Sql.is_not_distinct_from(a, b)`
+renders `(a <=> b)` and `is_distinct_from(a, b)` renders its complement `(not (a <=> b))`. MariaDB
+inherits the same rendering from `MySqlDialect`; both forms are two-valued (1/0). Ordinary `==`/`!=`
+keep their SQL NULL semantics. See
+[Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from).
+
 ## In-memory and other providers
 
 The in-memory provider cannot evaluate these native functions and rejects them with

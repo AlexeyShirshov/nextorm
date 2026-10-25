@@ -110,6 +110,78 @@ select id, multiIf((id = 1), 'one', (id = 2), 'two', 'many') as `Bucket`
  from complex_entity
 ```
 
+## Null-safe comparison (`IS [NOT] DISTINCT FROM`)
+
+`SqlFunctions.Sql.is_not_distinct_from` and `SqlFunctions.Sql.is_distinct_from` are the explicit,
+opt-in null-safe comparison. Both take one common operand type `T` and return a non-nullable `bool`:
+
+```csharp
+bool is_not_distinct_from<T>(T left, T right);
+bool is_distinct_from<T>(T left, T right);
+```
+
+The result is always two-valued — it is never SQL `NULL`/UNKNOWN, so it cannot drop a row the way an
+ordinary comparison does:
+
+| `left` | `right` | `is_not_distinct_from` | `is_distinct_from` |
+|---|---|---|---|
+| `1` | `1` | `true` | `false` |
+| `1` | `2` | `false` | `true` |
+| `NULL` | `NULL` | `true` | `false` |
+| `NULL` | `1` | `false` | `true` |
+| `1` | `NULL` | `false` | `true` |
+
+`is_distinct_from` is the complement of `is_not_distinct_from`. Ordinary `==` / `!=` are **unchanged**:
+they keep SQL three-valued logic and are never rewritten to this helper (a `NULL` comparison yields no
+row in `WHERE`). Use the helpers when "both are `NULL`" must count as equal.
+
+```csharp
+int? previous = 42;
+
+var rows = await dataContext.From<ComplexEntity>()
+    .Where(e => SqlFunctions.Sql.is_not_distinct_from(e.Int, previous))
+    .Select(e => new { e.Id })
+    .ToListAsync();
+```
+
+| Provider | `is_not_distinct_from(a, b)` | `is_distinct_from(a, b)` | Disposition |
+|---|---|---|---|
+| PostgreSQL | `(a is not distinct from b)` | `(a is distinct from b)` | native |
+| SQLite | `(a is b)` | `(a is not b)` | native |
+| MySQL, MariaDB | `(a <=> b)` | `(not (a <=> b))` | native |
+| SQL Server | `((a is not null and b is not null and a = b) or (a is null and b is null))` | `(not ((a is not null and b is not null and a = b) or (a is null and b is null)))` | emulated |
+| ClickHouse | `((a is null and b is null) or (a is not null and b is not null and a = b))` | `(not ((a is null and b is null) or (a is not null and b is not null and a = b)))` | emulated |
+
+A boolean projection is shaped by the dialect: SQL Server legalises the predicate as
+`cast(case when ... then 1 else 0 end as bit)`, while the other providers project it directly (on
+ClickHouse the guarded predicate is already a `UInt8` value).
+
+Folding, typing and parameters behave deterministically:
+
+* two literal `NULL` operands fold to `1 = 1` (`is_not_distinct_from`) or `1 = 0` (`is_distinct_from`);
+* exactly one literal `NULL` lowers to `is null` / `is not null` on the other operand;
+* a **captured** operand stays one command parameter, and its SQL type comes from the compared column's
+  mapping (or its converter), never from the runtime value — a captured `NULL` works and never
+  specializes the cached SQL;
+* two statically non-nullable CLR **value** operands that read no query source (two captured `int`
+  locals, for example) may lower to `=` / `<>`; a nullable value, a column, a navigation or an
+  outer-join null-extended operand always keeps the null-safe rendering. A nullable reference
+  annotation is **not** runtime proof: a reference declared non-nullable that actually holds `NULL`
+  still takes the null-safe path.
+
+The single operand type `T` is inferred when both arguments already share it. A bare `null` literal has
+no type of its own, so name it explicitly — `is_not_distinct_from<int?>(null, null)` — or cast it
+(`(int?)null`). Operands whose effective CLR types differ (after nullable unwrapping) are rejected with
+`NotSupportedException` and `Null-safe comparison requires compatible operand types.` instead of being
+silently converted. On SQL Server the SQL type of a null operand must be resolvable from metadata (the
+bound column/converter mapping, then the operand's CLR type); an unmapped operand fails before execution
+with `Null-safe comparison requires a SQL Server type mapping for null operands.`
+
+The in-memory provider applies the same truth table — both `NULL` equal, exactly one `NULL` unequal,
+otherwise `EqualityComparer<T>.Default` — so a `NULL` reference is never dereferenced. CLR string
+equality is **not** database collation: the in-memory provider compares CLR strings, while a SQL
+provider compares with the column's collation, so no cross-collation equality is promised.
+
 ## SQL Server type predicates
 
 `SqlFunctions.SqlServer.isdate(value)` and `isnumeric(value)` render `isdate(...)` / `isnumeric(...)`

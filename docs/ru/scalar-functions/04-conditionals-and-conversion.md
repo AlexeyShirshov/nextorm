@@ -112,6 +112,80 @@ select id, multiIf((id = 1), 'one', (id = 2), 'two', 'many') as `Bucket`
  from complex_entity
 ```
 
+## Null-safe-сравнение (`IS [NOT] DISTINCT FROM`)
+
+`SqlFunctions.Sql.is_not_distinct_from` и `SqlFunctions.Sql.is_distinct_from` — явное, включаемое по
+желанию null-safe-сравнение. Оба принимают один общий тип операндов `T` и возвращают non-nullable
+`bool`:
+
+```csharp
+bool is_not_distinct_from<T>(T left, T right);
+bool is_distinct_from<T>(T left, T right);
+```
+
+Результат всегда двузначен — это никогда не SQL `NULL`/UNKNOWN, поэтому такое сравнение не может
+отбросить строку так, как это делает обычное сравнение:
+
+| `left` | `right` | `is_not_distinct_from` | `is_distinct_from` |
+|---|---|---|---|
+| `1` | `1` | `true` | `false` |
+| `1` | `2` | `false` | `true` |
+| `NULL` | `NULL` | `true` | `false` |
+| `NULL` | `1` | `false` | `true` |
+| `1` | `NULL` | `false` | `true` |
+
+`is_distinct_from` — дополнение `is_not_distinct_from`. Обычные `==` / `!=` **не меняются**: они
+сохраняют трёхзначную логику SQL и никогда не перезаписываются на этот помощник (сравнение с `NULL` не
+даёт строки в `WHERE`). Помощники нужны, когда «оба `NULL`» должно считаться равенством.
+
+```csharp
+int? previous = 42;
+
+var rows = await dataContext.From<ComplexEntity>()
+    .Where(e => SqlFunctions.Sql.is_not_distinct_from(e.Int, previous))
+    .Select(e => new { e.Id })
+    .ToListAsync();
+```
+
+| Провайдер | `is_not_distinct_from(a, b)` | `is_distinct_from(a, b)` | Реализация |
+|---|---|---|---|
+| PostgreSQL | `(a is not distinct from b)` | `(a is distinct from b)` | нативная |
+| SQLite | `(a is b)` | `(a is not b)` | нативная |
+| MySQL, MariaDB | `(a <=> b)` | `(not (a <=> b))` | нативная |
+| SQL Server | `((a is not null and b is not null and a = b) or (a is null and b is null))` | `(not ((a is not null and b is not null and a = b) or (a is null and b is null)))` | эмуляция |
+| ClickHouse | `((a is null and b is null) or (a is not null and b is not null and a = b))` | `(not ((a is null and b is null) or (a is not null and b is not null and a = b)))` | эмуляция |
+
+Логическую проекцию оформляет диалект: SQL Server легализует предикат как
+`cast(case when ... then 1 else 0 end as bit)`, остальные провайдеры проецируют его напрямую (в
+ClickHouse охраняемый предикат уже имеет тип `UInt8`).
+
+Свёртка, типизация и параметры ведут себя детерминированно:
+
+* два литеральных `NULL` сворачиваются в `1 = 1` (`is_not_distinct_from`) или `1 = 0`
+  (`is_distinct_from`);
+* ровно один литеральный `NULL` понижается до `is null` / `is not null` на другом операнде;
+* **захваченный** операнд остаётся одним параметром команды, а его SQL-тип берётся из маппинга
+  сравниваемой колонки (или её конвертера), а не из значения во время выполнения — захваченный `NULL`
+  работает и никогда не специализирует кэшированный SQL;
+* два статически non-nullable CLR-операнда **типа значения**, не читающие источник запроса (например,
+  две захваченные локальные `int`), могут понижаться до `=` / `<>`; nullable-значение, колонка,
+  навигация и операнд, расширяемый до NULL внешним соединением, всегда сохраняют null-safe-рендеринг.
+  Nullable-аннотация ссылочного типа **не** является доказательством на этапе выполнения: ссылка,
+  объявленная non-nullable, но фактически содержащая `NULL`, всё равно идёт null-safe-путём.
+
+Единый тип операндов `T` выводится, когда оба аргумента уже имеют его. У литерала `null` своего типа
+нет, поэтому укажите его явно — `is_not_distinct_from<int?>(null, null)` — либо приведите
+(`(int?)null`). Операнды с разными эффективными CLR-типами (после разворачивания nullable)
+отклоняются с `NotSupportedException` и `Null-safe comparison requires compatible operand types.`
+вместо молчаливого преобразования. В SQL Server SQL-тип null-операнда должен выводиться из метаданных
+(сначала маппинг связанной колонки/конвертера, затем CLR-тип операнда); операнд без маппинга падает до
+выполнения с `Null-safe comparison requires a SQL Server type mapping for null operands.`
+
+In-memory-провайдер применяет ту же таблицу истинности — оба `NULL` равны, ровно один `NULL` не равен,
+иначе `EqualityComparer<T>.Default` — поэтому ссылка `NULL` никогда не разыменовывается. Равенство
+строк в CLR — **не** коллация базы: in-memory-провайдер сравнивает строки CLR, а SQL-провайдер — с
+коллацией колонки, поэтому равенство при разных коллациях не обещается.
+
 ## Предикаты типов SQL Server
 
 `SqlFunctions.SqlServer.isdate(value)` и `isnumeric(value)` рендерятся как `isdate(...)` / `isnumeric(...)`

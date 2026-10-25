@@ -172,6 +172,9 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>MySQL renders the portable <c>iif</c> as <c>if(condition, whenTrue, whenFalse)</c>.</summary>
     public override IIifRenderer Iif => MySqlIifRenderer.Instance;
 
+    /// <summary>MySQL (and MariaDB) render the null-safe comparison over the native <c>&lt;=&gt;</c> equality primitive.</summary>
+    public override INullSafeComparisonRenderer? NullSafeComparison => MySqlNullSafeComparisonRenderer.Instance;
+
     /// <summary>MySQL 8.0+ (and MariaDB 10.2+) support the ANSI <c>percent_rank</c>/<c>cume_dist</c> window functions.</summary>
     public override bool SupportsPercentRankCumeDist => true;
 
@@ -817,3 +820,26 @@ internal class MySqlNativeFunctions : IMySqlFunctions
     };
 }
 
+
+/// <summary>
+/// Renders the explicit null-safe comparison helpers on MySQL and MariaDB, which share the
+/// null-safe equality operator <c>&lt;=&gt;</c>: <c>a &lt;=&gt; b</c> for not-distinct and its logical
+/// complement <c>NOT (a &lt;=&gt; b)</c> for distinct. Both forms are two-valued (1/0), so the result is
+/// a plain value and needs no scalar legalisation. MariaDB inherits this renderer unchanged.
+/// </summary>
+internal sealed class MySqlNullSafeComparisonRenderer : INullSafeComparisonRenderer
+{
+    internal static readonly MySqlNullSafeComparisonRenderer Instance = new();
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition DistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition NotDistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public string RenderDistinct(string left, string right) => $"(not ({left} <=> {right}))";
+
+    /// <inheritdoc/>
+    public string RenderNotDistinct(string left, string right) => $"({left} <=> {right})";
+}

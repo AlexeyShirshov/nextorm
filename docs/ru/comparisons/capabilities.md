@@ -14,6 +14,7 @@
 |---|---|---|---|
 | Проекции (сущность, DTO, anonymous, record, tuple, скаляр; несопоставленные колонки через `SqlFunctions.Column`) | yes | yes | yes |
 | Предикаты (`WHERE`: сравнение, `and`/`or`/`!`, арифметика, битовые операции/сдвиг) | yes | yes | yes |
+| Null-safe-сравнение (`IS [NOT] DISTINCT FROM`; `SqlFunctions.Sql.is_distinct_from` / `is_not_distinct_from`) | yes (нативно на PostgreSQL, SQLite и MySQL/MariaDB; эмуляция в SQL Server и ClickHouse) | yes (`Sql.Is[Not]DistinctFrom`; покрытие зависит от провайдера) | no |
 | JOIN (`INNER`/`LEFT`/`RIGHT`/`FULL`/`CROSS`, join к производным таблицам, до 8 источников) | yes (`FULL JOIN` не на MySQL/MariaDB) | yes | partial (`RIGHT`/`FULL` требуют обхода) |
 | Именованные алиасы join (`Alias.<Name>`) | yes (только SQL-провайдеры) | no | no |
 | `APPLY` / `LATERAL` | yes (выключено там, где у движка нет lateral-источника) | yes | partial |
@@ -92,7 +93,7 @@
 | In-memory-провайдер (только чтение, зарегистрированные CLR-наборы) | yes | partial | partial |
 | Жизненный цикл соединения (`IConnectionManager`: переданное vs собственное, переиспользование, dispose) | yes | yes | yes |
 | Расширяемость (диалект, `[SqlFunction]`/`[SqlTableFunction]`, интерцепторы, глобальные фильтры, сырой SQL) | yes | yes (обширно) | yes |
-| **Итого** | 71 / 5 / 3 | 48 / 21 / 10 | 27 / 27 / 24 |
+| **Итого** | 72 / 5 / 3 | 49 / 21 / 10 | 27 / 27 / 25 |
 
 ## Где Nextorm впереди
 

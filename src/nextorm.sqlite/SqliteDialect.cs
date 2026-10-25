@@ -171,6 +171,9 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>SQLite 3.28+ supports the <c>GROUPS</c> window frame unit.</summary>
     public override bool SupportsWindowFrameGroups => true;
 
+    /// <summary>SQLite renders both null-safe comparison forms natively (<c>IS</c> / <c>IS NOT</c>).</summary>
+    public override INullSafeComparisonRenderer? NullSafeComparison => SqliteNullSafeComparisonRenderer.Instance;
+
     /// <summary>SQLite 3.28+ supports the frame <c>EXCLUDE CURRENT ROW</c>/<c>GROUP</c>/<c>TIES</c>/<c>NO OTHERS</c> clause.</summary>
     public override bool SupportsWindowFrameExclusion => true;
 
@@ -525,4 +528,26 @@ internal sealed class SqliteScalarFunctions : IScalarFunctions
         "pi" => "pi()",
         _ => throw new NotSupportedException($"The {name} function is not supported by SQLite.")
     };
+}
+
+/// <summary>
+/// Renders the explicit null-safe comparison helpers on SQLite, whose <c>IS</c> operator is the
+/// native null-safe equality (<c>a IS b</c>, <c>a IS NOT b</c>). Both forms are two-valued, so the
+/// result is a plain 0/1 value and needs no scalar legalisation.
+/// </summary>
+internal sealed class SqliteNullSafeComparisonRenderer : INullSafeComparisonRenderer
+{
+    internal static readonly SqliteNullSafeComparisonRenderer Instance = new();
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition DistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition NotDistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public string RenderDistinct(string left, string right) => $"({left} is not {right})";
+
+    /// <inheritdoc/>
+    public string RenderNotDistinct(string left, string right) => $"({left} is {right})";
 }
