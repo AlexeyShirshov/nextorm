@@ -127,6 +127,76 @@ Null compensation is consistent across predicates and bool/value projections, in
 semantics — it is **included** in `!=`/negated/`OR` comparisons — rather than being silently dropped or
 compared against a default value.
 
+### References inside a correlated predicate
+
+A reference navigation can also be used **inside a correlated subquery** — an `EXISTS`/`IN` body or a
+correlated scalar subquery — where the hop is resolved on the outer query and the nested body compares
+against the joined alias:
+
+```csharp
+var inner = ctx.From<Child>();
+
+var hop1 = ctx.From<Parent>()
+    .Where(p => SqlFunctions.Sql.exists(inner.Where(c => c.ParentId == p.Id && c.GroupCode == p.Group!.Code)))
+    .Select(p => p.Id)
+    .ToList();
+
+// select t1.id
+// from parent as t1
+// left join group as t2 on t1.group_id = t2.id
+// where exists(select * from child as t3 where (t3.parent_id = t1.id and t3.group_code = t2.code))
+```
+
+The expansion belongs to the **outer** command: its join is emitted once on the outer query and the
+joined alias is registered as an outer reference of the nested command, so the correlated body reads
+`t2.code` instead of carrying the navigation as a free parameter. A deeper chain
+(`c.Group!.Root!.Label`, hop 2+) adds one `LEFT JOIN` per hop on the outer command and reads the deepest
+alias inside the body — hop depth is not a special case:
+
+```csharp
+var hop2 = ctx.From<Parent>()
+    .Where(p => SqlFunctions.Sql.exists(inner.Where(c => c.ParentId == p.Id && c.GroupCode == p.Group!.Root!.Label)))
+    .Select(p => p.Id)
+    .ToList();
+
+// ... left join group as t2 on t1.group_id = t2.id
+//     left join root as t3 on t2.root_id = t3.id
+// ... exists(select * from child as t4 where (t4.parent_id = t1.id and t4.group_code = t3.label))
+```
+
+All three reference forms work in this position:
+
+* a **scalar comparison** against a reference member (`c.GroupCode == p.Group!.Code`);
+* a **presence check** on the bare reference (`p.Group != null` / `p.Group == null`, rendered as
+  `t2.id is not null` / `t2.id is null` on the joined principal key);
+* a **scalar projection** by the correlated subquery (`.Select(c => p.Group!.Code)`) — a scalar
+  reference value, **not** whole-object eager loading.
+
+The same reference path used by two correlated predicates of one command reuses one joined alias (one
+`LEFT JOIN`, both correlated bodies reading it). Null semantics follow the outer `LEFT JOIN`: a dangling
+foreign key produces a `NULL` joined key, so the correlated comparison is unknown and the row does not
+match; a nullable foreign key with a `NULL` value never matches either; and an absent row at an
+intermediate hop of a 2+ chain makes the whole hop absent. A presence check inside the body tests the
+non-nullable identifying principal key of the deepest hop, exactly as it does outside a correlated
+predicate, so `!=`/`==` and a nullable-FK chain stay mutually consistent.
+
+This is a **predicate/scalar** form: it adds no collection capability and no new join form, and it
+never falls back to a per-parent `APPLY`/`LATERAL`. The emitted shape is a portable `LEFT JOIN` plus a
+correlated `EXISTS`/scalar subquery on every SQL provider:
+
+| Provider | Reference hop inside a correlated predicate | Disposition |
+|---|---|---|
+| SQLite | yes | SQL shape + live (incl. no `APPLY`) |
+| PostgreSQL | yes | SQL shape + shared live |
+| SQL Server | yes | SQL shape + shared live |
+| MySQL | yes | SQL shape + shared live |
+| MariaDB | yes | SQL shape; live deferred (trigger: dedicated live harness or MySQL divergence) |
+| ClickHouse | yes | SQL shape (no `APPLY`); live deferred (trigger: correlated-`EXISTS` live fixture or shape change) |
+
+[ClickHouse's collection-through-reference limitation](#collection-navigation) is unchanged: the
+reference hop itself is supported, and a *collection* reached through a reference stays rejected. The
+in-memory provider is not part of this matrix — the form is a server-side predicate translation.
+
 ## Collection navigation
 
 A declared collection supports exactly **four** parameterless terminals. They lower to a correlated

@@ -1455,7 +1455,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
         else
         {
-            var constRepl = new ReplaceConstantsExpressionVisitor(_outerParams, _queryProvider);
+            var constRepl = new ReplaceConstantsExpressionVisitor(NormalizationParameters(exp), _queryProvider);
             var body = constRepl.Visit(exp);
 
             if (constRepl.Params.Count > 0)
@@ -1513,6 +1513,65 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
 
         return cmd;
+    }
+
+    /// <summary>
+    /// The outer-parameter set the preparation-local normalization rewrites into outer references: the
+    /// pushed lambda parameters plus any free parameter that is a navigation-join alias of the command
+    /// being prepared (<see cref="QueryCommand.NavigationPaths"/>). <see cref="NavigationExpansion"/>
+    /// injects such an alias on the outer command and a nested correlated lambda can capture it; it is
+    /// not a lambda parameter, so it never reaches the pushed outer parameters, and the nested command
+    /// does not own it either. Without this the alias stays free and compiling the nested command fails
+    /// with "variable 'navigationN' ... is not defined". Ownership is matched by reference against the
+    /// enclosing command's own path registry - never by name - and nothing is mutated or copied.
+    /// </summary>
+    private IEnumerable<ParameterExpression> NormalizationParameters(Expression expression)
+    {
+        if (_queryProvider is not QueryCommand { NavigationPaths: { Count: > 0 } paths })
+            return (IEnumerable<ParameterExpression>?)_outerParams ?? [];
+
+        var collector = new JoinedParameterCollector(paths, _outerParams);
+        collector.Visit(expression);
+
+        return collector.Found.Count == 0
+            ? (IEnumerable<ParameterExpression>?)_outerParams ?? []
+            : (_outerParams ?? []).Concat(collector.Found);
+    }
+
+    /// <summary>
+    /// Collects the free navigation-join aliases of the enclosing command that appear in an expression,
+    /// skipping the parameters already treated as outer.
+    /// </summary>
+    private sealed class JoinedParameterCollector(
+        IReadOnlyDictionary<ParameterExpression, string> paths,
+        IEnumerable<ParameterExpression>? outerParameters) : ExpressionVisitor
+    {
+        private readonly HashSet<ParameterExpression> _seen = outerParameters is null ? [] : [.. outerParameters];
+        private readonly List<ParameterExpression> _found = [];
+
+        internal List<ParameterExpression> Found => _found;
+
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            if (!_seen.Contains(node) && IsJoinedParameter(node))
+            {
+                _seen.Add(node);
+                _found.Add(node);
+            }
+
+            return base.VisitParameter(node);
+        }
+
+        private bool IsJoinedParameter(ParameterExpression node)
+        {
+            foreach (var parameter in paths.Keys)
+            {
+                if (ReferenceEquals(parameter, node))
+                    return true;
+            }
+
+            return false;
+        }
     }
 
     /// <summary>

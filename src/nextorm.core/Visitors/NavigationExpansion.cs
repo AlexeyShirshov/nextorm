@@ -429,10 +429,21 @@ internal static class NavigationExpansion
                     ? (hop.PrimaryLeg.ForeignKey.PropertyInfo, hop.PrimaryLeg.PrincipalKey.PropertyInfo)
                     : (hop.PrimaryLeg.PrincipalKey.PropertyInfo, hop.PrimaryLeg.ForeignKey.PropertyInfo);
 
+                // A nullable foreign key compared with a non-nullable principal key (or the reverse)
+                // needs the narrower operand lifted to the nullable type before the equality is built:
+                // Expression.Equal(int?, int) is undefined. The comparison stays a plain key equality;
+                // only a mismatched nullability pair is converted, so equal types keep their exact
+                // expression and SQL text.
+                Expression leftKeyExpression = Expression.Property(leftParameter, leftKey);
+                Expression rightKeyExpression = Expression.Property(rightParameter, rightKey);
+
+                if (Nullable.GetUnderlyingType(leftKeyExpression.Type) == rightKeyExpression.Type)
+                    rightKeyExpression = Expression.Convert(rightKeyExpression, leftKeyExpression.Type);
+                else if (Nullable.GetUnderlyingType(rightKeyExpression.Type) == leftKeyExpression.Type)
+                    leftKeyExpression = Expression.Convert(leftKeyExpression, rightKeyExpression.Type);
+
                 var condition = Expression.Lambda(
-                    Expression.Equal(
-                        Expression.Property(leftParameter, leftKey),
-                        Expression.Property(rightParameter, rightKey)),
+                    Expression.Equal(leftKeyExpression, rightKeyExpression),
                     leftParameter,
                     rightParameter);
 
