@@ -820,6 +820,7 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "json_set" or "json_insert" or "json_replace" or "json_remove" or
         "json_merge_patch" or "json_merge_preserve" or "json_array_append" or "json_array_insert" or
         "json_depth" or "json_keys" or "json_length" or "json_type" or
+        "json_storage_free" or
         "uuid_to_bin" or "bin_to_uuid";
 
     /// <inheritdoc/>
@@ -851,6 +852,7 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "json_keys" => $"json_keys({args[0]})",
         "json_length" => $"json_length({args[0]})",
         "json_type" => $"json_type({args[0]})",
+        "json_storage_free" => $"json_storage_free({args[0]})",
         "uuid_to_bin" => $"uuid_to_bin({args[0]})",
         "bin_to_uuid" => $"bin_to_uuid({args[0]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by MySQL/MariaDB.")

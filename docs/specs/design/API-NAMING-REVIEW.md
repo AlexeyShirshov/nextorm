@@ -5874,3 +5874,23 @@ EC233-COMPAT. Действующий поддерживаемый consumer-по�
 ℹ️ **Наблюдения.** (1) Extend-only: маркеры аддитивны, существующие подписи не менялись. (2) ClickHouse: dialect-capability `true` для BASE64, но адаптер связывает `byte[]` как `Array(UInt8)` и читает `String` как `string` — ограничение записано в `docs/advanced/limitations.md`; это не нейминг-находка, а вопрос плана. (3) `docs/specs/**` internal, публичные ссылки на specs отсутствуют.
 
 **Итог.** P0 — нет; P1 по именам — нет; P2 — T282-1 (трекинг Шага 5). Новых публичных типов — 0, членов — 5, DIM/virtual — 12.
+
+---
+
+## Аудит 26.10.2026 — T283 (#283): MySQL `JSON_STORAGE_FREE`, uncommitted working tree (P0 — нет; P1 по именам — нет; P2 — T283-1)
+
+**Область.** Ограниченный срез [#283](https://github.com/AlexeyShirshov/nextorm/issues/283) в `1.0.9-rc4`: **1** новый публичный член `NextORM.Core.MySqlFunctions.json_storage_free(string?) -> long?` (`src/nextorm.core/Query/SqlFunctions.MySql.cs:144`, XML-doc полный). Продукт: имя добавлено в `MySqlNativeFunctions.Supports`/`Render` (`src/nextorm.mysql/MySqlDialect.cs:823,855`) и явно исключено в `MariaDbNativeFunctions.Supports` (`src/nextorm.mariadb/MariaDbDialect.cs:123`). `IMySqlFunctions`, DIM `ISqlDialect.MySqlFunctions`, `SqlDialectBase` и `MySqlFunctionTranslator` не менялись. Новых публичных типов — **0**; DIM/virtual — **0**.
+
+**Счёт поверхности.** `roslyn members NextORM.Core.MySqlFunctions` на базе коллекции — **47** (подтверждено до среза); после среза — **48** (единственный новый член `json_storage_free(string?)`). Дельта — **+1**. T281/T282 добавили члены другим типам (`PostgresFunctions`/`CommonFunctions`/`SqlServerFunctions`), поэтому база `MySqlFunctions` осталась 47 и слепое «48» не предполагалось. `PublicAPI.*.txt` — **0** (Шаг 5, issue #53, открыт).
+
+**P0 — нет.** BCL-конфликтов нет: `json_storage_free` — snake_case-зеркало SQL-токена в принятом DSL-исключении **P1-10**; nullable `long?` соответствует серверному результату (SQL NULL → NULL, `0` — реальное значение).
+
+**P1 по именам — нет.** Один обязательный аргумент `string?`; overload/`params`/generic/optional отсутствуют (проверено тестом формы API). XML-doc полный; `dotnet build nextorm.slnx -c Debug` — **0 warnings / 0 errors** при `GenerateDocumentationFile=true` + `TreatWarningsAsErrors=true`, `NoWarn` — 0 ⇒ CS1591 гейтится.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| T283-1 | **P2 (трекинг Шага 5)** | `Query/SqlFunctions.MySql.cs:144`; `PublicAPI.*.txt` — **0** | Новый публичный член `MySqlFunctions` не попал в inventory заморозки. Продолжение MY1/MD1/Шаг 5 (issue #53); `PublicApiAnalyzers`/ApiCompat не подключены | При заморозке внести подпись `json_storage_free(string?) -> long?`; отдельной записи поверх MY1/MD1 не требуется |
+
+ℹ️ **Наблюдения.** (1) Extend-only: только новый член существующего типа; внешний реализатор `ISqlDialect` компилируется без доработки. (2) `docs/specs/**` internal, публичные ссылки на specs отсутствуют; EN+RU доки обновлены (`guide/provider-specific-sql/mysql.md` +RU, `scalar-functions/08-reference.md` +RU). (3) Срез не закрывает #283: `JSON_STORAGE_SIZE` и остальные имена остаются в §3; T284 (`JSON_EQUALS`/`JSON_NORMALIZE`) не затронут.
+
+**Итог.** P0 — нет; P1 по именам — нет; P2 — T283-1 (трекинг Шага 5). Новых публичных типов — 0, членов — 1, DIM/virtual — 0.

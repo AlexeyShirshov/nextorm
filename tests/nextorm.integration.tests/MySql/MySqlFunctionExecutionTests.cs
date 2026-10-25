@@ -1,5 +1,10 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Globalization;
 using FluentAssertions;
+using MySqlConnector;
 using NextORM.Core;
+using NextORM.MySql;
 
 namespace NextORM.Integration.Tests;
 
@@ -293,4 +298,196 @@ public sealed class MySqlFunctionExecutionTests : ProviderTestSuite
         r.MergePatch.Should().Contain("\"b\"");
         r.MergePreserve.Should().Contain("\"a\"");
     }
+
+    [Fact]
+    public void JsonStorageFree_ShouldMatchRawSqlForLiteralAndColumnValues()
+    {
+        using var context = CreateProbeContext();
+        try
+        {
+            CreateProbeTable(context);
+            Execute(context, "insert into t283_json_storage (id, payload) values (1, '{\"a\":1}'), (2, null)");
+            const string Doc = "{\"a\":1}";
+
+            var rawObject = RawLong(context, "select json_storage_free('{\"a\":1}')");
+            var rawScalar = RawLong(context, "select json_storage_free('123')");
+            var rawArray = RawLong(context, "select json_storage_free('[1,2]')");
+            var rawJsonNull = RawLong(context, "select json_storage_free('null')");
+
+            var translatedObject = context.From<IT283JsonStorage>()
+                .Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.MySql.json_storage_free("{\"a\":1}"))
+                .First();
+            var translatedScalar = context.From<IT283JsonStorage>()
+                .Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.MySql.json_storage_free("123"))
+                .First();
+            var translatedArray = context.From<IT283JsonStorage>()
+                .Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.MySql.json_storage_free("[1,2]"))
+                .First();
+            var translatedJsonNull = context.From<IT283JsonStorage>()
+                .Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.MySql.json_storage_free("null"))
+                .First();
+            var translatedCaptured = context.From<IT283JsonStorage>()
+                .Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.MySql.json_storage_free(Doc))
+                .First();
+            var translatedBound = context.From<IT283JsonStorage>()
+                .Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.MySql.json_storage_free(SqlFunctions.Parameter<string>(0)))
+                .First(Doc);
+            var translatedColumn = context.From<IT283JsonStorage>()
+                .Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.MySql.json_storage_free(x.Payload))
+                .First();
+
+            translatedObject.Should().Be(rawObject, "the object literal must equal the raw oracle");
+            translatedScalar.Should().Be(rawScalar, "the scalar literal must equal the raw oracle");
+            translatedArray.Should().Be(rawArray, "the array literal must equal the raw oracle");
+            translatedJsonNull.Should().Be(rawJsonNull, "the JSON text null must equal the raw oracle");
+            translatedCaptured.Should().Be(rawObject, "a captured string must equal the raw oracle");
+            translatedBound.Should().Be(rawObject, "a bound parameter must equal the raw oracle");
+            translatedColumn.Should().Be(rawObject, "the JSON column value must equal the raw oracle");
+        }
+        finally
+        {
+            DropProbeTable(context);
+        }
+    }
+
+    [Fact]
+    public void JsonStorageFree_ShouldPreserveSqlNull()
+    {
+        using var context = CreateProbeContext();
+        try
+        {
+            CreateProbeTable(context);
+            Execute(context, "insert into t283_json_storage (id, payload) values (1, '{\"a\":1}'), (2, null)");
+
+            var rawNull = RawScalar(context, "select json_storage_free(null)");
+            (rawNull is null or DBNull).Should().BeTrue("the raw oracle maps SQL NULL to NULL");
+
+            context.From<IT283JsonStorage>()
+                .Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.MySql.json_storage_free(null))
+                .FirstOrDefault()
+                .Should().BeNull("a SQL NULL literal is not converted to zero");
+
+            context.From<IT283JsonStorage>()
+                .Where(x => x.Id == 2)
+                .Select(x => SqlFunctions.MySql.json_storage_free(x.Payload))
+                .FirstOrDefault()
+                .Should().BeNull("a NULL JSON column is not converted to zero");
+        }
+        finally
+        {
+            DropProbeTable(context);
+        }
+    }
+
+    [Fact]
+    public void JsonStorageFree_ShouldMatchRawSqlAfterJsonUpdates()
+    {
+        using var context = CreateProbeContext();
+        try
+        {
+            CreateProbeTable(context);
+            Execute(context, "insert into t283_json_storage (id, payload) values (3, '{\"a\":1000,\"b\":\"wxyz\",\"c\":[1,3,5,7]}')");
+
+            var rawBefore = RawLong(context, "select json_storage_free(payload) from t283_json_storage where id = 3");
+            var translatedBefore = context.From<IT283JsonStorage>()
+                .Where(x => x.Id == 3)
+                .Select(x => SqlFunctions.MySql.json_storage_free(x.Payload))
+                .First();
+            translatedBefore.Should().Be(rawBefore, "the pre-update value must equal the raw oracle");
+
+            Execute(context, "update t283_json_storage set payload = json_set(payload, '$.b', 'a') where id = 3");
+
+            var rawAfter = RawLong(context, "select json_storage_free(payload) from t283_json_storage where id = 3");
+            var translatedAfter = context.From<IT283JsonStorage>()
+                .Where(x => x.Id == 3)
+                .Select(x => SqlFunctions.MySql.json_storage_free(x.Payload))
+                .First();
+
+            rawAfter.Should().NotBeNull("the partially updated column keeps a JSON value");
+            translatedAfter.Should().Be(rawAfter, "the post-update value must equal the raw oracle; a positive count is not assumed");
+        }
+        finally
+        {
+            DropProbeTable(context);
+        }
+    }
+
+    [Fact]
+    public void JsonStorageFree_ShouldRejectMalformedJsonLikeRawSql()
+    {
+        using var context = CreateProbeContext();
+        try
+        {
+            CreateProbeTable(context);
+            Execute(context, "insert into t283_json_storage (id, payload) values (1, '{\"a\":1}')");
+
+            var raw = FluentActions.Invoking(() => RawScalar(context, "select json_storage_free('{bad')"))
+                .Should().Throw<MySqlException>("the raw oracle rejects malformed JSON").Subject.Single();
+            var translated = FluentActions.Invoking(() => context.From<IT283JsonStorage>()
+                    .Where(x => x.Id == 1)
+                    .Select(x => SqlFunctions.MySql.json_storage_free("{bad"))
+                    .First())
+                .Should().Throw<MySqlException>("the translated query rejects malformed JSON").Subject.Single();
+
+            translated.Number.Should().Be(raw.Number, "both paths must report the same MySQL error number");
+            translated.SqlState.Should().Be(raw.SqlState, "both paths must report the same SQLSTATE");
+        }
+        finally
+        {
+            DropProbeTable(context);
+        }
+    }
+
+    private static MySqlDataContext CreateProbeContext()
+    {
+        var context = new MySqlDataContext(MySqlContainer.ConnectionString, new DataContextBuilder());
+        context.EnsureConnectionOpen();
+        return context;
+    }
+
+    private static void CreateProbeTable(MySqlDataContext context)
+    {
+        Execute(context, "drop temporary table if exists t283_json_storage");
+        Execute(context, "create temporary table t283_json_storage (id int not null primary key, payload json null)");
+    }
+
+    private static void DropProbeTable(MySqlDataContext context) =>
+        Execute(context, "drop temporary table if exists t283_json_storage");
+
+    private static void Execute(MySqlDataContext context, string sql)
+    {
+        using var command = context.CreateCommand(sql);
+        command.ExecuteNonQuery();
+    }
+
+    private static object? RawScalar(MySqlDataContext context, string sql)
+    {
+        using var command = context.CreateCommand(sql);
+        return command.ExecuteScalar();
+    }
+
+    private static long? RawLong(MySqlDataContext context, string sql)
+    {
+        var value = RawScalar(context, sql);
+        return value is null or DBNull ? null : Convert.ToInt64(value, CultureInfo.InvariantCulture);
+    }
+}
+
+[SqlTable("t283_json_storage")]
+public interface IT283JsonStorage
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("payload")]
+    string? Payload { get; set; }
 }

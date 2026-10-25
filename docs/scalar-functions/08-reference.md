@@ -51,6 +51,16 @@ ClickHouse renders `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds
 `filter (where ...)` clause and the `regr_*`/boolean aggregates with `NotSupportedException`; see the
 [ClickHouse provider](../connecting-providers/clickhouse.md).
 
+## MySQL-specific functions
+
+The names on [`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md) render only on the MySQL
+provider; MariaDB, PostgreSQL, SQL Server, SQLite, ClickHouse and the in-memory provider reject them
+with `NotSupportedException`.
+
+| Member | SQL | Result | Availability |
+|---|---|---|---|
+| `json_storage_free(json)` | `json_storage_free(...)` | `long?` — bytes freed in the binary `JSON` column value by a partial `JSON_SET`/`JSON_REPLACE`/`JSON_REMOVE`; `0` when nothing was freed, `null` for SQL NULL | [MySQL only](../guide/provider-specific-sql/mysql.md#native-functions); MariaDB rejects it |
+
 ## Explicitly unsupported
 
 These throw `NotSupportedException` rather than emitting SQL with different semantics:

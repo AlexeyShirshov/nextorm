@@ -99,6 +99,17 @@ public class MySqlFunctionsSqlGenerationTests
     }
 
     [Fact]
+    public void JsonStorageFree_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_storage_free("{\"a\":1}")));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*json_storage_free*not supported*");
+    }
+
+    [Fact]
     public void UuidFunctions_ShouldThrowBecauseNotSupported()
     {
         using var ctx = MariaDbTestContext.Create();

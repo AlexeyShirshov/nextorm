@@ -51,6 +51,16 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 `filter (where ...)`, агрегаты `regr_*` и логические агрегаты через `NotSupportedException`; см.
 [Провайдер ClickHouse](../connecting-providers/clickhouse.md).
 
+## Функции только для MySQL
+
+Имена из [`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md) рендерятся только провайдером
+MySQL; MariaDB, PostgreSQL, SQL Server, SQLite, ClickHouse и in-memory-провайдер отклоняют их с
+`NotSupportedException`.
+
+| Член | SQL | Результат | Доступность |
+|---|---|---|---|
+| `json_storage_free(json)` | `json_storage_free(...)` | `long?` — байты, освобождённые в бинарном значении `JSON`-колонки при частичном `JSON_SET`/`JSON_REPLACE`/`JSON_REMOVE`; `0`, если ничего не освободилось, `null` для SQL NULL | [только MySQL](../guide/provider-specific-sql/mysql.md#native-functions); MariaDB отклоняет |
+
 ## Явно не поддерживается
 
 Эти случаи бросают `NotSupportedException`, а не генерируют SQL с другой семантикой:

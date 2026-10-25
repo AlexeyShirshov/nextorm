@@ -53,6 +53,7 @@ where find_in_set(status, 'new,open') > 0
 | `json_merge_patch` / `json_merge_preserve` | то же | merge-patch по RFC 7396 / слияние с дублями |
 | `json_array_append` / `json_array_insert` | то же | добавить в конец / вставить в массив по пути |
 | `json_depth` / `json_keys` / `json_length` / `json_type` | то же | интроспекция JSON |
+| `json_storage_free(json)` | `json_storage_free(...)` | **только MySQL** — байты, освобождённые в бинарном значении `JSON`-колонки при частичном `JSON_SET`/`JSON_REPLACE`/`JSON_REMOVE`; `0`, если ничего не освободилось, `null` для SQL NULL |
 | `uuid_to_bin(uuid)` / `bin_to_uuid(binary)` | то же | **только MySQL** (см. ниже) |
 
 Методы мутации JSON принимают одну пару `path`/`value`; MySQL допускает и несколько пар, но
@@ -65,12 +66,18 @@ var updated = dataContext.From<IComplexEntity>()
     .First();
 ```
 
+`json_storage_free` — диагностика бинарного JSON-хранилища MySQL: после частичного обновления она
+показывает, сколько байт освободило изменение на месте, поэтому число описывает хранимое
+представление, а не длину текста JSON. Для литералов, captured-значений и колонок, где обновление
+ничего не освободило, результат `0`; при SQL NULL — `null` (никогда не `0`). Реализует её только MySQL.
+
 ## MariaDB
 
 `nextorm.mariadb` наследует `MariaDbDialect` от `MySqlDialect`, поэтому получает всю поверхность выше.
-Исключения — `uuid_to_bin`/`bin_to_uuid`: в MariaDB таких функций нет (преобразование идёт через
-`CAST(... AS BINARY(16))`/`CAST(... AS UUID)`), поэтому `MariaDbDialect.MySqlFunctions` сообщает их как
-неподдерживаемые, и запрос отклоняется с `NotSupportedException`.
+Исключения — `uuid_to_bin`/`bin_to_uuid` и `json_storage_free`: в MariaDB таких функций нет
+(`uuid_to_bin`/`bin_to_uuid` преобразуют через `CAST(... AS BINARY(16))`/`CAST(... AS UUID)`, а учёта
+освобождённого места в бинарном JSON MariaDB не реализует), поэтому `MariaDbDialect.MySqlFunctions`
+сообщает их как неподдерживаемые, и запрос отклоняется с `NotSupportedException`.
 
 Поверх наследуемого набора MariaDB добавляет собственные имена через тот же вход `SqlFunctions.MySql`.
 Диалект MySQL их не сообщает, поэтому запрос MySQL с таким именем отклоняется с `NotSupportedException`:

@@ -100,7 +100,8 @@ public sealed class MariaDbDialect : MySqlDialect
 /// <summary>
 /// Decorates the MySQL native-function renderer for MariaDB: every MySQL name is inherited except
 /// <c>uuid_to_bin</c>/<c>bin_to_uuid</c>, which MariaDB has no function for (it uses
-/// <c>cast(... as binary(16))</c>/<c>cast(... as uuid)</c>), and the MariaDB-only names are added here
+/// <c>cast(... as binary(16))</c>/<c>cast(... as uuid)</c>), and <c>json_storage_free</c>, whose
+/// binary-JSON update accounting MariaDB does not implement, and the MariaDB-only names are added here
 /// (extended regexp, <c>nvl</c>/<c>nvl2</c>, the Oracle-compatible date/number conversions, <c>kdf</c>,
 /// <c>xxh3</c>/<c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c> and sequence access). MySQL's
 /// renderer does not report the MariaDB-only names, so MySQL rejects them.
@@ -120,7 +121,7 @@ internal sealed class MariaDbNativeFunctions : IMySqlFunctions
 
     /// <inheritdoc/>
     public bool Supports(string name) =>
-        IsMariaDbOnly(name) || (name is not ("uuid_to_bin" or "bin_to_uuid") && Inner.Supports(name));
+        IsMariaDbOnly(name) || (name is not ("uuid_to_bin" or "bin_to_uuid" or "json_storage_free") && Inner.Supports(name));
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch

@@ -53,6 +53,7 @@ where find_in_set(status, 'new,open') > 0
 | `json_merge_patch` / `json_merge_preserve` | same | RFC 7396 merge-patch / duplicate-preserving merge |
 | `json_array_append` / `json_array_insert` | same | append to / insert into the array at the path |
 | `json_depth` / `json_keys` / `json_length` / `json_type` | same | JSON introspection |
+| `json_storage_free(json)` | `json_storage_free(...)` | **MySQL only** — bytes freed in the binary `JSON` column value by an in-place `JSON_SET`/`JSON_REPLACE`/`JSON_REMOVE`; `0` when nothing was freed, `null` for SQL NULL |
 | `uuid_to_bin(uuid)` / `bin_to_uuid(binary)` | same | **MySQL only** (see below) |
 
 JSON mutation methods take a single `path`/`value` pair; MySQL accepts further pairs but the portable
@@ -65,12 +66,19 @@ var updated = dataContext.From<IComplexEntity>()
     .First();
 ```
 
+`json_storage_free` is a diagnostic for MySQL's binary JSON storage: after a partial update it reports
+how many bytes the in-place change freed, so the number describes the stored representation, not the
+length of the JSON text. It is `0` for literals, captured values and columns whose update freed nothing,
+and `null` (never `0`) when the argument is SQL NULL. Only MySQL implements it.
+
 ## MariaDB
 
 `nextorm.mariadb` derives `MariaDbDialect` from `MySqlDialect`, so it inherits the whole surface above.
-The only exceptions are `uuid_to_bin`/`bin_to_uuid`: MariaDB has no such functions (it converts
-through `CAST(... AS BINARY(16))`/`CAST(... AS UUID)`), so `MariaDbDialect.MySqlFunctions` reports them
-as unsupported and the query is rejected with `NotSupportedException`.
+The only exceptions are `uuid_to_bin`/`bin_to_uuid` and `json_storage_free`: MariaDB has no such
+functions (`uuid_to_bin`/`bin_to_uuid` convert through `CAST(... AS BINARY(16))`/`CAST(... AS UUID)`,
+and MariaDB does not implement MySQL's binary-JSON freed-space accounting), so
+`MariaDbDialect.MySqlFunctions` reports them as unsupported and the query is rejected with
+`NotSupportedException`.
 
 On top of the inherited surface, MariaDB adds its own names through the same `SqlFunctions.MySql`
 entry point. MySQL's dialect does not report them, so a MySQL query using one of them is rejected with

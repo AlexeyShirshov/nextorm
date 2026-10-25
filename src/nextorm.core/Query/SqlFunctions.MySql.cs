@@ -133,6 +133,17 @@ public class MySqlFunctions : CommonFunctions
     public string? json_type(string? json) => default!;
 
     /// <summary>
+    /// <c>json_storage_free(json)</c>: the bytes freed in the binary representation of a MySQL
+    /// <c>JSON</c> column value after it was updated in place by <c>JSON_SET</c>, <c>JSON_REPLACE</c> or
+    /// <c>JSON_REMOVE</c>. Returns <c>0</c> for a literal, a captured value or a column whose update
+    /// freed nothing, and <c>null</c> when <paramref name="json"/> is SQL NULL; an argument that is not
+    /// valid JSON fails on the server. Server-side only: the count describes MySQL's binary JSON
+    /// storage, not a portable JSON-text length, and providers that cannot express the operation reject
+    /// the call with <see cref="NotSupportedException"/>.
+    /// </summary>
+    public long? json_storage_free(string? json) => default!;
+
+    /// <summary>
     /// <c>uuid_to_bin(uuid)</c>: converts the textual UUID to its 16-byte binary representation.
     /// </summary>
     public byte[]? uuid_to_bin(string? uuid) => default!;
