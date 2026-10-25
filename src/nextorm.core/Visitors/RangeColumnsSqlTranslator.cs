@@ -70,7 +70,7 @@ internal static class RangeColumnsSqlTranslator
         if (RangeReturning.Contains(name))
         {
             if (AnyPairColumn(visitor, node))
-                throw new NotSupportedException($"The PostgreSQL range function '{name}' returns a range and cannot be expressed over a pair of columns. Use a provider with a native range type (PostgreSQL) or a range-returning projection.");
+                throw new NotSupportedException(GetRangeReturningOverPairMessage(name));
 
             return false;
         }
@@ -160,7 +160,7 @@ internal static class RangeColumnsSqlTranslator
             return operand;
 
         if (exp is MethodCallExpression call && call.Method.DeclaringType == typeof(PostgresFunctions) && RangeReturning.Contains(call.Method.Name))
-            throw new NotSupportedException($"The PostgreSQL range function '{call.Method.Name}' returns a range and cannot be expressed over a pair of columns. Use a provider with a native range type (PostgreSQL) or a range-returning projection.");
+            throw new NotSupportedException(GetRangeReturningOverPairMessage(call.Method.Name));
 
         if (RangeTypeFacts.IsRange(exp.Type) && IsConstantRange(exp))
             return ResolveConstant(visitor, exp);
@@ -171,23 +171,12 @@ internal static class RangeColumnsSqlTranslator
     private static bool TryResolvePairColumn(BaseExpressionVisitor visitor, Expression expression, out RangeOperand operand)
     {
         operand = default;
-        if (expression is not MemberExpression member || member.Member is not PropertyInfo pi)
+        if (expression is not MemberExpression member)
             return false;
         if (visitor.EntityType is null || !DataContextCache.Metadata.TryGetValue(visitor.EntityType, out var metadata))
             return false;
 
-        RangeColumnsMetadata? columns = null;
-        var props = metadata.Properties;
-        for (var i = 0; i < props.Count; i++)
-        {
-            if (MemberInfoExtensions.SameProperty(props[i].PropertyInfo, pi) && props[i].RangeColumns is not null)
-            {
-                columns = props[i].RangeColumns;
-                break;
-            }
-        }
-
-        if (columns is null)
+        if (!TryMatchPairProperty(member, metadata, out var property) || property!.RangeColumns is not { } columns)
             return false;
 
         if (visitor.IsParamMode)
@@ -203,6 +192,79 @@ internal static class RangeColumnsSqlTranslator
             new Bound(upper, $"({upper} is null)", columns.UpperInclusive));
         return true;
     }
+
+    /// <summary>
+    /// True when <paramref name="expression"/> reads a mapped entity property whose
+    /// <see cref="RangeColumnsMetadata"/> declares a column pair. Shared by the rendering path
+    /// (<see cref="TryResolvePairColumn"/>) and the prepare-time bare-projection guard so both agree
+    /// on which properties represent a range pair. The check is metadata-only: no visitor and no
+    /// runtime value is involved.
+    /// </summary>
+    /// <param name="expression">The candidate operand; conversions are unwrapped by the caller.</param>
+    /// <param name="metadata">The projection source metadata, when the source is a mapped entity.</param>
+    /// <param name="property">The matched mapped property, carrying its <see cref="RangeColumnsMetadata"/>.</param>
+    internal static bool TryMatchPairProperty(Expression expression, IEntityMetadata? metadata, out IPropertyMetadata? property)
+    {
+        property = null;
+        if (expression is not MemberExpression member || member.Member is not PropertyInfo pi || metadata is null)
+            return false;
+
+        var props = metadata.Properties;
+        for (var i = 0; i < props.Count; i++)
+        {
+            if (MemberInfoExtensions.SameProperty(props[i].PropertyInfo, pi) && props[i].RangeColumns is not null)
+            {
+                property = props[i];
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The single diagnostic source for a range-returning PostgreSQL function used over a mapped
+    /// column pair. Reused by the rendering guards and by the prepare-time bare-projection guard so the
+    /// text stays byte-identical on every route.
+    /// </summary>
+    internal static string GetRangeReturningOverPairMessage(string name)
+        => $"The PostgreSQL range function '{name}' returns a range and cannot be expressed over a pair of columns. Use a provider with a native range type (PostgreSQL) or a range-returning projection.";
+
+    /// <summary>
+    /// True when a bare projection body is a range-returning PostgreSQL function and at least one of its
+    /// arguments (conversion wrappers stripped) matches a mapped <see cref="RangeColumnsAttribute"/>
+    /// pair. Used by the query preparer where no projection-shape branch matches the bare
+    /// <see cref="Range{T}"/> result, so the empty select list would otherwise reach the row mapper.
+    /// Metadata-only: no visitor is constructed and no cache is mutated.
+    /// </summary>
+    internal static bool IsRangeReturningOverPair(Expression body, Type? entityType, out string? functionName)
+    {
+        functionName = null;
+        if (TypeFacts.UnwrapConvert(body) is not MethodCallExpression call
+            || !RangeReturning.Contains(call.Method.Name))
+            return false;
+
+        if (entityType is null || !DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
+            return false;
+
+        var arguments = call.Arguments;
+        for (var i = 0; i < arguments.Count; i++)
+        {
+            if (TryMatchPairProperty(TypeFacts.UnwrapConvert(arguments[i]), metadata, out _))
+            {
+                functionName = call.Method.Name;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Throws the shared range-returning-over-pair diagnostic for <paramref name="functionName"/>.
+    /// </summary>
+    internal static void ThrowRangeReturningOverPair(string functionName)
+        => throw new NotSupportedException(GetRangeReturningOverPairMessage(functionName));
 
     private static string RenderPairColumn(BaseExpressionVisitor visitor, MemberExpression member, RangeColumnRole role)
     {

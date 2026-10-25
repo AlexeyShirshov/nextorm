@@ -824,6 +824,18 @@ public partial class QueryCommand
                         throw new NotSupportedException(
                             $"The bare top-level scalar projection '{domMember.Type}' at Select position 0 is not supported; project it inside a named shape (for example Select(x => new {{ x.Doc }}) or a DTO) instead.");
                     }
+                    // A bare projection of a range-returning PostgreSQL function over a mapped
+                    // [RangeColumns] pair has no scalar SQL form and no projection shape, so without this
+                    // guard the select list stays empty and the row mapper fails with the opaque
+                    // "Incorrect number of arguments for constructor". Reject it during preparation with
+                    // the same diagnostic the rendering guards produce. The check is metadata-only (no
+                    // visitor construction, no cache mutation) and only classifies the existing
+                    // RangeReturning set; anonymous projections and predicates keep their earlier
+                    // translator path unchanged.
+                    else if (RangeColumnsSqlTranslator.IsRangeReturningOverPair(cmd._exp.Body, srcType, out var rangeReturningName))
+                    {
+                        RangeColumnsSqlTranslator.ThrowRangeReturningOverPair(rangeReturningName!);
+                    }
                     // Final invariant: a structural direct-projection read (Select(p => p.ItemN)) that no
                     // earlier branch handled and whose item is not a mapped entity must fail closed. The
                     // scalar/tuple/DOM branches above run first, so this guard never masks a supported
