@@ -131,7 +131,7 @@ PostgreSQL only):
 |---|---|
 | `SqlFunctions.Postgres.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, 0, d, h, mi, s)` (PostgreSQL's `weeks` is pinned to `0`) |
 | `SqlFunctions.Postgres.make_time(h, mi, sec)` / `make_timestamp(y, mo, d, h, mi, sec)` | `make_time(...)` / `make_timestamp(...)` |
-| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (the result is an `interval`; a whole-month part is read back as 30 days) |
+| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (the result is an `interval`; materialising it into a `TimeSpan` column throws `InvalidCastException` when the returned value carries a non-zero month component — either sign — naming calendar months, so a month is never read back as 30 days; a zero-month value converts exactly) |
 | `SqlFunctions.Postgres.date_bin(stride, source, origin)` | `date_bin(cast(stride as interval), source, origin)` |
 | `SqlFunctions.Postgres.justify_days(interval)` / `justify_hours(interval)` | `justify_days(interval)` / `justify_hours(interval)` |
 | `SqlFunctions.Postgres.to_char(value, format)` | `to_char(value, format)` |
@@ -338,6 +338,13 @@ like the native function. `timefromparts` materialises as a `TimeSpan`, the `sma
 `datetime2` builders as a `DateTime`, and the clock- and offset-returning functions as a `DateTime` /
 `DateTimeOffset` matching the T-SQL result type. This is the date half of the SQL Server-only scalar
 surface; the other T-SQL scalars are documented on the matching category pages.
+
+Reading a native `time` does not change the mapped storage type. A computed `timefromparts`/`cast`
+result and a physical `time`, `time(3)` or `time(7)` column are read as a `TimeSpan` per row, keeping
+the precision the value carries. A mapped **duration property** — a `TimeSpan` property with
+`[Duration(...)]` or the fluent `Duration(...)` — still stores `bigint` on SQL Server and still scales
+through its `DurationUnit`; it can hold negative values and values of 24 h or more, neither of which a
+native `time` can represent. A `TimeOnly` projection is not supported.
 
 ## Date conversion and parts (ClickHouse)
 

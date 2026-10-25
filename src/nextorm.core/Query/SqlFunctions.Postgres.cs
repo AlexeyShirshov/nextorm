@@ -428,7 +428,12 @@ namespace NextORM.Core;
         /// <summary>The substring matched by the first POSIX regular expression match in <paramref name="value"/> with <paramref name="flags"/>.</summary>
         public string? regexp_substr(string? value, string? pattern, string? flags) => default!;
 
-        /// <summary>Builds an interval from its parts.</summary>
+        /// <summary>
+        /// Builds an interval from its parts. A mapped <see cref="TimeSpan"/> result is supported only
+        /// for zero-month values: the mapper rejects a returned interval with a non-zero month component
+        /// (either sign) through <see cref="InvalidCastException"/> and converts the zero-month days and
+        /// microseconds exactly.
+        /// </summary>
         public TimeSpan? make_interval(int years, int months, int days, int hours, int minutes, double seconds) => default!;
 
         /// <summary>
@@ -440,17 +445,27 @@ namespace NextORM.Core;
         /// <summary>Builds a timestamp from its parts (<c>make_timestamp</c>).</summary>
         public DateTime? make_timestamp(int year, int month, int day, int hour, int minute, double second) => default!;
 
-        /// <summary>Adjusts an interval so that 30-day units are represented as months.</summary>
+        /// <summary>
+        /// Adjusts an interval so that 30-day units are represented as months, so the returned value can
+        /// carry a month component: the mapper rejects a non-zero month component (either sign) through
+        /// <see cref="InvalidCastException"/> and converts a zero-month result exactly.
+        /// </summary>
         public TimeSpan? justify_days(TimeSpan? interval) => default!;
 
-        /// <summary>Adjusts an interval so that 24-hour units are represented as days.</summary>
+        /// <summary>
+        /// Adjusts an interval so that 24-hour units are represented as days. The returned interval is
+        /// subject to the same mapper rule: a non-zero month component (either sign) is rejected through
+        /// <see cref="InvalidCastException"/> and a zero-month value converts exactly.
+        /// </summary>
         public TimeSpan? justify_hours(TimeSpan? interval) => default!;
 
         /// <summary>
         /// The interval between two timestamps, subtracting <paramref name="b"/> from
         /// <paramref name="a"/> (<c>age</c>). PostgreSQL's <c>age</c> returns an <c>interval</c> that can
-        /// carry whole months, which a <see cref="TimeSpan"/> cannot represent; PostgreSQL treats a
-        /// month as 30 days when the value is read back as a <see cref="TimeSpan"/>.
+        /// carry whole months, which a <see cref="TimeSpan"/> cannot represent: on the mapped-column path
+        /// the mapper rejects a returned interval with a non-zero month component (either sign) through
+        /// <see cref="InvalidCastException"/> naming calendar months, and a month is never read back as 30
+        /// days. A zero-month value converts exactly. Other materialisation paths are not covered.
         /// </summary>
         public TimeSpan? age(DateTime? a, DateTime? b) => default!;
 

@@ -324,6 +324,25 @@ where (b = true)
 settings max_threads = 2
 ```
 
+`Settings` is the trailer of the clause order: it is emitted after `LIMIT ... BY` and after
+`LIMIT`/`OFFSET`, and ClickHouse rejects a `LIMIT` placed after `SETTINGS` (server Code 62). A scalar
+terminal adds paging — `First`/`FirstOrDefault` render `limit 1`, `Single`/`SingleOrDefault` render
+`limit 2` — so the settings clause follows it:
+
+```csharp
+var count = dataContext.From<IComplexEntity>()
+    .Settings(("max_threads", "2"))
+    .Select(c => SqlFunctions.Sql.count())
+    .First();
+```
+
+```sql
+select toInt32(count(*))
+ from complex_entity
+limit 1
+ settings max_threads = 2
+```
+
 `Final()` forces the merge of a ReplacingMergeTree/CollapsingMergeTree before the read; `Sample` reads a
 fraction `[0, 1]` of the rows; `PreWhere` filters before the regular `WHERE` so the read can skip other
 columns; `Settings` appends a trailing clause whose values are rendered verbatim (only pass trusted

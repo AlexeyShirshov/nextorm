@@ -444,6 +444,12 @@ internal readonly struct SqlBuilder
                     }
                 }
 
+                if (!pageApplied && !_ctx.ParamMode && !cmd.Paging.IsEmpty)
+                {
+                    sqlBuilder!.Append(SqlText.NewLine);
+                    _ctx.Dialect.MakePage(cmd.Paging, sqlBuilder, _ctx.KeywordCase);
+                }
+
                 if (cmd.Settings is { Count: > 0 } settings)
                 {
                     if (!_ctx.Dialect.SupportsSettings)
@@ -454,12 +460,6 @@ internal readonly struct SqlBuilder
                         sqlBuilder!.Append(SqlText.NewLine);
                         sqlBuilder.Append(_ctx.Dialect.MakeSettings(settings, _ctx.KeywordCase));
                     }
-                }
-
-                if (!pageApplied && !_ctx.ParamMode && !cmd.Paging.IsEmpty)
-                {
-                    sqlBuilder!.Append(SqlText.NewLine);
-                    _ctx.Dialect.MakePage(cmd.Paging, sqlBuilder, _ctx.KeywordCase);
                 }
             }
             else if (!_ctx.ParamMode && sqlBuilder!.Length > 0)

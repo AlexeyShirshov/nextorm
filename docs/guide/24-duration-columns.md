@@ -96,7 +96,7 @@ Writes go through the same conversion, including bulk insert.
 
 ## Details and limitations
 
-* PostgreSQL `interval` also stores months, which a `TimeSpan` cannot express; a value with whole months is not round-tripped faithfully. Use a unit-based integer column if months matter.
+* PostgreSQL `interval` also stores months, which a `TimeSpan` cannot express losslessly. Reading a mapped interval whose returned value carries a non-zero month component — either sign — into a `TimeSpan` column throws `InvalidCastException` instead of approximating; a zero-month value (days plus microseconds) converts exactly when it fits a `TimeSpan`, and an unrepresentable value fails with `OverflowException` instead of wrapping. Use a unit-based integer column if months matter.
 * SQL Server has a `time` type, but it is a time-of-day (less than 24 hours); nextorm therefore uses an integer column so durations longer than a day are representable.
 * A non-tick unit truncates the sub-unit remainder, exactly like a database column of that unit.
 * Only a directly projected duration **property** carries its declared unit; a computed duration expression (`Select(x => x.Estimate + something)`) is read with the default ticks unit. Project the property itself when a non-tick unit is in use.

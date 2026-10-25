@@ -33,6 +33,11 @@
 - date arithmetic is enabled ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic) is `true`): `SqlFunctions.Sql.date_add`/`end_of_month`
   and the `DateTime.Add*` methods render PostgreSQL interval arithmetic
   (`x + (n * interval '1 day')`, `date_trunc('month', x) + interval '1 month - 1 day'`);
+- a `TimeSpan` column maps a PostgreSQL `interval` only for **zero-month** values: a returned interval
+  carrying a non-zero month component (either sign) is rejected with `InvalidCastException` naming
+  calendar months, zero-month days and microseconds convert exactly with checked arithmetic (an
+  unrepresentable value fails with `OverflowException` instead of wrapping), and `time`/`timetz`
+  columns keep the driver's `TimeSpan` accessor unchanged;
 - the `string_agg`/`array_agg` aggregates are enabled ([`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates) is `true`);
 - full-text search is enabled ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) is `true`): `SqlFunctions.Sql.contains` renders
   `to_tsvector(col) @@ plainto_tsquery(search)` and `freetext` `websearch_to_tsquery(search)`; ranking is

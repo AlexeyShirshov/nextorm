@@ -57,7 +57,7 @@
 | Конвертеры значений | yes | yes | yes (`HasConversion`) |
 | Динамические колонки (хранилище `[DynamicColumns]`) | yes | yes | no (обход через JSON/TPH) |
 | JSON-колонка ↔ объект | yes | partial ([linq2db#1661](https://github.com/linq2db/linq2db/issues/1661)) | yes (JSON-колонки) |
-| Колонки-длительности / interval | yes | yes | partial (маппинг interval провайдером) |
+| Колонки-длительности / interval | yes (PostgreSQL `interval` → `TimeSpan` — только для представимых значений с нулевыми месяцами) | yes | partial (маппинг interval провайдером) |
 | Нативные JSON-документы | yes на PostgreSQL | partial (тип `json`/`jsonb` плюс `@>`, `#>>` и `Json.Value`; не полная библиотека `jsonb_*`) | partial (маппинг JSON-колонок + Npgsql `EF.Functions.Json*`) |
 | JSON-скаляры (`json_value`/`json_query`/`json_modify`, `isjson`) | yes (SQL Server, MySQL/MariaDB) | yes | partial |
 | Строковый JSON + нативные JSON- и dictionary-функции (ClickHouse) | yes на ClickHouse | no | no |

@@ -83,6 +83,12 @@ ctx.From<ISimpleEntity>().Offset(10).OrderBy(x => x.Id).Select(x => x.Id);
 // ... order by id offset 10 rows
 ```
 
+`WITH TIES` is supported only in the no-offset `TOP(n) WITH TIES` form. A positive `OFFSET` together
+with `WithTies()` — for example `Page(5, 3).WithTies()` or `Offset(3).Limit(5).WithTies()` — throws
+`NotSupportedException` during preparation, before any SQL is rendered, sent or cached: T-SQL accepts
+`WITH TIES` only in `TOP`, not in `OFFSET … FETCH … ONLY`. Use `WithTies()` without an `OFFSET`, or
+ordinary paging without ties.
+
 ## Aggregates and scalar functions
 
 ```csharp

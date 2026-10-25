@@ -132,7 +132,7 @@ time) и материализуют `DateTimeOffset` с нулевым offset'о
 |---|---|
 | `SqlFunctions.Postgres.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, 0, d, h, mi, s)` (параметр `weeks` у PostgreSQL зафиксирован в `0`) |
 | `SqlFunctions.Postgres.make_time(h, mi, sec)` / `make_timestamp(y, mo, d, h, mi, sec)` | `make_time(...)` / `make_timestamp(...)` |
-| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (результат — `interval`; целая часть в месяцах читается как 30 дней) |
+| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (результат — `interval`; при материализации в колонку `TimeSpan` бросается `InvalidCastException`, если возвращённое значение несёт ненулевую месячную составляющую — любого знака, — с указанием календарных месяцев, поэтому месяц никогда не читается как 30 дней; значение с нулевыми месяцами конвертируется точно) |
 | `SqlFunctions.Postgres.date_bin(stride, source, origin)` | `date_bin(cast(stride as interval), source, origin)` |
 | `SqlFunctions.Postgres.justify_days(interval)` / `justify_hours(interval)` | `justify_days(interval)` / `justify_hours(interval)` |
 | `SqlFunctions.Postgres.to_char(value, format)` | `to_char(value, format)` |
@@ -341,6 +341,13 @@ select sysdatetime() as [Now], sysdatetimeoffset() as [NowOffset], sysutcdatetim
 `DateTime` / `DateTimeOffset`, соответствующие типу результата T-SQL. Это датовая половина
 скалярной поверхности, специфичной для SQL Server; остальные T-SQL-скаляры описаны на
 соответствующих категорийных страницах.
+
+Чтение нативного `time` не меняет тип хранения. Вычисленный результат `timefromparts`/`cast` и
+физическая колонка `time`, `time(3)` или `time(7)` читаются как `TimeSpan` построчно, с сохранением
+точности значения. Свойство-**длительность** (свойство `TimeSpan` с `[Duration(...)]` или fluent
+`Duration(...)`) по-прежнему хранится как `bigint` в SQL Server и по-прежнему масштабируется через
+свой `DurationUnit`; оно может быть отрицательным или не меньше 24 ч, что нативный `time` представить
+не может. Проекция `TimeOnly` не поддерживается.
 
 ## Приведение и части даты (ClickHouse)
 

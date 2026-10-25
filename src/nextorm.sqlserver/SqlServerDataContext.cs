@@ -371,7 +371,9 @@ public class SqlServerDataContext : DataContext
 
     /// <summary>
     /// Maps projected numeric columns by reading the raw value and converting it to the projected CLR
-    /// type, because SqlClient typed getters throw when the field type does not match.
+    /// type, because SqlClient typed getters throw when the field type does not match. A
+    /// <see cref="TimeSpan"/> projection is dispatched per row between a native <c>time</c> field and an
+    /// integer-backed duration.
     /// </summary>
     /// <param name="column">The projected column being read.</param>
     /// <param name="param">The data-reader expression the accessor is built from.</param>
@@ -384,6 +386,52 @@ public class SqlServerDataContext : DataContext
             return base.MapColumnExpression(column, param);
 
         var type = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+
+        if (type == typeof(TimeSpan))
+        {
+            // SqlClient returns a native TimeSpan for time/timefromparts, while a mapped duration property
+            // stays bigint and reaches the same mapper. The storage type is only known once the reader is
+            // open, so dispatch on the runtime field type: a native value is already a TimeSpan and must
+            // not be scaled by DurationUnit, an integer keeps the legacy read through the base mapping.
+            var timeIndex = Expression.Constant(column.Index);
+            var fieldType = Expression.Variable(typeof(Type), "fieldType");
+            var assign = Expression.Assign(fieldType, Expression.Call(param, GetFieldTypeMI, timeIndex));
+
+            Expression native = Expression.Convert(
+                Expression.Call(param, GetValueMethod, timeIndex),
+                typeof(TimeSpan));
+
+            if (native.Type != column.PropertyType)
+                native = Expression.Convert(native, column.PropertyType);
+
+            var timeValue = Expression.Block(
+                [fieldType],
+                assign,
+                Expression.Condition(
+                    Expression.ReferenceEqual(fieldType, Expression.Constant(typeof(TimeSpan), typeof(Type))),
+                    native,
+                    base.MapColumnExpression(column, param)));
+
+            if (column.Nullable)
+            {
+                // The native unbox must not see DBNull, so the null policy short-circuits before it.
+                return Expression.Condition(
+                    Expression.Call(param, IsDBNullMI, timeIndex),
+                    Expression.Constant(null, column.PropertyType),
+                    timeValue);
+            }
+
+            if (column.DefaultOnNull)
+            {
+                // A non-nullable *OrDefault scalar: SQL NULL means no row, so return default(T).
+                return Expression.Condition(
+                    Expression.Call(param, IsDBNullMI, timeIndex),
+                    Expression.Default(column.PropertyType),
+                    timeValue);
+            }
+
+            return timeValue;
+        }
 
         if (!IsNumeric(type))
             return base.MapColumnExpression(column, param);

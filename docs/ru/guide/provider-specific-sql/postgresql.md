@@ -199,6 +199,11 @@ Native-поверхность реализована только в PostgreSQL;
 (`to_char`/`to_date`/`to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) и
 конструкторы массивов, всё гейтится `SupportsExtendedScalarFunctions`.
 
+На пути смэппированных колонок правило длительности определяется **возвращённым** interval, а не именем
+функции: `make_interval`, нормализация `justify_*` и `age` одинаково отклоняют результат с ненулевой
+месячной составляющей (любого знака) через `InvalidCastException` с указанием календарных месяцев, а
+результат с нулевыми месяцами конвертируют точно.
+
 См. [Скалярные функции](../../scalar-functions/index.md).
 
 ## `DISTINCT ON`

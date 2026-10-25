@@ -2786,14 +2786,72 @@ public class SqlGenerationTests
             .Should().Contain("top(5) with ties");
     }
 
+    private const string WithTiesOffsetRefusal =
+        "SQL Server does not support WITH TIES with a non-zero OFFSET. Use WithTies() without OFFSET.";
+
     [Fact]
-    public void WithTies_WithOffset_ShouldUseFetchWithTies()
+    public void WithTies_WithOffset_ShouldThrowAtPreparation()
     {
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.Page(5, 3).WithTies().OrderBy(x => x.Id).Select(x => x.Id))
-            .Should().Contain("fetch next 5 rows with ties");
+        // Both call orders must fail closed while the statement is prepared: T-SQL permits WITH TIES only
+        // in TOP(n), so a paged OFFSET/FETCH WITH TIES must never be rendered or sent.
+        string? pageSql = null;
+        string? offsetSql = null;
+
+        FluentActions.Invoking(() => pageSql = SqlOf(ctx, e.Page(5, 3).WithTies().OrderBy(x => x.Id).Select(x => x.Id)))
+            .Should().Throw<NotSupportedException>().Which.Message.Should().Be(WithTiesOffsetRefusal);
+
+        FluentActions.Invoking(() => offsetSql = SqlOf(ctx, e.Offset(3).Limit(5).WithTies().OrderBy(x => x.Id).Select(x => x.Id)))
+            .Should().Throw<NotSupportedException>().Which.Message.Should().Be(WithTiesOffsetRefusal);
+
+        pageSql.Should().BeNull("the refusal must happen before any SQL string is produced");
+        offsetSql.Should().BeNull("the refusal must happen before any SQL string is produced");
+    }
+
+    [Fact]
+    public void WithTies_FormMatrix_ShouldPreserveContract()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        // F0: neither ties nor skip keeps the bare statement.
+        var f0 = SqlOf(ctx, e.OrderBy(x => x.Id).Select(x => x.Id));
+        f0.Should().NotContain("with ties");
+        f0.Should().NotContain("offset ");
+        f0.Should().NotContain("fetch ");
+
+        // F1: ties with no offset stays on the TOP(n) WITH TIES path.
+        SqlOf(ctx, e.Limit(5).WithTies().OrderBy(x => x.Id).Select(x => x.Id))
+            .Should().Contain("top(5) with ties");
+
+        // F3: ordinary paging without ties emits OFFSET/FETCH ... ONLY.
+        var f3 = SqlOf(ctx, e.Page(5, 3).OrderBy(x => x.Id).Select(x => x.Id));
+        f3.Should().Contain("offset 3 rows").And.Contain("fetch next 5 rows only");
+        f3.Should().NotContain("with ties");
+
+        // F4/F5: both call orders of ties plus a positive offset are refused at preparation.
+        FluentActions.Invoking(() => SqlOf(ctx, e.Page(5, 3).WithTies().OrderBy(x => x.Id).Select(x => x.Id)))
+            .Should().Throw<NotSupportedException>().Which.Message.Should().Be(WithTiesOffsetRefusal);
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Offset(3).Limit(5).WithTies().OrderBy(x => x.Id).Select(x => x.Id)))
+            .Should().Throw<NotSupportedException>().Which.Message.Should().Be(WithTiesOffsetRefusal);
+    }
+
+    [Fact]
+    public void WithTies_ExtremeRowDispatch_ShouldNotBypassOffsetRejection()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // The extreme-row lowering rejects paging before any dialect pager runs, so ties plus a positive
+        // offset cannot reach the renderer through this dispatch either.
+        var command = e.Offset(1).Limit(2).WithTies().SelectWhereMax(x => x.Int).ToCommand();
+
+        FluentActions.Invoking(() => Prepare(ctx, command))
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage("SelectWhereMax/SelectWhereMin cannot be combined with paging.");
     }
 
     [Fact]
