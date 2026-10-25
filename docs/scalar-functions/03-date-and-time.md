@@ -93,6 +93,13 @@ built, before any client evaluation or constant folding:
   release;
 * a fractional `.AddYears`/`.AddMonths` — the CLR amount is an `int`.
 
+The refusal does not depend on the projection form: an anonymous projection, a DTO, a predicate and a
+bare scalar (`Select(e => e.Value.DayOfWeek)`, including `.First()`/`.Single()` over it) all report the
+same message during preparation, before any SQL is sent. It is also limited to row-mapping providers
+(`IContextEnvironment.NeedMapping`); the in-memory provider keeps evaluating those members client-side.
+Members that do have a translation (`.Year` … `.DayOfYear`, the `Add*` family, `Now`/`UtcNow`) keep
+working in every projection form.
+
 `value.ToString(format)` and `string.Format` are still translated (see
 [Formatting dates and numbers to strings](#formatting-dates-and-numbers-to-strings)). A
 `DateTimeOffset` table-valued-parameter column and a PostgreSQL array element map to the

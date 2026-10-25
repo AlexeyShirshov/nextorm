@@ -567,6 +567,28 @@ public partial class QueryCommand
                     // (Stream/TextReader) is not one of the scalar types in IsSingleColumnProjection.
                     var bodyIsStreaming = TableAliasAccessors.IsStreaming(cmd._exp.Body);
 
+                    // Ordered pre-classification guards (§T313, #313). The column-shape branches below
+                    // decide how a body becomes a select list; a body that matches none of them falls
+                    // through to complex row materialization, where an enum result type surfaces as a
+                    // CLR constructor failure. Both guards therefore run before the classification chain
+                    // and never reach it: first the DateTimeOffset fail-closed guard shared with the
+                    // projection visitor (a bare Select(x => value.DayOfWeek) never visits its receiver
+                    // chain), then the enum scalar refusal, which is bypassed by a value converter.
+                    //
+                    // These two guards apply only when NeedMapping is true: mapping a row back from columns
+                    // is what a bare enum / untranslated DateTimeOffset scalar body cannot survive, while
+                    // the in-memory provider materializes its projections itself and evaluating such a
+                    // member client-side is a supported behaviour there (plan revision r2).
+                    if (cmd._dataContext!.NeedMapping)
+                    {
+                        MemberTranslator.ThrowIfUnsupportedDateTimeOffsetAccess(cmd._exp.Body);
+
+                        if (bodyConverter is null
+                            && (Nullable.GetUnderlyingType(cmd._exp.Body.Type) ?? cmd._exp.Body.Type).IsEnum)
+                            throw new NotSupportedException(
+                                "Enum scalar projections without a value converter are not supported in a server-side query.");
+                    }
+
                     // A whole-projection (identity) read over a column-shape source
                     // (a data-modifying CTE or an equivalent derived shape) reuses that slot-tagged shape
                     // instead of falling through with no columns. TryBuildProjectionSelectList's reuse

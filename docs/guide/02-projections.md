@@ -324,6 +324,16 @@ Output:
 
 When that single column is a `byte[]` or `string`, it can be read as a stream instead of being materialised: `ToStream`/`ToTextReader` (and their async forms) open the provider's LOB accessors for that one column — see [Streaming large objects](28-large-objects.md).
 
+An **enum-typed** column is the one scalar shape that needs a value converter: a bare `enum` or
+nullable-enum projection without one (`Select(it => it.State)`, `Select(it => it.MaybeState)`) is
+refused during preparation with `NotSupportedException` — "Enum scalar projections without a value
+converter are not supported in a server-side query." — instead of falling through to row
+materialization. Map the column through a converter (see
+[Value converters and JSON columns](../infrastructure/03-value-converters.md)) and its scalar
+projection behaves like any other converted column. The refusal applies to server-side query
+preparation only: the in-memory provider materializes the projection from the source objects, so an
+enum scalar keeps working there.
+
 ## Nested entity and calculated columns over a projection
 
 A [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) can itself be used as the source of another query with
