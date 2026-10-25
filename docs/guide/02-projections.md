@@ -184,6 +184,16 @@ Output:
 | 9 |
 | 10 |
 
+A DTO projection is a direct-read projection: it binds the mapped columns of the entity you query.
+It does not change the rule for a **derived** source read without an outer `Select` — a DTO used as
+the *inner* projection of `From(query)` is refused exactly like the anonymous form when its members
+have to be re-translated, because the restriction is the projection's expression shape, not the type
+being anonymous. Name the columns with an outer `Select` when the DTO is the inner projection (see
+[Subqueries](07-subqueries.md#subquery-as-a-from-source)). This rewrite works with member-init DTO and
+positional-record projections; the tested constructor-only class projection has a known pre-existing
+failure (`Cannot find inner column Id`), so use one of those supported forms instead.
+See [Limitations](../advanced/limitations.md#limitations).
+
 ## Record
 
 Positional records are projected by their constructor too:
@@ -364,6 +374,15 @@ select id, Calc
  from (select id, (somestring + somestring) as [Calc]
  from complex_entity) as [t1]
 ```
+
+The enclosing `Select` is what makes such a read work: the outer query addresses the derived
+`SELECT`'s output columns, so a named or computed inner column is reused as-is. Reading the same inner
+query without an outer projection (`dataContext.From(inner).ToList()`) is accepted only when every
+inner column is already such a resolved reference; a projection built from row-member expressions (an
+anonymous `new { it.Id }` or a DTO `new Dto { Id = it.Id }`) is refused during preparation with a
+`QueryPreparationException` and must be read through an outer `Select`. That is an expression-shape
+restriction, not an anonymous-type requirement — see
+[Subqueries](07-subqueries.md#subquery-as-a-from-source).
 
 ## Named join aliases
 

@@ -55,6 +55,20 @@ var nested = dataContext.From<IComplexEntity>().Select(x => new { x.Id, Calc = x
 var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 ```
 
+Building the derived source and reading its rows are separate steps: `From(nested)` composes the
+derived table, while materializing it needs an explicit outer `Select`, since the enclosing query can
+only address the output columns the derived `SELECT` declares. A bare `From(nested).ToList()` works
+only when the inner projection is already a set of resolved column references (a mapped column, the
+renamed `Calc` above, or a computed scalar addressed by its output name). A projection built from
+row-member expressions — an anonymous `new { x.Id }` or a DTO `new Dto { Id = x.Id }` — would have to
+be re-translated against the derived source, so preparation refuses it with a
+`QueryPreparationException`. That restriction is about the **expression shape**, not about anonymous
+types: DTO projections are fully supported for a direct read (see [Projections](02-projections.md)),
+which does not make a bare derived read of the same DTO reusable. Add the outer `Select`
+(`From(nested).Select(t => t.Id)`) to read such a source. This rewrite works with member-init DTO and
+positional-record projections; the tested constructor-only class projection has a known pre-existing
+failure (`Cannot find inner column Id`), so use one of those supported forms instead.
+
 Two different aliases appear in these examples. The **table alias** (`t1`, `t2`, ...) names the derived
 source in `FROM` and qualifies every reference to it (`t1.id`); the provider generates it, you never
 write it. The **output-column alias** is what the derived `SELECT` itself declares: a projected member's

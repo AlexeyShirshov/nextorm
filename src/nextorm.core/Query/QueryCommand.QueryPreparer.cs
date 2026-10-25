@@ -1004,7 +1004,22 @@ public partial class QueryCommand
                                 throw new BuildSqlCommandException(ExtremeRowCompatibility.MappedEntitySourceMessage);
 
                             if (!(selectList?.Length > 0))
-                                throw new QueryPreparationException("Select must return new anonymous type");
+                            {
+                                // #294: this guard is a projection-SHAPE restriction, not an
+                                // anonymous-type requirement. A derived source whose own select list
+                                // exists but cannot be passed through (TryGetReusableDerivedShape
+                                // refused it: a projected member needs re-translation against the
+                                // derived source) is reported with the derived diagnostic and the
+                                // outer-Select rewrite; every other unmapped source is reported with
+                                // the no-mapped-columns message. Only the message is selected here —
+                                // the refusal predicate, the fallback gates above and the recursion
+                                // guard in the helper are unchanged, and no translation is re-run.
+                                var derivedSourceUnreusable = cmd._from?.ColumnShape is null
+                                    && cmd._from?.SubQuery?.SelectList is { Length: > 0 };
+                                throw new QueryPreparationException(derivedSourceUnreusable
+                                    ? "Cannot materialize this derived source without an explicit outer Select: its projected columns cannot be reused safely (row-member expressions require re-translation). Add an outer Select, for example Select(x => x.Id). This restriction applies to anonymous types and DTOs alike."
+                                    : "Cannot materialize this source because it has no mapped columns or reusable projection. Use a mapped source or specify an explicit Select with named columns.");
+                            }
 
                             DataContextCache.SelectListCache[srcType] = selectList;
                         }
