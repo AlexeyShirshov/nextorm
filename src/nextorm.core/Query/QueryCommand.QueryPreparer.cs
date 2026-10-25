@@ -567,6 +567,28 @@ public partial class QueryCommand
                     // (Stream/TextReader) is not one of the scalar types in IsSingleColumnProjection.
                     var bodyIsStreaming = TableAliasAccessors.IsStreaming(cmd._exp.Body);
 
+                    // Ordered pre-classification guards (§T313, #313). The column-shape branches below
+                    // decide how a body becomes a select list; a body that matches none of them falls
+                    // through to complex row materialization, where an enum result type surfaces as a
+                    // CLR constructor failure. Both guards therefore run before the classification chain
+                    // and never reach it: first the DateTimeOffset fail-closed guard shared with the
+                    // projection visitor (a bare Select(x => value.DayOfWeek) never visits its receiver
+                    // chain), then the enum scalar refusal, which is bypassed by a value converter.
+                    //
+                    // These two guards apply only when NeedMapping is true: mapping a row back from columns
+                    // is what a bare enum / untranslated DateTimeOffset scalar body cannot survive, while
+                    // the in-memory provider materializes its projections itself and evaluating such a
+                    // member client-side is a supported behaviour there (plan revision r2).
+                    if (cmd._dataContext!.NeedMapping)
+                    {
+                        MemberTranslator.ThrowIfUnsupportedDateTimeOffsetAccess(cmd._exp.Body);
+
+                        if (bodyConverter is null
+                            && (Nullable.GetUnderlyingType(cmd._exp.Body.Type) ?? cmd._exp.Body.Type).IsEnum)
+                            throw new NotSupportedException(
+                                "Enum scalar projections without a value converter are not supported in a server-side query.");
+                    }
+
                     // A whole-projection (identity) read over a column-shape source
                     // (a data-modifying CTE or an equivalent derived shape) reuses that slot-tagged shape
                     // instead of falling through with no columns. TryBuildProjectionSelectList's reuse
@@ -824,6 +846,18 @@ public partial class QueryCommand
                         throw new NotSupportedException(
                             $"The bare top-level scalar projection '{domMember.Type}' at Select position 0 is not supported; project it inside a named shape (for example Select(x => new {{ x.Doc }}) or a DTO) instead.");
                     }
+                    // A bare projection of a range-returning PostgreSQL function over a mapped
+                    // [RangeColumns] pair has no scalar SQL form and no projection shape, so without this
+                    // guard the select list stays empty and the row mapper fails with the opaque
+                    // "Incorrect number of arguments for constructor". Reject it during preparation with
+                    // the same diagnostic the rendering guards produce. The check is metadata-only (no
+                    // visitor construction, no cache mutation) and only classifies the existing
+                    // RangeReturning set; anonymous projections and predicates keep their earlier
+                    // translator path unchanged.
+                    else if (RangeColumnsSqlTranslator.IsRangeReturningOverPair(cmd._exp.Body, srcType, out var rangeReturningName))
+                    {
+                        RangeColumnsSqlTranslator.ThrowRangeReturningOverPair(rangeReturningName!);
+                    }
                     // Final invariant: a structural direct-projection read (Select(p => p.ItemN)) that no
                     // earlier branch handled and whose item is not a mapped entity must fail closed. The
                     // scalar/tuple/DOM branches above run first, so this guard never masks a supported
@@ -955,6 +989,19 @@ public partial class QueryCommand
                                         columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
                                 }
                             }
+
+                            // #315: a projection-less extreme-row query returns whole entity rows, so the
+                            // source must carry mapped metadata. Without it the whole-row shape yields no
+                            // columns and the generic anonymous-projection error below would misreport the
+                            // contract; report the mapped-source requirement instead. The explicitly
+                            // projected overloads supply _exp and never reach this branch.
+                            var unmappedExtremeRowSource = cmd.ExtremeRow is not null
+                                && cmd._exp is null
+                                && cmd._dataContext!.NeedMapping
+                                && cmd._srcType is not null
+                                && (entityMeta is null || entityMeta.Properties.Count == 0);
+                            if (unmappedExtremeRowSource)
+                                throw new BuildSqlCommandException(ExtremeRowCompatibility.MappedEntitySourceMessage);
 
                             if (!(selectList?.Length > 0))
                                 throw new QueryPreparationException("Select must return new anonymous type");
@@ -1521,11 +1568,14 @@ public partial class QueryCommand
         /// <returns>A consumer-side column referencing the derived source's output identifier.</returns>
         private static SelectExpression DerivedPassThroughColumn(SelectExpression src)
         {
-            // Mirror MakeColumn's alias decision exactly: a column whose defining expression references
-            // the source column named exactly like its target member is emitted without an alias, so the
-            // derived table exposes that bare column name; every other shape exposes the target member
-            // name through the alias MakeColumn emits. PropertyName participates in the identifier only
-            // when an alias is actually emitted, so a case-sensitive server still resolves the bare name.
+            // Mirror the select-list alias rule the derived boundary actually rendered
+            // (SqlBuildContext.RequireDerivedScalarOutputName, read where SqlBuilder appends the alias).
+            // A named projection exposes the alias MakeColumn emits: the target member name, except for a
+            // column-valued expression that already reads the source column named like the member
+            // (emitted bare, so the physical/declared column name is the identifier). An unaliased
+            // computed scalar has no member name: the boundary declares its generated OutputName, and
+            // that is exactly the identifier the consumer must reference. Predicting anything else here
+            // would make the consumer address a column the derived table does not expose.
             var outputName = src.PropertyName is { } propertyName
                 ? TryGetColumnIdentifier(src.Expression, out var columnIdentifier)
                     && string.Equals(columnIdentifier, propertyName, StringComparison.OrdinalIgnoreCase)

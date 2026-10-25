@@ -163,6 +163,11 @@ internal sealed class QueryPlanner : IQueryPlanner
             KeywordCase = source.ResolvedKeywordCase,
             ParameterNamePrefix = parameterNamePrefix,
             RenderMutationBody = _renderMutationBody,
+            // A statement source renders a select list whose output is addressed by column identifier
+            // (a CTAS target, an INSERT ... SELECT target and a MERGE source): an unaliased computed
+            // scalar must declare its generated output name, exactly like a derived subquery body. The
+            // flag is part of this one context value, so no shared command state is mutated.
+            RequireDerivedScalarOutputName = true,
         };
 
         string? withSql = null;

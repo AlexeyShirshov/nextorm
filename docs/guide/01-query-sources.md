@@ -44,6 +44,36 @@ Output:
 | 9 |
 | 10 |
 
+A derived source may also project a computed scalar instead of a named member. The enclosing query
+addresses that value through the output column the derived select list exposes, so it can be ordered,
+filtered and projected like any other column:
+
+```csharp
+var inner = dataContext.From<SimpleEntity>()
+    .Where(it => it.Id <= 2)
+    .Select(it => it.Id * 2);
+
+var rows = dataContext.From(inner)
+    .OrderBy(x => x)
+    .Select(x => x * 3)
+    .ToList();
+```
+
+```sql
+-- SQLite
+select (c0 * 3)
+ from (select (id * 2) as 'c0'
+ from simple_entity
+ where (id <= 2)) as 't1'
+ order by t1.c0
+```
+
+Output: `6`, `12`.
+
+> The generated output name in the sample (`c0` here) is how the rendered SQL exposes the computed
+> column; it is not a public naming contract. Read the value through the builder (as above) instead of
+> hard-coding the rendered spelling, which is provider-specific and may change.
+
 ## Table function as source
 
 `dataContext.FromTableFunction(() => ...)` uses a table-valued function as the `FROM` source. The

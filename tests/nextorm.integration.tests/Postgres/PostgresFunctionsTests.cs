@@ -807,6 +807,12 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             .WithMessage("*The empty range cannot be expressed over a pair of columns*");
 
         FluentActions.Invoking(() => ctx.From<CommonTestSuite.IRangeProbe>()
+                .Select(x => SqlFunctions.Postgres.range_union(x.During, new Range<int>(1, 10)))
+                .ToList())
+            .Should().Throw<NotSupportedException>()
+            .WithMessage("The PostgreSQL range function 'range_union' returns a range and cannot be expressed over a pair of columns. Use a provider with a native range type (PostgreSQL) or a range-returning projection.");
+
+        FluentActions.Invoking(() => ctx.From<CommonTestSuite.IRangeProbe>()
                 .Where(x => SqlFunctions.Postgres.overlaps(x.During, Array.Empty<Range<int>>()))
                 .Select(x => x.Id)
                 .ToList())
