@@ -167,10 +167,9 @@ public sealed class BuilderValidationSweepTests : ProviderTestSuite
 
     /// <summary>
     /// The whole-row extreme-row form over a name-addressed source cannot prepare: the source type has
-    /// no mapped metadata, so the projection builder yields no select list and the preparer rejects it
-    /// before any SQL is rendered. The mapped <see cref="IComplexEntity"/> extreme-row query executes
-    /// and returns the winner. The render-time mapped-source guard in SqlBuilder (see
-    /// <c>unreachable.txt</c>) is therefore not reached through this public route.
+    /// no mapped metadata, so the projection builder yields no select list and the preparer reports the
+    /// mapped-source contract before any SQL is rendered. The mapped <see cref="IComplexEntity"/>
+    /// extreme-row query executes and returns the winner.
     /// </summary>
     [Fact]
     public void ExtremeRowOverUnmappedSource_ShouldFailPreparation()
@@ -179,8 +178,8 @@ public sealed class BuilderValidationSweepTests : ProviderTestSuite
 
         FluentActions
             .Invoking(() => ctx.From("simple_entity").SelectWhereMax(t => t["id"].AsInt).ToList())
-            .Should().Throw<QueryPreparationException>()
-            .WithMessage("*Select must return new anonymous type*");
+            .Should().Throw<BuildSqlCommandException>()
+            .WithMessage("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
 
         _sut.ComplexEntity.SelectWhereMax(x => x.Id).Select(x => x.Id).ToList().Should().Equal(3L);
     }

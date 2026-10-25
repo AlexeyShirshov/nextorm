@@ -1298,7 +1298,7 @@ internal readonly struct SqlBuilder
     private static SelectExpression[] BuildExtremeRowEntitySelectList(Type entityType)
     {
         if (!DataContextCache.Metadata.TryGetValue(entityType, out var entityMeta))
-            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
+            throw new BuildSqlCommandException(ExtremeRowCompatibility.MappedEntitySourceMessage);
 
         var (columns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
         return columns;

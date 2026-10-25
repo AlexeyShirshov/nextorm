@@ -956,6 +956,19 @@ public partial class QueryCommand
                                 }
                             }
 
+                            // #315: a projection-less extreme-row query returns whole entity rows, so the
+                            // source must carry mapped metadata. Without it the whole-row shape yields no
+                            // columns and the generic anonymous-projection error below would misreport the
+                            // contract; report the mapped-source requirement instead. The explicitly
+                            // projected overloads supply _exp and never reach this branch.
+                            var unmappedExtremeRowSource = cmd.ExtremeRow is not null
+                                && cmd._exp is null
+                                && cmd._dataContext!.NeedMapping
+                                && cmd._srcType is not null
+                                && (entityMeta is null || entityMeta.Properties.Count == 0);
+                            if (unmappedExtremeRowSource)
+                                throw new BuildSqlCommandException(ExtremeRowCompatibility.MappedEntitySourceMessage);
+
                             if (!(selectList?.Length > 0))
                                 throw new QueryPreparationException("Select must return new anonymous type");
 
