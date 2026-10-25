@@ -242,6 +242,8 @@ A `Where` after `JoinInto` is applied to the **joined query** — it filters the
 
 A `Where` written **before** `JoinInto` filters the parent source. The predicate passed to `JoinInto` is the `ON` condition and only pairs rows; it never removes a `LEFT` parent.
 
+`JoinInto` folds a child source's `Where` predicate into the join's `ON` condition, preserving unmatched parents for LEFT joins; unsupported child-query modifiers throw `NotSupportedException` before execution. A derived (`As`) child source is supported when its only modifier is its own `Where`; any other modifier on or inside it is rejected.
+
 ## Parent paging
 
 `Limit`/`Offset` (`Take`/`Page`) constrain **parents**, not denormalized rows. On a SQL provider the parent source is selected in a subquery with the limit and the join wraps around it, so paging a parent does not truncate its children. On the in-memory provider the limit is applied to the deduplicated parent list.

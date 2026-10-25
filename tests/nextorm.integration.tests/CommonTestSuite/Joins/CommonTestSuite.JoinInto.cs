@@ -150,6 +150,104 @@ public abstract partial class CommonTestSuite
         return parent;
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // #309 child `Where`: the shared live rows. Fixed ids (they collide with no other fixture: every
+    // other JoinInto seed uses negative ids) so the assertions read as the acceptance rows:
+    //   9501 -> [9511, 9512]  (child 9513 has Tag = "skip")
+    //   9502 -> [9521]        (child 9522 has Tag = "skip")
+    //   9503 -> []            (no child at all)
+    //   9601 -> [9611, 9612]  (tag 9613 has Tag = "skip"), 9602 -> [9621], 9603 -> []
+    // The new CLR types map the existing eager_* tables (no provider DDL change is needed) and only
+    // rename the filtered column: child `Tag` -> eager_child.name, profile `Tag` -> eager_note.text.
+    // ---------------------------------------------------------------------------------------------
+
+    private const string JoinIntoChildWhereSkip = "skip";
+
+    private static readonly object JoinIntoChildWhereSeedGate = new();
+
+    private EntityBuilder<JcwChildWhereParent> JoinIntoChildWhereParents()
+        => _sut.DataProvider.From<JcwChildWhereParent>(b => b
+            .HasMany(p => p.Children, c => c.ParentId)
+            .HasOneToOne(p => p.PrimaryProfile, p => p.Id, c => c.ParentId));
+
+    private EntityBuilder<JcwChildWhereTagParent> JoinIntoChildWhereTagParents()
+        => _sut.DataProvider.From<JcwChildWhereTagParent>(b => b
+            .HasManyThrough<JcwChildWhereTag, JcwChildWhereTagLink, int, int>(
+                p => p.Tags, p => p.Id, l => l.ParentId, t => t.Id, l => l.ChildId));
+
+    private EntityBuilder<JcwChildWhereChild> JoinIntoChildWhereChildren()
+        => _sut.DataProvider.From<JcwChildWhereChild>();
+
+    private EntityBuilder<JcwChildWhereProfile> JoinIntoChildWhereProfiles()
+        => _sut.DataProvider.From<JcwChildWhereProfile>();
+
+    private EntityBuilder<JcwChildWhereTag> JoinIntoChildWhereTags()
+        => _sut.DataProvider.From<JcwChildWhereTag>();
+
+    /// <summary>
+    /// Seeds the fixed child-<c>Where</c> rows once per provider database: the relationship metadata is
+    /// registered first (child types before parents, so their navigation members are already excluded
+    /// when the parent-side relationship resolves), then the rows are inserted unless parent 9501 is
+    /// already present — every fact of this block shares the same rows.
+    /// </summary>
+    private void EnsureJoinIntoChildWhereSeeded()
+    {
+        lock (JoinIntoChildWhereSeedGate)
+        {
+            var ctx = _sut.DataProvider;
+
+            JoinIntoChildWhereChildren();
+            JoinIntoChildWhereProfiles();
+            JoinIntoChildWhereTags();
+            JoinIntoChildWhereParents();
+            JoinIntoChildWhereTagParents();
+
+            if (ctx.From<JcwChildWhereParent>().Where(p => p.Id == 9501).Any())
+                return;
+
+            ctx.CreateInsertBuilder<JcwChildWhereParent>().Values([
+                new JcwChildWhereParent { Id = 9501, Name = "p9501" },
+                new JcwChildWhereParent { Id = 9502, Name = "p9502" },
+                new JcwChildWhereParent { Id = 9503, Name = "p9503" },
+            ]).Insert();
+
+            ctx.CreateInsertBuilder<JcwChildWhereChild>().Values([
+                new JcwChildWhereChild { Id = 9511, ParentId = 9501, Tag = "keep" },
+                new JcwChildWhereChild { Id = 9512, ParentId = 9501, Tag = "keep" },
+                new JcwChildWhereChild { Id = 9513, ParentId = 9501, Tag = JoinIntoChildWhereSkip },
+                new JcwChildWhereChild { Id = 9521, ParentId = 9502, Tag = "keep" },
+                new JcwChildWhereChild { Id = 9522, ParentId = 9502, Tag = JoinIntoChildWhereSkip },
+            ]).Insert();
+
+            ctx.CreateInsertBuilder<JcwChildWhereProfile>().Values([
+                new JcwChildWhereProfile { Id = 9531, ParentId = 9501, Tag = "keep" },
+                new JcwChildWhereProfile { Id = 9532, ParentId = 9502, Tag = JoinIntoChildWhereSkip },
+            ]).Insert();
+
+            ctx.CreateInsertBuilder<JcwChildWhereTagParent>().Values([
+                new JcwChildWhereTagParent { Id = 9601, Name = "m9601" },
+                new JcwChildWhereTagParent { Id = 9602, Name = "m9602" },
+                new JcwChildWhereTagParent { Id = 9603, Name = "m9603" },
+            ]).Insert();
+
+            ctx.CreateInsertBuilder<JcwChildWhereTag>().Values([
+                new JcwChildWhereTag { Id = 9611, Tag = "keep" },
+                new JcwChildWhereTag { Id = 9612, Tag = "keep" },
+                new JcwChildWhereTag { Id = 9613, Tag = JoinIntoChildWhereSkip },
+                new JcwChildWhereTag { Id = 9621, Tag = "keep" },
+                new JcwChildWhereTag { Id = 9622, Tag = JoinIntoChildWhereSkip },
+            ]).Insert();
+
+            ctx.CreateInsertBuilder<JcwChildWhereTagLink>().Values([
+                new JcwChildWhereTagLink { Id = 9631, ParentId = 9601, ChildId = 9611 },
+                new JcwChildWhereTagLink { Id = 9632, ParentId = 9601, ChildId = 9612 },
+                new JcwChildWhereTagLink { Id = 9633, ParentId = 9601, ChildId = 9613 },
+                new JcwChildWhereTagLink { Id = 9634, ParentId = 9602, ChildId = 9621 },
+                new JcwChildWhereTagLink { Id = 9635, ParentId = 9602, ChildId = 9622 },
+            ]).Insert();
+        }
+    }
+
     [Fact]
     public void JoinInto_Left_ShouldKeepChildlessParentAndGroupChildren()
     {
@@ -231,6 +329,168 @@ public abstract partial class CommonTestSuite
         parents.Select(p => p.Id).Should().Equal(many, none);
         parents[0].Children.Should().HaveCount(2);
         parents[1].Children.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void JoinIntoChildWhere_Left_ShouldFilterChildrenAndKeepEveryParent()
+    {
+        EnsureJoinIntoChildWhereSeeded();
+
+        var parents = JoinIntoChildWhereParents()
+            .Where(p => p.Id == 9501 || p.Id == 9502 || p.Id == 9503)
+            .JoinInto(
+                JoinIntoChildWhereChildren().Where(c => c.Tag != JoinIntoChildWhereSkip),
+                (p, c) => p.Id == c.ParentId,
+                p => p.Children)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(new[] { 9501, 9502, 9503 }, "a LEFT join keeps every parent");
+        parents[0].Children.Select(c => c.Id).Should().BeEquivalentTo([9511, 9512],
+            "child 9513 (Tag = skip) is excluded by the child Where");
+        parents[1].Children.Select(c => c.Id).Should().Equal([9521],
+            "child 9522 (Tag = skip) is excluded by the child Where");
+        parents[2].Children.Should().BeEmpty("a childless parent stays with an empty collection");
+    }
+
+    [Fact]
+    public void JoinIntoChildWhere_Inner_ShouldDropAllFilteredAndChildlessParents()
+    {
+        EnsureJoinIntoChildWhereSeeded();
+
+        var parents = JoinIntoChildWhereParents()
+            .Where(p => p.Id == 9501 || p.Id == 9502 || p.Id == 9503)
+            .JoinInto(
+                JoinIntoChildWhereChildren().Where(c => c.Tag != JoinIntoChildWhereSkip && c.Id != 9521),
+                (p, c) => p.Id == c.ParentId,
+                p => p.Children,
+                JoinType.Inner)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal([9501],
+            "9502 loses its only surviving child to the filter and 9503 has no child at all");
+        parents[0].Children.Select(c => c.Id).Should().BeEquivalentTo([9511, 9512]);
+    }
+
+    [Fact]
+    public void JoinIntoChildWhere_Reference_ShouldLeaveNullWhenTheOnlyChildIsFiltered()
+    {
+        EnsureJoinIntoChildWhereSeeded();
+
+        var parents = JoinIntoChildWhereParents()
+            .Where(p => p.Id == 9501 || p.Id == 9502 || p.Id == 9503)
+            .JoinInto(
+                JoinIntoChildWhereProfiles().Where(c => c.Tag != JoinIntoChildWhereSkip),
+                (p, c) => p.Id == c.ParentId,
+                p => p.PrimaryProfile)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(9501, 9502, 9503);
+        parents[0].PrimaryProfile.Should().NotBeNull();
+        parents[0].PrimaryProfile!.Id.Should().Be(9531);
+        parents[1].PrimaryProfile.Should().BeNull("its only profile (9532) is filtered out by the child Where");
+        parents[2].PrimaryProfile.Should().BeNull();
+    }
+
+    [Fact]
+    public void JoinIntoChildWhere_ReferenceInner_ShouldExcludeTheFilteredChildParent()
+    {
+        EnsureJoinIntoChildWhereSeeded();
+
+        var parents = JoinIntoChildWhereParents()
+            .Where(p => p.Id == 9501 || p.Id == 9502 || p.Id == 9503)
+            .JoinInto(
+                JoinIntoChildWhereProfiles().Where(c => c.Tag != JoinIntoChildWhereSkip),
+                (p, c) => p.Id == c.ParentId,
+                p => p.PrimaryProfile,
+                JoinType.Inner)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal([9501], "an INNER reference join excludes a parent whose only child is filtered");
+        parents[0].PrimaryProfile!.Id.Should().Be(9531);
+    }
+
+    [Fact]
+    public void JoinIntoChildWhere_Repeated_ShouldAndComposeBothPredicates()
+    {
+        EnsureJoinIntoChildWhereSeeded();
+
+        var parents = JoinIntoChildWhereParents()
+            .Where(p => p.Id == 9501 || p.Id == 9502)
+            .JoinInto(
+                JoinIntoChildWhereChildren()
+                    .Where(c => c.Tag != JoinIntoChildWhereSkip)
+                    .Where(c => c.Id != 9512),
+                (p, c) => p.Id == c.ParentId,
+                p => p.Children)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents[0].Children.Select(c => c.Id).Should().Equal([9511], "9513 fails the first Where and 9512 the second");
+        parents[1].Children.Select(c => c.Id).Should().Equal([9521]);
+    }
+
+    [Fact]
+    public void JoinIntoChildWhere_WithCallerPredicate_ShouldComposeKeysCallerAndChild()
+    {
+        EnsureJoinIntoChildWhereSeeded();
+
+        var parents = JoinIntoChildWhereParents()
+            .Where(p => p.Id == 9501 || p.Id == 9502 || p.Id == 9503)
+            .JoinInto(
+                JoinIntoChildWhereChildren().Where(c => c.Tag != JoinIntoChildWhereSkip),
+                (p, c) => p.Id == c.ParentId && c.Id != 9512,
+                p => p.Children)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(new[] { 9501, 9502, 9503 }, "a LEFT join keeps every parent");
+        parents[0].Children.Select(c => c.Id).Should().Equal([9511],
+            "the relationship key matches 9511/9512/9513, the caller predicate drops 9512 and the child Where drops 9513");
+        parents[1].Children.Select(c => c.Id).Should().Equal([9521]);
+        parents[2].Children.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void JoinIntoChildWhere_ManyToMany_Left_ShouldFilterTagsAndKeepEveryParent()
+    {
+        EnsureJoinIntoChildWhereSeeded();
+
+        var parents = JoinIntoChildWhereTagParents()
+            .Where(p => p.Id == 9601 || p.Id == 9602 || p.Id == 9603)
+            .JoinInto(
+                JoinIntoChildWhereTags().Where(t => t.Tag != JoinIntoChildWhereSkip),
+                (p, t) => t.Id >= 9600,
+                p => p.Tags)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(9601, 9602, 9603);
+        parents[0].Tags.Select(t => t.Id).Should().BeEquivalentTo([9611, 9612], "tag 9613 (Tag = skip) is excluded by the child Where");
+        parents[1].Tags.Select(t => t.Id).Should().Equal([9621], "tag 9622 (Tag = skip) is excluded by the child Where");
+        parents[2].Tags.Should().BeEmpty("a LEFT many-to-many join keeps a parent without junction rows");
+    }
+
+    [Fact]
+    public void JoinIntoChildWhere_ManyToMany_Inner_ShouldDropAllFilteredAndUnlinkedParents()
+    {
+        EnsureJoinIntoChildWhereSeeded();
+
+        var parents = JoinIntoChildWhereTagParents()
+            .Where(p => p.Id == 9601 || p.Id == 9602 || p.Id == 9603)
+            .JoinInto(
+                JoinIntoChildWhereTags().Where(t => t.Tag != JoinIntoChildWhereSkip && t.Id != 9621),
+                (p, t) => t.Id >= 9600,
+                p => p.Tags,
+                JoinType.Inner)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal([9601],
+            "9602 loses its only surviving tag to the filter and 9603 has no junction row");
+        parents[0].Tags.Select(t => t.Id).Should().BeEquivalentTo([9611, 9612]);
     }
 
     [Fact]
@@ -721,6 +981,93 @@ public sealed class JoinIntoTag
 
 [SqlTable("eager_link")]
 public sealed class JoinIntoTagLink
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("child_id")]
+    public int ChildId { get; set; }
+}
+
+// ---------------------------------------------------------------------------------------------
+// #309 child-`Where` fixtures: the same eager_* tables under dedicated CLR types, so the filtered
+// column can be named `Tag` without a provider DDL change (child Tag -> eager_child.name,
+// profile Tag -> eager_note.text, tag Tag -> eager_tag.name).
+// ---------------------------------------------------------------------------------------------
+
+[SqlTable("eager_parent")]
+public sealed class JcwChildWhereParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<JcwChildWhereChild> Children { get; set; } = new List<JcwChildWhereChild>();
+
+    public JcwChildWhereProfile? PrimaryProfile { get; set; }
+}
+
+[SqlTable("eager_child")]
+public sealed class JcwChildWhereChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("name")]
+    public string? Tag { get; set; }
+}
+
+[SqlTable("eager_note")]
+public sealed class JcwChildWhereProfile
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("text")]
+    public string? Tag { get; set; }
+}
+
+[SqlTable("eager_parent")]
+public sealed class JcwChildWhereTagParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<JcwChildWhereTag> Tags { get; set; } = new List<JcwChildWhereTag>();
+}
+
+[SqlTable("eager_tag")]
+public sealed class JcwChildWhereTag
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Tag { get; set; }
+}
+
+[SqlTable("eager_link")]
+public sealed class JcwChildWhereTagLink
 {
     [Key]
     [Column("id")]
