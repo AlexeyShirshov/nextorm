@@ -332,6 +332,13 @@ like the native function. `timefromparts` materialises as a `TimeSpan`, the `sma
 `DateTimeOffset` matching the T-SQL result type. This is the date half of the SQL Server-only scalar
 surface; the other T-SQL scalars are documented on the matching category pages.
 
+Reading a native `time` does not change the mapped storage type. A computed `timefromparts`/`cast`
+result and a physical `time`, `time(3)` or `time(7)` column are read as a `TimeSpan` per row, keeping
+the precision the value carries. A mapped **duration property** — a `TimeSpan` property with
+`[Duration(...)]` or the fluent `Duration(...)` — still stores `bigint` on SQL Server and still scales
+through its `DurationUnit`; it can hold negative values and values of 24 h or more, neither of which a
+native `time` can represent. A `TimeOnly` projection is not supported.
+
 ## Date conversion and parts (ClickHouse)
 
 ClickHouse exposes its `to*` date/time functions through `SqlFunctions.ClickHouse`
