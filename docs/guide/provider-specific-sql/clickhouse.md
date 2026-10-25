@@ -101,6 +101,27 @@ select id
  from complex_entity final prewhere (nullableint > 0) settings max_threads = 2
 ```
 
+The `SETTINGS` clause is always emitted last among the clauses the builder appends: after `LIMIT n BY`
+and after `LIMIT`/`OFFSET` (the tail order is `ORDER BY` → `LIMIT ... BY` → `LIMIT`/`OFFSET` →
+`SETTINGS`). ClickHouse parses a `LIMIT` that follows `SETTINGS` as a syntax error (server Code 62),
+so this order is what makes a scalar terminal usable on a settings-bearing query: `First`,
+`FirstOrDefault`, `Single` and `SingleOrDefault` add paging (`limit 1` or `limit 2`), and the settings
+clause follows it.
+
+```csharp
+var count = dataContext.From<IComplexEntity>()
+    .Settings(("max_threads", "2"))
+    .Select(c => SqlFunctions.Sql.count())
+    .First();
+```
+
+```sql
+select toInt32(count(*))
+ from complex_entity
+limit 1
+ settings max_threads = 2
+```
+
 See [Query hints](../15-query-hints.md#clickhouse-query-modifiers)
 ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings)).
 `FINAL`/`PREWHERE` need a table engine that supports them — the `Memory` engine rejects both.

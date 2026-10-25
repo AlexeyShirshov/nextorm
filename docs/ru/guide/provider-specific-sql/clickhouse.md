@@ -102,6 +102,27 @@ select id
  from complex_entity final prewhere (nullableint > 0) settings max_threads = 2
 ```
 
+Предложение `SETTINGS` всегда выводится последним среди добавляемых построителем предложений: после
+`LIMIT n BY` и после `LIMIT`/`OFFSET` (порядок хвоста: `ORDER BY` → `LIMIT ... BY` → `LIMIT`/`OFFSET` →
+`SETTINGS`). ClickHouse считает `LIMIT` после `SETTINGS` синтаксической ошибкой (код сервера 62),
+поэтому именно такой порядок делает скалярный терминал пригодным для запроса с настройками: `First`,
+`FirstOrDefault`, `Single` и `SingleOrDefault` добавляют постраничность (`limit 1` или `limit 2`), и
+предложение настроек идёт за ней.
+
+```csharp
+var count = dataContext.From<IComplexEntity>()
+    .Settings(("max_threads", "2"))
+    .Select(c => SqlFunctions.Sql.count())
+    .First();
+```
+
+```sql
+select toInt32(count(*))
+ from complex_entity
+limit 1
+ settings max_threads = 2
+```
+
 См. [Хинты запросов](../15-query-hints.md#модификаторы-запроса-clickhouse)
 ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings)).
 `FINAL`/`PREWHERE` требуют движок таблицы, который их поддерживает, — движок `Memory` отклоняет оба.
