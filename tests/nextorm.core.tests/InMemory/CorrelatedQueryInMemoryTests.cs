@@ -181,4 +181,20 @@ public class CorrelatedQueryInMemoryTests
 
         r.Should().BeEmpty();
     }
+
+    /// <summary>
+    /// #303: an aggregate terminal inside a correlated WHERE predicate lowers to a correlated scalar
+    /// and takes part in the comparison per outer row, like the SQL providers, instead of failing on
+    /// the untyped registry placeholder.
+    /// </summary>
+    [Fact]
+    public void CorrelatedAggregateInWhere_ShouldComparePerRow()
+    {
+        var r = _sut.SimpleEntity
+            .Where(it => _sut.SimpleEntity.Where(s => s.Id <= it.Id).Count() > 1)
+            .Select(it => it.Id)
+            .ToList();
+
+        r.Should().Equal(2);
+    }
 }

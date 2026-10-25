@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
 using NextORM.Generated.nextorm_integration_tests;
@@ -314,6 +315,101 @@ public abstract partial class CommonTestSuite
 
         r.Should().NotBeEmpty();
         r.Should().OnlyContain(row => row.cnt == 1 && row.mx == row.Id);
+    }
+
+    /// <summary>
+    /// T303 (#303): the same aggregate terminal inside a correlated WHERE predicate is lowered to a
+    /// correlated scalar subquery, so it filters rows per outer row on every shared provider. The
+    /// fixture owns the issue's seed shape: 8001 sums 5 + 7, 8002 owns only a NULL-amount child and
+    /// 8003 owns no child, so neither NULL nor an empty set may satisfy a positive threshold.
+    /// </summary>
+    [Fact]
+    public void T303_AggregatePredicate_ShouldEvaluatePerRowOnEveryProvider()
+    {
+        T303CreateFixture();
+        try
+        {
+            var parents = T303Context.From<T303PortableParent>();
+            var children = T303Context.From<T303PortableChild>();
+
+            List<int> Match(Expression<Func<T303PortableParent, bool>> predicate) => parents
+                .Where(predicate)
+                .OrderBy(p => p.Id)
+                .Select(p => p.Id)
+                .ToList();
+
+            Match(p => children.Where(c => c.ParentId == p.Id).Sum(c => c.Amount) > 6)
+                .Should().Equal(new[] { 8001 }, "5 + 7 = 12 > 6; 8002 is NULL and 8003 is empty");
+
+            Match(p => children.Where(c => c.ParentId == p.Id).Sum(c => c.Amount) > 0)
+                .Should().Equal(new[] { 8001 }, "a NULL sum does not match a positive threshold");
+
+            Match(p => children.Where(c => c.ParentId == p.Id).Count() > 1)
+                .Should().Equal(new[] { 8001 });
+
+            Match(p => children.Where(c => c.ParentId == p.Id).Count() == 2)
+                .Should().Equal(new[] { 8001 }, "the equality arm keeps its own comparison semantics");
+
+            Match(p => children.Where(c => c.ParentId == p.Id).Count() != 2)
+                .Should().Equal(new[] { 8002, 8003 });
+
+            Match(p => children.Where(c => c.ParentId == p.Id
+                    && children.Where(d => d.ParentId == c.Id).Sum(d => d.Amount) > 0)
+                .Count() > 0)
+                .Should().Equal(new[] { 8001 }, "the nested level binds the child 8101 and its grandchild 8201");
+        }
+        finally
+        {
+            T303DropFixture();
+        }
+    }
+
+    private IDataContext T303Context => _sut.DataProvider;
+
+    private void T303Execute(string sql)
+    {
+        using var result = T303Context.ExecuteRaw(sql);
+    }
+
+    private void T303CreateFixture()
+    {
+        T303Execute("drop table if exists t303p_child");
+        T303Execute("drop table if exists t303p_parent");
+        T303Execute("create table t303p_parent (id int not null primary key, name varchar(50) not null)");
+        T303Execute("create table t303p_child (id int not null primary key, parent_id int not null, amount int null)");
+        T303Execute("insert into t303p_parent (id, name) values (8001, 'p-rich'), (8002, 'p-null-amount'), (8003, 'p-empty')");
+        T303Execute("insert into t303p_child (id, parent_id, amount) values (8101, 8001, 5), (8102, 8001, 7), (8103, 8002, null), (8201, 8101, 3)");
+    }
+
+    private void T303DropFixture()
+    {
+        T303Execute("drop table if exists t303p_child");
+        T303Execute("drop table if exists t303p_parent");
+    }
+
+    [SqlTable("t303p_parent")]
+    public sealed class T303PortableParent
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
+    }
+
+    [SqlTable("t303p_child")]
+    public sealed class T303PortableChild
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("parent_id")]
+        public int ParentId { get; set; }
+
+        [Column("amount")]
+        public int? Amount { get; set; }
     }
 
     /// <summary>

@@ -258,6 +258,36 @@ limit 1) as 'cnt'
  from complex_entity as 't1'
 ```
 
+The same aggregate terminal may stand on the left of a comparison in the filter, where it becomes a
+correlated scalar subquery evaluated once per outer row:
+
+```csharp
+var rows = await dataContext.From<IComplexEntity>()
+    .Where(it => dataContext.From<IComplexEntity>().Where(c => c.Id == it.Id).Sum(c => c.Int) > 6)
+    .Select(it => it.Id)
+    .ToListAsync();
+```
+
+```sql
+select t1.id
+ from complex_entity as 't1'
+ where ((select sum(t2.nullableint)
+ from complex_entity as 't2'
+ where t2.id = t1.id
+limit 1) > 6)
+```
+
+`Count`, `Sum`, `Min`, `Max` and `Avg` compose this way with the ordered comparisons, `==`/`!=`,
+arithmetic and the logical operators. The comparison stays outside the inner `select`, and SQL NULL
+semantics apply: a sum over no rows or over only `NULL` values is `NULL`, and a row whose aggregate is
+`NULL` never satisfies the comparison - it is not treated as zero. On the reported data (parent `8001`
+with child amounts 5 and 7, `8002` with only a `NULL` amount, `8003` with no children) the predicate
+returns `[8001]` only.
+
+`LongCount` and other builder terminals outside the supported aggregate list cannot take part in such a
+comparison: preparation fails closed with `QueryPreparationException` naming the terminal and the
+operator, instead of raising an internal expression-tree error.
+
 Correlation nests arbitrarily: a correlated subquery may itself contain a correlated subquery, and
 each outer reference resolves to the alias of the scope that declared it.
 

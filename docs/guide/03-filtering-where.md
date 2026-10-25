@@ -550,8 +550,11 @@ MySQL/MariaDB `match(col) against(search in boolean mode) > 0` (natural-language
 
 A scalar subquery is also valid in `WHERE`: a single-row terminal on the right-hand side (`First`,
 `Single`, their `*OrDefault` forms, or an aggregate such as `Count`) renders as a parenthesised
-`select` and may reference the outer row (correlated). These forms, together with the full set of
-subquery positions and the in-memory limits, are covered in [Subqueries](07-subqueries.md).
+`select` and may reference the outer row (correlated). An aggregate terminal (`Count()`, `Sum(x)`,
+`Min`/`Max`/`Avg`) may also stand on the left of the comparison, for example
+`Where(p => children.Where(c => c.ParentId == p.Id).Sum(c => c.Amount) > 6)`. These forms, together
+with the full set of subquery positions and the in-memory limits, are covered in
+[Subqueries](07-subqueries.md#correlated-scalar-subquery).
 
 For a captured pattern the wildcards are concatenated around the parameter at build time, for example
 `somestring like '%' || $needle || '%'` on SQLite. `any` and `all` are not supported by the SQLite

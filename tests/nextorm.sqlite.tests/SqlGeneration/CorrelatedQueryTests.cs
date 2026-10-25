@@ -518,4 +518,152 @@ public class CorrelatedQueryTests
         sql.Should().NotContain("t2.id = t1.a");
         sql.Should().Contain("t3.id = t1.a");
     }
+
+    /// <summary>
+    /// #303: an aggregate terminal inside a correlated WHERE predicate lowers to the same correlated
+    /// scalar subquery the projection form uses, keeps <c>limit 1</c> and leaves the comparison
+    /// outside the inner SELECT; the whole statement is pinned as a literal.
+    /// </summary>
+    [Fact]
+    public void AggregateTerminalInWhere_ShouldRenderCorrelatedScalarSubquery()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var pairs = ctx.From<IPairEntity>();
+
+        var sql = SqlOf(ctx, outer
+            .Where(it => pairs.Where(p => p.Id == it.Id).Sum(p => p.A) > 6)
+            .Select(it => it.Id));
+
+        sql.Should().Contain("select sum(");
+        sql.Should().Contain("from pair_entity");
+        sql.Should().Contain("where cast(t2.id as bigint) = t1.id");
+        sql.Should().Contain("limit 1)");
+
+        sql.Should().Be("select t1.id\n from complex_entity as 't1'\n"
+            + " where ((select sum(t2.a)\n from pair_entity as 't2'\n"
+            + " where cast(t2.id as bigint) = t1.id\n"
+            + "limit 1) > 6)");
+    }
+
+    /// <summary>
+    /// #303: every whitelisted aggregate terminal composes with a numeric consumer, both the count
+    /// branch (<c>count(*)</c>) and the selector branches.
+    /// </summary>
+    [Fact]
+    public void AggregateTerminalInWhere_ShouldRenderEveryAggregateFunction()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var pairs = ctx.From<IPairEntity>();
+
+        SqlOf(ctx, outer.Where(it => pairs.Where(p => p.Id == it.Id).Count() > 1).Select(it => it.Id))
+            .Should().Contain(" where ((select count(*)\n from pair_entity as 't2'\n")
+            .And.Contain("limit 1) > 1)");
+        SqlOf(ctx, outer.Where(it => pairs.Where(p => p.Id == it.Id).Min(p => p.A) > 1).Select(it => it.Id))
+            .Should().Contain("(select min(t2.a)\n from pair_entity as 't2'");
+        SqlOf(ctx, outer.Where(it => pairs.Where(p => p.Id == it.Id).Max(p => p.A) > 1).Select(it => it.Id))
+            .Should().Contain("(select max(t2.a)\n from pair_entity as 't2'");
+        SqlOf(ctx, outer.Where(it => pairs.Where(p => p.Id == it.Id).Avg(p => p.A) > 1).Select(it => it.Id))
+            .Should().Contain("(select avg(t2.a)\n from pair_entity as 't2'");
+        SqlOf(ctx, outer.Where(it => outer.Where(s => s.Id == it.Id).Sum(s => s.Int) > 6).Select(it => it.Id))
+            .Should().Contain("(select sum(t2.nullableint)\n from complex_entity as 't2'");
+    }
+
+    /// <summary>
+    /// #303: the comparison operators keep their identity around the scalar subquery - equality keeps
+    /// its boxed path, the ordered comparisons stay ordered, and the reversed/arithmetic forms place
+    /// the subquery on the correct side.
+    /// </summary>
+    [Fact]
+    public void AggregateTerminalInWhere_ShouldPreserveComparisonOperators()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var pairs = ctx.From<IPairEntity>();
+
+        SqlOf(ctx, outer.Where(it => pairs.Where(p => p.Id == it.Id).Count() != 2).Select(it => it.Id))
+            .Should().Contain("limit 1) != 2");
+        SqlOf(ctx, outer.Where(it => pairs.Where(p => p.Id == it.Id).Count() >= 1).Select(it => it.Id))
+            .Should().Contain("limit 1) >= 1)");
+        SqlOf(ctx, outer.Where(it => pairs.Where(p => p.Id == it.Id).Count() < 2).Select(it => it.Id))
+            .Should().Contain("limit 1) < 2)");
+        SqlOf(ctx, outer.Where(it => pairs.Where(p => p.Id == it.Id).Count() <= 1).Select(it => it.Id))
+            .Should().Contain("limit 1) <= 1)");
+        SqlOf(ctx, outer.Where(it => 6 < pairs.Where(p => p.Id == it.Id).Sum(p => p.A)).Select(it => it.Id))
+            .Should().Contain(" where (6 < (select sum(t2.a)");
+        SqlOf(ctx, outer.Where(it => pairs.Where(p => p.Id == it.Id).Count() + 1 > 2).Select(it => it.Id))
+            .Should().Contain("limit 1) + 1) > 2)");
+    }
+
+    /// <summary>
+    /// #303: logical operators compose with the lowered predicate, including a negated one.
+    /// </summary>
+    [Fact]
+    public void AggregateTerminalInWhere_ShouldComposeWithLogicalOperators()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var pairs = ctx.From<IPairEntity>();
+
+        SqlOf(ctx, outer
+            .Where(it => pairs.Where(p => p.Id == it.Id).Sum(p => p.A) > 6
+                && pairs.Where(p => p.Id == it.Id).Count() > 1)
+            .Select(it => it.Id))
+            .Should().Contain("limit 1) > 6) and ((select count(*)\n from pair_entity as 't3'")
+            .And.Contain("limit 1) > 1))");
+
+        SqlOf(ctx, outer
+            .Where(it => pairs.Where(p => p.Id == it.Id).Sum(p => p.A) > 6
+                || pairs.Where(p => p.Id == it.Id).Count() == 0)
+            .Select(it => it.Id))
+            .Should().Contain("limit 1) > 6) or (select count(*)\n from pair_entity as 't3'")
+            .And.Contain("limit 1) = 0)");
+
+        SqlOf(ctx, outer
+            .Where(it => !(pairs.Where(p => p.Id == it.Id).Count() > 1))
+            .Select(it => it.Id))
+            .Should().Contain(" where not (((select count(*)\n from pair_entity as 't2'")
+            .And.Contain("limit 1) > 1))");
+    }
+
+    /// <summary>
+    /// #303: a terminal that still returns the untyped registry placeholder (builder <c>LongCount</c>
+    /// is deliberately outside the whitelist - T279 owns its wide count and result type) fails closed
+    /// with a public preparation exception naming the terminal and the operator, instead of the
+    /// internal expression-tree error.
+    /// </summary>
+    [Fact]
+    public void LongCountInWhere_ShouldThrowQueryPreparationException()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var pairs = ctx.From<IPairEntity>();
+
+        FluentActions.Invoking(() => SqlOf(ctx, outer
+                .Where(it => pairs.Where(p => p.Id == it.Id).LongCount() > 0)
+                .Select(it => it.Id)))
+            .Should().Throw<QueryPreparationException>()
+            .WithMessage("*LongCount*")
+            .WithMessage("*GreaterThan*");
+    }
+
+    /// <summary>
+    /// #303: the same fail-closed path covers a scalar <c>First()</c> subquery used in an ordered
+    /// comparison - it stays unsupported, but as a public refusal rather than an internal error.
+    /// </summary>
+    [Fact]
+    public void ScalarFirstInWhere_ShouldThrowQueryPreparationException()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var pairs = ctx.From<IPairEntity>();
+
+        FluentActions.Invoking(() => SqlOf(ctx, outer
+                .Where(it => pairs.Where(p => p.Id == it.Id).Select(p => p.A).First() > 5)
+                .Select(it => it.Id)))
+            .Should().Throw<QueryPreparationException>()
+            .WithMessage("*First*")
+            .WithMessage("*GreaterThan*");
+    }
 }
