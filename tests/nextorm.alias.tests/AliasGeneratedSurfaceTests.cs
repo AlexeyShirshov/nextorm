@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using FluentAssertions;
@@ -122,27 +123,34 @@ public class AliasGeneratedSurfaceTests
                 method.IsDefined(typeof(ExtensionAttribute), inherit: false));
             overloads.Should().OnlyContain(method =>
                 method.ReturnType.Name.StartsWith("AliasJoin_", StringComparison.Ordinal));
+
+            // Two forms share an operator name: the source-explicit form ends in the marker, while the
+            // source-less form (#322) ends in the optional Action<JoinOptions> with the marker before it.
             overloads.Should().OnlyContain(method =>
-                method.GetParameters().Length >= 2
-                && method.GetParameters().Last().ParameterType.Name.EndsWith("Marker", StringComparison.Ordinal));
+                IsSourceExplicitAliasForm(method) || IsSourceLessAliasForm(method));
+            overloads.Should().Contain(
+                method => IsSourceExplicitAliasForm(method),
+                $"{joinOperator} must keep its source-explicit marker-last overload");
         }
     }
 
     [Fact]
-    public void Generated_alias_join_overloads_do_not_accept_a_join_options_configuration()
+    public void Source_explicit_alias_join_overloads_stay_option_less()
     {
-        // C3 dismissal (issue #160): the alias extension surface deliberately has no per-join
-        // `Action<JoinOptions>` overload. A caller writing `.Join(inner, condition, configure, Alias.X)`
-        // must not bind a generated alias overload that silently accepts (and drops) the options; the
-        // options-taking overloads are the generated positional `new` instance transitions, which carry
-        // no marker and therefore cannot be mistaken for an alias step. Pin that no marker-taking join
-        // extension carries an `Action<JoinOptions>`, and specifically not the 4-argument
-        // `(inner, condition, Action<JoinOptions>, marker)` form.
+        // C3 dismissal (issue #160): the source-explicit alias extension surface deliberately has no
+        // per-join `Action<JoinOptions>` overload. A caller writing `.Join(inner, condition, configure,
+        // Alias.X)` must not bind a generated alias overload that silently accepts (and drops) the
+        // options; the options-taking overloads are the generated positional `new` instance transitions,
+        // which carry no marker and therefore cannot be mistaken for an alias step. Pin that no
+        // marker-last (source-explicit) join extension carries an `Action<JoinOptions>`, and specifically
+        // not the 4-argument `(inner, condition, Action<JoinOptions>, marker)` form. Frozen per form:
+        // only the separate source-less form (#322) accepts options, and it puts them after the marker.
         var extensions = typeof(Alias).Assembly.GetType(GeneratedNamespace + ".JoinAliasExtensions")!;
         var optionsType = typeof(Action<JoinOptions>);
 
         var methods = extensions.GetMethods(BindingFlags.Public | BindingFlags.Static)
             .Where(method => JoinOperators.Contains(method.Name))
+            .Where(IsSourceExplicitAliasForm)
             .ToArray();
 
         methods.Should().NotBeEmpty();
@@ -159,11 +167,82 @@ public class AliasGeneratedSurfaceTests
         }).ToArray();
 
         fourArgumentOptionsForm.Should().BeEmpty(
-            "an alias `.Join(inner, condition, Action<JoinOptions>, marker)` overload must not exist (C3)");
+            "a source-explicit alias `.Join(inner, condition, Action<JoinOptions>, marker)` overload must not exist (C3)");
 
-        // Stronger and direct: the alias surface never takes an `Action<JoinOptions>` at all.
+        // Stronger and direct: the source-explicit form never takes an `Action<JoinOptions>` at all.
         methods.SelectMany(method => method.GetParameters())
             .Should().NotContain(parameter => parameter.ParameterType == optionsType);
+    }
+
+    [Fact]
+    public void Source_less_alias_join_overloads_take_optional_options_after_the_marker()
+    {
+        // #322 freeze, form-specific counterpart of the C3 dismissal: the source-less form has no source
+        // parameter at all (the implicit `From<TJoin>()` lives in the core seam) and its signature ends in
+        // `marker, Action<JoinOptions> options = null`. The exact explicit-generic call shape is compiled
+        // through `DeclareSourceLessCallShapes`, which is bound but never executed.
+        Action<EntityBuilder<Order>> binder = DeclareSourceLessCallShapes;
+        binder.Should().NotBeNull("the source-less call shapes must compile against the emitted surface");
+
+        var extensions = typeof(Alias).Assembly.GetType(GeneratedNamespace + ".JoinAliasExtensions")!;
+        var optionsType = typeof(Action<JoinOptions>);
+
+        var methods = extensions.GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Where(method => JoinOperators.Contains(method.Name))
+            .Where(IsSourceLessAliasForm)
+            .ToArray();
+
+        methods.Should().NotBeEmpty("the source-less form must emit join overloads");
+
+        foreach (var joinOperator in new[] { "Join", "LeftJoin", "RightJoin", "FullJoin" })
+        {
+            methods.Should().Contain(
+                method => method.Name == joinOperator,
+                $"the source-less form must cover the conditional operator {joinOperator}");
+        }
+
+        // No source argument: `this, condition, marker, options` and nothing else.
+        methods.Should().OnlyContain(method => method.GetParameters().Length == 4);
+        methods.Should().OnlyContain(method =>
+            method.GetParameters()[1].ParameterType.IsGenericType
+            && method.GetParameters()[1].ParameterType.GetGenericTypeDefinition() == typeof(Expression<>));
+        methods.Should().OnlyContain(method =>
+            method.GetParameters()[2].ParameterType.Name.EndsWith("Marker", StringComparison.Ordinal));
+        methods.Should().OnlyContain(method =>
+            method.GetParameters()[3].ParameterType == optionsType
+            && method.GetParameters()[3].IsOptional
+            && method.GetParameters()[3].DefaultValue == null);
+    }
+
+    /// <summary>
+    /// Compile-only declaration of the #322 source-less call shapes. It is bound (never invoked) by
+    /// <see cref="Source_less_alias_join_overloads_take_optional_options_after_the_marker"/> so the
+    /// compiler must resolve the exact explicit-generic form against the emitted extensions: marker-only
+    /// and marker-with-options, for every conditional operator, without a source argument.
+    /// </summary>
+    private static void DeclareSourceLessCallShapes(EntityBuilder<Order> orders)
+    {
+        _ = orders.Join<Person>((l, r) => l.Id == r.Id, Alias.Buyer);
+        _ = orders.Join<Person>((l, r) => l.Id == r.Id, Alias.Buyer, options => options.WithJoinHint("loop"));
+        _ = orders.LeftJoin<Person>((l, r) => l.Id == r.Id, Alias.Buyer);
+        _ = orders.RightJoin<Person>((l, r) => l.Id == r.Id, Alias.Buyer);
+        _ = orders.FullJoin<Person>((l, r) => l.Id == r.Id, Alias.Buyer, null);
+    }
+
+    /// <summary>The shape of a source-explicit alias extension: the last parameter is the alias marker.</summary>
+    private static bool IsSourceExplicitAliasForm(MethodInfo method)
+        => method.GetParameters().Last().ParameterType.Name.EndsWith("Marker", StringComparison.Ordinal);
+
+    /// <summary>
+    /// The shape of a source-less alias extension (#322): `this receiver, condition, marker, options`,
+    /// i.e. no source parameter and the optional options after the marker.
+    /// </summary>
+    private static bool IsSourceLessAliasForm(MethodInfo method)
+    {
+        var parameters = method.GetParameters();
+        return parameters.Length == 4
+            && parameters[^1].ParameterType == typeof(Action<JoinOptions>)
+            && parameters[^2].ParameterType.Name.EndsWith("Marker", StringComparison.Ordinal);
     }
 
     [Fact]

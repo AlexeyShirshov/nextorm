@@ -13,6 +13,7 @@ namespace NextORM.Integration.Tests;
 /// CROSS/OUTER APPLY body is re-pinned (the fail-closed guard has its own SQL-generation tests). A
 /// skip is never a pass: when the container is unavailable the constructor reports the reason.
 /// </summary>
+[Collection("ClickHouse")]
 public sealed class ClickHouseJoinAliasIntegrationTests : IDisposable
 {
     private readonly IDataContext _ctx;
@@ -28,6 +29,17 @@ public sealed class ClickHouseJoinAliasIntegrationTests : IDisposable
     }
 
     public void Dispose() => _ctx.Dispose();
+
+    // #322 D7: the shared O x R x V row matrix re-pinned against a real ClickHouse server. ClickHouse
+    // has a native FULL join, so every operator cell executes and no cell is skipped.
+    /// <summary>The shared #322 matrix, forwarded so the attribute resolves on this class.</summary>
+    public static IEnumerable<object[]> TypeOnlyAliasMatrix() => CommonTestSuite.TypeOnlyAliasMatrix();
+
+    [Theory]
+    [MemberData(nameof(TypeOnlyAliasMatrix))]
+    public void TypeOnlyAlias_rows_match_the_source_explicit_and_positional_chains(
+        AliasProbeOperator op, int arity, AliasProbeOptions opt)
+        => CommonTestSuite.TypeOnlyAliasRowsMatch(op, arity, opt, supportsFullJoin: true, _sut);
 
     [Fact]
     public void Alias_inner_join_returns_matched_rows()

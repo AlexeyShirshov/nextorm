@@ -2929,6 +2929,36 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     }
 
     /// <summary>
+    /// Source-less alias-join seam for generated alias-join builders (issue #322): the implicit
+    /// <c>FROM</c> source for <typeparamref name="TJoinEntity"/> is created from this builder's data
+    /// context (<c>From&lt;TJoinEntity&gt;()</c>) and forwarded to the same assembly path as the
+    /// source-explicit conditional overload, so a generated extension method can expose the
+    /// <c>Alias.X</c> marker without also handing the caller an <c>EntityBuilder&lt;TJoinEntity&gt;</c>.
+    /// </summary>
+    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
+    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <typeparam name="TJoinEntity">The entity type being joined.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="joinType">The kind of join to add.</param>
+    /// <param name="options">Optional per-join configuration; applied exactly once by the shared assembly path.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The in-memory provider cannot project named aliases.</exception>
+    public TNext JoinAlias<TNext, TNextEntity, TJoinEntity>(
+        Func<IDataContext, TNext> create,
+        Expression<Func<TEntity, TJoinEntity, bool>> joinCondition,
+        JoinType joinType = JoinType.Inner,
+        Action<JoinOptions>? options = null)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+
+        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _dataProvider.From<TJoinEntity>(), joinCondition, joinType, options);
+    }
+
+    /// <summary>
     /// Alias-join seam for the conditionless operators (<c>CrossJoin</c>/<c>CrossApply</c>/
     /// <c>OuterApply</c>): mirrors the positional conditionless overloads, so the resulting
     /// <see cref="JoinExpression"/> carries no <c>ON</c> predicate and an explicit

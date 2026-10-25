@@ -166,6 +166,73 @@ public class AliasProjectionShapeTests
         }
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // #322: the source-less alias form must produce exactly the same generated builder/projection
+    // shape as the source-explicit form: same closed return type, same slot-2 attribute, same retained
+    // ItemN members. The marker stays mandatory — an unaliased source-less call is not a surface.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void A_source_less_alias_join_reuses_the_source_explicit_builder_and_projection_shape()
+    {
+        var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var orders = ctx.From<Order>(b => b.Table("orders"));
+            var people = ctx.From<Person>(b => b.Table("person"));
+
+            AliasJoin_P1_A2_Buyer<Order, Person> sourceLess = orders.Join<Person>((a, b) => a.BuyerId == b.Id, Alias.Buyer);
+            AliasJoin_P1_A2_Buyer<Order, Person> sourceExplicit = orders.Join<Person>(people, (a, b) => a.BuyerId == b.Id, Alias.Buyer);
+
+            // The compile-time assignment above already proves the static return type; the runtime type
+            // proves the two call forms are the same closed builder, not two parallel generated types.
+            sourceLess.GetType().Should().Be(sourceExplicit.GetType());
+            sourceLess.GetType().BaseType.Should().Be(typeof(EntityBuilder<AliasProjection_P1_A2_Buyer<Order, Person>>));
+
+            var projection = typeof(AliasProjection_P1_A2_Buyer<Order, Person>);
+            projection.GetProperty("Item1").Should().NotBeNull();
+            projection.GetProperty("Item2").Should().NotBeNull();
+            projection.GetProperty("Buyer").Should().NotBeNull();
+            projection.GetProperty("Buyer")!.GetCustomAttribute<JoinSlotAttribute>()!.Position.Should().Be(2);
+            GetMemberPosition(projection.GetProperty("Buyer")!).Should().Be(1);
+            GetMemberPosition(projection.GetProperty("Item2")!).Should().Be(1);
+
+            // Slot resolution belongs to the projection, so both call forms must read slot 2.
+            sourceLess.Select(p => p.Buyer.Id).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
+            sourceExplicit.Select(p => p.Buyer.Id).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void A_source_less_alias_join_cannot_be_called_without_a_marker()
+    {
+        // The generator emits the source-less form only together with an `Alias.*` marker argument, so a
+        // call that omits the marker (for example `orders.Join<Person>((a, b) => ...)`) is not part of
+        // the surface and cannot compile. Every conditional overload on the root receiver must therefore
+        // carry exactly one marker parameter; an unaliased overload would show up here with none.
+        var extensions = typeof(Alias).Assembly
+            .GetType("NextORM.Generated.nextorm_alias_tests.JoinAliasExtensions")
+            ?? throw new InvalidOperationException("JoinAliasExtensions type was not found.");
+
+        var conditionalRootForms = extensions
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Where(method => method.Name is "Join" or "LeftJoin" or "RightJoin" or "FullJoin")
+            .Where(method => method.GetParameters()[0].ParameterType == typeof(EntityBuilder<Order>))
+            .ToArray();
+
+        conditionalRootForms.Should().NotBeEmpty();
+        conditionalRootForms.Should().OnlyContain(method =>
+            method.GetParameters().Count(parameter =>
+                parameter.ParameterType.Name.EndsWith("Marker", StringComparison.Ordinal)) == 1);
+        conditionalRootForms.Should().OnlyContain(method => method.GetParameters().Length >= 4,
+            "an unaliased source-less overload would be (self, condition[, options])");
+    }
+
     [Fact]
     public void Alias_members_carry_join_slot_attribute_and_resolve_to_the_right_slot()
     {

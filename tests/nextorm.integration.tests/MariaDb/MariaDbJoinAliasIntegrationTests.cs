@@ -28,6 +28,18 @@ public sealed class MariaDbJoinAliasIntegrationTests : IDisposable
 
     public void Dispose() => _ctx.Dispose();
 
+    // #322 D7: the shared O x R x V row matrix re-pinned against a real MariaDB server. MariaDB has
+    // no FULL join, so every FULL cell takes the refusal-parity branch (all three forms must throw the
+    // same *Full join* message) and no unsupported SQL is emitted or skipped.
+    /// <summary>The shared #322 matrix, forwarded so the attribute resolves on this class.</summary>
+    public static IEnumerable<object[]> TypeOnlyAliasMatrix() => CommonTestSuite.TypeOnlyAliasMatrix();
+
+    [Theory]
+    [MemberData(nameof(TypeOnlyAliasMatrix))]
+    public void TypeOnlyAlias_rows_match_the_source_explicit_and_positional_chains(
+        AliasProbeOperator op, int arity, AliasProbeOptions opt)
+        => CommonTestSuite.TypeOnlyAliasRowsMatch(op, arity, opt, supportsFullJoin: false, _sut);
+
     [Fact]
     public void Alias_inner_join_returns_matched_rows()
         => CommonTestSuite.AliasInnerJoinReturnsMatchedRows(_sut);

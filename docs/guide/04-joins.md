@@ -317,6 +317,46 @@ each slot a distinct alias name (as with `Alias.Buyer` and `Alias.Approver` abov
 typed builder per chain; that is a builder-granularity choice only, not a verified `NORMGEN007`
 remediation.
 
+### Source-less aliases
+
+The four predicate-based operators accept the marker on their source-less form as well. The joined
+source is created from the receiver's own data context, so the call is a condition plus the marker —
+with an optional join-options callback after the marker:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join<Person>((o, p) => o.BuyerId == p.Id, Alias.Buyer)            // slot 2, options omitted
+    .Join<Person>((p, a) => p.Item2.Id == a.Id, Alias.Approver)        // slot 3, options omitted
+    .Select(p => new { Buyer = p.Buyer.Id, Approver = p.Approver.Id })
+    .ToListAsync();
+```
+
+```sql
+select t2.id as 'Buyer', t3.id as 'Approver'
+ from orders as 't1'
+ join person as 't2' on t1.buyerid = t2.id
+ join person as 't3' on t2.id = t3.id
+```
+
+`Join<TJoin>((left, right) => ..., Alias.X[, options])`, and the same shape for `LeftJoin`, `RightJoin`
+and `FullJoin`, is the complete source-less alias surface. It is also the **only** alias surface that
+takes options: `(condition, marker, Action<JoinOptions> options)` accepts an omitted argument, an
+explicit `null` or a callback — the first two mean "no options", and a supplied callback runs exactly
+once per call with the same hint, lock and relationship semantics as the positional join overloads.
+The marker means what it means everywhere else: it names the new slot (`Alias.Buyer` at slot 2 is also
+`p.Item2`), the chain continues on the generated `AliasJoin_<suffix>` receiver, and source-less,
+source-explicit and positional steps mix freely in one chain.
+
+The receivers are the ones the marker form already has: the root `EntityBuilder<T>` and the
+`JoinedEntityBuilder<T1..Tn>` arities 2–7, i.e. the alias join lands on slot 2 through slot 8. The two
+boundaries of the source-less form itself are unchanged: `CrossJoin`, `CrossApply` and `OuterApply`
+take no condition, so they have no source-less form (their aliased forms keep taking the explicit
+source), and a raw-table source is not resolvable by type. The provider boundaries are unchanged too:
+the in-memory provider throws `NotSupportedException` on any alias, and MySQL/MariaDB refuse `FullJoin`
+in **every** form — source-less, source-explicit and positional — with `NotSupportedException` naming
+the unsupported `Full join`, before any SQL is rendered, so an unsupported operator is never silently
+skipped.
+
 ### Naming the root source (`.WithAlias`)
 
 The root source occupies slot 1, so it can be named with a chained `.WithAlias(Alias.X)` applied to
@@ -447,7 +487,8 @@ flat arity-chain scope bound, which stops at arity 8. It is **not** a compile-ti
 builder still inherits the generic-base `EntityBuilder<Projection<T1..T8>>` members, so a further
 source-less join (like a further source-explicit join) *does* compile, treating the accumulated eight-table
 projection as `Item1`. Use `As`/`From(query)` to name the projection when the flat chain is no longer the
-right shape.
+right shape. The same four operators also accept an `Alias.<Name>` marker — with the optional join
+options after it — on every one of those receivers; see [Source-less aliases](#source-less-aliases).
 
 ## Cross join
 

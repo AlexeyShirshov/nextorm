@@ -50,6 +50,48 @@ public class AliasPlanCacheTests
         }
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // #322: the source-less alias form must use the same plan cache as the source-explicit form —
+    // alternating projections of two slots on one chain must not collide, and a second preparation
+    // must return the cached command without setting the sticky _dontCache flag.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Source_less_alias_chain_keeps_slots_and_reuses_the_cached_plan()
+    {
+        var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var chained = ctx.From<Order>(b => b.Table("orders"))
+                .Join<Person>((a, b) => a.BuyerId == b.Id, Alias.Buyer)
+                .Join<Person>((a, b) => a.Item1.ApproverId == b.Id, Alias.Approver);
+
+            var commands = new List<QueryCommand<int>>();
+            for (var i = 0; i < 5; i++)
+            {
+                var buyerCommand = chained.Select(p => p.Buyer.Id);
+                var approverCommand = chained.Select(p => p.Approver.Id);
+                commands.Add(buyerCommand);
+                commands.Add(approverCommand);
+
+                buyerCommand.ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
+                approverCommand.ToList().Should().Equal(AliasSqliteDatabase.ApproverId);
+            }
+
+            commands.Should().OnlyContain(command => command.Cache);
+
+            var first = ctx.GetPreparedQueryCommand(commands[0], createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
+            var second = ctx.GetPreparedQueryCommand(commands[0], createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
+            second.Should().BeSameAs(first);
+            commands[0].Cache.Should().BeTrue("a source-less alias preparation must not set the sticky _dontCache flag");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void Root_alias_storeInCache_false_keeps_the_command_and_shared_any_command_cacheable()
     {

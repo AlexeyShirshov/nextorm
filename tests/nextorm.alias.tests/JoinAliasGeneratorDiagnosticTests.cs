@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Reflection;
+using System.Text;
 using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -937,6 +938,270 @@ public class JoinAliasGeneratorDiagnosticTests
         => ErrorReceiverSource(
             "IDataContext ctx, EntityBuilder<Person> people, " + wrapper + "<MidRow> target",
             "unknown.From(target)");
+
+    [Fact]
+    public void TypeOnlyAliasExactCallShapeCompiles()
+    {
+        // T322 (issue #322) D1 executable proof: #222's source-less joins must also accept #160's
+        // generated alias marker, i.e. the exact explicit-generic call shape
+        // `.Join<TJoin>((l, r) => <condition>, Alias.X)` with no source argument. The requested call
+        // stays inside the harness source text; the emitted surface has to make that call bind, so the
+        // assertion is a compilation success (missing-surface red before the generator/core work).
+        const string source =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(EntityBuilder<Order> orders, EntityBuilder<Person> people)\n" +
+            "    {\n" +
+            "        _ = orders.Join<Person>(people, (a, b) => a.Id == b.Id, Alias.Customer);\n" +
+            "        _ = orders.Join<Person>((l, r) => l.Id == r.Id, Alias.Buyer);\n" +
+            "    }\n" +
+            "}\n";
+
+        var compilation = CreateCompilation(source);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create([CreateGenerator()]);
+        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out _, TestContext.Current.CancellationToken);
+
+        var errors = output.GetDiagnostics(TestContext.Current.CancellationToken)
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .ToArray();
+        errors.Should().BeEmpty(
+            "the exact source-less alias call `.Join<Person>((l, r) => ..., Alias.Buyer)` must compile " +
+            "against the emitted surface; observed compiler errors: {0}",
+            string.Join(" | ", errors.Select(diagnostic => diagnostic.ToString())));
+
+        var run = driver.GetRunResult();
+        run.Diagnostics.Should().BeEmpty();
+        run.GeneratedTrees.Should().HaveCount(1);
+    }
+
+    // #322 D3: the source-less alias surface.
+    // ---------------------------------------------------------------------------------------------
+
+    private const string SourceLessHeader =
+        "using NextORM.Core;\n" +
+        "using NextORM.Generated.AliasHarness;\n" +
+        "namespace Harness;\n" +
+        "public sealed class Order { public int Id { get; set; } }\n" +
+        "public sealed class Person { public int Id { get; set; } }\n";
+
+    /// <summary>Wraps a call-site body in the source-less harness (root <c>orders</c>, source <c>people</c>).</summary>
+    private static string SourceLessSource(string body)
+        => SourceLessHeader +
+           "public static class Cases\n{\n" +
+           "    public static void Run(EntityBuilder<Order> orders, EntityBuilder<Person> people)\n    {\n" +
+           "        _ = people;\n" +
+           body +
+           "    }\n}\n";
+
+    [Fact]
+    public void Source_less_alias_join_emits_the_marker_with_options_overload()
+    {
+        // The exact #322 shape must produce a closed-receiver extension with the frozen parameter
+        // order `self, condition, marker, Action<JoinOptions> options = null` and no source argument at
+        // all: the implicit source is created inside the core JoinAlias seam.
+        var (run, output) = RunGenerator(SourceLessSource(
+            "        _ = orders.Join<Person>((l, r) => l.Id == r.Id, Alias.Buyer);\n" +
+            "        _ = orders.Join<Person>((l, r) => l.Id == r.Id, Alias.Buyer, o => o.WithJoinHint(\"loop\"));\n"));
+
+        ErrorText(output).Should().BeEmpty("the source-less alias call must compile against the emitted surface");
+        run.Diagnostics.Should().BeEmpty();
+
+        var generated = NormalizedGeneratedSource(run);
+        var expected =
+            "        public static NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin> Join<TJoin>(\n" +
+            "            this global::NextORM.Core.EntityBuilder<global::Harness.Order> self,\n" +
+            "            global::System.Linq.Expressions.Expression<global::System.Func<global::Harness.Order, TJoin, bool>> condition,\n" +
+            "            NextORM.Generated.AliasHarness.Alias.BuyerMarker marker,\n" +
+            "            global::System.Action<global::NextORM.Core.JoinOptions> options = null)\n" +
+            "            => self.JoinAlias<NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin>, NextORM.Generated.AliasHarness.AliasProjection_P1_A2_Buyer<global::Harness.Order, TJoin>, TJoin>(\n" +
+            "                static dc => new NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin>(dc),\n" +
+            "                condition,\n" +
+            "                global::NextORM.Core.JoinType.Inner, options);";
+
+        generated.Should().Contain(expected);
+        generated.Should().NotContain("EntityBuilder<TJoin> _", "the source-less form takes no source argument");
+    }
+
+    [Fact]
+    public void Source_less_alias_joins_emit_every_conditional_operator()
+    {
+        // O = Join/Left/Right/Full on the root receiver: each operator keeps its JoinType and forwards the
+        // options, so the generated surface is the source-less counterpart of the source-explicit one.
+        var (run, output) = RunGenerator(SourceLessSource(
+            "        _ = orders.Join<Person>((l, r) => true, Alias.Buyer);\n" +
+            "        _ = orders.LeftJoin<Person>((l, r) => true, Alias.Buyer);\n" +
+            "        _ = orders.RightJoin<Person>((l, r) => true, Alias.Buyer);\n" +
+            "        _ = orders.FullJoin<Person>((l, r) => true, Alias.Buyer);\n"));
+
+        ErrorText(output).Should().BeEmpty();
+        run.Diagnostics.Should().BeEmpty();
+
+        var generated = NormalizedGeneratedSource(run);
+        foreach (var (operation, joinType) in new[]
+                 {
+                     ("Join", "Inner"), ("LeftJoin", "Left"), ("RightJoin", "Right"), ("FullJoin", "Full")
+                 })
+        {
+            generated.Should().Contain(
+                "public static NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Buyer<global::Harness.Order, TJoin> "
+                + operation + "<TJoin>(");
+            generated.Should().Contain(
+                "global::NextORM.Core.JoinType." + joinType + ", options);",
+                "the source-less " + operation + " step must delegate with JoinType." + joinType);
+        }
+    }
+
+    [Fact]
+    public void Source_less_alias_joins_close_every_positional_receiver_arity()
+    {
+        // R = root (EntityBuilder<T>) plus JoinedEntityBuilder arity 2..7, for every conditional operator:
+        // the generated receiver type is the closed positional projection of that arity.
+        string[] operators = ["Join", "LeftJoin", "RightJoin", "FullJoin"];
+        var body = new StringBuilder();
+        var expectations = new List<string>();
+
+        for (var arity = 2; arity <= 7; arity++)
+        {
+            foreach (var operation in operators)
+            {
+                var alias = "S" + operation + arity;
+                var receiver = "orders" + string.Concat(Enumerable.Repeat(".Join<Person>((a, b) => true)", arity - 1));
+                body.Append("        _ = ").Append(receiver).Append('.')
+                    .Append(operation).Append("<Person>((l, r) => true, Alias.").Append(alias).Append(");\n");
+
+                var orderedArguments = "<global::Harness.Order" +
+                    string.Concat(Enumerable.Repeat(", global::Harness.Person", arity - 1)) + ">";
+                var receiverSuffix = "P1" + string.Concat(
+                    Enumerable.Range(2, arity - 1).Select(slot => "_P" + slot));
+
+                expectations.Add(
+                    "public static NextORM.Generated.AliasHarness.AliasJoin_" + receiverSuffix + "_A" + (arity + 1) + "_" + alias + orderedArguments.Replace(">", ", TJoin>", StringComparison.Ordinal) + " " + operation + "<TJoin>(");
+                expectations.Add(
+                    "            this global::NextORM.Core.JoinedEntityBuilder" + orderedArguments + " self,");
+            }
+        }
+
+        var (run, output) = RunGenerator(SourceLessSource(body.ToString()));
+
+        ErrorText(output).Should().BeEmpty();
+        run.Diagnostics.Should().BeEmpty();
+
+        var generated = NormalizedGeneratedSource(run);
+        foreach (var expectation in expectations) generated.Should().Contain(expectation);
+    }
+
+    [Fact]
+    public void Source_less_alias_joins_compile_for_a_generic_joined_type_argument()
+    {
+        // "Generic callers": the emitted method keeps exactly one method type parameter, so a consumer
+        // generic method can supply its own type argument and the alias surface still binds.
+        const string source =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public static class Cases\n{\n" +
+            "    public static void Run<TJoined>(EntityBuilder<Order> orders)\n    {\n" +
+            "        _ = orders.Join<TJoined>((l, r) => l.Id != 0, Alias.Generic);\n" +
+            "        _ = orders.LeftJoin<TJoined>((l, r) => l.Id != 0, Alias.Generic, o => o.WithJoinHint(\"loop\"));\n" +
+            "    }\n}\n";
+
+        var (run, output) = RunGenerator(source);
+
+        ErrorText(output).Should().BeEmpty();
+        run.Diagnostics.Should().BeEmpty();
+        NormalizedGeneratedSource(run).Should().Contain(
+            "public static NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Generic<global::Harness.Order, TJoin> LeftJoin<TJoin>(");
+    }
+
+    [Fact]
+    public void Source_less_alias_join_reaches_the_seven_to_eight_transition()
+    {
+        // Seven chained source-less alias joins: receivers run from EntityBuilder<Order> through the
+        // generated AliasJoin_* of arity 7, and the return type is the arity-8 builder.
+        var body = new StringBuilder("        _ = orders");
+        for (var slot = 2; slot <= 8; slot++)
+        {
+            body.Append(".Join<Person>((l, r) => true, Alias.S").Append(slot - 1).Append(')');
+        }
+
+        body.Append(";\n");
+
+        var (run, output) = RunGenerator(SourceLessSource(body.ToString()));
+
+        ErrorText(output).Should().BeEmpty();
+        run.Diagnostics.Should().BeEmpty();
+
+        var generated = NormalizedGeneratedSource(run);
+        generated.Should().Contain(
+            "class AliasJoin_P1_A2_S1_A3_S2_A4_S3_A5_S4_A6_S5_A7_S6_A8_S7<T1, T2, T3, T4, T5, T6, T7, T8>");
+        generated.Should().Contain(
+            "class AliasProjection_P1_A2_S1_A3_S2_A4_S3_A5_S4_A6_S5_A7_S6_A8_S7<T1, T2, T3, T4, T5, T6, T7, T8>");
+        // The arity-7 receiver is the generated alias builder of the six-step prefix, not a positional one.
+        generated.Should().Contain(
+            "            this NextORM.Generated.AliasHarness.AliasJoin_P1_A2_S1_A3_S2_A4_S3_A5_S4_A6_S5_A7_S6<global::Harness.Order, global::Harness.Person, global::Harness.Person, global::Harness.Person, global::Harness.Person, global::Harness.Person, global::Harness.Person> self,");
+    }
+
+    [Fact]
+    public void Source_less_alias_join_with_a_malformed_marker_reports_NORMGEN005()
+    {
+        // Negative control: the guard still rejects, it is not a valid shape turned into a failure. Both
+        // the option-less and the options-after-marker forms must report NORMGEN005 on the marker.
+        AssertSingleDiagnostic(
+            RunDiagnosticCase("var q = orders.Join<Person>((a, b) => true, Alias.Buyer.Approver);"),
+            "NORMGEN005",
+            "Alias.Buyer.Approver");
+
+        AssertSingleDiagnostic(
+            RunDiagnosticCase("var q = orders.Join<Person>((a, b) => true, Alias.Buyer.Approver, o => o.WithJoinHint(\"loop\"));"),
+            "NORMGEN005",
+            "Alias.Buyer.Approver");
+    }
+
+    [Fact]
+    public void Source_less_alias_join_ninth_slot_reports_NORMGEN004()
+    {
+        // Negative control: the slot cap is unchanged by the new form; the ninth slot is rejected at the
+        // eighth source-less alias step.
+        var body = new StringBuilder("var q = orders");
+        for (var slot = 2; slot <= 9; slot++)
+        {
+            body.Append(".Join<Person>((a, b) => true, Alias.A").Append(slot - 1).Append(')');
+        }
+
+        body.Append(';');
+
+        var harness = RunDiagnosticCase(body.ToString());
+        var diagnostic = AssertSingleDiagnostic(harness, "NORMGEN004", "Alias.A8");
+        diagnostic.GetMessage().Should().Contain("9");
+    }
+
+    private static (GeneratorDriverRunResult Run, Compilation Output) RunGenerator(string source)
+    {
+        var compilation = CreateCompilation(source);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create([CreateGenerator()]);
+        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out _, TestContext.Current.CancellationToken);
+        return (driver.GetRunResult(), output);
+    }
+
+    private static string ErrorText(Compilation output)
+        => string.Join(
+            " | ",
+            output.GetDiagnostics(TestContext.Current.CancellationToken)
+                .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+                .Select(diagnostic => diagnostic.ToString()));
+
+    /// <summary>Generated source with line endings normalized, so multi-line expectations are portable.</summary>
+    private static string NormalizedGeneratedSource(GeneratorDriverRunResult run)
+    {
+        run.GeneratedTrees.Should().HaveCount(1);
+        return run.GeneratedTrees[0].ToString().Replace("\r\n", "\n", StringComparison.Ordinal);
+    }
 
     // Harness plumbing.
     // ---------------------------------------------------------------------------------------------
