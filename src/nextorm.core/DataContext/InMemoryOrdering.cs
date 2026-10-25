@@ -21,10 +21,28 @@ internal static class InMemoryOrdering
         foreach (var sorting in queryCommand.Sorting!)
         {
             var del = GetSortingSelector<TEntity>(context, sorting, queryCommand, sortingSelectorCache);
-            if (sorting.Direction == OrderDirection.Asc)
-                intData = (intData ?? data).OrderBy(del);
+            var nullsPosition = NullsOrderingRenderer.Validate(sorting.NullsPosition);
+            if (nullsPosition == NullsPosition.Default)
+            {
+                // A second key must extend the previous ordering instead of replacing it: Enumerable.OrderBy
+                // is a fresh stable sort, so calling it again would silently make the last key primary and
+                // the earlier keys (including an explicit placement) disappear. The single-key path is
+                // unchanged.
+                if (intData is null)
+                    intData = sorting.Direction == OrderDirection.Asc ? data.OrderBy(del) : data.OrderByDescending(del);
+                else
+                    intData = sorting.Direction == OrderDirection.Asc ? intData.ThenBy(del) : intData.ThenByDescending(del);
+            }
             else
-                intData = (intData ?? data).OrderByDescending(del);
+            {
+                // Placement is direction-independent, matching the SQL oracle: the rank key groups the
+                // NULLs first or last (always ascending), then the value key applies the requested
+                // direction inside each group.
+                var nullsFirst = nullsPosition == NullsPosition.First;
+                Func<TEntity, int> rank = row => del(row) is null ? (nullsFirst ? 0 : 1) : (nullsFirst ? 1 : 0);
+                var ranked = intData is null ? data.OrderBy(rank) : intData.ThenBy(rank);
+                intData = sorting.Direction == OrderDirection.Asc ? ranked.ThenBy(del) : ranked.ThenByDescending(del);
+            }
         }
         return intData ?? data;
     }
@@ -48,7 +66,19 @@ internal static class InMemoryOrdering
         }
         else
         {
-            expression = (Expression<Func<TEntity, object>>)sorting.PreparedExpression!;
+            // A key over a reference type (for example string) is compiled as
+            // Expression<Func<TEntity, string>>: C# elides the implicit reference conversion to object in
+            // an expression tree, so the runtime cast to Expression<Func<TEntity, object>> would fail.
+            // Rebuild the lambda over object instead of casting, which keeps the natural key selector for
+            // every nullable value and reference type.
+            expression = sorting.PreparedExpression switch
+            {
+                Expression<Func<TEntity, object>> typed => typed,
+                LambdaExpression { Parameters.Count: 1 } lambda => Expression.Lambda<Func<TEntity, object>>(
+                    lambda.Body.Type == typeof(object) ? lambda.Body : Expression.Convert(lambda.Body, typeof(object)),
+                    lambda.Parameters[0]),
+                _ => throw new NotSupportedException("The in-memory provider supports ORDER BY expressions that are single-parameter lambdas only."),
+            };
         }
 
         var key = new ExpressionKey(expression, queryCommand);
@@ -101,9 +131,20 @@ internal static class InMemoryOrdering
 
             object? Key(TResult row) => property.GetValue(row);
 
-            ordered = sorting.Direction == OrderDirection.Asc
-                ? (ordered is null ? results.OrderBy(Key) : ordered.ThenBy(Key))
-                : (ordered is null ? results.OrderByDescending(Key) : ordered.ThenByDescending(Key));
+            var nullsPosition = NullsOrderingRenderer.Validate(sorting.NullsPosition);
+            if (nullsPosition == NullsPosition.Default)
+            {
+                ordered = sorting.Direction == OrderDirection.Asc
+                    ? (ordered is null ? results.OrderBy(Key) : ordered.ThenBy(Key))
+                    : (ordered is null ? results.OrderByDescending(Key) : ordered.ThenByDescending(Key));
+            }
+            else
+            {
+                var nullsFirst = nullsPosition == NullsPosition.First;
+                Func<TResult, int> rank = row => Key(row) is null ? (nullsFirst ? 0 : 1) : (nullsFirst ? 1 : 0);
+                var ranked = ordered is null ? results.OrderBy(rank) : ordered.ThenBy(rank);
+                ordered = sorting.Direction == OrderDirection.Asc ? ranked.ThenBy(Key) : ranked.ThenByDescending(Key);
+            }
         }
 
         return ordered?.ToList() ?? results;

@@ -54,6 +54,13 @@ public class ClickHouseDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsRangeColumns => true;
 
+    /// <summary>ClickHouse renders the native <c>NULLS FIRST</c>/<c>NULLS LAST</c> ordering modifier.</summary>
+    public override bool SupportsNullsOrdering => true;
+
+    /// <inheritdoc/>
+    public override string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
+        => NullsOrderingRenderer.RenderNative(expressionSql, direction, nullsPosition);
+
     /// <summary>
     /// ClickHouse emulates a table-valued parameter with a native array bound through the driver and
     /// expanded server-side with <c>arrayJoin(@p)</c>: a scalar set is an <c>Array(T)</c> and an entity
@@ -298,6 +305,13 @@ public class ClickHouseDialect : SqlDialectBase
 
     /// <summary>ClickHouse supports the <c>GROUPS</c> window frame unit.</summary>
     public override bool SupportsWindowFrameGroups => true;
+
+    /// <summary>
+    /// ClickHouse emulates both null-safe comparison forms over guarded ordinary equality: its native
+    /// <c>isNotDistinctFrom</c>/<c>&lt;=&gt;</c> spellings are restricted to the JOIN ON section (Code 48
+    /// outside it), so they are never emitted in a predicate or scalar position.
+    /// </summary>
+    public override INullSafeComparisonRenderer? NullSafeComparison => ClickHouseNullSafeComparisonRenderer.Instance;
 
     /// <summary>
     /// ClickHouse has a native <c>JSON</c> type and stores a mapped JSON column as it. This is the
@@ -1208,4 +1222,32 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
     };
 
     private static string Pad(IReadOnlyList<string> args) => args.Count == 3 ? args[2] : "' '";
+}
+
+/// <summary>
+/// Renders the explicit null-safe comparison helpers on ClickHouse. The native
+/// <c>isNotDistinctFrom</c>/<c>&lt;=&gt;</c> spellings are rejected outside a JOIN ON section (Code 48),
+/// so both forms are the guarded ordinary-equality emulation:
+/// <c>(a is null and b is null) or (a is not null and b is not null and a = b)</c>, with distinct as its
+/// logical complement. No sentinel normalisation is used, so a NULL never compares equal to a real value
+/// (including <c>0</c>), and the two-valued result is already <c>UInt8</c> in a scalar position.
+/// </summary>
+internal sealed class ClickHouseNullSafeComparisonRenderer : INullSafeComparisonRenderer
+{
+    internal static readonly ClickHouseNullSafeComparisonRenderer Instance = new();
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition DistinctDisposition => NullSafeComparisonDisposition.Emulated;
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition NotDistinctDisposition => NullSafeComparisonDisposition.Emulated;
+
+    /// <inheritdoc/>
+    public string RenderDistinct(string left, string right) => $"(not {Guarded(left, right)})";
+
+    /// <inheritdoc/>
+    public string RenderNotDistinct(string left, string right) => Guarded(left, right);
+
+    private static string Guarded(string left, string right) =>
+        $"(({left} is null and {right} is null) or ({left} is not null and {right} is not null and {left} = {right}))";
 }

@@ -20,6 +20,9 @@ public class PostgresDialect : SqlDialectBase
     // The first PostgreSQL release with the ANSI aggregate FILTER clause (SQL:2003 T612, 9.4).
     private static readonly Version AggregatesFilterMinVersion = new(9, 4);
 
+    /// <summary>PostgreSQL supports <c>SAVEPOINT</c>/<c>ROLLBACK TO SAVEPOINT</c>/<c>RELEASE SAVEPOINT</c>.</summary>
+    public override bool SupportsSavepoints => true;
+
     /// <summary>
     /// Gets the shared PostgreSQL dialect instance. Subclassing the dialect does not change this
     /// instance; a derived dialect is created through the public constructors instead.
@@ -68,6 +71,13 @@ public class PostgresDialect : SqlDialectBase
 
     /// <summary>Npgsql exposes streaming <c>GetStream</c>/<c>GetTextReader</c> accessors for LOB columns.</summary>
     public override bool SupportsSequentialAccess => true;
+
+    /// <summary>PostgreSQL renders the native <c>NULLS FIRST</c>/<c>NULLS LAST</c> ordering modifier.</summary>
+    public override bool SupportsNullsOrdering => true;
+
+    /// <inheritdoc/>
+    public override string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
+        => NullsOrderingRenderer.RenderNative(expressionSql, direction, nullsPosition);
 
     /// <summary>PostgreSQL allows a data-modifying statement (<c>INSERT ... RETURNING</c>) as a CTE body.</summary>
     public override bool SupportsDataModifyingCtes => true;
@@ -370,6 +380,9 @@ public class PostgresDialect : SqlDialectBase
 
     /// <summary>PostgreSQL 11+ supports the <c>GROUPS</c> window frame unit.</summary>
     public override bool SupportsWindowFrameGroups => true;
+
+    /// <summary>PostgreSQL renders both null-safe comparison forms natively (<c>IS [NOT] DISTINCT FROM</c>).</summary>
+    public override INullSafeComparisonRenderer? NullSafeComparison => PostgresNullSafeComparisonRenderer.Instance;
 
     /// <summary>PostgreSQL supports the frame <c>EXCLUDE CURRENT ROW</c>/<c>GROUP</c>/<c>TIES</c>/<c>NO OTHERS</c> clause.</summary>
     public override bool SupportsWindowFrameExclusion => true;
@@ -842,4 +855,26 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
     };
 
     private static string Pad(IReadOnlyList<string> args) => args.Count == 3 ? args[2] : "' '";
+}
+
+/// <summary>
+/// Renders the explicit null-safe comparison helpers on PostgreSQL, which has the ANSI spellings as
+/// native operators: <c>a IS NOT DISTINCT FROM b</c> and <c>a IS DISTINCT FROM b</c>. Both are
+/// two-valued, so the result is a plain boolean and needs no scalar legalisation.
+/// </summary>
+internal sealed class PostgresNullSafeComparisonRenderer : INullSafeComparisonRenderer
+{
+    internal static readonly PostgresNullSafeComparisonRenderer Instance = new();
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition DistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition NotDistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public string RenderDistinct(string left, string right) => $"({left} is distinct from {right})";
+
+    /// <inheritdoc/>
+    public string RenderNotDistinct(string left, string right) => $"({left} is not distinct from {right})";
 }

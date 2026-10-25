@@ -204,6 +204,14 @@ result exactly.
 
 See [Scalar functions](../../scalar-functions/index.md).
 
+## Null-safe comparison
+
+PostgreSQL has the ANSI operators natively, so both helpers map one-to-one and the result is a plain
+boolean: `SqlFunctions.Sql.is_not_distinct_from(a, b)` renders `(a is not distinct from b)` and
+`is_distinct_from(a, b)` renders `(a is distinct from b)`. Both are two-valued, so no scalar
+legalisation is needed; ordinary `==`/`!=` keep their SQL NULL semantics. See
+[Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from).
+
 ## `DISTINCT ON`
 
 [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) renders `SELECT DISTINCT ON (expr, ...)`, keeping the

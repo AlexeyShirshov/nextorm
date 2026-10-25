@@ -1017,4 +1017,31 @@ public static partial class SqlFunctions
 
         /// <summary>Windowed <c>count(property)</c>.</summary>
         public WindowFunction<int> count_over<T>(T? property) => default!;
+
+        /// <summary>
+        /// <c>left is not distinct from right</c>: two-valued null-safe equality. Both NULL operands
+        /// compare equal, exactly one NULL operand compares unequal, and two non-NULL operands compare
+        /// with ordinary equality. Unlike <c>==</c>, the result is never SQL <c>NULL</c>/UNKNOWN.
+        /// Requires a provider that supports null-safe comparison (see
+        /// <see cref="ISqlDialect.NullSafeComparison"/>); the provider may render it natively or
+        /// emulate it.
+        /// </summary>
+        /// <typeparam name="T">The common operand type; a nullable column uses the nullable type.</typeparam>
+        /// <param name="left">The left operand.</param>
+        /// <param name="right">The right operand.</param>
+        /// <returns>The two-valued comparison result.</returns>
+        public bool is_not_distinct_from<T>(T left, T right) => default!;
+
+        /// <summary>
+        /// <c>left is distinct from right</c>: the complement of
+        /// <see cref="is_not_distinct_from{T}(T, T)"/>. Two non-NULL operands compare with ordinary
+        /// inequality, and a NULL on exactly one side compares unequal instead of yielding SQL
+        /// <c>NULL</c>/UNKNOWN. Requires a provider that supports null-safe comparison (see
+        /// <see cref="ISqlDialect.NullSafeComparison"/>).
+        /// </summary>
+        /// <typeparam name="T">The common operand type; a nullable column uses the nullable type.</typeparam>
+        /// <param name="left">The left operand.</param>
+        /// <param name="right">The right operand.</param>
+        /// <returns>The two-valued comparison result.</returns>
+        public bool is_distinct_from<T>(T left, T right) => default!;
     }

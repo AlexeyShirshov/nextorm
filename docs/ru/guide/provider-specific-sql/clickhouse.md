@@ -303,6 +303,17 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 материализуется как `Tuple<SByte,String>`, а не через нативный транспорт `JsonObject`. См.
 [Поддержка JSON](../16-json.md#отобразить-clr-объект-на-нативную-json-колонку).
 
+## Null-safe-сравнение
+
+В ClickHouse нет пригодной скалярной нативной формы: `isNotDistinctFrom(...)` и оператор `<=>`
+принимаются только в секции `JOIN ON`, а вне неё на 25.8 падают ошибкой сервера Code 48
+`NOT_IMPLEMENTED` («Function isNotDistinctFrom can be used only in the JOIN ON section»). Поэтому оба
+помощника эмулируются охраняемым предикатом:
+`((a is null and b is null) or (a is not null and b is not null and a = b))`, а `is_distinct_from` —
+его дополнение `not (...)`. Нормализация через sentinel не используется, поэтому `NULL` никогда не
+сравнивается как равный реальному значению (включая `0`), а скалярный результат уже имеет тип `UInt8`.
+См. [Null-safe-сравнение](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
+
 ## Пока не поддерживается
 
 Серверные/кластерные табличные функции (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`,

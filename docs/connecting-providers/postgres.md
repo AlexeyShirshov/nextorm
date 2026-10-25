@@ -307,6 +307,27 @@ var r = ctx.From<IComplexEntity>()
 // r[0].Id == 1 (the row whose Int is NULL)
 ```
 
+## Explicit NULL placement
+
+PostgreSQL has native `NULLS FIRST`/`NULLS LAST`, so [`NullsPosition`](xref:NextORM.Core.NullsPosition)
+`First`/`Last` render the modifier directly and [`ISqlDialect.SupportsNullsOrdering`](xref:NextORM.Core.ISqlDialect.SupportsNullsOrdering)
+is `true`:
+
+```csharp
+var r = ctx.From<IComplexEntity>()
+    .OrderBy(it => it.Int, NullsPosition.Last)
+    .Select(it => new { it.Id })
+    .ToList();
+// order by nullableint NULLS LAST
+```
+
+Placement is independent of direction: `First`/`Last` keep their group even when the key is descending
+(`order by nullableint desc NULLS FIRST`). `NullsPosition.Default` emits no clause and keeps the PostgreSQL
+default, which is direction-aware and opposite to SQLite/SQL Server/MySQL/MariaDB: ascending puts nulls
+**last** and descending puts them **first** (null sorts as the largest value). Because the modifier is
+native, the key is emitted once, `DISTINCT`/`DISTINCT ON` need no special handling, and a parameterized key
+binds once. See [Sorting and paging](../guide/06-sorting-and-paging.md#null-ordering-and-placement).
+
 ## Large objects (LOB streaming)
 
 A single `byte[]` or `string` column can be read as a `Stream`/`TextReader` without loading the value into managed memory. Npgsql implements `GetStream`/`GetTextReader` for `bytea` and `text`, so PostgreSQL is one of the three providers that support the LOB terminals in this release (alongside SQL Server and SQLite):
@@ -365,7 +386,8 @@ select t1.value, t2.somestring as "String"
 | `stdev` / `stdevp` | `stddev` / `stddev_pop` |
 | `var` / `varp` | `variance` / `var_pop` |
 | `DateTime.Now` / `UtcNow` | `now()` / `now() at time zone 'utc'` |
-| `ORDER BY … DESC` null placement | nulls sort first |
+| `ORDER BY` null placement (default) | nulls sort as the largest value, so `DESC` puts them first and `ASC` last |
+| Explicit NULL placement (`NullsPosition`) | native `NULLS FIRST`/`NULLS LAST` ([`SupportsNullsOrdering`](xref:NextORM.Core.ISqlDialect.SupportsNullsOrdering)) |
 
 ## See also
 

@@ -311,6 +311,28 @@ var r = ctx.From<IComplexEntity>()
 // r[0].Id == 1 (the row whose Int is NULL)
 ```
 
+## Явное размещение NULL
+
+В PostgreSQL есть нативные `NULLS FIRST`/`NULLS LAST`, поэтому [`NullsPosition`](xref:NextORM.Core.NullsPosition)
+`First`/`Last` отрисовывают модификатор напрямую, а [`ISqlDialect.SupportsNullsOrdering`](xref:NextORM.Core.ISqlDialect.SupportsNullsOrdering)
+равен `true`:
+
+```csharp
+var r = ctx.From<IComplexEntity>()
+    .OrderBy(it => it.Int, NullsPosition.Last)
+    .Select(it => new { it.Id })
+    .ToList();
+// order by nullableint NULLS LAST
+```
+
+Размещение не зависит от направления: `First`/`Last` сохраняют свою группу даже при нисходящем ключе
+(`order by nullableint desc NULLS FIRST`). `NullsPosition.Default` не генерирует клаузу и сохраняет
+умолчание PostgreSQL, которое зависит от направления и противоположно SQLite/SQL Server/MySQL/MariaDB:
+по возрастанию null идут **последними**, по убыванию — **первыми** (null считается наибольшим значением).
+Поскольку модификатор нативный, ключ генерируется один раз, `DISTINCT`/`DISTINCT ON` не требуют особой
+обработки, а параметризованный ключ привязывается один раз. См.
+[Сортировка и постраничная выборка](../guide/06-sorting-and-paging.md#упорядочивание-null-и-размещение).
+
 ## Большие объекты (потоковое чтение LOB)
 
 Одну колонку `byte[]` или `string` можно прочитать как `Stream`/`TextReader`, не загружая значение целиком в managed-память. Npgsql реализует `GetStream`/`GetTextReader` для `bytea` и `text`, поэтому PostgreSQL — один из трёх провайдеров, поддерживающих LOB-терминалы в этом выпуске (наряду с SQL Server и SQLite):
@@ -369,7 +391,8 @@ select t1.value, t2.somestring as "String"
 | `stdev` / `stdevp` | `stddev` / `stddev_pop` |
 | `var` / `varp` | `variance` / `var_pop` |
 | `DateTime.Now` / `UtcNow` | `now()` / `now() at time zone 'utc'` |
-| Размещение null при `ORDER BY … DESC` | null сортируются первыми |
+| Размещение null при `ORDER BY` (по умолчанию) | null сортируются как наибольшее значение: `DESC` ставит их первыми, `ASC` — последними |
+| Явное размещение NULL (`NullsPosition`) | нативные `NULLS FIRST`/`NULLS LAST` ([`SupportsNullsOrdering`](xref:NextORM.Core.ISqlDialect.SupportsNullsOrdering)) |
 
 ## См. также
 

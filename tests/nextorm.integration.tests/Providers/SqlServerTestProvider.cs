@@ -48,6 +48,9 @@ internal sealed class SqlServerTestProvider : ITestProvider
     /// <summary>The provider binds table-valued parameters (native SQL Server UDTT or JSON/array emulation).</summary>
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => true;
+
+    /// <summary>Savepoints are available inside a transaction on this provider.</summary>
+    public bool SupportsSavepoints => true;
     public bool SupportsRegex => true;
     public bool SupportsLobStreaming => true;
     public bool SupportsLobDataReader => true;

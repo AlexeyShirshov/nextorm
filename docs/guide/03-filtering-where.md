@@ -99,6 +99,29 @@ the column's collation, and nextorm makes no CLR `string` collation promise. The
 the expression shape, not by the runtime value: the same expression renders the same SQL whether the
 captured variable currently holds `null` or a value.
 
+### Explicit null-safe comparison (`IS [NOT] DISTINCT FROM`)
+
+The rewrites above are automatic and shape-limited. When a comparison must be two-valued for **any**
+operands — two columns included — opt in explicitly with
+[`SqlFunctions.Sql.is_not_distinct_from`](xref:NextORM.Core.CommonFunctions.is_not_distinct_from``1(``0,``0))
+and [`SqlFunctions.Sql.is_distinct_from`](xref:NextORM.Core.CommonFunctions.is_distinct_from``1(``0,``0)),
+both of which return a non-nullable `bool`:
+
+```csharp
+int? captured = 42;
+
+var rows = await dataContext.From<ComplexEntity>()
+    .Where(x => SqlFunctions.Sql.is_not_distinct_from(x.Int, captured))
+    .Select(x => new { x.Id })
+    .ToListAsync();
+```
+
+Both `NULL` operands compare equal, exactly one `NULL` compares unequal, and two non-null operands use
+the provider's ordinary comparison; `is_distinct_from` is the complement. Ordinary `==` / `!=` stay
+exactly as documented above — the helper is an explicit opt-in and never changes their SQL. See
+[Null-safe comparison](../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from)
+for the truth table, the per-provider rendering and the typing rules.
+
 ### Presence (`HasValue`)
 
 `HasValue` / `!HasValue` on a mapped `Nullable<T>` column translates to `is not null` / `is null`,
@@ -143,17 +166,17 @@ mapped column (or its converter), not from the runtime null, so a SQL Server par
 ### Not covered
 
 The rewrite is deliberately limited to a DB column compared with a captured nullable/string variable.
-The following keep their previous behaviour and are **not** null-safe:
+The following keep their previous behaviour and are **not** automatically null-safe:
 
 * a nullable column compared with another nullable column — in `WHERE`, a `SELECT` projection or
   `JOIN ON`;
 * `ORDER BY`, `GROUP BY`, window `PARTITION BY`/`ORDER BY` and ClickHouse `LIMIT BY`;
 * `Nullable<T>.Value`;
-* a hand-built `DefaultExpression`;
-* the `IS [NOT] DISTINCT FROM` operator (issue #288).
+* a hand-built `DefaultExpression`.
 
-Column↔column null-safe comparison and the native distinctness operator remain separate,
-not-yet-implemented work.
+Ordinary `==` / `!=` between those operands keep SQL three-valued logic; when a two-valued result is
+required, use the explicit
+[null-safe comparison](#explicit-null-safe-comparison-is-not-distinct-from) helper.
 
 ## Combining predicates
 
@@ -563,6 +586,7 @@ array is bound as one parameter; see [Arrays](../scalar-functions/06-arrays.md#a
 | C# construct | SQL |
 |---|---|
 | `==` / `!=` | `=` / `!=`; `is` / `is not` against a `null` literal (including `(int?)null`); captured nullable/string values follow C# null-equality (see [Null handling](#null-handling)) |
+| `SqlFunctions.Sql.is_not_distinct_from` / `is_distinct_from` | two-valued null-safe comparison — native `IS [NOT] DISTINCT FROM` / `IS` / `<=>`, emulated on SQL Server and ClickHouse (see [Null-safe comparison](../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from)) |
 | `>`, `>=`, `<`, `<=` | `>`, `>=`, `<`, `<=` (parenthesised); not null-safe |
 | `&&` / `\|\|` | `and` / `or` |
 | `!` | `not (...)`; in a boolean `SELECT` projection SQL Server casts the predicate to `bit` |

@@ -71,6 +71,12 @@
 `iif(condition, a, b)`, `gen_random_uuid()`/`uuidv7()`, а также session/info-функции
 `current_user()`/`session_user()`/`current_schema()`/`version()`.
 
+Null-safe-сравнение — из их числа и документировано один раз, на странице функций: переносимые
+`SqlFunctions.Sql.is_not_distinct_from`/`is_distinct_from` становятся `IS [NOT] DISTINCT FROM` в
+PostgreSQL, `IS`/`IS NOT` в SQLite и `<=>` в MySQL/MariaDB, а в SQL Server и ClickHouse эмулируются
+охраняемым предикатом `is null`/`=`. См.
+[Null-safe-сравнение](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
+
 ## См. также
 
 * [Ограничения и возможности вне области охвата](../../advanced/limitations.md)

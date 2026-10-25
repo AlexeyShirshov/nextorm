@@ -16,6 +16,77 @@ public interface IIifRenderer
 }
 
 /// <summary>
+/// How one form of the explicit null-safe comparison (<c>is distinct from</c> /
+/// <c>is not distinct from</c>) can be rendered by a dialect.
+/// </summary>
+public enum NullSafeComparisonDisposition
+{
+    /// <summary>The dialect cannot render this form; calling the helper is rejected.</summary>
+    Unsupported = 0,
+    /// <summary>The provider has a native spelling for this form.</summary>
+    Native = 1,
+    /// <summary>The form is expressed portably over the provider's ordinary equality primitives.</summary>
+    Emulated = 2,
+}
+
+/// <summary>
+/// A dialect's renderer for the explicit null-safe comparison helpers
+/// (<see cref="CommonFunctions.is_distinct_from{T}(T, T)"/> and
+/// <see cref="CommonFunctions.is_not_distinct_from{T}(T, T)"/>). Each form carries its own
+/// disposition, so a provider can support one form and reject the other, and every disposition other
+/// than <see cref="NullSafeComparisonDisposition.Unsupported"/> has its rendering on the same object.
+/// </summary>
+/// <remarks>
+/// The capability is absent by default: <see cref="ISqlDialect.NullSafeComparison"/> returns
+/// <see langword="null"/> for a provider that has not opted in, and the translator then rejects the
+/// helper with an exception naming the provider and the form instead of emitting SQL the provider
+/// cannot execute. Both renderings return a two-valued predicate; the caller lowers it to a scalar
+/// value through <see cref="ISqlDialect.MakeBooleanPredicate(string, bool)"/>.
+/// </remarks>
+public interface INullSafeComparisonRenderer
+{
+    /// <summary>How the <c>is distinct from</c> form is expressed; the default rejects it.</summary>
+    NullSafeComparisonDisposition DistinctDisposition => NullSafeComparisonDisposition.Unsupported;
+
+    /// <summary>How the <c>is not distinct from</c> form is expressed; the default rejects it.</summary>
+    NullSafeComparisonDisposition NotDistinctDisposition => NullSafeComparisonDisposition.Unsupported;
+
+    /// <summary>True when <see cref="DistinctDisposition"/> is not <see cref="NullSafeComparisonDisposition.Unsupported"/>.</summary>
+    bool SupportsDistinct => DistinctDisposition != NullSafeComparisonDisposition.Unsupported;
+
+    /// <summary>True when <see cref="NotDistinctDisposition"/> is not <see cref="NullSafeComparisonDisposition.Unsupported"/>.</summary>
+    bool SupportsNotDistinct => NotDistinctDisposition != NullSafeComparisonDisposition.Unsupported;
+
+    /// <summary>
+    /// True when the provider cannot bind a captured comparison operand without an explicit SQL type,
+    /// so every captured operand of the helper must resolve one from the compared column's metadata
+    /// (converter/provider mapping first) or from the CLR-type mapping. When neither yields a mapping
+    /// the helper is rejected before execution instead of emitting an untyped comparison operand.
+    /// SQL Server opts in; the default is <see langword="false"/>, which keeps the provider's
+    /// value-based parameter inference.
+    /// </summary>
+    bool RequiresTypedNullOperands => false;
+
+    /// <summary>
+    /// Renders <c>left is distinct from right</c> over the already-rendered operands. Reached only
+    /// when <see cref="SupportsDistinct"/> is true.
+    /// </summary>
+    /// <param name="left">The already-rendered left operand.</param>
+    /// <param name="right">The already-rendered right operand.</param>
+    /// <returns>The two-valued predicate.</returns>
+    string RenderDistinct(string left, string right);
+
+    /// <summary>
+    /// Renders <c>left is not distinct from right</c> over the already-rendered operands. Reached only
+    /// when <see cref="SupportsNotDistinct"/> is true.
+    /// </summary>
+    /// <param name="left">The already-rendered left operand.</param>
+    /// <param name="right">The already-rendered right operand.</param>
+    /// <returns>The two-valued predicate.</returns>
+    string RenderNotDistinct(string left, string right);
+}
+
+/// <summary>
 /// A dialect's session/information function surface (<c>current_user</c>, <c>session_user</c>,
 /// <c>current_schema</c>, <c>current_database</c>, <c>version</c>). The predicate and the renderer live
 /// on one object, so a name the dialect reports as supported always has a rendering; a provider that

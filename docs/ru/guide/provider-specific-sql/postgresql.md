@@ -206,6 +206,14 @@ Native-поверхность реализована только в PostgreSQL;
 
 См. [Скалярные функции](../../scalar-functions/index.md).
 
+## Null-safe-сравнение
+
+PostgreSQL имеет операторы ANSI нативно, поэтому оба помощника отображаются один-к-одному, а результат —
+обычный boolean: `SqlFunctions.Sql.is_not_distinct_from(a, b)` рендерит `(a is not distinct from b)`, а
+`is_distinct_from(a, b)` — `(a is distinct from b)`. Оба двузначны, поэтому скалярной легализации не
+нужно; обычные `==`/`!=` сохраняют семантику SQL NULL. См.
+[Null-safe-сравнение](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-сравнение-is-not-distinct-from).
+
 ## `DISTINCT ON`
 
 [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) рендерит `SELECT DISTINCT ON (expr, ...)`, оставляя

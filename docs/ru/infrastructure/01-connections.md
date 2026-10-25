@@ -114,6 +114,8 @@ bool same = ReferenceEquals(((IConnectionManager)ctx).GetConnection(), ctx.GetCo
 [`DataContext`](xref:NextORM.Core.DataContext) реализует
 [`ITransactionManager`](xref:NextORM.Core.ITransactionManager): начните транзакцию через
 `BeginTransaction*` или встройтесь в чужую (EF Core, Dapper, сырой ADO.NET) через `UseTransaction`.
+Savepoints (`CreateSavepoint*`/`RollbackToSavepoint*`/`ReleaseSavepoint*`) выполняются в активной
+транзакции или во встроенной через `UseTransaction` и никогда не меняют её владение.
 Её поддерживают SQLite, PostgreSQL, SQL Server и MySQL/MariaDB; ClickHouse её отклоняет, а провайдер
 in-memory её не реализует. Полный гайд — [Транзакции](../guide/23-transactions.md).
 

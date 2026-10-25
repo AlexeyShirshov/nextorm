@@ -897,4 +897,23 @@ internal static class InMemoryScalarFunctions
         var padding = builder.ToString(0, needed);
         return left ? padding + value : value + padding;
     }
+
+    /// <summary>
+    /// <c>is not distinct from</c>: the two-valued null-safe equality behind
+    /// <see cref="CommonFunctions.is_not_distinct_from{T}(T, T)"/>. Both NULL operands are equal,
+    /// exactly one NULL is unequal, and otherwise <see cref="EqualityComparer{T}.Default"/> decides.
+    /// The NULL checks are explicit, so a NULL reference operand is never dereferenced.
+    /// </summary>
+    internal static bool IsNotDistinctFrom<T>(T left, T right)
+    {
+        if (left is null)
+            return right is null;
+
+        return right is not null && EqualityComparer<T>.Default.Equals(left, right);
+    }
+
+    /// <summary>
+    /// <c>is distinct from</c>: the complement of <see cref="IsNotDistinctFrom{T}(T, T)"/>.
+    /// </summary>
+    internal static bool IsDistinctFrom<T>(T left, T right) => !IsNotDistinctFrom(left, right);
 }

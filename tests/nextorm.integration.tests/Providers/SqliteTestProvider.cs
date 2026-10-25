@@ -41,6 +41,9 @@ internal sealed class SqliteTestProvider : ITestProvider
     /// <summary>SQLite binds table-valued parameters through a JSON document.</summary>
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => true;
+
+    /// <summary>Savepoints are available inside a transaction on this provider.</summary>
+    public bool SupportsSavepoints => true;
     public bool SupportsRegex => true;
     public bool SupportsLobStreaming => true;
     // The locator-free result path returns a buffered (non-sequential) reader without the rowid column.

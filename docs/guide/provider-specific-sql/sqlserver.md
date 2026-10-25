@@ -458,6 +458,17 @@ of the same scope (`CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`, `SERVER_NAME`, `HOS
 `APP_NAME`, `SUSER_NAME`, `ORIGINAL_LOGIN`) are shipped. Use raw SQL or a `[SqlFunction]` wrapper when a
 concrete per-row use appears.
 
+## Null-safe comparison
+
+SQL Server has no `IS [NOT] DISTINCT FROM` on the supported version floor, so both helpers are emulated
+over ordinary equality as an always-two-valued guarded predicate:
+`((a is not null and b is not null and a = b) or (a is null and b is null))`, with `is_distinct_from` as
+its `not (...)` complement. A boolean projection is legalised as
+`cast(case when ... then 1 else 0 end as bit)`. Because the operands are compared twice, a captured null
+operand needs a SQL type derived from metadata; an unmapped one is rejected before execution with
+`Null-safe comparison requires a SQL Server type mapping for null operands.` See
+[Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from).
+
 ## Not yet supported
 
 No SQL Server-specific surface remains open. See

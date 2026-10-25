@@ -730,6 +730,11 @@ public class ParamRefreshRecipeTests
 
         public RecipeTestContext() : base(new DataContextBuilder())
         {
+            // Several shape tests build a command straight from a QueryDefinition (CreateCapturedCommand)
+            // without materialising the entity, so the planner's table-name lookup must not depend on
+            // another test method having called From<RecipeEntity>() first: register the probe type here,
+            // which makes the class order-independent.
+            _ = this.From<RecipeEntity>();
         }
 
         public override ISqlDialect Dialect => RecipeTestDialect.Instance;

@@ -52,6 +52,9 @@ internal sealed class ClickHouseTestProvider : ITestProvider
     /// <summary>ClickHouse emulates a table parameter with a native array expanded server-side with <c>arrayJoin(@p)</c>.</summary>
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => false;
+
+    /// <summary>ClickHouse has no transaction, so it can never expose a savepoint.</summary>
+    public bool SupportsSavepoints => false;
     public bool SupportsRegex => true;
     public bool SupportsLobStreaming => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for ClickHouse.";

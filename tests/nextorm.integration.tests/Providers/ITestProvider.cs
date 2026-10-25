@@ -137,6 +137,15 @@ public interface ITestProvider
     bool SupportsTransactions { get; }
 
     /// <summary>
+    /// True when the provider supports savepoints inside an ADO.NET transaction: create, roll back to
+    /// and release a named point. SQLite, PostgreSQL, SQL Server and MySQL (and therefore MariaDB,
+    /// which is not part of this harness) do; ClickHouse has no transaction at all, so every shared
+    /// savepoint fact is skipped there. The shared facts assert this flag equals
+    /// <see cref="ISqlDialect.SupportsSavepoints"/> for the same provider.
+    /// </summary>
+    bool SupportsSavepoints { get; }
+
+    /// <summary>
     /// True when the provider can translate a constant-pattern <c>Regex.IsMatch</c>/<c>Regex.Replace</c>
     /// into native SQL. PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ can.
     /// </summary>

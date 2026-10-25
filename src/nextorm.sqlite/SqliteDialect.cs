@@ -9,6 +9,9 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>Gets the shared SQLite dialect instance.</summary>
     public static readonly SqliteDialect Instance = new();
 
+    /// <summary>SQLite supports <c>SAVEPOINT</c>/<c>ROLLBACK TO</c>/<c>RELEASE</c> inside a transaction.</summary>
+    public override bool SupportsSavepoints => true;
+
     // Microsoft.Data.Sqlite exposes a blob as a seekable SqliteBlob when it is read through
     // SequentialAccess, but only if the row has a rowid it can address lazily.
     /// <inheritdoc/>
@@ -25,6 +28,13 @@ public sealed class SqliteDialect : SqlDialectBase
 
     /// <summary>SQLite emulates a table-valued parameter with a JSON document (<c>json_each</c>/<c>json_extract</c>).</summary>
     public override bool SupportsTableValuedParameters => true;
+
+    /// <summary>SQLite renders the native <c>NULLS FIRST</c>/<c>NULLS LAST</c> ordering modifier.</summary>
+    public override bool SupportsNullsOrdering => true;
+
+    /// <inheritdoc/>
+    public override string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
+        => NullsOrderingRenderer.RenderNative(expressionSql, direction, nullsPosition);
 
     // SQLite 3.35.0+ supports the ANSI INSERT ... RETURNING clause; last_insert_rowid() stays
     // available as a fallback but RETURNING is preferred because it is scoped to the statement.
@@ -163,6 +173,9 @@ public sealed class SqliteDialect : SqlDialectBase
 
     /// <summary>SQLite 3.28+ supports the <c>GROUPS</c> window frame unit.</summary>
     public override bool SupportsWindowFrameGroups => true;
+
+    /// <summary>SQLite renders both null-safe comparison forms natively (<c>IS</c> / <c>IS NOT</c>).</summary>
+    public override INullSafeComparisonRenderer? NullSafeComparison => SqliteNullSafeComparisonRenderer.Instance;
 
     /// <summary>SQLite 3.28+ supports the frame <c>EXCLUDE CURRENT ROW</c>/<c>GROUP</c>/<c>TIES</c>/<c>NO OTHERS</c> clause.</summary>
     public override bool SupportsWindowFrameExclusion => true;
@@ -518,4 +531,26 @@ internal sealed class SqliteScalarFunctions : IScalarFunctions
         "pi" => "pi()",
         _ => throw new NotSupportedException($"The {name} function is not supported by SQLite.")
     };
+}
+
+/// <summary>
+/// Renders the explicit null-safe comparison helpers on SQLite, whose <c>IS</c> operator is the
+/// native null-safe equality (<c>a IS b</c>, <c>a IS NOT b</c>). Both forms are two-valued, so the
+/// result is a plain 0/1 value and needs no scalar legalisation.
+/// </summary>
+internal sealed class SqliteNullSafeComparisonRenderer : INullSafeComparisonRenderer
+{
+    internal static readonly SqliteNullSafeComparisonRenderer Instance = new();
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition DistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition NotDistinctDisposition => NullSafeComparisonDisposition.Native;
+
+    /// <inheritdoc/>
+    public string RenderDistinct(string left, string right) => $"({left} is not {right})";
+
+    /// <inheritdoc/>
+    public string RenderNotDistinct(string left, string right) => $"({left} is {right})";
 }

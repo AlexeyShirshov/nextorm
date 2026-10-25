@@ -134,6 +134,7 @@ public class MySqlDialectTests
         Dialect.SupportsFullJoin.Should().BeFalse();
         Dialect.SupportsIntersectExceptAll.Should().BeFalse();
         Dialect.SupportsSequentialAccess.Should().BeFalse();
+        Dialect.SupportsSavepoints.Should().BeTrue();
         Dialect.SupportsApply.Should().BeTrue();
         Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsCube.Should().BeFalse();

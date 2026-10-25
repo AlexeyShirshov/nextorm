@@ -37,7 +37,9 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         [nameof(CommonFunctions.cot)] = Helper(nameof(InMemoryScalarFunctions.Cot)),
         [nameof(CommonFunctions.degrees)] = Helper(nameof(InMemoryScalarFunctions.Degrees)),
         [nameof(CommonFunctions.radians)] = Helper(nameof(InMemoryScalarFunctions.Radians)),
-        [nameof(CommonFunctions.pi)] = Helper(nameof(InMemoryScalarFunctions.Pi))
+        [nameof(CommonFunctions.pi)] = Helper(nameof(InMemoryScalarFunctions.Pi)),
+        [nameof(CommonFunctions.is_distinct_from)] = Helper(nameof(InMemoryScalarFunctions.IsDistinctFrom)),
+        [nameof(CommonFunctions.is_not_distinct_from)] = Helper(nameof(InMemoryScalarFunctions.IsNotDistinctFrom))
     };
 
     private static readonly Dictionary<string, MethodInfo> SqliteHelpers = new(StringComparer.Ordinal)

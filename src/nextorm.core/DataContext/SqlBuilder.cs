@@ -384,6 +384,8 @@ internal readonly struct SqlBuilder
                 var sortingList = cmd.Sorting;
                 if (sortingList is not null)
                 {
+                    EnsureNullPlacementIsRenderable(cmd, sortingList);
+
                     if (!_ctx.ParamMode) sqlBuilder!.Append(SqlText.NewLine).Append(Kw(" order by "));
 
                     for (var (i, cnt) = (0, sortingList.Length); i < cnt; i++)
@@ -391,23 +393,62 @@ internal readonly struct SqlBuilder
                         var sorting = sortingList[i];
                         if (sorting.PreparedExpression is not null)
                         {
-                            var sortingSql = SqlSourceRenderer.MakeSort(in _ctx, entityType, sorting.PreparedExpression, 0, dontNeedAlias);
                             if (!_ctx.ParamMode)
                             {
-                                sqlBuilder!.Append(sortingSql);
-                                if (sorting.Direction == OrderDirection.Desc)
-                                    sqlBuilder.Append(Kw(" desc"));
+                                var sortingSql = SqlSourceRenderer.MakeSort(in _ctx, entityType, sorting.PreparedExpression, 0, dontNeedAlias);
+                                if (sorting.NullsPosition == NullsPosition.Default)
+                                {
+                                    sqlBuilder!.Append(sortingSql);
+                                    if (sorting.Direction == OrderDirection.Desc)
+                                        sqlBuilder.Append(Kw(" desc"));
+                                }
+                                else
+                                {
+                                    // The dialect decides between native NULLS FIRST/LAST and the CASE
+                                    // emulation; the key fragment is already qualified and quoted.
+                                    sqlBuilder!.Append(_ctx.Dialect.RenderOrderBy(sortingSql, sorting.Direction, sorting.NullsPosition));
+                                }
 
                                 sqlBuilder.Append(", ");
                             }
+                            else
+                            {
+                                // Parameter mode mirrors the emitted occurrences: the CASE emulation repeats
+                                // the key, so it is walked twice; Default and native placement walk it once.
+                                var occurrences = sorting.NullsPosition != NullsPosition.Default && !_ctx.Dialect.SupportsNullsOrdering ? 2 : 1;
+                                for (var n = 0; n < occurrences; n++)
+                                    SqlSourceRenderer.MakeSort(in _ctx, entityType, sorting.PreparedExpression, 0, dontNeedAlias);
+                            }
                         }
-                        else if (!_ctx.ParamMode && sorting.ColumnIndex.HasValue)
+                        else if (sorting.ColumnIndex.HasValue)
                         {
-                            sqlBuilder!.Append(sorting.ColumnIndex);
-                            if (sorting.Direction == OrderDirection.Desc)
-                                sqlBuilder.Append(Kw(" desc"));
+                            if (!_ctx.ParamMode)
+                            {
+                                if (sorting.NullsPosition == NullsPosition.Default)
+                                {
+                                    sqlBuilder!.Append(sorting.ColumnIndex);
+                                    if (sorting.Direction == OrderDirection.Desc)
+                                        sqlBuilder.Append(Kw(" desc"));
+                                }
+                                else
+                                {
+                                    // An ordinal cannot carry a CASE (that would test the literal ordinal), so
+                                    // the actual selected key expression is resolved first.
+                                    var sortKey = ResolveSortKeyExpression(cmd, entityType, in sorting);
+                                    var sortingSql = SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0, dontNeedAlias);
+                                    sqlBuilder!.Append(_ctx.Dialect.RenderOrderBy(sortingSql, sorting.Direction, sorting.NullsPosition));
+                                }
 
-                            sqlBuilder.Append(", ");
+                                sqlBuilder.Append(", ");
+                            }
+                            else if (sorting.NullsPosition != NullsPosition.Default && !_ctx.Dialect.SupportsNullsOrdering)
+                            {
+                                // The CASE emulation repeats the resolved key, so the parameter walk visits
+                                // it twice (the plain ordinal path visits nothing).
+                                var sortKey = ResolveSortKeyExpression(cmd, entityType, in sorting);
+                                SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0, dontNeedAlias);
+                                SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0, dontNeedAlias);
+                            }
                         }
                     }
 
@@ -818,6 +859,33 @@ internal readonly struct SqlBuilder
 
             for (var i = 0; i < sorting.Length; i++)
             {
+                var nullsPosition = NullsOrderingRenderer.Validate(sorting[i].NullsPosition);
+
+                if (nullsPosition != NullsPosition.Default)
+                {
+                    var sortKey = ResolveSortKeyExpression(cmd, entityType, in sorting[i]);
+                    if (builder is not null)
+                    {
+                        if (i == 0)
+                            builder.Append(wrotePartition ? Kw(" order by ") : Kw("order by "));
+                        else
+                            builder.Append(", ");
+
+                        var sort = SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0);
+                        builder.Append(_ctx.Dialect.RenderOrderBy(sort, sorting[i].Direction, nullsPosition));
+                    }
+                    else
+                    {
+                        // Mirror the emitted key occurrences: native placement emits the key once, the
+                        // CASE emulation twice.
+                        var occurrences = _ctx.Dialect.SupportsNullsOrdering ? 1 : 2;
+                        for (var n = 0; n < occurrences; n++)
+                            SqlSourceRenderer.MakeSort(in _ctx, entityType, sortKey, 0);
+                    }
+
+                    continue;
+                }
+
                 if (builder is not null)
                 {
                     if (i == 0)
@@ -912,13 +980,7 @@ internal readonly struct SqlBuilder
                         SqlSourceRenderer.MakeColumn(in _ctx, entityColumns[i], entityType, dontNeedAlias: false, renameAware: true);
 
                     if (!cmd.PerParentPagingEmbedded && cmd.Sorting is { Length: > 0 } sorting)
-                    {
-                        for (var i = 0; i < sorting.Length; i++)
-                        {
-                            if (sorting[i].PreparedExpression is { } prepared)
-                                SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
-                        }
-                    }
+                        WalkOrderByParameters(cmd, entityType, sorting);
                 }
 
                 result = outer?.ToString();
@@ -1411,13 +1473,7 @@ internal readonly struct SqlBuilder
                     }
 
                     if (cmd.Sorting is { Length: > 0 } sorting)
-                    {
-                        for (var i = 0; i < sorting.Length; i++)
-                        {
-                            if (sorting[i].PreparedExpression is { } prepared)
-                                SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
-                        }
-                    }
+                        WalkOrderByParameters(cmd, entityType, sorting);
                 }
 
                 result = outer?.ToString();
@@ -1436,9 +1492,116 @@ internal readonly struct SqlBuilder
     }
 
     /// <summary>
+    /// Validates the requested NULL placements and fails closed on shapes where the portable <c>CASE</c>
+    /// emulation would repeat an ordering key illegally. Called from both the SQL and the parameter pass,
+    /// so an unsupported shape is rejected before anything is executed. A dialect with native
+    /// <c>NULLS FIRST</c>/<c>NULLS LAST</c> never repeats the key and is not restricted.
+    /// </summary>
+    /// <param name="cmd">The command whose ordering is about to be rendered.</param>
+    /// <param name="sortingList">Its sort keys.</param>
+    /// <exception cref="BuildSqlCommandException">An explicit placement meets a DISTINCT or LIMIT BY shape that cannot carry the emulation.</exception>
+    private void EnsureNullPlacementIsRenderable(QueryCommand cmd, Sorting[] sortingList)
+    {
+        var hasExplicitPlacement = false;
+        for (var i = 0; i < sortingList.Length; i++)
+        {
+            NullsOrderingRenderer.Validate(sortingList[i].NullsPosition);
+            if (sortingList[i].NullsPosition != NullsPosition.Default)
+                hasExplicitPlacement = true;
+        }
+
+        if (!hasExplicitPlacement || _ctx.Dialect.SupportsNullsOrdering)
+            return;
+
+        // The emulation emits `CASE WHEN <key> ... END ASC, <key>`, so the ordering key is repeated. A
+        // DISTINCT query requires every ORDER BY expression to be in the select list, which the CASE
+        // prefix is not (SQL Server and PostgreSQL both reject it), and LIMIT BY evaluates its own
+        // ordering keys. Both would change semantics or fail at execution, so they fail closed instead.
+        if (cmd.IsDistinct || cmd.DistinctOn is not null)
+            throw new BuildSqlCommandException(
+                "Explicit NULL placement cannot be emulated on a DISTINCT query: the emulation repeats the ordering " +
+                "key inside a CASE expression, which DISTINCT does not permit. Use the provider default or a provider " +
+                "with native NULLS FIRST/NULLS LAST support.");
+
+        if (cmd.LimitBy is not null)
+            throw new BuildSqlCommandException(
+                "Explicit NULL placement cannot be emulated together with LIMIT BY: the emulation repeats the ordering " +
+                "key, which LIMIT BY does not permit. Use the provider default or a provider with native NULLS " +
+                "FIRST/NULLS LAST support.");
+    }
+
+    /// <summary>
+    /// Resolves the real SQL key behind a sort entry. A prepared expression is used as-is; a column index
+    /// is resolved to the expression of the selected column (<c>ORDER BY &lt;ordinal&gt;</c> cannot be
+    /// wrapped in a CASE, which would test the literal ordinal). An unresolvable index fails closed rather
+    /// than silently dropping the requested placement.
+    /// </summary>
+    /// <param name="cmd">The command whose select list resolves an ordinal key.</param>
+    /// <param name="entityType">The entity type the column visitor renders against.</param>
+    /// <param name="sorting">The sort entry.</param>
+    /// <returns>The key expression to render.</returns>
+    /// <exception cref="BuildSqlCommandException">The entry has neither a prepared expression nor a resolvable selected column.</exception>
+    private Expression ResolveSortKeyExpression(QueryCommand cmd, Type entityType, in Sorting sorting)
+    {
+        if (sorting.PreparedExpression is { } prepared)
+            return prepared;
+
+        if (sorting.ColumnIndex is int columnIndex)
+        {
+            var selectList = cmd.SelectList;
+            if (selectList is null || columnIndex < 1 || columnIndex > selectList.Length)
+                throw new BuildSqlCommandException(
+                    $"The ORDER BY column index {columnIndex} does not resolve to a selected column, so an explicit " +
+                    "NULL placement cannot be rendered for it.");
+
+            var column = selectList[columnIndex - 1];
+            if (column.Expression is { } expression)
+                return expression is LambdaExpression { Parameters.Count: 1 } lambda ? lambda.Body : expression;
+
+            if (column.PropertyInfo is { } property)
+                return Expression.Property(Expression.Parameter(entityType, "e"), property);
+
+            throw new BuildSqlCommandException(
+                $"The ORDER BY column index {columnIndex} has no renderable key expression, so an explicit NULL " +
+                "placement cannot be rendered for it.");
+        }
+
+        throw new BuildSqlCommandException("An ORDER BY key must carry either a prepared expression or a column index.");
+    }
+
+    /// <summary>
+    /// Walks the parameters of an <see cref="AppendOrderBy"/> ordering in the same occurrence order as the
+    /// SQL pass: an explicit placement that the dialect emulates with CASE repeats the key, so its
+    /// expression is walked twice; native placement and the default path walk it once. The plain ordinal
+    /// path contributes no parameters.
+    /// </summary>
+    /// <param name="cmd">The command whose select list resolves an ordinal key.</param>
+    /// <param name="entityType">The entity type the column visitor renders against.</param>
+    /// <param name="sorting">The sort keys being rendered.</param>
+    private void WalkOrderByParameters(QueryCommand cmd, Type entityType, Sorting[] sorting)
+    {
+        for (var i = 0; i < sorting.Length; i++)
+        {
+            if (sorting[i].NullsPosition != NullsPosition.Default)
+            {
+                var key = ResolveSortKeyExpression(cmd, entityType, in sorting[i]);
+                var occurrences = _ctx.Dialect.SupportsNullsOrdering ? 1 : 2;
+                for (var n = 0; n < occurrences; n++)
+                    SqlSourceRenderer.MakeSort(in _ctx, entityType, key, 0);
+            }
+            else if (sorting[i].PreparedExpression is { } prepared)
+            {
+                SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
+            }
+        }
+    }
+
+    /// <summary>
     /// Renders the <c>order by</c> of the surviving rows on the outer statement. Mirrors the plain
     /// select-list ordering: a prepared expression is rendered through the column visitor, an ordinal
-    /// is emitted verbatim. A parameter-mode caller walks the expressions separately.
+    /// is emitted verbatim. A parameter-mode caller walks the expressions separately. An explicit NULL
+    /// placement routes through the dialect renderer (native or CASE emulation); the default placement
+    /// keeps the plain direction-only rendering byte-for-byte.
     /// </summary>
     private void AppendOrderBy(QueryCommand cmd, Type entityType, StringBuilder target)
     {
@@ -1449,6 +1612,14 @@ internal readonly struct SqlBuilder
         for (var i = 0; i < sorting.Length; i++)
         {
             if (i > 0) target.Append(", ");
+
+            if (sorting[i].NullsPosition != NullsPosition.Default)
+            {
+                var key = ResolveSortKeyExpression(cmd, entityType, in sorting[i]);
+                var keySql = SqlSourceRenderer.MakeSort(in _ctx, entityType, key, 0);
+                target.Append(_ctx.Dialect.RenderOrderBy(keySql, sorting[i].Direction, sorting[i].NullsPosition));
+                continue;
+            }
 
             if (sorting[i].PreparedExpression is { } prepared)
                 target.Append(SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0));

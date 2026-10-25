@@ -177,6 +177,7 @@ public class PostgresDialectTests
         Dialect.SupportsSequentialAccess.Should().BeTrue();
         // No trailing locator: Npgsql streams the payload without a rowid, so no "<payload>, rowid" SQL.
         Dialect.LobLocatorColumn.Should().BeNull();
+        Dialect.SupportsSavepoints.Should().BeTrue();
         Dialect.SupportsApply.Should().BeTrue();
         Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsArrays.Should().BeTrue();

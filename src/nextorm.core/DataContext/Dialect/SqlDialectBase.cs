@@ -114,6 +114,29 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsPercentileWindow => false;
     /// <summary>Defaults to <c>false</c>; PostgreSQL, MySQL, MariaDB, ClickHouse and SQLite opt into named windows.</summary>
     public virtual bool SupportsNamedWindows => false;
+    /// <summary>
+    /// True when the dialect understands the native <c>NULLS FIRST</c>/<c>NULLS LAST</c> modifier; the safe
+    /// default is <c>false</c>, which selects the portable <c>CASE</c> emulation from
+    /// <see cref="RenderOrderBy"/>. SQLite, PostgreSQL and ClickHouse opt in.
+    /// </summary>
+    public virtual bool SupportsNullsOrdering => false;
+    /// <summary>
+    /// Renders one logical <c>ORDER BY</c> item with an explicit NULL placement. The default emulates the
+    /// placement with a <c>CASE</c> rank key whose prefix is always ascending; providers that opt into
+    /// <see cref="SupportsNullsOrdering"/> override it with the native form.
+    /// </summary>
+    /// <param name="expressionSql">The already-qualified, already-quoted key SQL.</param>
+    /// <param name="direction">The requested key direction.</param>
+    /// <param name="nullsPosition">The explicit NULL placement.</param>
+    /// <returns>The rendered ordering item.</returns>
+    public virtual string RenderOrderBy(string expressionSql, OrderDirection direction, NullsPosition nullsPosition)
+        => NullsOrderingRenderer.Render(expressionSql, direction, nullsPosition);
+    /// <summary>
+    /// The renderer for the explicit null-safe comparison helpers, or <see langword="null"/> when the
+    /// provider has not opted in. The safe default is <see langword="null"/>, which makes the
+    /// translator reject both helper forms with an exception naming the provider and the form.
+    /// </summary>
+    public virtual INullSafeComparisonRenderer? NullSafeComparison => null;
     /// <summary>Defaults to <c>false</c>; PostgreSQL, ClickHouse and SQLite opt into the <c>GROUPS</c> frame unit.</summary>
     public virtual bool SupportsWindowFrameGroups => false;
     /// <summary>Defaults to <c>false</c>; PostgreSQL and SQLite opt into the frame <c>EXCLUDE</c> clause.</summary>
@@ -229,6 +252,16 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string? LobLocatorColumn => null;
     /// <inheritdoc/>
     public virtual bool SupportsTransactions => true;
+
+    /// <summary>
+    /// True when the provider supports savepoints inside an ADO.NET transaction; the fail-closed
+    /// default is <c>false</c>, so a dialect opts in with an override. The member exists on the base
+    /// class as well as on <see cref="ISqlDialect"/> because a class member declared in a derived type
+    /// does not implement — and is not re-mapped to — an interface default member: without this
+    /// <c>virtual</c> member a third-party dialect deriving from this base and declaring
+    /// <c>SupportsSavepoints => true</c> would still read <c>false</c> through <see cref="ISqlDialect"/>.
+    /// </summary>
+    public virtual bool SupportsSavepoints => false;
 
     /// <summary>Defaults to <c>null</c>; ClickHouse exposes the <c>LIMIT n BY expr</c> renderer.</summary>
     public virtual ILimitByRenderer? LimitBy => null;

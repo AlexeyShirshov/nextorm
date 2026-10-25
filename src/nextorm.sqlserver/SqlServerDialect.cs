@@ -12,6 +12,12 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>The shared SQL Server dialect instance.</summary>
     public static readonly SqlServerDialect Instance = new();
 
+    /// <summary>
+    /// SQL Server supports <c>SAVE TRANSACTION</c> and <c>ROLLBACK TRANSACTION &lt;name&gt;</c>; its ADO.NET
+    /// release is a driver no-op, which this capability still reports as supported.
+    /// </summary>
+    public override bool SupportsSavepoints => true;
+
     private readonly IPivotRenderer _pivot;
 
     /// <summary>Creates the dialect and its capability renderers.</summary>
@@ -631,6 +637,13 @@ public sealed class SqlServerDialect : SqlDialectBase
             : $"cast(case when {predicate} then 1 else 0 end as bit)";
     }
 
+    /// <summary>
+    /// T-SQL has no <c>IS [NOT] DISTINCT FROM</c> before SQL Server 2022, so both forms are emulated
+    /// over the ordinary equality primitives as a two-valued guarded predicate. Captured operands need
+    /// an explicit SQL type, which is resolved from the compared column's metadata.
+    /// </summary>
+    public override INullSafeComparisonRenderer? NullSafeComparison => SqlServerNullSafeComparisonRenderer.Instance;
+
     /// <summary>A bit value is not a valid T-SQL predicate, so it is compared with its true literal (<c>(value) = 1</c>).</summary>
     public override string MakeBooleanValuePredicate(string value)
     {
@@ -1171,4 +1184,38 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
 
         return string.Join(", ", parts);
     }
+}
+
+/// <summary>
+/// Renders the explicit null-safe comparison helpers on SQL Server, which has no
+/// <c>IS [NOT] DISTINCT FROM</c> on the supported version floor. Both forms are emulated over ordinary
+/// equality as an always-two-valued guarded predicate:
+/// <c>(a is not null and b is not null and a = b) or (a is null and b is null)</c>, with distinct as its
+/// logical complement. The result is never UNKNOWN, so a scalar projection only needs the existing
+/// Boolean lowering (<c>cast(case when ... then 1 else 0 end as bit)</c>).
+/// </summary>
+internal sealed class SqlServerNullSafeComparisonRenderer : INullSafeComparisonRenderer
+{
+    internal static readonly SqlServerNullSafeComparisonRenderer Instance = new();
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition DistinctDisposition => NullSafeComparisonDisposition.Emulated;
+
+    /// <inheritdoc/>
+    public NullSafeComparisonDisposition NotDistinctDisposition => NullSafeComparisonDisposition.Emulated;
+
+    /// <summary>
+    /// A comparison operand that SQL Server cannot bind without an explicit type is rejected instead of
+    /// being sent untyped, so this renderer requires the metadata-derived SQL type.
+    /// </summary>
+    public bool RequiresTypedNullOperands => true;
+
+    /// <inheritdoc/>
+    public string RenderDistinct(string left, string right) => $"(not {Guarded(left, right)})";
+
+    /// <inheritdoc/>
+    public string RenderNotDistinct(string left, string right) => Guarded(left, right);
+
+    private static string Guarded(string left, string right) =>
+        $"(({left} is not null and {right} is not null and {left} = {right}) or ({left} is null and {right} is null))";
 }

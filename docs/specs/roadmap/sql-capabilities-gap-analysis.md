@@ -55,7 +55,7 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 >
 > The workstreams above are closed; the remaining gaps are itemized in
 > [Remaining gaps](#4-remaining-gaps-in-order-of-significance): relationship metadata (#249, #251),
-> SQL Server composable DML `OUTPUT` (#266), NULLS placement (#287), `IS [NOT] DISTINCT FROM` (#288)
+> SQL Server composable DML `OUTPUT` (#266), NULLS placement (#287)
 > and savepoints (#289), plus the ClickHouse `AggregateFunction` driver blocker (#62) and the
 > dynamic-schema tail (item 11).
 >
@@ -181,7 +181,8 @@ These are fully implemented and covered by SQL-generation or integration tests:
 
 Per-feature details and owners live in the per-feature `docs/specs/roadmap/todo_*.md`; the full matrix
 is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md). Shipped items were moved
-to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
+to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17; item 58 (savepoints) moved on
+2026-10-25.
 
 60. **Metadata-driven loading of declared relationships (issue [#249](https://github.com/AlexeyShirshov/nextorm/issues/249)).**
     `LoadWith` declares each edge with key selectors at the call site and does not consume relationship
@@ -217,11 +218,6 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     inside a CTE, so on SQL Server the rows are consumed by the mutation itself (`Returning`,
     `OutputInto`, `OutputIntoThenOutput`) and cannot feed a second statement of the same query. #266
     tracks making `OUTPUT` a composable source.
-58. **Savepoints (issue [#289](https://github.com/AlexeyShirshov/nextorm/issues/289)).**
-    `ITransactionManager` exposes begin/commit/rollback only; a savepoint needs `ExecuteRaw`, and the
-    caller owns names and nesting ([Transactions](../../guide/23-transactions.md#nested-transactions-and-savepoints)).
-    #289 proposes `CreateSavepoint`/`RollbackToSavepoint`/`ReleaseSavepoint` (SQL Server has
-    `SAVE`/`ROLLBACK TRANSACTION` and no release; ClickHouse and in-memory reject).
 56. **`ORDER BY ... NULLS FIRST/LAST` (issue [#287](https://github.com/AlexeyShirshov/nextorm/issues/287)).**
     There is no null-placement overload, so NULLs sort the way the provider sorts them — and the default
     differs: PostgreSQL is `NULLS LAST` ascending / `FIRST` descending, SQL Server/MySQL/MariaDB/SQLite
@@ -229,11 +225,6 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     ([Sorting and paging](../../guide/06-sorting-and-paging.md)). #287 proposes a `NullsPosition`
     overload family: native syntax on PostgreSQL/SQLite 3.30+/ClickHouse, a `CASE` sort key on SQL
     Server/MySQL/MariaDB. Deferred earlier in the D233 window work.
-57. **`IS [NOT] DISTINCT FROM` (issue [#288](https://github.com/AlexeyShirshov/nextorm/issues/288)).**
-    `==`/`!=` keep SQL NULL semantics and there is no NULL-safe comparison, so a nullable "changed?"
-    predicate has to be written by hand. #288 proposes `SqlFunctions.Sql.is_distinct_from` /
-    `is_not_distinct_from`: native on PostgreSQL/SQLite (`IS`)/MySQL/MariaDB (`<=>`)/ClickHouse
-    (`isNotDistinctFrom`), emulated on SQL Server.
 
 ---
 
@@ -747,6 +738,55 @@ to the ledger on 2026-09-29; item 49 (eager loading) moved on 2026-10-17.
     guard, because its gated `UPDATE ... RETURNING` is a mutation whose SQL is not plan-cached.
     Shipped: [PostgreSQL provider](../../connecting-providers/postgres.md), [MariaDB provider](../../connecting-providers/mariadb.md),
     [Limitations](../../advanced/limitations.md).
+
+57. **`IS [NOT] DISTINCT FROM` — <span style="color:green">shipped</span> (issue [#288](https://github.com/AlexeyShirshov/nextorm/issues/288)).**
+    `SqlFunctions.Sql.is_not_distinct_from`/`is_distinct_from` are explicit, always-two-valued
+    null-safe comparison helpers (both `NULL` equal, exactly one `NULL` unequal, otherwise ordinary
+    comparison), and ordinary `==`/`!=` keep their SQL NULL semantics untouched. Rendering is
+    **driver-free but dialect-owned**: one focused translator
+    (`Visitors/NullSafeComparisonTranslator.cs`) validates the operands, folds literal NULLs, and calls
+    the per-dialect `INullSafeComparisonRenderer` capability (`DataContext/Dialect/DialectCapabilities.cs`)
+    — no provider-name switch in the visitor, and a provider without the capability fails closed before
+    any SQL is emitted. Native forms: PostgreSQL `IS [NOT] DISTINCT FROM`, SQLite `IS`/`IS NOT`,
+    MySQL and MariaDB (inherited) `<=>` with `not (<=>)` as the distinct form. Emulated with a guarded
+    equality predicate: SQL Server (so the supported version floor stays free of the 2022+ operator) and
+    ClickHouse. The original ClickHouse assumption in this document was **wrong**: the native spellings
+    are not usable in scalar context — `isNotDistinctFrom(...)` and `a <=> b` are accepted only in a
+    `JOIN ON` section and fail elsewhere on 25.8 with server error Code 48
+    `NOT_IMPLEMENTED` ("Function isNotDistinctFrom can be used only in the JOIN ON section"), so they are
+    never emitted. Literal NULLs fold (`1 = 1`/`1 = 0`, or `is null`/`is not null` for one literal), a
+    captured operand stays a metadata-typed parameter (never value-specialised; SQL Server rejects an
+    unmapped null operand with `Null-safe comparison requires a SQL Server type mapping for null
+    operands.` and incompatible operands with `Null-safe comparison requires compatible operand types.`),
+    a statically non-nullable CLR value pair may lower to `=`/`<>`, and the in-memory provider applies
+    the same truth table without a CLR-collation promise. Verified on all six providers (37/37 live
+    cells, 0 skips). Docs: [Null-safe comparison](../../scalar-functions/04-conditionals-and-conversion.md#null-safe-comparison-is-not-distinct-from)
+    (EN+RU), [Filtering](../../guide/03-filtering-where.md#explicit-null-safe-comparison-is-not-distinct-from),
+    [Limitations](../../advanced/limitations.md).
+
+58. **Savepoints — <span style="color:green">shipped</span> (issue [#289](https://github.com/AlexeyShirshov/nextorm/issues/289)).**
+    `ITransactionManager` gained six members — `CreateSavepoint`/`CreateSavepointAsync`,
+    `RollbackToSavepoint`/`RollbackToSavepointAsync` and `ReleaseSavepoint`/`ReleaseSavepointAsync` —
+    declared as XML-documented default interface methods, so an existing third-party implementation keeps
+    compiling; `DataContext` implements them explicitly and the concrete type gains no public savepoint
+    member. **Driver-delegated, never rendered:** every call goes to the active or enlisted `DbTransaction`
+    (`Save`/`Rollback`/`Release` and their async forms), so nextorm keeps no savepoint registry or stack,
+    never commits, never rolls the whole transaction back and never changes ownership. The capability is
+    nextorm-owned (`ISqlDialect.SupportsSavepoints`, fail-closed default `false`, with a `SqlDialectBase`
+    virtual twin because a derived-class member does not re-map an interface default member): SQLite,
+    PostgreSQL, SQL Server and MySQL opt in, MariaDB inherits MySQL, ClickHouse has no transaction at all,
+    and an unmodified third-party dialect stays `false`. Guard order is part of the contract —
+    transactions → savepoints → an active transaction → the name — so a multiply-invalid call reports the
+    first applicable failure and never touches the driver. Names are a portable API policy, not a driver
+    limit: 1–32 ASCII identifier characters (`[A-Za-z_][A-Za-z0-9_]*`), validated ordinally, which keeps
+    SQL Server's 32-character truncation out of reach; a duplicate valid name is delegated unchanged and
+    uniqueness/nesting stay with the caller. SQL Server's release still calls the driver and is a
+    **non-throwing no-op that preserves the data** (T-SQL has no `RELEASE SAVEPOINT`), Npgsql applies a
+    savepoint immediately so create-then-rollback needs no intervening command, and rollback-after-release
+    stays provider-defined (not promised). Verified on all five supported providers (105 live cases,
+    0 failed, 0 skipped), plus unit coverage of the guards, the name boundaries and the DIM defaults, and
+    the ClickHouse refusal on the transaction guard. Docs:
+    [Transactions](../../guide/23-transactions.md#nested-transactions-and-savepoints) (EN+RU).
 
 ## 6. Implementation plan
 

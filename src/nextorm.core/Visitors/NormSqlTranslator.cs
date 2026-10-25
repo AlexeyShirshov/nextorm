@@ -597,6 +597,9 @@ internal static class NormSqlTranslator
         if (DictionarySqlTranslator.TryTranslate(visitor, node))
             return;
 
+        if (NullSafeComparisonTranslator.TryTranslate(visitor, node))
+            return;
+
         throw new NotImplementedException();
     }
 
