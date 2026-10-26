@@ -10,7 +10,7 @@ namespace NextORM.Core.Tests;
 /// Builder-level validation of the bulk-insert terminal. The in-memory context is read-only, so any
 /// terminal that needs the database throws; no database is involved.
 /// </summary>
-public class BulkInsertBuilderTests
+public partial class BulkInsertBuilderTests
 {
     [Fact]
     public void NoValues_ShouldThrow()

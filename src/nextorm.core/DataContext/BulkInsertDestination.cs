@@ -37,6 +37,47 @@ internal sealed class BulkInsertDestination
     public bool IsEmpty => Table is null && Schema is null && Database is null && Server is null;
 
     /// <summary>
+    /// The raw (unquoted) qualification parts in render order, without the dialect rules: <c>database.schema</c>
+    /// or the single part that is set, or <see langword="null"/> when the target is unqualified. Used by the
+    /// portable path, whose renderer quotes each part separately; the dialect-aware form is
+    /// <see cref="ResolveQualification"/>.
+    /// </summary>
+    public string? Qualification
+    {
+        get
+        {
+            if (Schema is null)
+                return Database;
+
+            return Database is null ? Schema : Database + "." + Schema;
+        }
+    }
+
+    /// <summary>
+    /// Resolves the raw qualification through the dialect, so a combination the dialect cannot express is
+    /// refused before any row is read, and a provider where a database and a schema coincide stays a single
+    /// part. The table part is a marker that is stripped again, because the caller renders the table itself.
+    /// </summary>
+    /// <param name="dialect">The active SQL dialect.</param>
+    /// <returns>The raw (unquoted) qualification, or <see langword="null"/> when the target is unqualified.</returns>
+    /// <exception cref="NotSupportedException">The dialect cannot express the requested qualification.</exception>
+    public string? ResolveQualification(ISqlDialect dialect)
+    {
+        ArgumentNullException.ThrowIfNull(dialect);
+
+        if (IsEmpty || (Schema is null && Database is null))
+            return null;
+
+        var qualified = dialect.MakeQualifiedTableName(server: null, Database, Schema, TableMarker);
+        var suffix = "." + TableMarker;
+        return qualified.EndsWith(suffix, StringComparison.Ordinal)
+            ? qualified[..^suffix.Length]
+            : null;
+    }
+
+    private const string TableMarker = "__nextorm_bulk_target__";
+
+    /// <summary>
     /// Resolves the destination from the options. The two schema aliases are treated as one part: equal
     /// values collapse, disagreeing values are rejected before any row is consumed.
     /// </summary>
@@ -86,8 +127,9 @@ internal sealed class BulkInsertDestination
     }
 
     // Quote each dot-separated part separately, so a qualified name stays qualified instead of becoming one
-    // identifier that contains dots.
-    private static string QuoteParts(ISqlDialect dialect, string qualifiedName)
+    // identifier that contains dots. Shared with the insert renderer, which receives the qualification as a
+    // raw dot-joined string from the portable bulk path.
+    internal static string QuoteParts(ISqlDialect dialect, string qualifiedName)
     {
         if (qualifiedName.IndexOf('.') < 0)
             return dialect.QuoteIdentifier(qualifiedName);

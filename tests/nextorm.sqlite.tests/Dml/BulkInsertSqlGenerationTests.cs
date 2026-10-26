@@ -105,6 +105,74 @@ public class BulkInsertSqlGenerationTests
         enumerated.Should().BeFalse();
     }
 
+    // ---------------------------------------------------------------- D2 destination / temp rendering
+
+    [Fact]
+    public void BulkInsert_SchemaNameOnly_ShouldQualifyWithTheMappedTable()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Schema("staging")).Values([Row("a", 1, "d")]).ToSql();
+
+        sql.Should().Be("insert into staging.insert_entity (name, age, description) values ($p0, $p1, $p2)");
+    }
+
+    [Fact]
+    public void BulkInsert_DatabaseName_ShouldQualifyTheTarget()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Database("other")).Values([Row("a", 1, "d")]).ToSql();
+
+        sql.Should().Be("insert into other.insert_entity (name, age, description) values ($p0, $p1, $p2)");
+    }
+
+    [Fact]
+    public void BulkInsert_QuotedDatabase_ShouldQuoteEachPartSeparately()
+    {
+        using var ctx = SqliteTestContext.CreateQuoted();
+
+        var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Database("other")).Values([Row("a", 1, "d")]).ToSql();
+
+        sql.Should().Be("insert into \"other\".\"insert_entity\" (\"name\", \"age\", \"description\") values ($p0, $p1, $p2)");
+    }
+
+    [Fact]
+    public void BulkInsert_QuotedSchemaOnly_ShouldQuoteEachPartSeparately()
+    {
+        using var ctx = SqliteTestContext.CreateQuoted();
+
+        var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Schema("staging")).Values([Row("a", 1, "d")]).ToSql();
+
+        sql.Should().Be("insert into \"staging\".\"insert_entity\" (\"name\", \"age\", \"description\") values ($p0, $p1, $p2)");
+    }
+
+    [Fact]
+    public void BulkInsert_LocalTemporary_ShouldRenderTheSameTargetWithoutDdl()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.TargetKind(BulkInsertTargetKind.LocalTemporary))
+            .Values([Row("a", 1, "d")])
+            .ToSql();
+
+        // The caller's temp table lives on this connection; the portable insert addresses it as-is and
+        // emits neither CREATE nor DROP.
+        sql.Should().Be("insert into insert_entity (name, age, description) values ($p0, $p1, $p2)");
+    }
+
+    [Fact]
+    public void BulkInsert_LocalTemporaryWithDatabaseName_ShouldBeRefusedByName()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.TargetKind(BulkInsertTargetKind.LocalTemporary).Database("other"))
+            .Values([Row("a", 1, "d")])
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*LocalTemporary*DatabaseName*");
+    }
+
     private static async IAsyncEnumerable<IInsertEntity> TrackingSource(Action onEnumerated)
     {
         onEnumerated();

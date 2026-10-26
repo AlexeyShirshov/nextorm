@@ -1,17 +1,20 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// The portable bulk-insert path: slices the row stream into batches (a single batch by default) and
-/// executes each as an ordinary parameterised <c>INSERT ... VALUES</c> through
-/// <see cref="IMutationExecutor"/>. Used when the provider has no native bulk API, or when the request
-/// needs <c>RETURNING</c>/<c>OUTPUT</c>, conflict handling or identity-insert forms that the native API
-/// cannot express.
+/// The portable bulk-insert path: slices the row stream into batches and executes each as an ordinary
+/// parameterised <c>INSERT ... VALUES</c> through <see cref="IMutationExecutor"/>. Used when the provider
+/// has no native bulk API, or when the request needs <c>RETURNING</c>/<c>OUTPUT</c>, conflict handling or
+/// identity-insert forms that the native API cannot express.
 /// </summary>
+/// <remarks>
+/// One <see cref="BulkInsertDeadline"/> is started at execution entry and shared by every batch: the
+/// budget covers the row source and the writes together and is never reset. Batches are limited by the
+/// real parameter count (each row binds one parameter per column) and by the exact rendered SQL length,
+/// measured by rendering the candidate batch; a single row that cannot be expressed within
+/// <see cref="BulkInsertOptions.MaxSqlLength"/> is refused before it is sent.
+/// </remarks>
 internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : IBulkInsertExecutor
 {
-    private const int EstimatedCharactersPerParameter = 12;
-    private const int EstimatedCharactersPerRowOverhead = 8;
-
     /// <inheritdoc/>
     public int BulkInsert(BulkInsertCommand command)
     {
@@ -20,89 +23,59 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
         var rows = command.SyncRows
             ?? throw new InvalidOperationException("BulkInsert is synchronous but the source is async; use BulkInsertAsync instead.");
 
-        var rowsPerBatch = RowsPerBatch(command);
+        var dialect = ResolveDialect(command);
+        using var deadline = BulkInsertDeadline.Start(command.Timeout, CancellationToken.None);
+
+        var rowLimit = RowLimit(command);
         var total = 0;
-        var batch = NewBatch(rowsPerBatch);
+        var batch = new List<object?[]>();
 
         foreach (var row in rows)
         {
+            deadline.ThrowIfCancelled();
+
             batch.Add(row);
-            if (batch.Count == rowsPerBatch)
-            {
-                total += mutation.Execute(BuildBatch(command, batch));
-                command.Progress?.Invoke(total);
-                batch = NewBatch(rowsPerBatch);
-            }
+            if (batch.Count >= rowLimit)
+                total = Drain(command, batch, total, deadline, dialect);
         }
 
         if (batch.Count > 0)
-        {
-            total += mutation.Execute(BuildBatch(command, batch));
-            command.Progress?.Invoke(total);
-        }
+            total = Drain(command, batch, total, deadline, dialect);
 
         return total;
     }
 
     /// <inheritdoc/>
-    public Task<int> BulkInsertAsync(BulkInsertCommand command, CancellationToken cancellationToken)
+    public async Task<int> BulkInsertAsync(BulkInsertCommand command, CancellationToken cancellationToken)
     {
         EnsurePortableOptionsSupported(command);
 
-        return command.AsyncRows is not null
-            ? BulkInsertAsyncRowsAsync(command, command.AsyncRows, cancellationToken)
-            : BulkInsertSyncRowsAsync(command, command.SyncRows!, cancellationToken);
-    }
+        var rows = command.AsyncRows ?? new SyncToAsyncEnumerable<object?[]>(command.SyncRows!);
+        var dialect = ResolveDialect(command);
+        using var deadline = BulkInsertDeadline.Start(command.Timeout, cancellationToken);
 
-    private async Task<int> BulkInsertAsyncRowsAsync(BulkInsertCommand command, IAsyncEnumerable<object?[]> rows, CancellationToken cancellationToken)
-    {
-        var rowsPerBatch = RowsPerBatch(command);
+        var rowLimit = RowLimit(command);
         var total = 0;
-        var batch = NewBatch(rowsPerBatch);
+        var batch = new List<object?[]>();
 
-        await foreach (var row in rows.WithCancellation(cancellationToken).ConfigureAwait(false))
+        try
         {
-            batch.Add(row);
-            if (batch.Count == rowsPerBatch)
+            await foreach (var row in rows.WithCancellation(deadline.Token).ConfigureAwait(false))
             {
-                total += await mutation.Execute(BuildBatch(command, batch), cancellationToken).ConfigureAwait(false);
-                command.Progress?.Invoke(total);
-                batch = NewBatch(rowsPerBatch);
+                deadline.ThrowIfCancelled();
+
+                batch.Add(row);
+                if (batch.Count >= rowLimit)
+                    total = await DrainAsync(command, batch, total, deadline, dialect).ConfigureAwait(false);
             }
+        }
+        catch (OperationCanceledException cancellation)
+        {
+            throw deadline.Translate(cancellation);
         }
 
         if (batch.Count > 0)
-        {
-            total += await mutation.Execute(BuildBatch(command, batch), cancellationToken).ConfigureAwait(false);
-            command.Progress?.Invoke(total);
-        }
-
-        return total;
-    }
-
-    private async Task<int> BulkInsertSyncRowsAsync(BulkInsertCommand command, IEnumerable<object?[]> rows, CancellationToken cancellationToken)
-    {
-        var rowsPerBatch = RowsPerBatch(command);
-        var total = 0;
-        var batch = NewBatch(rowsPerBatch);
-
-        foreach (var row in rows)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            batch.Add(row);
-            if (batch.Count == rowsPerBatch)
-            {
-                total += await mutation.Execute(BuildBatch(command, batch), cancellationToken).ConfigureAwait(false);
-                command.Progress?.Invoke(total);
-                batch = NewBatch(rowsPerBatch);
-            }
-        }
-
-        if (batch.Count > 0)
-        {
-            total += await mutation.Execute(BuildBatch(command, batch), cancellationToken).ConfigureAwait(false);
-            command.Progress?.Invoke(total);
-        }
+            total = await DrainAsync(command, batch, total, deadline, dialect).ConfigureAwait(false);
 
         return total;
     }
@@ -119,19 +92,135 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
 
         // Resolve the destination before any row is pulled: a server qualification and disagreeing schema
         // aliases are refused up front.
-        _ = BulkInsertDestination.From(command.Options);
+        var destination = BulkInsertDestination.From(command.Options);
 
-        if (command.TimeoutSeconds is not null)
+        // A local temporary target is the caller's table on the context's own connection/session. The
+        // portable INSERT addresses it exactly like a regular table on that connection, with no CREATE/DROP
+        // and no implicit transaction, so the only request it cannot honour is a qualification that points
+        // at another database. That is refused by name here, before the source is read.
+        if (command.TargetKind == BulkInsertTargetKind.LocalTemporary && destination.Database is not null)
             throw new NotSupportedException(
-                "A bulk-insert Timeout is only supported on the native bulk path; the portable INSERT ... VALUES path uses the provider's default command timeout.");
+                $"BulkInsertOptions.TargetKind.LocalTemporary cannot be combined with BulkInsertOptions.DatabaseName ('{destination.Database}'): a local temporary table lives in the current session's temporary store, never in another database.");
 
         command.BulkCopy.ThrowIfRequested("the portable INSERT ... VALUES path");
     }
 
-    /// <summary>Computes the rows per batch from the command's limits (<see cref="int.MaxValue"/> for unbounded).</summary>
+    /// <summary>
+    /// Resolves the active dialect for destination validation and reporting, and refuses a qualification the
+    /// dialect cannot express before any row is read.
+    /// </summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <returns>The active dialect, or <see langword="null"/> when the executor is not attached to a context.</returns>
+    private ISqlDialect? ResolveDialect(BulkInsertCommand command)
+    {
+        var dialect = (mutation as DataContext)?.Dialect;
+        if (dialect is not null)
+            _ = BulkInsertDestination.From(command.Options).ResolveQualification(dialect);
+
+        return dialect;
+    }
+
+    // Writes every batch in the buffer, splitting it further when a batch exceeds the rendered-SQL limit.
+    // Progress is reported only after a batch has been written; nothing is rolled back on failure.
+    private int Drain(BulkInsertCommand command, List<object?[]> batch, int total, BulkInsertDeadline deadline, ISqlDialect? dialect)
+    {
+        while (batch.Count > 0)
+        {
+            var take = FitBatch(command, batch, dialect);
+            var slice = take == batch.Count ? batch : batch.GetRange(0, take);
+
+            deadline.ThrowIfCancelled();
+            total += mutation.Execute(BuildBatch(command, slice, dialect: dialect));
+            deadline.ThrowIfCancelled();
+
+            command.Progress?.Invoke(total);
+            batch.RemoveRange(0, take);
+        }
+
+        return total;
+    }
+
+    // Asynchronous mirror of Drain: every write is awaited before the next batch is pulled.
+    private async Task<int> DrainAsync(BulkInsertCommand command, List<object?[]> batch, int total, BulkInsertDeadline deadline, ISqlDialect? dialect)
+    {
+        while (batch.Count > 0)
+        {
+            var take = FitBatch(command, batch, dialect);
+            var slice = take == batch.Count ? batch : batch.GetRange(0, take);
+
+            deadline.ThrowIfCancelled();
+
+            int written;
+            try
+            {
+                written = await mutation.Execute(BuildBatch(command, slice, dialect: dialect), deadline.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException cancellation)
+            {
+                throw deadline.Translate(cancellation);
+            }
+
+            deadline.ThrowIfCancelled();
+
+            total += written;
+            command.Progress?.Invoke(total);
+            batch.RemoveRange(0, take);
+        }
+
+        return total;
+    }
+
+    /// <summary>
+    /// Returns how many leading rows of <paramref name="batch"/> fit in one statement: the whole batch when
+    /// no rendered-length limit applies or it fits, otherwise the largest prefix whose rendered SQL fits.
+    /// </summary>
+    /// <param name="command">The bulk-insert command the batch belongs to.</param>
+    /// <param name="batch">The buffered rows.</param>
+    /// <param name="dialect">The active dialect, or <see langword="null"/>.</param>
+    /// <returns>The number of leading rows to write as one statement.</returns>
+    /// <exception cref="NotSupportedException">A single row already exceeds the rendered-length limit.</exception>
+    private int FitBatch(BulkInsertCommand command, List<object?[]> batch, ISqlDialect? dialect)
+    {
+        if (command.Batch?.MaxSqlLength is not int maxLength)
+            return batch.Count;
+
+        var renderedLength = RenderBatch(command, batch, batch.Count, dialect).Length;
+        if (renderedLength <= maxLength)
+            return batch.Count;
+
+        // Binary search the largest prefix that fits; a single oversized row leaves low at 0.
+        var low = 0;
+        var high = batch.Count - 1;
+        while (low < high)
+        {
+            var middle = (low + high + 1) / 2;
+            if (RenderBatch(command, batch, middle, dialect).Length <= maxLength)
+                low = middle;
+            else
+                high = middle - 1;
+        }
+
+        if (low == 0)
+            throw new NotSupportedException(
+                $"A single bulk-insert row renders {renderedLength} characters of SQL, which exceeds BulkInsertOptions.MaxSqlLength={maxLength}: "
+                + "the row cannot be expressed as one portable INSERT ... VALUES statement. Raise MaxSqlLength or split the row.");
+
+        return low;
+    }
+
+    private string RenderBatch(BulkInsertCommand command, List<object?[]> batch, int count, ISqlDialect? dialect)
+    {
+        var slice = count == batch.Count ? batch : batch.GetRange(0, count);
+        return mutation.Render(BuildBatch(command, slice, dialect: dialect));
+    }
+
+    /// <summary>
+    /// The maximum rows one statement binds: the row limit and the exact parameter count (one parameter per
+    /// column per row). The rendered-length limit is applied by <see cref="FitBatch"/>.
+    /// </summary>
     /// <param name="command">The bulk-insert command.</param>
     /// <returns>The maximum rows to write per statement.</returns>
-    internal static int RowsPerBatch(BulkInsertCommand command)
+    private static int RowLimit(BulkInsertCommand command)
     {
         if (command.Batch is null || command.Batch.IsUnbounded)
             return int.MaxValue;
@@ -145,8 +234,24 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
         if (command.Batch.MaxParameters is int parameters && parameters > 0)
             limit = Math.Min(limit, Math.Max(1, parameters / columnCount));
 
+        return limit;
+    }
+
+    /// <summary>Computes the rows per batch from the command's limits (<see cref="int.MaxValue"/> for unbounded).</summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <returns>The maximum rows to write per statement.</returns>
+    internal static int RowsPerBatch(BulkInsertCommand command)
+    {
+        if (command.Batch is null || command.Batch.IsUnbounded)
+            return int.MaxValue;
+
+        var columnCount = Math.Max(1, command.Columns.Count);
+        var limit = RowLimit(command);
+
         if (command.Batch.MaxSqlLength is int maxLength and > 0)
         {
+            const int EstimatedCharactersPerParameter = 12;
+            const int EstimatedCharactersPerRowOverhead = 8;
             var perRow = (columnCount * EstimatedCharactersPerParameter) + EstimatedCharactersPerRowOverhead;
             limit = Math.Min(limit, Math.Max(1, maxLength / perRow));
         }
@@ -164,8 +269,9 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
     /// <param name="command">The bulk-insert command the batch belongs to.</param>
     /// <param name="batch">The rows of this batch.</param>
     /// <param name="returningColumns">The columns to return through <c>RETURNING</c>/<c>OUTPUT</c>, or <see langword="null"/>.</param>
+    /// <param name="dialect">The active dialect used to resolve the destination qualification, or <see langword="null"/> when it is not known.</param>
     /// <returns>The insert command for the batch.</returns>
-    internal static InsertCommand BuildBatch(BulkInsertCommand command, List<object?[]> batch, IReadOnlyList<IPropertyMetadata>? returningColumns = null)
+    internal static InsertCommand BuildBatch(BulkInsertCommand command, List<object?[]> batch, IReadOnlyList<IPropertyMetadata>? returningColumns = null, ISqlDialect? dialect = null)
     {
         var columns = new InsertColumn[command.Columns.Count];
 
@@ -178,10 +284,18 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
             columns[c] = new InsertColumn(command.Columns[c], values);
         }
 
+        // The destination is resolved once per batch: a schema-only override keeps the mapped table, and the
+        // qualification is rendered per part by the insert renderer. Without a dialect the raw parts are used,
+        // which is what the SQL-only diagnostics path renders.
+        var destination = BulkInsertDestination.From(command.Options);
+        var qualification = dialect is null
+            ? destination.Qualification
+            : destination.ResolveQualification(dialect);
+
         return new InsertCommand(
             command.EntityType,
-            command.TableName,
-            command.IsTableNameAuto,
+            destination.Table ?? command.TableName,
+            destination.Table is null && command.IsTableNameAuto,
             columns,
             batch.Count,
             identityColumn: null,
@@ -190,6 +304,6 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
             sourceColumns: null,
             ignoreConflicts: command.IgnoreConflicts,
             keepIdentity: command.KeepIdentity,
-            tableSchema: command.TableSchema);
+            tableSchema: qualification);
     }
 }

@@ -1357,7 +1357,9 @@ internal static class SqlMutationBuilder
         if (string.IsNullOrEmpty(schema))
             return renderedName;
 
-        var renderedSchema = quoteIdentifiers ? dialect.QuoteIdentifier(schema) : schema;
+        // A destination qualification may carry more than one part (database.schema). Each part is quoted
+        // on its own, so a qualified target never collapses into one identifier containing dots.
+        var renderedSchema = quoteIdentifiers ? BulkInsertDestination.QuoteParts(dialect, schema) : schema;
         return renderedSchema + "." + renderedName;
     }
 
