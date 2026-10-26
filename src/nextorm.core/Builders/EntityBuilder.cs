@@ -23,8 +23,12 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 {
     // private const string AnyCommandProperty = "NextORM.Core.AnyCommand";
     #region Fields
-    /// <summary>The data context this builder creates commands from and resolves sources against.</summary>
-    protected readonly IDataContext _dataProvider;
+    /// <summary>
+    /// The data context this builder creates commands from and resolves sources against, or <c>null</c>
+    /// when the builder composes an unbound, context-independent source (a runtime TVF descriptor).
+    /// Context-dependent operations must go through <see cref="RequireContext"/>, never this field.
+    /// </summary>
+    protected readonly IDataContext? _dataProvider;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
@@ -83,6 +87,25 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         _dataProvider = dataProvider;
         _table = table;
     }
+    /// <summary>
+    /// Initializes an <b>unbound</b> builder: a context-independent composition of a runtime source
+    /// descriptor. The chain carries no data context on purpose — no placeholder context is ever
+    /// constructed — so every context-dependent operation fails explicitly through
+    /// <see cref="RequireContext"/> until the source is consumed by
+    /// <c>IDataContext.From(Expression&lt;Func&lt;EntityBuilder&lt;T&gt;&gt;&gt;)</c>.
+    /// </summary>
+    protected EntityBuilder()
+    {
+    }
+    /// <summary>
+    /// The data context this builder is bound to. On an unbound source chain the operation is rejected
+    /// with <see cref="InvalidOperationException"/> instead of executing against entity metadata or
+    /// dereferencing a missing context.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The builder composes an unbound source.</exception>
+    protected IDataContext RequireContext => _dataProvider
+        ?? throw new InvalidOperationException(
+            "The builder composes an unbound table-valued-function source and carries no data context; consume it with ctx.From(...) before any context-dependent operation.");
     #region Properties
     internal ILogger? Logger { get; set; }
     internal QueryCommand? Query { get => _query; set => _query = value; }
@@ -91,7 +114,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// none. Set by the <c>From(...)</c> overloads that copy <see cref="FromOptions.SubQueryHint"/>.
     /// </summary>
     internal string? SubQueryHint { get => _subQueryHint; set => _subQueryHint = value; }
-    internal IDataContext DataProvider => _dataProvider;
+    internal IDataContext DataProvider => RequireContext;
     /// <summary>
     /// The eager-load specifications applied by <see cref="LoadWith{TChild,TKey}"/>, or <c>null</c> when
     /// the builder carries none. Only the list terminals consult them; <see cref="ToCommand"/> ignores
@@ -131,7 +154,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             if (_loadSpecs is { Count: > 0 } || _eagerLoadMode != EagerLoadMode.Default)
             {
                 EagerLoadMode? requested = _eagerLoadMode != EagerLoadMode.Default ? _eagerLoadMode : null;
-                return EagerLoadResolver.Resolve(requested, _dataProvider.EagerLoadMode);
+                return EagerLoadResolver.Resolve(requested, RequireContext.EagerLoadMode);
             }
 
             return EagerLoadMode.Default;
@@ -342,7 +365,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// </summary>
     private QueryCommand<TResult> SelectCore<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
-        var cmd = _dataProvider.CreateCommand<TResult>(new QueryDefinition
+        var cmd = RequireContext.CreateCommand<TResult>(new QueryDefinition
         {
             Exp = exp,
             SrcType = _sourceEntityType,
@@ -450,7 +473,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         EnsureNoJoinIntos(nameof(As));
         EnsureNoEagerLoadState(nameof(As));
 
-        return _dataProvider.From(Select(selector));
+        return RequireContext.From(Select(selector));
     }
     /// <summary>
     /// Creates a SELECT command over the entity type without a custom projection, carrying every
@@ -459,7 +482,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <returns>The command that produces <typeparamref name="TEntity"/> rows.</returns>
     public QueryCommand<TEntity> ToCommand()
     {
-        var cmd = _dataProvider.CreateCommand<TEntity>(new QueryDefinition
+        var cmd = RequireContext.CreateCommand<TEntity>(new QueryDefinition
         {
             SrcType = _sourceEntityType ?? typeof(TEntity),
             Condition = _condition,
@@ -793,7 +816,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         if (relationship.Kind is RelationshipKind.ManyToMany)
         {
             var (manyToMany, linkJoin, childJoin) = JoinIntoManyToManySpec<TEntity, TChild>.Create(
-                child, predicate, collection, relationship, joinType, opts, _dataProvider);
+                child, predicate, collection, relationship, joinType, opts, RequireContext);
             return AddJoinInto(manyToMany, linkJoin, childJoin);
         }
 
@@ -1014,7 +1037,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         if (options.Relationship is { } local)
             return ValidateLocalCollectionRelationship<TChild>(local, property);
 
-        var metadata = DataContextExtensions.ResolveMetadata<TEntity>(_dataProvider, null);
+        var metadata = DataContextExtensions.ResolveMetadata<TEntity>(RequireContext, null);
         foreach (var relationship in metadata.Relationships)
         {
             if (relationship.Navigation is null || !relationship.Navigation.Equals(property))
@@ -1127,7 +1150,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             return local;
         }
 
-        var metadata = DataContextExtensions.ResolveMetadata<TEntity>(_dataProvider, null);
+        var metadata = DataContextExtensions.ResolveMetadata<TEntity>(RequireContext, null);
         foreach (var relationship in metadata.Relationships)
         {
             if (relationship.Navigation is null || !relationship.Navigation.Equals(property))
@@ -1650,7 +1673,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
                 // The subtree's first join lands right after the items already laid out (Item1 is the
                 // root entity); its direct parent is the root, so a repeated CLR type at depth resolves
                 // to the correct projection slot.
-                var plan = load.PlanSingleQuery(_dataProvider, _filterScope, baseItemNumber: joins.Count + 2, parentItemNumber: 1);
+                var plan = load.PlanSingleQuery(RequireContext, _filterScope, baseItemNumber: joins.Count + 2, parentItemNumber: 1);
                 specs.Add(plan.Spec);
                 joins.AddRange(plan.Joins);
             }
@@ -1711,7 +1734,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <returns>The command producing one row per <c>(parent, child…)</c> pair.</returns>
     internal QueryCommand CreatePairCommand(IReadOnlyList<IJoinIntoSpec<TEntity>> specs, List<JoinExpression>? joins)
     {
-        var isSql = _dataProvider.NeedMapping;
+        var isSql = RequireContext.NeedMapping;
 
         var itemTypesByDeclaration = new IReadOnlyList<Type>[specs.Count];
         for (var i = 0; i < specs.Count; i++)
@@ -1794,7 +1817,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             condition = null;
         }
 
-        var cmd = _dataProvider.CreateCommand(projectionType, new QueryDefinition
+        var cmd = RequireContext.CreateCommand(projectionType, new QueryDefinition
         {
             SrcType = sourceType,
             // Set on both providers: the SQL path uses it to expand the projection's entity items, the
@@ -2604,7 +2627,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             ? raw!.WithEntityBinding(binding)
             : new FromExpression(_table!).WithEntityBinding(binding);
 
-        var dst = new EntityBuilder<TResult>(_dataProvider) { Logger = Logger };
+        var dst = new EntityBuilder<TResult>(RequireContext) { Logger = Logger };
         CopyProjectionIndependentStateTo(dst);
         dst._from = bound;
         dst._table = null;
@@ -2661,7 +2684,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// <returns>A new builder with the same state.</returns>
     protected virtual object CloneImp()
     {
-        var r = new EntityBuilder<TEntity>(_dataProvider) { Logger = Logger };
+        var r = new EntityBuilder<TEntity>(RequireContext) { Logger = Logger };
 
         CopyTo(r);
 
@@ -2772,7 +2795,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
     private void EnsureInMemory(string method)
     {
-        if (_dataProvider is not InMemoryDataContext)
+        if (RequireContext is not InMemoryDataContext)
             throw new NotSupportedException(
                 $"{method} is not supported by this provider; it is only available on the in-memory provider. " +
                 "SQL providers do not translate SelectMany/GroupJoin yet.");
@@ -2780,7 +2803,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
     private EntityBuilder<TResult> CreateLinqSourceBuilder<TResult>(LinqSourceExpression source)
     {
-        var builder = new EntityBuilder<TResult>(_dataProvider) { Logger = Logger };
+        var builder = new EntityBuilder<TResult>(RequireContext) { Logger = Logger };
         builder._from = new FromExpression(source);
         return builder;
     }
@@ -2834,7 +2857,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     public JoinedEntityBuilder<TEntity, TJoinEntity> Join<TJoinEntity>(Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         ArgumentNullException.ThrowIfNull(joinCondition);
-        return Join(_dataProvider.From<TJoinEntity>(), joinCondition, options);
+        return Join(RequireContext.From<TJoinEntity>(), joinCondition, options);
     }
     /// <summary>Adds a <c>LEFT JOIN</c> over <typeparamref name="TJoinEntity"/> without an explicit source; <typeparamref name="TJoinEntity"/> is resolved through this builder's context (<c>From&lt;TJoinEntity&gt;()</c>) and forwarded to the source-explicit overload.</summary>
     /// <typeparam name="TJoinEntity">The entity type of the joined table.</typeparam>
@@ -2845,7 +2868,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     public JoinedEntityBuilder<TEntity, TJoinEntity> LeftJoin<TJoinEntity>(Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         ArgumentNullException.ThrowIfNull(joinCondition);
-        return LeftJoin(_dataProvider.From<TJoinEntity>(), joinCondition, options);
+        return LeftJoin(RequireContext.From<TJoinEntity>(), joinCondition, options);
     }
     /// <summary>Adds a <c>RIGHT JOIN</c> over <typeparamref name="TJoinEntity"/> without an explicit source; <typeparamref name="TJoinEntity"/> is resolved through this builder's context (<c>From&lt;TJoinEntity&gt;()</c>) and forwarded to the source-explicit overload.</summary>
     /// <typeparam name="TJoinEntity">The entity type of the joined table.</typeparam>
@@ -2856,7 +2879,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     public JoinedEntityBuilder<TEntity, TJoinEntity> RightJoin<TJoinEntity>(Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         ArgumentNullException.ThrowIfNull(joinCondition);
-        return RightJoin(_dataProvider.From<TJoinEntity>(), joinCondition, options);
+        return RightJoin(RequireContext.From<TJoinEntity>(), joinCondition, options);
     }
     /// <summary>Adds a <c>FULL JOIN</c> over <typeparamref name="TJoinEntity"/> without an explicit source; <typeparamref name="TJoinEntity"/> is resolved through this builder's context (<c>From&lt;TJoinEntity&gt;()</c>) and forwarded to the source-explicit overload.</summary>
     /// <typeparam name="TJoinEntity">The entity type of the joined table.</typeparam>
@@ -2867,7 +2890,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     public JoinedEntityBuilder<TEntity, TJoinEntity> FullJoin<TJoinEntity>(Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         ArgumentNullException.ThrowIfNull(joinCondition);
-        return FullJoin(_dataProvider.From<TJoinEntity>(), joinCondition, options);
+        return FullJoin(RequireContext.From<TJoinEntity>(), joinCondition, options);
     }
     /// <summary>
     /// Adds a cross join producing the Cartesian product of the two sources; there is no <c>ON</c>
@@ -2921,7 +2944,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     {
         ArgumentNullException.ThrowIfNull(cte);
         ArgumentNullException.ThrowIfNull(joinCondition);
-        return Join(_dataProvider.From(cte), joinCondition, options);
+        return Join(RequireContext.From(cte), joinCondition, options);
     }
 
     /// <summary>Adds a left outer join over the typed CTE <paramref name="cte"/>.</summary>
@@ -2943,7 +2966,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     {
         ArgumentNullException.ThrowIfNull(cte);
         ArgumentNullException.ThrowIfNull(joinCondition);
-        return LeftJoin(_dataProvider.From(cte), joinCondition, options);
+        return LeftJoin(RequireContext.From(cte), joinCondition, options);
     }
 
     /// <summary>Adds a right outer join over the typed CTE <paramref name="cte"/>.</summary>
@@ -2965,7 +2988,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     {
         ArgumentNullException.ThrowIfNull(cte);
         ArgumentNullException.ThrowIfNull(joinCondition);
-        return RightJoin(_dataProvider.From(cte), joinCondition, options);
+        return RightJoin(RequireContext.From(cte), joinCondition, options);
     }
 
     /// <summary>Adds a full outer join over the typed CTE <paramref name="cte"/>.</summary>
@@ -2987,7 +3010,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     {
         ArgumentNullException.ThrowIfNull(cte);
         ArgumentNullException.ThrowIfNull(joinCondition);
-        return FullJoin(_dataProvider.From(cte), joinCondition, options);
+        return FullJoin(RequireContext.From(cte), joinCondition, options);
     }
 
     /// <summary>Adds a cross join over the typed CTE <paramref name="cte"/>.</summary>
@@ -3006,7 +3029,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     public JoinedEntityBuilder<TEntity, TJoinEntity> CrossJoin<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
     {
         ArgumentNullException.ThrowIfNull(cte);
-        return CrossJoin(_dataProvider.From(cte), options);
+        return CrossJoin(RequireContext.From(cte), options);
     }
 
     /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>CROSS APPLY</c>.</summary>
@@ -3025,7 +3048,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     public JoinedEntityBuilder<TEntity, TJoinEntity> CrossApply<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
     {
         ArgumentNullException.ThrowIfNull(cte);
-        return CrossApply(_dataProvider.From(cte), options);
+        return CrossApply(RequireContext.From(cte), options);
     }
 
     /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>OUTER APPLY</c>.</summary>
@@ -3044,7 +3067,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     public JoinedEntityBuilder<TEntity, TJoinEntity> OuterApply<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
     {
         ArgumentNullException.ThrowIfNull(cte);
-        return OuterApply(_dataProvider.From(cte), options);
+        return OuterApply(RequireContext.From(cte), options);
     }
 
     internal JoinedEntityBuilder<TEntity, TJoinEntity> JoinCore<TJoinEntity>(EntityBuilder<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
@@ -3140,7 +3163,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         ArgumentNullException.ThrowIfNull(create);
         ArgumentNullException.ThrowIfNull(joinCondition);
 
-        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _dataProvider.From<TJoinEntity>(), joinCondition, joinType, options);
+        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, RequireContext.From<TJoinEntity>(), joinCondition, joinType, options);
     }
 
     /// <summary>
@@ -3200,7 +3223,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         ArgumentNullException.ThrowIfNull(cte);
         ArgumentNullException.ThrowIfNull(joinCondition);
 
-        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _dataProvider.From(cte), joinCondition, joinType, options);
+        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, RequireContext.From(cte), joinCondition, joinType, options);
     }
 
     /// <summary>Alias-join seam over a typed CTE for the conditionless operators; see the conditional counterpart.</summary>
@@ -3224,7 +3247,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         ArgumentNullException.ThrowIfNull(create);
         ArgumentNullException.ThrowIfNull(cte);
 
-        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _dataProvider.From(cte), null, joinType, options);
+        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, RequireContext.From(cte), null, joinType, options);
     }
 
     /// <summary>
@@ -3287,7 +3310,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         if (_windows is not null)
             throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
 
-        if (_dataProvider is InMemoryDataContext)
+        if (RequireContext is InMemoryDataContext)
             throw new NotSupportedException(
                 "Named alias join projections are not supported by the in-memory provider; run the query against a SQL provider.");
 
@@ -3329,7 +3352,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             throw new NotSupportedException(
                 "A correlated CROSS/OUTER APPLY source cannot reference a join projection; apply it to a single-entity source instead.");
 
-        if (_dataProvider is InMemoryDataContext)
+        if (RequireContext is InMemoryDataContext)
             throw new NotSupportedException(
                 "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; run the query against a SQL provider.");
 
@@ -3380,7 +3403,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         EnsureNoEagerLoadState("Join/Apply");
 
-        var joined = create(_dataProvider);
+        var joined = create(RequireContext);
         ApplyJoinStateTo(joined, query);
 
         var joins = _joins is null ? new List<JoinExpression>() : new List<JoinExpression>(_joins);
@@ -3493,7 +3516,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     {
         ArgumentNullException.ThrowIfNull(create);
 
-        if (_dataProvider is InMemoryDataContext)
+        if (RequireContext is InMemoryDataContext)
             throw new NotSupportedException(
                 "Named alias projections are not supported by the in-memory provider; run the query against a SQL provider.");
 
@@ -3516,7 +3539,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         EnsureNoEagerLoadState("WithAlias");
 
-        var rooted = create(_dataProvider);
+        var rooted = create(RequireContext);
         ApplyJoinStateTo(rooted, Query);
 
         // A mapped-entity root carries no explicit FROM source (it is resolved from entity metadata by
@@ -3526,7 +3549,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         // already carries an explicit source (table name, FromExpression or derived Query).
         if (rooted.SourceFrom is null && rooted.Query is null && string.IsNullOrEmpty(rooted.Table))
         {
-            rooted.SourceFrom = _dataProvider.GetFrom(_sourceEntityType ?? typeof(TEntity), null);
+            rooted.SourceFrom = RequireContext.GetFrom(_sourceEntityType ?? typeof(TEntity), null);
         }
         // A derived root source (From(builder) / From(QueryCommand<T>)) is carried as _query. After
         // re-rooting, the projection type would make ResolveJoinBase treat it as a joined projection that
@@ -3731,7 +3754,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// join would fall back to entity metadata that does not exist for <see cref="TableAlias"/>.
     /// </summary>
     internal FromExpression GetJoinSource<TJoinEntity>(EntityBuilder<TJoinEntity> builder)
-        => JoinSourceResolver.Resolve(_dataProvider, builder);
+        => JoinSourceResolver.Resolve(RequireContext, builder);
 
     /// <summary>
     /// Adds an inner join to the derived <paramref name="query"/>, using
@@ -3829,7 +3852,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             throw new NotSupportedException(
                 "A correlated CROSS/OUTER APPLY source cannot reference a join projection; apply it to a single-entity source instead.");
 
-        if (_dataProvider is InMemoryDataContext)
+        if (RequireContext is InMemoryDataContext)
             throw new NotSupportedException(
                 "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; run the query against a SQL provider.");
 
@@ -3841,8 +3864,19 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         QueryCommand? queryBase = ResolveJoinBase();
 
-        var body = source.Body.Type == typeof(QueryCommand) ? source.Body : Expression.Convert(source.Body, typeof(QueryCommand));
-        var applySource = Expression.Lambda(body, source.Parameters);
+        // A runtime table-valued-function body (row => Db.MyTvf(row.Id)) is not a derived query: it is
+        // lowered to the shared table-function source, keeping the outer row in the expression so the
+        // correlated argument renders as a column reference. Derived-query bodies keep the old path.
+        LambdaExpression applySource;
+        if (SourceExpressionLowerer.TryCreateCorrelatedTvfApply<TJoinEntity>(source, RequireContext, out var tvfApplySource))
+        {
+            applySource = tvfApplySource;
+        }
+        else
+        {
+            var body = source.Body.Type == typeof(QueryCommand) ? source.Body : Expression.Convert(source.Body, typeof(QueryCommand));
+            applySource = Expression.Lambda(body, source.Parameters);
+        }
 
         var joined = CreateJoined<TJoinEntity>(new JoinExpression(null, joinType)
         {
@@ -3880,7 +3914,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
 
         EnsureNoEagerLoadState("Join/Apply");
 
-        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join);
+        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(RequireContext, join);
         ApplyJoinStateTo(cb, query);
         return cb;
     }
@@ -3919,7 +3953,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         if (_query is null)
             return _condition is not null ? ToCommand() : null;
 
-        if (_dataProvider is InMemoryDataContext)
+        if (RequireContext is InMemoryDataContext)
             throw new NotSupportedException(
                 "A derived query as the primary FROM source cannot be joined by the in-memory provider.");
 
@@ -4253,7 +4287,7 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// </summary>
     private void EnsureSqlSourceOverride()
     {
-        if (_dataProvider is InMemoryDataContext)
+        if (RequireContext is InMemoryDataContext)
             throw new NotSupportedException("Per-query source overrides are not supported by the in-memory provider; run the query against a SQL provider.");
     }
 
@@ -4264,6 +4298,9 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
     /// </summary>
     internal FromExpression? ResolveSource()
     {
+        if (_dataProvider is null)
+            _ = RequireContext; // an unbound source chain has no entity metadata to fall back to
+
         if (!HasSourceOverride)
         {
             if (_query is not null) return new FromExpression(_query) { SubQueryHint = _subQueryHint };

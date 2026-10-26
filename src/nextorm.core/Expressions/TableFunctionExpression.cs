@@ -103,6 +103,22 @@ public sealed class TableFunctionExpression
         return new TableFunctionExpression(name, attribute.Schema, attribute.WithClause, attribute.CallClause, attribute.VerbatimArguments, call, resultType, attribute.ResultSchema);
     }
 
+    /// <summary>
+    /// Builds a source node from runtime metadata of a <see cref="TvfEntityBuilder{T}"/> descriptor
+    /// instead of <see cref="SqlTableFunctionAttribute"/>: the row type and the result placement come
+    /// from the descriptor and the arguments stay in <paramref name="call"/> untouched.
+    /// </summary>
+    internal static TableFunctionExpression CreateRuntime(
+        string name,
+        string? schema,
+        string? withClause,
+        string? callClause,
+        IReadOnlyList<int>? verbatimArguments,
+        MethodCallExpression call,
+        Type resultType,
+        TableFunctionSchema resultSchema)
+        => new(name, schema, withClause, callClause, verbatimArguments, call, resultType, resultSchema);
+
     // The row type is the sole generic argument of the IQueryable<T> return type. A closed generic
     // method call and a plain IQueryable<T> return both expose it; anything else is a programming
     // error in the placeholder declaration.

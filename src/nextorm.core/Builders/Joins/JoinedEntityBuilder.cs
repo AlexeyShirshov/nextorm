@@ -269,7 +269,7 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
         if (Joins is not null) cb.Joins!.AddRange(Joins);
         cb.Joins!.Add(new JoinExpression(joinCondition, joinType)
         {
-            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            From = JoinSourceResolver.Resolve(RequireContext, _),
             EntityType = joinCondition is null ? typeof(T3) : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
@@ -566,7 +566,7 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
         if (Joins is not null) cb.Joins!.AddRange(Joins);
         cb.Joins!.Add(new JoinExpression(joinCondition, joinType)
         {
-            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            From = JoinSourceResolver.Resolve(RequireContext, _),
             EntityType = joinCondition is null ? typeof(T4) : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
@@ -850,7 +850,7 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
         if (Joins is not null) cb.Joins!.AddRange(Joins);
         cb.Joins!.Add(new JoinExpression(joinCondition, joinType)
         {
-            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            From = JoinSourceResolver.Resolve(RequireContext, _),
             EntityType = joinCondition is null ? typeof(T5) : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
@@ -1134,7 +1134,7 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
         if (Joins is not null) cb.Joins!.AddRange(Joins);
         cb.Joins!.Add(new JoinExpression(joinCondition, joinType)
         {
-            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            From = JoinSourceResolver.Resolve(RequireContext, _),
             EntityType = joinCondition is null ? typeof(T6) : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
@@ -1418,7 +1418,7 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
         if (Joins is not null) cb.Joins!.AddRange(Joins);
         cb.Joins!.Add(new JoinExpression(joinCondition, joinType)
         {
-            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            From = JoinSourceResolver.Resolve(RequireContext, _),
             EntityType = joinCondition is null ? typeof(T7) : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
@@ -1702,7 +1702,7 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
         if (Joins is not null) cb.Joins!.AddRange(Joins);
         cb.Joins!.Add(new JoinExpression(joinCondition, joinType)
         {
-            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            From = JoinSourceResolver.Resolve(RequireContext, _),
             EntityType = joinCondition is null ? typeof(T8) : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,

@@ -1429,6 +1429,60 @@ public static class DataContextExtensions
     }
 
     /// <summary>
+    /// Starts a query from a runtime table-valued-function descriptor supplied as an <b>expression</b>
+    /// source, for example <c>ctx.From(() =&gt; Db.MyTvf(42))</c>. The lambda is required: a direct
+    /// <c>Db.MyTvf(42)</c> call would pass an argument value and lose the expression, so only the lambda
+    /// carries the call node whose arguments are rendered/parameterised like any other SQL expression.
+    /// <para>
+    /// The factory must return <see cref="TvfEntityBuilder{T}"/> for the same row type, and its metadata
+    /// must not depend on the argument values. The argument expressions are kept untouched — a member of
+    /// an outer row stays an outer-column reference, never an evaluated CLR value. A captured descriptor
+    /// or any other shape without the original call expression is rejected with
+    /// <see cref="NotSupportedException"/>.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="T">The mapped row type the function returns.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="source">The expression that calls the runtime factory, for example <c>() =&gt; Db.MyTvf(42)</c>.</param>
+    /// <returns>A builder for composing the query over the function.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="dataContext"/> or <paramref name="source"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
+    public static EntityBuilder<T> From<T>(this IDataContext dataContext, Expression<Func<EntityBuilder<T>>> source)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+
+        var entity = dataContext.From<T>();
+        entity.SourceFrom = SourceExpressionLowerer.LowerTvfSource(source, nameof(source));
+        return entity;
+    }
+
+    /// <summary>
+    /// Starts a query from a runtime table-valued-function descriptor supplied as an expression source,
+    /// with per-source options. See <see cref="From{T}(IDataContext, Expression{Func{EntityBuilder{T}}})"/>.
+    /// </summary>
+    /// <typeparam name="T">The mapped row type the function returns.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="source">The expression that calls the runtime factory.</param>
+    /// <param name="configure">Configures the source placement, for example <c>o =&gt; o.WithSubQueryHint("NestLoop(t1)")</c>.</param>
+    /// <returns>A builder for composing the query over the function.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="dataContext"/>, <paramref name="source"/> or <paramref name="configure"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The expression is not a direct runtime-factory call or lost its argument provenance.</exception>
+    public static EntityBuilder<T> From<T>(this IDataContext dataContext, Expression<Func<EntityBuilder<T>>> source, Action<FromOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var fromOptions = new FromOptions();
+        configure(fromOptions);
+
+        var entity = dataContext.From<T>();
+        entity.SourceFrom = SourceExpressionLowerer.LowerTvfSource(source, nameof(source));
+        entity.SubQueryHint = fromOptions.SubQueryHint;
+        entity.SourceLockClause = fromOptions.SourceLock;
+        return entity;
+    }
+
+    /// <summary>
     /// Starts a query from a table-valued function. <paramref name="call"/> must be a call to a static
     /// method annotated with <see cref="SqlTableFunctionAttribute"/> (or declared in an annotated
     /// type); its arguments are rendered as the function arguments and are parameterised like any
