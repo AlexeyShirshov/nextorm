@@ -674,6 +674,26 @@ public partial class QueryCommand
                             selectList = [directColumn];
                         }
                     }
+                    // A top-level generic ValueTuple.Create factory call is the same unsupported
+                    // projection as the explicit ValueTuple constructor below: no classification
+                    // branch produces a select list for it, so without this guard it reaches row
+                    // materialization and leaks the raw constructor-arity ArgumentException. Refuse it
+                    // during preparation, before dialect dispatch. The guard is top-level only (a
+                    // nested factory inside an anonymous/DTO member keeps its existing diagnostic) and
+                    // mapping-only (the in-memory provider evaluates projections client-side and keeps
+                    // its measured baseline).
+                    else if (cmd._dataContext!.NeedMapping
+                        && cmd._exp.Body is MethodCallExpression valueTupleFactory
+                        && valueTupleFactory.Method is { IsStatic: true } valueTupleFactoryMethod
+                        && valueTupleFactoryMethod.Name == nameof(ValueTuple.Create)
+                        && valueTupleFactoryMethod.DeclaringType == typeof(ValueTuple)
+                        && valueTupleFactoryMethod.IsGenericMethod
+                        && valueTupleFactoryMethod.GetGenericArguments().Length is >= 1 and <= 8
+                        && IsValueTupleFactoryResult(valueTupleFactory.Type))
+                    {
+                        throw new NotSupportedException(
+                            $"The ValueTuple projection '{valueTupleFactory.Type}' at Select position 0 is not supported; project an explicit type or use Tuple.Create.");
+                    }
                     else if (cmd._exp.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
                     {
                         // A ValueTuple construction is not a supported Select projection: this path
@@ -1917,6 +1937,16 @@ public partial class QueryCommand
             itemExpression = body;
             return true;
         }
+
+        /// <summary>
+        /// True for the result type of a top-level <see cref="ValueTuple.Create"/> factory call at every
+        /// factory arity (1..8). <see cref="TypeFacts.IsValueTupleType"/> recognizes arities 1..7; the
+        /// 8-argument factory returns the 8-element <c>Rest</c> form, which that helper deliberately
+        /// excludes, so the shape is recognized explicitly here.
+        /// </summary>
+        private static bool IsValueTupleFactoryResult(Type type) =>
+            TypeFacts.IsValueTupleType(type)
+            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ValueTuple<,,,,,,,>));
 
         /// <summary>
         /// Recognizes the direct whole-entity projection of a joined projection item and confirms the

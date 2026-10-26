@@ -257,6 +257,8 @@ Output:
 | 9 |
 | 10 |
 
+`Tuple.Create` is the row-value constructor surface: it renders a tuple column where the provider supports row values, and remains subject to the provider and context restrictions (for example, SQLite accepts it only as a comparison operand, not as a `SELECT` projection). A `ValueTuple` is different: a top-level generic `ValueTuple.Create(...)` factory call and an explicit `new ValueTuple<...>(...)` construction are **not supported projections**. Both are rejected during query preparation with a `NotSupportedException` that names the projection type and the `Select` position, before any SQL is rendered or a database is touched — not as a row-materializer failure. Project an explicit DTO or anonymous shape instead; nested tuple members keep their own existing restrictions.
+
 ## Member initialiser
 
 Instead of a constructor, a projection can use an object initialiser:
