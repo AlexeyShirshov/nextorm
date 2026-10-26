@@ -740,7 +740,10 @@ public sealed partial class MergeBuilder<TEntity>
                 }
             }
 
-            var registry = hasCondition || HasActiveFilter() ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
+            // The registry renders conditions and target filters, and it also backs the expression key of
+            // every captured or constant assignment value (the scalar visitor keys such a value through the
+            // registry's plan comparer), so an expression branch needs it with or without a condition.
+            var registry = hasCondition || HasActiveFilter() || HasExpressionBranch() ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
             return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry, _dynamicColumns, _filterScope);
         }
 
