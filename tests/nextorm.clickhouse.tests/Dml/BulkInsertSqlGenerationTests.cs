@@ -737,6 +737,31 @@ public class BulkInsertSqlGenerationTests
         adapter.RowsWritten.Should().Be(0);
     }
 
+    // ---------------------------------------------------------------- T305 D6 matrix shape cells (rows 1/16)
+
+    [Fact]
+    public void BulkInsert_RegularTarget_ShouldRenderTheSameMappedTable()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+
+        var explicitRegular = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.TargetKind(BulkInsertTargetKind.Regular)).Values(rows).ToSql();
+
+        explicitRegular.Should().Be(ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(rows).ToSql());
+    }
+
+    [Fact]
+    public void BulkInsert_ModePortable_WithoutAProviderGroup_ShouldRenderThePlainStatement()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable))
+            .Values([Row("a", 1)])
+            .ToSql();
+
+        sql.Should().Be("insert into insert_entity (id, name, age) values (@p0, @p1, @p2)");
+    }
+
     private static async IAsyncEnumerable<object?[]> Rows(int count)
     {
         for (var i = 0; i < count; i++)

@@ -1067,6 +1067,70 @@ public partial class BulkInsertBuilderTests
         ctx.PortableScopeDisposals.Should().Be(1);
     }
 
+    // ---------------------------------------------------------------- T305 D6 matrix presence cells (rows 1/6-9)
+
+    [Fact]
+    public void NullableFlags_TrueFalseAndAbsent_ShouldBeThreeDistinctStates()
+    {
+        var absent = new BulkInsertOptions();
+        var explicitTrue = new BulkInsertOptions { CheckConstraints = true, TableLock = true, KeepNulls = true, FireTriggers = true };
+        var explicitFalse = new BulkInsertOptions { CheckConstraints = false, TableLock = false, KeepNulls = false, FireTriggers = false };
+
+        absent.CheckConstraintsSpecified.Should().BeFalse();
+        explicitTrue.CheckConstraints.Should().BeTrue();
+        explicitFalse.CheckConstraints.Should().BeFalse();
+
+        explicitTrue.CheckConstraintsSpecified.Should().BeTrue();
+        explicitFalse.CheckConstraintsSpecified.Should().BeTrue();
+        explicitTrue.TableLockSpecified.Should().BeTrue();
+        explicitTrue.KeepNullsSpecified.Should().BeTrue();
+        explicitTrue.FireTriggersSpecified.Should().BeTrue();
+    }
+
+    [Fact]
+    public void KeepIdentityAndIgnoreDuplicates_TrueFalseAndAbsent_ShouldBeThreeDistinctStates()
+    {
+        var absent = new BulkInsertOptions();
+        var explicitTrue = new BulkInsertOptions { KeepIdentity = true, IgnoreDuplicates = true };
+        var explicitFalse = new BulkInsertOptions { KeepIdentity = false, IgnoreDuplicates = false };
+
+        absent.KeepIdentitySpecified.Should().BeFalse();
+        absent.IgnoreDuplicatesSpecified.Should().BeFalse();
+
+        explicitTrue.KeepIdentitySpecified.Should().BeTrue();
+        explicitTrue.KeepIdentity.Should().BeTrue();
+        explicitTrue.IgnoreDuplicatesSpecified.Should().BeTrue();
+        explicitTrue.IgnoreDuplicates.Should().BeTrue();
+
+        explicitFalse.KeepIdentitySpecified.Should().BeTrue();
+        explicitFalse.KeepIdentity.Should().BeFalse();
+        explicitFalse.IgnoreDuplicatesSpecified.Should().BeTrue();
+        explicitFalse.IgnoreDuplicates.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ModeAuto_OnAPortableOnlyContext_ShouldUseThePortablePath()
+    {
+        using var ctx = new PortableOnlyContext();
+        var source = new CountingSource(new BulkEntity { Id = 1, Name = "a" });
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Mode(BulkInsertMode.Auto))
+            .Values(source)
+            .BulkInsert();
+
+        // Auto has no native path to prefer here, so the write goes through the portable INSERT loop and
+        // reaches the fake connection with the row already pulled.
+        act.Should().Throw<NotSupportedException>().WithMessage("*t305-fake-connection*");
+        source.Enumerated.Should().Be(1);
+    }
+
+    [Fact]
+    public void ModeAndTargetKind_ShouldExposeExactlyTheDeclaredValues()
+    {
+        Enum.GetValues<BulkInsertMode>().Should().Equal(BulkInsertMode.Auto, BulkInsertMode.Native, BulkInsertMode.Portable);
+        Enum.GetValues<BulkInsertTargetKind>().Should().Equal(BulkInsertTargetKind.Regular, BulkInsertTargetKind.LocalTemporary);
+    }
+
     private sealed class NativeCapableDialect : SqlDialectBase
     {
         internal static readonly NativeCapableDialect Instance = new();

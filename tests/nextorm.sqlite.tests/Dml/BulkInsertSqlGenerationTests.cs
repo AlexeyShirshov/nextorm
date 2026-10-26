@@ -173,6 +173,55 @@ public class BulkInsertSqlGenerationTests
         act.Should().Throw<NotSupportedException>().WithMessage("*LocalTemporary*DatabaseName*");
     }
 
+    // ---------------------------------------------------------------- T305 D6 matrix shape cells (rows 1/6/8/13/16)
+
+    [Fact]
+    public void BulkInsert_RegularTarget_ShouldRenderTheSameMappedTable()
+    {
+        using var ctx = SqliteTestContext.Create();
+        IInsertEntity[] rows = [Row("a", 1, "d")];
+
+        var explicitRegular = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.TargetKind(BulkInsertTargetKind.Regular)).Values(rows).ToSql();
+
+        explicitRegular.Should().Be(ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(rows).ToSql());
+    }
+
+    [Fact]
+    public void BulkInsert_ModePortable_ShouldRenderThePlainStatement()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable))
+            .Values([Row("a", 1, "d")])
+            .ToSql();
+
+        sql.Should().Be("insert into insert_entity (name, age, description) values ($p0, $p1, $p2)");
+    }
+
+    [Fact]
+    public void BulkInsert_CheckConstraintsTrueAndKeepNullsTrue_ShouldNotChangeTheRenderedSql()
+    {
+        using var ctx = SqliteTestContext.Create();
+        IInsertEntity[] rows = [Row("a", 1, "d")];
+        var plain = ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(rows).ToSql();
+
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.CheckConstraints(true)).Values(rows).ToSql().Should().Be(plain);
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.KeepNulls(true)).Values(rows).ToSql().Should().Be(plain);
+    }
+
+    [Fact]
+    public void BulkInsert_EqualAliases_ShouldCollapseToTheMainDatabase()
+    {
+        using var ctx = SqliteTestContext.Create();
+        IInsertEntity[] rows = [Row("a", 1, "d")];
+
+        var aliases = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Table("main", "insert_entity").Schema("main")).Values(rows).ToSql();
+        var schemaOnly = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Schema("main")).Values(rows).ToSql();
+
+        aliases.Should().Be(schemaOnly);
+        schemaOnly.Should().StartWith("insert into main.insert_entity ");
+    }
+
     private static async IAsyncEnumerable<IInsertEntity> TrackingSource(Action onEnumerated)
     {
         onEnumerated();

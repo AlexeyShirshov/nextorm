@@ -388,6 +388,64 @@ public class BulkInsertSqlGenerationTests
 
         await act.Should().ThrowAsync<TimeoutException>();
     }
+
+    // ---------------------------------------------------------------- T305 D6 matrix shape cells (rows 1/7/8/9/13/16)
+
+    [Fact]
+    public void BulkInsert_RegularTarget_ShouldRenderTheSameMappedTable()
+    {
+        using var ctx = PostgresTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+
+        var explicitRegular = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.TargetKind(BulkInsertTargetKind.Regular)).Values(rows).ToSql();
+
+        explicitRegular.Should().Be(ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(rows).ToSql());
+    }
+
+    [Fact]
+    public void BulkInsert_ModePortable_WithoutProviderOptions_ShouldRenderThePlainStatement()
+    {
+        using var ctx = PostgresTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+
+        var portable = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable)).Values(rows).ToSql();
+
+        portable.Should().Be("insert into insert_entity (name, age) values (@p0, @p1)");
+    }
+
+    [Fact]
+    public void BulkInsert_SchemaOnlyAndAliases_ShouldQualifyTheMappedTableOnce()
+    {
+        using var ctx = PostgresTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+
+        var schemaOnly = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Schema("public")).Values(rows).ToSql();
+        var aliases = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Table("public", "insert_entity").Schema("public")).Values(rows).ToSql();
+
+        schemaOnly.Should().Be("insert into public.insert_entity (name, age) values (@p0, @p1)");
+        aliases.Should().Be(schemaOnly);
+    }
+
+    [Fact]
+    public void BulkInsert_TableLockFalseAndFireTriggersFalse_ShouldNotChangeTheRenderedSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+        var plain = ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(rows).ToSql();
+
+        // Rows 7/9: an explicit false is honoured by absence, so it is not a refusal and not a request.
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.TableLock(false).FireTriggers(false)).Values(rows).ToSql().Should().Be(plain);
+    }
+
+    [Fact]
+    public void BulkInsert_KeepNullsTrue_ShouldRenderEveryColumn()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.KeepNulls(true)).Values([Row("a", 1)]).ToSql();
+
+        sql.Should().Be("insert into insert_entity (name, age) values (@p0, @p1)");
+    }
 }
 
 /// <summary>An entity whose every written column is nullable, so <c>KeepNulls=false</c> stays default-equivalent.</summary>

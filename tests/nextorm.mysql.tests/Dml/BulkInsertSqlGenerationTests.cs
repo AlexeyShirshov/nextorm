@@ -367,4 +367,56 @@ public class BulkInsertSqlGenerationTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*LocalTemporary*DatabaseName*");
     }
+
+    // ---------------------------------------------------------------- T305 D6 matrix shape cells (rows 1/6/8/13/16)
+
+    [Fact]
+    public void BulkInsert_CheckConstraintsTrue_ShouldNotChangeTheRenderedSql()
+    {
+        using var ctx = MySqlTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+        var plain = ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(rows).ToSql();
+
+        // Row 6: true is honoured by the default behaviour of every path, so the statement is unchanged.
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.CheckConstraints(true)).Values(rows).ToSql().Should().Be(plain);
+    }
+
+    [Fact]
+    public void BulkInsert_KeepNullsTrue_ShouldWriteEveryColumn()
+    {
+        using var ctx = MySqlTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+        var plain = ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(rows).ToSql();
+
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.KeepNulls(true)).Values(rows).ToSql().Should().Be(plain);
+    }
+
+    [Fact]
+    public void BulkInsert_RegularTargetAndEqualAliases_ShouldRenderTheMappedTableOnce()
+    {
+        using var ctx = MySqlTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+
+        var regular = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.TargetKind(BulkInsertTargetKind.Regular).Schema("archive")).Values(rows).ToSql();
+        var aliases = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Table("archive", "insert_entity").Schema("archive")).Values(rows).ToSql();
+
+        regular.Should().Be("insert into archive.insert_entity (name, age) values (_utf8mb4 X'61', @p1)");
+        aliases.Should().Be(regular, "equal schema aliases collapse to one part");
+    }
+
+    [Fact]
+    public void BulkInsert_ModePortable_ShouldBypassTheNativePath()
+    {
+        using var ctx = new MySqlDataContext(LocalInfileEnabledConnectionString, new DataContextBuilder());
+        var source = new CountingSource([Row("a", 1)]);
+
+        Action act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable))
+            .Values(source)
+            .BulkInsert();
+
+        // The portable path pulled the row before reaching the unreachable connection; the native path
+        // would have refused or connected before reading it.
+        act.Should().Throw<MySqlException>();
+        source.Enumerated.Should().Be(1);
+    }
 }

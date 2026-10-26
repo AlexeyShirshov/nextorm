@@ -382,4 +382,56 @@ public class BulkInsertSqlGenerationTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*LocalTemporary*DatabaseName*");
     }
+
+    // ---------------------------------------------------------------- T305 D6 matrix shape cells (rows 1/6/8/13/16)
+
+    [Fact]
+    public void BulkInsert_CheckConstraintsTrue_ShouldNotChangeTheRenderedSql()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        SimpleEntity[] rows = [new SimpleEntity { Id = 7 }];
+        var plain = ctx.CreateBulkInsertBuilder<ISimpleEntity>().Values(rows).ToSql();
+
+        ctx.CreateBulkInsertBuilder<ISimpleEntity>(o => o.CheckConstraints(true)).Values(rows).ToSql().Should().Be(plain);
+    }
+
+    [Fact]
+    public void BulkInsert_KeepNullsTrue_ShouldNotChangeTheRenderedSql()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        SimpleEntity[] rows = [new SimpleEntity { Id = 7 }];
+        var plain = ctx.CreateBulkInsertBuilder<ISimpleEntity>().Values(rows).ToSql();
+
+        ctx.CreateBulkInsertBuilder<ISimpleEntity>(o => o.KeepNulls(true)).Values(rows).ToSql().Should().Be(plain);
+    }
+
+    [Fact]
+    public void BulkInsert_RegularTargetAndEqualAliases_ShouldRenderTheMappedTableOnce()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        SimpleEntity[] rows = [new SimpleEntity { Id = 7 }];
+
+        var regular = ctx.CreateBulkInsertBuilder<ISimpleEntity>(o => o
+                .TargetKind(BulkInsertTargetKind.Regular)
+                .Table("archive", "insert_entity")
+                .Schema("archive"))
+            .Values(rows)
+            .ToSql();
+
+        regular.Should().Be("insert into archive.insert_entity (id) values (@p0)");
+    }
+
+    [Fact]
+    public void BulkInsert_ModePortable_ShouldBypassTheNativePath()
+    {
+        using var ctx = new MariaDbDataContext(LocalInfileEnabledConnectionString, new DataContextBuilder());
+        var source = new CountingSource([new SimpleEntity { Id = 7 }]);
+
+        Action act = () => ctx.CreateBulkInsertBuilder<ISimpleEntity>(o => o.Mode(BulkInsertMode.Portable))
+            .Values(source)
+            .BulkInsert();
+
+        act.Should().Throw<MySqlException>();
+        source.Enumerated.Should().Be(1);
+    }
 }

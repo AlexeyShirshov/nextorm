@@ -318,6 +318,80 @@ public class BulkInsertSqlGenerationTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*IgnoreDuplicates=true*");
     }
+
+    // ---------------------------------------------------------------- T305 D6 matrix shape cells (rows 1/6/8/13/16)
+
+    [Fact]
+    public void BulkInsert_RegularTarget_ShouldRenderTheSameMappedTable()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+
+        var explicitRegular = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.TargetKind(BulkInsertTargetKind.Regular)).Values(rows).ToSql();
+
+        explicitRegular.Should().Be(ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(rows).ToSql());
+    }
+
+    [Fact]
+    public void BulkInsert_SchemaOnlyAndEqualAliases_ShouldQualifyTheMappedTableOnce()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+
+        var schemaOnly = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Schema("dbo")).Values(rows).ToSql();
+        var aliases = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Table("dbo", "insert_entity").Schema("dbo")).Values(rows).ToSql();
+
+        schemaOnly.Should().Be("insert into dbo.insert_entity (name, age) values (@p0, @p1)");
+        aliases.Should().Be(schemaOnly);
+    }
+
+    [Fact]
+    public void BulkInsert_KeepNullsTrueAndFalse_ShouldNotChangeTheRenderedSql()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        InsertEntity[] rows = [Row("a", 1)];
+        var plain = ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(rows).ToSql();
+
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.KeepNulls(true)).Values(rows).ToSql().Should().Be(plain);
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.KeepNulls(false)).Values(rows).ToSql().Should().Be(plain);
+    }
+
+    [Fact]
+    public void BulkInsert_CheckConstraintsFalse_OnThePortablePath_ShouldBeRefusedByName()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // Row 6: only the native SqlBulkCopy flag can turn constraint checking off.
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).CheckConstraints(false))
+            .Values([Row("a", 1)])
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*CheckConstraints=false*");
+    }
+
+    [Fact]
+    public void BulkInsert_ModePortable_KeepIdentity_ShouldKeepTheIdentityInsertWrapper()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Portable).KeepIdentity())
+            .Values([Row("a", 1)])
+            .ToSql();
+
+        sql.Should().Contain("set identity_insert").And.Contain("insert into insert_entity (id, name, age)");
+    }
+
+    [Fact]
+    public void BulkInsert_ModeAuto_PlainWrite_ShouldBeACompatibleNativeRequest()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Mode(BulkInsertMode.Auto))
+            .Values([Row("a", 1)])
+            .ValidateTarget();
+
+        act.Should().NotThrow("row 1: Auto prefers the native path for a request with no incompatible option");
+    }
 }
 
 /// <summary>A caller-owned transaction stand-in, so the internal-transaction conflict is testable offline.</summary>
