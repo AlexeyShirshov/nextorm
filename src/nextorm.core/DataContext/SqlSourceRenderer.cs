@@ -531,7 +531,7 @@ internal static class SqlSourceRenderer
                 if (from.HasQualificationOverride)
                     tableName = ctx.Dialect.MakeQualifiedTableName(from.ServerOverride, from.DatabaseOverride, from.SchemaOverride, tableName);
 
-                sqlBuilder.Append(ctx.QuoteIdentifiers ? QuoteQualifiedIdentifier(ctx.Dialect, tableName) : tableName);
+                sqlBuilder.Append(from.IsTableVariableSource || !ctx.QuoteIdentifiers ? tableName : QuoteQualifiedIdentifier(ctx.Dialect, tableName));
 
                 // SQL Server's grammar requires the table-hint WITH (...) clause AFTER the table alias
                 // (FROM t AS a WITH (hint)); it is emitted below, once the alias is known. MySQL/SQLite,

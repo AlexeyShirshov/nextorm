@@ -61,6 +61,7 @@ public sealed class BatchBuilder
     private readonly IBatchExecutor _executor;
     private readonly List<BatchStepSpec> _steps = new();
     private readonly List<Func<BatchPlan, IBatchResultMaterializer>> _resultFactories = new();
+    private readonly Dictionary<string, CaptureRegistration> _captures = new(StringComparer.Ordinal);
     private bool _hasResult;
     private bool _terminalQueryUsed;
 
@@ -212,6 +213,151 @@ public sealed class BatchBuilder
     }
 
     /// <summary>
+    /// Adds a side-effecting <c>INSERT</c> whose returned rows are captured into a same-batch table
+    /// variable (SQL Server <c>OUTPUT ... INTO @t</c>) instead of being returned to the client. The batch
+    /// renders <c>DECLARE @t TABLE (...); INSERT ... OUTPUT ... INTO @t (...)</c> as one statement; a later
+    /// <see cref="FromOutput{TResult}(string)"/> or <see cref="FromOutputTable(string)"/> step of the same
+    /// batch reads the captured rows, so the whole operation stays one round trip.
+    /// <para>
+    /// The table-variable name is one identifier with an optional leading <c>@</c>, normalised to
+    /// <c>@name</c>; it is never quoted. <paramref name="columnDefinitions"/> is trusted caller SQL that
+    /// is embedded verbatim in the <c>DECLARE</c> text and never parameterised.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type inserted.</typeparam>
+    /// <typeparam name="TResult">The row shape the returning builder projects.</typeparam>
+    /// <param name="mutation">The insert terminal whose returned columns are captured.</param>
+    /// <param name="variableName">The table-variable name, with or without the leading <c>@</c>.</param>
+    /// <param name="columnDefinitions">The trusted column-definition text of the <c>DECLARE @t TABLE (...)</c> declaration.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a bare table-variable identifier, or <paramref name="columnDefinitions"/> is null, empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The capture is duplicated on this batch, the projection has no output columns, or a result-bearing query was already added.</exception>
+    /// <exception cref="NotSupportedException">The provider has no <c>OUTPUT INTO</c> form (only SQL Server supports the capture).</exception>
+    public BatchBuilder OutputIntoTableVariable<TEntity, TResult>(InsertReturningBuilder<TEntity, TResult> mutation, string variableName, string columnDefinitions)
+    {
+        ArgumentNullException.ThrowIfNull(mutation);
+        var name = RequireCaptureSlot(variableName, columnDefinitions, mutation.ReturningColumns, ((IOutputIntoMutation)mutation).DataContext);
+        var shape = MutationReadShape.BuildShape<TEntity, TResult>(_context, mutation);
+        return RegisterCapture(name, typeof(TResult), shape, mutation.BuildMutationCommand(), columnDefinitions);
+    }
+
+    /// <summary>
+    /// Adds a side-effecting <c>UPDATE</c> whose returned rows are captured into a same-batch table
+    /// variable, mirroring <see cref="OutputIntoTableVariable{TEntity, TResult}(InsertReturningBuilder{TEntity, TResult}, string, string)"/>.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type updated.</typeparam>
+    /// <typeparam name="TResult">The row shape the returning builder projects.</typeparam>
+    /// <param name="mutation">The update terminal whose returned columns are captured.</param>
+    /// <param name="variableName">The table-variable name, with or without the leading <c>@</c>.</param>
+    /// <param name="columnDefinitions">The trusted column-definition text of the <c>DECLARE @t TABLE (...)</c> declaration.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a bare table-variable identifier, or <paramref name="columnDefinitions"/> is null, empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The capture is duplicated on this batch, the projection has no output columns, or a result-bearing query was already added.</exception>
+    /// <exception cref="NotSupportedException">The provider has no <c>OUTPUT INTO</c> form (only SQL Server supports the capture).</exception>
+    public BatchBuilder OutputIntoTableVariable<TEntity, TResult>(UpdateReturningBuilder<TEntity, TResult> mutation, string variableName, string columnDefinitions)
+    {
+        ArgumentNullException.ThrowIfNull(mutation);
+        var name = RequireCaptureSlot(variableName, columnDefinitions, mutation.ReturningColumns, mutation.DataContext);
+        var shape = BuildTypedCaptureShape<TResult>(mutation.Projection, typeof(TEntity), "update");
+        return RegisterCapture(name, typeof(TResult), shape, mutation.BuildMutationCommand(), columnDefinitions);
+    }
+
+    /// <summary>
+    /// Adds a side-effecting <c>DELETE</c> whose removed rows are captured into a same-batch table
+    /// variable (read through the <c>deleted</c> alias), mirroring
+    /// <see cref="OutputIntoTableVariable{TEntity, TResult}(InsertReturningBuilder{TEntity, TResult}, string, string)"/>.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type deleted.</typeparam>
+    /// <typeparam name="TResult">The row shape the returning builder projects.</typeparam>
+    /// <param name="mutation">The delete terminal whose returned columns are captured.</param>
+    /// <param name="variableName">The table-variable name, with or without the leading <c>@</c>.</param>
+    /// <param name="columnDefinitions">The trusted column-definition text of the <c>DECLARE @t TABLE (...)</c> declaration.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a bare table-variable identifier, or <paramref name="columnDefinitions"/> is null, empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The capture is duplicated on this batch, the projection has no output columns, or a result-bearing query was already added.</exception>
+    /// <exception cref="NotSupportedException">The provider has no <c>OUTPUT INTO</c> form (only SQL Server supports the capture).</exception>
+    public BatchBuilder OutputIntoTableVariable<TEntity, TResult>(DeleteReturningBuilder<TEntity, TResult> mutation, string variableName, string columnDefinitions)
+    {
+        ArgumentNullException.ThrowIfNull(mutation);
+        var name = RequireCaptureSlot(variableName, columnDefinitions, mutation.ReturningColumns, mutation.DataContext);
+        var shape = BuildTypedCaptureShape<TResult>(mutation.Projection, typeof(TEntity), "delete");
+        return RegisterCapture(name, typeof(TResult), shape, mutation.BuildMutationCommand(), columnDefinitions);
+    }
+
+    /// <summary>
+    /// Adds a side-effecting <c>MERGE</c> whose output rows are captured into a same-batch table
+    /// variable. The captured output always leads with <c>$action</c> (written into the first column
+    /// declared by <paramref name="columnDefinitions"/>), followed by the returned columns written into
+    /// the remaining declared columns; this is the batch-only MERGE OUTPUT-INTO form, not a new MERGE
+    /// fluent terminal.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type merged.</typeparam>
+    /// <typeparam name="TResult">The row shape the returning builder projects.</typeparam>
+    /// <param name="mutation">The merge terminal whose returned columns are captured.</param>
+    /// <param name="variableName">The table-variable name, with or without the leading <c>@</c>.</param>
+    /// <param name="columnDefinitions">The trusted column-definition text of the <c>DECLARE @t TABLE (...)</c> declaration; its first column receives <c>$action</c>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a bare table-variable identifier, or <paramref name="columnDefinitions"/> is null, empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The capture is duplicated on this batch, the projection has no output columns, or a result-bearing query was already added.</exception>
+    /// <exception cref="NotSupportedException">The provider has no <c>OUTPUT INTO</c> form (only SQL Server supports the capture).</exception>
+    public BatchBuilder OutputIntoTableVariable<TEntity, TResult>(MergeReturningBuilder<TEntity, TResult> mutation, string variableName, string columnDefinitions)
+    {
+        ArgumentNullException.ThrowIfNull(mutation);
+        var name = RequireCaptureSlot(variableName, columnDefinitions, mutation.ReturningColumns, mutation.DataContext);
+        var shape = BuildTypedCaptureShape<TResult>(mutation.Projection, typeof(TEntity), "merge");
+        return RegisterCapture(name, typeof(TResult), shape, mutation.BuildMutationCommand(), columnDefinitions);
+    }
+
+    /// <summary>
+    /// Starts a typed query over the rows a capture step of this batch wrote into a table variable. The
+    /// returned builder projects the captured row shape, so the rows can be filtered, ordered, joined,
+    /// paged and aggregated with the ordinary operator set; the source renders as the bare
+    /// table-variable identifier and is never quoted.
+    /// </summary>
+    /// <typeparam name="TResult">The captured row shape; it must match the capture's projection.</typeparam>
+    /// <param name="variableName">The table-variable name of an earlier capture of this batch.</param>
+    /// <returns>A typed builder over the captured rows.</returns>
+    /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a valid table-variable identifier.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="variableName"/> is not a capture registered earlier on this batch, or its projection is not <typeparamref name="TResult"/>.</exception>
+    public EntityBuilder<TResult> FromOutput<TResult>(string variableName)
+    {
+        var (name, capture) = RequireCapture(variableName, nameof(variableName));
+        if (capture.RowType != typeof(TResult))
+            throw new InvalidOperationException(
+                $"The batch output source '{name}' projects '{capture.RowType.Name}', not '{typeof(TResult).Name}'; read it with the matching type (batch output source).");
+
+        return new EntityBuilder<TResult>(_context)
+        {
+            Logger = _context.CommandLogger,
+            SourceFrom = new FromExpression(name, capture.Shape) { IsTableVariableSource = true },
+        };
+    }
+
+    /// <summary>
+    /// Starts a query over the rows a capture step of this batch wrote into a table variable, reading its
+    /// columns through <see cref="TableAlias"/> accessors (for example <c>t["id"].AsInt</c>). Useful for
+    /// joins and for aggregating over the captured rows.
+    /// </summary>
+    /// <param name="variableName">The table-variable name of an earlier capture of this batch.</param>
+    /// <returns>A builder over the captured rows.</returns>
+    /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a valid table-variable identifier.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="variableName"/> is not a capture registered earlier on this batch.</exception>
+    public EntityBuilder<TableAlias> FromOutputTable(string variableName)
+    {
+        var (name, _) = RequireCapture(variableName, nameof(variableName));
+
+        return new EntityBuilder<TableAlias>(_context)
+        {
+            Logger = _context.CommandLogger,
+            SourceFrom = new FromExpression(name) { IsTableVariableSource = true },
+        };
+    }
+
+    /// <summary>
     /// Adds the sole result-bearing query and returns the batch terminal. It must be the last statement:
     /// any further statement would throw. To carry more than one result use
     /// <see cref="AddQuery{TResult}"/> and <see cref="Execute"/> instead.
@@ -229,6 +375,7 @@ public sealed class BatchBuilder
             throw new InvalidOperationException("A batch already has a result-bearing query; Query() is the single-result terminal and cannot be combined with AddQuery(). Use AddQuery() for every result and Execute() to materialise them.");
 
         RequireSameContext(query);
+        RequireCapturedSources(query);
         _steps.Add(BatchStepSpec.ForResult(query));
         _hasResult = true;
         _terminalQueryUsed = true;
@@ -253,6 +400,7 @@ public sealed class BatchBuilder
             throw new InvalidOperationException("A batch ended with Query() cannot accept further queries; use AddQuery() for every result set and Execute() to materialise them.");
 
         RequireSameContext(query);
+        RequireCapturedSources(query);
         _steps.Add(BatchStepSpec.ForResult(query));
         _hasResult = true;
 
@@ -350,6 +498,133 @@ public sealed class BatchBuilder
 
         _steps.Add(BatchStepSpec.ForMutation(command));
         return this;
+    }
+
+    // The capture API is batch-owned: a name may be registered at most once per BatchBuilder instance,
+    // so another batch never sees this source and a duplicate is refused before any SQL is produced.
+    private string RequireCaptureSlot(string variableName, string columnDefinitions, IReadOnlyList<IPropertyMetadata>? columns, IDataContext context)
+    {
+        var name = NormalizeCaptureVariableName(variableName, nameof(variableName));
+        ArgumentException.ThrowIfNullOrWhiteSpace(columnDefinitions);
+
+        if (_context is not DataContext { Dialect.SupportsOutputInto: true })
+            throw new NotSupportedException(
+                $"{_context.GetType().Name} cannot capture modified rows into a table variable: the provider has no OUTPUT INTO form (SQL Server only). Read the rows with the mutation's own returning terminal and query them separately instead.");
+
+        if (columns is not { Count: > 0 })
+            throw new InvalidOperationException(
+                "A batch output source needs at least one output column; use Returning()/Returning(projection) on the mutation builder instead of the identity-function form (batch output source).");
+
+        if (_hasResult)
+            throw new InvalidOperationException("A result-bearing query has already been added; add captures before Query()/AddQuery().");
+
+        if (!ReferenceEquals(context, _context))
+            throw new ArgumentException("A batch statement is bound to a different data context; build every statement from the batch's context.", nameof(variableName));
+
+        if (_captures.ContainsKey(name))
+            throw new InvalidOperationException(
+                $"A batch output source named '{name}' is already registered on this batch; every table-variable capture needs a unique name (batch output source).");
+
+        return name;
+    }
+
+    private BatchBuilder RegisterCapture(string name, Type rowType, QueryCommand shape, MutationCommand command, string columnDefinitions)
+    {
+        _steps.Add(BatchStepSpec.ForCapture(command, name, columnDefinitions));
+        _captures.Add(name, new CaptureRegistration(rowType, shape));
+        return this;
+    }
+
+    private QueryCommand BuildTypedCaptureShape<TResult>(System.Linq.Expressions.LambdaExpression? projection, Type entityType, string operation)
+    {
+        if (projection is null)
+            throw new InvalidOperationException(
+                $"A batch output source needs a returning projection for this {operation}; call Returning() or Returning(projection) on the mutation builder (batch output source).");
+
+        return MutationReadShape.BuildShape<TResult>(_context, projection, entityType);
+    }
+
+    private (string Name, CaptureRegistration Registration) RequireCapture(string variableName, string parameterName)
+    {
+        var name = NormalizeCaptureVariableName(variableName, parameterName);
+        if (!_captures.TryGetValue(name, out var registration))
+            throw new InvalidOperationException(
+                $"'{variableName}' is not a batch output source captured earlier on this batch; register it with OutputIntoTableVariable(...) before reading it (batch output source).");
+
+        return (name, registration);
+    }
+
+    // A root or joined source whose name starts with '@' names a table variable, and the only valid
+    // table variable is a capture registered earlier on this batch. This also catches a command built
+    // over another batch's source and a use-before-capture at Query()/AddQuery() time.
+    private void RequireCapturedSources(QueryCommand command)
+    {
+        RequireCapturedSource(command.From);
+
+        if (command.Joins is { } joins)
+        {
+            for (var i = 0; i < joins.Length; i++)
+                RequireCapturedSource(joins[i].From);
+        }
+    }
+
+    private void RequireCapturedSource(FromExpression? from)
+    {
+        if (from?.Table is not { Length: > 1 } table || table[0] != '@')
+            return;
+
+        if (!_captures.ContainsKey(table))
+            throw new InvalidOperationException(
+                $"'{table}' is not a batch output source registered earlier on this batch; a table-variable source must be captured with OutputIntoTableVariable(...) on the same batch (batch output source).");
+    }
+
+    // One documented table-variable identifier with an optional leading '@', normalised once to the
+    // canonical '@name'. A bracketed, quoted, whitespace-bearing or statement-injecting form is not a
+    // table variable and is refused.
+    private static string NormalizeCaptureVariableName(string variableName, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(variableName))
+            throw new ArgumentException("A batch output source needs a table-variable name (with an optional leading '@').", parameterName);
+
+        var name = variableName[0] == '@' ? variableName : "@" + variableName;
+        if (!IsTableVariableName(name))
+            throw new ArgumentException(
+                $"'{variableName}' is not a valid table-variable name for a batch output source. It must start with a letter or underscore and contain only letters, digits and underscores; a bracketed or quoted identifier is not a table variable.",
+                parameterName);
+
+        return name;
+    }
+
+    private static bool IsTableVariableName(string name)
+    {
+        if (name.Length < 2 || name[0] != '@')
+            return false;
+
+        var first = name[1];
+        if (first != '_' && (first < 'A' || first > 'Z') && (first < 'a' || first > 'z'))
+            return false;
+
+        for (var i = 2; i < name.Length; i++)
+        {
+            var c = name[i];
+            if (c != '_' && !char.IsLetterOrDigit(c))
+                return false;
+        }
+
+        return true;
+    }
+
+    private sealed class CaptureRegistration
+    {
+        public CaptureRegistration(Type rowType, QueryCommand shape)
+        {
+            RowType = rowType;
+            Shape = shape;
+        }
+
+        public Type RowType { get; }
+
+        public QueryCommand Shape { get; }
     }
 
     private void RequireSameContext(QueryCommand command)
@@ -697,4 +972,79 @@ public sealed class BatchQuery<TResult>
     }
 
     private BatchPlan Render() => _executor.RenderBatch(_steps);
+}
+
+/// <summary>
+/// Builds the prepared column-shape command a mutation read projects over. It is shared by the two
+/// row-capturing mutation reads — the PostgreSQL data-modifying CTE (<c>INSERT ... RETURNING</c>) and the
+/// SQL Server batch capture (<c>OUTPUT ... INTO</c>) — so it is reached by name instead of through a
+/// <c>MutationCteQuery&lt;object&gt;</c> instantiation, which is generic for no reason of its own.
+/// </summary>
+internal static class MutationReadShape
+{
+    /// <summary>
+    /// Builds the shape of a read over the rows an insert terminal returns. A terminal without an explicit
+    /// selector is read through its key member, which is the column its <c>RETURNING</c>/<c>OUTPUT</c> list
+    /// carries.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type inserted.</typeparam>
+    /// <typeparam name="TReturn">The row shape the returning terminal projects.</typeparam>
+    /// <param name="dataContext">The context the read executes on.</param>
+    /// <param name="insert">The insert terminal whose returned columns define the shape.</param>
+    /// <returns>The prepared shape command.</returns>
+    internal static QueryCommand BuildShape<TEntity, TReturn>(IDataContext dataContext, InsertReturningBuilder<TEntity, TReturn> insert)
+    {
+        var projection = insert.Projection ?? BuildKeyProjection<TEntity, TReturn>(insert);
+        return BuildShape<TReturn>(dataContext, projection, typeof(TEntity));
+    }
+
+    /// <summary>
+    /// Builds the prepared column-shape command a mutation read uses: a projection over the mutated entity
+    /// that mirrors the returned columns, so member access resolves to the returned columns.
+    /// </summary>
+    /// <typeparam name="TShape">The row shape the read projects.</typeparam>
+    /// <param name="dataContext">The context the read executes on.</param>
+    /// <param name="projection">The returning selector that defines the projected columns.</param>
+    /// <param name="sourceType">The mapped entity type the selector reads.</param>
+    /// <param name="joinedSource">The joined source of a multi-table mutation read, or <see langword="null"/>.</param>
+    /// <returns>The prepared shape command.</returns>
+    internal static QueryCommand BuildShape<TShape>(IDataContext dataContext, System.Linq.Expressions.LambdaExpression projection, Type sourceType, QueryCommand? joinedSource = null)
+    {
+        // An identity projection has no column-producing body for the normal
+        // projector path, so the shape is built as a bare projection over TShape and expanded by
+        // TryBuildProjectionSelectList into slot-tagged item columns (mirroring the mutation's
+        // RETURNING list). Non-identity shapes keep their selector.
+        var isIdentity = TypeFacts.UnwrapConvert(projection.Body) is System.Linq.Expressions.ParameterExpression;
+        var shape = dataContext.CreateCommand<TShape>(new QueryDefinition
+        {
+            Exp = isIdentity ? null : projection,
+            SrcType = isIdentity ? typeof(TShape) : sourceType,
+            Joins = joinedSource?.Joins,
+        });
+        // Mark the identity shape BEFORE preparation so TryBuildProjectionSelectList tags every item
+        // column with its deterministic, collision-free per-slot alias before the column plan hash is
+        // finalized. Assigning it afterwards (after PrepareCommand) would leave PlanHashCode and the
+        // command's ColumnsPlanHash describing a shape without the alias.
+        if (isIdentity)
+            shape.IdentitySlotAliases = true;
+        if (joinedSource?.From is { } from)
+            shape.From = from;
+        shape.PrepareCommand(false, CancellationToken.None);
+
+        return shape;
+    }
+
+    // ReturningKey<TKey>() carries no selector; reconstruct the single key member access so the read
+    // can still be typed (the key type was validated against TKey when the returning builder was built).
+    private static System.Linq.Expressions.LambdaExpression BuildKeyProjection<TEntity, TReturn>(InsertReturningBuilder<TEntity, TReturn> insert)
+    {
+        var columns = insert.ReturningColumns;
+        if (columns.Count == 0)
+            throw new NotSupportedException(
+                "A data-modifying CTE requires RETURNING columns: ReturningIdentity<TKey>() names no column. Project the returned columns instead, e.g. Return(x => new { x.Id }).");
+
+        var property = columns[0].PropertyInfo;
+        var parameter = System.Linq.Expressions.Expression.Parameter(typeof(TEntity), "x");
+        return System.Linq.Expressions.Expression.Lambda(System.Linq.Expressions.Expression.MakeMemberAccess(parameter, property), parameter);
+    }
 }
