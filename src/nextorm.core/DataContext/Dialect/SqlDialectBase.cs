@@ -39,6 +39,8 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual bool SupportsApplyOnPlainTable => false;
     /// <inheritdoc/>
+    public virtual bool SupportsDirectApplyTableFunction => false;
+    /// <inheritdoc/>
     public virtual bool SupportsJoinStrictness => false;
     /// <inheritdoc/>
     public virtual bool SupportsGlobalJoin => false;
