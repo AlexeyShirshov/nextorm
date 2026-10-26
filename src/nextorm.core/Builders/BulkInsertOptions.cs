@@ -75,35 +75,39 @@ public sealed record BulkInsertOptions
 
     /// <summary>
     /// Whether CHECK and FOREIGN KEY constraints are checked by the destination while the rows are
-    /// written. Only the SQL Server native <c>SqlBulkCopy</c> path can express it (it maps to
-    /// <c>SqlBulkCopyOptions.CheckConstraints</c>, which SQL Server leaves off by default); every other
-    /// bulk path always enforces or always ignores constraints and rejects a request with a clear
+    /// written. <see langword="true"/> is honoured everywhere: a path that always checks constraints
+    /// accepts it by its default behaviour, and SQL Server maps it to
+    /// <c>SqlBulkCopyOptions.CheckConstraints</c>. <see langword="false"/> asks for unchecked rows,
+    /// which only the SQL Server native path can express (MariaDB and SQLite honour it through their
+    /// scoped session controls); every other path always checks and rejects it with
     /// <see cref="NotSupportedException"/>. Defaults to <see langword="null"/> (the provider default).
     /// </summary>
     public bool? CheckConstraints { get; init; }
 
     /// <summary>
     /// Whether a table-level bulk-update lock is taken for the duration of the write. Only the SQL
-    /// Server native <c>SqlBulkCopy</c> path can express it (<c>SqlBulkCopyOptions.TableLock</c>);
-    /// other bulk paths reject a request with a clear <see cref="NotSupportedException"/>. Defaults to
-    /// <see langword="null"/> (row locks).
+    /// Server native <c>SqlBulkCopy</c> path can express it (<c>SqlBulkCopyOptions.TableLock</c>), so
+    /// <see langword="true"/> is rejected elsewhere. <see langword="false"/> requests no such lock and
+    /// is honoured by every path by not asking for one. Defaults to <see langword="null"/> (row locks).
     /// </summary>
     public bool? TableLock { get; init; }
 
     /// <summary>
-    /// Whether explicit null values are written instead of the destination column's DEFAULT. Only the
-    /// SQL Server native <c>SqlBulkCopy</c> path can express it (<c>SqlBulkCopyOptions.KeepNulls</c>);
-    /// other bulk paths reject a request with a clear <see cref="NotSupportedException"/>. Defaults to
+    /// Whether explicit null values are written instead of the destination column's DEFAULT. Every path
+    /// writes the caller's values, so <see langword="true"/> is honoured everywhere (SQL Server maps it
+    /// to <c>SqlBulkCopyOptions.KeepNulls</c>). <see langword="false"/> asks the destination to apply the
+    /// column DEFAULT instead of an explicit null; it is accepted where the written shape is
+    /// default-equivalent and rejected otherwise when the target provider is known. Defaults to
     /// <see langword="null"/> (the provider default).
     /// </summary>
     public bool? KeepNulls { get; init; }
 
     /// <summary>
     /// Whether INSERT triggers fire for the written rows. Only the SQL Server native
-    /// <c>SqlBulkCopy</c> path can express it (<c>SqlBulkCopyOptions.FireTriggers</c>); other bulk paths
-    /// always fire (or never have) triggers and reject a request with a clear
-    /// <see cref="NotSupportedException"/>. Defaults to <see langword="null"/> (triggers do not fire on
-    /// the native path).
+    /// <c>SqlBulkCopy</c> path can express it (<c>SqlBulkCopyOptions.FireTriggers</c>), so
+    /// <see langword="true"/> is rejected elsewhere. <see langword="false"/> requests no firing and is
+    /// honoured by every path by not asking for it. Defaults to <see langword="null"/> (triggers do not
+    /// fire on the native path).
     /// </summary>
     public bool? FireTriggers { get; init; }
 
@@ -254,21 +258,127 @@ public sealed record BulkInsertOptions
     }
 
     /// <summary>
-    /// Validates the provider-scoped option groups against the provider whose bulk path is about to run. A
-    /// group that explicitly requests a value is meaningful only on its own provider, including an explicit
-    /// <see langword="false"/>; an empty group requests nothing and is accepted everywhere.
+    /// Validates the provider-scoped option groups and the provider-specific request against the provider
+    /// whose bulk path is about to run. A group that explicitly requests a value is meaningful only on its
+    /// own provider, including an explicit <see langword="false"/>; an empty group requests nothing and is
+    /// accepted everywhere. <see langword="null"/> means the provider identity could not be resolved (a
+    /// custom dialect or a context with no SQL dialect), which cannot host a provider-scoped group.
     /// </summary>
-    /// <param name="provider">The provider identity resolved for the write.</param>
+    /// <param name="provider">The provider identity resolved for the write, or <see langword="null"/> when unknown.</param>
     /// <exception cref="NotSupportedException">A provider group was supplied for a different provider.</exception>
-    internal void ValidateForProvider(BulkInsertProvider provider)
+    internal void ValidateForProvider(BulkInsertProvider? provider)
     {
         if (SqlServer is { RequestsAny: true } && provider != BulkInsertProvider.SqlServer)
             throw new NotSupportedException(
-                "SqlServerBulkInsertOptions are only supported by the SQL Server native SqlBulkCopy path; the resolved provider cannot express them.");
+                $"SqlServerBulkInsertOptions.UseInternalTransaction is only supported by the SQL Server native SqlBulkCopy path; {BulkInsertProviders.Describe(provider)} cannot express it.");
 
         if (ClickHouse is { RequestsAny: true } && provider != BulkInsertProvider.ClickHouse)
             throw new NotSupportedException(
-                "ClickHouseBulkInsertOptions are only supported by the ClickHouse native InsertBinaryAsync path; the resolved provider cannot express them.");
+                $"ClickHouseBulkInsertOptions (MaxDegreeOfParallelism/UseSession) are only supported by the ClickHouse native InsertBinaryAsync path; {BulkInsertProviders.Describe(provider)} cannot express them.");
+    }
+
+    /// <summary>
+    /// Validates the requested destination kind against the resolved provider and path. A regular target
+    /// takes the existing path unchanged. A local temporary target uses the provider's existing temporary
+    /// mechanism on the context's own connection/session, so a request that contradicts that mechanism is
+    /// refused instead of being accepted and ignored.
+    /// </summary>
+    /// <param name="provider">The provider identity resolved for the write, or <see langword="null"/> when unknown.</param>
+    /// <exception cref="NotSupportedException">The target kind contradicts a requested option.</exception>
+    internal void ValidateTargetKind(BulkInsertProvider? provider)
+    {
+        if (TargetKind == BulkInsertTargetKind.Regular)
+            return;
+
+        if (DatabaseName is not null)
+            throw new NotSupportedException(
+                $"BulkInsertOptions.TargetKind.LocalTemporary cannot be combined with BulkInsertOptions.DatabaseName ('{DatabaseName}'): a local temporary table lives in the current session's temporary store, never in another database.");
+
+        if (provider == BulkInsertProvider.SqlServer && (SchemaName ?? TableSchema) is not null)
+            throw new NotSupportedException(
+                $"BulkInsertOptions.TargetKind.LocalTemporary cannot be combined with BulkInsertOptions.SchemaName/TableSchema on SQL Server: a #temp table is session-scoped and takes no schema qualifier.");
+
+        if (ClickHouse is { UseSession: false })
+            throw new NotSupportedException(
+                "BulkInsertOptions.TargetKind.LocalTemporary cannot be combined with ClickHouseBulkInsertOptions.UseSession=false: a sessionless insert cannot see a session-local temporary table.");
+
+        if (ClickHouse is { MaxDegreeOfParallelism: > 1 } clickHouse)
+            throw new NotSupportedException(
+                $"BulkInsertOptions.TargetKind.LocalTemporary cannot be combined with ClickHouseBulkInsertOptions.MaxDegreeOfParallelism={clickHouse.MaxDegreeOfParallelism}: a parallel insert cannot address a session-local temporary table.");
+
+        // Every built-in provider writes a local temporary table on the context's own connection, which
+        // is exactly the path the native/portable executors already use, so no further refusal is needed.
+    }
+
+    /// <summary>
+    /// Validates options that only the provider's native path can express against the resolved path, so a
+    /// native-only request on the portable path is refused instead of silently ignored (the documented
+    /// contract of <see cref="BulkInsertMode.Portable"/>).
+    /// </summary>
+    /// <param name="useNative">Whether the write takes the provider's native bulk path.</param>
+    /// <exception cref="NotSupportedException">A native-only option was requested on the portable path.</exception>
+    internal void ValidateNativeOnlyOptions(bool useNative)
+    {
+        if (useNative)
+            return;
+
+        var requested = new List<string>(2);
+
+        if (SqlServer is { UseInternalTransaction: true })
+            requested.Add("SqlServerBulkInsertOptions.UseInternalTransaction=true");
+
+        if (ClickHouse is { RequestsAny: true })
+            requested.Add("ClickHouseBulkInsertOptions (MaxDegreeOfParallelism/UseSession)");
+
+        if (requested.Count == 0)
+            return;
+
+        throw new NotSupportedException(
+            $"The bulk-insert option(s) {string.Join(", ", requested)} are only supported by the provider's native bulk path; "
+            + "the portable INSERT ... VALUES path cannot express them. Use Mode.Auto or Mode.Native.");
+    }
+
+    /// <summary>
+    /// Validates the SQL Server-shaped bulk-copy flags against the semantic matrix: a request the resolved
+    /// path cannot honour is refused before any row is read, while an explicitly <see langword="false"/>
+    /// value is honoured by absence and is never treated as a request. Every offending option is named in
+    /// one message.
+    /// </summary>
+    /// <param name="provider">The provider identity resolved for the write, or <see langword="null"/> when unknown.</param>
+    /// <param name="useNative">Whether the write takes the provider's native bulk path.</param>
+    /// <exception cref="NotSupportedException">A requested flag cannot be expressed by the resolved path.</exception>
+    internal void ValidateBulkCopyFlags(BulkInsertProvider? provider, bool useNative)
+    {
+        var sqlServerNative = provider == BulkInsertProvider.SqlServer && useNative;
+        var rejected = new List<string>(3);
+
+        if (TableLock is true && !sqlServerNative)
+            rejected.Add("TableLock=true");
+
+        if (FireTriggers is true && !sqlServerNative)
+            rejected.Add("FireTriggers=true");
+
+        // false means "do not check constraints": only the SQL Server native flag turns checking off, and
+        // MariaDB/SQLite honour it through their scoped session controls. Every other path checks them.
+        if (CheckConstraints is false
+            && !sqlServerNative
+            && provider is not (BulkInsertProvider.MariaDb or BulkInsertProvider.Sqlite))
+        {
+            rejected.Add("CheckConstraints=false");
+        }
+
+        // KeepNulls needs no D1 refusal: true is honoured by every path (they write the caller's values),
+        // and false is accepted only for a default-equivalent shape, which the target provider validates
+        // against the mapped columns before the write.
+
+        if (rejected.Count == 0)
+            return;
+
+        var path = useNative ? "the native bulk path" : "the portable INSERT ... VALUES path";
+        throw new NotSupportedException(
+            $"The bulk-insert option(s) {string.Join(", ", rejected)} cannot be honoured by {path} on {BulkInsertProviders.Describe(provider)}. "
+            + "Only the SQL Server native SqlBulkCopy path can turn constraint checking off, take a table lock or fire triggers; "
+            + "an explicit false is honoured everywhere by not requesting the behaviour.");
     }
 
     private static void ThrowIfNonPositive(int? value, string name)
@@ -301,6 +411,52 @@ internal enum BulkInsertProvider
 
     /// <summary>SQLite portable path.</summary>
     Sqlite,
+}
+
+/// <summary>
+/// Resolves a dialect's built-in provider identity and renders it for diagnostics, so core never references
+/// a provider assembly. Only the six built-in dialects are mapped; a custom dialect or a user subclass of a
+/// built-in one resolves to <see langword="null"/>, which is treated as "cannot host a provider-scoped
+/// group" rather than guessed. The identity check is exact (assembly name plus full type name), so a
+/// same-named type from another assembly is not mistaken for a built-in either.
+/// </summary>
+internal static class BulkInsertProviders
+{
+    /// <summary>Resolves the provider identity of <paramref name="dialect"/>, or <see langword="null"/> when it is not a built-in dialect.</summary>
+    /// <param name="dialect">The dialect of the context the write runs on, or <see langword="null"/> when the context has none.</param>
+    /// <returns>The provider identity, or <see langword="null"/>.</returns>
+    internal static BulkInsertProvider? From(ISqlDialect? dialect)
+    {
+        if (dialect is null)
+            return null;
+
+        var type = dialect.GetType();
+        return (type.Assembly.GetName().Name, type.FullName) switch
+        {
+            ("nextorm.sqlserver", "NextORM.SqlServer.SqlServerDialect") => BulkInsertProvider.SqlServer,
+            ("nextorm.postgres", "NextORM.Postgres.PostgresDialect") => BulkInsertProvider.Postgres,
+            ("nextorm.mysql", "NextORM.MySql.MySqlDialect") => BulkInsertProvider.MySql,
+            ("nextorm.mariadb", "NextORM.MariaDb.MariaDbDialect") => BulkInsertProvider.MariaDb,
+            ("nextorm.clickhouse", "NextORM.ClickHouse.ClickHouseDialect") => BulkInsertProvider.ClickHouse,
+            ("nextorm.sqlite", "NextORM.Sqlite.SqliteDialect") => BulkInsertProvider.Sqlite,
+            _ => null,
+        };
+    }
+
+    /// <summary>Renders a provider identity for an error message.</summary>
+    /// <param name="provider">The provider identity, or <see langword="null"/> when unknown.</param>
+    /// <returns>The provider display name.</returns>
+    internal static string Describe(BulkInsertProvider? provider)
+        => provider switch
+        {
+            BulkInsertProvider.SqlServer => "SQL Server",
+            BulkInsertProvider.Postgres => "PostgreSQL",
+            BulkInsertProvider.MySql => "MySQL",
+            BulkInsertProvider.MariaDb => "MariaDB",
+            BulkInsertProvider.ClickHouse => "ClickHouse",
+            BulkInsertProvider.Sqlite => "SQLite",
+            _ => "the resolved provider (identity unknown)",
+        };
 }
 
 /// <summary>

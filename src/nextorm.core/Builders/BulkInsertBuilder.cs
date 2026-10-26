@@ -167,6 +167,8 @@ public sealed class BulkInsertBuilder<TEntity>
     /// <exception cref="NotSupportedException">The context is read-only, or the provider cannot express a requested form.</exception>
     public int BulkInsert()
     {
+        EnsureSyncSource();
+        ValidateTarget();
         var rows = ValidateAndMaterializeSync();
         var command = BuildCommand(ProjectSync(rows), null);
         return Execute(command);
@@ -180,6 +182,7 @@ public sealed class BulkInsertBuilder<TEntity>
     public Task<int> BulkInsertAsync(CancellationToken cancellationToken = default)
     {
         EnsureSourceSet();
+        ValidateTarget();
 
         if (_asyncSource is not null)
         {
@@ -450,8 +453,69 @@ public sealed class BulkInsertBuilder<TEntity>
         return new PortableBulkInsertExecutor(RequireMutationExecutor()).BulkInsertAsync(command, cancellationToken);
     }
 
+    /// <summary>
+    /// Resolves the target provider and the execution path and validates the whole request before any
+    /// source row is read: provider-scoped option groups, the destination, the target kind, native-only
+    /// options and the bulk-copy flags. Every refusal is a <see cref="NotSupportedException"/> raised before
+    /// the source is enumerated, so an unsupported combination never writes a partial batch.
+    /// </summary>
+    /// <param name="portableRequired">Whether the terminal always writes through the portable path (a returning terminal).</param>
+    /// <exception cref="NotSupportedException">The request cannot be honoured by the resolved provider/path.</exception>
+    internal void ValidateTarget(bool portableRequired = false)
+    {
+        var db = _dataContext as DataContext;
+        var provider = BulkInsertProviders.From(db?.Dialect);
+
+        _options.ValidateForProvider(provider);
+        _ = BulkInsertDestination.From(_options);
+
+        if (portableRequired && _options.Mode == BulkInsertMode.Native)
+            throw new NotSupportedException(
+                "Bulk insert Mode.Native was requested, but a RETURNING/OUTPUT terminal always writes through the portable INSERT ... VALUES path. Use Mode.Auto or Mode.Portable.");
+
+        var useNative = !portableRequired && UseNative(db);
+        _options.ValidateTargetKind(provider);
+        _options.ValidateNativeOnlyOptions(useNative);
+        _options.ValidateBulkCopyFlags(provider, useNative);
+    }
+
     private bool UseNative(DataContext? db)
-        => db is not null && db.Dialect.SupportsBulkCopy && !_options.IgnoreDuplicates && !_keepIdentity;
+    {
+        // Capability plus option compatibility, decided once here for every provider: a provider supplies
+        // only its capability flag, so the selection logic is never duplicated per provider.
+        var capable = db is not null && db.Dialect.SupportsBulkCopy;
+        var compatible = !_options.IgnoreDuplicates && !_keepIdentity;
+
+        if (_options.Mode == BulkInsertMode.Native)
+        {
+            if (!capable)
+                throw new NotSupportedException(
+                    $"Bulk insert Mode.Native was requested, but {BulkInsertProviders.Describe(BulkInsertProviders.From(db?.Dialect))} has no native bulk path. "
+                    + "Use Mode.Auto to let nextorm pick a compatible path, or Mode.Portable to request the parameterised INSERT path.");
+
+            if (!compatible)
+                throw new NotSupportedException(
+                    "Bulk insert Mode.Native was requested, but the request needs the portable path: "
+                    + DescribePortableOnlyOptions()
+                    + ". Use Mode.Auto to let nextorm pick a compatible path, or Mode.Portable.");
+
+            return true;
+        }
+
+        if (_options.Mode == BulkInsertMode.Portable)
+            return false;
+
+        // Auto: prefer the native path only when it is fully compatible, otherwise the portable path.
+        return capable && compatible;
+    }
+
+    private string DescribePortableOnlyOptions()
+    {
+        var options = new List<string>(2);
+        if (_options.IgnoreDuplicates) options.Add("IgnoreDuplicates=true");
+        if (_keepIdentity) options.Add("KeepIdentity=true");
+        return string.Join(", ", options);
+    }
 
     private static bool HasIdentityColumn(IEntityMetadata metadata)
     {

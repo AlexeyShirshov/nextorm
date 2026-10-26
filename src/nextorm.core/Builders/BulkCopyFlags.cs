@@ -2,9 +2,13 @@ namespace NextORM.Core;
 
 /// <summary>
 /// The provider-specific bulk-copy flags requested for a write, passed to the native bulk hooks
-/// <see cref="DataContext.BulkInsertRows"/> and <see cref="DataContext.BulkInsertRowsAsync"/>. Only the
-/// SQL Server native <c>SqlBulkCopy</c> path can express them; every other path rejects a non-empty set
-/// with <see cref="NotSupportedException"/> instead of silently ignoring it.
+/// <see cref="DataContext.BulkInsertRows"/> and <see cref="DataContext.BulkInsertRowsAsync"/>. A set flag
+/// is a request; an unset flag means "not requested", so an explicitly supplied <c>false</c> on
+/// <see cref="BulkInsertOptions"/> never appears here (absence is the off state). Only the SQL Server
+/// native <c>SqlBulkCopy</c> path can express <c>TableLock</c> and <c>FireTriggers</c>;
+/// <c>CheckConstraints=true</c> and <c>KeepNulls=true</c> are honoured by every path, the first because a
+/// path that always checks constraints needs no request and the second because every path writes the
+/// caller's values.
 /// </summary>
 /// <param name="CheckConstraints">Whether CHECK and FOREIGN KEY constraints are checked.</param>
 /// <param name="TableLock">Whether a table-level bulk-update lock is taken.</param>
@@ -19,21 +23,21 @@ public readonly record struct BulkCopyFlags(bool CheckConstraints, bool TableLoc
     public bool IsAny => CheckConstraints || TableLock || KeepNulls || FireTriggers;
 
     /// <summary>
-    /// Throws <see cref="NotSupportedException"/> naming every requested flag when the set is not empty,
-    /// so a path that cannot express the flags fails loudly instead of ignoring them.
+    /// Throws <see cref="NotSupportedException"/> naming every requested flag the path cannot express, so a
+    /// path that cannot honour the request fails loudly instead of ignoring it. Only <c>TableLock</c> and
+    /// <c>FireTriggers</c> are rejected: <c>CheckConstraints=true</c> and <c>KeepNulls=true</c> match the
+    /// default behaviour of every path and are therefore already honoured.
     /// </summary>
     /// <param name="path">The bulk path that cannot express the flags (for the error message).</param>
-    /// <exception cref="NotSupportedException">At least one flag is set.</exception>
+    /// <exception cref="NotSupportedException">A flag the path cannot express is set.</exception>
     public void ThrowIfRequested(string path)
     {
-        if (!IsAny)
-            return;
+        var requested = new List<string>(2);
+        if (TableLock) requested.Add("TableLock=true");
+        if (FireTriggers) requested.Add("FireTriggers=true");
 
-        var requested = new List<string>(4);
-        if (CheckConstraints) requested.Add(nameof(CheckConstraints));
-        if (TableLock) requested.Add(nameof(TableLock));
-        if (KeepNulls) requested.Add(nameof(KeepNulls));
-        if (FireTriggers) requested.Add(nameof(FireTriggers));
+        if (requested.Count == 0)
+            return;
 
         throw new NotSupportedException(
             $"The bulk-insert option(s) {string.Join(", ", requested)} are only supported by the SQL Server native SqlBulkCopy path; {path} cannot express them.");

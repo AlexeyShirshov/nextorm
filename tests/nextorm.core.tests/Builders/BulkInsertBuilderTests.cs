@@ -1,5 +1,8 @@
 using FluentAssertions;
 using NextORM.Core;
+using System.Collections;
+using System.Data.Common;
+using System.Text;
 
 namespace NextORM.Core.Tests;
 
@@ -494,6 +497,552 @@ public class BulkInsertBuilderTests
         var act = () => destination.Render(NextORM.Postgres.PostgresDialect.Instance, quoteIdentifiers: true, "orders");
 
         act.Should().Throw<NotSupportedException>().WithMessage("*DatabaseName*");
+    }
+
+    // ---------------------------------------------------------------- D1 mode dispatch
+
+    [Fact]
+    public void ModeAuto_OnNativeCapableContext_ShouldPreferTheNativePath()
+    {
+        using var ctx = new NativeCapableContext();
+
+        var count = ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Mode(BulkInsertMode.Auto))
+            .Values([new BulkEntity { Id = 1, Name = "a" }, new BulkEntity { Id = 2, Name = "b" }])
+            .BulkInsert();
+
+        count.Should().Be(2);
+        ctx.NativeCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public void ModeNative_OnNativeCapableContext_ShouldWriteThroughTheNativePath()
+    {
+        using var ctx = new NativeCapableContext();
+
+        var count = ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Mode(BulkInsertMode.Native))
+            .Values([new BulkEntity { Id = 1, Name = "a" }])
+            .BulkInsert();
+
+        count.Should().Be(1);
+        ctx.NativeCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public void ModePortable_OnNativeCapableContext_ShouldNotCallTheNativePath()
+    {
+        using var ctx = new NativeCapableContext();
+        var builder = ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Mode(BulkInsertMode.Portable))
+            .Values([new BulkEntity { Id = 1, Name = "a" }]);
+
+        // The portable path is the parameterised INSERT loop: the fake context has no connection, so the
+        // write stops at the connection, which proves the native hook was never entered.
+        var act = () => builder.BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*t305-fake-connection*");
+        ctx.NativeCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public void ModeNative_OnPortableOnlyContext_ShouldThrowBeforeReadingTheSource()
+    {
+        using var ctx = new PortableOnlyContext();
+        var source = new CountingSource(new BulkEntity { Id = 1, Name = "a" });
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Mode(BulkInsertMode.Native))
+            .Values(source)
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Mode.Native*");
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ModeNative_OnPortableOnlyContextAsync_ShouldThrowBeforeReadingTheSource()
+    {
+        using var ctx = new PortableOnlyContext();
+        var source = new CountingSource(new BulkEntity { Id = 1, Name = "a" });
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Mode(BulkInsertMode.Native))
+            .Values(source)
+            .BulkInsertAsync();
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*Mode.Native*");
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public void ModeNative_WithIgnoreDuplicates_ShouldThrowNamingthePortableOnlyOption()
+    {
+        using var ctx = new NativeCapableContext();
+        var source = new CountingSource(new BulkEntity { Id = 1, Name = "a" });
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Mode(BulkInsertMode.Native).IgnoreDuplicates())
+            .Values(source)
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*IgnoreDuplicates*");
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public void ReturningKey_WithModeNative_ShouldThrowBeforeReadingTheSource()
+    {
+        using var ctx = new InMemoryDataContext();
+        var source = new CountingSource(new BulkEntity { Id = 1, Name = "a" });
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Mode(BulkInsertMode.Native))
+            .Values(source)
+            .ReturningKey<int>()
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Mode.Native*");
+        source.Enumerated.Should().Be(0);
+    }
+
+    // ---------------------------------------------------------------- D1 provider-scoped groups
+
+    [Fact]
+    public void ForeignSqlServerGroup_ShouldBeRejectedBeforeReadingTheSource()
+    {
+        using var ctx = new InMemoryDataContext();
+        var source = new CountingSource(new BulkEntity { Id = 1, Name = "a" });
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(
+                o => o.SqlServer(new SqlServerBulkInsertOptions { UseInternalTransaction = false }))
+            .Values(source)
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*SqlServer*");
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public void ForeignClickHouseGroup_ShouldBeRejectedBeforeReadingTheSource()
+    {
+        using var ctx = new InMemoryDataContext();
+        var source = new CountingSource(new BulkEntity { Id = 1, Name = "a" });
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(
+                o => o.ClickHouse(new ClickHouseBulkInsertOptions { UseSession = false }))
+            .Values(source)
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*ClickHouse*");
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Fact]
+    public void EmptyTypedGroups_OnUnknownProvider_ShouldRequestNothing()
+    {
+        var options = new BulkInsertOptions
+        {
+            SqlServer = new SqlServerBulkInsertOptions(),
+            ClickHouse = new ClickHouseBulkInsertOptions(),
+        };
+
+        var act = () => options.ValidateForProvider(provider: null);
+
+        act.Should().NotThrow();
+    }
+
+    // ---------------------------------------------------------------- D1 target kind
+
+    [Fact]
+    public void TargetKind_ShouldDefaultToRegular()
+    {
+        new BulkInsertOptions().TargetKind.Should().Be(BulkInsertTargetKind.Regular);
+    }
+
+    [Fact]
+    public void TargetKind_LocalTemporary_ShouldBeCarriedOnTheCommand()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var command = ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.TargetKind(BulkInsertTargetKind.LocalTemporary))
+            .Values(Array.Empty<BulkEntity>())
+            .BuildCommand([], null);
+
+        command.TargetKind.Should().Be(BulkInsertTargetKind.LocalTemporary);
+    }
+
+    [Fact]
+    public void LocalTemporary_WithDatabaseName_ShouldBeRejectedBeforeReadingTheSource()
+    {
+        using var ctx = new InMemoryDataContext();
+        var source = new CountingSource(new BulkEntity { Id = 1, Name = "a" });
+
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o
+                .TargetKind(BulkInsertTargetKind.LocalTemporary)
+                .Database("other"))
+            .Values(source)
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*LocalTemporary*DatabaseName*");
+        source.Enumerated.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData((int)BulkInsertProvider.SqlServer)]
+    [InlineData((int)BulkInsertProvider.Postgres)]
+    [InlineData((int)BulkInsertProvider.MySql)]
+    [InlineData((int)BulkInsertProvider.MariaDb)]
+    [InlineData((int)BulkInsertProvider.ClickHouse)]
+    [InlineData((int)BulkInsertProvider.Sqlite)]
+    public void LocalTemporary_OnASameConnectionProvider_ShouldBeAccepted(int provider)
+    {
+        var options = new BulkInsertOptions { TargetKind = BulkInsertTargetKind.LocalTemporary };
+
+        var act = () => options.ValidateTargetKind((BulkInsertProvider)provider);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void LocalTemporary_WithSqlServerSchema_ShouldThrow()
+    {
+        var options = new BulkInsertOptions
+        {
+            TargetKind = BulkInsertTargetKind.LocalTemporary,
+            SchemaName = "staging",
+        };
+
+        var act = () => options.ValidateTargetKind(BulkInsertProvider.SqlServer);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*LocalTemporary*SchemaName*");
+    }
+
+    [Fact]
+    public void LocalTemporary_WithSessionlessClickHouse_ShouldThrow()
+    {
+        var options = new BulkInsertOptions
+        {
+            TargetKind = BulkInsertTargetKind.LocalTemporary,
+            ClickHouse = new ClickHouseBulkInsertOptions { UseSession = false },
+        };
+
+        var act = () => options.ValidateTargetKind(BulkInsertProvider.ClickHouse);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*LocalTemporary*UseSession*");
+    }
+
+    [Fact]
+    public void LocalTemporary_WithParallelClickHouse_ShouldThrow()
+    {
+        var options = new BulkInsertOptions
+        {
+            TargetKind = BulkInsertTargetKind.LocalTemporary,
+            ClickHouse = new ClickHouseBulkInsertOptions { MaxDegreeOfParallelism = 4 },
+        };
+
+        var act = () => options.ValidateTargetKind(BulkInsertProvider.ClickHouse);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*LocalTemporary*MaxDegreeOfParallelism*");
+    }
+
+    // ---------------------------------------------------------------- D1 bulk-copy flag matrix
+
+    [Theory]
+    [InlineData((int)BulkInsertProvider.Postgres)]
+    [InlineData((int)BulkInsertProvider.MySql)]
+    [InlineData((int)BulkInsertProvider.MariaDb)]
+    [InlineData((int)BulkInsertProvider.ClickHouse)]
+    [InlineData((int)BulkInsertProvider.Sqlite)]
+    public void TableLockTrue_OffSqlServer_ShouldThrowNamingTheOption(int provider)
+    {
+        var act = () => new BulkInsertOptions { TableLock = true }.ValidateBulkCopyFlags((BulkInsertProvider)provider, useNative: true);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*TableLock=true*");
+    }
+
+    [Fact]
+    public void TableLockTrue_OnSqlServerNative_ShouldBeAccepted()
+    {
+        var act = () => new BulkInsertOptions { TableLock = true }.ValidateBulkCopyFlags(BulkInsertProvider.SqlServer, useNative: true);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void TableLockTrue_OnSqlServerPortable_ShouldThrow()
+    {
+        var act = () => new BulkInsertOptions { TableLock = true }.ValidateBulkCopyFlags(BulkInsertProvider.SqlServer, useNative: false);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*TableLock=true*");
+    }
+
+    [Theory]
+    [InlineData((int)BulkInsertProvider.SqlServer, true)]
+    [InlineData((int)BulkInsertProvider.SqlServer, false)]
+    [InlineData((int)BulkInsertProvider.Postgres, true)]
+    [InlineData((int)BulkInsertProvider.Postgres, false)]
+    [InlineData((int)BulkInsertProvider.MySql, true)]
+    [InlineData((int)BulkInsertProvider.MariaDb, true)]
+    [InlineData((int)BulkInsertProvider.ClickHouse, true)]
+    [InlineData((int)BulkInsertProvider.Sqlite, true)]
+    public void TableLockFalse_ShouldBeHonouredByAbsence(int provider, bool useNative)
+    {
+        var act = () => new BulkInsertOptions { TableLock = false }.ValidateBulkCopyFlags((BulkInsertProvider)provider, useNative);
+
+        act.Should().NotThrow();
+    }
+
+    [Theory]
+    [InlineData((int)BulkInsertProvider.Postgres)]
+    [InlineData((int)BulkInsertProvider.MySql)]
+    [InlineData((int)BulkInsertProvider.MariaDb)]
+    [InlineData((int)BulkInsertProvider.ClickHouse)]
+    [InlineData((int)BulkInsertProvider.Sqlite)]
+    public void FireTriggersTrue_OffSqlServer_ShouldThrowNamingTheOption(int provider)
+    {
+        var act = () => new BulkInsertOptions { FireTriggers = true }.ValidateBulkCopyFlags((BulkInsertProvider)provider, useNative: true);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FireTriggers=true*");
+    }
+
+    [Fact]
+    public void FireTriggersFalse_ShouldBeHonouredByAbsence()
+    {
+        var act = () => new BulkInsertOptions { FireTriggers = false }.ValidateBulkCopyFlags(BulkInsertProvider.Postgres, useNative: true);
+
+        act.Should().NotThrow();
+    }
+
+    [Theory]
+    [InlineData((int)BulkInsertProvider.SqlServer, true)]
+    [InlineData((int)BulkInsertProvider.SqlServer, false)]
+    [InlineData((int)BulkInsertProvider.Postgres, true)]
+    [InlineData((int)BulkInsertProvider.MySql, true)]
+    [InlineData((int)BulkInsertProvider.MariaDb, true)]
+    [InlineData((int)BulkInsertProvider.ClickHouse, true)]
+    [InlineData((int)BulkInsertProvider.Sqlite, true)]
+    public void CheckConstraintsTrue_ShouldBeHonouredEverywhere(int provider, bool useNative)
+    {
+        var act = () => new BulkInsertOptions { CheckConstraints = true }.ValidateBulkCopyFlags((BulkInsertProvider)provider, useNative);
+
+        act.Should().NotThrow();
+    }
+
+    [Theory]
+    [InlineData((int)BulkInsertProvider.Postgres)]
+    [InlineData((int)BulkInsertProvider.MySql)]
+    [InlineData((int)BulkInsertProvider.ClickHouse)]
+    public void CheckConstraintsFalse_WhereThePathAlwaysChecks_ShouldThrow(int provider)
+    {
+        var act = () => new BulkInsertOptions { CheckConstraints = false }.ValidateBulkCopyFlags((BulkInsertProvider)provider, useNative: true);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*CheckConstraints=false*");
+    }
+
+    [Fact]
+    public void CheckConstraintsFalse_OnSqlServerPortable_ShouldThrow()
+    {
+        var act = () => new BulkInsertOptions { CheckConstraints = false }.ValidateBulkCopyFlags(BulkInsertProvider.SqlServer, useNative: false);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*CheckConstraints=false*");
+    }
+
+    [Theory]
+    [InlineData((int)BulkInsertProvider.MariaDb)]
+    [InlineData((int)BulkInsertProvider.Sqlite)]
+    public void CheckConstraintsFalse_WithScopedSessionControls_ShouldBeAccepted(int provider)
+    {
+        var act = () => new BulkInsertOptions { CheckConstraints = false }.ValidateBulkCopyFlags((BulkInsertProvider)provider, useNative: false);
+
+        act.Should().NotThrow();
+    }
+
+    [Theory]
+    [InlineData((int)BulkInsertProvider.SqlServer)]
+    [InlineData((int)BulkInsertProvider.Postgres)]
+    [InlineData((int)BulkInsertProvider.MySql)]
+    [InlineData((int)BulkInsertProvider.MariaDb)]
+    [InlineData((int)BulkInsertProvider.ClickHouse)]
+    [InlineData((int)BulkInsertProvider.Sqlite)]
+    public void KeepNullsTrueAndFalse_ShouldBeAcceptedAtD1(int provider)
+    {
+        var keepNulls = () => new BulkInsertOptions { KeepNulls = true }.ValidateBulkCopyFlags((BulkInsertProvider)provider, useNative: true);
+        var defaultEquivalent = () => new BulkInsertOptions { KeepNulls = false }.ValidateBulkCopyFlags((BulkInsertProvider)provider, useNative: false);
+
+        keepNulls.Should().NotThrow();
+        defaultEquivalent.Should().NotThrow();
+    }
+
+    [Fact]
+    public void RejectedFlagCombination_ShouldNameEveryOption()
+    {
+        var options = new BulkInsertOptions
+        {
+            TableLock = true,
+            FireTriggers = true,
+            CheckConstraints = false,
+        };
+
+        var act = () => options.ValidateBulkCopyFlags(BulkInsertProvider.Postgres, useNative: true);
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*TableLock=true*FireTriggers=true*CheckConstraints=false*");
+    }
+
+    [Fact]
+    public void BulkCopyFlags_CheckConstraintsOrKeepNullsTrue_ShouldNotThrow()
+    {
+        var checkConstraints = () => new BulkCopyFlags(CheckConstraints: true, TableLock: false, KeepNulls: false, FireTriggers: false)
+            .ThrowIfRequested("the portable INSERT ... VALUES path");
+        var keepNulls = () => new BulkCopyFlags(CheckConstraints: false, TableLock: false, KeepNulls: true, FireTriggers: false)
+            .ThrowIfRequested("the portable INSERT ... VALUES path");
+
+        checkConstraints.Should().NotThrow();
+        keepNulls.Should().NotThrow();
+    }
+
+    [Fact]
+    public void BulkCopyFlags_TableLockAndFireTriggersTrue_ShouldNameBothOptions()
+    {
+        var flags = new BulkCopyFlags(CheckConstraints: false, TableLock: true, KeepNulls: false, FireTriggers: true);
+
+        var act = () => flags.ThrowIfRequested("the PostgreSQL COPY path");
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*TableLock=true*FireTriggers=true*");
+    }
+
+    // ---------------------------------------------------------------- D1 native-only options on the portable path
+
+    [Fact]
+    public void SqlServerInternalTransactionTrue_OnPortablePath_ShouldThrow()
+    {
+        var options = new BulkInsertOptions { SqlServer = new SqlServerBulkInsertOptions { UseInternalTransaction = true } };
+
+        var act = () => options.ValidateNativeOnlyOptions(useNative: false);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*UseInternalTransaction=true*");
+    }
+
+    [Fact]
+    public void SqlServerInternalTransactionFalse_OnPortablePath_ShouldBeHonouredByAbsence()
+    {
+        var options = new BulkInsertOptions { SqlServer = new SqlServerBulkInsertOptions { UseInternalTransaction = false } };
+
+        var act = () => options.ValidateNativeOnlyOptions(useNative: false);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void ClickHouseGroup_OnPortablePath_ShouldThrow()
+    {
+        var options = new BulkInsertOptions { ClickHouse = new ClickHouseBulkInsertOptions { MaxDegreeOfParallelism = 1 } };
+
+        var act = () => options.ValidateNativeOnlyOptions(useNative: false);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*ClickHouseBulkInsertOptions*");
+    }
+
+    private sealed class NativeCapableDialect : SqlDialectBase
+    {
+        internal static readonly NativeCapableDialect Instance = new();
+
+        public override bool SupportsBulkCopy => true;
+
+        public override string MakeParam(string name) => "@" + name;
+
+        public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
+        {
+        }
+    }
+
+    private sealed class PortableOnlyDialect : SqlDialectBase
+    {
+        internal static readonly PortableOnlyDialect Instance = new();
+
+        public override string MakeParam(string name) => "@" + name;
+
+        public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
+        {
+        }
+    }
+
+    private sealed class NativeCapableContext : DataContext
+    {
+        public NativeCapableContext() : base(new DataContextBuilder())
+        {
+        }
+
+        public int NativeCalls { get; private set; }
+
+        public override ISqlDialect Dialect => NativeCapableDialect.Instance;
+
+        public override DbParameter CreateParam(string name, object? value) => throw new NotSupportedException("t305-fake-param");
+
+        protected override DbConnection CreateDbConnection(string? connectionString) => throw new NotSupportedException("t305-fake-connection");
+
+        protected override int BulkInsertRows(
+            string tableName,
+            IReadOnlyList<string> columnNames,
+            IReadOnlyList<IPropertyMetadata> columns,
+            IEnumerable<object?[]> rows,
+            int? commandTimeoutSeconds,
+            int? maxBatchSize,
+            Action<int>? progress,
+            int notifyEvery,
+            BulkCopyFlags bulkCopy)
+        {
+            NativeCalls++;
+            return rows.Count();
+        }
+
+        protected override Task<int> BulkInsertRowsAsync(
+            string tableName,
+            IReadOnlyList<string> columnNames,
+            IReadOnlyList<IPropertyMetadata> columns,
+            IAsyncEnumerable<object?[]> rows,
+            int? commandTimeoutSeconds,
+            int? maxBatchSize,
+            Action<int>? progress,
+            int notifyEvery,
+            BulkCopyFlags bulkCopy,
+            CancellationToken cancellationToken)
+        {
+            NativeCalls++;
+            return CountAsync(rows, cancellationToken);
+        }
+
+        private static async Task<int> CountAsync(IAsyncEnumerable<object?[]> rows, CancellationToken cancellationToken)
+        {
+            var count = 0;
+            await foreach (var _ in rows.WithCancellation(cancellationToken).ConfigureAwait(false))
+                count++;
+
+            return count;
+        }
+    }
+
+    private sealed class PortableOnlyContext : DataContext
+    {
+        public PortableOnlyContext() : base(new DataContextBuilder())
+        {
+        }
+
+        public override ISqlDialect Dialect => PortableOnlyDialect.Instance;
+
+        public override DbParameter CreateParam(string name, object? value) => throw new NotSupportedException("t305-fake-param");
+
+        protected override DbConnection CreateDbConnection(string? connectionString) => throw new NotSupportedException("t305-fake-connection");
+    }
+
+    private sealed class CountingSource(params BulkEntity[] rows) : IEnumerable<BulkEntity>
+    {
+        public int Enumerated { get; private set; }
+
+        public IEnumerator<BulkEntity> GetEnumerator()
+        {
+            foreach (var row in rows)
+            {
+                Enumerated++;
+                yield return row;
+            }
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     private static async IAsyncEnumerable<BulkEntity> EmptyAsync()

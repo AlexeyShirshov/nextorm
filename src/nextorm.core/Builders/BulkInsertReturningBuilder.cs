@@ -73,6 +73,8 @@ public sealed class BulkInsertReturningBuilder<TEntity, TResult>
     /// <exception cref="NotSupportedException">The provider cannot express <c>RETURNING</c>/<c>OUTPUT</c>, or the context is read-only.</exception>
     public IReadOnlyList<TResult> ToList()
     {
+        _bulk.ValidateSyncSource();
+        _bulk.ValidateTarget(portableRequired: true);
         var rows = _bulk.ValidateAndMaterializeSync();
 
         var mutation = _bulk.RequireMutationExecutor();
@@ -112,6 +114,7 @@ public sealed class BulkInsertReturningBuilder<TEntity, TResult>
     public Task<IReadOnlyList<TResult>> ToListAsync(CancellationToken cancellationToken = default)
     {
         _bulk.ValidateSource();
+        _bulk.ValidateTarget(portableRequired: true);
 
         return _bulk.AsyncSource is not null
             ? ToListAsyncRowsAsync(_bulk.ProjectAsyncRows(cancellationToken), cancellationToken)
