@@ -99,6 +99,12 @@ public class PostgresDataContext : DataContext
     /// <inheritdoc/>
     public override ISqlDialect Dialect => _dialect;
 
+    /// <summary>
+    /// PostgreSQL <c>time</c> is a true time of day and the driver surfaces it as
+    /// <see cref="TimeSpan"/> with microsecond precision, so the projection is supported.
+    /// </summary>
+    protected override string? TimeOnlyProjectionRefusal => null;
+
     // A context type owns one immutable server version. A second, conflicting version is a
     // configuration error that names the remedy: derive a distinct context subclass.
     private static void RegisterServerVersion(Type contextType, Version? serverVersion)

@@ -257,11 +257,13 @@ public sealed class TimeOnlySqlServerLiveTests : ProviderTestSuite
             var holdersBefore = QueryPlanStore.Values.Count();
 
             var first = Prepare(context);
+            var holdersAfterFirst = QueryPlanStore.Values.Count();
             var second = Prepare(context);
 
             second.Should().BeSameAs(first, "the same shape must be served from the plan store");
-            QueryPlanStore.Values.Count().Should().Be(holdersBefore,
-                "preparation must not grow the plan store on a cache hit");
+            holdersAfterFirst.Should().BeGreaterThan(holdersBefore, "the first preparation publishes its plan");
+            QueryPlanStore.Values.Count().Should().Be(holdersAfterFirst,
+                "the second preparation is a cache hit and must not grow the plan store again");
 
             var rows = Context.From<ITimeOnlyProbe>()
                 .OrderBy(x => x.Id)
@@ -292,17 +294,23 @@ public sealed class TimeOnlySqlServerLiveTests : ProviderTestSuite
         CreateFixture();
         try
         {
-            var scalarPath = ScalarDispatchIsMapperFree();
+            // The public ExecuteScalar seam (QueryExecutor.ExecuteScalar -> ConvertScalar) is the scalar
+            // route this task threads the provider policy into. A single-column projection also carries a
+            // row mapper (MapDelegate is not null, observed), so the mapped row is the agreement control.
+            var context = (DataContext)Context;
+            var command = context.From<ITimeOnlyProbe>().Where(x => x.Id == 2).Select(x => x.T7);
+            var prepared = context.GetPreparedQueryCommand(
+                command, createEnumerator: false, storeInCache: false, CancellationToken.None);
 
-            var value = Context.From<ITimeOnlyProbe>()
+            var scalar = context.ExecuteScalar<TimeOnly?>(prepared, ReadOnlySpan<object?>.Empty, throwIfNull: true);
+            var mapped = Context.From<ITimeOnlyProbe>()
                 .Where(x => x.Id == 2)
                 .Select(x => x.T7)
                 .First();
 
-            value!.Value.Ticks.Should().Be(Fractional7.Ticks,
-                $"scalar dispatch: MapDelegate-null={scalarPath}");
-            scalarPath.Should().BeTrue(
-                "a single-column projection is read by SqlCommand.ExecuteScalar, not by a compiled row mapper");
+            scalar!.Value.Ticks.Should().Be(Fractional7.Ticks);
+            mapped!.Value.Ticks.Should().Be(scalar.Value.Ticks,
+                "the scalar terminal and the compiled row mapper must agree");
         }
         finally
         {
@@ -342,17 +350,6 @@ public sealed class TimeOnlySqlServerLiveTests : ProviderTestSuite
             createEnumerator: false,
             storeInCache: true,
             CancellationToken.None);
-
-    private bool ScalarDispatchIsMapperFree()
-    {
-        var context = (DataContext)Context;
-        var prepared = (DbPreparedQueryCommand<TimeOnly?>)context.GetPreparedQueryCommand(
-            context.From<ITimeOnlyProbe>().Where(x => x.Id == 2).Select(x => x.T7),
-            createEnumerator: false,
-            storeInCache: false,
-            CancellationToken.None);
-        return prepared.MapDelegate is null;
-    }
 
     private void CreateFixture()
     {

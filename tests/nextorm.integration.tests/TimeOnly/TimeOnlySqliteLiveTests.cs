@@ -71,7 +71,8 @@ public sealed class TimeOnlySqliteLiveTests : IDisposable
 
             var failure = act.Should().Throw<NotSupportedException>().Which;
             _output.WriteLine($"T340 SQLite mapped TimeOnly refusal: {failure.Message}");
-            failure.Message.Should().Contain("TimeOnly");
+            failure.Message.Should().Be(
+                "TimeOnly projection refused for SQLite: there is no native time-of-day type; use an explicit value converter.");
         }
         finally
         {

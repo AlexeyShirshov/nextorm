@@ -60,7 +60,8 @@ public sealed class TimeOnlyMySqlLiveTests : ProviderTestSuite
 
             var failure = act.Should().Throw<NotSupportedException>().Which;
             _output.WriteLine($"T340 MySQL mapped TimeOnly refusal: {failure.Message}");
-            failure.Message.Should().Contain("TimeOnly");
+            failure.Message.Should().Be(
+                "TimeOnly projection refused for MySQL: TIME is a duration; use TimeSpan or an explicit value converter.");
         }
         finally
         {

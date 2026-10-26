@@ -61,7 +61,8 @@ public sealed class TimeOnlyClickHouseLiveTests : ProviderTestSuite
 
             var failure = act.Should().Throw<NotSupportedException>().Which;
             _output.WriteLine($"T340 ClickHouse mapped TimeOnly refusal: {failure.Message}");
-            failure.Message.Should().Contain("TimeOnly");
+            failure.Message.Should().Be(
+                "TimeOnly projection refused for ClickHouse: there is no native time-of-day type and TimeOnly is bound as String; use an explicit value converter.");
         }
         finally
         {

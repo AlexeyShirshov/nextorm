@@ -73,7 +73,8 @@ public sealed class TimeOnlyMariaDbLiveTests : IDisposable
 
             var failure = act.Should().Throw<NotSupportedException>().Which;
             _output.WriteLine($"T340 MariaDB mapped TimeOnly refusal: {failure.Message}");
-            failure.Message.Should().Contain("TimeOnly");
+            failure.Message.Should().Be(
+                "TimeOnly projection refused for MariaDB: TIME is a duration; use TimeSpan or an explicit value converter.");
         }
         finally
         {

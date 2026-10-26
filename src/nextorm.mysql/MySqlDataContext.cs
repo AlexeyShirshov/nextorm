@@ -57,6 +57,14 @@ public class MySqlDataContext : DataContext
     public override ISqlDialect Dialect => MySqlDialect.Instance;
 
     /// <summary>
+    /// MySQL has no time of day: <c>TIME</c> is a signed duration that may be negative or exceed 24 h, so a
+    /// <see cref="TimeOnly"/> projection would have to truncate or reject values the column legitimately
+    /// holds. The projection is refused and the duration stays available through <see cref="TimeSpan"/>.
+    /// </summary>
+    protected override string? TimeOnlyProjectionRefusal =>
+        "TimeOnly projection refused for MySQL: TIME is a duration; use TimeSpan or an explicit value converter.";
+
+    /// <summary>
     /// Creates a <c>MySqlConnector</c> parameter, mapping a <see langword="null"/> value to
     /// <c>DBNull.Value</c> because <c>MySqlConnector</c> rejects an unset parameter value. This is the
     /// public 2-arg factory; the execution paths use the command-aware overloads below so a command

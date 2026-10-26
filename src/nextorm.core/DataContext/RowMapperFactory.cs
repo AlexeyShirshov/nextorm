@@ -34,6 +34,13 @@ internal static class RowMapperFactory
     private static readonly ConcurrentDictionary<Type, MethodInfo?> TypedFromProviderMethods = new();
 
     /// <summary>
+    /// <see cref="TimeOnlyProjectionReader.ReadNative(object?, string?)"/>: the single conversion point a
+    /// <see cref="TimeOnly"/> column is read through, so the policy and the value domain are enforced in
+    /// one place instead of in the compiled expression body.
+    /// </summary>
+    private static readonly MethodInfo TimeOnlyReadNativeMI = TimeOnlyProjectionReader.ReadNativeMethod;
+
+    /// <summary>
     /// Default column accessor: typed getters only (no <c>GetValue</c>/boxing), with the ordinal baked
     /// in as a constant. Providers whose reader does not widen CLR types (SqlClient throws when a typed
     /// getter does not match the field type) substitute their own.
@@ -49,7 +56,12 @@ internal static class RowMapperFactory
     /// The active dialect, used to resolve a dialect-dependent converter (a JSON column whose storage is
     /// <see cref="JsonColumnStorage.Auto"/>) before reading. Ignored when the column has no converter.
     /// </param>
-    public static Expression MapColumn(SelectExpression column, Expression param, bool supportsNativeDuration = true, ISqlDialect? dialect = null)
+    /// <param name="timeOnlyRefusal">
+    /// The context's <see cref="TimeOnly"/> policy: <see langword="null"/> when the provider has a verified
+    /// native time-of-day reader, otherwise the refusal message. The default is a generic refusal, never
+    /// "supported", so an internal caller that cannot reach the context policy fails closed.
+    /// </param>
+    public static Expression MapColumn(SelectExpression column, Expression param, bool supportsNativeDuration = true, ISqlDialect? dialect = null, string? timeOnlyRefusal = null)
     {
         if (column.IsLobStreaming)
             throw new NotSupportedException(
@@ -79,6 +91,21 @@ internal static class RowMapperFactory
             var unit = column.DurationUnit ?? DurationUnit.Ticks;
             var raw = Expression.Call(param, GetValueMI, Expression.Constant(column.Index));
             getter = Expression.Call(FromStorageMI, Expression.Call(ToInt64MI, raw), Expression.Constant(unit));
+        }
+        else if (realType == typeof(TimeOnly) && column.Converter is null)
+        {
+            // A time-of-day projection is read through one helper that enforces the provider policy and the
+            // [00:00:00, 24:00:00) domain: the drivers expose the value as a native TimeOnly or TimeSpan,
+            // and no other shape may be reinterpreted into a time. A refused provider throws here, while
+            // the mapper is composed — before the nullable/default-on-null wrappers below could turn the
+            // refusal into a "supported but null" projection.
+            if (timeOnlyRefusal is not null)
+                throw new NotSupportedException(timeOnlyRefusal);
+
+            getter = Expression.Call(
+                TimeOnlyReadNativeMI,
+                Expression.Call(param, GetValueMI, Expression.Constant(column.Index)),
+                Expression.Constant(null, typeof(string)));
         }
         else
         {
