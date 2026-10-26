@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
     Compiler fixture for #301 (T301). Deliberately NOT part of nextorm.slnx: the
