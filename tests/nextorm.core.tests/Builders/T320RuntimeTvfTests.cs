@@ -101,6 +101,31 @@ public class T320RuntimeTvfTests
     }
 
     [Fact]
+    public void Descriptor_NullVerbatimArguments_ShouldThrowArgumentNullException()
+    {
+        // The declared contract is non-nullable: "no verbatim argument" is an empty list, never a null one.
+        // NRT does not stop a runtime null, so the constructor has to reject it explicitly.
+        var act = () => new TvfEntityBuilder<T320TvfRow>("echo_rows", "dbo", null, null, null!, TableFunctionSchema.None);
+
+        act.Should().Throw<ArgumentNullException>()
+            .Which.ParamName.Should().Be("verbatimArguments");
+    }
+
+    [Fact]
+    public void Descriptor_VerbatimArgumentsParameter_ShouldBeNonNullableAndHaveNoDefault()
+    {
+        var constructor = typeof(TvfEntityBuilder<T320TvfRow>)
+            .GetConstructors()
+            .Single(candidate => candidate.GetParameters().Length == 6);
+        var parameter = constructor.GetParameters()[4];
+
+        parameter.Name.Should().Be("verbatimArguments");
+        parameter.ParameterType.Should().Be(typeof(IReadOnlyList<int>), "the planned declaration is non-nullable");
+        parameter.HasDefaultValue.Should().BeFalse("an optional-null parameter is forbidden by the plan");
+        new NullabilityInfoContext().Create(parameter).ReadState.Should().Be(NullabilityState.NotNull);
+    }
+
+    [Fact]
     public void Descriptor_ShouldNotExposePublicSetters()
     {
         var properties = typeof(TvfEntityBuilder<T320TvfRow>)

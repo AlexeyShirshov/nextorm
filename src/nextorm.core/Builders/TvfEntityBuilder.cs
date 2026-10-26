@@ -40,7 +40,7 @@ public class TvfEntityBuilder<T> : EntityBuilder<T>
     /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="name"/> is empty or whitespace.</exception>
     public TvfEntityBuilder(string name, string? schema)
-        : this(name, schema, null, null, null, TableFunctionSchema.None)
+        : this(name, schema, null, null, Array.Empty<int>(), TableFunctionSchema.None)
     {
     }
 
@@ -52,12 +52,14 @@ public class TvfEntityBuilder<T> : EntityBuilder<T>
     /// <param name="withClause">Optional trailing <c>WITH (...)</c> clause body appended after the call.</param>
     /// <param name="callClause">Optional verbatim SQL appended inside the call parentheses after the arguments.</param>
     /// <param name="verbatimArguments">
-    /// Indices of the arguments emitted verbatim as SQL (identifiers, not parameters); <see langword="null"/>
-    /// means every argument is a value. The list is defensively copied and must contain distinct,
-    /// non-negative indices.
+    /// Indices of the arguments emitted verbatim as SQL (identifiers, not parameters); an empty list means
+    /// every argument is a value. The list is defensively copied and must contain distinct, non-negative
+    /// indices. It is never <see langword="null"/>: "no verbatim argument" is expressed by an empty list.
     /// </param>
     /// <param name="resultSchema">Where the caller-declared result schema is rendered.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="name"/> or <paramref name="verbatimArguments"/> is <see langword="null"/>.
+    /// </exception>
     /// <exception cref="ArgumentException">
     /// <paramref name="name"/> is empty or whitespace, or <paramref name="verbatimArguments"/> contains a
     /// negative or duplicate index.
@@ -67,11 +69,12 @@ public class TvfEntityBuilder<T> : EntityBuilder<T>
         string? schema,
         string? withClause,
         string? callClause,
-        IReadOnlyList<int>? verbatimArguments,
+        IReadOnlyList<int> verbatimArguments,
         TableFunctionSchema resultSchema)
         : base()
     {
         ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(verbatimArguments);
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("The table-valued function name cannot be empty.", nameof(name));
 
@@ -123,9 +126,9 @@ public class TvfEntityBuilder<T> : EntityBuilder<T>
         return clone;
     }
 
-    private static IReadOnlyList<int> CopyVerbatimArguments(IReadOnlyList<int>? verbatimArguments)
+    private static IReadOnlyList<int> CopyVerbatimArguments(IReadOnlyList<int> verbatimArguments)
     {
-        if (verbatimArguments is null || verbatimArguments.Count == 0)
+        if (verbatimArguments.Count == 0)
             return Array.Empty<int>();
 
         var copy = new int[verbatimArguments.Count];
