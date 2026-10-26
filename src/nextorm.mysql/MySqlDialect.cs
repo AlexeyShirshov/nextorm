@@ -46,12 +46,14 @@ public class MySqlDialect : SqlDialectBase
     public override bool SupportsColumnDefault => true;
 
     /// <summary>
-    /// MySQL is not marked as having a native bulk path: <c>MySqlBulkCopy</c> goes through
-    /// <c>LOAD DATA LOCAL INFILE</c>, which requires <c>AllowLoadLocalInfile=true</c> on the connection
-    /// and a matching server setting, so the portable <c>INSERT ... VALUES</c> path is used instead (it
-    /// also returns keys and supports <c>INSERT IGNORE</c>).
+    /// MySQL has a native bulk path: <c>MySqlBulkCopy</c> loads through <c>LOAD DATA LOCAL INFILE</c>,
+    /// which requires <c>AllowLoadLocalInfile=true</c> on the connection and <c>local_infile</c> enabled
+    /// on the server. Both are read-only preflight checks: a missing permission is never changed by
+    /// nextorm, the portable <c>INSERT ... VALUES</c> path is used in <see cref="BulkInsertMode.Auto"/>,
+    /// and <see cref="BulkInsertMode.Native"/> refuses by name instead of replaying through the portable
+    /// path after a failed load.
     /// </summary>
-    public override bool SupportsBulkCopy => false;
+    public override bool SupportsBulkCopy => true;
 
     /// <summary>MySQL/MariaDB batches through <c>MySqlBatch</c>.</summary>
     public override bool SupportsBatch => true;

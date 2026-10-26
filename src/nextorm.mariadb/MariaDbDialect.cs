@@ -64,11 +64,15 @@ public sealed class MariaDbDialect : MySqlDialect
     public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
         $"regexp_replace({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : "(?-i)") + pattern, escapeBackslash: true)}, {QuoteStringLiteral(replacement, escapeBackslash: true)})";
 
-    /// <summary>MariaDB has no native bulk path enabled: <c>MySqlBulkCopy</c> requires a server-side
-    /// <c>local_infile</c> setting that is commonly disabled, so the portable
-    /// <c>INSERT ... VALUES</c> path is used instead (it also returns keys on request).
+    /// <summary>
+    /// MariaDB has a native bulk path: <c>MySqlBulkCopy</c> loads through <c>LOAD DATA LOCAL INFILE</c>,
+    /// which requires <c>AllowLoadLocalInfile=true</c> on the connection and <c>local_infile</c> enabled
+    /// on the server. Both are read-only preflight checks: a missing permission is never changed by
+    /// nextorm, the portable path is used in <see cref="BulkInsertMode.Auto"/>, and
+    /// <see cref="BulkInsertMode.Native"/> refuses by name. MariaDB additionally honours
+    /// <c>CheckConstraints=false</c> through scoped session controls that are restored after the write.
     /// </summary>
-    public override bool SupportsBulkCopy => false;
+    public override bool SupportsBulkCopy => true;
 
     /// <inheritdoc/>
     public override bool SupportsIntersectExceptAll => true;

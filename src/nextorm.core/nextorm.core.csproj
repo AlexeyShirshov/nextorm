@@ -79,6 +79,11 @@
     <!-- The SQL Server provider re-exposes Pivot/Unpivot as public extension methods over the internal
          construction seams (PivotExpression/EnsureNoEagerLoadState/typed builder state). -->
     <InternalsVisibleTo Include="nextorm.sqlserver" />
+    <!-- The MySQL/MariaDB providers re-implement the internal IBulkInsertExecutor contract so the
+         whole-invocation budget, the option presence and the mode reach the native MySqlBulkCopy path
+         and its portable fallback without a new public member (the same seam SQL Server/PostgreSQL use). -->
+    <InternalsVisibleTo Include="nextorm.mysql" />
+    <InternalsVisibleTo Include="nextorm.mariadb" />
     <!-- The EF Core bridge stages its whole import and publishes it under the shared metadata
          registration gate, so a concurrent auto/configured registration or junction publication
          cannot clobber a bridged entry (and vice versa). -->
