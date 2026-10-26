@@ -399,6 +399,8 @@ internal static class SqlSourceRenderer
         if (!ctx.Dialect.SupportsApply)
             throw new NotSupportedException($"The {join.JoinType} join is not supported by this SQL dialect");
 
+        RegisterApplyLeftSlots(in ctx, join);
+
         var source = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, GlobalLock: globalLock));
 
         if (ctx.ParamMode)
@@ -408,6 +410,33 @@ internal static class SqlSourceRenderer
             return MakePlainTableApply(in ctx, join.JoinType, source);
 
         return ctx.Dialect.MakeApply(join.JoinType, source, ctx.KeywordCase);
+    }
+
+    /// <summary>
+    /// Binds the correlated APPLY's left-row slots (#324) in the frame that is rendering it, before the
+    /// applied source is rendered. Slot 1 is the frame's FROM source and slot <c>n</c> its
+    /// <c>n-1</c>-th preceding join, resolved by registration order inside the current source scope —
+    /// never by alias arithmetic and never by CLR type. A slot the frame cannot address fails closed, so
+    /// the applied query can never be qualified with a wrong alias.
+    /// </summary>
+    private static void RegisterApplyLeftSlots(in SqlBuildContext ctx, JoinExpression join)
+    {
+        if (ctx.ParamMode || join.ApplyLeftSlots is not { Count: > 0 } slots)
+            return;
+
+        if (ctx.ColumnsProvider is not IOuterSlotSourceRegistry registry)
+            throw new InvalidOperationException(
+                "The active columns provider cannot bind correlated APPLY left-row slots; the applied source would resolve an outer reference without an exact occurrence.");
+
+        for (var i = 0; i < slots.Count; i++)
+        {
+            var slot = slots[i];
+            var sourceIndex = registry.ResolveFrameSourceIndex(slot.Slot)
+                ?? throw new InvalidOperationException(
+                    $"The correlated APPLY left-row slot {slot.Slot} is not registered in the active render frame: the applied source may only reference this command's FROM source and the joins that precede it.");
+
+            registry.PushOuterSlotSource(slot.Owner, slot.Slot, sourceIndex);
+        }
     }
 
     // A plain table cannot reference the left-hand row, so CROSS/OUTER APPLY over it is an ordinary

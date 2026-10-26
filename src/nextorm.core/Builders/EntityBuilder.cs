@@ -3325,9 +3325,14 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         ArgumentNullException.ThrowIfNull(create);
         ArgumentNullException.ThrowIfNull(source);
 
-        if (typeof(TEntity).TryGetProjectionDimension(out _))
-            throw new NotSupportedException(
-                "A correlated CROSS/OUTER APPLY source cannot reference a join projection; apply it to a single-entity source instead.");
+        // #324: an alias receiver is projection-shaped too, so the same flat transition as the positional
+        // after-join builders applies: only the eight-source cap is refused (a ninth source), and slots
+        // 1..n of the alias projection become the APPLY's addressable left row. The generated alias
+        // surface (marker extension and instance transitions) is what makes this path reachable, and it
+        // never nests the alias projection as the result's Item1.
+        var leftSlots = typeof(TEntity).TryGetProjectionDimension(out var projectionDimension) ? projectionDimension : 0;
+        if (leftSlots >= MaxJoinedSources)
+            throw new NotSupportedException(JoinedSourceCapMessage);
 
         if (_dataProvider is InMemoryDataContext)
             throw new NotSupportedException(
@@ -3347,6 +3352,12 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
             From = JoinSourceLock.Apply(new FromExpression(typeof(TJoinEntity)), opts),
             EntityType = typeof(TJoinEntity),
             ApplySource = applySource,
+            // The left-row prefix (FROM plus preceding joins, never the applied source) is rebuilt for
+            // every preparation from the command's actual prefix; recording it here makes a single-slot
+            // receiver keep its legacy resolution path unchanged.
+            ApplyLeftSlots = leftSlots >= 2
+                ? JoinExpression.CreateApplyLeftSlots(applySource.Parameters[0], leftSlots)
+                : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
             JoinHint = opts.JoinHint,
@@ -3825,9 +3836,13 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         => JoinApply<TJoinEntity>(source, JoinType.OuterApply, options);
     private JoinedEntityBuilder<TEntity, TJoinEntity> JoinApply<TJoinEntity>(LambdaExpression source, JoinType joinType, Action<JoinOptions>? options = null)
     {
-        if (typeof(TEntity).TryGetProjectionDimension(out _))
-            throw new NotSupportedException(
-                "A correlated CROSS/OUTER APPLY source cannot reference a join projection; apply it to a single-entity source instead.");
+        // A projection-shaped receiver (a join chain) must use the flat transition declared on the
+        // joined builder: this member would nest the projection as the result's Item1. At exactly eight
+        // sources the same check is the positional ninth-source boundary (issue #324).
+        if (typeof(TEntity).TryGetProjectionDimension(out var projectionDimension))
+            throw new NotSupportedException(projectionDimension >= MaxJoinedSources
+                ? JoinedSourceCapMessage
+                : JoinProjectionApplyMessage);
 
         if (_dataProvider is InMemoryDataContext)
             throw new NotSupportedException(
@@ -3856,6 +3871,118 @@ public class EntityBuilder<TEntity> : ICloneable, IEagerLoadNodeSource //IAsyncE
         }, queryBase);
         ApplyWhereToJoined(joined);
         return joined;
+    }
+    private const int MaxJoinedSources = 8;
+    private const string JoinedSourceCapMessage =
+        "A correlated CROSS/OUTER APPLY after joins supports at most 8 total sources (7 preceding sources plus the applied source); a ninth positional source is not supported. Use the alias API or express the extra source inside the applied query.";
+    private const string JoinProjectionApplyMessage =
+        "A correlated CROSS/OUTER APPLY over a join projection needs the flat transition declared on the joined builder (JoinedEntityBuilder<T1, ..., Tn>): the inherited single-entity member would nest the projection as the result's first item.";
+    /// <summary>
+    /// Shared construction seam for the correlated APPLY-after-join transitions (issue #324). It
+    /// validates the receiver once, stores the user lambda as <see cref="JoinExpression.ApplySource"/>
+    /// without compiling or evaluating it, constructs the caller's <em>flat</em>
+    /// <typeparamref name="TNext"/> and carries the complete join state through
+    /// <see cref="ApplyJoinStateTo{TOther}"/>, then copies the receiver's ordered joins and appends the
+    /// new APPLY exactly once (a copy, never the parent list by reference).
+    /// </summary>
+    /// <typeparam name="TNext">The flat joined builder type the caller's factory creates.</typeparam>
+    /// <typeparam name="TNextEntity">The flat projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <typeparam name="TAppliedEntity">The element type yielded by the applied source.</typeparam>
+    /// <param name="source">The correlated source lambda; stored, not executed here.</param>
+    /// <param name="joinType"><see cref="JoinType.CrossApply"/> or <see cref="JoinType.OuterApply"/>.</param>
+    /// <param name="options">Optional per-apply configuration, invoked immediately like every other join surface.</param>
+    /// <param name="create">Creates an empty flat builder bound to this builder's data context.</param>
+    /// <returns>A flat joined builder over the receiver's slots plus the applied source.</returns>
+    internal TNext ApplyCorrelatedJoin<TNext, TNextEntity, TAppliedEntity>(
+        LambdaExpression source,
+        JoinType joinType,
+        Action<JoinOptions>? options,
+        Func<IDataContext, JoinExpression, TNext> create)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        ArgumentNullException.ThrowIfNull(source);
+
+        // Exact flat dimension eight plus one APPLY would be a ninth source. Refuse before building
+        // anything, so no SQL is assembled and the user lambda is never executed.
+        if (typeof(TEntity).TryGetProjectionDimension(out var leftDimension) && leftDimension >= MaxJoinedSources)
+            throw new NotSupportedException(JoinedSourceCapMessage);
+
+        if (_dataProvider is InMemoryDataContext)
+            throw new NotSupportedException(
+                "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; run the query against a SQL provider.");
+
+        if (_windows is not null)
+            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
+
+        if (_joinIntos is { Count: > 0 })
+            throw new NotSupportedException(
+                "JoinInto cannot be combined with other joins on the same builder; declare JoinInto on a plain entity source only.");
+
+        EnsureNoEagerLoadState("Join/Apply");
+
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
+
+        var body = source.Body.Type == typeof(QueryCommand) ? source.Body : Expression.Convert(source.Body, typeof(QueryCommand));
+        var applySource = Expression.Lambda(body, source.Parameters);
+
+        var join = new JoinExpression(null, joinType)
+        {
+            From = JoinSourceLock.Apply(new FromExpression(typeof(TAppliedEntity)), opts),
+            EntityType = typeof(TAppliedEntity),
+            ApplySource = applySource,
+            // Binding metadata is recorded before any evaluation: slot 1 is the FROM source and each
+            // following slot one of the preceding ordered joins. Preparation rebuilds this list from the
+            // command's actual FROM-plus-preceding-joins prefix (QueryPreparer.PrepareJoin).
+            ApplyLeftSlots = leftDimension >= 2
+                ? JoinExpression.CreateApplyLeftSlots(applySource.Parameters[0], leftDimension)
+                : null,
+            Strictness = opts.Strictness ?? JoinStrictness.Default,
+            IsGlobal = opts.IsGlobal,
+            JoinHint = opts.JoinHint,
+            TableHints = opts.TableHints
+        };
+
+        var joined = create(_dataProvider, join);
+        ApplyJoinStateTo(joined, Query);
+
+        // Copy the receiver's ordered joins, then append the new APPLY exactly once. The list is copied,
+        // never aliased: a provider extension mutates a builder's own join list in place.
+        var joins = _joins is null ? new List<JoinExpression>() : new List<JoinExpression>(_joins);
+        joins.Add(join);
+        joined.Joins = joins;
+
+        ApplyConditionToCorrelatedJoined(joined);
+        return joined;
+    }
+    /// <summary>
+    /// Carries a <c>Where</c> written before a correlated APPLY onto the flat extended projection. A
+    /// projection predicate keeps its slot (<c>p.ItemN</c> becomes <c>q.ItemN</c>), while a plain source
+    /// predicate is re-rooted onto the new projection's <c>Item1</c>, mirroring the derived-source
+    /// re-root of <see cref="ApplyWhereToJoined{TJoinEntity}"/>.
+    /// </summary>
+    private void ApplyConditionToCorrelatedJoined<TNextEntity>(EntityBuilder<TNextEntity> joined)
+    {
+        if (_condition is null)
+            return;
+
+        var sourceParameter = _condition.Parameters[0];
+        var parameter = Expression.Parameter(typeof(TNextEntity), sourceParameter.Name);
+
+        if (sourceParameter.Type.TryGetProjectionDimension(out _))
+        {
+            var rebased = new RebaseAliasProjectionVisitor(sourceParameter, parameter, typeof(TNextEntity)).Visit(_condition.Body);
+            joined.Condition = Expression.Lambda<Func<TNextEntity, bool>>(rebased, parameter);
+            return;
+        }
+
+        var item1 = ProjectionAliasCache.GetItem1Property(typeof(TNextEntity))
+            ?? throw new NotSupportedException(
+                $"A correlated APPLY after a derived source requires the projection '{typeof(TNextEntity)}' to expose Item1.");
+        var item1Access = Expression.Property(parameter, item1);
+        var body = new ReplaceTargetParameterVisitor(sourceParameter, item1Access).Visit(_condition.Body);
+        joined.Condition = Expression.Lambda<Func<TNextEntity, bool>>(body, parameter);
     }
     /// <summary>
     /// Wraps a join into a <see cref="JoinedEntityBuilder{TEntity, TJoinEntity}"/>, carrying this

@@ -8,7 +8,7 @@ namespace NextORM.Core;
 /// Default <see cref="IColumnsProvider"/> that tracks the column sources of a query in registration
 /// order and resolves lambda parameters to alias indexes within the current scope.
 /// </summary>
-public class DefaultColumnsProvider : IColumnsProvider
+public class DefaultColumnsProvider : IColumnsProvider, IOuterSlotSourceRegistry
 {
 #if NET8_0_OR_GREATER
     private ValueList<(Type, QueryCommand?, bool, bool, ParameterExpression?)> _list;
@@ -28,11 +28,29 @@ public class DefaultColumnsProvider : IColumnsProvider
     /// CLR type, which keeps two same-typed joined sources distinct.
     /// </summary>
     private readonly Dictionary<ParameterExpression, int> _paramSources = new(ReferenceEqualityComparer.Instance);
+    /// <summary>
+    /// Frame-local correlated-APPLY left-row bindings (#324): one entry per source scope, created
+    /// lazily, holding <c>(owner parameter occurrence, one-based slot) -&gt; registration index</c>.
+    /// Popped together with its source scope, so a frame only addresses the sources it registered.
+    /// </summary>
+    private readonly List<Dictionary<(ParameterExpression Owner, int Slot), int>?> _outerSlotFrames = [];
+    /// <summary>
+    /// The projection type of the command each source scope belongs to (#324), parallel to
+    /// <see cref="_sourceScopes"/>. It lets a SELECT projection item resolve through the frame-local slot
+    /// map only in the frame that actually renders that projection; an enclosing or nested command's
+    /// frame can never satisfy this command's projection lookups.
+    /// </summary>
+    private readonly List<Type?> _frameProjections = [];
     /// <summary>The index of the first entry owned by the command currently being rendered.</summary>
     private int SourceScopeStart => _sourceScopes.Count > 0 ? _sourceScopes.Peek() : 0;
 
     /// <inheritdoc/>
-    public void PushSourceScope() => _sourceScopes.Add(_list.Count);
+    public void PushSourceScope()
+    {
+        _sourceScopes.Add(_list.Count);
+        _outerSlotFrames.Add(null);
+        _frameProjections.Add(null);
+    }
 
     /// <inheritdoc/>
     public void PopSourceScope()
@@ -50,6 +68,9 @@ public class DefaultColumnsProvider : IColumnsProvider
                 _list[i] = (item.Item1, item.Item2, item.Item3, true, item.Item5);
         }
         _sourceScopes.Pop();
+        // The frame's binding dictionary dies with the frame: a popped occurrence must not resolve.
+        _outerSlotFrames.RemoveAt(_outerSlotFrames.Count - 1);
+        _frameProjections.RemoveAt(_frameProjections.Count - 1);
     }
 
     /// <inheritdoc/>
@@ -257,4 +278,79 @@ public class DefaultColumnsProvider : IColumnsProvider
 
     /// <inheritdoc/>
     public bool HasAliases => _list.Count > 0;
+    /// <inheritdoc/>
+    int? IOuterSlotSourceRegistry.ResolveFrameSourceIndex(int slot)
+    {
+        if (slot < 1)
+            return null;
+
+        var seen = 0;
+        for (var (i, cnt) = (SourceScopeStart, _list.Count); i < cnt; i++)
+        {
+            if (_list[i].Item4)
+                continue;
+
+            if (++seen == slot)
+                return i;
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc/>
+    void IOuterSlotSourceRegistry.PushOuterSlotSource(ParameterExpression owner, int slot, int sourceIndex)
+    {
+        if (_outerSlotFrames.Count == 0)
+            throw new InvalidOperationException(
+                "A correlated APPLY left-row binding can only be registered inside an active source scope.");
+
+        var frame = _outerSlotFrames[^1] ??= new Dictionary<(ParameterExpression Owner, int Slot), int>();
+        frame[(owner, slot)] = sourceIndex;
+    }
+
+    /// <inheritdoc/>
+    int? IOuterSlotSourceRegistry.FindOuterSlotSource(ParameterExpression owner, int slot)
+    {
+        // Innermost frame first: an inner APPLY level shadows nothing (owner parameters are distinct
+        // instances), but a popped frame is gone, so a stale occurrence can never resolve.
+        for (var i = _outerSlotFrames.Count - 1; i >= 0; i--)
+        {
+            if (_outerSlotFrames[i] is { } frame && frame.TryGetValue((owner, slot), out var sourceIndex))
+                return sourceIndex;
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc/>
+    void IOuterSlotSourceRegistry.BindFrameProjection(Type? projectionType)
+    {
+        if (_frameProjections.Count > 0)
+            _frameProjections[^1] = projectionType;
+    }
+
+    /// <inheritdoc/>
+    int? IOuterSlotSourceRegistry.ResolveProjectionSlotSourceIndex(Type projectionType, int slot)
+    {
+        // Only the frame that renders this projection may answer, and only when it carries a
+        // correlated-APPLY binding: a non-zero enclosing scope, an unavailable frame or an unrelated
+        // nested command therefore keeps the legacy type/occurrence path instead of borrowing an alias.
+        if (_frameProjections.Count == 0
+            || !ReferenceEquals(_frameProjections[^1], projectionType)
+            || _outerSlotFrames[^1] is null)
+            return null;
+
+        if (((IOuterSlotSourceRegistry)this).ResolveFrameSourceIndex(slot) is int sourceIndex)
+            return sourceIndex;
+
+        var registered = 0;
+        for (var (i, cnt) = (SourceScopeStart, _list.Count); i < cnt; i++)
+        {
+            if (!_list[i].Item4)
+                registered++;
+        }
+
+        throw new InvalidOperationException(
+            $"The SELECT projection addresses slot {slot} of '{projectionType}', but the active render frame of this command registers only {registered} source(s). A projection item and the APPLY correlation that shares its slot may only address the FROM source plus the joins that precede the correlated APPLY; a forward or out-of-frame slot is refused instead of resolving to another alias.");
+    }
 }

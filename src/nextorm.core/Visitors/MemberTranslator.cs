@@ -415,7 +415,16 @@ internal static class MemberTranslator
         visitor.NeedAliasForColumn = true;
     }
 
+    private static void T324Tr(string site, object? a = null, object? b = null)
+    {
+        if (Environment.GetEnvironmentVariable("T324_TRACE") is null) return;
+        Console.Error.WriteLine("[T324] " + site + " | " + a + " | " + b);
+    }
+
     internal static Expression? VisitMember(BaseExpressionVisitor visitor, MemberExpression node)    {
+        T324Tr("enter", node);
+        var t324Start = visitor.Builder?.Length ?? 0;
+        try {
         if (TryTranslate(visitor, node))
             return node;
 
@@ -436,10 +445,20 @@ internal static class MemberTranslator
             return node;
         }
 
+        // #324: an outer-reference marker (`OuterRefMarker<T>(idx).Ref.Member`) is never a column of the
+        // rendered source, even when the marker's `Ref` CLR type is the same entity as the source it is
+        // rendered over (for example `Person` joined to `Person`). Resolving it first keeps the
+        // entity-column branch below from claiming it and emitting a bare identifier that would silently
+        // bind to the inner source. The translator resolves the exact join-projection alias — through the
+        // frame-local owner/slot map for a bound APPLY reference — and fails closed when it cannot.
+        if (TryTranslateProjectionOuterReference(visitor, node))
+            return node;
+
         if (node.Expression?.Type == visitor.EntityType)
         {
             if (node.Expression!.Type!.IsAssignableTo(typeof(IProjection)))
             {
+                T324Tr("iproj-branch", node);
                 if (!visitor.IsParamMode)
                     visitor.Builder!.Append(node.Member.Name).Append('.');
 
@@ -550,7 +569,11 @@ internal static class MemberTranslator
                 var memberAccessExp = (MemberExpression)visitor.QueryProvider.OuterReferences![idx];
                 string? tableAliasForColumn = null;
 
-                if (memberAccessExp!.Type!.TryGetProjectionDimension(out _))
+                // #324: a bound APPLY reference resolves through its exact owner/slot occurrence. The
+                // legacy type/arithmetic fallbacks below apply only to unbound references.
+                if (GetOuterReferenceBinding(visitor, idx) is { } binding)
+                    tableAliasForColumn = ResolveBoundOuterAlias(visitor, binding, idx);
+                else if (memberAccessExp!.Type!.TryGetProjectionDimension(out _))
                 {
                     var aliasVisitor = new AliasFromProjectionVisitor();
                     aliasVisitor.Visit(node.Expression);
@@ -564,6 +587,7 @@ internal static class MemberTranslator
                 var colName = memberAccessExp.Member.GetPropertyColumnName(
                     visitor.Options.NamingConvention,
                     (memberAccessExp.Expression as ParameterExpression)?.Type);
+                T324Tr("outerref-new", memberAccessExp + " / " + node, colName);
                 if (!string.IsNullOrEmpty(colName))
                 {
                         visitor.AppendIdentifier(colName);
@@ -571,10 +595,6 @@ internal static class MemberTranslator
                         return node;
                 }
             }
-        }
-        else if (TryTranslateProjectionOuterReference(visitor, node))
-        {
-            return node;
         }
         else if (node.Expression.Type == typeof(TableColumn))
         {
@@ -685,12 +705,12 @@ internal static class MemberTranslator
                         var position = ProjectionAliasCache.GetMemberPosition(propExp.Member);
                         var paramIdx = ProjectionAliasCache.GetOccurrence(lambdaParameter.Type, position);
 
-                        var sourceIdx = ResolveProjectionItemAliasIndex(
-                            visitor.ColumnsProvider,
-                            node.Expression.Type,
-                            paramIdx,
+                        var sourceIdx = ResolveProjectionItemSourceIndex(
+                            visitor,
                             lambdaParameter,
-                            visitor.IncludeNestedSources);
+                            propExp.Member,
+                            node.Expression.Type,
+                            paramIdx);
 
                         tableAliasForColumn = visitor.AliasProvider!.FindAlias(sourceIdx);
                     }
@@ -781,6 +801,12 @@ internal static class MemberTranslator
         }
 
         return null;
+        }
+        finally
+        {
+            if (visitor.Builder is not null)
+                T324Tr("chunk", node, visitor.Builder.ToString(Math.Min(t324Start, visitor.Builder.Length), visitor.Builder.Length - Math.Min(t324Start, visitor.Builder.Length)));
+        }
     }
 
     /// <summary>
@@ -829,8 +855,12 @@ internal static class MemberTranslator
                 : visitor.ColumnsProvider.FindInScopeQueryCommand(node.Expression!.Type);
         }
 
+        T324Tr("dpm-found", node, found is { } f ? (f.Index + ":" + f.Command?.EntityType?.Name) : "null");
         if (found is not { Command: { } innerQuery } || innerQuery.SelectList is null)
+        {
+            T324Tr("dpm-miss", node);
             return false;
+        }
 
         SelectExpression? innerCol = null;
         if (slot >= 0)
@@ -924,7 +954,9 @@ internal static class MemberTranslator
             return (true, innerCol.PropertyName!);
 
         var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
-        return sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
+        var t324r = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
+        T324Tr("makeinner-render", innerCol.PropertyName, t324r.NeedAliasForColumn + "/" + t324r.Column);
+        return t324r;
     }
 
     /// <summary>
@@ -1004,13 +1036,48 @@ internal static class MemberTranslator
     }
 
     /// <summary>
+    /// Resolves the alias index of one projection item (<c>p.ItemN.Member</c>, or a generated alias
+    /// member such as <c>p.Buyer.Member</c>).
+    /// <para>
+    /// A command whose active render frame belongs to this projection <em>and</em> carries a
+    /// correlated-APPLY binding resolves the member through that frame's registration order — the same
+    /// frame-local map <see cref="ResolveBoundOuterAlias"/> uses for the correlation — so the SELECT
+    /// projection and the APPLY's outer reference always select the same physical source (#324, AC05).
+    /// A bound frame that cannot address the slot fails closed in the columns provider instead of
+    /// borrowing another alias.
+    /// </para>
+    /// <para>
+    /// Every other command keeps the existing type + occurrence resolution (see
+    /// <see cref="ResolveProjectionItemAliasIndex(IColumnsProvider, Type, int?, ParameterExpression, bool)"/>).
+    /// </para>
+    /// </summary>
+    private static int ResolveProjectionItemSourceIndex(
+        BaseExpressionVisitor visitor,
+        ParameterExpression projectionParameter,
+        MemberInfo member,
+        Type itemType,
+        int? occurrence)
+    {
+        if (ProjectionAliasCache.GetMemberSlot(member) is int slot
+            && visitor.SourceProvider is IOuterSlotSourceRegistry frameSlots
+            && frameSlots.ResolveProjectionSlotSourceIndex(projectionParameter.Type, slot) is int frameSourceIndex)
+            return frameSourceIndex;
+
+        return ResolveProjectionItemAliasIndex(
+            visitor.ColumnsProvider,
+            itemType,
+            occurrence,
+            projectionParameter,
+            visitor.IncludeNestedSources);
+    }
+
+    /// <summary>
     /// Resolves the alias index of a projection-item member access (<c>p.ItemN.Member</c>). The item
     /// type is the primary lookup. Over a derived/CTE source the item type may not be a registered
     /// source while the projection shape is; only the identity (whole-projection) joined-returning shape
     /// registers that way, so the projection-parameter fallback is gated on the source command carrying
-    /// <see cref="QueryCommand.IdentitySlotAliases"/>. Every other miss fails closed with the same
-    /// <see cref="InvalidOperationException"/> the previous <c>AliasResolver.GetAliasFromParam</c> call
-    /// produced, rather than silently emitting an unqualified column.
+    /// <see cref="QueryCommand.IdentitySlotAliases"/>. Every other miss fails closed with a named
+    /// <see cref="InvalidOperationException"/> rather than silently emitting an unqualified column.
     /// </summary>
     internal static int ResolveProjectionItemAliasIndex(
         IColumnsProvider columnsProvider,
@@ -1027,7 +1094,8 @@ internal static class MemberTranslator
                 sourceIdx = columnsProvider.FindAlias(projectionParameter, false, includeOuterScopes: false, includeNestedSources: includeNestedSources);
         }
 
-        return sourceIdx ?? throw new InvalidOperationException();
+        return sourceIdx ?? throw new InvalidOperationException(
+            $"No source in the active render frame matches the projection item '{itemType}' (occurrence {itemOccurrence?.ToString() ?? "first"}). The projection cannot be translated to a table alias, and no unqualified column is emitted because it would be ambiguous.");
     }
 
     /// <summary>
@@ -1058,6 +1126,26 @@ internal static class MemberTranslator
             || idx < 0 || idx >= outerReferences.Count)
             return false;
 
+        // #324: a bound APPLY reference is authoritative — resolve the exact owner/slot occurrence of
+        // the active render frame and never fall back to the legacy ItemN -&gt; tN arithmetic or to a
+        // type-based guess. A missing occurrence fails closed below.
+        if (GetOuterReferenceBinding(visitor, idx) is { } binding)
+        {
+            if (outerReferences[idx] is not MemberExpression { Expression: ParameterExpression owner }
+                || !ReferenceEquals(owner, binding.Owner))
+                throw new InvalidOperationException(BoundOuterReferenceMessage(idx, binding.Slot));
+
+            if (!visitor.IsParamMode)
+            {
+                T324Tr("outerref-bound", node.Member.Name, colName);
+                visitor.Builder!.Append(ResolveBoundOuterAlias(visitor, binding, idx)).Append('.');
+                visitor.AppendIdentifier(colName);
+            }
+
+            visitor.ColumnName = colName;
+            return true;
+        }
+
         if (outerReferences[idx] is not MemberExpression { Expression: ParameterExpression projectionParam } stored
             || !projectionParam.Type.TryGetProjectionDimension(out _))
             return false;
@@ -1076,6 +1164,35 @@ internal static class MemberTranslator
         visitor.ColumnName = colName;
         return true;
     }
+
+    /// <summary>
+    /// Returns the occurrence binding (#324) of the outer reference registered at
+    /// <paramref name="index"/>, or <see langword="null"/> for a legacy unbound reference. Only the
+    /// command that owns the render's outer-reference list carries the parallel binding table.
+    /// </summary>
+    private static OuterReferenceBinding? GetOuterReferenceBinding(BaseExpressionVisitor visitor, int index)
+        => visitor.QueryProvider is QueryCommand command ? command.GetOuterReferenceBinding(index) : null;
+
+    /// <summary>
+    /// Resolves the alias of a <em>bound</em> APPLY outer reference through its exact owner parameter and
+    /// one-based left-row slot in the active render frame. The reference is authoritative: an
+    /// unresolvable occurrence is a named failure, never a silent <c>.Column</c> or a wrong alias.
+    /// </summary>
+    private static string ResolveBoundOuterAlias(BaseExpressionVisitor visitor, OuterReferenceBinding binding, int index)
+    {
+        if (visitor.SourceProvider is IOuterSlotSourceRegistry registry
+            && registry.FindOuterSlotSource(binding.Owner, binding.Slot) is int sourceIndex)
+        {
+            var alias = visitor.AliasProvider?.FindAlias(sourceIndex);
+            if (!string.IsNullOrEmpty(alias))
+                return alias;
+        }
+
+        throw new InvalidOperationException(BoundOuterReferenceMessage(index, binding.Slot));
+    }
+
+    private static string BoundOuterReferenceMessage(int index, int slot)
+        => $"The correlated CROSS/OUTER APPLY outer reference '{index}' (left-row slot {slot}) cannot be resolved to a source occurrence of the active render frame. A bound reference must name one of the left row's FROM/join sources that are already in scope; no alias was emitted because a missing or wrong alias would silently change the query.";
 
     internal static Expression? VisitIndex(BaseExpressionVisitor visitor, IndexExpression node)
     {
