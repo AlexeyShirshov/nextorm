@@ -641,6 +641,99 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("Issue", "281")]
+    public void NumericScaleFunctions_ShouldReportAndTrimScale()
+    {
+        decimal? typedNull = null;
+
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Scale = SqlFunctions.Postgres.scale(12.3400m),
+                MinScale = SqlFunctions.Postgres.min_scale(12.3400m),
+                Trimmed = SqlFunctions.Postgres.trim_scale(12.3400m),
+                ScaleZero = SqlFunctions.Postgres.scale(0.0000m),
+                MinScaleZero = SqlFunctions.Postgres.min_scale(0.0000m),
+                TrimmedZero = SqlFunctions.Postgres.trim_scale(0.0000m),
+                ScaleNegative = SqlFunctions.Postgres.scale(-12.3400m),
+                MinScaleNegative = SqlFunctions.Postgres.min_scale(-12.3400m),
+                TrimmedNegative = SqlFunctions.Postgres.trim_scale(-12.3400m),
+                ScaleUnchanged = SqlFunctions.Postgres.scale(12.3456m),
+                MinScaleUnchanged = SqlFunctions.Postgres.min_scale(12.3456m),
+                TrimmedUnchanged = SqlFunctions.Postgres.trim_scale(12.3456m),
+                ScaleNull = SqlFunctions.Postgres.scale(typedNull),
+                MinScaleNull = SqlFunctions.Postgres.min_scale(typedNull),
+                TrimmedNull = SqlFunctions.Postgres.trim_scale(typedNull)
+            })
+            .First();
+
+        r.Scale.Should().Be(4);
+        ((object)r.Scale!).Should().BeOfType<int>();
+        r.MinScale.Should().Be(2);
+        ((object)r.MinScale!).Should().BeOfType<int>();
+        r.Trimmed.Should().Be(12.34m);
+        ((object)r.Trimmed!).Should().BeOfType<decimal>();
+        DecimalScale(r.Trimmed!.Value).Should().Be(2);
+
+        r.ScaleZero.Should().Be(4);
+        r.MinScaleZero.Should().Be(0);
+        r.TrimmedZero.Should().Be(0m);
+        DecimalScale(r.TrimmedZero!.Value).Should().Be(0);
+
+        r.ScaleNegative.Should().Be(4);
+        r.MinScaleNegative.Should().Be(2);
+        r.TrimmedNegative.Should().Be(-12.34m);
+        DecimalScale(r.TrimmedNegative!.Value).Should().Be(2);
+
+        r.ScaleUnchanged.Should().Be(4);
+        r.MinScaleUnchanged.Should().Be(4);
+        r.TrimmedUnchanged.Should().Be(12.3456m);
+        DecimalScale(r.TrimmedUnchanged!.Value).Should().Be(4);
+
+        r.ScaleNull.Should().BeNull();
+        r.MinScaleNull.Should().BeNull();
+        r.TrimmedNull.Should().BeNull();
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void NumericScaleFunctions_ShouldWorkOnNullableColumnProjections()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 2)
+            .Select(x => new
+            {
+                Scale = SqlFunctions.Postgres.scale(x.Numeric),
+                MinScale = SqlFunctions.Postgres.min_scale(x.Numeric),
+                Trimmed = SqlFunctions.Postgres.trim_scale(x.Numeric)
+            })
+            .First();
+
+        r.Scale.Should().Be(0);
+        r.MinScale.Should().Be(0);
+        r.Trimmed.Should().Be(6m);
+        DecimalScale(r.Trimmed!.Value).Should().Be(0);
+    }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void NumericScaleFunctions_ShouldPreserveParameterScale()
+    {
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Scale = SqlFunctions.Postgres.scale(SqlFunctions.Parameter<decimal>(0)),
+                MinScale = SqlFunctions.Postgres.min_scale(SqlFunctions.Parameter<decimal>(0)),
+                Trimmed = SqlFunctions.Postgres.trim_scale(SqlFunctions.Parameter<decimal>(0))
+            })
+            .First(12.3400m);
+
+        r.Scale.Should().Be(4);
+        r.MinScale.Should().Be(2);
+        r.Trimmed.Should().Be(12.34m);
+        DecimalScale(r.Trimmed!.Value).Should().Be(2);
+    }
+
+    [Fact]
     public void CurrentSettingAndSetConfig_ShouldReadAndWrite()
     {
         var r = _sut.SimpleEntity.Where(x => x.Id == 1)
@@ -1115,4 +1208,6 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         using var cmd = ((DataContext)ctx).CreateCommand(sql);
         cmd.ExecuteNonQuery();
     }
+
+    private static int DecimalScale(decimal value) => (decimal.GetBits(value)[3] >> 16) & 0xFF;
 }

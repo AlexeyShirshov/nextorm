@@ -110,7 +110,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | Фильтрующие агрегаты (`FILTER (WHERE …)` / `-If`) | ANSI `count(*) filter (where …)` | бросает | ANSI `filter (where …)` (9.4+; гейт по версии) | бросает | бросает | комбинатор `-If` (`countIf`/`sumIf`/…) | бросает |
 | Ordered-set / boolean / regression агрегаты | бросает | оконная форма `percentile_cont(f) within group (order by x) over (…)` (2012+) | `percentile_cont`/`percentile_disc`/`mode`, `bool_and`/`bool_or`/`every`, `regr_*` | бросает | оконная `percentile_cont` (10.3+) | `quantile*`/`median` (своё семейство); нет `bool_and`/`regr_*` | бросает |
 | Настройки и последовательности PostgreSQL | бросает | бросает | `current_setting`/`set_config`, `nextval`/`setval`/`currval`/`lastval` | бросает | последовательности через `SqlFunctions.MySql` (`next_value_for`/`nextval`/`setval`/`lastval`) | бросает | бросает |
-| Провайдерная библиотека скалярных функций (`SqlFunctions.<Provider>`) | `SqlFunctions.Sqlite` (core-скаляры, JSON1, дата, математика, запросы FTS3/4/5) | `SqlFunctions.SqlServer` (T-SQL-библиотека, XML-методы, JSON-как-текст, `string_split`/`openjson`) | `SqlFunctions.Postgres` (массивы, JSON/JSONB, ranges, семейства агрегатов, full-text `ts_*`, настройки/последовательности, `regexp_*`) | `SqlFunctions.MySql` (строки/дата/хэши/inet/JSON) | наследует `SqlFunctions.MySql` + добавки MariaDB (`nvl`, `add_months`, `to_char`, `xxh3`, последовательности, …) | `SqlFunctions.ClickHouse` (quantile/uniq/topK/sequence-агрегаты, массивы, map, хэши, словари, табличные функции) | нет (`SqlFunctions.Sql` вычисляет in-process) |
+| Провайдерная библиотека скалярных функций (`SqlFunctions.<Provider>`) | `SqlFunctions.Sqlite` (core-скаляры, JSON1, дата, математика, запросы FTS3/4/5) | `SqlFunctions.SqlServer` (T-SQL-библиотека, XML-методы, JSON-как-текст, `string_split`/`openjson`) | `SqlFunctions.Postgres` (массивы, JSON/JSONB, ranges, семейства агрегатов, full-text `ts_*`, настройки/последовательности, `regexp_*`) | `SqlFunctions.MySql` (строки/дата/хэши/inet/JSON) | наследует `SqlFunctions.MySql` + добавки MariaDB (`nvl`, `add_months`, `to_char`, `xxh3`, последовательности, …); `months_between`/`to_date`/`to_number` и генераторы UUID зависят от версии (12.2.1 / 12.3 / 12.2.1; 11.7) и отклоняются контекстом без версии | `SqlFunctions.ClickHouse` (quantile/uniq/topK/sequence-агрегаты, массивы, map, хэши, словари, табличные функции) | нет (`SqlFunctions.Sql` вычисляет in-process) |
 | Row values / кортежи (`(a, b)`, доступ к элементу, сравнение строк) | плоский конструктор `(a, b)` как прямой операнд предиката `==`/`!=` (`.ItemN` inline сворачивается; проекция/сортировка/группировка/аргументы функций и серверный `.ItemN` бросают `NotSupportedException`) | бросает `NotSupportedException` | `ROW(a, b)`, `(row).fN`, `ROW(...) = ROW(...)`; одна сырая колонка `ROW(...)` (арность 1..7) материализуется в `System.Tuple<...>` через `ExecuteRaw(...).Read<T>()` по обычной строке подключения, а зарегистрированный вызывающим именованный composite — в именованный тип, когда вызывающий предоставляет настроенный `NpgsqlDataSource` ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)); `ValueTuple`, арность ≥8, вложенный/пустой `ROW`, несколько/смешанные колонки-записи, незарегистрированный composite и composite, объявленный как `System.Tuple`, бросают `NotSupportedException` | плоский конструктор `(a, b)` как прямой операнд предиката `==`/`!=` (`.ItemN` inline сворачивается; серверный `.ItemN` бросает) | как в MySQL | `tuple(a, b)`, `tupleElement`, сравнение | бросает `NotSupportedException` |
 | Tuple `IN`/`Contains` по списку значений (арность 1..7) | `(a, b) IN (VALUES (@p0, @p1), ...)` | бросает `NotSupportedException` для **любой** формы кортежа (вкл. null-коллекцию/элемент, арность ≥8, вложенные) — `SQL Server does not support tuple IN/Contains translation.` | `ROW(a, b) IN (ROW(@p0, @p1), ...)` | `(a, b) IN ((@p0, @p1), ...)` | как в MySQL | `tuple(a, b) IN (tuple(@p0, @p1), ...)`; `global_in` рендерит `GLOBAL IN` | вычисляет in-process по строкам in-memory (`Enumerable.Contains`; отказа нет) |
 
@@ -143,25 +143,27 @@ PostgreSQL и ClickHouse (`NULLS FIRST`/`NULLS LAST`) и **портируема�
 | Сырой SQL как композируемый источник `FROM` | **Унифицировано** | `FromSql` + `SupportsRawSqlSource` у всех SQL-провайдеров (см. [Сырой SQL](../guide/14-raw-sql.md)). |
 | Уровни переопределения источника на запрос | **Гейтится по уровню** | `MakeQualifiedTableName` плюс `SupportsCrossDatabase`/`SupportsLinkedServer`: провайдер, не умеющий уровень, отклоняет `WithDatabase`/`WithServer` через `NotSupportedException`, а не молча теряет квалификатор. Schema/имя таблицы и сырой `WithTableExpression` — универсальные уровни у SQL-провайдеров. |
 | `INTERSECT ALL`/`EXCEPT ALL` | **Гейт** | PostgreSQL и MariaDB поддерживают; SQL Server/SQLite/MySQL отклоняют через `SupportsIntersectExceptAll`. |
-| Синтаксис, зависящий от версии сервера (`FILTER` в PostgreSQL, `UPDATE ... RETURNING` в MariaDB) | **Гейт по явно настроенной версии** | Провайдер несёт серверную `Version` (`SupportsUpdateReturning` отражает гейт MariaDB). PostgreSQL включает ANSI `FILTER` с 9.4+ и сохраняет прежнее поведение при незаданной версии (предполагается ≥9.4); MariaDB включает `UPDATE ... RETURNING` только при явной версии 13.0+. Живого определения версии сервера нет. PostgreSQL дополнительно фиксирует одну версию на конкретный тип контекста на всё время жизни процесса; MariaDB такой защиты не накладывает (её гейтируемый `UPDATE ... RETURNING` не кладётся в кэш планов). |
+| Синтаксис, зависящий от версии сервера (`FILTER` в PostgreSQL; `UPDATE ... RETURNING` и нативные функции после 11.4 в MariaDB) | **Гейт по явно настроенной версии** | Провайдер несёт серверную `Version` (`SupportsUpdateReturning` отражает гейт MariaDB). PostgreSQL включает ANSI `FILTER` с 9.4+ и сохраняет прежнее поведение при незаданной версии (предполагается ≥9.4); MariaDB включает `UPDATE ... RETURNING` только при явной версии 13.0+, а каждую функцию после 11.4 — только при её собственном минимуме. Живого определения версии сервера нет. PostgreSQL дополнительно фиксирует одну версию на конкретный тип контекста на всё время жизни процесса; MariaDB такой защиты не накладывает (каждый контекст несёт собственный диалект и предикат возможностей). |
 
 Строки таблицы [ограничений](../advanced/limitations.md) описывают итоговое поведение в рантайме.
 
 ### Гейты по версии сервера
 
-Две возможности зависят от версии сервера, и обе гейтятся **явно настроенной версией** — nextorm
+Возможности зависят от версии сервера и гейтятся **явно настроенной версией** — nextorm
 никогда не опрашивает живой сервер. Передайте версию сервера при создании контекста (у контекста
 провайдера есть перегрузка конструктора с параметром `Version`); если её не задать, сохраняется
 историческое поведение: PostgreSQL предполагает версию 9.4 или новее и эмитит `FILTER (WHERE ...)`, а
-MariaDB оставляет `UPDATE ... RETURNING` отключённым. Фильтрующие агрегаты PostgreSQL требуют 9.4+ и
-бросают `NotSupportedException` ниже; `UPDATE ... RETURNING` в MariaDB требует явной версии 13.0+.
+MariaDB оставляет `UPDATE ... RETURNING` и нативные функции после 11.4 отключёнными. Фильтрующие
+агрегаты PostgreSQL требуют 9.4+ и бросают `NotSupportedException` ниже; `UPDATE ... RETURNING` в MariaDB
+требует явной версии 13.0+, а `months_between`/`to_number` (12.2.1), `to_date` (12.3) и генераторы UUID
+(11.7) — каждый своего минимума.
 PostgreSQL накладывает одну неизменяемую версию сервера на **конкретный тип контекста** на всё время
 жизни процесса, потому что кэшируемый SQL `SELECT` зависит от гейта `FILTER`: второй контекст
 PostgreSQL того же конкретного типа, запрашивающий другую версию, бросает `InvalidOperationException`,
 поэтому для каждой версии PostgreSQL следует объявить отдельный подкласс контекста. MariaDB **не
-накладывает такой защиты**: поскольку её единственная версионно-гейтируемая операция
-(`UPDATE ... RETURNING`) — мутация, чей SQL не кладётся в кэш планов, на одном типе контекста допустимы
-разные версии. `RETURNING` у insert/delete и `ANY_VALUE` (`any_agg`, 13.2) не затрагиваются.
+накладывает такой защиты**: каждый контекст несёт собственный диалект и предикат возможностей, поэтому
+на одном типе контекста допустимы разные версии. `RETURNING` у insert/delete и `ANY_VALUE` (`any_agg`,
+13.2) не затрагиваются.
 
 ## Как подключается диалект
 

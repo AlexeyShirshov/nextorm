@@ -222,6 +222,37 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>MySQL and MariaDB (through the inherited dialect) render the native MySQL function surface.</summary>
     public override IMySqlFunctions MySqlFunctions => MySqlNativeFunctions.Instance;
 
+    /// <summary>MySQL encodes base64 through <c>TO_BASE64</c>; its CRLF wrapping is stripped explicitly.</summary>
+    public override bool SupportsBase64Encode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Encode(string value) =>
+        $"CAST(REPLACE(REPLACE(TO_BASE64({TypedNull(value, "BINARY")}), CHAR(13), ''), CHAR(10), '') AS CHAR)";
+
+    /// <summary>MySQL decodes base64 through <c>FROM_BASE64</c>.</summary>
+    public override bool SupportsBase64Decode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Decode(string value) =>
+        $"FROM_BASE64({TypedNull(value, "CHAR")})";
+
+    /// <summary>MySQL generates random bytes through <c>RANDOM_BYTES</c>.</summary>
+    public override bool SupportsCryptGenRandom => true;
+
+    /// <inheritdoc/>
+    public override string MakeCryptGenRandom(string length)
+    {
+        var argument = TypedNull(length, "SIGNED");
+        return $"CASE WHEN {argument} IS NULL THEN CAST(NULL AS BINARY) ELSE RANDOM_BYTES({argument}) END";
+    }
+
+    /// <summary>
+    /// Replaces the bare <c>null</c> token of a literal NULL argument with the provider's typed NULL,
+    /// so the function keeps the SQL input type instead of receiving an untyped literal.
+    /// </summary>
+    private static string TypedNull(string value, string sqlType) =>
+        value == "null" ? $"CAST(NULL AS {sqlType})" : value;
+
     /// <inheritdoc/>
     public override string MakeTextJsonFunction(string name, IReadOnlyList<string> args) => name switch
     {
@@ -789,6 +820,7 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "json_set" or "json_insert" or "json_replace" or "json_remove" or
         "json_merge_patch" or "json_merge_preserve" or "json_array_append" or "json_array_insert" or
         "json_depth" or "json_keys" or "json_length" or "json_type" or
+        "json_storage_free" or
         "uuid_to_bin" or "bin_to_uuid";
 
     /// <inheritdoc/>
@@ -820,6 +852,7 @@ internal class MySqlNativeFunctions : IMySqlFunctions
         "json_keys" => $"json_keys({args[0]})",
         "json_length" => $"json_length({args[0]})",
         "json_type" => $"json_type({args[0]})",
+        "json_storage_free" => $"json_storage_free({args[0]})",
         "uuid_to_bin" => $"uuid_to_bin({args[0]})",
         "bin_to_uuid" => $"bin_to_uuid({args[0]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by MySQL/MariaDB.")

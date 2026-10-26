@@ -136,6 +136,25 @@ PostgreSQL о backend/сети (`pg_backend_pid`, `inet_server_addr`, `inet_serv
 текст T-SQL только при наличии прав (иначе `null`); `file_idex` отличается от `file_id` тем, что не
 ограничен текущей базой данных.
 
+## Криптографические случайные байты
+
+`SqlFunctions.Sql.crypt_gen_random(int? length)` возвращает `length` криптографически стойких случайных
+байт как `byte[]?`. Переносимый домен — 1–1024 байта: **константная** длина вне его бросает
+`ArgumentOutOfRangeException` до генерации SQL, а runtime-значение вне домена сохраняет ошибку
+провайдера (единое сообщение не обещается). NULL-длина даёт SQL NULL.
+
+| Провайдер | SQL |
+|---|---|
+| SQL Server | `CASE WHEN length IS NULL THEN CAST(NULL AS varbinary(8000)) ELSE CRYPT_GEN_RANDOM(length) END` |
+| PostgreSQL | `CASE WHEN length IS NULL THEN CAST(NULL AS bytea) ELSE gen_random_bytes(length) END` |
+| MySQL / MariaDB | `CASE WHEN length IS NULL THEN CAST(NULL AS BINARY) ELSE RANDOM_BYTES(length) END` |
+
+Путь PostgreSQL вызывает `gen_random_bytes` из расширения **`pgcrypto`**: установите его на сервере
+(`CREATE EXTENSION pgcrypto`); nextorm не устанавливает расширения и не детектирует их отсутствие.
+ClickHouse, SQLite и in-memory провайдер отклоняют член с
+`The crypt_gen_random function is not supported by this provider.` Сгенерированные байты не
+предсказуемы и не воспроизводимы из запроса, и ни один тест не обещает их содержимое или энтропию.
+
 ## Не открыто (SQL Server)
 
 Семь имён T-SQL, сообщающих **живое изменяемое состояние соединения, сессии или инструкции**, не

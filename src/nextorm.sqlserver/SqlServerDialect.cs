@@ -767,6 +767,39 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server renders the T-SQL-only scalar functions (<c>patindex</c>, <c>quotename</c>, the trigonometric functions, the SQL/JSON constructors and aggregates, …).</summary>
     public override ISqlServerFunctions? SqlServerFunctions => SqlServerSpecificFunctions.Instance;
 
+    /// <summary>SQL Server 2025 has the native <c>BASE64_ENCODE</c> function over <c>varbinary</c>.</summary>
+    public override bool SupportsBase64Encode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Encode(string value) =>
+        $"BASE64_ENCODE({TypedNull(value, "varbinary(8000)")})";
+
+    /// <summary>SQL Server 2025 has the native <c>BASE64_DECODE</c> function returning <c>varbinary</c>.</summary>
+    public override bool SupportsBase64Decode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Decode(string value) =>
+        $"BASE64_DECODE({TypedNull(value, "varchar(8000)")})";
+
+    /// <summary>SQL Server has the <c>CRYPT_GEN_RANDOM</c> cryptographic generator over a constant or variable length.</summary>
+    public override bool SupportsCryptGenRandom => true;
+
+    /// <inheritdoc/>
+    public override string MakeCryptGenRandom(string length)
+    {
+        var argument = TypedNull(length, "int");
+        return $"CASE WHEN {argument} IS NULL THEN CAST(NULL AS varbinary(8000)) ELSE CRYPT_GEN_RANDOM({argument}) END";
+    }
+
+    /// <summary>
+    /// Replaces the bare <c>null</c> token of a literal NULL argument with the provider's typed NULL,
+    /// so the argument keeps the SQL input type the function declares instead of relying on an
+    /// implicit conversion SQL Server does not perform.
+    /// </summary>
+    private static string TypedNull(string value, string sqlType) =>
+        value == "null" ? $"CAST(NULL AS {sqlType})" : value;
+
+
     /// <summary>Appends the hints as an <c>option (...)</c> clause, folding an existing <c>maxrecursion</c> option into it.</summary>
     public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption, KeywordCase keywordCase = KeywordCase.Lower)
     {
@@ -1079,6 +1112,7 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "filegroup_id" or "filegroup_name" or "file_id" or "file_idex" or "file_name" or
         "current_timezone" or "current_timezone_id" or "formatmessage" or "getansinull" or
         "isdate" or "isnumeric" or "parsename" or "publishingservername" or "str" or
+        "parse" or "try_parse" or
         "next_value_for" or "nextval";
 
     /// <inheritdoc/>
@@ -1162,6 +1196,8 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "parsename" => $"parsename({args[0]}, {args[1]})",
         "publishingservername" => "publishingservername()",
         "str" => $"str({string.Join(", ", args)})",
+        "parse" => ParseExpression("PARSE", args[0]),
+        "try_parse" => ParseExpression("TRY_PARSE", args[0]),
         // The sequence name arrives already bracket-quoted by the translator; both aliases render the
         // same T-SQL sequence expression.
         "next_value_for" or "nextval" => $"next value for {args[0]}",
@@ -1171,6 +1207,17 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
     /// <summary>Strips the surrounding single quotes a constant date-part string is rendered with.</summary>
     private static string DatePart(string value) =>
         value.Length >= 2 && value[0] == '\'' && value[^1] == '\'' ? value[1..^1] : value;
+
+    /// <summary>
+    /// Renders the frozen decimal parsing form: the result is always typed <c>decimal(38,18)</c>, the
+    /// culture is the literal <c>en-US</c> and never a parameter, and a literal NULL argument keeps
+    /// its text input type.
+    /// </summary>
+    private static string ParseExpression(string function, string value)
+    {
+        var input = value == "null" ? "CAST(NULL AS nvarchar(4000))" : value;
+        return $"CASE WHEN {input} IS NULL THEN CAST(NULL AS decimal(38,18)) ELSE {function}({input} AS decimal(38,18) USING N'en-US') END";
+    }
 
     /// <summary>Renders the alternating key/value arguments of <c>JSON_OBJECT</c> as <c>key : value</c> pairs.</summary>
     private static string JsonPairs(IReadOnlyList<string> args)

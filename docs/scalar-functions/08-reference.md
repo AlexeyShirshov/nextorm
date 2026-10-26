@@ -51,6 +51,28 @@ ClickHouse renders `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds
 `filter (where ...)` clause and the `regr_*`/boolean aggregates with `NotSupportedException`; see the
 [ClickHouse provider](../connecting-providers/clickhouse.md).
 
+## MySQL-specific functions
+
+The names on [`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md) render only on the MySQL
+provider; MariaDB, PostgreSQL, SQL Server, SQLite, ClickHouse and the in-memory provider reject them
+with `NotSupportedException`.
+
+| Member | SQL | Result | Availability |
+|---|---|---|---|
+| `json_storage_free(json)` | `json_storage_free(...)` | `long?` — bytes freed in the binary `JSON` column value by a partial `JSON_SET`/`JSON_REPLACE`/`JSON_REMOVE`; `0` when nothing was freed, `null` for SQL NULL | [MySQL only](../guide/provider-specific-sql/mysql.md#native-functions); MariaDB rejects it |
+
+## MariaDB-only JSON functions
+
+`json_equals` and `json_normalize` on
+[`SqlFunctions.MySql`](../guide/provider-specific-sql/mysql.md#mariadb) render only on MariaDB
+(verified on the 11.4 baseline); MySQL, PostgreSQL, SQL Server, SQLite, ClickHouse and the in-memory
+provider reject both with `NotSupportedException`.
+
+| Member | SQL | Result | Availability |
+|---|---|---|---|
+| `json_equals(json1, json2)` | `json_equals(...)` | `int?` — `1` for equal JSON documents (object key order does not matter), `0` when they differ, `null` for SQL NULL | [MariaDB only](../guide/provider-specific-sql/mysql.md#mariadb); MySQL and other providers reject |
+| `json_normalize(json)` | `json_normalize(...)` | `string?` — canonical JSON text with sorted object keys and no unnecessary whitespace (idempotent), `null` for SQL NULL | [MariaDB only](../guide/provider-specific-sql/mysql.md#mariadb); MySQL and other providers reject |
+
 ## Explicitly unsupported
 
 These throw `NotSupportedException` rather than emitting SQL with different semantics:

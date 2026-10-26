@@ -113,7 +113,7 @@ public class InMemoryScalarFunctionsTests
     [Fact]
     public void SqlServerOnlyFunctions182_ShouldThrowBecauseNotSupported()
     {
-        // Every one of the 47 SQL Server-only functions added for #182 must fail in memory with a
+        // Every one of the 49 SQL Server-only functions covered by the list must fail in memory with a
         // clear NotSupportedException rather than fabricating a value.
         var cases = new (string Name, Action Act)[]
         {
@@ -176,10 +176,14 @@ public class InMemoryScalarFunctionsTests
             ("isnumeric", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.isnumeric("x") }).ToList()),
             ("parsename", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.parsename("a.b", 1) }).ToList()),
             ("publishingservername", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.publishingservername() }).ToList()),
-            ("str", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.str(1.5) }).ToList())
+            ("str", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.str(1.5) }).ToList()),
+
+            // Parsing (2) — T282 (#282)
+            ("parse", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.parse("1234.50") }).ToList()),
+            ("try_parse", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.try_parse("1234.50") }).ToList())
         };
 
-        cases.Should().HaveCount(47);
+        cases.Should().HaveCount(49);
         foreach (var (name, act) in cases)
             act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
     }

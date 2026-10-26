@@ -100,6 +100,15 @@ var std   = ctx.From<IComplexEntity>().Select(x => SqlFunctions.Sql.stdev((doubl
 `count(...)`. `stdev`, `stdevp`, `var` и `varp` сохраняют свои имена (SQL Server предоставляет их нативно).
 `Math.Round`, `Math.Truncate`, `len`, `datepart`, `getdate` и `isnull` все выдаются, как показано выше.
 
+BASE64 требует SQL Server 2025: там `SqlFunctions.Sql.base64_encode` и `base64_decode` рендерятся как
+`BASE64_ENCODE`/`BASE64_DECODE`, без compatibility level и preview-флага. `base64_decode` принимает
+`varchar`, поэтому столбец `nvarchar` нужно привести. `crypt_gen_random` и decimal-функции
+`parse`/`try_parse` (`decimal(38,18)`, фиксированный `en-US`) доступны на том же сервере. nextorm не
+опрашивает версию сервера, поэтому на старом сервере отрисованная функция падает с собственной
+ошибкой сервера «not a recognized function».
+
+
+
 SQL Server 2022+ также включает `greatest`/`least` (стандартный синтаксис) и `SqlFunctions.Sql.date_trunc`,
 который отрисовывает `datetrunc(part, value)`, сворачивая множественные ANSI-части в единственные
 T-SQL-написания (`milliseconds` → `millisecond`); `decade`/`century`/`millennium` выбрасывают исключение.

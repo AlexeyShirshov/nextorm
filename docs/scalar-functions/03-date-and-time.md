@@ -146,6 +146,11 @@ Date construction and arithmetic otherwise use the portable surface: `date_from_
 PostgreSQL `make_date`), `date_add`, `date_diff`, `date_trunc` and the `DateTime` members (see
 [Date arithmetic](#date-arithmetic) below).
 
+MariaDB's Oracle-compatible conversions are **version-gated**, not part of the portable surface:
+`months_between` (12.2.1), `to_date` (12.3) and `to_number` (12.2 family, enforced minimum 12.2.1) are refused
+with `NotSupportedException` by an unversioned `MariaDbDataContext`; `add_months`/`to_char` are available from
+MariaDB 10.6. See [MySQL and MariaDB-specific SQL](../guide/provider-specific-sql/mysql.md#mariadb).
+
 ## Formatting dates and numbers to strings
 
 nextorm translates the culture-invariant subset of the CLR formatting API — `string.Format`,

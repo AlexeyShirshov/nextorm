@@ -56,7 +56,7 @@ internal static class SqlServerScalarFunctionTranslator
         nameof(SqlServerFunctions.formatmessage), nameof(SqlServerFunctions.getansinull),
         nameof(SqlServerFunctions.isdate), nameof(SqlServerFunctions.isnumeric),
         nameof(SqlServerFunctions.parsename), nameof(SqlServerFunctions.publishingservername),
-        nameof(SqlServerFunctions.str),
+        nameof(SqlServerFunctions.str), nameof(SqlServerFunctions.parse), nameof(SqlServerFunctions.try_parse),
         nameof(SqlServerFunctions.next_value_for), nameof(SqlServerFunctions.nextval)
     };
 

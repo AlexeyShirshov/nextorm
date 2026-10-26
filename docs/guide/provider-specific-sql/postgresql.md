@@ -204,6 +204,39 @@ result exactly.
 
 See [Scalar functions](../../scalar-functions/index.md).
 
+## Numeric scale functions
+
+`SqlFunctions.Postgres.scale`/`min_scale`/`trim_scale` describe and normalize the scale of a `numeric`
+value. Each name is gated **individually** by
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)) — not by a
+family-wide flag — and every other provider rejects the call with `NotSupportedException`, so
+PostgreSQL SQL never reaches a server that cannot run it.
+
+| C# | SQL | Returns |
+|---|---|---|
+| `SqlFunctions.Postgres.scale(decimal? value)` | `scale(value)` | `int?` — fractional digits, trailing zeroes included |
+| `SqlFunctions.Postgres.min_scale(decimal? value)` | `min_scale(value)` | `int?` — fractional digits without the trailing zeroes |
+| `SqlFunctions.Postgres.trim_scale(decimal? value)` | `trim_scale(value)` | `decimal?` — the value with its trailing zeroes removed |
+
+`scale` exists on every supported PostgreSQL version; `min_scale`/`trim_scale` need PostgreSQL 13 or
+newer. A NULL argument yields NULL for all three. `trim_scale` removes trailing zeroes only: unlike
+`round`/`trunc` it never rounds and never changes a significant digit, so `trim_scale(12.3400)` is
+`12.34` (decimal scale 2) while `trim_scale(12.3456)` is unchanged at scale 4. The value travels
+through Npgsql's numeric reader, so the returned decimal keeps the server-side scale.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Scale = SqlFunctions.Postgres.scale(e.Numeric),
+        MinScale = SqlFunctions.Postgres.min_scale(e.Numeric),
+        Trimmed = SqlFunctions.Postgres.trim_scale(e.Numeric)
+    })
+    .ToList();
+```
+
+See [Math functions](../../scalar-functions/02-math-functions.md#postgresql-numeric-scale).
+
 ## Null-safe comparison
 
 PostgreSQL has the ANSI operators natively, so both helpers map one-to-one and the result is a plain

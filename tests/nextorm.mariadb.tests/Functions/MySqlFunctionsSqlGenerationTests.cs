@@ -99,6 +99,17 @@ public class MySqlFunctionsSqlGenerationTests
     }
 
     [Fact]
+    public void JsonStorageFree_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_storage_free("{\"a\":1}")));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*json_storage_free*not supported*");
+    }
+
+    [Fact]
     public void UuidFunctions_ShouldThrowBecauseNotSupported()
     {
         using var ctx = MariaDbTestContext.Create();
@@ -132,7 +143,7 @@ public class MySqlFunctionsSqlGenerationTests
     [Fact]
     public void MariaDbOnlyDateAndNumberFunctions_ShouldRenderNatively()
     {
-        using var ctx = MariaDbTestContext.Create();
+        using var ctx = MariaDbTestContext.Create(new Version(12, 3));
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => SqlFunctions.MySql.add_months(x.Datetime, 2)))
@@ -145,6 +156,21 @@ public class MySqlFunctionsSqlGenerationTests
             .Should().Contain("to_date(_utf8mb4 X'323032332d30312d3032', _utf8mb4 X'595959592d4d4d2d4444')");
         SqlOf(ctx, e.Select(x => SqlFunctions.MySql.to_number("100.00", "999.99")))
             .Should().Contain("to_number(_utf8mb4 X'3130302e3030', _utf8mb4 X'3939392e3939')");
+    }
+
+    [Fact]
+    public void MariaDbVersionGatedFunctions_Unset_ShouldThrow()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var months = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.months_between(x.Datetime, x.Datetime)));
+        var date = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.to_date("2023-01-02", "YYYY-MM-DD")));
+        var number = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.to_number("100.00", "999.99")));
+
+        months.Should().Throw<NotSupportedException>().WithMessage("*months_between*not supported*");
+        date.Should().Throw<NotSupportedException>().WithMessage("*to_date*not supported*");
+        number.Should().Throw<NotSupportedException>().WithMessage("*to_number*not supported*");
     }
 
     [Fact]
@@ -163,6 +189,47 @@ public class MySqlFunctionsSqlGenerationTests
             .Should().Contain("json_detailed(_utf8mb4 X'7b7d')");
         SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_compact("{}")))
             .Should().Contain("json_compact(_utf8mb4 X'7b7d')");
+    }
+
+    [Fact]
+    public void T284_JsonFunctions_ShouldRenderExactSql()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(_ => SqlFunctions.MySql.json_equals("{\"a\":1}", "{\"a\":1}")))
+            .Should().Contain("json_equals(_utf8mb4 X'7b2261223a317d', _utf8mb4 X'7b2261223a317d')")
+            .And.StartWith("select json_equals(");
+        SqlOf(ctx, e.Select(_ => SqlFunctions.MySql.json_normalize("{\"b\":true,\"a\":false}")))
+            .Should().Contain("json_normalize(_utf8mb4 X'7b2262223a747275652c2261223a66616c73657d')")
+            .And.StartWith("select json_normalize(");
+    }
+
+    [Fact]
+    public void T284_JsonFunctions_ShouldRenderColumnsAndLiterals()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_equals(x.String, "{\"a\":1}")))
+            .Should().Contain("json_equals(somestring, _utf8mb4 X'7b2261223a317d')");
+        SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_normalize(x.String)))
+            .Should().Contain("json_normalize(somestring)");
+        SqlOf(ctx, e.Select(_ => SqlFunctions.MySql.json_equals("true", "true")))
+            .Should().Contain("json_equals(_utf8mb4 X'74727565', _utf8mb4 X'74727565')");
+    }
+
+    [Fact]
+    public void T284_JsonFunctions_ShouldBindCapturedJson()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var captured = "{\"a\":1}";
+
+        SqlOf(ctx, e.Select(_ => SqlFunctions.MySql.json_normalize(captured)))
+            .Should().Contain("json_normalize(@captured)");
+        SqlOf(ctx, e.Select(_ => SqlFunctions.MySql.json_equals(SqlFunctions.Parameter<string>(0), "{\"a\":1}")))
+            .Should().Contain("json_equals(@norm_p0, _utf8mb4 X'7b2261223a317d')");
     }
 
     [Fact]

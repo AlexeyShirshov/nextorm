@@ -53,6 +53,7 @@ where find_in_set(status, 'new,open') > 0
 | `json_merge_patch` / `json_merge_preserve` | то же | merge-patch по RFC 7396 / слияние с дублями |
 | `json_array_append` / `json_array_insert` | то же | добавить в конец / вставить в массив по пути |
 | `json_depth` / `json_keys` / `json_length` / `json_type` | то же | интроспекция JSON |
+| `json_storage_free(json)` | `json_storage_free(...)` | **только MySQL** — байты, освобождённые в бинарном значении `JSON`-колонки при частичном `JSON_SET`/`JSON_REPLACE`/`JSON_REMOVE`; `0`, если ничего не освободилось, `null` для SQL NULL |
 | `uuid_to_bin(uuid)` / `bin_to_uuid(binary)` | то же | **только MySQL** (см. ниже) |
 
 Методы мутации JSON принимают одну пару `path`/`value`; MySQL допускает и несколько пар, но
@@ -65,12 +66,18 @@ var updated = dataContext.From<IComplexEntity>()
     .First();
 ```
 
+`json_storage_free` — диагностика бинарного JSON-хранилища MySQL: после частичного обновления она
+показывает, сколько байт освободило изменение на месте, поэтому число описывает хранимое
+представление, а не длину текста JSON. Для литералов, captured-значений и колонок, где обновление
+ничего не освободило, результат `0`; при SQL NULL — `null` (никогда не `0`). Реализует её только MySQL.
+
 ## MariaDB
 
 `nextorm.mariadb` наследует `MariaDbDialect` от `MySqlDialect`, поэтому получает всю поверхность выше.
-Исключения — `uuid_to_bin`/`bin_to_uuid`: в MariaDB таких функций нет (преобразование идёт через
-`CAST(... AS BINARY(16))`/`CAST(... AS UUID)`), поэтому `MariaDbDialect.MySqlFunctions` сообщает их как
-неподдерживаемые, и запрос отклоняется с `NotSupportedException`.
+Исключения — `uuid_to_bin`/`bin_to_uuid` и `json_storage_free`: в MariaDB таких функций нет
+(`uuid_to_bin`/`bin_to_uuid` преобразуют через `CAST(... AS BINARY(16))`/`CAST(... AS UUID)`, а учёта
+освобождённого места в бинарном JSON MariaDB не реализует), поэтому `MariaDbDialect.MySqlFunctions`
+сообщает их как неподдерживаемые, и запрос отклоняется с `NotSupportedException`.
 
 Поверх наследуемого набора MariaDB добавляет собственные имена через тот же вход `SqlFunctions.MySql`.
 Диалект MySQL их не сообщает, поэтому запрос MySQL с таким именем отклоняется с `NotSupportedException`:
@@ -83,13 +90,23 @@ var updated = dataContext.From<IComplexEntity>()
 | `nvl(value, fallback)` | `nvl(...)` | синоним `IFNULL` |
 | `nvl2(value, whenNotNull, whenNull)` | `nvl2(...)` | выбор по NULL-ности `value` |
 | `add_months(date, months)` | `add_months(...)` | MariaDB 10.6.1+; при переполнении — последний день месяца |
-| `months_between(a, b)` | `months_between(...)` | MariaDB 12.2+; дробные месяцы |
+| `months_between(a, b)` | `months_between(...)` | MariaDB 12.2.1+ (принудительный минимум; 12.2 и 12.2.0 отклоняются); дробные месяцы |
 | `to_char(value, format)` | `to_char(...)` | MariaDB 10.6+; маска формата Oracle |
 | `to_date(value, format)` | `to_date(...)` | MariaDB 12.3+; разбор в стиле Oracle |
-| `to_number(value, format)` | `to_number(...)` | MariaDB 12.2+; возвращает `DOUBLE` |
+| `to_number(value, format)` | `to_number(...)` | семейство MariaDB 12.2, принудительный минимум 12.2.1; возвращает `DOUBLE` |
 | `kdf(password, salt, info, kdfName)` | `kdf(...)` | MariaDB 11.3+; вывод ключа, возвращает binary |
 | `xxh3(value)` / `xxh32(value)` | то же | MariaDB 13.1+; быстрый 64/32-битный xxHash |
 | `json_detailed(json)` / `json_compact(json)` | то же | переформатирование / удаление пробелов |
+| `json_equals(json1, json2)` | `json_equals(...)` | `1`, если JSON-документы равны (порядок ключей объекта не важен), `0`, если различаются, `null` при SQL NULL; базовая версия MariaDB 11.4, MySQL отклоняет |
+| `json_normalize(json)` | `json_normalize(...)` | канонический текст JSON (ключи объекта отсортированы, лишние пробелы удалены, идемпотентно), `null` при SQL NULL; базовая версия MariaDB 11.4, MySQL отклоняет |
+
+Эти три Oracle-совместимые конверсии (`months_between`, `to_date`, `to_number`) **зависят от версии**:
+в MariaDB 11.4 их нет, поэтому `MariaDbDialect` рендерит каждую только тогда, когда контекст создан с явно
+заданной версией сервера не ниже её минимума. **Без версии** (конструктор по умолчанию с двумя аргументами)
+MariaDB-контекст отклоняет вызов с `NotSupportedException` при подготовке, вместо того чтобы эмитить SQL,
+который сервер отвергнет; платформенные эквиваленты (`TIMESTAMPDIFF`, `STR_TO_DATE`, `CAST(... AS DECIMAL)`)
+не подставляются. Генераторы UUID подчиняются тому же правилу с минимумом MariaDB 11.7 (см.
+[Последовательности и генераторы UUID](../../scalar-functions/10-sequences.md)).
 
 Доступ к последовательностям провайдерный; см. общий раздел
 [Последовательности и генераторы UUID](../../scalar-functions/10-sequences.md).

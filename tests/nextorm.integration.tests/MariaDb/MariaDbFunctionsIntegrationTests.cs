@@ -12,6 +12,8 @@ namespace NextORM.Integration.Tests;
 /// </summary>
 public sealed class MariaDbFunctionsIntegrationTests : IDisposable
 {
+    private const string Doc = "{\"a\":1}";
+
     private readonly IDataContext _ctx;
 
     public MariaDbFunctionsIntegrationTests()
@@ -205,6 +207,81 @@ public sealed class MariaDbFunctionsIntegrationTests : IDisposable
         Probe.Select(_ => SqlFunctions.MySql.lastval("fn_seq")).First().Should().Be(510);
     }
 
+    [Fact]
+    public void T284_JsonEquals_ShouldEvaluate()
+    {
+        int? equal = Probe.Select(_ => SqlFunctions.MySql.json_equals("{\"a\":1}", "{\"a\":1}")).First();
+        int? different = Probe.Select(_ => SqlFunctions.MySql.json_equals("{\"a\":1}", "{\"a\":2}")).First();
+        int? reordered = Probe
+            .Select(_ => SqlFunctions.MySql.json_equals("{\"a\":1,\"b\":2}", "{\"b\":2,\"a\":1}"))
+            .First();
+        int? boundEqual = Probe
+            .Select(_ => SqlFunctions.MySql.json_equals(SqlFunctions.Parameter<string>(0), Doc))
+            .First(Doc);
+
+        equal.Should().Be(1);
+        different.Should().Be(0);
+        reordered.Should().Be(1, "object key order must not affect equality");
+        boundEqual.Should().Be(1);
+    }
+
+    [Fact]
+    public void T284_JsonEquals_NullArguments_ShouldReturnNull()
+    {
+        int? nullLeft = Probe.Select(_ => SqlFunctions.MySql.json_equals(null, "{\"a\":1}")).ExecuteScalar();
+        int? nullRight = Probe.Select(_ => SqlFunctions.MySql.json_equals("{\"a\":1}", null)).ExecuteScalar();
+        int? nullBoth = Probe.Select(_ => SqlFunctions.MySql.json_equals(null, null)).ExecuteScalar();
+        int? jsonTextNull = Probe.Select(_ => SqlFunctions.MySql.json_equals("null", "null")).First();
+
+        nullLeft.Should().BeNull();
+        nullRight.Should().BeNull();
+        nullBoth.Should().BeNull();
+        jsonTextNull.Should().Be(1, "the JSON text null is a value, not SQL NULL");
+    }
+
+    [Fact]
+    public void T284_JsonNormalize_ShouldEvaluate()
+    {
+        string? normalizedTrue = Probe.Select(_ => SqlFunctions.MySql.json_normalize("true")).First();
+        string? normalizedObject = Probe
+            .Select(_ => SqlFunctions.MySql.json_normalize("{ \"b\" : true, \"a\" : false }"))
+            .First();
+        string? renormalized = Probe
+            .Select(_ => SqlFunctions.MySql.json_normalize(SqlFunctions.MySql.json_normalize("{ \"b\" : true, \"a\" : false }")))
+            .First();
+        string? captured = Probe.Select(_ => SqlFunctions.MySql.json_normalize(Doc)).First();
+
+        normalizedTrue.Should().Be("true");
+        normalizedObject.Should().Be("{\"a\":false,\"b\":true}");
+        renormalized.Should().Be(normalizedObject, "normalisation must be idempotent");
+        captured.Should().Be("{\"a\":1.0E0}");
+    }
+
+    [Fact]
+    public void T284_JsonNormalize_NullArgument_ShouldMatchRawOracle()
+    {
+        string? normalizedNull = Probe.Select(_ => SqlFunctions.MySql.json_normalize(null)).ExecuteScalar();
+        string? normalizedJsonNull = Probe.Select(_ => SqlFunctions.MySql.json_normalize("null")).ExecuteScalar();
+
+        normalizedNull.Should().BeNull(
+            "the raw ADO.NET observation on MariaDB 11.4.13 recorded SQL NULL for json_normalize(NULL) before this assertion (.pdca/T284/rv1/raw-oracle.log)");
+        normalizedJsonNull.Should().Be("null", "the JSON text null is a value, not SQL NULL");
+    }
+
+    [Fact]
+    public void T284_JsonFunctions_QuotedPayload_ShouldRemainData()
+    {
+        string? normalized = Probe
+            .Select(_ => SqlFunctions.MySql.json_normalize("{\"quoted\":\"a b\"}"))
+            .First();
+        int? equal = Probe
+            .Select(_ => SqlFunctions.MySql.json_equals("{\"quoted\":\"a b\"}", "{\"quoted\":\"a b\"}"))
+            .First();
+
+        normalized.Should().Be("{\"quoted\":\"a b\"}");
+        equal.Should().Be(1);
+    }
+
     private sealed class TvpEntity
     {
         public int Id { get; set; }
@@ -272,6 +349,75 @@ public sealed class MariaDbFunctionsIntegrationTests : IDisposable
         var act = () => _ctx.ExecuteRaw("select 1", [ProcedureParameter.Table("p", "my_type", new[] { 1 })]);
 
         act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void T280_GatedFunctions_UnversionedContext_ShouldRefuseBeforeSendingSql()
+    {
+        AssertGatedFunctionsRefused(_ctx);
+    }
+
+    [Fact]
+    public void T280_GatedFunctions_V114Context_ShouldRefuseBeforeSendingSql()
+    {
+        using var ctx = new MariaDbDataContext(
+            MariaDbContainer.ConnectionString, new DataContextBuilder(), new Version(11, 4));
+
+        AssertGatedFunctionsRefused(ctx);
+    }
+
+    [Fact]
+    public void T280_Controls_ShouldStillExecuteOnMariaDb114()
+    {
+        var r = Probe
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Added = SqlFunctions.MySql.add_months(x.Dt, 2),
+                Formatted = SqlFunctions.MySql.to_char(x.Dt, "YYYY-MM-DD"),
+                MonthDiff = SqlFunctions.Sql.date_diff("month", new DateTime(2024, 1, 15), new DateTime(2024, 2, 15)),
+                Parsed = SqlFunctions.MySql.str_to_date("2023-01-02", "%Y-%m-%d")
+            })
+            .First();
+
+        r.Added.Should().Be(new DateTime(2023, 3, 1, 10, 0, 0));
+        r.Formatted.Should().Be("2023-01-01");
+        r.MonthDiff.Should().Be(1);
+        r.Parsed.Should().Be(new DateTime(2023, 1, 2));
+
+        Convert.ToInt64(Scalar("select cast('42' as signed)")).Should().Be(42L);
+
+        var v1 = (Guid)Scalar("select uuid()")!;
+        v1.Version.Should().Be(1, "UUID() is the v1 generator and must not stand in for UUID_V4()");
+    }
+
+    private static void AssertGatedFunctionsRefused(IDataContext ctx)
+    {
+        var e = ctx.From<IFnProbe>();
+
+        Action months = () => ctx.GetPreparedQueryCommand(
+            e.Select(x => SqlFunctions.MySql.months_between(x.Dt, x.Dt)), false, false, CancellationToken.None);
+        Action date = () => ctx.GetPreparedQueryCommand(
+            e.Select(_ => SqlFunctions.MySql.to_date("2023-01-02", "YYYY-MM-DD")), false, false, CancellationToken.None);
+        Action number = () => ctx.GetPreparedQueryCommand(
+            e.Select(_ => SqlFunctions.MySql.to_number("100.00", "999.99")), false, false, CancellationToken.None);
+        Action v4 = () => ctx.GetPreparedQueryCommand(
+            e.Select(_ => new { U = SqlFunctions.Sql.gen_random_uuid() }), false, false, CancellationToken.None);
+        Action v7 = () => ctx.GetPreparedQueryCommand(
+            e.Select(_ => new { V = SqlFunctions.Sql.uuidv7() }), false, false, CancellationToken.None);
+
+        months.Should().Throw<NotSupportedException>().WithMessage("*months_between*not supported*");
+        date.Should().Throw<NotSupportedException>().WithMessage("*to_date*not supported*");
+        number.Should().Throw<NotSupportedException>().WithMessage("*to_number*not supported*");
+        v4.Should().Throw<NotSupportedException>().WithMessage("*gen_random_uuid*not supported*");
+        v7.Should().Throw<NotSupportedException>().WithMessage("*uuidv7*not supported*");
+    }
+
+    private object? Scalar(string sql)
+    {
+        ((DataContext)_ctx).EnsureConnectionOpen();
+        using var cmd = ((DataContext)_ctx).CreateCommand(sql);
+        return cmd.ExecuteScalar();
     }
 
     private void Seed()

@@ -91,10 +91,12 @@ provider rejects them. Tracked in
 
 | C# | PostgreSQL | SQL Server | MySQL | MariaDB | ClickHouse | SQLite |
 |---|---|---|---|---|---|---|
-| `gen_random_uuid()` | `gen_random_uuid()` (13+) | `newid()` | — | `UUID_v4()` | `generateUUIDv4()` | — |
-| `uuidv7()` | `uuidv7()` (18+) | — | — | `UUID_v7()` (11.7+) | `generateUUIDv7()` | — |
+| `gen_random_uuid()` | `gen_random_uuid()` (13+) | `newid()` | — | `uuid_v4()` (11.7+) | `generateUUIDv4()` | — |
+| `uuidv7()` | `uuidv7()` (18+) | — | — | `uuid_v7()` (11.7+) | `generateUUIDv7()` | — |
 
-MySQL has only `UUID()` (v1) and SQLite has no UUID generator, so both reject the calls. These are
+MySQL has only `UUID()` (v1) and SQLite has no UUID generator, so both reject the calls. On MariaDB both
+generators require an explicit server version 11.7 or later; an **unversioned** `MariaDbDataContext` refuses
+them with `NotSupportedException`, and `UUID()` (v1) is never substituted. These are
 server-side generators, evaluated per row by the database; `Guid.NewGuid()` is a client-side value and
 is not a substitute. SQL Server additionally exposes `newsequentialid()`
 (`SqlFunctions.SqlServer.newsequentialid()`), which is valid only as a column `DEFAULT` and not in an

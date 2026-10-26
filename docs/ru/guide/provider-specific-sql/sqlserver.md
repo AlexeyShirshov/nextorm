@@ -451,7 +451,9 @@ select patindex('%a%', somestring) as [Pos],
 * **Дата/время:** `datename(datepart, date)` (часть — константа), `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+), серверные часы `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`, функции смещения `switchoffset(value, offset)`/`todatetimeoffset(value, offset)` (строка вида `"+02:00"` или минуты со знаком) и семейство конструкторов `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/`datetimeoffsetfromparts`. Завершающая точность `*FROMPARTS` должна быть константой `0..7` (неконстантное, `null` или выходящее за диапазон значение бросает исключение до генерации SQL).
 * **Бинарные/системные:** `hashbytes(algorithm, data)` (алгоритм — константа, например `SHA2_256`), `newsequentialid()` (допустим только как `DEFAULT` столбца, но не в обычном `SELECT`), `checksum(values...)`/`binary_checksum(values...)` (минимум одно значение; форма `checksum(*)` не открыта) и `compress(value)`/`decompress(value)` (GZIP над `varbinary(max)`).
 * **Метаданные:** `col_length`, `col_name`, `ident_incr`/`ident_seed`, `index_col`, `object_definition`/`object_id`/`object_name`/`object_schema_name`, `stats_date`, `db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`, `type_id`/`type_name`, `filegroup_id`/`filegroup_name`/`file_id`/`file_idex`/`file_name`, `current_timezone`/`current_timezone_id`, `getansinull`, `parsename` и `publishingservername`. Отсутствующий объект/столбец/индекс/статистика даёт `null`, как и нативная функция.
-* **Преобразование/логика:** `isdate(value)`/`isnumeric(value)` возвращают нативный T-SQL `int` (1/0), а не `bit`, поэтому остаются целочисленными значениями, а не материализованными предикатами; `formatmessage(messageOrId, args...)` принимает не более 20 аргументов форматирования.
+* **Преобразование/логика:** `isdate(value)`/`isnumeric(value)` возвращают нативный T-SQL `int` (1/0), а не `bit`, поэтому остаются целочисленными значениями, а не материализованными предикатами; `formatmessage(messageOrId, args...)` принимает не более 20 аргументов форматирования, а `parse(value)`/`try_parse(value)` разбирают `decimal(38,18)` с фиксированной культурой `en-US` (аргумента культуры нет; `parse` отдаёт серверную ошибку на неверном тексте, `try_parse` возвращает NULL).
+
+Переносимые BASE64 и crypto на этом провайдере требуют SQL Server 2025: `SqlFunctions.Sql.base64_encode` рендерится как `BASE64_ENCODE(value)` над `varbinary`, `base64_decode` — как `BASE64_DECODE(value)` над `varchar` (столбец `nvarchar` нужно привести), а `crypt_gen_random` рендерит типизированную обёртку `CASE WHEN length IS NULL THEN CAST(NULL AS varbinary(8000)) ELSE CRYPT_GEN_RANDOM(length) END`, поэтому NULL-длина остаётся типизированным NULL. Compatibility level и preview-флаг не нужны.
 * **JSON:** `json_array(value, ...)` и `json_object(key, value, ...)` (SQL Server 2022+),
   `json_objectagg(key, value)` и `json_arrayagg(value)` (SQL Server 2025+),
   `json_path_exists(json, path)` (SQL Server 2022+) и `json_contains(json, searchValue, path)`
@@ -477,7 +479,14 @@ null-операнду нужен SQL-тип, выведенный из мета�
 
 ## Пока не поддерживается
 
-Открытых специфичных для SQL Server поверхностей не осталось. См.
+Остаток каталога [#282](https://github.com/AlexeyShirshov/nextorm/issues/282) остаётся открытым в
+`1.0.9-rc4` — 26 позиций: regex `REGEXP_SUBSTR`/`REGEXP_COUNT`/`REGEXP_INSTR`/`REGEXP_MATCHES`/
+`REGEXP_SPLIT_TO_TABLE`; fuzzy `EDIT_DISTANCE`/`EDIT_DISTANCE_SIMILARITY`/`JARO_WINKLER_DISTANCE`/
+`JARO_WINKLER_SIMILARITY`; bit `LEFT_SHIFT`/`RIGHT_SHIFT`/`BIT_COUNT`/`GET_BIT`/`SET_BIT`; conversion
+`TRY_CAST`/`TRY_CONVERT`; aggregate `ANY_VALUE`/`APPROX_COUNT_DISTINCT`/`CHECKSUM_AGG`/`GROUPING_ID`/
+`PRODUCT`; analytic `APPROX_PERCENTILE_CONT`/`APPROX_PERCENTILE_DISC`; system `SESSION_CONTEXT`/
+`SESSION_ID`/`@@ROWCOUNT`/`@@ERROR`/`ERROR_*`. Пять функций выбранного среза — `parse`, `try_parse`,
+`base64_encode`, `base64_decode` и `crypt_gen_random`; issue они не закрывают. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

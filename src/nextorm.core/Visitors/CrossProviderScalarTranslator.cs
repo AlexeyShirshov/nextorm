@@ -4,10 +4,12 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Translates the cross-provider scalar functions of <see cref="CommonFunctions"/> (the members that
-/// render natively on several providers) through the dialect's <see cref="ISqlDialect.ScalarFunctions"/>.
-/// Split out of <see cref="BuiltinFunctionTranslator"/> for cohesion; the supported set and emitted SQL
-/// are unchanged. Named on <see cref="CommonFunctions"/> only, so a same-named provider-only member
-/// still falls through to <see cref="ExtendedScalarFunctionTranslator"/>.
+/// render natively on several providers) and the three PostgreSQL numeric-scale members
+/// (<c>scale</c>/<c>min_scale</c>/<c>trim_scale</c>) through the dialect's
+/// <see cref="ISqlDialect.ScalarFunctions"/>. Split out of <see cref="BuiltinFunctionTranslator"/> for
+/// cohesion; the supported set and emitted SQL are unchanged. Only the enumerated names are enrolled,
+/// so a same-named provider-only member that is not listed falls through to
+/// <see cref="ExtendedScalarFunctionTranslator"/>.
 /// </summary>
 internal static class CrossProviderScalarTranslator
 {
@@ -19,13 +21,16 @@ internal static class CrossProviderScalarTranslator
         nameof(CommonFunctions.ascii), nameof(CommonFunctions.@char),
         nameof(CommonFunctions.bit_length), nameof(CommonFunctions.octet_length),
         nameof(CommonFunctions.cot), nameof(CommonFunctions.degrees), nameof(CommonFunctions.radians),
-        nameof(CommonFunctions.pi)
+        nameof(CommonFunctions.pi),
+        nameof(PostgresFunctions.scale), nameof(PostgresFunctions.min_scale), nameof(PostgresFunctions.trim_scale)
     };
 
     /// <summary>Translates a cross-provider scalar call; returns <c>false</c> when it is not one.</summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
-        if (node.Method.DeclaringType != typeof(CommonFunctions) || !ScalarFunctionNames.Contains(node.Method.Name))
+        if (node.Method.DeclaringType is not { } declaring
+            || (declaring != typeof(CommonFunctions) && declaring != typeof(PostgresFunctions))
+            || !ScalarFunctionNames.Contains(node.Method.Name))
             return false;
 
         EmitScalarFunction(visitor, node);

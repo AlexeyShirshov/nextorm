@@ -512,7 +512,9 @@ public static partial class SqlFunctions
         /// Generates a random UUID v4 (<c>gen_random_uuid()</c>). Requires a provider that supports it
         /// (see <see cref="ISqlDialect.UuidGenerators"/> and
         /// <see cref="IUuidGenerators.Supports"/>): PostgreSQL 13+, SQL Server
-        /// (<c>newid()</c>), MariaDB (<c>uuid_v4()</c>) and ClickHouse (<c>generateUUIDv4()</c>).
+        /// (<c>newid()</c>), MariaDB 11.7+ (<c>uuid_v4()</c>) and ClickHouse
+        /// (<c>generateUUIDv4()</c>). An unversioned MariaDB dialect rejects it: MariaDB 11.4 has no
+        /// <c>UUID_V4()</c> and <c>UUID()</c> (v1) is not substituted.
         /// </summary>
         public Guid? gen_random_uuid() => default!;
 
@@ -520,7 +522,8 @@ public static partial class SqlFunctions
         /// Generates a UUID v7 (<c>uuidv7()</c>). Requires a provider that supports it
         /// (see <see cref="ISqlDialect.UuidGenerators"/> and
         /// <see cref="IUuidGenerators.Supports"/>): PostgreSQL 18+, MariaDB 11.7+
-        /// (<c>uuid_v7()</c>) and ClickHouse (<c>generateUUIDv7()</c>).
+        /// (<c>uuid_v7()</c>) and ClickHouse (<c>generateUUIDv7()</c>). An unversioned MariaDB dialect
+        /// rejects it.
         /// </summary>
         public Guid? uuidv7() => default!;
 
@@ -690,6 +693,40 @@ public static partial class SqlFunctions
         /// <c>octet_length()</c>.
         /// </summary>
         public int? octet_length(string? value) => default!;
+
+        /// <summary>
+        /// <c>base64_encode(value)</c>: the standard base64 (RFC 4648) text of
+        /// <paramref name="value"/>, with <c>+</c>/<c>/</c> and <c>=</c> padding and no line
+        /// wrapping. SQL NULL (including a NULL argument) yields SQL NULL. Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.SupportsBase64Encode"/> and
+        /// <see cref="ISqlDialect.MakeBase64Encode(string)"/>); SQL Server, PostgreSQL, MySQL and
+        /// MariaDB render it natively, and every other provider rejects the call.
+        /// </summary>
+        public string? base64_encode(byte[]? value) =>
+            throw new NotSupportedException("The base64_encode function can only be used inside a query expression.");
+
+        /// <summary>
+        /// <c>base64_decode(value)</c>: the binary value of the standard base64 (RFC 4648) text
+        /// <paramref name="value"/>. SQL NULL (including a NULL argument) yields SQL NULL. The
+        /// input domain is canonical base64; invalid or URL-safe input is not normalized and the
+        /// provider error is not masked. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsBase64Decode"/> and
+        /// <see cref="ISqlDialect.MakeBase64Decode(string)"/>).
+        /// </summary>
+        public byte[]? base64_decode(string? value) =>
+            throw new NotSupportedException("The base64_decode function can only be used inside a query expression.");
+
+        /// <summary>
+        /// <c>crypt_gen_random(length)</c>: a cryptographically strong random byte string of
+        /// <paramref name="length"/> bytes. The portable domain is 1–1024 bytes; a constant length
+        /// outside it is rejected before any SQL is emitted
+        /// (<see cref="ArgumentOutOfRangeException"/>). A NULL argument yields SQL NULL. Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SupportsCryptGenRandom"/> and
+        /// <see cref="ISqlDialect.MakeCryptGenRandom(string)"/>); PostgreSQL additionally requires
+        /// the <c>pgcrypto</c> extension to be installed on the server.
+        /// </summary>
+        public byte[]? crypt_gen_random(int? length) =>
+            throw new NotSupportedException("The crypt_gen_random function can only be used inside a query expression.");
 
         /// <summary>
         /// <c>cot(x)</c>: the cotangent of <paramref name="value"/> (in radians). PostgreSQL, SQL Server

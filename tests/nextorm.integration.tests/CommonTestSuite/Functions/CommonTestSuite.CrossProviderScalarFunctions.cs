@@ -92,4 +92,34 @@ public abstract partial class CommonTestSuite
         ((double?)r.Acos).GetValueOrDefault().Should().BeApproximately(0.0, 1e-6);
         ((double?)r.Atan2).GetValueOrDefault().Should().BeApproximately(Math.PI / 4, 1e-6);
     }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void CrossProviderScalarFunctions_NumericScale_ShouldMatchProviderSupport()
+    {
+        var scale = () => _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => new { V = SqlFunctions.Postgres.scale(12.3400m) })
+            .First();
+        var minScale = () => _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => new { V = SqlFunctions.Postgres.min_scale(12.3400m) })
+            .First();
+        var trimScale = () => _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => new { V = SqlFunctions.Postgres.trim_scale(12.3400m) })
+            .First();
+
+        if (Provider.Name == "postgres")
+        {
+            scale().V.Should().Be(4);
+            minScale().V.Should().Be(2);
+            trimScale().V.Should().Be(12.34m);
+            return;
+        }
+
+        scale.Should().Throw<NotSupportedException>().WithMessage("*scale*not supported*");
+        minScale.Should().Throw<NotSupportedException>().WithMessage("*min_scale*not supported*");
+        trimScale.Should().Throw<NotSupportedException>().WithMessage("*trim_scale*not supported*");
+    }
 }

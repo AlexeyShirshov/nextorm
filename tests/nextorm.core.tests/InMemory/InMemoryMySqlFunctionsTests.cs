@@ -28,6 +28,17 @@ public class InMemoryMySqlFunctionsTests
     }
 
     [Fact]
+    public void JsonStorageFree_ShouldThrowBecauseNotSupported()
+    {
+        var act = () => _sut.SimpleEntity
+            .Select(it => SqlFunctions.MySql.json_storage_free("{\"a\":1}"))
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*json_storage_free*MySQL/MariaDB*in-memory*");
+    }
+
+    [Fact]
     public void MariaDbOnlyFunctions_ShouldThrowBecauseNotEvaluatable()
     {
         var act = () => _sut.SimpleEntity
@@ -36,5 +47,16 @@ public class InMemoryMySqlFunctionsTests
 
         act.Should().Throw<NotSupportedException>()
             .WithMessage("*nvl*MySQL/MariaDB*in-memory*");
+    }
+
+    [Fact]
+    public void T284_JsonFunctions_ShouldThrowOnUnsupportedProvider()
+    {
+        var act = () => _sut.SimpleEntity
+            .Select(it => SqlFunctions.MySql.json_equals("{\"a\":1}", "{\"a\":1}"))
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*json_equals*MySQL/MariaDB*in-memory*");
     }
 }

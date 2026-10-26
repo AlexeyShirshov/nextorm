@@ -260,6 +260,12 @@ surface (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `
 in [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql). Other providers
 reject it with `NotSupportedException`.
 
+`SqlFunctions.Sql.base64_encode` and `base64_decode` use the core `encode(value, 'base64')` /
+`decode(value, 'base64')` pair (the encode result has its trailing newline removed explicitly).
+`SqlFunctions.Sql.crypt_gen_random` calls `gen_random_bytes` from the **`pgcrypto`** extension: the
+extension must be installed on the server (`CREATE EXTENSION pgcrypto`). nextorm neither installs it
+nor detects its absence — a missing extension surfaces as the provider's native error.
+
 ## Additional function surface
 
 PostgreSQL also opts into `greatest`/`least`, `date_trunc`, the `string_agg`/`array_agg` aggregates, the

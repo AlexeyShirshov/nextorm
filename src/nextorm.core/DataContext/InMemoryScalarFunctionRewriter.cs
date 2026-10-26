@@ -143,6 +143,27 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         nameof(PostgresFunctions.tstzrange), nameof(PostgresFunctions.daterange)
     };
 
+    /// <summary>
+    /// The portable binary functions <c>base64_encode</c>/<c>base64_decode</c>/<c>crypt_gen_random</c>
+    /// are SQL-only. Rejecting them explicitly keeps the failure a <see cref="NotSupportedException"/>
+    /// instead of compiling the marker call on the null <see cref="SqlFunctions.Sql"/> surface.
+    /// </summary>
+    private static readonly HashSet<string> PortableBinaryFunctionNames = new(StringComparer.Ordinal)
+    {
+        nameof(CommonFunctions.base64_encode), nameof(CommonFunctions.base64_decode),
+        nameof(CommonFunctions.crypt_gen_random)
+    };
+
+    /// <summary>
+    /// The PostgreSQL numeric-scale members <c>scale</c>/<c>min_scale</c>/<c>trim_scale</c> are
+    /// SQL-only. Rejecting them explicitly keeps the failure a <see cref="NotSupportedException"/>
+    /// instead of a compiled call on the null <see cref="SqlFunctions.Postgres"/> marker surface.
+    /// </summary>
+    private static readonly HashSet<string> PostgresNumericScaleFunctionNames = new(StringComparer.Ordinal)
+    {
+        nameof(PostgresFunctions.scale), nameof(PostgresFunctions.min_scale), nameof(PostgresFunctions.trim_scale)
+    };
+
     internal static Expression Rewrite(Expression expression) => new InMemoryScalarFunctionRewriter().Visit(expression)!;
 
     protected override Expression VisitMethodCall(MethodCallExpression node)
@@ -167,6 +188,9 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         {
             if (node.Method.Name == nameof(CommonFunctions.collate) && node.Arguments.Count == 2)
                 return Visit(node.Arguments[0])!;
+
+            if (PortableBinaryFunctionNames.Contains(node.Method.Name))
+                throw new NotSupportedException($"The {node.Method.Name} function is not supported by the in-memory provider.");
 
             if (Helpers.TryGetValue(node.Method.Name, out var helper))
                 return Call(helper, node);
@@ -195,6 +219,9 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         }
         else if (node.Method.DeclaringType == typeof(PostgresFunctions))
         {
+            if (PostgresNumericScaleFunctionNames.Contains(node.Method.Name))
+                throw new NotSupportedException($"The {node.Method.Name} function is not supported by the in-memory provider.");
+
             if (HasRangeArrayParameter(node))
                 return CallMultiRange(node);
 

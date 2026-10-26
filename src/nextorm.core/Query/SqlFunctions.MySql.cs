@@ -6,7 +6,8 @@ namespace NextORM.Core;
 /// conversion and Unix-epoch functions, the hexadecimal hash functions, the IPv4 conversion pair, the
 /// JSON mutation family, the binary UUID pair and the MariaDB-only names (extended regexp,
 /// <c>nvl</c>/<c>nvl2</c>, the Oracle-compatible date/number conversions, <c>kdf</c>, <c>xxh3</c>/
-/// <c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c> and sequence access).
+/// <c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c>, the JSON canonicalisation pair
+/// <c>json_equals</c>/<c>json_normalize</c> and sequence access).
 /// <para>
 /// Exposed through <see cref="SqlFunctions.MySql"/>; every member is gated per name by the dialect's
 /// <see cref="IMySqlFunctions"/> capability object and rejected by providers that do not opt in.
@@ -133,6 +134,17 @@ public class MySqlFunctions : CommonFunctions
     public string? json_type(string? json) => default!;
 
     /// <summary>
+    /// <c>json_storage_free(json)</c>: the bytes freed in the binary representation of a MySQL
+    /// <c>JSON</c> column value after it was updated in place by <c>JSON_SET</c>, <c>JSON_REPLACE</c> or
+    /// <c>JSON_REMOVE</c>. Returns <c>0</c> for a literal, a captured value or a column whose update
+    /// freed nothing, and <c>null</c> when <paramref name="json"/> is SQL NULL; an argument that is not
+    /// valid JSON fails on the server. Server-side only: the count describes MySQL's binary JSON
+    /// storage, not a portable JSON-text length, and providers that cannot express the operation reject
+    /// the call with <see cref="NotSupportedException"/>.
+    /// </summary>
+    public long? json_storage_free(string? json) => default!;
+
+    /// <summary>
     /// <c>uuid_to_bin(uuid)</c>: converts the textual UUID to its 16-byte binary representation.
     /// </summary>
     public byte[]? uuid_to_bin(string? uuid) => default!;
@@ -181,7 +193,9 @@ public class MySqlFunctions : CommonFunctions
 
     /// <summary>
     /// <c>months_between(a, b)</c>: the (fractional) number of months between two dates, negative when
-    /// <paramref name="a"/> is earlier. MariaDB-only.
+    /// <paramref name="a"/> is earlier. MariaDB-only (MariaDB 12.2.1+): an unversioned or older MariaDB
+    /// dialect rejects it with <see cref="NotSupportedException"/> instead of substituting
+    /// <c>timestampdiff</c> (integer truncation, no fractional months).
     /// </summary>
     public double? months_between(DateTime? a, DateTime? b) => default!;
 
@@ -193,13 +207,17 @@ public class MySqlFunctions : CommonFunctions
 
     /// <summary>
     /// <c>to_date(value, format)</c>: parses a date/time from an Oracle-style format string.
-    /// MariaDB-only (MariaDB 12.3+).
+    /// MariaDB-only (MariaDB 12.3+): an unversioned or older MariaDB dialect rejects it with
+    /// <see cref="NotSupportedException"/> instead of substituting <c>str_to_date</c> (<c>%</c> masks,
+    /// not Oracle masks).
     /// </summary>
     public DateTime? to_date(string? value, string? format) => default!;
 
     /// <summary>
     /// <c>to_number(value, format)</c>: parses a number from an Oracle-style format string (the result
-    /// is a <c>DOUBLE</c>). MariaDB-only (MariaDB 12.2+).
+    /// is a <c>DOUBLE</c>). MariaDB-only (MariaDB 12.2 family; the enforced minimum is 12.2.1): an
+    /// unversioned or older MariaDB dialect rejects it with <see cref="NotSupportedException"/> instead
+    /// of substituting a decimal cast, which has no Oracle format model.
     /// </summary>
     public double? to_number(string? value, string? format) => default!;
 
@@ -230,6 +248,20 @@ public class MySqlFunctions : CommonFunctions
     /// MariaDB-only.
     /// </summary>
     public string? json_compact(string? json) => default!;
+
+    /// <summary>
+    /// <c>json_equals(json1, json2)</c>: <c>1</c> when the two JSON documents are equal (object key
+    /// order does not matter), <c>0</c> when they differ, and <c>null</c> when either argument is SQL
+    /// NULL. MariaDB-only.
+    /// </summary>
+    public int? json_equals(string? json1, string? json2) => default!;
+
+    /// <summary>
+    /// <c>json_normalize(json)</c>: the canonical text of the JSON document with sorted object keys and
+    /// no unnecessary whitespace (idempotent), or <c>null</c> when <paramref name="json"/> is SQL NULL.
+    /// MariaDB-only.
+    /// </summary>
+    public string? json_normalize(string? json) => default!;
 
     /// <summary>
     /// <c>next value for sequence</c>: the next value of the named sequence. MariaDB-only; the

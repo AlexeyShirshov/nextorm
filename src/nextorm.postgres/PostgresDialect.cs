@@ -486,6 +486,39 @@ public class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL renders every cross-provider scalar function natively (<c>space</c> as <c>repeat(' ', n)</c>).</summary>
     public override IScalarFunctions ScalarFunctions => PostgresScalarFunctions.Instance;
 
+    /// <summary>PostgreSQL encodes base64 through the core <c>encode</c> function.</summary>
+    public override bool SupportsBase64Encode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Encode(string value) =>
+        $"replace(encode({TypedNull(value, "bytea")}, 'base64'), E'\\n', '')";
+
+    /// <summary>PostgreSQL decodes base64 through the core <c>decode</c> function.</summary>
+    public override bool SupportsBase64Decode => true;
+
+    /// <inheritdoc/>
+    public override string MakeBase64Decode(string value) =>
+        $"decode({TypedNull(value, "text")}, 'base64')";
+
+    /// <summary>PostgreSQL generates random bytes through <c>pgcrypto</c>'s <c>gen_random_bytes</c>.</summary>
+    public override bool SupportsCryptGenRandom => true;
+
+    /// <inheritdoc/>
+    public override string MakeCryptGenRandom(string length)
+    {
+        var argument = TypedNull(length, "integer");
+        return $"CASE WHEN {argument} IS NULL THEN CAST(NULL AS bytea) ELSE gen_random_bytes({argument}) END";
+    }
+
+    /// <summary>
+    /// Replaces the bare <c>null</c> token of a literal NULL argument with the provider's typed NULL,
+    /// so the function resolves the expected binary/text/integer input type instead of the
+    /// polymorphic <c>unknown</c> literal.
+    /// </summary>
+    private static string TypedNull(string value, string sqlType) =>
+        value == "null" ? $"CAST(NULL AS {sqlType})" : value;
+
+
     /// <inheritdoc/>
     public override bool SupportsBooleanAggregates => true;
     /// <inheritdoc/>
@@ -819,7 +852,8 @@ internal sealed class PostgresStringFormats : IStringFormatFunctions
 /// Renders the cross-provider scalar functions of <see cref="CommonFunctions"/> on PostgreSQL, where
 /// every name has a native spelling (<c>left</c>/<c>right</c>, <c>lpad</c>/<c>rpad</c>, <c>repeat</c>/
 /// <c>reverse</c>, <c>concat_ws</c>, <c>translate</c>, <c>ascii</c>, <c>chr</c>). <c>space</c> has no
-/// native function and is rendered as <c>repeat(' ', n)</c>.
+/// native function and is rendered as <c>repeat(' ', n)</c>. Also renders the PostgreSQL numeric-scale
+/// members <c>scale</c>/<c>min_scale</c>/<c>trim_scale</c>, each advertised by its own name.
 /// </summary>
 internal sealed class PostgresScalarFunctions : IScalarFunctions
 {
@@ -829,7 +863,8 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
     public bool Supports(string name) => name is
         "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
         "concat_ws" or "translate" or "ascii" or "char" or
-        "bit_length" or "octet_length" or "cot" or "degrees" or "radians" or "pi";
+        "bit_length" or "octet_length" or "cot" or "degrees" or "radians" or "pi" or
+        "scale" or "min_scale" or "trim_scale";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -851,6 +886,9 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "degrees" => $"degrees({args[0]})",
         "radians" => $"radians({args[0]})",
         "pi" => "pi()",
+        "scale" => $"scale({args[0]})",
+        "min_scale" => $"min_scale({args[0]})",
+        "trim_scale" => $"trim_scale({args[0]})",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 

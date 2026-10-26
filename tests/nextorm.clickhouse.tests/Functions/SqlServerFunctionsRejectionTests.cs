@@ -101,6 +101,17 @@ public class SqlServerFunctionsRejectionTests
         AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.str(1.5) }), "str");
     }
 
+    [Fact]
+    [Trait("Issue", "282")]
+    public void T282_DecimalParsing_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.parse(x.String) }), "parse");
+        AssertUnsupported(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.try_parse(x.String) }), "try_parse");
+    }
+
     private static void AssertUnsupported<T>(IDataContext ctx, QueryCommand<T> cmd, string name)
     {
         var act = () => SqlOf(ctx, cmd);

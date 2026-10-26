@@ -338,6 +338,29 @@ namespace NextORM.Core;
         /// <summary>The bucket number for <paramref name="operand"/> in <paramref name="count"/> equal-width buckets.</summary>
         public int width_bucket(double? operand, double? low, double? high, int count) => default!;
 
+        /// <summary>
+        /// The number of decimal digits in the fractional part of <paramref name="value"/>
+        /// (<c>scale</c>, PostgreSQL). Trailing zeroes count, so <c>12.3400</c> has scale 4. A NULL
+        /// argument yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int? scale(decimal? value) => default!;
+
+        /// <summary>
+        /// The number of fractional digits that remain after the trailing zeroes of
+        /// <paramref name="value"/> are removed (<c>min_scale</c>, PostgreSQL 13+); <c>12.3400</c>
+        /// reports 2. A NULL argument yields NULL. Gated per name by
+        /// <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public int? min_scale(decimal? value) => default!;
+
+        /// <summary>
+        /// <paramref name="value"/> with its trailing fractional zeroes removed (<c>trim_scale</c>,
+        /// PostgreSQL 13+): <c>12.3400</c> becomes <c>12.34</c>. Only zeroes are removed, so this is
+        /// not rounding and an input without removable zeroes is returned unchanged. A NULL argument
+        /// yields NULL. Gated per name by <see cref="IScalarFunctions.Supports"/>.
+        /// </summary>
+        public decimal? trim_scale(decimal? value) => default!;
+
         /// <summary>Splits <paramref name="value"/> on <paramref name="delimiter"/> and returns the <paramref name="field"/>-th part (1-based).</summary>
         public string? split_part(string? value, string? delimiter, int field) => default!;
 

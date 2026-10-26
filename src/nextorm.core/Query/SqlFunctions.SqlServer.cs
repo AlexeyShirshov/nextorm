@@ -798,6 +798,27 @@ namespace NextORM.Core;
         public string? parsename(string? objectName, int? piece) => default!;
 
         /// <summary>
+        /// <c>PARSE(value AS decimal(38,18) USING N'en-US')</c>: parses <paramref name="value"/> as a
+        /// decimal with 18 fractional digits. The culture is fixed to <c>en-US</c> and is not a
+        /// parameter, so the result does not depend on the session language; the portable alternative
+        /// for other target types is not provided. SQL NULL (including a NULL argument) yields SQL
+        /// NULL. Invalid text raises the server error (a <c>SqlException</c> with the CLR provider) —
+        /// use <see cref="try_parse"/> for the NULL-returning form. Requires a provider that supports
+        /// it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public decimal? parse(string? value) =>
+            throw new NotSupportedException("The parse function can only be used inside a query expression.");
+
+        /// <summary>
+        /// <c>TRY_PARSE(value AS decimal(38,18) USING N'en-US')</c>: as <see cref="parse"/> with the
+        /// fixed <c>en-US</c> culture, but invalid text returns SQL NULL instead of raising. SQL NULL
+        /// (including a NULL argument) yields SQL NULL. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public decimal? try_parse(string? value) =>
+            throw new NotSupportedException("The try_parse function can only be used inside a query expression.");
+
+        /// <summary>
         /// <c>publishingservername()</c>: the name of the publishing server (the server name when a
         /// replicated database is published). Requires a provider that supports it (see
         /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).

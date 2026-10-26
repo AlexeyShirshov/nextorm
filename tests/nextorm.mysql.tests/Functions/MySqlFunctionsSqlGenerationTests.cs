@@ -1,5 +1,7 @@
+using System.Reflection;
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.MySql;
 
 namespace NextORM.MySql.Tests;
 
@@ -96,6 +98,71 @@ public class MySqlFunctionsSqlGenerationTests
     }
 
     [Fact]
+    public void JsonStorageFree_ShouldRenderNatively()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_storage_free("{\"a\":1}")))
+            .Should().Contain("json_storage_free(_utf8mb4 X'7b2261223a317d')");
+        SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_storage_free(null)))
+            .Should().Contain("json_storage_free(null)");
+        SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_storage_free(x.String)))
+            .Should().Contain("json_storage_free(somestring)");
+    }
+
+    [Fact]
+    public void JsonStorageFree_ShouldRenderNullableAndBoundArguments()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var captured = "{\"a\":1}";
+        var method = typeof(MySqlFunctions).GetMethod(nameof(MySqlFunctions.json_storage_free))!;
+
+        method.ReturnType.Should().Be<long?>();
+        method.IsGenericMethod.Should().BeFalse();
+        var parameter = method.GetParameters().Should().ContainSingle().Subject;
+        parameter.ParameterType.Should().Be(typeof(string));
+        parameter.IsOptional.Should().BeFalse();
+        parameter.GetCustomAttribute<ParamArrayAttribute>().Should().BeNull();
+        typeof(MySqlFunctions)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Count(m => m.Name == nameof(MySqlFunctions.json_storage_free))
+            .Should().Be(1);
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_storage_free(SqlFunctions.Parameter<string>(0))))
+            .Should().Contain("json_storage_free(@norm_p0)");
+        SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_storage_free(captured)))
+            .Should().Contain("json_storage_free(@captured)");
+    }
+
+    [Fact]
+    public void NativeFunctionSurface_ShouldHaveCapabilityCoverage()
+    {
+        var capability = MySqlDialect.Instance.MySqlFunctions!;
+        string[] mariaDbOnly =
+        [
+            "regexp_substr", "regexp_instr", "regexp_replace", "nvl", "nvl2", "add_months",
+            "months_between", "to_char", "to_date", "to_number", "kdf", "xxh3", "xxh32",
+            "json_detailed", "json_compact", "json_equals", "json_normalize",
+            "next_value_for", "nextval", "setval", "lastval"
+        ];
+        var declared = typeof(MySqlFunctions)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(m => !m.IsSpecialName)
+            .Select(m => m.Name)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        declared.Should().NotBeEmpty();
+        foreach (var name in declared.Except(mariaDbOnly, StringComparer.Ordinal))
+            capability.Supports(name).Should().BeTrue($"MySQL must support the declared marker '{name}'");
+        foreach (var name in mariaDbOnly)
+            capability.Supports(name).Should().BeFalse($"'{name}' is MariaDB-only");
+        capability.Supports("json_storage_free").Should().BeTrue();
+    }
+
+    [Fact]
     public void UuidFunctions_ShouldRenderNatively()
     {
         using var ctx = MySqlTestContext.Create();
@@ -145,5 +212,18 @@ public class MySqlFunctionsSqlGenerationTests
 
         var sequence = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.next_value_for("s")));
         sequence.Should().Throw<NotSupportedException>().WithMessage("*next_value_for*not supported*");
+    }
+
+    [Fact]
+    public void T284_JsonFunctions_ShouldThrowOnUnsupportedProvider()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var equals = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_equals(x.String, "{\"a\":1}")));
+        equals.Should().Throw<NotSupportedException>().WithMessage("*json_equals*not supported*");
+
+        var normalize = () => SqlOf(ctx, e.Select(x => SqlFunctions.MySql.json_normalize(x.String)));
+        normalize.Should().Throw<NotSupportedException>().WithMessage("*json_normalize*not supported*");
     }
 }

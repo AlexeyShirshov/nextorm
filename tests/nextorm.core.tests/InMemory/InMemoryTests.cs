@@ -1045,6 +1045,23 @@ public class InMemoryTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*FromSql*");
     }
+
+    [Fact]
+    [Trait("Issue", "281")]
+    public void PostgresNumericScaleFunctions_ShouldThrow()
+    {
+        decimal? typedNull = null;
+
+        var scale = () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.scale(12.3400m) }).ToList();
+        var minScale = () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.min_scale(12.3400m) }).ToList();
+        var trimScale = () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.trim_scale(12.3400m) }).ToList();
+        var nullArgument = () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.Postgres.trim_scale(typedNull) }).ToList();
+
+        scale.Should().Throw<NotSupportedException>().WithMessage("*scale*not supported*");
+        minScale.Should().Throw<NotSupportedException>().WithMessage("*min_scale*not supported*");
+        trimScale.Should().Throw<NotSupportedException>().WithMessage("*trim_scale*not supported*");
+        nullArgument.Should().Throw<NotSupportedException>().WithMessage("*trim_scale*not supported*");
+    }
 }
 
 // D178 T12 fixtures: an enum member for the in-memory fail-closed checks.
