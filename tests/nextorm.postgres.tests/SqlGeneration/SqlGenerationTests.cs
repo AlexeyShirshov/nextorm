@@ -5179,4 +5179,29 @@ public class SqlGenerationTests
 
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*single physical-table source*");
     }
+    [Fact]
+    public void T292_VariabilityAggregateNames_ShouldRenderProviderSpelling()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // T292 (#292): the eight variability facade forms keep their postgres spelling with the
+        // structurally nullable result; the DISTINCT forms keep the SQL DISTINCT keyword.
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev((double)x.Id)))
+            .Should().Contain("stddev(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev_distinct((double)x.Id)))
+            .Should().Contain("stddev(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp((double)x.Id)))
+            .Should().Contain("stddev_pop(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp_distinct((double)x.Id)))
+            .Should().Contain("stddev_pop(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var((double)x.Id)))
+            .Should().Contain("variance(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var_distinct((double)x.Id)))
+            .Should().Contain("variance(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp((double)x.Id)))
+            .Should().Contain("var_pop(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp_distinct((double)x.Id)))
+            .Should().Contain("var_pop(distinct ");
+    }
 }

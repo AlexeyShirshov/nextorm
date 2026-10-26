@@ -3734,4 +3734,29 @@ public class SqlGenerationTests
         SqlOf(ctx, ctx.From<IComplexEntity>().Where(x => Tuple.Create(x.Id, x.String).Item1 == 1L).Select(x => new { x.Id }))
             .Should().Contain("id = 1");
     }
+    [Fact]
+    public void T292_VariabilityAggregateNames_ShouldRenderProviderSpelling()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // T292 (#292): the eight variability facade forms keep their sqlserver spelling with the
+        // structurally nullable result; the DISTINCT forms keep the SQL DISTINCT keyword.
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev((double)x.Id)))
+            .Should().Contain("stdev(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev_distinct((double)x.Id)))
+            .Should().Contain("stdev(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp((double)x.Id)))
+            .Should().Contain("stdevp(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp_distinct((double)x.Id)))
+            .Should().Contain("stdevp(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var((double)x.Id)))
+            .Should().Contain("var(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var_distinct((double)x.Id)))
+            .Should().Contain("var(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp((double)x.Id)))
+            .Should().Contain("varp(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp_distinct((double)x.Id)))
+            .Should().Contain("varp(distinct ");
+    }
 }

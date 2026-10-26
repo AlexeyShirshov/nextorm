@@ -177,10 +177,14 @@ ctx.CreateMergeBuilder<IOrder>()
     .Using(order)                                     // entity, batch or server-side query
     .OnKeys()
     .WhenMatched((t, s) => t.Version == s.Version)
-    .ThenUpdate(o => new { o.Status })
+    .ThenUpdate((t, s) => new { Status = s.Status })
     .WhenNotMatched().ThenInsert()
     .Merge();
 ```
+
+The assignment-expression overload replaced the former column-list selector: each anonymous-initializer
+assignment names its destination and an explicit right-hand side, so `ThenUpdate(o => new { o.Status })`
+migrates to `ThenUpdate((t, s) => new { Status = s.Status })`.
 
 ```sql
 -- SQL Server

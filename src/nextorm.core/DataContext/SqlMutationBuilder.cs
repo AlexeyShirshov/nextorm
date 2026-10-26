@@ -200,6 +200,9 @@ internal static class SqlMutationBuilder
     /// <param name="targetFilterSql">The rendered <c>target</c>-qualified global-filter predicate to AND into the <c>ON</c> and every <c>WHEN NOT MATCHED BY SOURCE</c> arm, or <see langword="null"/> when no filter is active.</param>
     /// <param name="dataContext">The executing context, used to enforce the bridge fail-closed expectation before any upsert SQL is produced. <see langword="null"/> (no context known) keeps the existing behavior.</param>
     /// <param name="renderKind">How the statement is rendered. Only an ad-hoc or batch render lowers a text value into a literal (D4g); the default keeps the prepared path byte-identical.</param>
+    /// <param name="branchAssignments">The rendered assignment fragment of each full-MERGE branch in order, or <see langword="null"/> when no branch carries explicit assignments.</param>
+    /// <param name="keyUpdateFragment">The rendered <c>SET</c> list of a key-upsert expression update, or <see langword="null"/> for the no-argument form.</param>
+    /// <param name="keyInsertFragment">The rendered insert column/value lists of a key-upsert expression insert, or <see langword="null"/> for the no-argument form.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
     /// <exception cref="NotSupportedException">The dialect has no <c>ON CONFLICT</c>, <c>ON DUPLICATE KEY</c> or <c>MERGE</c> form.</exception>
     /// <exception cref="InvalidOperationException">The context expects imported filters that the resolved metadata no longer carries.</exception>
@@ -217,7 +220,10 @@ internal static class SqlMutationBuilder
         IReadOnlyList<string?>? branchConditions = null,
         string? targetFilterSql = null,
         IDataContext? dataContext = null,
-        MutationRenderKind renderKind = MutationRenderKind.Prepared)
+        MutationRenderKind renderKind = MutationRenderKind.Prepared,
+        IReadOnlyList<MergeAssignmentFragment?>? branchAssignments = null,
+        MergeAssignmentFragment? keyUpdateFragment = null,
+        MergeAssignmentFragment? keyInsertFragment = null)
     {
         // Merge/upsert is the one DML path that reads the target's global filters at render time
         // (RenderMerge's native-upsert fallback). A command built before DataContextCache.Clear and
@@ -233,11 +239,11 @@ internal static class SqlMutationBuilder
         try
         {
             if (command.Branches is not null)
-                RenderFullMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters, matchConditionSql, branchConditions, targetFilterSql, lowering);
+                RenderFullMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters, matchConditionSql, branchConditions, targetFilterSql, lowering, branchAssignments);
             else if (dialect.SupportsMerge)
-                RenderMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, targetFilterSql, lowering);
+                RenderMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, targetFilterSql, lowering, keyUpdateFragment, keyInsertFragment);
             else if (dialect.SupportsOnConflict || dialect.SupportsOnDuplicateKey)
-                RenderOnConflictUpsert(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, lowering);
+                RenderOnConflictUpsert(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, lowering, keyUpdateFragment, keyInsertFragment);
             else
                 throw new NotSupportedException(
                     $"{dialect.GetType().Name} does not support key upsert: it has no ON CONFLICT, ON DUPLICATE KEY or MERGE form.");
@@ -698,31 +704,55 @@ internal static class SqlMutationBuilder
         List<Parameter> parameters,
         KeywordCase keywordCase,
         IParameterProvider parameterProvider,
-        MutationParameterLowering lowering)
+        MutationParameterLowering lowering,
+        MergeAssignmentFragment? keyUpdateFragment,
+        MergeAssignmentFragment? keyInsertFragment)
     {
         writer.Append(SqlKeywords.Of(keywordCase, "insert into "));
         AppendIdentifier(writer, dialect, quoteIdentifiers, ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention));
-        AppendColumnList(writer, dialect, quoteIdentifiers, namingConvention, ColumnProperties(command.Columns), command.DynamicColumns);
-        writer.Append(SqlKeywords.Of(keywordCase, " values "));
-        AppendValuesRows(writer, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, lowering, command.DynamicColumns);
+
+        // An explicit insert assignment supplies the whole row: exactly the assigned destinations, in
+        // assignment order, with no implicit key injection and no dynamic store key. Otherwise the
+        // no-argument form inserts every written column from the incoming row.
+        if (keyInsertFragment is not null)
+        {
+            writer.Append('(').Append(string.Join(", ", keyInsertFragment.InsertColumns!)).Append(')');
+            writer.Append(SqlKeywords.Of(keywordCase, " values (")).Append(string.Join(", ", keyInsertFragment.InsertValues!)).Append(')');
+        }
+        else
+        {
+            AppendColumnList(writer, dialect, quoteIdentifiers, namingConvention, ColumnProperties(command.Columns), command.DynamicColumns);
+            writer.Append(SqlKeywords.Of(keywordCase, " values "));
+            AppendValuesRows(writer, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, lowering, command.DynamicColumns);
+        }
 
         if (dialect.SupportsOnConflict)
             writer.Append(dialect.MakeOnConflict(RenderColumns(dialect, quoteIdentifiers, namingConvention, command.Keys), keywordCase));
         else
             writer.Append(dialect.MakeOnDuplicateKey(keywordCase));
 
-        var updates = RenderColumns(dialect, quoteIdentifiers, namingConvention, command.UpdateColumns);
         var wroteUpdate = false;
-        for (var i = 0; i < updates.Length; i++)
+        if (keyUpdateFragment is not null)
         {
-            if (wroteUpdate)
-                writer.Append(", ");
-
-            writer.Append(updates[i]).Append(" = ").Append(dialect.MakeUpsertValueReference(updates[i], keywordCase));
+            // Explicit assignments write exactly the assigned destinations; the store's dynamic keys are
+            // not appended, so an assignment never silently becomes a dynamic-key write.
+            writer.Append(keyUpdateFragment.SetList);
             wroteUpdate = true;
         }
+        else
+        {
+            var updates = RenderColumns(dialect, quoteIdentifiers, namingConvention, command.UpdateColumns);
+            for (var i = 0; i < updates.Length; i++)
+            {
+                if (wroteUpdate)
+                    writer.Append(", ");
 
-        if (command.DynamicColumns is not null)
+                writer.Append(updates[i]).Append(" = ").Append(dialect.MakeUpsertValueReference(updates[i], keywordCase));
+                wroteUpdate = true;
+            }
+        }
+
+        if (keyUpdateFragment is null && command.DynamicColumns is not null)
         {
             var dynamicKeys = command.DynamicColumns.RenderKeys(dialect);
             for (var d = 0; d < dynamicKeys.Length; d++)
@@ -761,7 +791,9 @@ internal static class SqlMutationBuilder
         KeywordCase keywordCase,
         IParameterProvider parameterProvider,
         string? targetFilterSql,
-        MutationParameterLowering lowering)
+        MutationParameterLowering lowering,
+        MergeAssignmentFragment? keyUpdateFragment,
+        MergeAssignmentFragment? keyInsertFragment)
     {
         var table = ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention);
         if (quoteIdentifiers)
@@ -789,7 +821,7 @@ internal static class SqlMutationBuilder
         var rows = StringBuilderPool.Shared.Get();
         try
         {
-            if (targetFilterSql is null)
+            if (targetFilterSql is null && keyUpdateFragment is null && keyInsertFragment is null)
             {
                 // Fail-closed last line of defence: an active, non-ignored target filter must never fall
                 // back to the native key-upsert skeleton, which cannot carry the predicate. The builder's
@@ -804,15 +836,16 @@ internal static class SqlMutationBuilder
                 return;
             }
 
-            // Filtered key upsert: the target predicate cannot be expressed by the dialect's native
-            // upsert skeleton, so the statement is built from the same ON/branch/returning helpers the
-            // general MERGE uses. The only delta from MakeMerge is the extra predicate in the ON.
+            // Filtered key upsert, and every expression-based key upsert: the dialect's native key-upsert
+            // skeleton cannot carry a target predicate or an explicit assignment set, so the statement is
+            // built from the same ON/branch/returning helpers the general MERGE uses. The only delta from
+            // MakeMerge is the extra predicate in the ON.
             var qualifyTarget = dialect.SupportsMergeTargetQualification;
             writer.Append(SqlKeywords.Of(keywordCase, "merge into ")).Append(table);
             AppendMergeUsingSource(writer, rows, dialect, quoteIdentifiers, namingConvention, command, columns, parameters, keywordCase, parameterProvider, null, null, lowering, command.DynamicColumns);
             AppendMergeOnKeys(writer, keys, null, keywordCase, targetFilterSql);
-            AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, new MergeBranch(MergeMatchKind.Matched, MergeActionKind.Update, command.UpdateColumns), null, keywordCase, qualifyTarget, command.DynamicColumns, null);
-            AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, new MergeBranch(MergeMatchKind.NotMatchedByTarget, MergeActionKind.Insert, ColumnProperties(command.Columns)), null, keywordCase, qualifyTarget, command.DynamicColumns, null);
+            AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, new MergeBranch(MergeMatchKind.Matched, MergeActionKind.Update, command.UpdateColumns), null, keywordCase, qualifyTarget, command.DynamicColumns, null, keyUpdateFragment);
+            AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, new MergeBranch(MergeMatchKind.NotMatchedByTarget, MergeActionKind.Insert, ColumnProperties(command.Columns)), null, keywordCase, qualifyTarget, command.DynamicColumns, null, keyInsertFragment);
             AppendMergeReturning(writer, dialect, quoteIdentifiers, namingConvention, command, keywordCase);
             writer.Append(dialect.MakeMergeStatementTerminator(keywordCase));
         }
@@ -838,7 +871,8 @@ internal static class SqlMutationBuilder
         string? matchConditionSql,
         IReadOnlyList<string?>? branchConditions,
         string? targetFilterSql,
-        MutationParameterLowering lowering)
+        MutationParameterLowering lowering,
+        IReadOnlyList<MergeAssignmentFragment?>? branchAssignments)
     {
         ValidateMergeBranches(dialect, command);
 
@@ -865,7 +899,8 @@ internal static class SqlMutationBuilder
             for (var i = 0; i < command.Branches!.Count; i++)
             {
                 var condition = branchConditions is not null && i < branchConditions.Count ? branchConditions[i] : null;
-                AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, command.Branches[i], condition, keywordCase, qualifyTarget, command.DynamicColumns, targetFilterSql);
+                var fragment = branchAssignments is not null && i < branchAssignments.Count ? branchAssignments[i] : null;
+                AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, command.Branches[i], condition, keywordCase, qualifyTarget, command.DynamicColumns, targetFilterSql, fragment);
             }
 
             AppendMergeReturning(writer, dialect, quoteIdentifiers, namingConvention, command, keywordCase);
@@ -1014,17 +1049,36 @@ internal static class SqlMutationBuilder
         KeywordCase keywordCase,
         bool qualifyTarget,
         DynamicColumnSet? dynamicColumns,
-        string? targetFilterSql)
+        string? targetFilterSql,
+        MergeAssignmentFragment? fragment = null)
     {
         switch (branch.Action)
         {
             case MergeActionKind.Update:
                 AppendMergeWhen(writer, MergeMatchKind.Matched, condition, keywordCase, targetFilterSql);
                 writer.Append(SqlKeywords.Of(keywordCase, " then update set "));
+                if (fragment?.SetList is { } setList)
+                {
+                    // Explicit assignments write exactly the assigned destinations; the store's dynamic keys
+                    // are not appended, so an assignment never silently becomes a dynamic-key write.
+                    writer.Append(setList);
+                    break;
+                }
+
                 AppendMergeAssignments(writer, dialect, quoteIdentifiers, namingConvention, branch.Columns, qualifyTarget, dynamicColumns);
                 break;
             case MergeActionKind.Insert:
                 AppendMergeWhen(writer, MergeMatchKind.NotMatchedByTarget, condition, keywordCase, targetFilterSql);
+                if (fragment is not null)
+                {
+                    writer.Append(SqlKeywords.Of(keywordCase, " then insert ("))
+                        .Append(string.Join(", ", fragment.InsertColumns!))
+                        .Append(SqlKeywords.Of(keywordCase, ") values ("))
+                        .Append(string.Join(", ", fragment.InsertValues!))
+                        .Append(')');
+                    break;
+                }
+
                 var insertColumns = RenderColumns(dialect, quoteIdentifiers, namingConvention, branch.Columns);
                 if (dynamicColumns is not null)
                     insertColumns = [.. insertColumns, .. dynamicColumns.RenderKeys(dialect)];

@@ -199,20 +199,27 @@ internal static class InMemoryAggregates
         if (count2 == 0)
         {
             // SQL SUM over an empty set is NULL; the CLR default (0) is the closest mapping and what
-            // callers of a non-nullable TResult expect. MIN/MAX/AVG/STDEV/VAR stay default.
+            // callers of a non-nullable TResult expect. MIN/MAX/AVG stay default, and so do the four
+            // variability families, whose results are structurally nullable: n = 0 is undefined.
             return normalized == nameof(CommonFunctions.sum)
                 ? (TResult)Convert.ChangeType(0d, resultType, CultureInfo.InvariantCulture)
                 : default;
         }
+
+        // The sample flavours are undefined for a single contributing value (n - 1 = 0); return the
+        // undefined result before the conversion below, which cannot carry a null. The population
+        // flavours stay defined and fold to zero, exactly as the SQL providers do.
+        if (count2 < 2 && (normalized is nameof(CommonFunctions.var) or nameof(CommonFunctions.stdev)))
+            return default;
 
         var centre = sumSquares - (sum * sum / count2);
         var result = normalized switch
         {
             nameof(CommonFunctions.sum) => sum,
             nameof(CommonFunctions.avg) => sum / count2,
-            nameof(CommonFunctions.var) => count2 < 2 ? 0 : centre / (count2 - 1),
+            nameof(CommonFunctions.var) => centre / (count2 - 1),
             nameof(CommonFunctions.varp) => centre / count2,
-            nameof(CommonFunctions.stdev) => count2 < 2 ? 0 : Math.Sqrt(centre / (count2 - 1)),
+            nameof(CommonFunctions.stdev) => Math.Sqrt(centre / (count2 - 1)),
             nameof(CommonFunctions.stdevp) => Math.Sqrt(centre / count2),
             _ => throw new NotSupportedException($"Aggregate '{name}' is not supported by the in-memory provider."),
         };

@@ -998,4 +998,29 @@ public class SqlGenerationTests
 
         sql.Should().Contain("where (id, somestring) = (1, _utf8mb4 X'61')");
     }
+    [Fact]
+    public void T292_VariabilityAggregateNames_ShouldRenderProviderSpelling()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // T292 (#292): the eight variability facade forms keep their mariadb spelling with the
+        // structurally nullable result; the DISTINCT forms keep the SQL DISTINCT keyword.
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev((double)x.Id)))
+            .Should().Contain("stddev_samp(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev_distinct((double)x.Id)))
+            .Should().Contain("stddev_samp(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp((double)x.Id)))
+            .Should().Contain("stddev_pop(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdevp_distinct((double)x.Id)))
+            .Should().Contain("stddev_pop(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var((double)x.Id)))
+            .Should().Contain("var_samp(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.var_distinct((double)x.Id)))
+            .Should().Contain("var_samp(distinct ");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp((double)x.Id)))
+            .Should().Contain("var_pop(");
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.varp_distinct((double)x.Id)))
+            .Should().Contain("var_pop(distinct ");
+    }
 }

@@ -84,7 +84,9 @@ public sealed class ProviderCapabilityContractTests
             ["sqlserver"] = new Dictionary<string, bool>(StringComparer.Ordinal)
             {
                 ["SupportsFullJoin"] = true,
-                ["SupportsFractionalAverage"] = false,
+                // T291 (#291): SQL Server widens an integral AVG argument to float inside the
+                // aggregate, so the fractional result holds and the shared AVG facts are live.
+                ["SupportsFractionalAverage"] = true,
                 ["SupportsIntersectExceptAll"] = false,
                 ["SupportsVarianceAggregates"] = true,
                 ["SupportsTableValuedFunctions"] = false,

@@ -121,7 +121,7 @@ public static class AdventureWorksQueries
                     SqlFunctions.Sql.avg_over(m.MonthlyRevenue).Over(
                         partitionBy: () => m.RegionName,
                         orderBy: () => m.SalesMonth,
-                        frame: WindowFrame.Rows(WindowFrameBound.Preceding(2), WindowFrameBound.CurrentRow)),
+                        frame: WindowFrame.Rows(WindowFrameBound.Preceding(2), WindowFrameBound.CurrentRow))!.Value,
                     2)
             })
             .ToListAsync(ct);

@@ -107,7 +107,7 @@ public class T303_AggregatePredicateTests
             "max(t2.score)", "> 1");
         AssertCorrelatedScalar(
             SqlOf(ctx, parents.Where(p => children.Where(c => c.ParentId == p.Id).Avg(c => c.Score) > 1).Select(p => p.Id)),
-            "avg(t2.score)", "> 1");
+            "avg(cast(t2.score as float))", "> 1");
         AssertCorrelatedScalar(
             SqlOf(ctx, parents.Where(p => children.Where(c => c.ParentId == p.Id).Min(c => c.Amount) > 1).Select(p => p.Id)),
             "min(t2.amount)", "> 1");

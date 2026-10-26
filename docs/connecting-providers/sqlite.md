@@ -66,6 +66,11 @@ The four share one `VarianceAccumulator`; a flavour returns `null` when there ar
 (fewer than 2 for the sample flavour, fewer than 1 for the population flavour). Because the functions are
 already named `stdev`/`var`, SQLite performs no aggregate name remapping.
 
+That null promise survives the CLR boundary: the four entity terminals and the `Sql.stdev*`/`Sql.var*`
+facade forms return `T?`, so a `null` from the accumulator reaches the caller as `null` instead of
+throwing on a non-nullable `double`. A one-row population result is still `0.0`, and duplicates
+collapsed by `DISTINCT` follow the same cardinality rule as the plain forms.
+
 ```csharp
 var stddev = ctx.From<IComplexEntity>()
     .Select(x => SqlFunctions.Sql.stdev((double)x.Id))

@@ -219,6 +219,37 @@ select id, sum(id) over (partition by nullableint) as 'total', count(*) over (pa
  from complex_entity
 ```
 
+`avg_over` наследует контракт группового `avg`: целочисленное свойство даёт `double?`, а SQL Server
+расширяет аргумент внутри агрегата (`avg(cast(id as float)) over (...)`); остальные диалекты
+сохраняют нативный аргумент — ровно как описано в разделе
+[типы результата и аргументы AVG](05-grouping-and-aggregates.md#типы-результата-и-аргументы-avg).
+Поэтому накопительное среднее никогда не теряет дробную часть:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Select(e => new
+    {
+        e.Id,
+        runningAvg = SqlFunctions.Sql.avg_over(e.Id).Over(
+            SqlFunctions.Sql.asc(() => e.Id),
+            WindowFrame.RowsUnboundedPrecedingToCurrentRow)
+    })
+    .ToList();
+```
+
+```sql
+select id, avg(id) over (order by id rows between unbounded preceding and current row) as 'runningAvg'
+ from simple_entity
+```
+
+Вывод для строк с `id` 1, 2, 3 (`[1, 2, 3]`):
+
+| Id | runningAvg |
+|----|----|
+| 1 | 1 |
+| 2 | 1.5 |
+| 3 | 2 |
+
 ## Рамки (frames)
 
 Рамка ограничивает строки, которые видит агрегат. [`WindowFrame`](xref:NextORM.Core.WindowFrame) имеет фабричные методы для обеих

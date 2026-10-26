@@ -470,7 +470,7 @@ internal static class PredicateTranslator
         if (!visitor.IsParamMode)
             visitor.Builder!.Append('(');
 
-        visitor.VisitComparisonOperand(node.Left, rightConverter);
+        visitor.VisitComparisonOperand(isComparison ? NaturalComparisonLiteral(node.Left) : node.Left, rightConverter);
 
         if (!visitor.IsParamMode)
         {
@@ -526,7 +526,7 @@ internal static class PredicateTranslator
             }
         }
 
-        visitor.VisitComparisonOperand(node.Right, leftConverter);
+        visitor.VisitComparisonOperand(isComparison ? NaturalComparisonLiteral(node.Right) : node.Right, leftConverter);
 
         if (!visitor.IsParamMode)
             visitor.Builder!.Append(')');
@@ -534,6 +534,57 @@ internal static class PredicateTranslator
         visitor.DurationUnitContext = previousDurationUnit;
 
         return node;
+    }
+
+    /// <summary>
+    /// Renders an integral literal lifted to a floating type at its natural literal type. When the
+    /// opposite operand of a comparison is a nullable floating value, the C# compiler wraps the
+    /// literal in a conversion chain (<c>Convert(Convert(1, Double), Nullable&lt;double&gt;)</c>);
+    /// after an integral AVG was declared <c>double?</c>, <c>Avg(...) &gt; 1</c> has exactly that
+    /// shape. SQL promotes the integer literal to the floating operand itself, so the explicit
+    /// <c>cast(1 as double)</c> carries no information and the redundant cast is not emitted. Only
+    /// an exactly representable integral value is unwrapped, so no rounding is introduced; a
+    /// decimal target and every non-literal operand keep their previous rendering.
+    /// </summary>
+    private static Expression NaturalComparisonLiteral(Expression operand)
+    {
+        if (operand is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked, Method: null } lifted
+            && lifted.Type is { IsGenericType: true } liftedType
+            && liftedType.GetGenericTypeDefinition() == typeof(Nullable<>)
+            && lifted.Operand is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked, Method: null } conversion
+            && conversion.Operand is ConstantExpression literal
+            && IsExactIntegralFloatingLiteral(literal, conversion.Type))
+        {
+            return literal;
+        }
+
+        return operand;
+    }
+
+    /// <summary>
+    /// True when <paramref name="literal"/> is an integral constant that <paramref name="target"/>
+    /// represents without any value change: every integral value is exact in <see cref="double"/>
+    /// up to 2^53 and in <see cref="float"/> up to 2^24. The decimal round trip checks the actual
+    /// target representation, so a large <c>long</c> literal keeps its explicit cast.
+    /// </summary>
+    private static bool IsExactIntegralFloatingLiteral(ConstantExpression literal, Type target)
+    {
+        if (target != typeof(double) && target != typeof(float))
+            return false;
+
+        if (literal.Type != typeof(byte) && literal.Type != typeof(sbyte)
+            && literal.Type != typeof(short) && literal.Type != typeof(ushort)
+            && literal.Type != typeof(int) && literal.Type != typeof(uint)
+            && literal.Type != typeof(long) && literal.Type != typeof(ulong))
+            return false;
+
+        if (literal.Value is null)
+            return false;
+
+        var value = Convert.ToDecimal(literal.Value);
+        return target == typeof(double)
+            ? (decimal)(double)value == value
+            : (decimal)(float)value == value;
     }
 
     /// <summary>

@@ -7,6 +7,12 @@ public sealed partial class MergeBuilder<TEntity>
     // form is supported; the full-MERGE branches and a query source have no in-memory counterpart.
     private int MergeInMemory(InMemoryDataContext inMemory)
     {
+        // The in-memory provider writes same-named columns only; an explicit assignment set has no in-memory
+        // evaluator, so the expression forms fail closed instead of silently falling back to the no-arg
+        // behaviour. The no-arg key upsert below is unchanged.
+        if (_keyUpdateAssignments is not null || _keyInsertAssignments is not null || HasExpressionBranch())
+            throw new NotSupportedException($"Provider '{ProviderName()}' does not support MERGE assignment expressions.");
+
         if (_source is not null)
             throw new NotSupportedException("The in-memory provider does not support a query source; pass an entity or a batch.");
         if (_branches.Count > 0)

@@ -78,6 +78,11 @@
   рендерит `cast(extract(epoch from value) as double precision)`;
 - разбиение на страницы — `limit n` / `limit n offset m`; запрос только с offset выдаёт только `offset m`.
 
+Агрегаты вариативности следуют общему контракту кардинальности: `Stdev`/`Var` дают `null` при нуле или
+одном вносящем вклад значении, `Stdevp`/`Varp` — `null` при нуле и `0.0` при одном. Поскольку результат
+теперь настоящий `Nullable<T>`, выборочный агрегат по пустому или однострочному набору материализуется
+как `null`, а не вызывает `InvalidCastException` Npgsql (`Column V is null.`) при non-nullable чтении.
+
 ## Регистрация провайдера
 
 На [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) доступны две перегрузки

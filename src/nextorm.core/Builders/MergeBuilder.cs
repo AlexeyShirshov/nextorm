@@ -19,7 +19,7 @@ namespace NextORM.Core;
 /// <typeparam name="TEntity">The mapped entity type upserted.</typeparam>
 /// <remarks>
 /// A key upsert is defined by the <see cref="Using(TEntity)"/> source, the <see cref="OnKeys"/> match
-/// key and both branches <see cref="WhenMatchedUpdate"/> and <see cref="WhenNotMatchedInsert"/>; all
+/// key and both branches <see cref="WhenMatchedUpdate()"/> and <see cref="WhenNotMatchedInsert()"/>; all
 /// four are required. <see cref="OnKeys"/> resolves the key from the entity mapping, so it must be
 /// declared before the merge; some providers (MySQL, MariaDB) render the update without naming the key
 /// because their native <c>ON DUPLICATE KEY UPDATE</c> clause has no key list.
@@ -39,6 +39,8 @@ public sealed partial class MergeBuilder<TEntity>
     private bool _whenNotMatchedInsert;
     private LambdaExpression? _matchCondition;
     private QueryCommand? _registry;
+    private LambdaExpression? _keyUpdateAssignments;
+    private LambdaExpression? _keyInsertAssignments;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
 
     internal MergeBuilder(IDataContext dataContext, IEntityMetadata metadata)
@@ -360,8 +362,26 @@ public sealed partial class MergeBuilder<TEntity>
         if (condition.Parameters.Count < 2)
             return null;
 
-        var finder = new MissingSourceColumnFinder(condition.Parameters[1], metadata, columns);
-        finder.Visit(condition.Body);
+        return FindMissingSourceColumn(condition.Parameters[1], condition.Body, metadata, columns);
+    }
+
+    /// <summary>
+    /// Finds the first mapped property read through <paramref name="source"/> that the VALUES-derived source
+    /// does not declare. Used for a branch condition and for an assignment right-hand side.
+    /// </summary>
+    /// <param name="source">The original-source lambda parameter.</param>
+    /// <param name="body">The expression to inspect.</param>
+    /// <param name="metadata">The target entity metadata, resolving a CLR property to its mapped column.</param>
+    /// <param name="columns">The VALUES-derived source columns.</param>
+    /// <returns>The offending property, or <see langword="null"/> when every source reference is a source column.</returns>
+    private static PropertyInfo? FindMissingSourceColumn(
+        ParameterExpression source,
+        Expression body,
+        IEntityMetadata metadata,
+        IReadOnlyList<ColumnAccumulator> columns)
+    {
+        var finder = new MissingSourceColumnFinder(source, metadata, columns);
+        finder.Visit(body);
         return finder.Found;
     }
 
@@ -439,10 +459,64 @@ public sealed partial class MergeBuilder<TEntity>
         return this;
     }
 
+    /// <summary>
+    /// Updates only the explicitly assigned columns when the row already exists. The lambda body must be an
+    /// anonymous initializer or a named initializer assignable to the entity; the values may read the
+    /// pre-update target row and the original input row. This is the expression form of the key upsert;
+    /// combination with the no-argument <see cref="WhenNotMatchedInsert()"/> keeps the implicit key binding.
+    /// </summary>
+    /// <param name="assignments">The assignments, for example <c>(target, source) =&gt; new { Count = target.Count + source.Count }</c>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentException">The body is not a supported non-empty initializer, or a destination is unknown, duplicated or type-incompatible.</exception>
+    /// <exception cref="NotSupportedException">A destination may not be written, or the provider cannot express the form.</exception>
+    public MergeBuilder<TEntity> WhenMatchedUpdate(Expression<Func<TEntity, TEntity, object?>> assignments)
+    {
+        ArgumentNullException.ThrowIfNull(assignments);
+        _keyUpdateAssignments = assignments;
+        _whenMatchedUpdate = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Updates only the explicitly assigned columns when the row already exists, with the third parameter
+    /// naming the provider-native proposed insert row (<c>excluded</c>). A parameter that is never read is
+    /// accepted; reading it on a provider without a native proposed row fails before execution.
+    /// </summary>
+    /// <param name="assignments">The assignments, for example <c>(target, source, excluded) =&gt; new { Count = target.Count + excluded.Count }</c>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentException">The body is not a supported non-empty initializer, or a destination is unknown, duplicated or type-incompatible.</exception>
+    /// <exception cref="NotSupportedException">A destination may not be written, or the provider has no proposed row for this form.</exception>
+    public MergeBuilder<TEntity> WhenMatchedUpdate(Expression<Func<TEntity, TEntity, TEntity, object?>> assignments)
+    {
+        ArgumentNullException.ThrowIfNull(assignments);
+        _keyUpdateAssignments = assignments;
+        _whenMatchedUpdate = true;
+        return this;
+    }
+
     /// <summary>Inserts a new row when no key matches.</summary>
     /// <returns>This builder, for chaining.</returns>
     public MergeBuilder<TEntity> WhenNotMatchedInsert()
     {
+        _whenNotMatchedInsert = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Inserts a new row built from the explicitly assigned columns when no key matches. Only the listed
+    /// columns are inserted, so omitted columns take their database defaults. Every configured conflict key
+    /// must be assigned directly from the same-named original source property
+    /// (<c>Id = source.Id</c>); a missing, constant, transformed or foreign-property key is rejected before
+    /// execution and no key is injected implicitly.
+    /// </summary>
+    /// <param name="assignments">The assignments, for example <c>source =&gt; new { Id = source.Id, Name = source.Name }</c>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentException">The body is not a supported non-empty initializer, a destination is unknown, duplicated or type-incompatible, or a conflict key is not bound directly from its source property.</exception>
+    /// <exception cref="NotSupportedException">A destination may not be written, or an unavailable role is referenced.</exception>
+    public MergeBuilder<TEntity> WhenNotMatchedInsert(Expression<Func<TEntity, object?>> assignments)
+    {
+        ArgumentNullException.ThrowIfNull(assignments);
+        _keyInsertAssignments = assignments;
         _whenNotMatchedInsert = true;
         return this;
     }
@@ -602,7 +676,9 @@ public sealed partial class MergeBuilder<TEntity>
 
     private MergeCommand BuildCommand(IReadOnlyList<IPropertyMetadata>? returningColumns = null)
     {
+        EnsureAssignmentFormSupported();
         EnsureFilteredFormSupported();
+        EnsureAssignmentFilterSupported();
 
         if (_columns.Count == 0 && _source is null && _dynamicColumns is null)
             throw new InvalidOperationException("No source rows were specified; call Using first.");
@@ -621,9 +697,9 @@ public sealed partial class MergeBuilder<TEntity>
         for (var i = 0; i < columns.Length; i++)
             columns[i] = new InsertColumn(_columns[i].Property, _columns[i].Values);
 
-        // The VALUES-derived source declares only the writable mapped columns; a condition that reaches a
-        // generated column through the source has no matching derived column. A query source projects the
-        // whole row (generated columns included), so its conditions are left to the provider.
+        // The VALUES-derived source declares only the writable mapped columns; a condition or an assignment
+        // that reaches a generated column through the source has no matching derived column. A query source
+        // projects the whole row (generated columns included), so those references are left to the provider.
         if (_source is null)
         {
             if (_matchCondition is not null)
@@ -633,11 +709,24 @@ public sealed partial class MergeBuilder<TEntity>
             {
                 if (branch.Condition is not null)
                     ValidateValuesSourceCondition(branch.Condition);
+
+                ValidateValuesSourceAssignments(branch.Assignments);
             }
         }
 
+        object? sourceRow = _sourceEntities is { Count: 1 } single ? single[0] : null;
+        var keyUpdateAssignments = _keyUpdateAssignments is null
+            ? null
+            : ParseAssignments(_keyUpdateAssignments, MergeActionKind.Update, MergeMatchKind.Matched);
+        var keyInsertAssignments = _keyInsertAssignments is null
+            ? null
+            : ParseAssignments(_keyInsertAssignments, MergeActionKind.Insert, MergeMatchKind.NotMatchedByTarget);
+
         if (_branches.Count > 0 || _matchCondition is not null)
         {
+            if (keyUpdateAssignments is not null || keyInsertAssignments is not null)
+                throw new InvalidOperationException("The key-upsert assignment forms cannot be combined with the full-MERGE branch form; use WhenMatched(...).ThenUpdate(...)/WhenNotMatched().ThenInsert(...) for a full MERGE.");
+
             var hasCondition = _matchCondition is not null;
             if (!hasCondition)
             {
@@ -651,7 +740,10 @@ public sealed partial class MergeBuilder<TEntity>
                 }
             }
 
-            var registry = hasCondition || HasActiveFilter() ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
+            // The registry renders conditions and target filters, and it also backs the expression key of
+            // every captured or constant assignment value (the scalar visitor keys such a value through the
+            // registry's plan comparer), so an expression branch needs it with or without a condition.
+            var registry = hasCondition || HasActiveFilter() || HasExpressionBranch() ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
             return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry, _dynamicColumns, _filterScope);
         }
 
@@ -671,11 +763,175 @@ public sealed partial class MergeBuilder<TEntity>
         if (updateColumns.Count == 0 && _dynamicColumns is null)
             throw new NotSupportedException($"Entity {typeof(TEntity)} has only key columns; a key upsert needs at least one non-key column to update.");
 
+        if (keyInsertAssignments is not null)
+            ValidateKeyInsertAssignments(keyInsertAssignments);
+
+        if (keyUpdateAssignments is { UsesSource: true } && _rowCount != 1 && !IsFullMergeDialect())
+            throw new NotSupportedException(
+                $"Provider '{ProviderName()}' requires one materialized source row for original-source references in key-upsert UPDATE assignments.");
+
+        // A single-row expression INSERT reads its original input values from the same materialized row, so a
+        // batch source cannot bind them without a per-row parameter loop. Fail closed instead of inserting the
+        // first row's values into every row.
+        if (keyInsertAssignments is { UsesSource: true } && _rowCount != 1)
+            throw new NotSupportedException(
+                $"Provider '{ProviderName()}' requires one materialized source row for original-source references in key-upsert UPDATE assignments.");
+
         // A filtered SQL Server key upsert is re-rendered as a general MERGE with the target filter in
-        // its ON, so it needs the condition-rendering registry even though it has no user condition.
-        var keyRegistry = HasActiveFilter() ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
-        return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys!, updateColumns, returningColumns: returningColumns, dynamicColumns: _dynamicColumns, filterScope: _filterScope, registry: keyRegistry);
+        // its ON, and an expression form is re-rendered as a general MERGE too, so both need the
+        // condition-rendering registry even though neither has a user condition.
+        var needsRegistry = HasActiveFilter() || keyUpdateAssignments is not null || keyInsertAssignments is not null;
+        var keyRegistry = needsRegistry ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
+        return new MergeCommand(
+            typeof(TEntity),
+            _metadata.TableName!,
+            _metadata.IsTableNameAuto,
+            columns,
+            _rowCount,
+            _keys!,
+            updateColumns,
+            returningColumns: returningColumns,
+            dynamicColumns: _dynamicColumns,
+            filterScope: _filterScope,
+            registry: keyRegistry,
+            keyUpdateAssignments: keyUpdateAssignments,
+            keyInsertAssignments: keyInsertAssignments,
+            sourceRow: keyUpdateAssignments is { UsesSource: true } || keyInsertAssignments is { UsesSource: true } ? sourceRow : null);
     }
+
+    /// <summary>
+    /// Enforces the key-upsert conflict-key rule: every configured conflict key must be assigned and its
+    /// value must be a direct read of the same-named original source property. No key is injected implicitly.
+    /// </summary>
+    /// <param name="assignments">The parsed insert assignment set.</param>
+    /// <exception cref="ArgumentException">A conflict key is missing or is not bound directly from its source property.</exception>
+    private void ValidateKeyInsertAssignments(MergeAssignmentSet assignments)
+    {
+        foreach (var key in _keys!)
+        {
+            var binding = assignments.Find(key);
+            if (binding is null || !assignments.IsDirectRoleRead(binding.Value, MergeAssignmentRole.Source, key))
+            {
+                throw new ArgumentException(
+                    $"MERGE key-upsert INSERT must assign conflict key '{key.PropertyInfo.Name}' directly from source.{key.PropertyInfo.Name}.", "assignments");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Validates the original-source references of a branch's assignments against the VALUES-derived source,
+    /// which declares only the writable mapped columns.
+    /// </summary>
+    /// <param name="assignments">The branch assignments, or <see langword="null"/>.</param>
+    private void ValidateValuesSourceAssignments(MergeAssignmentSet? assignments)
+    {
+        if (assignments is null || !assignments.UsesSource)
+            return;
+
+        ParameterExpression? sourceParameter = null;
+        for (var i = 0; i < assignments.Bindings.Count; i++)
+        {
+            if (assignments.Bindings[i].Role == MergeAssignmentRole.Source)
+            {
+                sourceParameter = assignments.Bindings[i].Parameter;
+                break;
+            }
+        }
+
+        if (sourceParameter is null)
+            return;
+
+        foreach (var assignment in assignments.Assignments)
+        {
+            if (!assignment.ReferencedRoles.Contains(MergeAssignmentRole.Source))
+                continue;
+
+            if (FindMissingSourceColumn(sourceParameter, assignment.Value, _metadata, _columns) is { } missing)
+            {
+                throw new NotSupportedException(
+                    $"Property {missing.Name} of {typeof(TEntity)} is not a column of the VALUES-derived merge source; " +
+                    "a database-generated column is excluded from the source built from Using(entity)/Using(batch) and cannot be referenced there.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fail-closed guard for the expression forms on a provider that has no MERGE assignment rendering at
+    /// all (the in-memory context, ClickHouse). Decided from the context and dialect only, before any
+    /// command, connection or source enumeration.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The provider has no supported merge form for assignments.</exception>
+    private void EnsureAssignmentFormSupported()
+    {
+        if (_keyUpdateAssignments is null && _keyInsertAssignments is null && !HasExpressionBranch())
+            return;
+
+        if (_dataContext is not DataContext database)
+            throw new NotSupportedException($"Provider '{ProviderName()}' does not support MERGE assignment expressions.");
+
+        var dialect = database.Dialect;
+        var fullMergeForm = _branches.Count > 0;
+        if (fullMergeForm
+            ? dialect.SupportsMergeStatement
+            : dialect.SupportsMerge || dialect.SupportsOnConflict || dialect.SupportsOnDuplicateKey)
+        {
+            return;
+        }
+
+        throw new NotSupportedException($"Provider '{ProviderName()}' does not support MERGE assignment expressions.");
+    }
+
+    /// <summary>
+    /// Fail-closed guard for an expression INSERT under an active target filter that the statement cannot
+    /// prove in one statement (§7.1): the user must opt out explicitly with <c>IgnoreFilters</c>.
+    /// </summary>
+    /// <exception cref="NotSupportedException">An active relevant target filter is in effect.</exception>
+    private void EnsureAssignmentFilterSupported()
+    {
+        if (!HasExpressionInsert() || _filterScope.All)
+            return;
+
+        if (QueryFilterResolver.GetFilters(typeof(TEntity), _filterScope, _dataContext).Count > 0)
+            throw new NotSupportedException("MERGE expression INSERT with active target filters is not supported. Use IgnoreFilters() explicitly.");
+    }
+
+    /// <summary>Whether any full-MERGE branch carries explicit assignments.</summary>
+    /// <returns>Whether an expression branch exists.</returns>
+    private bool HasExpressionBranch()
+    {
+        foreach (var branch in _branches)
+        {
+            if (branch.Assignments is not null)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether an expression INSERT form is in effect (key-upsert or full MERGE).</summary>
+    /// <returns>Whether an expression insert exists.</returns>
+    private bool HasExpressionInsert()
+    {
+        if (_keyInsertAssignments is not null)
+            return true;
+
+        foreach (var branch in _branches)
+        {
+            if (branch.Action == MergeActionKind.Insert && branch.Assignments is not null)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether the active provider renders a general MERGE statement.</summary>
+    /// <returns>Whether the dialect supports the full MERGE statement.</returns>
+    private bool IsFullMergeDialect() => _dataContext is DataContext database && database.Dialect.SupportsMergeStatement;
+
+    /// <summary>The provider name used in the frozen diagnostics.</summary>
+    /// <returns>The dialect type name for a database context, else the context type name.</returns>
+    private string ProviderName()
+        => _dataContext is DataContext database ? database.Dialect.GetType().Name : _dataContext.GetType().Name;
 
     private bool HasActiveFilter()
         => !_filterScope.All && QueryFilterResolver.GetFilters(typeof(TEntity), _filterScope, _dataContext).Count > 0;

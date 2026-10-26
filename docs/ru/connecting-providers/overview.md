@@ -51,6 +51,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | Key upsert (`CreateMergeBuilder`) | `ON CONFLICT ... DO UPDATE` | `MERGE ... USING (VALUES ...)` | `ON CONFLICT ... DO UPDATE` | `ON DUPLICATE KEY UPDATE` | `ON DUPLICATE KEY UPDATE` | бросает `NotSupportedException` | применяется в контексте (upsert) |
 | Полный `MERGE` (`WhenMatched`/`WhenNotMatched`, ветки) | бросает `NotSupportedException` | `MERGE ... WHEN MATCHED THEN ...` | `MERGE ... WHEN MATCHED THEN ...` (15+) | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | Условие совпадения merge (`On`/`WhenMatched(condition)`) | бросает `NotSupportedException` | `ON <condition>` / `WHEN ... AND <condition>` | `ON <condition>` / `WHEN ... AND <condition>` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| Выражения-присваивания merge (`ThenUpdate(assignments)`/`ThenInsert(assignments)`) | key upsert: роли target + source, нативный `excluded.<col>` | полный/key `MERGE`: target + source; `excluded` отклоняется (нет proposed-строки) | полный `MERGE` и `ON CONFLICT`: target + source, нативный `excluded.<col>` | key upsert: target + source, нативный `VALUES(<col>)`; batch/query-источник с чтением роли source отклоняется | как MySQL, с отдельным живым покрытием | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | `MERGE ... RETURNING`/`OUTPUT` (`Returning`) | бросает `NotSupportedException` | `OUTPUT inserted.<col>` | `RETURNING target.<col>` (17+) | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | `DELETE` (`CreateDeleteBuilder`/`Delete`) | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | `ALTER TABLE ... DELETE ... SETTINGS mutations_sync = 1` | бросает `NotSupportedException` |
 | `UPDATE` (`CreateUpdateBuilder`/`Update(entity)`) | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | `ALTER TABLE ... UPDATE ... SETTINGS mutations_sync = 1` | бросает `NotSupportedException` |
@@ -146,6 +147,15 @@ PostgreSQL и ClickHouse (`NULLS FIRST`/`NULLS LAST`) и **портируема�
 | Синтаксис, зависящий от версии сервера (`FILTER` в PostgreSQL; `UPDATE ... RETURNING` и нативные функции после 11.4 в MariaDB) | **Гейт по явно настроенной версии** | Провайдер несёт серверную `Version` (`SupportsUpdateReturning` отражает гейт MariaDB). PostgreSQL включает ANSI `FILTER` с 9.4+ и сохраняет прежнее поведение при незаданной версии (предполагается ≥9.4); MariaDB включает `UPDATE ... RETURNING` только при явной версии 13.0+, а каждую функцию после 11.4 — только при её собственном минимуме. Живого определения версии сервера нет. PostgreSQL дополнительно фиксирует одну версию на конкретный тип контекста на всё время жизни процесса; MariaDB такой защиты не накладывает (каждый контекст несёт собственный диалект и предикат возможностей). |
 
 Строки таблицы [ограничений](../advanced/limitations.md) описывают итоговое поведение в рантайме.
+
+**Агрегаты вариативности унифицированы, а не оставлены документированным различием.** `Stdev`/`Stdevp`/
+`Var`/`Varp` и восемь форм фасада `Sql.stdev*`/`Sql.var*` возвращают структурно nullable `T?` на каждом
+провайдере: выборочный результат при нуле или одном вносящем вклад непустом значении — `null`,
+генеральный при нуле — `null`, при одном — `0.0`, а два и более значений сохраняют установленную
+формулу провайдера. Контракт кардинальности одинаков для SQLite, PostgreSQL, SQL Server, MySQL/MariaDB
+и ClickHouse; различается только нативное имя функции (`stddev`/`stddev_pop`/`variance`/`var_pop`,
+`stddev_samp`/`stddev_pop`/`var_samp`/`var_pop`, `stddevSamp`/`stddevPop`/`varSamp`/`varPop`). Статус
+проверки каждого провайдера указан на его собственной странице.
 
 ### Гейты по версии сервера
 

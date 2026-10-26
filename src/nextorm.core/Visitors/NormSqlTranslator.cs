@@ -514,9 +514,32 @@ internal static class NormSqlTranslator
             {
                 if (!visitor.IsParamMode) visitor.NeedAliasForColumn = true;
                 var combinatorName = node.Method.Name.Replace("_distinct", string.Empty);
-                AggregateFilter.AppendCombinator(visitor, AggregateFilter.CombinatorName(visitor.Dialect, combinatorName), args[0], aggregateFilter);
+                var average = IsAverage(node.Method.Name);
+
+                var combinatorBuilder = visitor.IsParamMode ? null : visitor.Builder!;
+                var combinatorStart = combinatorBuilder?.Length ?? 0;
+                var combinatorMark = visitor.IsParamMode ? null : visitor.Recorder?.MarkAt(combinatorStart);
+                string? averageArgument = null;
+                string? averagePredicate = null;
+
+                AggregateFilter.AppendCombinator(visitor, AggregateFilter.CombinatorName(visitor.Dialect, combinatorName), args[0], aggregateFilter,
+                    average ? rendered => visitor.Dialect.MakeAverageArgument(rendered, args[0].Type) : null,
+                    average ? (argument, predicate) =>
+                    {
+                        averageArgument = argument;
+                        averagePredicate = predicate;
+                    } : null);
+
+                if (combinatorBuilder is not null && averageArgument is not null && visitor.Dialect.WrapsAverageResult)
+                    AppendAverageWrap(visitor, combinatorBuilder, combinatorStart, combinatorMark, averageArgument, averagePredicate);
+
                 return;
             }
+
+            var averageBuilder = visitor.IsParamMode ? null : visitor.Builder!;
+            var averageStart = averageBuilder?.Length ?? 0;
+            var averageMark = visitor.IsParamMode ? null : visitor.Recorder?.MarkAt(averageStart);
+            string? renderedAverageArgument = null;
 
             if (!visitor.IsParamMode)
             {
@@ -532,7 +555,16 @@ internal static class NormSqlTranslator
                 var argExp = args[i];
                 using var subVisitor = new BaseExpressionVisitor(visitor.Options with { Dim = 0 });
                 subVisitor.Visit(argExp);
-                if (!visitor.IsParamMode) visitor.Builder!.Append(subVisitor.ToString()).Append(", ");
+                if (!visitor.IsParamMode)
+                {
+                    // The AVG argument policy runs on the rendered argument, so a dialect that has to
+                    // widen an integral argument does it inside the parentheses (after `distinct`)
+                    // rather than around the aggregate result.
+                    var rendered = subVisitor.ToString();
+                    if (IsAverage(node.Method.Name))
+                        renderedAverageArgument = rendered = visitor.Dialect.MakeAverageArgument(rendered, argExp.Type);
+                    visitor.Builder!.Append(rendered).Append(", ");
+                }
             }
 
             if (!visitor.IsParamMode)
@@ -542,6 +574,9 @@ internal static class NormSqlTranslator
             }
 
             if (aggregateFilter is not null) AggregateFilter.Append(visitor, aggregateFilter);
+
+            if (averageBuilder is not null && renderedAverageArgument is not null && visitor.Dialect.WrapsAverageResult)
+                AppendAverageWrap(visitor, averageBuilder, averageStart, averageMark, renderedAverageArgument);
 
             return;
         }
@@ -633,6 +668,33 @@ internal static class NormSqlTranslator
     }
 
     /// <summary>
+    /// Wraps the AVG expression rendered after <paramref name="start"/> with the dialect's eligibility
+    /// guard (ClickHouse turns an empty/all-NULL input into SQL NULL with an <c>if(count(...)=0, ...)</c>
+    /// wrapper). The wrapper embeds the rendered text unchanged, so the parameter recorder is rewound to
+    /// the checkpoint and the detached occurrences are relocated behind the wrapper prefix.
+    /// </summary>
+    private static void AppendAverageWrap(
+        BaseExpressionVisitor visitor,
+        StringBuilder builder,
+        int start,
+        SqlParameterMark? mark,
+        string argument,
+        string? filterPredicate = null)
+    {
+        var rendered = builder.ToString(start, builder.Length - start);
+        builder.Length = start;
+        var fragment = mark is { } checkpoint ? visitor.Recorder!.RewindTo(checkpoint) : null;
+        var fragments = fragment is { OccurrenceCount: > 0 }
+            ? new[] { new SqlParameterTrackedFragment(rendered, null, fragment) }
+            : Array.Empty<SqlParameterTrackedFragment>();
+        SqlParameterFragmentRelocation.AppendComposed(
+            builder,
+            visitor.Recorder,
+            visitor.Dialect.MakeAverageResult(rendered, argument, filterPredicate),
+            fragments);
+    }
+
+    /// <summary>
     /// Trims the trailing <c>", "</c> separator of an argument list. The recorder is first advanced over
     /// the text it has not accounted for yet, then rewound over the separator, which carries no
     /// occurrence; a trim that would cut through a placeholder throws instead of misplacing it.
@@ -653,4 +715,8 @@ internal static class NormSqlTranslator
         => args.Count == withFilterCount && AggregateFilter.IsFilterExpression(args[args.Count - 1])
             ? args[args.Count - 1]
             : null;
+
+    /// <summary>True for the two AVG spellings that share the argument-rendering policy.</summary>
+    private static bool IsAverage(string methodName)
+        => methodName is nameof(CommonFunctions.avg) or nameof(CommonFunctions.avg_distinct);
 }

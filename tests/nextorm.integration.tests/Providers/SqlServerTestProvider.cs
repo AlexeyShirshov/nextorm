@@ -22,8 +22,9 @@ internal sealed class SqlServerTestProvider : ITestProvider
 
     public bool SupportsFullJoin => true;
 
-    // T-SQL evaluates AVG over an integer column as an integer, so 5.5 becomes 5.
-    public bool SupportsFractionalAverage => false;
+    // T291 (#291): the dialect widens an integral AVG argument to float inside the aggregate
+    // (avg(cast(i as float))), so the fractional mean survives (5.5, not 5).
+    public bool SupportsFractionalAverage => true;
 
     // SQL Server has no INTERSECT ALL / EXCEPT ALL.
     public bool SupportsIntersectExceptAll => false;
@@ -119,10 +120,30 @@ internal sealed class SqlServerTestProvider : ITestProvider
         drop table if exists extrema_entity;
         drop table if exists orders;
         drop table if exists person;
+        drop table if exists avg_fixture;
 
         create table simple_entity (id int not null primary key);
 
         insert into simple_entity (id) values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10);
+
+        -- T291 (#291): AVG fixture, identical rows on every provider (values 1,2,1,3 / null,1,2,3).
+        create table avg_fixture
+        (
+            id int not null primary key,
+            b tinyint not null,
+            s smallint not null,
+            i int not null,
+            l bigint not null,
+            nb tinyint null,
+            ns smallint null,
+            ni int null,
+            nl bigint null
+        );
+        insert into avg_fixture (id, b, s, i, l, nb, ns, ni, nl) values
+            (1, 1, 1, 1, 1, null, null, null, null),
+            (2, 2, 2, 2, 2, 1, 1, 1, 1),
+            (3, 1, 1, 1, 1, 2, 2, 2, 2),
+            (4, 3, 3, 3, 3, 3, 3, 3, 3);
 
         drop table if exists pivot_entity;
 

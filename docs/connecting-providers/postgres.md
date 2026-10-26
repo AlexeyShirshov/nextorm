@@ -79,6 +79,11 @@
   `cast(extract(epoch from value) as double precision)`;
 - paging is `limit n` / `limit n offset m`; an offset-only query emits `offset m` alone.
 
+The variability aggregates follow the shared cardinality contract: `Stdev`/`Var` are `null` for zero or
+one contributing value, `Stdevp`/`Varp` are `null` for zero and `0.0` for one. Because the result is now
+a real `Nullable<T>`, a sample over an empty or single-row set materializes as `null` instead of raising
+Npgsql's `InvalidCastException` (`Column V is null.`) on a non-nullable read.
+
 ## Registering the provider
 
 Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)

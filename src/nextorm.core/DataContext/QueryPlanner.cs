@@ -345,6 +345,74 @@ internal sealed class QueryPlanner : IQueryPlanner
         }
     }
 
+    // Renders an explicit MERGE assignment set against the roles of the statement shape. The roles come from
+    // the assignment set's own parameter bindings (never from a member name), and the scalar translation is
+    // shared with the condition pipeline so functions, closures, quoting and parameter numbering stay
+    // identical to the rest of the statement. The fragment's parameters join the caller's accumulator.
+    internal MergeAssignmentFragment RenderMergeAssignments(
+        MergeAssignmentSet assignments,
+        MergeAssignmentRenderInfo info,
+        Type entityType,
+        IQueryRegistry registry,
+        IParameterProvider parameterProvider,
+        List<Parameter> parameters,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        KeywordCase keywordCase)
+    {
+        var ctx = new SqlBuildContext
+        {
+            Dialect = _dialect(),
+            ParamMode = false,
+            Params = parameters,
+            ColumnsProvider = new DefaultColumnsProvider(),
+            QueryProvider = registry,
+            ParameterProvider = parameterProvider,
+            AliasProvider = new MergeAliasProvider(info.TargetReference, "source", info.SupportsExcluded ? "excluded" : null),
+            Logger = _logger!,
+            QuoteIdentifiers = quoteIdentifiers,
+            NamingConvention = namingConvention,
+            KeywordCase = keywordCase,
+        };
+
+        var roleParameters = new ParameterExpression[assignments.Bindings.Count];
+        for (var i = 0; i < roleParameters.Length; i++)
+        {
+            roleParameters[i] = assignments.Bindings[i].Parameter;
+            ctx.ColumnsProvider.Add(entityType, false);
+        }
+
+        ctx.ColumnsProvider.PushScope(Array.AsReadOnly(roleParameters));
+
+        try
+        {
+            var options = new VisitorOptions(
+                entityType,
+                ctx.Dialect,
+                ctx.ColumnsProvider,
+                0,
+                ctx.AliasProvider,
+                parameterProvider,
+                registry,
+                DontNeedAlias: false,
+                ParamMode: false,
+                parameters,
+                _logger)
+            {
+                QuoteIdentifiers = quoteIdentifiers,
+                NamingConvention = namingConvention,
+                KeywordCase = keywordCase,
+            };
+
+            using var visitor = new MergeAssignmentValueVisitor(options, assignments, info);
+            return MergeAssignmentRenderer.Render(assignments, info, visitor.VisitToString);
+        }
+        finally
+        {
+            ctx.ColumnsProvider.PopScope();
+        }
+    }
+
     // Renders the target entity's active global filter (after the effective IgnoreFilters scope) as a
     // "target"-alias-qualified MERGE search condition, appending its bound parameters to `parameters`.
     // The filters are reduced through the same entity/context substitution the SELECT pipeline uses

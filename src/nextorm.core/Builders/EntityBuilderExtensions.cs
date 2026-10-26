@@ -1102,49 +1102,797 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is the maximum of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
     public static Task<TResult?> MaxAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(builder, CommonFunctions.MaxMI, exp, cancellationToken, @params);
-    /// <summary>
-    /// Computes the average of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
-    /// </summary>
+    /// <summary>Computes the average of the projected <c>byte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
-    /// <returns>The average of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static TResult? Avg<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp) => AggregateCore(builder, CommonFunctions.AvgMI, exp, ReadOnlySpan<object?>.Empty);
-    /// <summary>
-    /// Computes the average of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
-    /// </summary>
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, byte>> exp)
+        => AverageCore<TEntity, byte, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected <c>byte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>The average of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static TResult? Avg<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(builder, CommonFunctions.AvgMI, exp, @params);
-    /// <summary>
-    /// Computes the average of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
-    /// </summary>
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, byte>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, byte, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected <c>byte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Task<TResult?> AvgAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params object[] @params) => AvgAsync(builder, exp, CancellationToken.None, @params);
-    /// <summary>
-    /// Computes the average of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
-    /// </summary>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, byte>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected <c>byte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
-    public static Task<TResult?> AvgAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(builder, CommonFunctions.AvgMI, exp, cancellationToken, @params);
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, byte>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, byte, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected nullable <c>byte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, byte?>> exp)
+        => AverageCore<TEntity, byte?, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected nullable <c>byte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, byte?>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, byte?, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected nullable <c>byte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, byte?>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected nullable <c>byte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, byte?>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, byte?, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected <c>sbyte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, sbyte>> exp)
+        => AverageCore<TEntity, sbyte, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected <c>sbyte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, sbyte>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, sbyte, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected <c>sbyte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, sbyte>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected <c>sbyte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, sbyte>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, sbyte, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected nullable <c>sbyte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, sbyte?>> exp)
+        => AverageCore<TEntity, sbyte?, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected nullable <c>sbyte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, sbyte?>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, sbyte?, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected nullable <c>sbyte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, sbyte?>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected nullable <c>sbyte</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, sbyte?>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, sbyte?, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected <c>short</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, short>> exp)
+        => AverageCore<TEntity, short, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected <c>short</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, short>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, short, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected <c>short</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, short>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected <c>short</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, short>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, short, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected nullable <c>short</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, short?>> exp)
+        => AverageCore<TEntity, short?, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected nullable <c>short</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, short?>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, short?, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected nullable <c>short</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, short?>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected nullable <c>short</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, short?>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, short?, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected <c>ushort</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ushort>> exp)
+        => AverageCore<TEntity, ushort, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected <c>ushort</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ushort>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, ushort, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected <c>ushort</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ushort>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected <c>ushort</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ushort>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, ushort, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected nullable <c>ushort</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ushort?>> exp)
+        => AverageCore<TEntity, ushort?, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected nullable <c>ushort</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ushort?>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, ushort?, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected nullable <c>ushort</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ushort?>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected nullable <c>ushort</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ushort?>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, ushort?, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected <c>int</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, int>> exp)
+        => AverageCore<TEntity, int, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected <c>int</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, int>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, int, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected <c>int</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, int>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected <c>int</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, int>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, int, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected nullable <c>int</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, int?>> exp)
+        => AverageCore<TEntity, int?, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected nullable <c>int</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, int?>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, int?, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected nullable <c>int</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, int?>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected nullable <c>int</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, int?>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, int?, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected <c>uint</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, uint>> exp)
+        => AverageCore<TEntity, uint, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected <c>uint</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, uint>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, uint, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected <c>uint</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, uint>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected <c>uint</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, uint>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, uint, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected nullable <c>uint</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, uint?>> exp)
+        => AverageCore<TEntity, uint?, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected nullable <c>uint</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, uint?>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, uint?, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected nullable <c>uint</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, uint?>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected nullable <c>uint</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, uint?>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, uint?, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected <c>long</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, long>> exp)
+        => AverageCore<TEntity, long, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected <c>long</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, long>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, long, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected <c>long</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, long>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected <c>long</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, long>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, long, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected nullable <c>long</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, long?>> exp)
+        => AverageCore<TEntity, long?, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected nullable <c>long</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, long?>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, long?, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected nullable <c>long</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, long?>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected nullable <c>long</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, long?>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, long?, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected <c>ulong</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ulong>> exp)
+        => AverageCore<TEntity, ulong, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected <c>ulong</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ulong>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, ulong, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected <c>ulong</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ulong>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected <c>ulong</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ulong>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, ulong, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected nullable <c>ulong</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ulong?>> exp)
+        => AverageCore<TEntity, ulong?, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected nullable <c>ulong</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ulong?>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, ulong?, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected nullable <c>ulong</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ulong?>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected nullable <c>ulong</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, ulong?>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, ulong?, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected <c>float</c> values as a fractional <see cref="float"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, float>> exp)
+        => AverageCore<TEntity, float, float>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected <c>float</c> values as a fractional <see cref="float"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, float>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, float, float>(builder, exp, @params);
+    /// <summary>Computes the average of the projected <c>float</c> values as a fractional <see cref="float"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<float?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, float>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected <c>float</c> values as a fractional <see cref="float"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<float?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, float>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, float, float>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected nullable <c>float</c> values as a fractional <see cref="float"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, float?>> exp)
+        => AverageCore<TEntity, float?, float>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected nullable <c>float</c> values as a fractional <see cref="float"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, float?>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, float?, float>(builder, exp, @params);
+    /// <summary>Computes the average of the projected nullable <c>float</c> values as a fractional <see cref="float"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<float?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, float?>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected nullable <c>float</c> values as a fractional <see cref="float"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<float?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, float?>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, float?, float>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected <c>double</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, double>> exp)
+        => AverageCore<TEntity, double, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected <c>double</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, double>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, double, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected <c>double</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, double>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected <c>double</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, double>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, double, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected nullable <c>double</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, double?>> exp)
+        => AverageCore<TEntity, double?, double>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected nullable <c>double</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, double?>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, double?, double>(builder, exp, @params);
+    /// <summary>Computes the average of the projected nullable <c>double</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, double?>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected nullable <c>double</c> values as a fractional <see cref="double"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<double?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, double?>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, double?, double>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected <c>decimal</c> values as a fractional <see cref="decimal"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static decimal? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, decimal>> exp)
+        => AverageCore<TEntity, decimal, decimal>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected <c>decimal</c> values as a fractional <see cref="decimal"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static decimal? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, decimal>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, decimal, decimal>(builder, exp, @params);
+    /// <summary>Computes the average of the projected <c>decimal</c> values as a fractional <see cref="decimal"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<decimal?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, decimal>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected <c>decimal</c> values as a fractional <see cref="decimal"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<decimal?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, decimal>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, decimal, decimal>(builder, exp, cancellationToken, @params);
+
+    /// <summary>Computes the average of the projected nullable <c>decimal</c> values as a fractional <see cref="decimal"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static decimal? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, decimal?>> exp)
+        => AverageCore<TEntity, decimal?, decimal>(builder, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>Computes the average of the projected nullable <c>decimal</c> values as a fractional <see cref="decimal"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static decimal? Avg<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, decimal?>> exp, params ReadOnlySpan<object?> @params)
+        => AverageCore<TEntity, decimal?, decimal>(builder, exp, @params);
+    /// <summary>Computes the average of the projected nullable <c>decimal</c> values as a fractional <see cref="decimal"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<decimal?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, decimal?>> exp, params object[] @params)
+        => AvgAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>Computes the average of the projected nullable <c>decimal</c> values as a fractional <see cref="decimal"/>; <see langword="null"/> values are ignored.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    public static Task<decimal?> AvgAsync<TEntity>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, decimal?>> exp, CancellationToken cancellationToken, params object[] @params)
+        => AverageAsyncCore<TEntity, decimal?, decimal>(builder, exp, cancellationToken, @params);
     /// <summary>
     /// Computes the sum of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
@@ -1191,175 +1939,475 @@ public static class EntityBuilderExtensions
     /// <summary>
     /// Computes the sample standard deviation of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
-    /// <returns>The sample standard deviation of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>The sample standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static TResult? Stdev<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp) => AggregateCore(builder, CommonFunctions.StdevMI, exp, ReadOnlySpan<object?>.Empty);
+    public static TResult? Stdev<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.StdevMI, exp, ReadOnlySpan<object?>.Empty);
     /// <summary>
     /// Computes the sample standard deviation of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <returns>The sample standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TResult? Stdev<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.StdevMI, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>
+    /// Computes the sample standard deviation of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>The sample standard deviation of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>The sample standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static TResult? Stdev<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(builder, CommonFunctions.StdevMI, exp, @params);
+    public static TResult? Stdev<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.StdevMI, exp, @params);
+    /// <summary>
+    /// Computes the sample standard deviation of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The sample standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TResult? Stdev<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp, params ReadOnlySpan<object?> @params) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.StdevMI, exp, @params);
     /// <summary>
     /// Computes the sample standard deviation of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>A task whose result is the sample standard deviation of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>A task whose result is the sample standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Task<TResult?> StdevAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params object[] @params) => StdevAsync(builder, exp, CancellationToken.None, @params);
+    public static Task<TResult?> StdevAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params object[] @params) where TResult : struct => StdevAsync(builder, exp, CancellationToken.None, @params);
     /// <summary>
     /// Computes the sample standard deviation of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the sample standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<TResult?> StdevAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp, params object[] @params) where TResult : struct => StdevAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>
+    /// Computes the sample standard deviation of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>A task whose result is the sample standard deviation of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
-    public static Task<TResult?> StdevAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(builder, CommonFunctions.StdevMI, exp, cancellationToken, @params);
+    /// <returns>A task whose result is the sample standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    public static Task<TResult?> StdevAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) where TResult : struct => AggregateNullableAsyncCore<TEntity, TResult>(builder, CommonFunctions.StdevMI, exp, cancellationToken, @params);
+    /// <summary>
+    /// Computes the sample standard deviation of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the sample standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    public static Task<TResult?> StdevAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp, CancellationToken cancellationToken, params object[] @params) where TResult : struct => AggregateNullableAsyncCore<TEntity, TResult>(builder, CommonFunctions.StdevMI, exp, cancellationToken, @params);
     /// <summary>
     /// Computes the population standard deviation of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
-    /// <returns>The population standard deviation of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>The population standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static TResult? Stdevp<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp) => AggregateCore(builder, CommonFunctions.StdevpMI, exp, ReadOnlySpan<object?>.Empty);
+    public static TResult? Stdevp<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.StdevpMI, exp, ReadOnlySpan<object?>.Empty);
     /// <summary>
     /// Computes the population standard deviation of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <returns>The population standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TResult? Stdevp<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.StdevpMI, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>
+    /// Computes the population standard deviation of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>The population standard deviation of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>The population standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static TResult? Stdevp<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(builder, CommonFunctions.StdevpMI, exp, @params);
+    public static TResult? Stdevp<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.StdevpMI, exp, @params);
+    /// <summary>
+    /// Computes the population standard deviation of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The population standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TResult? Stdevp<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp, params ReadOnlySpan<object?> @params) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.StdevpMI, exp, @params);
     /// <summary>
     /// Computes the population standard deviation of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>A task whose result is the population standard deviation of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>A task whose result is the population standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Task<TResult?> StdevpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params object[] @params) => StdevpAsync(builder, exp, CancellationToken.None, @params);
+    public static Task<TResult?> StdevpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params object[] @params) where TResult : struct => StdevpAsync(builder, exp, CancellationToken.None, @params);
     /// <summary>
     /// Computes the population standard deviation of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the population standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<TResult?> StdevpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp, params object[] @params) where TResult : struct => StdevpAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>
+    /// Computes the population standard deviation of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>A task whose result is the population standard deviation of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
-    public static Task<TResult?> StdevpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(builder, CommonFunctions.StdevpMI, exp, cancellationToken, @params);
+    /// <returns>A task whose result is the population standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    public static Task<TResult?> StdevpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) where TResult : struct => AggregateNullableAsyncCore<TEntity, TResult>(builder, CommonFunctions.StdevpMI, exp, cancellationToken, @params);
+    /// <summary>
+    /// Computes the population standard deviation of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the population standard deviation of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    public static Task<TResult?> StdevpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp, CancellationToken cancellationToken, params object[] @params) where TResult : struct => AggregateNullableAsyncCore<TEntity, TResult>(builder, CommonFunctions.StdevpMI, exp, cancellationToken, @params);
     /// <summary>
     /// Computes the sample variance of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
-    /// <returns>The sample variance of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>The sample variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static TResult? Var<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp) => AggregateCore(builder, CommonFunctions.VarMI, exp, ReadOnlySpan<object?>.Empty);
+    public static TResult? Var<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.VarMI, exp, ReadOnlySpan<object?>.Empty);
     /// <summary>
     /// Computes the sample variance of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <returns>The sample variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TResult? Var<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.VarMI, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>
+    /// Computes the sample variance of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>The sample variance of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>The sample variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static TResult? Var<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(builder, CommonFunctions.VarMI, exp, @params);
+    public static TResult? Var<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.VarMI, exp, @params);
+    /// <summary>
+    /// Computes the sample variance of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The sample variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TResult? Var<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp, params ReadOnlySpan<object?> @params) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.VarMI, exp, @params);
     /// <summary>
     /// Computes the sample variance of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>A task whose result is the sample variance of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>A task whose result is the sample variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Task<TResult?> VarAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params object[] @params) => VarAsync(builder, exp, CancellationToken.None, @params);
+    public static Task<TResult?> VarAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params object[] @params) where TResult : struct => VarAsync(builder, exp, CancellationToken.None, @params);
     /// <summary>
     /// Computes the sample variance of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the sample variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<TResult?> VarAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp, params object[] @params) where TResult : struct => VarAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>
+    /// Computes the sample variance of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>A task whose result is the sample variance of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
-    public static Task<TResult?> VarAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(builder, CommonFunctions.VarMI, exp, cancellationToken, @params);
+    /// <returns>A task whose result is the sample variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    public static Task<TResult?> VarAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) where TResult : struct => AggregateNullableAsyncCore<TEntity, TResult>(builder, CommonFunctions.VarMI, exp, cancellationToken, @params);
+    /// <summary>
+    /// Computes the sample variance of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero or one contributing row is undefined. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the sample variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    public static Task<TResult?> VarAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp, CancellationToken cancellationToken, params object[] @params) where TResult : struct => AggregateNullableAsyncCore<TEntity, TResult>(builder, CommonFunctions.VarMI, exp, cancellationToken, @params);
     /// <summary>
     /// Computes the population variance of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
-    /// <returns>The population variance of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>The population variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static TResult? Varp<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp) => AggregateCore(builder, CommonFunctions.VarpMI, exp, ReadOnlySpan<object?>.Empty);
+    public static TResult? Varp<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.VarpMI, exp, ReadOnlySpan<object?>.Empty);
     /// <summary>
     /// Computes the population variance of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <returns>The population variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TResult? Varp<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.VarpMI, exp, ReadOnlySpan<object?>.Empty);
+    /// <summary>
+    /// Computes the population variance of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>The population variance of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>The population variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static TResult? Varp<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(builder, CommonFunctions.VarpMI, exp, @params);
+    public static TResult? Varp<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.VarpMI, exp, @params);
+    /// <summary>
+    /// Computes the population variance of the projected values. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The population variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static TResult? Varp<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp, params ReadOnlySpan<object?> @params) where TResult : struct => AggregateNullableCore<TEntity, TResult>(builder, CommonFunctions.VarpMI, exp, @params);
     /// <summary>
     /// Computes the population variance of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>A task whose result is the population variance of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
+    /// <returns>A task whose result is the population variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Task<TResult?> VarpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params object[] @params) => VarpAsync(builder, exp, CancellationToken.None, @params);
+    public static Task<TResult?> VarpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, params object[] @params) where TResult : struct => VarpAsync(builder, exp, CancellationToken.None, @params);
     /// <summary>
     /// Computes the population variance of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
     /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <typeparam name="TResult">The type produced by the projection expression.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the population variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<TResult?> VarpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp, params object[] @params) where TResult : struct => VarpAsync(builder, exp, CancellationToken.None, @params);
+    /// <summary>
+    /// Computes the population variance of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="exp">An expression selecting the values to aggregate.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>A task whose result is the population variance of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
-    public static Task<TResult?> VarpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(builder, CommonFunctions.VarpMI, exp, cancellationToken, @params);
+    /// <returns>A task whose result is the population variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    public static Task<TResult?> VarpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) where TResult : struct => AggregateNullableAsyncCore<TEntity, TResult>(builder, CommonFunctions.VarpMI, exp, cancellationToken, @params);
+    /// <summary>
+    /// Computes the population variance of the projected values asynchronously. Rows whose projection is <see langword="null"/> are ignored, matching SQL aggregate semantics.
+    /// </summary>
+    /// <remarks>
+    /// The result is structurally nullable: zero contributing rows is undefined, while a single contributing row is zero. The non-nullable-selector and the
+    /// <c>TResult?</c>-selector overloads are both supported.
+    /// </remarks>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type produced by the projection expression.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">An expression selecting the values to aggregate; rows whose projection is <see langword="null"/> are ignored.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the population variance of the projected values, or <see langword="null"/> when it is undefined.</returns>
+    public static Task<TResult?> VarpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult?>> exp, CancellationToken cancellationToken, params object[] @params) where TResult : struct => AggregateNullableAsyncCore<TEntity, TResult>(builder, CommonFunctions.VarpMI, exp, cancellationToken, @params);
 
     /// <summary>
     /// Adapts a declared collection navigation to a full <see cref="EntityBuilder{T}"/> so it can be
@@ -1591,4 +2639,109 @@ public static class EntityBuilderExtensions
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
+
+    /// <summary>
+    /// Builds the AVG scalar projection. The result type comes from the selected
+    /// <see cref="CommonFunctions"/> <c>avg</c> declaration for the selector's input type, never
+    /// from the selector itself: an integral selector yields a fractional nullable result.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TInput">The selector's value type, its nullable form included.</typeparam>
+    /// <typeparam name="TResult">The mapped non-nullable result type (<c>double</c>, <c>float</c> or <c>decimal</c>).</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">The value selector.</param>
+    /// <param name="params">The positional query parameters.</param>
+    /// <returns>The average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    private static TResult? AverageCore<TEntity, TInput, TResult>(EntityBuilder<TEntity> builder, Expression<Func<TEntity, TInput>> exp, ReadOnlySpan<object?> @params) where TResult : struct
+    {
+        var cmd = builder.SelectParent(AverageProjection<TEntity, TInput, TResult>(exp));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalar(@params);
+    }
+
+    /// <summary>Asynchronous twin of <c>AverageCore</c>.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TInput">The selector's value type, its nullable form included.</typeparam>
+    /// <typeparam name="TResult">The mapped non-nullable result type (<c>double</c>, <c>float</c> or <c>decimal</c>).</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="exp">The value selector.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The positional query parameters.</param>
+    /// <returns>A task whose result is the average of the projected values, or <see langword="null"/> when there is no non-null value.</returns>
+    private static Task<TResult?> AverageAsyncCore<TEntity, TInput, TResult>(EntityBuilder<TEntity> builder, Expression<Func<TEntity, TInput>> exp, CancellationToken cancellationToken, object[] @params) where TResult : struct
+    {
+        var cmd = builder.SelectParent(AverageProjection<TEntity, TInput, TResult>(exp));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalarAsync(cancellationToken, @params);
+    }
+
+    /// <summary>
+    /// Builds <c>avg(selector)</c> closed over the numeric input type whose declaration fixes the
+    /// nullable result type.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TInput">The selector's value type, its nullable form included.</typeparam>
+    /// <typeparam name="TResult">The mapped non-nullable result type.</typeparam>
+    /// <param name="exp">The value selector.</param>
+    /// <returns>The aggregate projection.</returns>
+    private static Expression<Func<TEntity, TResult?>> AverageProjection<TEntity, TInput, TResult>(Expression<Func<TEntity, TInput>> exp) where TResult : struct
+        => Expression.Lambda<Func<TEntity, TResult?>>(
+            Expression.Call(CommonFunctions.SQLExpression, CommonFunctions.AverageMethodFor(typeof(TInput)), exp.Body),
+            exp.Parameters);
+    /// <summary>
+    /// Projects one variability aggregate (<c>stdev</c>, <c>stdevp</c>, <c>var</c>, <c>varp</c>) as a
+    /// structurally nullable scalar: the projection value is <see cref="Nullable{T}"/> of
+    /// <typeparamref name="TResult"/>, so a SQL NULL reaches the guarded row mapper and the
+    /// <c>default</c>-on-NULL scalar path as <see langword="null"/> instead of an unguarded
+    /// <c>GetDouble</c> read.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type the aggregate returns.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="sqlMethod">The <see cref="CommonFunctions"/> translation marker, closed over <typeparamref name="TResult"/>.</param>
+    /// <param name="exp">The value selector; its body may be <typeparamref name="TResult"/> or <c>TResult?</c>.</param>
+    /// <param name="params">The positional query parameters.</param>
+    /// <returns>The aggregate result, or <see langword="null"/> when it is undefined.</returns>
+    private static TResult? AggregateNullableCore<TEntity, TResult>(EntityBuilder<TEntity> builder, MethodInfo sqlMethod, LambdaExpression exp, ReadOnlySpan<object?> @params) where TResult : struct
+    {
+        var cmd = builder.SelectParent(NullableProjection<TEntity, TResult>(sqlMethod, exp));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalar(@params);
+    }
+
+    /// <summary>
+    /// Asynchronous twin of <c>AggregateNullableCore</c>.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type the aggregate returns.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="sqlMethod">The <see cref="CommonFunctions"/> translation marker, closed over <typeparamref name="TResult"/>.</param>
+    /// <param name="exp">The value selector; its body may be <typeparamref name="TResult"/> or <c>TResult?</c>.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The positional query parameters.</param>
+    /// <returns>A task whose result is the aggregate result, or <see langword="null"/> when it is undefined.</returns>
+    private static Task<TResult?> AggregateNullableAsyncCore<TEntity, TResult>(EntityBuilder<TEntity> builder, MethodInfo sqlMethod, LambdaExpression exp, CancellationToken cancellationToken, object[] @params) where TResult : struct
+    {
+        var cmd = builder.SelectParent(NullableProjection<TEntity, TResult>(sqlMethod, exp));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalarAsync(cancellationToken, @params);
+    }
+
+    /// <summary>
+    /// Builds the single-column aggregate projection with a <c>TResult?</c> result type, converting the
+    /// selector body when it is the non-nullable <typeparamref name="TResult"/> form.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <typeparam name="TResult">The value type the aggregate returns.</typeparam>
+    /// <param name="sqlMethod">The translation marker for the aggregate, closed over <typeparamref name="TResult"/>.</param>
+    /// <param name="exp">The value selector.</param>
+    /// <returns>The nullable aggregate projection.</returns>
+    private static Expression<Func<TEntity, TResult?>> NullableProjection<TEntity, TResult>(MethodInfo sqlMethod, LambdaExpression exp) where TResult : struct
+    {
+        var nullable = typeof(TResult?);
+        var value = exp.Body.Type == nullable ? exp.Body : Expression.Convert(exp.Body, nullable);
+        var aggregate = Expression.Call(CommonFunctions.SQLExpression, sqlMethod.MakeGenericMethod(typeof(TResult)), value);
+        return Expression.Lambda<Func<TEntity, TResult?>>(aggregate, exp.Parameters);
+    }
+
 }

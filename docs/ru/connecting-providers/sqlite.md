@@ -66,6 +66,12 @@ using IDataContext ctx = new SqliteDataContext("Data Source=app.db", new DataCon
 (меньше 2 для выборочного варианта, меньше 1 для генерального). Поскольку функции
 уже названы `stdev`/`var`, SQLite не выполняет переименование агрегатов.
 
+Это обещание null сохраняется и на границе CLR: четыре терминала на сущности и формы фасада
+`Sql.stdev*`/`Sql.var*` возвращают `T?`, поэтому `null` из аккумулятора доходит до вызывающего как
+`null`, а не бросает исключение на non-nullable `double`. Генеральный результат по одной строке
+по-прежнему `0.0`, а дубликаты, свёрнутые `DISTINCT`, подчиняются тому же правилу кардинальности,
+что и обычные формы.
+
 ```csharp
 var stddev = ctx.From<IComplexEntity>()
     .Select(x => SqlFunctions.Sql.stdev((double)x.Id))

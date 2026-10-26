@@ -136,7 +136,7 @@ public class MergeBuilderTests
         var act = () => ctx.CreateMergeBuilder<ConventionalEntity>()
             .Using(new ConventionalEntity { Id = 1, Name = "a" })
             .OnKeys()
-            .WhenMatched().ThenUpdate(x => new { x.Id, x.Name })
+            .WhenMatched().ThenUpdate((t, s) => new { Id = t.Id, Name = s.Name })
             .WhenNotMatched().ThenInsert();
 
         act.Should().Throw<NotSupportedException>();

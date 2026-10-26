@@ -34,13 +34,48 @@ internal static class AggregateTerminalRewriter
             var body = Expression.Call(CommonFunctions.SQLExpression, CountMI, Expression.NewArrayInit(typeof(object)));
             selectLambda = Expression.Lambda(body, parameter);
         }
+        else if (node.Method.Name == nameof(EntityBuilderExtensions.Avg))
+        {
+            // AVG's result type is declared by the selected numeric overload, not by the selector:
+            // an integral selector returns a fractional nullable result. The concrete declaration is
+            // resolved from the selector's own type, so the projection column keeps that contract.
+            var selector = UnwrapLambda(node.Arguments[1]);
+            var aggregate = CommonFunctions.AverageMethodFor(selector.Body.Type);
+            resultType = aggregate.ReturnType;
+            var body = Expression.Call(CommonFunctions.SQLExpression, aggregate, selector.Body);
+            selectLambda = Expression.Lambda(body, selector.Parameters);
+        }
         else
         {
             var selector = UnwrapLambda(node.Arguments[1]);
-            resultType = selector.ReturnType;
-            var aggregate = AggregateMethodFor(node.Method.Name).MakeGenericMethod(resultType);
-            var body = Expression.Call(CommonFunctions.SQLExpression, aggregate, selector.Body);
-            selectLambda = Expression.Lambda(body, selector.Parameters);
+            var aggregateDefinition = AggregateMethodFor(node.Method.Name);
+
+            // The variability aggregates declare `T? value` with `where T : struct`, so their declared
+            // result is structurally nullable. Project it as Nullable<TResult> (the terminal's own
+            // return type) and convert a non-nullable selector body to the nullable parameter;
+            // without this the projection column would stay non-nullable and a SQL NULL would reach
+            // the unguarded reader getter.
+            if (aggregateDefinition.GetParameters()[0].ParameterType is { IsGenericType: true } nullableParameter
+                && nullableParameter.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                var declaredReturn = node.Method.ReturnType;
+                resultType = Nullable.GetUnderlyingType(declaredReturn) is not null ? declaredReturn : selector.ReturnType;
+                var valueType = Nullable.GetUnderlyingType(resultType) ?? resultType;
+                var aggregate = aggregateDefinition.MakeGenericMethod(valueType);
+                var parameter = aggregate.GetParameters()[0].ParameterType;
+                var argument = selector.Body.Type == parameter
+                    ? selector.Body
+                    : Expression.Convert(selector.Body, parameter);
+                var nullableBody = Expression.Call(CommonFunctions.SQLExpression, aggregate, argument);
+                selectLambda = Expression.Lambda(nullableBody, selector.Parameters);
+            }
+            else
+            {
+                resultType = selector.ReturnType;
+                var aggregate = aggregateDefinition.MakeGenericMethod(resultType);
+                var body = Expression.Call(CommonFunctions.SQLExpression, aggregate, selector.Body);
+                selectLambda = Expression.Lambda(body, selector.Parameters);
+            }
         }
 
         return Expression.Call(builderReceiver, selectMethod.MakeGenericMethod(resultType), Expression.Quote(selectLambda));

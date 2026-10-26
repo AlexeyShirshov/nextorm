@@ -121,9 +121,29 @@ internal sealed class PostgresTestProvider : ITestProvider
         drop table if exists extreme_alias_144;
         drop table if exists orders;
         drop table if exists person;
+        drop table if exists avg_fixture;
 
         create table simple_entity (id integer primary key);
         insert into simple_entity (id) select generate_series(1, 10);
+
+        -- T291 (#291): AVG fixture, identical rows on every provider (values 1,2,1,3 / null,1,2,3).
+        create table avg_fixture
+        (
+            id integer primary key,
+            b smallint not null,
+            s smallint not null,
+            i integer not null,
+            l bigint not null,
+            nb smallint null,
+            ns smallint null,
+            ni integer null,
+            nl bigint null
+        );
+        insert into avg_fixture (id, b, s, i, l, nb, ns, ni, nl) values
+            (1, 1, 1, 1, 1, null, null, null, null),
+            (2, 2, 2, 2, 2, 1, 1, 1, 1),
+            (3, 1, 1, 1, 1, 2, 2, 2, 2),
+            (4, 3, 3, 3, 3, 3, 3, 3, 3);
 
         create table complex_entity
         (
