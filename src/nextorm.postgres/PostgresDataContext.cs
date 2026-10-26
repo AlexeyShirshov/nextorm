@@ -16,7 +16,7 @@ namespace NextORM.Postgres;
 /// Data context for PostgreSQL. Wraps the <c>Npgsql</c> driver for connections and parameters and
 /// renders SQL through <c>PostgresDialect</c>.
 /// </summary>
-public class PostgresDataContext : DataContext
+public class PostgresDataContext : DataContext, IBulkInsertExecutor
 {
     private static readonly MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!;
     private static readonly MethodInfo GetTimeSpanMI = GetFieldValueMI.MakeGenericMethod(typeof(TimeSpan));
@@ -393,43 +393,93 @@ public class PostgresDataContext : DataContext
     }
 
     /// <summary>
+    /// One binary <c>COPY ... FROM STDIN</c> importer, abstracted so the unit tests can observe the
+    /// importer lifecycle (bounded chunks, <c>Complete</c> on success, disposal on cancellation/error)
+    /// without a live server. Production code always wraps a real <c>NpgsqlBinaryImporter</c>.
+    /// </summary>
+    internal interface IBinaryCopySession : IDisposable, IAsyncDisposable
+    {
+        /// <summary>Writes one row, blocking until it is buffered.</summary>
+        /// <param name="row">The row values, in written-column order.</param>
+        void WriteRow(object?[] row);
+
+        /// <summary>Writes one row asynchronously.</summary>
+        /// <param name="row">The row values, in written-column order.</param>
+        /// <param name="cancellationToken">Cancels the write.</param>
+        /// <returns>A task that completes when the row is buffered.</returns>
+        Task WriteRowAsync(object?[] row, CancellationToken cancellationToken);
+
+        /// <summary>Completes the COPY and returns the imported row count.</summary>
+        /// <returns>The number of rows imported by this importer.</returns>
+        long Complete();
+
+        /// <summary>Completes the COPY asynchronously.</summary>
+        /// <param name="cancellationToken">Cancels the completion.</param>
+        /// <returns>A task producing the number of rows imported by this importer.</returns>
+        Task<long> CompleteAsync(CancellationToken cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes the rows of a bulk-insert command through the native binary <c>COPY</c> path. The base hook signature
+    /// cannot carry the whole-invocation <see cref="TimeSpan"/> budget or the explicit option presence, so
+    /// the provider re-implements the internal bulk executor and keeps the protected hooks as a fallback.
+    /// </summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <returns>The number of rows written.</returns>
+    int IBulkInsertExecutor.BulkInsert(BulkInsertCommand command)
+    {
+        var rows = command.SyncRows
+            ?? throw new InvalidOperationException("BulkInsert is synchronous but the source is async; use BulkInsertAsync instead.");
+
+        var copyCommand = PrepareNativeCopy(command, out var chunkSize);
+        using var deadline = BulkInsertDeadline.Start(command.Timeout, CancellationToken.None);
+        using var enumerator = rows.GetEnumerator();
+        return WriteRows(copyCommand, enumerator, deadline, command.TimeoutSeconds, chunkSize, command.Progress);
+    }
+
+    /// <summary>Asynchronously writes the rows of a bulk-insert command through the native binary <c>COPY</c> path.</summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of rows written.</returns>
+    async Task<int> IBulkInsertExecutor.BulkInsertAsync(BulkInsertCommand command, CancellationToken cancellationToken)
+    {
+        var rows = command.AsyncRows ?? new SyncToAsyncEnumerable<object?[]>(command.SyncRows!);
+        var copyCommand = PrepareNativeCopy(command, out var chunkSize);
+        using var deadline = BulkInsertDeadline.Start(command.Timeout, cancellationToken);
+
+        try
+        {
+            await using var enumerator = rows.GetAsyncEnumerator(deadline.Token);
+            return await WriteRowsAsync(copyCommand, enumerator, deadline, command.TimeoutSeconds, chunkSize, command.Progress).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException cancellation)
+        {
+            throw deadline.Translate(cancellation);
+        }
+    }
+
+    /// <summary>
     /// Writes <paramref name="rows"/> through <c>COPY &lt;table&gt; (&lt;cols&gt;) FROM STDIN (FORMAT
-    /// BINARY)</c> with <c>NpgsqlBinaryImporter</c>, streaming each row without buffering the set.
+    /// BINARY)</c> with <c>NpgsqlBinaryImporter</c>. A finite <c>MaxBatchSize</c> starts one importer per
+    /// bounded chunk (each completed on success and disposed on cancellation/error); an unbounded request
+    /// streams every row into one importer without buffering the set.
     /// </summary>
     /// <param name="tableName">The rendered target table reference (schema-qualified, quoted when configured).</param>
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order.</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
-    /// <param name="commandTimeoutSeconds">The command timeout in seconds; rejected because <c>COPY</c> has none.</param>
-    /// <param name="maxBatchSize">Ignored: the binary importer streams one row at a time.</param>
-    /// <param name="progress">Called with the cumulative written-row count every <paramref name="notifyEvery"/> rows, or <see langword="null"/>.</param>
-    /// <param name="notifyEvery">The progress reporting interval in rows.</param>
+    /// <param name="commandTimeoutSeconds">The <c>Timeout</c> budget in whole seconds, or <see langword="null"/> for the provider default.</param>
+    /// <param name="maxBatchSize">The maximum rows per importer, or <see langword="null"/> to stream the whole set into one importer.</param>
+    /// <param name="progress">Called with the cumulative written-row count after each completed chunk, or <see langword="null"/>.</param>
+    /// <param name="notifyEvery">The progress reporting interval in rows; the callback wrapper applies it.</param>
     /// <param name="bulkCopy">The bulk-copy flags requested by the caller; <c>COPY</c> cannot express them.</param>
     /// <returns>The number of rows written.</returns>
     protected override int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy)
     {
-        EnsureCopyTimeoutSupported(commandTimeoutSeconds);
         bulkCopy.ThrowIfRequested("the PostgreSQL COPY path");
-        EnsureConnectionOpen();
-        var connection = (NpgsqlConnection)GetConnection();
-
+        using var deadline = StartDeadline(commandTimeoutSeconds, CancellationToken.None);
         using var enumerator = rows.GetEnumerator();
-        if (!enumerator.MoveNext())
-            return 0;
-
-        using var writer = connection.BeginBinaryImport(BuildCopyCommand(tableName, columnNames));
-        var written = 0;
-
-        do
-        {
-            writer.WriteRow(enumerator.Current);
-            written++;
-            if (progress is not null && written % notifyEvery == 0)
-                progress(written);
-        }
-        while (enumerator.MoveNext());
-
-        return (int)writer.Complete();
+        return WriteRows(BuildCopyCommand(tableName, columnNames), enumerator, deadline, commandTimeoutSeconds, maxBatchSize, progress);
     }
 
     /// <summary>Asynchronously writes <paramref name="rows"/> through a binary <c>COPY</c>.</summary>
@@ -437,48 +487,312 @@ public class PostgresDataContext : DataContext
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order.</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
-    /// <param name="commandTimeoutSeconds">The command timeout in seconds; rejected because <c>COPY</c> has none.</param>
-    /// <param name="maxBatchSize">Ignored: the binary importer streams one row at a time.</param>
-    /// <param name="progress">Called with the cumulative written-row count every <paramref name="notifyEvery"/> rows, or <see langword="null"/>.</param>
-    /// <param name="notifyEvery">The progress reporting interval in rows.</param>
+    /// <param name="commandTimeoutSeconds">The <c>Timeout</c> budget in whole seconds, or <see langword="null"/> for the provider default.</param>
+    /// <param name="maxBatchSize">The maximum rows per importer, or <see langword="null"/> to stream the whole set into one importer.</param>
+    /// <param name="progress">Called with the cumulative written-row count after each completed chunk, or <see langword="null"/>.</param>
+    /// <param name="notifyEvery">The progress reporting interval in rows; the callback wrapper applies it.</param>
     /// <param name="bulkCopy">The bulk-copy flags requested by the caller; <c>COPY</c> cannot express them.</param>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the number of rows written.</returns>
     protected override async Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, CancellationToken cancellationToken)
     {
-        EnsureCopyTimeoutSupported(commandTimeoutSeconds);
         bulkCopy.ThrowIfRequested("the PostgreSQL COPY path");
-        await EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
-        var connection = (NpgsqlConnection)GetConnection();
+        using var deadline = StartDeadline(commandTimeoutSeconds, cancellationToken);
 
-        await using var enumerator = rows.GetAsyncEnumerator(cancellationToken);
+        try
+        {
+            await using var enumerator = rows.GetAsyncEnumerator(deadline.Token);
+            return await WriteRowsAsync(BuildCopyCommand(tableName, columnNames), enumerator, deadline, commandTimeoutSeconds, maxBatchSize, progress).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException cancellation)
+        {
+            throw deadline.Translate(cancellation);
+        }
+    }
+
+    private static BulkInsertDeadline StartDeadline(int? commandTimeoutSeconds, CancellationToken cancellationToken)
+        => BulkInsertDeadline.Start(commandTimeoutSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null, cancellationToken);
+
+    private int WriteRows(string copyCommand, IEnumerator<object?[]> enumerator, BulkInsertDeadline deadline, int? configuredTimeoutSeconds, int? chunkSize, Action<int>? progress)
+    {
+        if (!enumerator.MoveNext())
+            return 0;
+
+        if (chunkSize is not { } maxRows)
+            return WriteSingleImporter(copyCommand, enumerator, deadline, configuredTimeoutSeconds, progress);
+
+        var total = 0;
+        var chunk = new List<object?[]>(maxRows);
+        do
+        {
+            deadline.ThrowIfCancelled();
+            chunk.Add(enumerator.Current);
+            while (chunk.Count < maxRows && enumerator.MoveNext())
+            {
+                deadline.ThrowIfCancelled();
+                chunk.Add(enumerator.Current);
+            }
+
+            total += WriteChunk(copyCommand, chunk, deadline, configuredTimeoutSeconds);
+            chunk.Clear();
+            progress?.Invoke(total);
+        }
+        while (enumerator.MoveNext());
+
+        return total;
+    }
+
+    private async Task<int> WriteRowsAsync(string copyCommand, IAsyncEnumerator<object?[]> enumerator, BulkInsertDeadline deadline, int? configuredTimeoutSeconds, int? chunkSize, Action<int>? progress)
+    {
         if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
             return 0;
 
-        using var writer = await connection.BeginBinaryImportAsync(BuildCopyCommand(tableName, columnNames), cancellationToken).ConfigureAwait(false);
-        var written = 0;
+        if (chunkSize is not { } maxRows)
+            return await WriteSingleImporterAsync(copyCommand, enumerator, deadline, configuredTimeoutSeconds, progress).ConfigureAwait(false);
 
+        var total = 0;
+        var chunk = new List<object?[]>(maxRows);
         do
         {
-            await writer.WriteRowAsync(cancellationToken, enumerator.Current).ConfigureAwait(false);
-            written++;
-            if (progress is not null && written % notifyEvery == 0)
-                progress(written);
+            deadline.ThrowIfCancelled();
+            chunk.Add(enumerator.Current);
+            while (chunk.Count < maxRows && await enumerator.MoveNextAsync().ConfigureAwait(false))
+            {
+                deadline.ThrowIfCancelled();
+                chunk.Add(enumerator.Current);
+            }
+
+            total += await WriteChunkAsync(copyCommand, chunk, deadline, configuredTimeoutSeconds).ConfigureAwait(false);
+            chunk.Clear();
+            progress?.Invoke(total);
         }
         while (await enumerator.MoveNextAsync().ConfigureAwait(false));
 
-        return (int)await writer.CompleteAsync(cancellationToken).ConfigureAwait(false);
+        return total;
     }
 
-    private static void EnsureCopyTimeoutSupported(int? commandTimeoutSeconds)
+    private int WriteSingleImporter(string copyCommand, IEnumerator<object?[]> enumerator, BulkInsertDeadline deadline, int? configuredTimeoutSeconds, Action<int>? progress)
     {
-        if (commandTimeoutSeconds is not null)
-            throw new NotSupportedException("A bulk-insert Timeout is not supported by the PostgreSQL COPY path; omit Timeout or use a provider whose native bulk API supports it.");
+        var session = BeginBinaryCopy(copyCommand, ResolveCopyTimeout(deadline, configuredTimeoutSeconds));
+        try
+        {
+            do
+            {
+                deadline.ThrowIfCancelled();
+                session.WriteRow(enumerator.Current);
+            }
+            while (enumerator.MoveNext());
+
+            var completed = (int)session.Complete();
+            progress?.Invoke(completed);
+            return completed;
+        }
+        finally
+        {
+            session.Dispose();
+        }
+    }
+
+    private async Task<int> WriteSingleImporterAsync(string copyCommand, IAsyncEnumerator<object?[]> enumerator, BulkInsertDeadline deadline, int? configuredTimeoutSeconds, Action<int>? progress)
+    {
+        var session = await BeginBinaryCopyAsync(copyCommand, ResolveCopyTimeout(deadline, configuredTimeoutSeconds), deadline.Token).ConfigureAwait(false);
+        try
+        {
+            do
+            {
+                deadline.ThrowIfCancelled();
+                await session.WriteRowAsync(enumerator.Current, deadline.Token).ConfigureAwait(false);
+            }
+            while (await enumerator.MoveNextAsync().ConfigureAwait(false));
+
+            var completed = (int)await session.CompleteAsync(deadline.Token).ConfigureAwait(false);
+            progress?.Invoke(completed);
+            return completed;
+        }
+        finally
+        {
+            await session.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private int WriteChunk(string copyCommand, List<object?[]> chunk, BulkInsertDeadline deadline, int? configuredTimeoutSeconds)
+    {
+        var session = BeginBinaryCopy(copyCommand, ResolveCopyTimeout(deadline, configuredTimeoutSeconds));
+        try
+        {
+            foreach (var row in chunk)
+            {
+                deadline.ThrowIfCancelled();
+                session.WriteRow(row);
+            }
+
+            return (int)session.Complete();
+        }
+        finally
+        {
+            session.Dispose();
+        }
+    }
+
+    private async Task<int> WriteChunkAsync(string copyCommand, List<object?[]> chunk, BulkInsertDeadline deadline, int? configuredTimeoutSeconds)
+    {
+        var session = await BeginBinaryCopyAsync(copyCommand, ResolveCopyTimeout(deadline, configuredTimeoutSeconds), deadline.Token).ConfigureAwait(false);
+        try
+        {
+            foreach (var row in chunk)
+            {
+                deadline.ThrowIfCancelled();
+                await session.WriteRowAsync(row, deadline.Token).ConfigureAwait(false);
+            }
+
+            return (int)await session.CompleteAsync(deadline.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            await session.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Starts one binary-COPY importer on the context's own connection. Overridden by the unit tests with
+    /// an instrumented session so the chunk/Complete/dispose contract is observable without a server.
+    /// </summary>
+    /// <param name="copyCommand">The rendered <c>COPY</c> statement.</param>
+    /// <param name="timeout">The remaining whole-invocation budget, or <see langword="null"/> for the provider default.</param>
+    /// <returns>The started importer session.</returns>
+    internal virtual IBinaryCopySession BeginBinaryCopy(string copyCommand, TimeSpan? timeout)
+    {
+        EnsureConnectionOpen();
+        var connection = (NpgsqlConnection)GetConnection();
+        var importer = connection.BeginBinaryImport(copyCommand);
+        ApplyImporterTimeout(importer, timeout);
+        return new NpgsqlBinaryCopySession(importer);
+    }
+
+    /// <summary>Asynchronously starts one binary-COPY importer on the context's own connection.</summary>
+    /// <param name="copyCommand">The rendered <c>COPY</c> statement.</param>
+    /// <param name="timeout">The remaining whole-invocation budget, or <see langword="null"/> for the provider default.</param>
+    /// <param name="cancellationToken">Cancels the start.</param>
+    /// <returns>A task producing the started importer session.</returns>
+    internal virtual async Task<IBinaryCopySession> BeginBinaryCopyAsync(string copyCommand, TimeSpan? timeout, CancellationToken cancellationToken)
+    {
+        await EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
+        var connection = (NpgsqlConnection)GetConnection();
+        var importer = await connection.BeginBinaryImportAsync(copyCommand, cancellationToken).ConfigureAwait(false);
+        ApplyImporterTimeout(importer, timeout);
+        return new NpgsqlBinaryCopySession(importer);
+    }
+
+    private static void ApplyImporterTimeout(NpgsqlBinaryImporter importer, TimeSpan? timeout)
+    {
+        if (timeout is { } value)
+            importer.Timeout = value;
+    }
+
+    /// <summary>
+    /// The driver timeout of the next importer: the <em>remaining</em> budget of the one monotonic
+    /// deadline, never the whole request re-applied per chunk. Without a nextorm budget the configured
+    /// whole seconds are passed through (or the provider default when both are unset).
+    /// </summary>
+    /// <param name="deadline">The started whole-invocation budget.</param>
+    /// <param name="configuredSeconds">The configured budget in whole seconds, or <see langword="null"/>.</param>
+    /// <returns>The budget to hand to <c>NpgsqlBinaryImporter.Timeout</c>, or <see langword="null"/> to keep the provider default.</returns>
+    internal static TimeSpan? ResolveCopyTimeout(BulkInsertDeadline deadline, int? configuredSeconds)
+    {
+        if (deadline.Remaining is not { } remaining)
+            return configuredSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null;
+
+        return remaining <= TimeSpan.Zero ? TimeSpan.FromMilliseconds(1) : remaining;
+    }
+
+    private string PrepareNativeCopy(BulkInsertCommand command, out int? chunkSize)
+    {
+        command.BulkCopy.ThrowIfRequested("the PostgreSQL COPY path");
+        EnsureKeepNullsIsDefaultEquivalent(command);
+        chunkSize = command.Batch?.MaxBatchSize;
+        return BuildCopyCommand(command);
+    }
+
+    // Binary COPY always writes the supplied value, so KeepNulls=false can only be honoured when writing
+    // NULL is indistinguishable from letting the destination DEFAULT apply: every written column must be
+    // nullable and have a NULL/absent SQL default. The SQL-default half is certified against the live
+    // schema by the integration suite; a non-nullable input column is refused here, before any row is read.
+    private static void EnsureKeepNullsIsDefaultEquivalent(BulkInsertCommand command)
+    {
+        if (command.Options.KeepNulls is not false)
+            return;
+
+        var nullability = new NullabilityInfoContext();
+        var nonNullable = new List<string>(command.Columns.Count);
+        foreach (var column in command.Columns)
+        {
+            if (nullability.Create(column.PropertyInfo).WriteState != NullabilityState.Nullable)
+                nonNullable.Add(column.ColumnName);
+        }
+
+        if (nonNullable.Count == 0)
+            return;
+
+        throw new NotSupportedException(
+            "BulkInsertOptions.KeepNulls=false cannot be honoured by the PostgreSQL binary COPY path: COPY always writes the supplied value and applies a column DEFAULT only when the column is omitted. "
+            + "The request is accepted only for a default-equivalent shape, where every written column is nullable with a NULL/absent SQL default; "
+            + $"the non-nullable input column(s) {string.Join(", ", nonNullable.Select(name => $"'{name}'"))} break that shape. Use KeepNulls=true, or write the DEFAULT explicitly.");
+    }
+
+    private string BuildCopyCommand(BulkInsertCommand command)
+    {
+        var destination = BulkInsertDestination.From(command.Options);
+        ValidateDatabase(destination);
+
+        var tableName = SqlMutationBuilder.RenderTableReference(
+            Dialect,
+            QuoteIdentifiers,
+            command.TableName,
+            destination.Schema,
+            command.IsTableNameAuto,
+            command.EntityType,
+            NamingConvention);
+
+        var columnNames = new string[command.Columns.Count];
+        for (var i = 0; i < columnNames.Length; i++)
+            columnNames[i] = SqlMutationBuilder.ResolveColumnName(command.Columns[i], NamingConvention);
+
+        return BuildCopyCommand(tableName, columnNames);
+    }
+
+    // PostgreSQL COPY runs on the context's own connection, so only the current database is addressable:
+    // naming the current database stays a no-op part, naming another one is refused before the source is read.
+    private void ValidateDatabase(BulkInsertDestination destination)
+    {
+        if (destination.Database is null)
+            return;
+
+        var current = GetConnection() is NpgsqlConnection connection ? connection.Database : string.Empty;
+        if (!string.Equals(destination.Database, current, StringComparison.Ordinal))
+            throw new NotSupportedException(
+                $"BulkInsertOptions.DatabaseName '{destination.Database}' cannot be addressed by a PostgreSQL bulk insert: COPY writes on the context's own connection, so only the current database ('{current}') is addressable. Connect to the required database instead.");
     }
 
     private string BuildCopyCommand(string tableName, IReadOnlyList<string> columnNames)
     {
         var quotedColumns = string.Join(", ", columnNames.Select(Dialect.QuoteIdentifier));
         return $"COPY {tableName} ({quotedColumns}) FROM STDIN (FORMAT BINARY)";
+    }
+
+    private sealed class NpgsqlBinaryCopySession(NpgsqlBinaryImporter importer) : IBinaryCopySession
+    {
+        public void WriteRow(object?[] row) => importer.WriteRow(row);
+
+        public Task WriteRowAsync(object?[] row, CancellationToken cancellationToken)
+            => importer.WriteRowAsync(cancellationToken, row);
+
+        public long Complete() => (long)importer.Complete();
+
+        public async Task<long> CompleteAsync(CancellationToken cancellationToken)
+            => (long)await importer.CompleteAsync(cancellationToken).ConfigureAwait(false);
+
+        public void Dispose() => importer.Dispose();
+
+        public ValueTask DisposeAsync() => importer.DisposeAsync();
     }
 }

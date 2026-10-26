@@ -1,3 +1,5 @@
+using System.Data;
+using System.Data.Common;
 using FluentAssertions;
 using Microsoft.Data.SqlClient;
 using NextORM.Core;
@@ -9,6 +11,9 @@ namespace NextORM.SqlServer.Tests;
 /// </summary>
 public class BulkInsertSqlGenerationTests
 {
+    private const string PlaceholderConnectionString =
+        "Server=localhost,1433;Database=nextorm;User Id=sa;Password=nextorm!Passw0rd;TrustServerCertificate=True";
+
     private static InsertEntity Row(string name, int age) => new() { Name = name, Age = age };
 
     [Fact]
@@ -72,6 +77,60 @@ public class BulkInsertSqlGenerationTests
     }
 
     [Fact]
+    public void BulkInsert_DatabaseAndSchema_ShouldQuoteEachPartSeparately()
+    {
+        using var ctx = SqlServerTestContext.CreateQuoted();
+
+        var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .Table("bulk_target")
+                .Database("app_db")
+                .Schema("staging"))
+            .Values([Row("a", 1)])
+            .ToSql();
+
+        sql.Should().Be("insert into [app_db].[staging].[bulk_target] ([name], [age]) values (@p0, @p1)");
+    }
+
+    [Fact]
+    public void BulkInsert_ServerName_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.Server("remote")).Values([Row("a", 1)]).BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*ServerName*");
+    }
+
+    [Fact]
+    public void BulkInsert_LocalTemporary_ShouldTargetTheSessionTempTableName()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .TargetKind(BulkInsertTargetKind.LocalTemporary)
+                .Table("#staging"))
+            .Values([Row("a", 1)])
+            .ToSql();
+
+        sql.Should().Be("insert into #staging (name, age) values (@p0, @p1)");
+    }
+
+    [Fact]
+    public void BulkInsert_LocalTemporary_WithSchema_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
+                .TargetKind(BulkInsertTargetKind.LocalTemporary)
+                .Table("#staging")
+                .Schema("staging"))
+            .Values([Row("a", 1)])
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*LocalTemporary*SchemaName*");
+    }
+
+    [Fact]
     public void BulkInsert_TableOverride_KeepIdentity_ShouldWrapOverriddenTable()
     {
         using var ctx = SqlServerTestContext.Create();
@@ -111,6 +170,67 @@ public class BulkInsertSqlGenerationTests
     }
 
     [Fact]
+    public void BulkInsert_UseInternalTransactionTrue_ShouldMapTheDriverFlag()
+    {
+        var internalTransaction = SqlServerDataContext.MapBulkCopyOptions(
+            checkConstraints: false, tableLock: false, keepNulls: false, fireTriggers: false, useInternalTransaction: true);
+
+        internalTransaction.Should().HaveFlag(SqlBulkCopyOptions.UseInternalTransaction);
+
+        var noInternalTransaction = SqlServerDataContext.MapBulkCopyOptions(
+            checkConstraints: false, tableLock: false, keepNulls: false, fireTriggers: false, useInternalTransaction: false);
+
+        noInternalTransaction.Should().NotHaveFlag(SqlBulkCopyOptions.UseInternalTransaction);
+    }
+
+    [Fact]
+    public void BulkInsert_ExternalTransactionWithInternalTransaction_ShouldThrowNamingBoth()
+    {
+        using var transaction = new FakeDbTransaction();
+
+        var act = () => SqlServerDataContext.ValidateInternalTransaction(useInternalTransaction: true, transaction);
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*UseInternalTransaction=true*external transaction*FakeDbTransaction*");
+
+        var withoutInternal = () => SqlServerDataContext.ValidateInternalTransaction(useInternalTransaction: false, transaction);
+        withoutInternal.Should().NotThrow();
+    }
+
+    [Fact]
+    public void BulkInsert_BatchSizeNull_ShouldStayTheDriverDefaultZero()
+    {
+        SqlServerDataContext.ResolveBatchSize(null).Should().Be(0);
+        SqlServerDataContext.ResolveBatchSize(5).Should().Be(5);
+
+        using var connection = new SqlConnection(PlaceholderConnectionString);
+        using var bulk = SqlServerDataContext.CreateBulkCopy(
+            connection,
+            transaction: null,
+            tableName: "[bulk_target]",
+            columnNames: ["name"],
+            bulkCopyTimeoutSeconds: 30,
+            batchSize: SqlServerDataContext.ResolveBatchSize(maxBatchSize: null),
+            progress: null,
+            notifyEvery: 1,
+            BulkCopyFlags.None,
+            useInternalTransaction: false);
+
+        bulk.BatchSize.Should().Be(0);
+        bulk.BulkCopyTimeout.Should().Be(30);
+        bulk.DestinationTableName.Should().Be("[bulk_target]");
+    }
+
+    [Fact]
+    public void BulkInsert_Timeout_ShouldGiveTheDriverTheRemainingBudget()
+    {
+        SqlServerDataContext.ResolveBulkCopyTimeout(TimeSpan.FromSeconds(5.2), configuredSeconds: 9).Should().Be(6);
+        SqlServerDataContext.ResolveBulkCopyTimeout(TimeSpan.FromMilliseconds(100), configuredSeconds: 9).Should().Be(1);
+        SqlServerDataContext.ResolveBulkCopyTimeout(remaining: null, configuredSeconds: 9).Should().Be(9);
+        SqlServerDataContext.ResolveBulkCopyTimeout(remaining: null, configuredSeconds: null).Should().Be(30);
+    }
+
+    [Fact]
     public void BulkInsert_BulkCopyFlag_ShouldNotChangeRenderedSql()
     {
         using var ctx = SqlServerTestContext.Create();
@@ -143,5 +263,21 @@ public class BulkInsertSqlGenerationTests
             .BulkInsert();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*FireTriggers*");
+    }
+}
+
+/// <summary>A caller-owned transaction stand-in, so the internal-transaction conflict is testable offline.</summary>
+internal sealed class FakeDbTransaction : DbTransaction
+{
+    public override IsolationLevel IsolationLevel => IsolationLevel.ReadCommitted;
+
+    protected override DbConnection? DbConnection => null;
+
+    public override void Commit()
+    {
+    }
+
+    public override void Rollback()
+    {
     }
 }

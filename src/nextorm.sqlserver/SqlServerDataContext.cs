@@ -1,9 +1,8 @@
-﻿using System.Data;
+using System.Data;
 using System.Data.Common;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.ExceptionServices;
 using Microsoft.Data.SqlClient;
 using Microsoft.Data.SqlClient.Server;
 using NextORM.Core;
@@ -14,7 +13,7 @@ namespace NextORM.SqlServer;
 /// Data context for Microsoft SQL Server. Wraps the <c>Microsoft.Data.SqlClient</c> driver for
 /// connections and parameters and renders SQL through <c>SqlServerDialect</c>.
 /// </summary>
-public class SqlServerDataContext : DataContext
+public class SqlServerDataContext : DataContext, IBulkInsertExecutor
 {
     private static readonly MethodInfo GetValueMethod = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
     private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
@@ -643,47 +642,80 @@ public class SqlServerDataContext : DataContext
         || type == typeof(double) || type == typeof(decimal);
 
     /// <summary>
-    /// Writes <paramref name="rows"/> through <c>SqlBulkCopy</c>. The rows are buffered in a
-    /// <see cref="DataTable"/> because <c>SqlBulkCopy</c> needs column type metadata; the whole set is
-    /// held in memory before the copy starts.
+    /// Writes the rows of a bulk-insert command through <c>SqlBulkCopy</c>. The base hook signature cannot carry the
+    /// whole-invocation <see cref="TimeSpan"/> budget or the SQL Server option group, so the provider
+    /// re-implements the internal bulk executor and keeps the protected hooks as a compatibility fallback.
+    /// </summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <returns>The number of rows written.</returns>
+    int IBulkInsertExecutor.BulkInsert(BulkInsertCommand command)
+    {
+        var rows = command.SyncRows
+            ?? throw new InvalidOperationException("BulkInsert is synchronous but the source is async; use BulkInsertAsync instead.");
+
+        // The internal-transaction request is validated against the context's current transaction before
+        // any row is read (an external transaction plus UseInternalTransaction is refused by name).
+        var useInternalTransaction = ValidateAndResolveInternalTransaction(command);
+
+        using var deadline = BulkInsertDeadline.Start(command.Timeout, CancellationToken.None);
+        return WriteRows(
+            SqlMutationBuilder.RenderBulkTarget(Dialect, QuoteIdentifiers, command, NamingConvention),
+            ResolveColumnNames(command.Columns),
+            command.Columns,
+            rows,
+            deadline,
+            command.TimeoutSeconds,
+            command.Batch?.MaxBatchSize,
+            command.Progress,
+            command.NotifyEvery,
+            command.BulkCopy,
+            useInternalTransaction);
+    }
+
+    /// <summary>Asynchronously writes the rows of a bulk-insert command through <c>SqlBulkCopy</c>.</summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of rows written.</returns>
+    async Task<int> IBulkInsertExecutor.BulkInsertAsync(BulkInsertCommand command, CancellationToken cancellationToken)
+    {
+        var rows = command.AsyncRows ?? new SyncToAsyncEnumerable<object?[]>(command.SyncRows!);
+        var useInternalTransaction = ValidateAndResolveInternalTransaction(command);
+
+        using var deadline = BulkInsertDeadline.Start(command.Timeout, cancellationToken);
+        return await WriteRowsAsync(
+            SqlMutationBuilder.RenderBulkTarget(Dialect, QuoteIdentifiers, command, NamingConvention),
+            ResolveColumnNames(command.Columns),
+            command.Columns,
+            rows,
+            deadline,
+            command.TimeoutSeconds,
+            command.Batch?.MaxBatchSize,
+            command.Progress,
+            command.NotifyEvery,
+            command.BulkCopy,
+            useInternalTransaction).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Compatibility entry point for the base hook: writes <paramref name="rows"/> through
+    /// <c>SqlBulkCopy</c> with the budget expressed in whole seconds. The executor path above carries the
+    /// full <see cref="TimeSpan"/> budget and the SQL Server option group; this hook never requests an
+    /// internal transaction.
     /// </summary>
     /// <param name="tableName">The rendered target table reference (schema-qualified, quoted when configured).</param>
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order.</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
-    /// <param name="commandTimeoutSeconds">The <c>SqlBulkCopy</c> timeout in seconds, or <see langword="null"/> for the 30s default.</param>
-    /// <param name="maxBatchSize">The <c>SqlBulkCopy.BatchSize</c> in rows, or <see langword="null"/> for one batch.</param>
+    /// <param name="commandTimeoutSeconds">The <c>Timeout</c> budget in whole seconds, or <see langword="null"/> for the 30s default.</param>
+    /// <param name="maxBatchSize">The <c>SqlBulkCopy.BatchSize</c> in rows, or <see langword="null"/> for the driver default (0).</param>
     /// <param name="progress">Called with the cumulative written-row count on each native progress tick, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The progress reporting interval in rows.</param>
     /// <param name="bulkCopy">The bulk-copy flags requested by the caller.</param>
     /// <returns>The number of rows written.</returns>
     protected override int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy)
     {
-        EnsureConnectionOpen();
-        var table = BuildTable(columnNames, columns);
-        var count = 0;
-
-        foreach (var row in rows)
-        {
-            table.Rows.Add(row);
-            count++;
-        }
-
-        using (table)
-        {
-            using var bulk = CreateBulkCopy(tableName, columnNames, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery, bulkCopy);
-
-            try
-            {
-                bulk.WriteToServer(table);
-            }
-            catch (Microsoft.Data.OperationAbortedException ex) when (ex.InnerException is OperationCanceledException)
-            {
-                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
-            }
-        }
-
-        return count;
+        using var deadline = BulkInsertDeadline.Start(commandTimeoutSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null, CancellationToken.None);
+        return WriteRows(tableName, columnNames, columns, rows, deadline, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery, bulkCopy, useInternalTransaction: false);
     }
 
     /// <summary>Asynchronously writes <paramref name="rows"/> through <c>SqlBulkCopy</c>.</summary>
@@ -691,8 +723,8 @@ public class SqlServerDataContext : DataContext
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order.</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
-    /// <param name="commandTimeoutSeconds">The <c>SqlBulkCopy</c> timeout in seconds, or <see langword="null"/> for the 30s default.</param>
-    /// <param name="maxBatchSize">The <c>SqlBulkCopy.BatchSize</c> in rows, or <see langword="null"/> for one batch.</param>
+    /// <param name="commandTimeoutSeconds">The <c>Timeout</c> budget in whole seconds, or <see langword="null"/> for the 30s default.</param>
+    /// <param name="maxBatchSize">The <c>SqlBulkCopy.BatchSize</c> in rows, or <see langword="null"/> for the driver default (0).</param>
     /// <param name="progress">Called with the cumulative written-row count on each native progress tick, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The progress reporting interval in rows.</param>
     /// <param name="bulkCopy">The bulk-copy flags requested by the caller.</param>
@@ -700,43 +732,197 @@ public class SqlServerDataContext : DataContext
     /// <returns>A task producing the number of rows written.</returns>
     protected override async Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, CancellationToken cancellationToken)
     {
-        await EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
+        using var deadline = BulkInsertDeadline.Start(commandTimeoutSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null, cancellationToken);
+        return await WriteRowsAsync(tableName, columnNames, columns, rows, deadline, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery, bulkCopy, useInternalTransaction: false).ConfigureAwait(false);
+    }
+
+    private int WriteRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, BulkInsertDeadline deadline, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, bool useInternalTransaction)
+    {
+        EnsureConnectionOpen();
         var table = BuildTable(columnNames, columns);
         var count = 0;
 
-        await foreach (var row in rows.WithCancellation(cancellationToken).ConfigureAwait(false))
+        foreach (var row in rows)
         {
+            deadline.ThrowIfCancelled();
             table.Rows.Add(row);
             count++;
         }
 
         using (table)
         {
-            using var bulk = CreateBulkCopy(tableName, columnNames, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery, bulkCopy);
+            using var bulk = CreateBulkCopy(
+                tableName,
+                columnNames,
+                ResolveBulkCopyTimeout(deadline.Remaining, commandTimeoutSeconds),
+                ResolveBatchSize(maxBatchSize),
+                progress,
+                notifyEvery,
+                bulkCopy,
+                useInternalTransaction);
 
             try
             {
-                await bulk.WriteToServerAsync(table, cancellationToken).ConfigureAwait(false);
+                bulk.WriteToServer(table);
             }
-            catch (Microsoft.Data.OperationAbortedException ex) when (ex.InnerException is OperationCanceledException)
+            catch (Microsoft.Data.OperationAbortedException ex) when (ex.InnerException is OperationCanceledException cancelled)
             {
-                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw deadline.Translate(cancelled);
+            }
+            catch (SqlException) when (deadline.IsExpired)
+            {
+                throw deadline.TimedOut();
             }
         }
 
+        deadline.ThrowIfCancelled();
         return count;
     }
 
-    private SqlBulkCopy CreateBulkCopy(string tableName, IReadOnlyList<string> columnNames, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy)
+    private async Task<int> WriteRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, BulkInsertDeadline deadline, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, bool useInternalTransaction)
+    {
+        var table = BuildTable(columnNames, columns);
+        var count = 0;
+
+        using (table)
+        {
+            try
+            {
+                await EnsureConnectionOpenAsync(deadline.Token).ConfigureAwait(false);
+
+                await foreach (var row in rows.WithCancellation(deadline.Token).ConfigureAwait(false))
+                {
+                    deadline.ThrowIfCancelled();
+                    table.Rows.Add(row);
+                    count++;
+                }
+
+                using var bulk = CreateBulkCopy(
+                    tableName,
+                    columnNames,
+                    ResolveBulkCopyTimeout(deadline.Remaining, commandTimeoutSeconds),
+                    ResolveBatchSize(maxBatchSize),
+                    progress,
+                    notifyEvery,
+                    bulkCopy,
+                    useInternalTransaction);
+
+                await bulk.WriteToServerAsync(table, deadline.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException cancellation)
+            {
+                throw deadline.Translate(cancellation);
+            }
+            catch (Microsoft.Data.OperationAbortedException ex) when (ex.InnerException is OperationCanceledException cancelled)
+            {
+                throw deadline.Translate(cancelled);
+            }
+            catch (SqlException) when (deadline.IsExpired)
+            {
+                throw deadline.TimedOut();
+            }
+        }
+
+        deadline.ThrowIfCancelled();
+        return count;
+    }
+
+    /// <summary>
+    /// Resolves the SQL Server option group of the command and refuses an external transaction combined
+    /// with <c>UseInternalTransaction=true</c> before any row is read.
+    /// </summary>
+    /// <param name="command">The bulk-insert command.</param>
+    /// <returns>Whether the driver should run its own internal transaction.</returns>
+    private bool ValidateAndResolveInternalTransaction(BulkInsertCommand command)
+    {
+        var requested = command.SqlServer?.UseInternalTransaction == true;
+        ValidateInternalTransaction(requested, ((ITransactionManager)this).CurrentTransaction);
+        return requested;
+    }
+
+    /// <summary>
+    /// Refuses <c>UseInternalTransaction=true</c> when the context already runs an external transaction:
+    /// the driver would open its own transaction inside the caller's, which is neither supported nor
+    /// meaningful. Naming both keeps the conflict diagnosable.
+    /// </summary>
+    /// <param name="useInternalTransaction">Whether the internal transaction was requested.</param>
+    /// <param name="externalTransaction">The context's current transaction, or <see langword="null"/>.</param>
+    /// <exception cref="NotSupportedException">Both an external transaction and the internal transaction are present.</exception>
+    internal static void ValidateInternalTransaction(bool useInternalTransaction, DbTransaction? externalTransaction)
+    {
+        if (!useInternalTransaction || externalTransaction is null)
+            return;
+
+        throw new NotSupportedException(
+            $"SqlServerBulkInsertOptions.UseInternalTransaction=true cannot be combined with an external transaction ({externalTransaction.GetType().Name}): "
+            + "SqlBulkCopy would open its own transaction inside the caller's transaction. Commit or roll back the external transaction first, or drop UseInternalTransaction.");
+    }
+
+    /// <summary>
+    /// The driver timeout of the copy: the <em>remaining</em> whole-invocation budget in seconds, never the
+    /// whole request re-applied per batch. Without a nextorm budget the configured seconds (or the 30s
+    /// driver default) apply. Always at least one second, because <c>BulkCopyTimeout = 0</c> means infinite.
+    /// </summary>
+    /// <param name="remaining">The time left in the budget, or <see langword="null"/> when no budget was requested.</param>
+    /// <param name="configuredSeconds">The configured budget in whole seconds, or <see langword="null"/>.</param>
+    /// <returns>The <c>SqlBulkCopy.BulkCopyTimeout</c> in seconds.</returns>
+    internal static int ResolveBulkCopyTimeout(TimeSpan? remaining, int? configuredSeconds)
+    {
+        if (remaining is not { } left)
+            return configuredSeconds ?? 30;
+
+        return left.TotalSeconds >= int.MaxValue
+            ? int.MaxValue
+            : Math.Max(1, (int)Math.Ceiling(left.TotalSeconds));
+    }
+
+    /// <summary>
+    /// The driver batch size: an unset <c>MaxBatchSize</c> stays the driver default <c>0</c> (one batch),
+    /// never <c>1</c>.
+    /// </summary>
+    /// <param name="maxBatchSize">The requested rows per batch, or <see langword="null"/>.</param>
+    /// <returns>The <c>SqlBulkCopy.BatchSize</c> value.</returns>
+    internal static int ResolveBatchSize(int? maxBatchSize) => maxBatchSize ?? 0;
+
+    private string[] ResolveColumnNames(IReadOnlyList<IPropertyMetadata> columns)
+    {
+        var names = new string[columns.Count];
+        for (var i = 0; i < names.Length; i++)
+            names[i] = SqlMutationBuilder.ResolveColumnName(columns[i], NamingConvention);
+
+        return names;
+    }
+
+    private SqlBulkCopy CreateBulkCopy(string tableName, IReadOnlyList<string> columnNames, int bulkCopyTimeoutSeconds, int batchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, bool useInternalTransaction)
     {
         var connection = (SqlConnection)GetConnection();
         var transaction = (this as ITransactionManager)?.CurrentTransaction as SqlTransaction;
 
-        var bulk = new SqlBulkCopy(connection, MapBulkCopyOptions(bulkCopy.CheckConstraints, bulkCopy.TableLock, bulkCopy.KeepNulls, bulkCopy.FireTriggers), transaction)
+        return CreateBulkCopy(connection, transaction, tableName, columnNames, bulkCopyTimeoutSeconds, batchSize, progress, notifyEvery, bulkCopy, useInternalTransaction);
+    }
+
+    /// <summary>
+    /// Builds the configured <c>SqlBulkCopy</c>. The connection is used as given (no open is attempted
+    /// here), so the batch size, timeout and option flags are observable in unit tests without a server.
+    /// </summary>
+    /// <param name="connection">The connection the copy runs on.</param>
+    /// <param name="transaction">The external transaction, or <see langword="null"/>.</param>
+    /// <param name="tableName">The rendered target table reference.</param>
+    /// <param name="columnNames">The written column names, in row order.</param>
+    /// <param name="bulkCopyTimeoutSeconds">The driver timeout in seconds.</param>
+    /// <param name="batchSize">The driver batch size (<c>0</c> for one batch).</param>
+    /// <param name="progress">Called with the cumulative written-row count on each native tick, or <see langword="null"/>.</param>
+    /// <param name="notifyEvery">The progress reporting interval in rows.</param>
+    /// <param name="bulkCopy">The bulk-copy flags requested by the caller.</param>
+    /// <param name="useInternalTransaction">Whether the driver runs its own internal transaction.</param>
+    /// <returns>The configured <c>SqlBulkCopy</c>.</returns>
+    internal static SqlBulkCopy CreateBulkCopy(SqlConnection connection, SqlTransaction? transaction, string tableName, IReadOnlyList<string> columnNames, int bulkCopyTimeoutSeconds, int batchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, bool useInternalTransaction)
+    {
+        var bulk = new SqlBulkCopy(connection, MapBulkCopyOptions(bulkCopy.CheckConstraints, bulkCopy.TableLock, bulkCopy.KeepNulls, bulkCopy.FireTriggers, useInternalTransaction), transaction)
         {
             DestinationTableName = tableName,
-            BulkCopyTimeout = commandTimeoutSeconds ?? 30,
-            BatchSize = maxBatchSize ?? 0
+            BulkCopyTimeout = bulkCopyTimeoutSeconds,
+            BatchSize = batchSize,
         };
 
         for (var i = 0; i < columnNames.Count; i++)
@@ -751,7 +937,7 @@ public class SqlServerDataContext : DataContext
         return bulk;
     }
 
-    internal static SqlBulkCopyOptions MapBulkCopyOptions(bool checkConstraints, bool tableLock, bool keepNulls, bool fireTriggers)
+    internal static SqlBulkCopyOptions MapBulkCopyOptions(bool checkConstraints, bool tableLock, bool keepNulls, bool fireTriggers, bool useInternalTransaction = false)
     {
         var options = SqlBulkCopyOptions.Default;
         if (checkConstraints)
@@ -762,6 +948,8 @@ public class SqlServerDataContext : DataContext
             options |= SqlBulkCopyOptions.KeepNulls;
         if (fireTriggers)
             options |= SqlBulkCopyOptions.FireTriggers;
+        if (useInternalTransaction)
+            options |= SqlBulkCopyOptions.UseInternalTransaction;
 
         return options;
     }
